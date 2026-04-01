@@ -1,4 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/lib/supabase";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -12,9 +27,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { 
   Plus, Pencil, Loader2, Settings2, X, Database, 
-  Trash2, ChevronRight, Layers, Building2, Globe
+  Trash2, ChevronRight, Layers, Building2, Globe, Search, GripVertical
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface TTDConfig {
   roleName: string; 
@@ -25,6 +41,208 @@ interface TTDConfig {
   sheet: number;
 }
 
+type RoleName = "membuat" | "memeriksa" | "menyetujui";
+type MatrixConfigItem = TTDConfig & { id: string };
+
+interface QuickPresetCell {
+  ttd: string;
+  nama: string;
+  jabatan: string;
+  sheet: number;
+}
+
+interface QuickPreset {
+  label: string;
+  description: string;
+  cells: QuickPresetCell[];
+}
+
+const ROLE_SEQUENCE: RoleName[] = ["membuat", "memeriksa", "menyetujui"];
+
+const ROLE_LABELS: Record<RoleName, string> = {
+  membuat: "Membuat",
+  memeriksa: "Memeriksa",
+  menyetujui: "Menyetujui",
+};
+
+const createConfigId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const normalizeTTDConfig = (ttdConfig: any): MatrixConfigItem[] => {
+  if (Array.isArray(ttdConfig)) {
+    return ttdConfig.map((item: any, index: number) => ({
+      id: item.id || createConfigId(),
+      roleName: item.roleName || ROLE_SEQUENCE[0],
+      labelJabatan: item.labelJabatan || item.jabatan || item.roleName || `Kotak ${index + 1}`,
+      ttd: item.ttd || "",
+      nama: item.nama || "",
+      jabatan: item.jabatan || "",
+      sheet: Number(item.sheet || 1),
+    }));
+  }
+  if (typeof ttdConfig === "string") {
+    try {
+      const parsed = JSON.parse(ttdConfig || "[]");
+      return Array.isArray(parsed) ? normalizeTTDConfig(parsed) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const getLevelCount = (item: any) => normalizeTTDConfig(item.ttd_config).length;
+
+const mergeTTDConfigOrder = (items: MatrixConfigItem[]) =>
+  ROLE_SEQUENCE.flatMap(role => items.filter(item => item.roleName === role));
+
+const serializeTTDConfig = (items: MatrixConfigItem[]) =>
+  mergeTTDConfigOrder(items).map(({ id, ...rest }) => rest);
+
+const SortableMatrixCard = ({
+  item,
+  onChange,
+  onRemove,
+}: {
+  item: MatrixConfigItem;
+  onChange: <K extends keyof Pick<MatrixConfigItem, "ttd" | "nama" | "jabatan" | "sheet">>(
+    id: string,
+    field: K,
+    value: MatrixConfigItem[K]
+  ) => void;
+  onRemove: (id: string) => void;
+}) => {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "elevated-card rounded-lg p-5 grid grid-cols-12 gap-4 items-end relative group border border-border/50",
+        isDragging && "opacity-60 ring-2 ring-primary/40"
+      )}
+    >
+      <div className="col-span-1 flex items-center justify-center">
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="h-8 w-8 rounded-md border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+          aria-label={`Drag ${item.labelJabatan}`}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="col-span-2">
+        <p className="text-[9px] font-extrabold text-primary uppercase tracking-tighter mb-1">{item.roleName}</p>
+        <p className="text-xs font-bold truncate text-foreground">{item.labelJabatan}</p>
+      </div>
+      <div className="col-span-2">
+        <Label className="text-[8px] font-bold uppercase text-muted-foreground">TTD Cell</Label>
+        <Input
+          className="h-8 text-[10px] font-mono mt-1 uppercase"
+          placeholder="e.g. C20"
+          value={item.ttd}
+          onChange={(e) => onChange(item.id, "ttd", e.target.value)}
+        />
+      </div>
+      <div className="col-span-2">
+        <Label className="text-[8px] font-bold uppercase text-muted-foreground">Name Cell</Label>
+        <Input
+          className="h-8 text-[10px] font-mono mt-1 uppercase"
+          placeholder="e.g. C25"
+          value={item.nama}
+          onChange={(e) => onChange(item.id, "nama", e.target.value)}
+        />
+      </div>
+      <div className="col-span-2">
+        <Label className="text-[8px] font-bold uppercase text-muted-foreground">Job Cell</Label>
+        <Input
+          className="h-8 text-[10px] font-mono mt-1 uppercase"
+          placeholder="e.g. C26"
+          value={item.jabatan}
+          onChange={(e) => onChange(item.id, "jabatan", e.target.value)}
+        />
+      </div>
+      <div className="col-span-2">
+        <Label className="text-[8px] font-bold uppercase text-muted-foreground">Sheet Index</Label>
+        <Input
+          type="number"
+          className="h-8 text-[10px] mt-1"
+          value={item.sheet}
+          onChange={(e) => onChange(item.id, "sheet", Number.parseInt(e.target.value) || 1)}
+        />
+      </div>
+      <div className="col-span-1 text-right">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+          onClick={() => onRemove(item.id)}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const QUICK_PRESETS: QuickPreset[] = [
+  {
+    label: "3 Kotak",
+    description: "H35, K35, N35",
+    cells: [
+      { ttd: "H35", nama: "H38", jabatan: "H39", sheet: 1 },
+      { ttd: "K35", nama: "K38", jabatan: "K39", sheet: 1 },
+      { ttd: "N35", nama: "N38", jabatan: "N39", sheet: 1 },
+    ],
+  },
+  {
+    label: "4 Kotak",
+    description: "G35 sampai N35",
+    cells: [
+      { ttd: "G35", nama: "G38", jabatan: "G39", sheet: 1 },
+      { ttd: "H35", nama: "H38", jabatan: "H39", sheet: 1 },
+      { ttd: "K35", nama: "K38", jabatan: "K39", sheet: 1 },
+      { ttd: "N35", nama: "N38", jabatan: "N39", sheet: 1 },
+    ],
+  },
+  {
+    label: "5 Kotak",
+    description: "E35, G35, H35, K35, N35",
+    cells: [
+      { ttd: "E35", nama: "E38", jabatan: "E39", sheet: 1 },
+      { ttd: "G35", nama: "G38", jabatan: "G39", sheet: 1 },
+      { ttd: "H35", nama: "H38", jabatan: "H39", sheet: 1 },
+      { ttd: "K35", nama: "K38", jabatan: "K39", sheet: 1 },
+      { ttd: "N35", nama: "N38", jabatan: "N39", sheet: 1 },
+    ],
+  },
+  {
+    label: "6 Kotak",
+    description: "Tambah baris bawah",
+    cells: [
+      { ttd: "G35", nama: "G38", jabatan: "G39", sheet: 1 },
+      { ttd: "H35", nama: "H38", jabatan: "H39", sheet: 1 },
+      { ttd: "K35", nama: "K38", jabatan: "K39", sheet: 1 },
+      { ttd: "N35", nama: "N38", jabatan: "N39", sheet: 1 },
+      { ttd: "K41", nama: "K44", jabatan: "K45", sheet: 1 },
+      { ttd: "N41", nama: "N44", jabatan: "N45", sheet: 1 },
+    ],
+  },
+];
+
 export default function WorkflowDetailManagementPage() {
   const { toast } = useToast();
   const [details, setDetails] = useState<any[]>([]);
@@ -33,6 +251,8 @@ export default function WorkflowDetailManagementPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'pusat' | 'cabang'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [levelFilter, setLevelFilter] = useState<string>("all");
 
   const [formData, setFormData] = useState({
     membuat: "",
@@ -40,8 +260,11 @@ export default function WorkflowDetailManagementPage() {
     menyetujui: "",
     form_id: "",
     is_cabang: false,
-    ttd_config: [] as TTDConfig[]
+    ttd_config: [] as MatrixConfigItem[]
   });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const loadData = async () => {
     try {
@@ -63,13 +286,162 @@ export default function WorkflowDetailManagementPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  const filteredDetails = details.filter(item => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'cabang') return item.is_cabang === true;
-    return item.is_cabang === false || item.is_cabang === null;
-  });
+  const normalizeSearchText = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/\b[mca]\s*:\s*/g, " ")
+      .replace(/[,/|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const buildSearchTokens = (value: string) =>
+    normalizeSearchText(value)
+      .split(" ")
+      .map(token => token.trim())
+      .filter(token => token.length > 0);
+
+  const filteredDetails = useMemo(() => {
+    const queryTokens = buildSearchTokens(searchQuery);
+
+    return details.filter(item => {
+      if (activeFilter === 'cabang' && item.is_cabang !== true) return false;
+      if (activeFilter === 'pusat' && !(item.is_cabang === false || item.is_cabang === null)) return false;
+
+      const levelCount = getLevelCount(item);
+      if (levelFilter !== "all" && String(levelCount) !== levelFilter) return false;
+
+      if (queryTokens.length === 0) return true;
+
+      const workflowText = [
+        item.membuat,
+        item.memeriksa,
+        item.menyetujui,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      const configText = normalizeTTDConfig(item.ttd_config)
+        .flatMap((t: any) => [t.roleName, t.labelJabatan, t.nama, t.jabatan, t.ttd])
+        .filter(Boolean)
+        .join(" ");
+
+      const haystack = normalizeSearchText([
+        workflowText,
+        item.master_forms?.nama_form,
+        item.is_cabang ? "cabang" : "pusat",
+        `level ${levelCount}`,
+        configText
+      ]
+        .filter(Boolean)
+        .join(" "));
+
+      return queryTokens.every(token => haystack.includes(token));
+    });
+  }, [activeFilter, details, levelFilter, searchQuery]);
+
+  const availableLevels = useMemo(() => {
+    const levels = new Set<number>();
+    details.forEach(item => {
+      const level = getLevelCount(item);
+      if (level > 0) levels.add(level);
+    });
+    return Array.from(levels).sort((a, b) => a - b);
+  }, [details]);
 
   const cleanCommaInput = (val: string) => val.split(',').map(s => s.trim()).filter(s => s !== "").join(', ');
+
+  const getConfigsForRole = (roleName: RoleName) =>
+    formData.ttd_config.filter(item => item.roleName === roleName);
+
+  const splitLabels = (value: string) =>
+    value.split(",").map(label => label.trim()).filter(Boolean);
+
+  const collectRoleLabels = () => ([
+    { roleName: "membuat", labels: splitLabels(formData.membuat) },
+    { roleName: "memeriksa", labels: splitLabels(formData.memeriksa) },
+    { roleName: "menyetujui", labels: splitLabels(formData.menyetujui) },
+  ] as const).flatMap(group =>
+    group.labels.map(label => ({
+      roleName: group.roleName,
+      labelJabatan: label,
+    }))
+  );
+
+  const getRoleNameByIndex = (index: number) => {
+    const roleGroups = [
+      { roleName: "membuat", count: splitLabels(formData.membuat).length },
+      { roleName: "memeriksa", count: splitLabels(formData.memeriksa).length },
+      { roleName: "menyetujui", count: splitLabels(formData.menyetujui).length },
+    ];
+
+    let cursor = 0;
+    for (const group of roleGroups) {
+      cursor += group.count;
+      if (index < cursor) return group.roleName;
+    }
+    return "menyetujui";
+  };
+
+  const updateConfigField = <K extends keyof Pick<MatrixConfigItem, "ttd" | "nama" | "jabatan" | "sheet">>(
+    id: string,
+    field: K,
+    value: MatrixConfigItem[K]
+  ) => {
+    setFormData(prev => ({
+      ...prev,
+      ttd_config: mergeTTDConfigOrder(
+        prev.ttd_config.map(item => (item.id === id ? { ...item, [field]: value } : item))
+      ),
+    }));
+  };
+
+  const handleDeleteConfig = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      ttd_config: mergeTTDConfigOrder(prev.ttd_config.filter(item => item.id !== id)),
+    }));
+  };
+
+  const handleDragEnd = (roleName: RoleName, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setFormData(prev => {
+      const roleItems = prev.ttd_config.filter(item => item.roleName === roleName);
+      const oldIndex = roleItems.findIndex(item => item.id === active.id);
+      const newIndex = roleItems.findIndex(item => item.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+
+      const reorderedRoleItems = arrayMove(roleItems, oldIndex, newIndex);
+      const nextItems = [
+        ...prev.ttd_config.filter(item => item.roleName !== roleName),
+        ...reorderedRoleItems,
+      ];
+
+      return {
+        ...prev,
+        ttd_config: mergeTTDConfigOrder(nextItems),
+      };
+    });
+  };
+
+  const applyQuickPreset = (preset: QuickPreset) => {
+    const labels = collectRoleLabels();
+    const nextConfigs = preset.cells.map((cell, index) => {
+      const label = labels[index];
+      return {
+        id: createConfigId(),
+        roleName: label?.roleName || getRoleNameByIndex(index),
+        labelJabatan: label?.labelJabatan || `Kotak ${index + 1}`,
+        ttd: cell.ttd,
+        nama: cell.nama,
+        jabatan: cell.jabatan,
+        sheet: cell.sheet,
+      };
+    }) as MatrixConfigItem[];
+
+    setFormData(prev => ({ ...prev, ttd_config: mergeTTDConfigOrder(nextConfigs) }));
+  };
 
   const handleOpenModal = (item: any = null) => {
     if (item) {
@@ -80,7 +452,7 @@ export default function WorkflowDetailManagementPage() {
         menyetujui: item.menyetujui || "",
         form_id: item.form_id || "",
         is_cabang: item.is_cabang || false,
-        ttd_config: Array.isArray(item.ttd_config) ? item.ttd_config : [] 
+        ttd_config: normalizeTTDConfig(item.ttd_config)
       });
     } else {
       setSelectedItem(null);
@@ -94,14 +466,39 @@ export default function WorkflowDetailManagementPage() {
     setIsModalOpen(true);
   };
 
-  const addTTDMapping = (roleKey: string, labelInput: string) => {
-    if (!labelInput) return;
-    const labels = labelInput.split(',').map(s => s.trim()).filter(s => s !== "");
-    const newConfigs = labels.map(label => ({
-      roleName: roleKey, labelJabatan: label, ttd: "", nama: "", jabatan: "", sheet: 1
-    }));
-    const uniqueConfigs = newConfigs.filter(n => !formData.ttd_config.some(e => e.roleName === n.roleName && e.labelJabatan === n.labelJabatan));
-    setFormData({ ...formData, ttd_config: [...formData.ttd_config, ...uniqueConfigs] });
+  const syncTTDMapping = (roleKey: string, labelInput: string) => {
+    const labels = splitLabels(labelInput);
+    if (labels.length === 0) return;
+
+    setFormData(prev => {
+      const roleItems = prev.ttd_config.filter(item => item.roleName === roleKey);
+      const otherItems = prev.ttd_config.filter(item => item.roleName !== roleKey);
+
+      const nextRoleItems: MatrixConfigItem[] = labels.map((label, index) => {
+        const existing = roleItems[index];
+        if (existing) {
+          return {
+            ...existing,
+            labelJabatan: label,
+          };
+        }
+
+        return {
+          id: createConfigId(),
+          roleName: roleKey,
+          labelJabatan: label,
+          ttd: "",
+          nama: "",
+          jabatan: "",
+          sheet: 1,
+        };
+      });
+
+      return {
+        ...prev,
+        ttd_config: mergeTTDConfigOrder([...otherItems, ...nextRoleItems]),
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -113,7 +510,7 @@ export default function WorkflowDetailManagementPage() {
         menyetujui: cleanCommaInput(formData.menyetujui),
         form_id: formData.form_id,
         is_cabang: formData.is_cabang,
-        ttd_config: formData.ttd_config
+        ttd_config: serializeTTDConfig(formData.ttd_config)
       };
       
       const { error } = selectedItem 
@@ -137,7 +534,30 @@ export default function WorkflowDetailManagementPage() {
           <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-3 text-gradient uppercase">
             <Layers className="text-primary h-6 w-6"/> Stamp Engine v4.0
           </h1>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari matrix, form, role, atau jabatan..."
+                className="pl-9 h-10 w-[320px] max-w-full"
+              />
+            </div>
+
+            <select
+              value={levelFilter}
+              onChange={(e) => setLevelFilter(e.target.value)}
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="all">Semua Level</option>
+              {availableLevels.map((level) => (
+                <option key={level} value={String(level)}>
+                  Level {level}
+                </option>
+              ))}
+            </select>
+
             <div className="flex bg-muted rounded-lg p-1 border border-border">
               {(['all', 'pusat', 'cabang'] as const).map((f) => (
                 <button 
@@ -174,6 +594,12 @@ export default function WorkflowDetailManagementPage() {
                   <Loader2 className="animate-spin h-6 w-6 mx-auto text-primary" />
                 </TableCell>
               </TableRow>
+            ) : filteredDetails.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-40 text-center text-sm text-muted-foreground">
+                  Tidak ada matrix yang cocok dengan pencarian atau filter saat ini.
+                </TableCell>
+              </TableRow>
             ) : filteredDetails.map((item) => (
               <TableRow key={item.id} className="border-b border-border/50 transition-colors hover:bg-muted/10">
                 <TableCell className="text-center">
@@ -192,10 +618,15 @@ export default function WorkflowDetailManagementPage() {
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     <Database className="h-3 w-3" /> {item.master_forms?.nama_form}
                   </div>
+                  <div className="mt-2">
+                    <Badge variant="outline" className="text-[10px] font-bold uppercase">
+                      Level {getLevelCount(item)}
+                    </Badge>
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
-                    {item.ttd_config?.map((t: any, i: number) => (
+                    {normalizeTTDConfig(item.ttd_config).map((t: any, i: number) => (
                       <div key={i} className="bg-muted border border-border p-2 rounded text-[10px] min-w-[100px]">
                         <p className="font-extrabold text-primary uppercase leading-tight">{t.roleName}</p>
                         <p className="font-medium text-foreground truncate">{t.labelJabatan}</p>
@@ -258,18 +689,43 @@ export default function WorkflowDetailManagementPage() {
               </div>
 
               <div className="space-y-4 border-t border-border pt-6">
-                <p className="text-[10px] font-black text-muted-foreground uppercase mb-2 italic">* Input jobs separated by comma</p>
+                <p className="text-[10px] font-black text-muted-foreground uppercase mb-2 italic">* Gunakan koma untuk lebih dari 1 jabatan. Tanda &amp; dianggap 1 label.</p>
                 {(['membuat', 'memeriksa', 'menyetujui'] as const).map((key) => (
                   <div key={key} className="space-y-2">
                     <Label className="text-[10px] font-bold uppercase text-muted-foreground">{key}</Label>
                     <div className="flex gap-2">
                       <Input className="text-xs h-9" placeholder="Example: Manager, Direktur..." value={formData[key]} onChange={(e) => setFormData({...formData, [key]: e.target.value})} />
-                      <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => addTTDMapping(key, formData[key])}>
+                      <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => syncTTDMapping(key, formData[key])}>
                         <Plus className="h-4 w-4"/>
                       </Button>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="space-y-3 border-t border-border pt-6">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase">Quick Preset</p>
+                  <span className="text-[10px] text-muted-foreground">Ambil dari pola kotak</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {QUICK_PRESETS.map((preset) => (
+                    <Button
+                      key={preset.label}
+                      variant="outline"
+                      className="h-auto py-3 px-3 flex flex-col items-start text-left gap-1"
+                      onClick={() => applyQuickPreset(preset)}
+                    >
+                      <span className="text-xs font-bold uppercase">{preset.label}</span>
+                      <span className="text-[10px] text-muted-foreground font-normal leading-tight">
+                        {preset.description}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Tombol ini mengisi otomatis cell `ttd`, `nama`, dan `jabatan`. Label jabatan tetap diambil dari input M/C/A di atas.
+                </p>
               </div>
             </div>
 
@@ -278,49 +734,49 @@ export default function WorkflowDetailManagementPage() {
               <h3 className="text-xs font-bold mb-6 flex items-center gap-2 uppercase tracking-widest text-muted-foreground">
                 <Database className="h-4 w-4 text-primary"/> Coordinate Matrix Mapping
               </h3>
-              <div className="grid grid-cols-1 gap-4">
-                {formData.ttd_config.length === 0 && (
-                  <div className="h-40 border-2 border-dashed border-border rounded-xl flex items-center justify-center text-muted-foreground text-xs font-medium">
-                    No mappings generated. Click the "+" button on the sidebar to start.
-                  </div>
-                )}
-                {formData.ttd_config.map((t, i) => (
-                  <div key={i} className="elevated-card rounded-lg p-5 grid grid-cols-12 gap-4 items-end relative group border border-border/50">
-                    <div className="col-span-3">
-                      <p className="text-[9px] font-extrabold text-primary uppercase tracking-tighter mb-1">{t.roleName}</p>
-                      <p className="text-xs font-bold truncate text-foreground">{t.labelJabatan}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-[8px] font-bold uppercase text-muted-foreground">TTD Cell</Label>
-                      <Input className="h-8 text-[10px] font-mono mt-1 uppercase" placeholder="e.g. C20" value={t.ttd} onChange={(e) => {
-                        const nc = [...formData.ttd_config]; nc[i].ttd = e.target.value; setFormData({...formData, ttd_config: nc});
-                      }} />
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-[8px] font-bold uppercase text-muted-foreground">Name Cell</Label>
-                      <Input className="h-8 text-[10px] font-mono mt-1 uppercase" placeholder="e.g. C25" value={t.nama} onChange={(e) => {
-                        const nc = [...formData.ttd_config]; nc[i].nama = e.target.value; setFormData({...formData, ttd_config: nc});
-                      }} />
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-[8px] font-bold uppercase text-muted-foreground">Job Cell</Label>
-                      <Input className="h-8 text-[10px] font-mono mt-1 uppercase" placeholder="e.g. C26" value={t.jabatan} onChange={(e) => {
-                        const nc = [...formData.ttd_config]; nc[i].jabatan = e.target.value; setFormData({...formData, ttd_config: nc});
-                      }} />
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-[8px] font-bold uppercase text-muted-foreground">Sheet Index</Label>
-                      <Input type="number" className="h-8 text-[10px] mt-1" value={t.sheet} onChange={(e) => {
-                        const nc = [...formData.ttd_config]; nc[i].sheet = parseInt(e.target.value); setFormData({...formData, ttd_config: nc});
-                      }} />
-                    </div>
-                    <div className="col-span-1 text-right">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => setFormData({...formData, ttd_config: formData.ttd_config.filter((_, idx) => idx !== i)})}>
-                        <X className="h-4 w-4"/>
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-5">
+                {ROLE_SEQUENCE.map((roleName) => {
+                  const roleItems = getConfigsForRole(roleName);
+                  return (
+                    <section key={roleName} className="rounded-2xl border border-border/60 bg-card/50 p-4 space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">{ROLE_LABELS[roleName]}</p>
+                          <p className="text-[10px] text-muted-foreground">Geser kartu di section ini untuk mengubah urutan.</p>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-bold uppercase">{roleItems.length} item</Badge>
+                      </div>
+
+                      {roleItems.length === 0 ? (
+                        <div className="h-24 border-2 border-dashed border-border rounded-xl flex items-center justify-center text-muted-foreground text-xs font-medium">
+                          Belum ada item {ROLE_LABELS[roleName].toLowerCase()}.
+                        </div>
+                      ) : (
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event) => handleDragEnd(roleName, event)}
+                        >
+                          <SortableContext
+                            items={roleItems.map(item => item.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            <div className="space-y-3">
+                              {roleItems.map((item) => (
+                                <SortableMatrixCard
+                                  key={item.id}
+                                  item={item}
+                                  onChange={updateConfigField}
+                                  onRemove={handleDeleteConfig}
+                                />
+                              ))}
+                            </div>
+                          </SortableContext>
+                        </DndContext>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             </div>
           </div>

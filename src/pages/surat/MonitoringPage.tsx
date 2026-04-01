@@ -27,6 +27,13 @@ const getPaymentUrl = (path: string | null): string | null => {
   return `https://xuhyodtmgwteyslhrkfx.supabase.co/storage/v1/object/public/spk_files/payment_files/${key}`;
 };
 
+const getSpkUrl = (path: string | null): string | null => {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  const key = path.startsWith('spk_files/') ? path.slice('spk_files/'.length) : path;
+  return `https://xuhyodtmgwteyslhrkfx.supabase.co/storage/v1/object/public/spk_files/${key}`;
+};
+
 type DocStatus = 'PROSES' | 'SELESAI' | 'DITOLAK' | 'MENUNGGU_PIC' | 'KEUANGAN';
 
 interface ResolvedStatus {
@@ -563,6 +570,33 @@ const MonitoringPage = () => {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* SPK */}
+            {selectedSurat?.pic_review_status === 'SPK' && selectedSurat?.pic_attachment && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <FileCheck size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">SPK</span>
+                </div>
+                <a
+                  href={getSpkUrl(selectedSurat.pic_attachment) || selectedSurat.pic_attachment}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                    <FileCheck size={16} className="text-emerald-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">Lihat SPK</p>
+                    <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
+                      {selectedSurat.pic_attachment.split('/').pop()}
+                    </p>
+                  </div>
+                  <ArrowUpRight size={14} className="text-emerald-400 shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </a>
               </div>
             )}
 
