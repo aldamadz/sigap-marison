@@ -9,7 +9,7 @@ export const getFileUrl = (path: string | null | undefined): string | null => {
   if (path.startsWith('http')) return path;
   const bucket =
     path.startsWith('spk_files/')     ? 'spk_files' :
-    path.startsWith('payment_files/') ? 'spk_files' :
+    path.startsWith('payment_files/') ? 'payment_files' :
     path.startsWith('chat_attachments/') ? 'chat_attachments' :
     'dokumen_surat';
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;

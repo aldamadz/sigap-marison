@@ -24,7 +24,7 @@ const getPaymentUrl = (path: string | null): string | null => {
   if (!path) return null;
   if (path.startsWith('http')) return path;
   const key = path.startsWith('payment_files/') ? path.slice('payment_files/'.length) : path;
-  return `https://xuhyodtmgwteyslhrkfx.supabase.co/storage/v1/object/public/spk_files/payment_files/${key}`;
+  return `https://xuhyodtmgwteyslhrkfx.supabase.co/storage/v1/object/public/payment_files/${key}`;
 };
 
 const getSpkUrl = (path: string | null): string | null => {
