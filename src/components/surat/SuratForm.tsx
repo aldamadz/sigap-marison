@@ -48,11 +48,22 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [signers, setSigners] = useState<any[]>([]);
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
+  const normalizeRoleName = (raw: any, index: number, total: number): "membuat" | "memeriksa" | "menyetujui" => {
+    const v = String(raw ?? "").toLowerCase().trim();
+    if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as any;
+    if (v.includes("setuju") || v.includes("approve") || v.includes("approval") || v.includes("otoris") || v.includes("final")) return "menyetujui";
+    if (v.includes("periksa") || v.includes("review") || v.includes("verifikasi") || v.includes("cek") || v.includes("paraf")) return "memeriksa";
+    if (v.includes("buat") || v.includes("draft") || v.includes("pemohon") || v.includes("request")) return "membuat";
+    if (index === 0) return "membuat";
+    if (index === total - 1) return "menyetujui";
+    return "memeriksa";
+  };
+
   const getFullRoles = (item: any) => {
     if (!item?.ttd_config) return [];
     try {
       const config = typeof item.ttd_config === "string" ? JSON.parse(item.ttd_config) : item.ttd_config;
-      return Array.isArray(config) ? config.map((c: any) => c.labelJabatan || c.jabatan || c.roleName) : [];
+      return Array.isArray(config) ? config.map((c: any) => c.labelJabatan || c.jabatan || c.roleName || c.role_name) : [];
     } catch { return []; }
   };
 
@@ -128,8 +139,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     try {
       const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
       if (Array.isArray(config)) {
+        const total = config.length;
         setSigners(config.map((c: any, i: number) => ({
-          role_name: c.roleName || c.role_name, label_jabatan: c.labelJabatan || c.label_jabatan || c.jabatan,
+          role_name: normalizeRoleName(c.roleName || c.role_name || c.labelJabatan || c.label_jabatan || c.jabatan, i, total),
+          label_jabatan: c.labelJabatan || c.label_jabatan || c.jabatan,
           user_id: "", step_order: i + 1
         })));
       }

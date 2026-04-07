@@ -25,6 +25,7 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 const SuratPage = lazy(() => import("@/pages/surat/SuratPage"));
 const InboxPage = lazy(() => import("@/pages/surat/InboxPage"));
 const MonitoringPage = lazy(() => import("@/pages/surat/MonitoringPage"));
+const RiwayatKeterlibatanPage = lazy(() => import("@/pages/surat/RiwayatKeterlibatanPage"));
 const PICMonitoringPage = lazy(() => import("@/pages/monitoring-pic/MonitoringPICPage"));
 const PICManagementPage = lazy(() => import("@/pages/admin/PICManagementPage"));
 const UserChatPage = lazy(() => import("@/pages/user-chat/userChatPage"));
@@ -114,6 +115,7 @@ const App = () => {
               <Route path="/surat/registrasi" element={<SuratPage />} />
               <Route path="/surat/inbox" element={<InboxPage />} />
               <Route path="/surat/monitoring" element={<MonitoringPage />} />
+              <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
               
               {/* SURAT CHAT */}
               <Route path="/surat/chat" element={<UserChatPage />} />

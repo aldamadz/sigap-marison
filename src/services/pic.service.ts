@@ -74,6 +74,29 @@ const CHAT_SELECT = `
 // ── Service ────────────────────────────────────────────────────────────────
 
 export const picService = {
+  async markCreatorChatsReadBulk(suratIds: string[]): Promise<void> {
+    if (!suratIds.length) return;
+
+    const { error: rpcError } = await supabase.rpc("mark_pic_chats_read_bulk", {
+      p_surat_ids: suratIds,
+    });
+    if (!rpcError) return;
+
+    const { error } = await supabase
+      .from("surat_chats")
+      .update({ is_read: true })
+      .in("surat_id", suratIds)
+      .eq("sender_role", "creator")
+      .eq("is_read", false)
+      .eq("is_system", false);
+
+    if (error) throw new Error(error.message);
+  },
+
+  async markCreatorChatsRead(suratId: string): Promise<void> {
+    if (!suratId) return;
+    await this.markCreatorChatsReadBulk([suratId]);
+  },
 
   /**
    * Ambil antrian review PIC: status DONE, pic_review_status PENDING atau NULL.
@@ -83,14 +106,30 @@ export const picService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
-    // 1. Dept yang di-PIC user ini
-    const { data: deptPics } = await supabase
-      .from("master_dept_pics")
-      .select("dept_id")
-      .eq("user_id", user.id);
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    if (!deptPics || deptPics.length === 0) return [];
-    const deptIds = deptPics.map((d: any) => d.dept_id);
+    const isAdmin = profile?.role === "admin";
+
+    // 1. Dept yang bisa dilihat user ini
+    let deptIds: string[] = [];
+    if (isAdmin) {
+      const { data: deptRows } = await supabase
+        .from("master_departments")
+        .select("id");
+      deptIds = (deptRows ?? []).map((d: any) => d.id);
+    } else {
+      const { data: deptPics } = await supabase
+        .from("master_dept_pics")
+        .select("dept_id")
+        .eq("user_id", user.id);
+      deptIds = (deptPics ?? []).map((d: any) => d.dept_id);
+    }
+
+    if (deptIds.length === 0) return [];
 
     // 2. Form-form milik dept tersebut
     const { data: forms } = await supabase
@@ -232,13 +271,26 @@ export const picService = {
         message:        message.trim(),
         attachment_url: attachmentUrl ?? null,
         is_system:      false,
-        // Pesan dari PIC langsung dianggap terbaca; pesan creator = belum dibaca PIC
-        is_read:        senderRole === 'pic',
+        // Pesan non-system selalu unread untuk pihak penerima.
+        is_read:        false,
       })
       .select(CHAT_SELECT)
       .single();
 
     if (error) throw new Error(error.message);
+
+    // Workaround trigger DB "force_unread":
+    // setelah PIC membalas, pastikan pesan creator di surat yang sama tetap terbaca oleh PIC.
+    if (senderRole === "pic") {
+      await supabase
+        .from("surat_chats")
+        .update({ is_read: true })
+        .eq("surat_id", suratId)
+        .eq("sender_role", "creator")
+        .eq("is_read", false)
+        .eq("is_system", false);
+    }
+
     return data as ChatMessage;
   },
 

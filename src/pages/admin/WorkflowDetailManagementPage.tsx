@@ -65,6 +65,15 @@ const ROLE_LABELS: Record<RoleName, string> = {
   menyetujui: "Menyetujui",
 };
 
+const sanitizeRoleName = (value: any): RoleName => {
+  const v = String(value ?? "").toLowerCase().trim();
+  if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as RoleName;
+  if (v.includes("setuju") || v.includes("approve") || v.includes("approval") || v.includes("otoris") || v.includes("final")) return "menyetujui";
+  if (v.includes("periksa") || v.includes("review") || v.includes("verifikasi") || v.includes("cek") || v.includes("paraf")) return "memeriksa";
+  if (v.includes("buat") || v.includes("draft") || v.includes("pemohon") || v.includes("request")) return "membuat";
+  return "membuat";
+};
+
 const createConfigId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -74,7 +83,7 @@ const normalizeTTDConfig = (ttdConfig: any): MatrixConfigItem[] => {
   if (Array.isArray(ttdConfig)) {
     return ttdConfig.map((item: any, index: number) => ({
       id: item.id || createConfigId(),
-      roleName: item.roleName || ROLE_SEQUENCE[0],
+      roleName: sanitizeRoleName(item.roleName || item.role_name),
       labelJabatan: item.labelJabatan || item.jabatan || item.roleName || `Kotak ${index + 1}`,
       ttd: item.ttd || "",
       nama: item.nama || "",

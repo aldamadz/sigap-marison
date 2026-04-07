@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { notificationService } from '@/services/notification.service'
-import { useAuth } from './useAuth'
+import { useAuth } from './use-auth'
 
 export interface Notification {
   id: string
@@ -65,7 +65,7 @@ export function useNotifications() {
     
     // Subscribe realtime ke notifikasi
     const channel = supabase
-      .channel('notifications')
+      .channel(`notifications-${user.id}`)
       .on('postgres_changes', 
         { 
           event: 'INSERT', 

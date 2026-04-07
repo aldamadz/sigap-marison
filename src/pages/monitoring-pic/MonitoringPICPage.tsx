@@ -74,6 +74,26 @@ const getStatusBadge = (surat: SuratItem) => {
   return { label: 'Baru Masuk',                                        color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
 };
 
+const buildSyntheticMessage = (surat: SuratItem): ChatMessage => ({
+  id: `system-${surat.id}`,
+  surat_id: surat.id,
+  sender_id: 'system',
+  sender_name: 'SYSTEM',
+  sender_role: 'system',
+  message:
+    surat.pic_review_status === 'KEUANGAN'
+      ? 'Pengajuan ini sedang berada di antrian tim keuangan.'
+      : surat.pic_review_status === 'KEUANGAN_DONE'
+        ? 'Proses keuangan sudah selesai.'
+        : surat.pic_review_status === 'KEUANGAN_REJECTED'
+          ? 'Pengajuan ini ditolak oleh tim keuangan.'
+          : 'Belum ada percakapan pada pengajuan ini.',
+  attachment_url: null,
+  is_system: true,
+  is_read: true,
+  created_at: surat.updated_at,
+});
+
 // ── Action Modal ──────────────────────────────────────────────────────────
 
 interface ActionModalProps {
@@ -194,9 +214,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 
   useEffect(() => {
     if (!suratData?.id) return;
-    picService.getChatHistory(suratData.id).then(setMessages);
-    supabase.from('surat_chats').update({ is_read: true })
-      .eq('surat_id', suratData.id).eq('sender_role', 'creator').eq('is_read', false).then();
+    picService.getChatHistory(suratData.id)
+      .then((rows) => {
+        setMessages(rows.length > 0 ? rows : [buildSyntheticMessage(suratData)]);
+      })
+      .catch((error) => {
+        console.error('Failed to load chat history', error);
+        setMessages([buildSyntheticMessage(suratData)]);
+      });
+    picService.markCreatorChatsRead(suratData.id).catch((error) => {
+      console.error('Failed to mark creator chats as read on chat open', error);
+    });
   }, [suratData.id]);
 
   useEffect(() => {
@@ -205,7 +233,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
       setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
       if (msg.sender_role === 'creator' && !msg.is_system) {
         playNotifRef.current();
-        supabase.from('surat_chats').update({ is_read: true }).eq('id', msg.id).then();
+        picService.markCreatorChatsRead(suratData.id).catch((error) => {
+          console.error('Failed to mark creator chats as read on incoming message', error);
+        });
       }
     });
     return () => { supabase.removeChannel(ch); };
@@ -663,7 +693,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 
 const MonitoringPICPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string; role?: string } | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [myDepts, setMyDepts] = useState<Department[]>([]);
   const [activeDeptId, setActiveDeptId] = useState<string | null>(null);
   const [selectedSurat, setSelectedSurat] = useState<SuratItem | null>(null);
@@ -671,17 +702,42 @@ const MonitoringPICPage: React.FC = () => {
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    const totalUnread = Object.values(unreadMap).reduce((sum, n) => sum + (n || 0), 0);
+    window.dispatchEvent(new CustomEvent('pic-unread-count', { detail: { count: totalUnread } }));
+  }, [unreadMap]);
+
+  const deptLabel = (dept: Department) => dept.code || dept.name;
+  const isFinanceDept = (dept: Department) => {
+    const code = (dept.code ?? '').toLowerCase();
+    const name = dept.name.toLowerCase();
+    return code.includes('keu') || name.includes('keuangan') || name.includes('akuntansi');
+  };
+  useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const [profileRes, deptRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name').eq('id', user.id).single(),
+        supabase.from('profiles').select('id, full_name, role').eq('id', user.id).single(),
         supabase.from('master_dept_pics')
           .select('dept_id, master_departments(id, name, code)')
           .eq('user_id', user.id),
       ]);
-      if (profileRes.data) setCurrentUser(profileRes.data);
-      if (deptRes.data) {
+      const profile = profileRes.data as { id: string; full_name: string; role?: string } | null;
+      const admin = profile?.role === 'admin';
+      if (profile) {
+        setCurrentUser(profile);
+        setIsAdminUser(admin);
+      }
+
+      if (admin) {
+        const { data: allDeptRows } = await supabase
+          .from('master_departments')
+          .select('id, name, code')
+          .order('name', { ascending: true });
+        const depts = (allDeptRows ?? []) as Department[];
+        setMyDepts(depts);
+        if (depts.length > 0) setActiveDeptId(depts[0].id);
+      } else if (deptRes.data) {
         const depts = deptRes.data.map((d: any) => d.master_departments).filter(Boolean) as Department[];
         setMyDepts(depts);
         if (depts.length > 0) setActiveDeptId(depts[0].id);
@@ -691,45 +747,83 @@ const MonitoringPICPage: React.FC = () => {
   }, []);
 
   const { data: suratList = [], isLoading, refetch } = useQuery<SuratItem[]>({
-    queryKey: ['pic-chat-list', currentUser?.id, myDepts.map(d => d.id).join(',')],
-    enabled: !!currentUser && myDepts.length > 0,
+    queryKey: ['pic-chat-list', currentUser?.id, isAdminUser, myDepts.map(d => d.id).join(',')],
+    enabled: !!currentUser && (isAdminUser || myDepts.length > 0),
     queryFn: async () => {
       const deptIds = myDepts.map(d => d.id);
+      if (deptIds.length === 0) return [];
+      const financeDept = myDepts.find(isFinanceDept);
 
+      let baseRows: any[] = [];
       const { data: forms } = await supabase
         .from('master_forms').select('id, department_id').in('department_id', deptIds);
-      if (!forms?.length) return [];
-      const formIds = forms.map((f: any) => f.id);
+      if (forms?.length) {
+        const formIds = forms.map((f: any) => f.id);
 
-      const { data: penggunaans } = await supabase
-        .from('master_penggunaan_detail').select('id, form_id').in('form_id', formIds);
-      if (!penggunaans?.length) return [];
-      const penggunaanIds = penggunaans.map((p: any) => p.id);
+        const { data: penggunaans } = await supabase
+          .from('master_penggunaan_detail').select('id, form_id').in('form_id', formIds);
+        if (penggunaans?.length) {
+          const penggunaanIds = penggunaans.map((p: any) => p.id);
 
-      const { data, error } = await supabase
-        .from('surat_registrasi')
-        .select(`
-          id, no_surat, judul_surat, status, pic_id,
-          pic_review_status, pic_attachment, pic_note,
-          chat_status, updated_at, created_by,
-          file_path, lampiran_path,
-          creator:profiles!surat_registrasi_created_by_fkey(full_name),
-          penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
-            form_id,
-            master_forms(department_id, nama_form,
-              master_departments(id, name, code)
-            )
-          ),
-          finance_reviews(id, payment_file_path, status)
-        `)
-        .eq('status', 'DONE')
-        .in('penggunaan_id', penggunaanIds)
-        .order('updated_at', { ascending: false });
+          const { data, error } = await supabase
+            .from('surat_registrasi')
+            .select(`
+              id, no_surat, judul_surat, status, pic_id,
+              pic_review_status, pic_attachment, pic_note,
+              chat_status, updated_at, created_by,
+              file_path, lampiran_path,
+              creator:profiles!surat_registrasi_created_by_fkey(full_name),
+              penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
+                form_id,
+                master_forms(department_id, nama_form,
+                  master_departments(id, name, code)
+                )
+              ),
+              finance_reviews(id, payment_file_path, status)
+            `)
+            .eq('status', 'DONE')
+            .in('penggunaan_id', penggunaanIds)
+            .order('updated_at', { ascending: false });
 
-      if (error) throw error;
+          if (error) throw error;
+          baseRows = data ?? [];
+        }
+      }
+
+      const allRows = [...baseRows];
+
+      if (financeDept) {
+        const financeStatuses = ['KEUANGAN', 'KEUANGAN_DONE', 'KEUANGAN_REJECTED'];
+        const { data: financeRows, error: financeError } = await supabase
+          .from('surat_registrasi')
+          .select(`
+            id, no_surat, judul_surat, status, pic_id,
+            pic_review_status, pic_attachment, pic_note,
+            chat_status, updated_at, created_by,
+            file_path, lampiran_path,
+            creator:profiles!surat_registrasi_created_by_fkey(full_name),
+            penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
+              form_id,
+              master_forms(department_id, nama_form,
+                master_departments(id, name, code)
+              )
+            ),
+            finance_reviews(id, payment_file_path, status)
+          `)
+          .eq('status', 'DONE')
+          .in('pic_review_status', financeStatuses)
+          .order('updated_at', { ascending: false });
+
+        if (financeError) throw financeError;
+
+        const existingIds = new Set(allRows.map((row: any) => row.id));
+        (financeRows ?? []).forEach((row: any) => {
+          if (!existingIds.has(row.id)) allRows.push(row);
+        });
+      }
 
       // Unread count
-      const suratIds = (data ?? []).map((s: any) => s.id);
+      const suratIds = allRows.map((s: any) => s.id);
       const newUnreadMap: Record<string, number> = {};
       if (suratIds.length > 0) {
         const { data: unreadData } = await supabase
@@ -749,7 +843,7 @@ const MonitoringPICPage: React.FC = () => {
       // ✅ FIX 7: payment_file_path map untuk semua surat yang punya finance_review
       const paymentFileMap: Record<string, string | null> = {};
 
-      (data ?? []).forEach((s: any) => {
+      allRows.forEach((s: any) => {
         const fr = s.finance_reviews?.[0];
         if (fr) {
           if (fr.status === 'PENDING') financeReviewMap[s.id] = fr.id;
@@ -757,7 +851,7 @@ const MonitoringPICPage: React.FC = () => {
         }
       });
 
-      return (data ?? []).map((s: any) => {
+      return allRows.map((s: any) => {
         const formDept = s.penggunaan?.master_forms?.master_departments;
         return {
           ...s,
@@ -787,7 +881,9 @@ const MonitoringPICPage: React.FC = () => {
         if (!suratIds.includes(msg.surat_id)) return;
         if (msg.sender_role !== 'creator' || msg.is_system) return;
         if (selectedSuratRef.current?.id === msg.surat_id) {
-          supabase.from('surat_chats').update({ is_read: true }).eq('id', msg.id).then();
+          picService.markCreatorChatsRead(msg.surat_id).catch((error) => {
+            console.error('Failed to mark creator chats as read from realtime insert', error);
+          });
         } else {
           setUnreadMap(prev => ({ ...prev, [msg.surat_id]: (prev[msg.surat_id] || 0) + 1 }));
         }
@@ -807,9 +903,9 @@ const MonitoringPICPage: React.FC = () => {
   const handleSelectSurat = useCallback(async (surat: SuratItem) => {
     setSelectedSurat(surat);
     setUnreadMap(prev => ({ ...prev, [surat.id]: 0 }));
-    supabase.from('surat_chats').update({ is_read: true })
-      .eq('surat_id', surat.id).eq('sender_role', 'creator')
-      .eq('is_read', false).eq('is_system', false).then();
+    picService.markCreatorChatsRead(surat.id).catch((error) => {
+      console.error('Failed to mark creator chats as read on select surat', error);
+    });
   }, []);
 
   const keuanganDept = myDepts.find(d => d.code === 'KEU');
@@ -866,17 +962,18 @@ const MonitoringPICPage: React.FC = () => {
 
         {/* Tab departemen */}
         {myDepts.length > 1 && (
-          <div className="flex border-b border-white/5 overflow-x-auto shrink-0">
+          <div className="flex gap-1 border-b border-white/5 overflow-x-auto shrink-0 px-3 py-2">
             {myDepts.map(dept => {
               const unread = unreadPerDept(dept.id);
               const isActive = activeDeptId === dept.id;
               return (
                 <button key={dept.id}
                   onClick={() => { setActiveDeptId(dept.id); setSelectedSurat(null); }}
-                  className={`flex-1 min-w-0 px-3 py-2.5 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                  title={dept.name}
+                  className={`shrink-0 min-w-[96px] max-w-[160px] px-3 py-2 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg ${
                     isActive ? 'border-primary text-primary' : 'border-transparent text-white/30 hover:text-white/60'
                   }`}>
-                  {dept.code || dept.name}
+                  <span className="truncate">{deptLabel(dept)}</span>
                   {unread > 0 && (
                     <span className="bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center">
                       {unread}

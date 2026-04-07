@@ -1,16 +1,14 @@
 import { supabase } from '@/lib/supabase'
 
 export const notificationService = {
-  // Kirim notifikasi via edge function
+  // Kirim notifikasi via RPC (bypass RLS)
   async createNotification(userId: string, title: string, message: string, type = 'info', link?: string) {
-    const { data, error } = await supabase.functions.invoke('create-notification', {
-      body: {
-        user_id: userId,
-        title,
-        message,
-        type,
-        link
-      }
+    const { data, error } = await supabase.rpc('create_notification_rpc', {
+      p_user_id: userId,
+      p_title: title,
+      p_message: message,
+      p_type: type,
+      p_link: link
     })
 
     if (error) {

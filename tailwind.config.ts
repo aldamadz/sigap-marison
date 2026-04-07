@@ -12,6 +12,14 @@ export default {
         "2xl": "1400px",
       },
     },
+    screens: {
+      'xs': '480px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1400px',
+    },
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -114,6 +122,14 @@ export default {
           from: { opacity: "0", transform: "scale(0.95)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
+        "slide-up": {
+          from: { opacity: "0", transform: "translateY(20px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "pulse-ring": {
+          "0%": { transform: "scale(0.8)", opacity: "0.5" },
+          "100%": { transform: "scale(1.2)", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -121,11 +137,25 @@ export default {
         "fade-in": "fade-in 0.3s ease-out",
         "slide-in": "slide-in 0.3s ease-out",
         "scale-in": "scale-in 0.2s ease-out",
+        "slide-up": "slide-up 0.4s ease-out",
+        "pulse-ring": "pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite",
       },
       boxShadow: {
         'card': '0 4px 24px -4px hsl(222 47% 3% / 0.5)',
         'elevated': '0 8px 32px -8px hsl(222 47% 3% / 0.6)',
         'glow': '0 0 40px -12px hsl(217 91% 60% / 0.3)',
+        'mobile-nav': '0 -4px 20px -4px hsl(222 47% 3% / 0.4)',
+      },
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+        '128': '32rem',
+      },
+      minWidth: {
+        'touch': '44px',
+      },
+      minHeight: {
+        'touch': '44px',
       },
     },
   },

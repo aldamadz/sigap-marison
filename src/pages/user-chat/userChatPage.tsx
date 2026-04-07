@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { picService, ChatMessage } from '@/services/pic.service';
 import {
-  Send, Paperclip, X, MessageSquare,
+  Send, Paperclip, X, MessageSquare, ArrowLeft,
   FileText, FileCheck, ExternalLink, Loader2,
   CheckCircle2, Clock, XCircle, Inbox, Search,
   AlertCircle, Download
@@ -91,9 +91,12 @@ const makePicNoteMsg = (surat: SuratItem): ChatMessage => ({
 const UserChatPage: React.FC = () => {
   const queryClient = useQueryClient();
   const playNotif = useNotifSound();
-  // Ref agar bisa dipanggil dari dalam useEffect tanpa stale closure / re-subscribe
   const playNotifRef = useRef(playNotif);
   useEffect(() => { playNotifRef.current = playNotif; }, [playNotif]);
+  
+  // Mobile view state - show sidebar or chat
+  const [showSidebar, setShowSidebar] = useState(true);
+  
   const [selected, setSelected] = useState<SuratItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatStatus, setChatStatus] = useState<'OPEN' | 'CLOSED'>('CLOSED');
@@ -105,6 +108,8 @@ const UserChatPage: React.FC = () => {
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = window.innerWidth < 768;
 
   const canSend = chatStatus === 'OPEN' && !isSending;
 
@@ -116,6 +121,18 @@ const UserChatPage: React.FC = () => {
         .then(({ data }) => setCurrentUser(data));
     });
   }, []);
+
+  // Handle mobile view changes
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      if (!mobile && selected) {
+        setShowSidebar(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [selected]);
 
   // ── Realtime: update list surat ───────────────────────────────────────
   useEffect(() => {
@@ -188,6 +205,12 @@ const UserChatPage: React.FC = () => {
     setChatStatus(surat.chat_status ?? 'CLOSED');
     setMessages([]);
     setUnreadMap(prev => ({ ...prev, [surat.id]: 0 }));
+    
+    // On mobile, hide sidebar when chat selected
+    if (window.innerWidth < 768) {
+      setShowSidebar(false);
+    }
+    
     supabase.from('surat_chats')
       .update({ is_read: true })
       .eq('surat_id', surat.id)
@@ -206,11 +229,17 @@ const UserChatPage: React.FC = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
+  // Back button handler for mobile
+  const handleBack = () => {
+    setShowSidebar(true);
+    setSelected(null);
+  };
+
   useEffect(() => {
     if (selected) setChatStatus(selected.chat_status ?? 'CLOSED');
   }, [selected?.chat_status]);
 
-  // ── Realtime: chat messages — bunyikan notif saat pesan dari PIC masuk ─
+  // ── Realtime: chat messages ──────────────────────────────────────────
   const selectedRef = useRef<SuratItem | null>(null);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
 
@@ -218,13 +247,12 @@ const UserChatPage: React.FC = () => {
     if (!selected) return;
     const ch = picService.subscribeChat(selected.id, (msg) => {
       setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
-      // Bunyikan notif hanya untuk pesan dari PIC (bukan pesan sendiri, bukan sistem)
       if (msg.sender_role === 'pic' && !msg.is_system) {
         playNotifRef.current();
       }
     });
     return () => { supabase.removeChannel(ch); };
-  }, [selected?.id]); // playNotif via ref — tidak perlu di deps
+  }, [selected?.id]);
 
   // ── Unread badge dari PIC ─────────────────────────────────────────────
   useEffect(() => {
@@ -252,7 +280,6 @@ const UserChatPage: React.FC = () => {
         if (selectedRef.current?.id === msg.surat_id) {
           supabase.from('surat_chats').update({ is_read: true }).eq('id', msg.id).then();
         } else {
-          // Bunyikan notif untuk surat yang tidak sedang terbuka
           playNotifRef.current();
           setUnreadMap(prev => ({ ...prev, [msg.surat_id]: (prev[msg.surat_id] ?? 0) + 1 }));
         }
@@ -267,7 +294,7 @@ const UserChatPage: React.FC = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
-  }, [currentUser, suratList]); // playNotif via ref — tidak perlu di deps
+  }, [currentUser, suratList]);
 
   // ── Sync pic_note ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -294,7 +321,7 @@ const UserChatPage: React.FC = () => {
       }
     }
     prevChatStatusRef.current = curr;
-  }, [selected?.chat_status]); // playNotif via ref — tidak perlu di deps
+  }, [selected?.chat_status]);
 
   // ── Auto scroll ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -324,42 +351,46 @@ const UserChatPage: React.FC = () => {
     }
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans">
+    <div className="flex h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] bg-background text-foreground overflow-hidden font-sans">
 
       {/* ── SIDEBAR KIRI ── */}
-      <div className="w-[320px] shrink-0 flex flex-col border-r border-border bg-card/20 backdrop-blur-xl">
-        <div className="px-5 pt-6 pb-4 border-b border-border">
+      <div className={`
+        ${showSidebar ? 'flex' : 'hidden'} 
+        md:flex flex-col w-full md:w-72 lg:w-80 shrink-0 border-r border-border bg-card/20 backdrop-blur-xl
+        h-full overflow-hidden
+      `}>
+        <div className="px-4 sm:px-5 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2 mb-1">
             <MessageSquare size={16} className="text-primary" />
-            <h1 className="text-sm font-black uppercase tracking-[0.15em] text-foreground">Diskusi Dokumen</h1>
+            <h1 className="text-sm font-black uppercase tracking-wider text-foreground">Diskusi Dokumen</h1>
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Chat dengan PIC Departemen</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground">Chat dengan PIC Departemen</p>
         </div>
 
-        <div className="px-4 py-3 border-b border-border">
+        <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-border shrink-0">
           <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari dokumen..."
-              className="w-full pl-8 pr-3 py-2 bg-background/50 border border-border rounded-lg text-[11px] font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
+              className="w-full pl-9 pr-3 py-2 bg-background/50 border border-border rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-border/30">
+        <div className="flex-1 overflow-y-auto divide-y divide-border/30 min-h-0">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3">
               <Loader2 size={20} className="animate-spin text-primary/40" />
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Memuat...</p>
+              <p className="text-xs text-muted-foreground">Memuat...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 opacity-30">
-              <Inbox size={32} strokeWidth={1} />
-              <p className="text-[10px] font-bold uppercase tracking-widest">Belum ada dokumen</p>
+            <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3 opacity-30">
+              <Inbox size={28} strokeWidth={1} />
+              <p className="text-xs font-bold uppercase">Belum ada dokumen</p>
             </div>
           ) : (
             filtered.map((surat) => {
@@ -370,32 +401,32 @@ const UserChatPage: React.FC = () => {
                 <button
                   key={surat.id}
                   onClick={() => handleSelect(surat)}
-                  className={`w-full text-left px-4 py-4 transition-all relative ${
+                  className={`w-full text-left px-3 sm:px-4 py-3 sm:py-4 transition-all relative ${
                     isActive ? 'bg-primary/5 border-l-4 border-primary' : 'hover:bg-secondary/30 border-l-4 border-transparent'
                   }`}
                 >
                   {unread > 0 && (
-                    <span className="absolute top-3 right-3 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-primary-foreground text-[9px] font-black rounded-full px-1 animate-bounce">
+                    <span className="absolute top-2 sm:top-3 right-2 sm:right-3 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-primary-foreground text-[10px] font-black rounded-full px-1 animate-bounce">
                       {unread > 9 ? '9+' : unread}
                     </span>
                   )}
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className={`flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded border tracking-tight ${badge.color}`}>
+                    <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-black uppercase px-2 py-0.5 rounded border ${badge.color}`}>
                       <StatusIcon surat={surat} />
-                      {badge.label}
+                      <span className="truncate">{badge.label}</span>
                     </div>
-                    <span className="text-[9px] text-muted-foreground/50 font-mono shrink-0">
+                    <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">
                       {formatDistanceToNow(new Date(surat.updated_at), { addSuffix: true, locale: localeID })}
                     </span>
                   </div>
-                  <p className={`text-[11px] font-black uppercase truncate leading-tight mb-1 ${isActive ? 'text-primary' : 'text-foreground'}`}>
+                  <p className={`text-xs sm:text-sm font-black uppercase truncate leading-tight mb-1 ${isActive ? 'text-primary' : 'text-foreground'}`}>
                     {surat.judul_surat}
                   </p>
-                  <p className="text-[9px] font-mono text-muted-foreground/60 truncate">{surat.no_surat}</p>
+                  <p className="text-[10px] sm:text-xs font-mono text-muted-foreground/60 truncate">{surat.no_surat}</p>
                   {surat.pic_name && (
-                    <p className="text-[9px] text-muted-foreground mt-2 truncate font-bold uppercase">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5 truncate font-bold">
                       PIC: <span className="text-foreground/70">{surat.pic_name}</span>
-                      {surat.dept_name && ` · ${surat.dept_name}`}
+                      {surat.dept_name && <span className="text-muted-foreground/50"> · {surat.dept_name}</span>}
                     </p>
                   )}
                 </button>
@@ -406,40 +437,54 @@ const UserChatPage: React.FC = () => {
       </div>
 
       {/* ── PANEL KANAN: CHAT ── */}
-      <div className="flex-1 flex flex-col bg-background/50 relative overflow-hidden">
+      <div className={`
+        ${showSidebar ? 'hidden' : 'flex'} 
+        md:flex flex-1 flex-col bg-background/50 relative overflow-hidden
+        h-full
+      `}>
         {!selected ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 opacity-10 select-none">
-            <MessageSquare size={80} strokeWidth={1} />
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 opacity-10 select-none px-4">
+            <MessageSquare size={64} strokeWidth={1} />
             <div className="text-center">
-              <p className="text-sm font-black uppercase tracking-[0.3em]">Pilih Dokumen</p>
-              <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-widest font-bold">Untuk memulai diskusi dengan PIC</p>
+              <p className="text-sm sm:text-base font-black uppercase tracking-wider">Pilih Dokumen</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-2 uppercase font-bold">Untuk memulai diskusi dengan PIC</p>
             </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
 
-            {/* Header Chat */}
-            <div className="px-8 py-5 border-b border-border bg-card/40 backdrop-blur-md flex justify-between items-center shrink-0">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[9px] font-mono text-muted-foreground/60">{selected.no_surat}</span>
-                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border tracking-tight ${getStatusBadge(selected).color}`}>
-                    {getStatusBadge(selected).label}
-                  </span>
+            {/* Header Chat - Mobile with Back Button */}
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-card/40 backdrop-blur-md flex justify-between items-center shrink-0 gap-3">
+              <div className="min-w-0 flex items-center gap-2 sm:gap-3">
+                {/* Back button for mobile */}
+                <button 
+                  onClick={handleBack}
+                  className="md:hidden p-2 rounded-lg hover:bg-accent text-muted-foreground shrink-0"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <span className="text-xs font-mono text-muted-foreground/60 truncate">{selected.no_surat}</span>
+                    <span className={`text-[10px] sm:text-xs font-black uppercase px-2 py-0.5 rounded border truncate ${getStatusBadge(selected).color}`}>
+                      {getStatusBadge(selected).label}
+                    </span>
+                  </div>
+                  <h2 className="text-sm sm:text-base font-black uppercase tracking-tight text-foreground truncate">{selected.judul_surat}</h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground font-bold mt-0.5 truncate">
+                    Ditangani: <span className="text-foreground/70">{selected.pic_name ?? 'N/A'}</span>
+                  </p>
                 </div>
-                <h2 className="text-sm font-black uppercase tracking-tight text-foreground truncate max-w-md">{selected.judul_surat}</h2>
-                <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">
-                  Ditangani: <span className="text-foreground/70">{selected.pic_name ?? 'N/A'}</span>
-                </p>
               </div>
             </div>
 
             {/* Messages Area */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-6 scroll-smooth">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 scroll-smooth">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4 opacity-10">
-                  <MessageSquare size={64} strokeWidth={1} />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-center">Belum ada diskusi terbuka<br/>untuk dokumen ini</p>
+                  <MessageSquare size={48} strokeWidth={1} />
+                  <p className="text-xs sm:text-sm font-black uppercase tracking-widest text-center">Belum ada diskusi terbuka<br/>untuk dokumen ini</p>
                 </div>
               ) : (
                 messages.map((msg) => {
@@ -448,9 +493,9 @@ const UserChatPage: React.FC = () => {
 
                   if (msg.is_system) {
                     return (
-                      <div key={msg.id} className="flex justify-center my-4 animate-in fade-in zoom-in duration-300">
-                        <div className="bg-secondary/40 border border-border/50 rounded-full px-6 py-1.5 shadow-sm backdrop-blur-sm">
-                          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-tight text-center">{msg.message}</p>
+                      <div key={msg.id} className="flex justify-center my-3 sm:my-4 animate-in fade-in zoom-in duration-300">
+                        <div className="bg-secondary/40 border border-border/50 rounded-full px-4 sm:px-6 py-1.5 sm:py-2 shadow-sm backdrop-blur-sm">
+                          <p className="text-[10px] sm:text-xs font-black text-muted-foreground uppercase tracking-tight text-center">{msg.message}</p>
                         </div>
                       </div>
                     );
@@ -458,21 +503,21 @@ const UserChatPage: React.FC = () => {
 
                   return (
                     <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                      <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center gap-2 mb-1.5 px-1">
-                          <span className={`text-[9px] font-black uppercase tracking-widest ${isMe ? 'text-primary' : 'text-muted-foreground'}`}>
+                      <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-2 mb-1 px-1">
+                          <span className={`text-[10px] sm:text-xs font-black uppercase ${isMe ? 'text-primary' : 'text-muted-foreground'}`}>
                             {isMe ? 'Anda' : (msg.sender_name ?? 'PIC')}
                           </span>
                           {isNote && (
-                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 tracking-tight">
+                            <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">
                               Catatan
                             </span>
                           )}
-                          <span className="text-[8px] font-mono text-muted-foreground/30">
+                          <span className="text-[10px] font-mono text-muted-foreground/30">
                             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <div className={`p-4 rounded-2xl shadow-sm text-xs font-bold leading-relaxed whitespace-pre-wrap transition-all ${
+                        <div className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-sm text-xs sm:text-sm font-bold leading-relaxed whitespace-pre-wrap ${
                           isMe
                             ? 'bg-primary text-primary-foreground rounded-tr-none'
                             : isNote
@@ -484,7 +529,7 @@ const UserChatPage: React.FC = () => {
                               href={getFileUrl(msg.attachment_url) ?? '#'}
                               target="_blank"
                               rel="noreferrer"
-                              className={`flex items-center gap-2 mb-3 p-2.5 rounded-lg border text-[10px] font-black uppercase transition-all ${
+                              className={`flex items-center gap-2 mb-2 sm:mb-3 p-2 rounded-lg border text-[10px] sm:text-xs font-black uppercase ${
                                 isMe ? 'bg-black/20 border-white/10 hover:bg-black/30' : 'bg-muted border-border hover:bg-accent'
                               }`}
                             >
@@ -500,77 +545,92 @@ const UserChatPage: React.FC = () => {
               )}
             </div>
 
-            {/* Sticky Banners + File Buttons */}
-            <div className="px-8 space-y-2 mb-4 shrink-0">
-              <div className="flex flex-wrap gap-2">
-                {selected.file_path && (
-                  <a href={selected.file_path} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all">
-                    <FileText size={12} /> Dokumen
-                  </a>
-                )}
-                {selected.lampiran_path && (
-                  <a href={selected.lampiran_path} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-violet-500/5 text-violet-500 border-violet-500/20 hover:bg-violet-500/10 transition-all">
-                    <Paperclip size={12} /> Lampiran
-                  </a>
-                )}
-                {selected.pic_attachment && (
-                  <a href={getFileUrl(selected.pic_attachment) ?? '#'} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-emerald-500/5 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10 transition-all">
-                    <FileCheck size={12} /> SPK
-                  </a>
-                )}
-                {selected.payment_file_path && (
-                  <a href={getFileUrl(selected.payment_file_path) ?? '#'} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-blue-500/5 text-blue-600 border-blue-500/20 hover:bg-blue-500/10 transition-all">
-                    <Download size={12} /> Bukti Bayar
-                  </a>
-                )}
+            {/* Payment Proof Banner */}
+            {selected.payment_file_path && (
+              <div className="px-4 sm:px-6 py-2 bg-emerald-500/10 border-t border-emerald-500/20 shrink-0">
+                <a 
+                  href={getFileUrl(selected.payment_file_path) ?? '#'} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 transition-colors"
+                >
+                  <FileCheck size={16} />
+                  <span className="text-xs sm:text-sm font-bold">Bukti Transaksi Tersedia</span>
+                  <ExternalLink size={12} className="ml-auto" />
+                </a>
               </div>
-              {chatStatus === 'CLOSED' && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3 animate-in slide-in-from-bottom-2">
-                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                  <p className="text-[10px] font-black uppercase text-amber-700 tracking-tight">
-                    Menunggu PIC membuka sesi untuk dapat berdiskusi
-                  </p>
-                </div>
-              )}
-            </div>
+            )}
 
-            {/* Input Footer */}
-            <div className="p-8 bg-card/30 border-t border-border backdrop-blur-md shrink-0">
-              {attachment && (
-                <div className="mb-4 flex items-center gap-2 text-[10px] font-black text-primary bg-primary/10 w-fit px-4 py-2 rounded-full border border-primary/20 animate-in zoom-in">
-                  <Paperclip size={12} /> {attachment.name}
-                  <button onClick={() => setAttachment(null)} className="ml-2 hover:text-destructive transition-colors">
-                    <X size={14} />
-                  </button>
+            {/* Input Area */}
+            <div className="p-3 sm:p-4 border-t border-border bg-card/40 backdrop-blur-sm shrink-0">
+              {!canSend && chatStatus !== 'OPEN' && (
+                <div className="mb-2 sm:mb-3 px-3 sm:px-4 py-2 sm:py-3 bg-amber-500/10 border border-amber-500/20 rounded-lg sm:rounded-xl flex items-center gap-2 sm:gap-3">
+                  <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                  <p className="text-xs sm:text-sm font-bold text-amber-600">Sesi chat tertutup. Tunggu PIC membuka sesi.</p>
                 </div>
               )}
-              <form onSubmit={handleSend} className="flex gap-3">
-                <label className={`p-4 rounded-xl border flex items-center justify-center shrink-0 transition-all ${
-                  !canSend ? 'bg-muted opacity-40 cursor-not-allowed' : 'bg-background hover:bg-secondary cursor-pointer active:scale-95'
-                }`}>
-                  <Paperclip size={20} className="text-muted-foreground" />
-                  <input type="file" className="hidden" disabled={!canSend} onChange={(e) => setAttachment(e.target.files?.[0] || null)} />
-                </label>
+              
+              <form onSubmit={handleSend} className="flex items-end gap-2 sm:gap-3">
                 <input
                   ref={inputRef}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   disabled={!canSend}
-                  placeholder={chatStatus === 'OPEN' ? "Ketik pesan diskusi..." : "Sesi chat masih tertutup"}
-                  className="flex-1 bg-background border border-border rounded-xl px-5 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all disabled:opacity-50 placeholder:text-muted-foreground/30"
+                  placeholder={canSend ? "Tulis pesan..." : "Chat tertutup..."}
+                  className="flex-1 min-w-0 px-3 sm:px-4 py-2.5 sm:py-3 bg-background/50 border border-border rounded-lg sm:rounded-xl text-xs sm:text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                  style={{ minHeight: '44px', maxHeight: '120px' }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (canSend && (newMessage.trim() || attachment)) handleSend(e);
+                    }
+                  }}
                 />
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                  disabled={!canSend}
+                />
+                
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!canSend}
+                  className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl border transition-all shrink-0 ${
+                    attachment 
+                      ? 'bg-primary text-primary-foreground border-primary' 
+                      : 'bg-background/50 text-muted-foreground border-border hover:bg-accent'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  <Paperclip size={18} />
+                </button>
+                
                 <button
                   type="submit"
                   disabled={!canSend || (!newMessage.trim() && !attachment)}
-                  className="bg-primary text-primary-foreground px-10 py-4 rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:opacity-90 active:scale-95 transition-all disabled:opacity-30 shadow-lg shadow-primary/20"
+                  className="p-2.5 sm:p-3 bg-primary text-primary-foreground rounded-lg sm:rounded-xl font-bold hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 >
-                  {isSending ? <Loader2 className="animate-spin" size={20} /> : "Kirim"}
+                  {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                 </button>
               </form>
+              
+              {attachment && (
+                <div className="mt-2 px-3 py-2 bg-accent/50 rounded-lg flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-2 truncate">
+                    <FileText size={14} />
+                    <span className="truncate">{attachment.name}</span>
+                  </span>
+                  <button 
+                    onClick={() => setAttachment(null)}
+                    className="p-1 hover:bg-destructive/10 rounded text-destructive shrink-0"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

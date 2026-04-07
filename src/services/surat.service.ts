@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
+import { notificationService } from "./notification.service";
 
 export interface SuratRegistrasi {
   id: string;
@@ -30,6 +31,17 @@ export const suratService = {
   cleanUuid(id: any) {
     if (!id || id === "" || id === "pusat" || id === "undefined" || id === "null") return null;
     return id;
+  },
+
+  normalizeRoleName(raw: any, stepOrder: number, totalSteps: number): "membuat" | "memeriksa" | "menyetujui" {
+    const v = String(raw ?? "").toLowerCase().trim();
+    if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as any;
+    if (v.includes("setuju") || v.includes("approve") || v.includes("approval") || v.includes("otoris") || v.includes("final")) return "menyetujui";
+    if (v.includes("periksa") || v.includes("review") || v.includes("verifikasi") || v.includes("cek") || v.includes("paraf")) return "memeriksa";
+    if (v.includes("buat") || v.includes("draft") || v.includes("pemohon") || v.includes("request")) return "membuat";
+    if (stepOrder === 1) return "membuat";
+    if (stepOrder === totalSteps) return "menyetujui";
+    return "memeriksa";
   },
 
   getRelativePath(url: string): string {
@@ -162,12 +174,33 @@ export const suratService = {
           status:      "PENDING",
         });
 
-      const signerPayload = signers.filter(s => s.user_id).map(s => ({
-        surat_id: surat.id, user_id: s.user_id,
-        role_name: s.role_name, step_order: s.step_order, is_signed: false
+      const activeSigners = signers.filter(s => s.user_id);
+      const totalSteps = activeSigners.length;
+      const signerPayload = activeSigners.map((s, idx) => ({
+        surat_id: surat.id,
+        user_id: s.user_id,
+        role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
+        step_order: s.step_order,
+        is_signed: false
       }));
 
-      if (signerPayload.length > 0) await supabase.from("surat_signatures").insert(signerPayload);
+      if (signerPayload.length > 0) {
+        await supabase.from("surat_signatures").insert(signerPayload);
+        
+        // Notifikasi ke step pertama
+        const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
+        const firstSigners = signerPayload.filter((s: any) => s.step_order === firstStepOrd);
+        
+        for (const s of firstSigners) {
+          notificationService.createNotification(
+             s.user_id,
+             'Surat Masuk Baru',
+             `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
+             'info',
+             `/surat/inbox`
+          ).catch(e => console.error("Notif error:", e));
+        }
+      }
 
       return surat;
     } catch (error: any) {
@@ -251,6 +284,48 @@ export const suratService = {
     });
     if (rpcError) throw new Error(rpcError.message);
     if (!rpcResult?.success) throw new Error("Gagal memproses persetujuan.");
+
+    // Ambil data terbaru untuk notifikasi
+    const { data: updatedSurat } = await supabase
+      .from("surat_registrasi")
+      .select("current_step, status, created_by, judul_surat")
+      .eq("id", suratId)
+      .single();
+
+    if (updatedSurat) {
+      // 1. Notif ke pembuat surat (yang mengajukan surat)
+      if (updatedSurat.created_by) {
+        notificationService.createNotification(
+          updatedSurat.created_by,
+          'Surat Ditandatangani',
+          `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
+          'success',
+          `/surat/monitoring`
+        ).catch(e => console.error(e));
+      }
+
+      // 2. Notif ke next signer jika masih diproses dan step bertambah
+      if ((updatedSurat.status === 'ON_PROGRESS' || updatedSurat.status === 'DRAFT') && updatedSurat.current_step > currentStep) {
+        const { data: nextSigners } = await supabase
+          .from("surat_signatures")
+          .select("user_id")
+          .eq("surat_id", suratId)
+          .eq("step_order", updatedSurat.current_step);
+          
+        if (nextSigners && nextSigners.length > 0) {
+          for (const ns of nextSigners) {
+            notificationService.createNotification(
+              ns.user_id,
+              'Surat Masuk Baru',
+              `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
+              'info',
+              `/surat/inbox`
+            ).catch(e => console.error(e));
+          }
+        }
+      }
+    }
+
     return { success: true };
   },
 
@@ -261,6 +336,19 @@ export const suratService = {
     if (sigError) throw sigError;
     const { error: suratError } = await supabase.from("surat_registrasi").update({ status: "REJECTED" }).eq("id", suratId);
     if (suratError) throw suratError;
+
+    // Notif ke pembuat surat
+    const { data: suratInfo } = await supabase.from('surat_registrasi').select('created_by, judul_surat').eq('id', suratId).single();
+    if (suratInfo?.created_by) {
+       notificationService.createNotification(
+         suratInfo.created_by,
+         'Surat Ditolak',
+         `Surat "${suratInfo.judul_surat}" telah ditolak. Catatan: ${note}`,
+         'error',
+         `/surat/monitoring`
+       ).catch(e => console.error(e));
+    }
+
     return true;
   },
 

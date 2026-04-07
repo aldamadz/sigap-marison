@@ -223,6 +223,12 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
     queryKey: ['pic-queue', dept.id, picId],
     enabled: !!picId,
     queryFn: async () => {
+      const financeStatuses = ['KEUANGAN', 'KEUANGAN_DONE', 'KEUANGAN_REJECTED'];
+      const isFinanceDept = (() => {
+        const code = (dept.code ?? '').toLowerCase();
+        const name = dept.name.toLowerCase();
+        return code.includes('keu') || name.includes('keuangan') || name.includes('akuntansi');
+      })();
       const { data, error } = await supabase
         .from('surat_registrasi')
         .select(`
@@ -239,7 +245,32 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      return (data ?? []).map((s: any) => ({
+
+      const mergedRows = [...(data ?? [])];
+      if (isFinanceDept) {
+        const { data: financeRows, error: financeError } = await supabase
+          .from('surat_registrasi')
+          .select(`
+            id, no_surat, judul_surat, status, pic_review_status,
+            pic_attachment, pic_note, chat_status, chat_opened_at,
+            updated_at, created_at, pic_id, dept_id, created_by,
+            file_path, lampiran_path,
+            creator:profiles!surat_registrasi_created_by_fkey(full_name),
+            finance_reviews(payment_file_path, status)
+          `)
+          .eq('status', 'DONE')
+          .in('pic_review_status', financeStatuses)
+          .order('updated_at', { ascending: false });
+
+        if (financeError) throw financeError;
+
+        const existingIds = new Set(mergedRows.map((row: any) => row.id));
+        (financeRows ?? []).forEach((row: any) => {
+          if (!existingIds.has(row.id)) mergedRows.push(row);
+        });
+      }
+
+      return mergedRows.map((s: any) => ({
         ...s,
         creator_name: s.creator?.full_name ?? null,
         pic_name: null,

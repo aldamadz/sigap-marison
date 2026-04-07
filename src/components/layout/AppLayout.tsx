@@ -1,8 +1,11 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion' // Tambahkan ini
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Menu } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 
 const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Overview of your agenda metrics' },
@@ -14,35 +17,89 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/surat/registrasi': { title: 'Registrasi Surat', subtitle: 'Kelola pendaftaran surat masuk & keluar' },
   '/surat/inbox': { title: 'Inbox Approval', subtitle: 'Daftar surat yang memerlukan persetujuan' },
   '/surat/monitoring': { title: 'Monitoring Surat', subtitle: 'Lacak status dan alur distribusi surat' },
+  '/surat/riwayat': { title: 'Riwayat Keterlibatan', subtitle: 'Riwayat pengajuan untuk pihak yang terlibat' },
+  '/surat/chat': { title: 'Diskusi', subtitle: 'Komunikasi dengan PIC' },
+  '/pic/monitoring': { title: 'PIC Monitoring', subtitle: 'Kelola review dan tindak lanjut surat' },
 }
 
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const location = useLocation()
 
   const { title, subtitle } =
     TITLE[location.pathname] || { title: '', subtitle: '' }
 
-  return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(v => !v)}
-      />
+  // Detect mobile breakpoint
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024)
+      if (window.innerWidth >= 1024) {
+        setMobileMenuOpen(false)
+      }
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
-      <main className="flex flex-1 flex-col min-w-0 relative">
-        <Header title={title} subtitle={subtitle} />
+  return (
+    <div className="flex min-h-screen bg-background overflow-hidden">
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:block">
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={() => setCollapsed(v => !v)}
+          isMobile={false}
+        />
+      </div>
+
+      {/* Mobile Sheet Sidebar */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent 
+          side="left" 
+          className="w-[280px] sm:w-[300px] p-0 bg-sidebar border-sidebar-border"
+        >
+          <Sidebar
+            collapsed={false}
+            onToggle={() => {}}
+            isMobile={true}
+            onNavigate={() => setMobileMenuOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <main className="flex flex-1 flex-col min-w-0 relative h-screen overflow-hidden">
+        <Header 
+          title={title} 
+          subtitle={subtitle} 
+          onMenuClick={() => setMobileMenuOpen(true)}
+          showMenuButton={isMobile}
+        />
         
         {/* Kontainer Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6 safe-area-bottom">
+          {/* Mobile Breadcrumb/Title when sidebar collapsed */}
+          {isMobile && title && (
+            <div className="mb-4 lg:hidden">
+              <h1 className="text-lg sm:text-xl font-bold text-foreground">{title}</h1>
+              {subtitle && (
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">{subtitle}</p>
+              )}
+            </div>
+          )}
+
           {/* Bungkus Outlet dengan AnimatePresence */}
           <AnimatePresence mode="wait">
             <motion.div
-              key={location.pathname} // Kunci utama: trigger animasi saat path berubah
+              key={location.pathname}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="min-h-0"
             >
               <Outlet />
             </motion.div>
