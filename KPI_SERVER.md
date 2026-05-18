@@ -8,19 +8,71 @@ Peran server: host Proxmox untuk pengembangan sistem, database, media penyimpana
 
 | Komponen | Nilai awal |
 |---|---:|
+| Hostname | `marison` |
 | OS | Debian GNU/Linux 13 (trixie) |
 | Platform | Proxmox VE 9.1.1, kernel 6.17.2-1-pve |
+| Hardware | INTEL X99-QD4 |
 | CPU | 40 vCPU |
 | RAM | 31 GiB total, 21 GiB available saat pengecekan |
 | Swap | 8 GiB, hampir tidak terpakai |
 | Root filesystem | 94G total, 5.3G used, 84G available, 6% used |
 | Inode root | 6.0M total, 72K used, 2% used |
 | Uptime saat baseline | 6 jam 22 menit |
-| Proxmox storage aktif | `local` di `/var/lib/vz`, `local-lvm` untuk `images,rootdir` |
-| VM/CT terdaftar | Belum ada konfigurasi VM/CT terbaca di `/etc/pve/qemu-server` dan `/etc/pve/lxc` |
-| Catatan storage fisik | Ada disk `sda1` bertanda `zfs_member` label `MARIS`, tetapi status ZFS perlu dicek langsung di host |
+| IP manajemen utama | `vmbr0` = `10.10.10.50/24` |
+| NIC/bridge | `nic0` UP, `ens4` DOWN, `vmbr0` UP |
+| Proxmox storage `local` | 98,497,780 KiB total, 5,540,392 KiB used, 87,907,840 KiB available, 5.62% used |
+| Proxmox storage `local-lvm` | 855,855,104 KiB total, 50,409,865 KiB used, 805,445,238 KiB available, 5.89% used |
+| LVM VG `pve` | <952.87g total, 16.00g free |
+| LVM thin pool `data` | <816.21g total, 5.89% data used, 0.42% metadata used |
+| VM berjalan | 5 VM: `TESTING-U26`, `OMADA`, `IT-MONITORING`, `DATABASE-U24`, `SISTEM-U24` |
+| ZFS | `zpool status` dan `zpool list` menunjukkan `no pools available` |
+| Disk fisik terdeteksi | `/dev/sda` WDC WD10PURX 1TB, SMART overall `PASSED`, tetapi punya riwayat `ATA Error Count: 2223` |
 
-Catatan akses: beberapa perintah host-level seperti system bus, netlink, LVM locking, dan ZFS tidak bisa dibaca dari sesi sandbox ini. KPI tetap dibuat, tetapi metrik tersebut perlu diverifikasi dari shell host penuh atau panel Proxmox.
+Data baseline host-level sudah diperbarui dari shell host penuh pada 2026-05-18. Catatan penting: SMART overall `PASSED` tidak berarti disk `/dev/sda` bebas risiko, karena ada riwayat error ATA/UNC yang perlu ditindaklanjuti.
+
+### 1.1 Inventaris VM Berjalan
+
+| VMID | Status | Nama | Peran awal |
+|---:|---|---|---|
+| 100 | running | `TESTING-U26` | Environment testing |
+| 101 | running | `OMADA` | Controller/network service |
+| 102 | running | `IT-MONITORING` | Monitoring |
+| 103 | running | `DATABASE-U24` | Database |
+| 104 | running | `SISTEM-U24` | Sistem/aplikasi |
+
+### 1.2 Detail LVM dan Disk VM
+
+| Logical Volume | Ukuran | Data used | Catatan |
+|---|---:|---:|---|
+| `root` | 96.00g | - | Root host Proxmox |
+| `swap` | 8.00g | - | Swap host |
+| `data` | <816.21g | 5.89% | Thin pool VM/CT |
+| `vm-100-disk-0` | 40.00g | 5.56% | Disk VM `TESTING-U26` |
+| `vm-101-disk-0` | 30.00g | 7.63% | Disk VM `OMADA` |
+| `vm-102-disk-0` | 50.00g | 37.58% | Disk VM `IT-MONITORING` |
+| `vm-103-disk-0` | 120.00g | 13.99% | Disk VM `DATABASE-U24` |
+| `vm-104-disk-0` | 100.00g | 7.99% | Disk VM `SISTEM-U24` |
+
+### 1.3 Temuan Risiko Storage
+
+| Item | Nilai | Status KPI |
+|---|---|---|
+| Disk | `/dev/sda` WDC WD10PURX-64KC9Y0, 1.00 TB, 5400 rpm | Perlu diawasi ketat |
+| Power on hours | 24,487 jam | Wajar untuk disk lama, perlu trend monitoring |
+| Suhu | 30 C | Normal |
+| Reallocated sector | 0 | Normal |
+| Current pending sector | 0 | Normal |
+| Offline uncorrectable | 0 | Normal |
+| ATA Error Count | 2,223 | Warning tinggi |
+| Error utama | `UNC 117 sectors at LBA 104` | Perlu investigasi |
+
+Tindakan prioritas untuk `/dev/sda`:
+
+1. Pastikan tidak ada data penting yang hanya tersimpan di disk ini.
+2. Jalankan `smartctl -x /dev/sda` untuk melihat detail SMART modern.
+3. Jalankan long test SMART di maintenance window.
+4. Jika error baru masih muncul, rencanakan penggantian disk.
+5. Jika disk dipakai untuk media/arsip, backup dan validasi restore menjadi KPI wajib sebelum dipakai operasional.
 
 ## 2. Prinsip Operasional
 
@@ -42,8 +94,9 @@ Catatan akses: beberapa perintah host-level seperti system bus, netlink, LVM loc
 | RAM | Swap usage | < 5% | >= 10% | >= 25% | 1 menit | node exporter |
 | Disk | Pemakaian root `/` | < 70% | >= 75% | >= 85% | 5 menit | node exporter |
 | Disk | Pemakaian inode root | < 70% | >= 75% | >= 85% | 5 menit | node exporter |
-| Storage | Pemakaian pool/data storage | < 70% | >= 75% | >= 85% | 5 menit | Proxmox/ZFS/LVM metrics |
-| Storage | Health disk/pool | 0 error | Ada warning SMART/ZFS | Pool degraded/disk failed | 5 menit + harian | smartctl, zpool, Proxmox |
+| Storage | Pemakaian `local-lvm`/thin pool | < 70% | >= 75% | >= 85% | 5 menit | Proxmox/LVM metrics |
+| Storage | Metadata thin pool `data` | < 60% | >= 70% | >= 80% | 5 menit | LVM/Proxmox metrics |
+| Storage | Health disk fisik | 0 error baru | SMART warning, ATA/UNC error baru, atau self-test gagal | Disk failed/degraded/data tidak terbaca | 5 menit + harian | smartctl, Proxmox |
 | Database | Ketersediaan DB | >= 99.5% per bulan | Down > 5 menit | Down > 15 menit | 1 menit | DB exporter, healthcheck |
 | Database | Backup database berhasil | 100% job harian | 1 job gagal | 2 job berturut-turut gagal | Harian | backup logs |
 | Database | Uji restore database | 1x per bulan berhasil | Belum diuji bulan berjalan | Gagal restore | Bulanan | restore drill |
@@ -142,8 +195,8 @@ Catatan akses: beberapa perintah host-level seperti system bus, netlink, LVM loc
 
 | Severity | Kondisi | Respons |
 |---|---|---|
-| P0 | Host down, DB down, storage degraded, backup kritis hilang | Respons <= 10 menit, update status tiap 30 menit |
-| P1 | Disk >= 85%, RAM available <= 10%, backup gagal 2x, latency DB parah | Respons <= 30 menit, perbaikan hari yang sama |
+| P0 | Host down, DB down, data storage tidak terbaca, backup kritis hilang | Respons <= 10 menit, update status tiap 30 menit |
+| P1 | Disk >= 85%, RAM available <= 10%, backup gagal 2x, SMART self-test gagal, ATA/UNC error baru, latency DB parah | Respons <= 30 menit, perbaikan hari yang sama |
 | P2 | Disk >= 75%, patch tertunda, monitoring target hilang | Respons <= 1 hari kerja |
 | P3 | Optimasi kapasitas, cleanup, dokumentasi | Masuk backlog operasional |
 
@@ -157,7 +210,7 @@ Minimal stack:
 4. Node Exporter untuk host dan VM/CT.
 5. Proxmox exporter untuk status VM/CT dan storage.
 6. PostgreSQL/MySQL exporter sesuai database yang dipakai.
-7. SMART monitoring untuk disk fisik.
+7. SMART monitoring untuk disk fisik, termasuk alert untuk self-test gagal, ATA error baru, UNC error, reallocated sector, pending sector, dan suhu.
 8. Backup log monitoring untuk Proxmox Backup Server, vzdump, restic, Borg, atau tool yang dipilih.
 
 Dashboard wajib:
@@ -196,7 +249,7 @@ Mingguan:
 1. Review kapasitas 30/60/90 hari.
 2. Review update OS/Proxmox.
 3. Audit port/service terbuka.
-4. Cek health disk dan storage pool.
+4. Cek health disk fisik, SMART log, dan thin pool `local-lvm`.
 5. Review slow query database.
 
 Bulanan:
@@ -204,25 +257,25 @@ Bulanan:
 1. Uji restore database.
 2. Uji restore 1 VM/CT sample.
 3. Review user dan akses.
-4. Review biaya/kapasitas storage.
+4. Review biaya/kapasitas storage dan rencana penggantian disk berisiko.
 5. Update KPI target berdasarkan tren.
 
-## 10. Data yang Perlu Diverifikasi Langsung di Host
+## 10. Tindak Lanjut Verifikasi
 
-Jalankan dari shell host penuh, bukan sandbox terbatas:
+Data host utama sudah diverifikasi dari shell host penuh: hostname, network, Proxmox storage, daftar VM, ZFS, LVM, dan SMART dasar `/dev/sda`.
+
+Tindak lanjut yang masih perlu dilakukan:
 
 ```bash
-hostnamectl
-ip -br addr
-pvesm status
-qm list
-pct list
-zpool status
-zpool list
-pvs
-vgs
-lvs
-smartctl -a /dev/sda
+smartctl -x /dev/sda
+smartctl -t long /dev/sda
+lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS,MODEL,SERIAL
+findmnt
 ```
 
-Hasil verifikasi tersebut sebaiknya ditambahkan ke bagian baseline sebelum KPI dipakai sebagai acuan resmi.
+Keputusan operasional setelah verifikasi:
+
+1. Jika `/dev/sda` berisi data penting, buat backup penuh dan uji restore sebelum dipakai lebih lanjut.
+2. Jika long test SMART gagal atau muncul ATA/UNC error baru, jadwalkan penggantian disk.
+3. Jika `/dev/sda` hanya disk lama/tidak dipakai, dokumentasikan statusnya agar tidak dianggap storage produksi.
+4. Jika akan dipakai sebagai media storage, jangan gunakan sebagai satu-satunya salinan data; gunakan backup terpisah atau storage redundant.
