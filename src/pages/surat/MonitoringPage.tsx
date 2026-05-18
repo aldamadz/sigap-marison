@@ -466,6 +466,68 @@ const MonitoringPage = () => {
               );
             })()}
 
+            {selectedSurat?.pic_review_status === 'SPK' && !selectedSurat?.pic_attachment && (
+              <div className="flex gap-3 p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-amber-700">
+                <Info size={16} className="shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-tight">SPK Belum Terlampir</p>
+                  <p className="text-[10px] font-bold leading-normal opacity-90">
+                    Status sudah SPK diterbitkan, tetapi file SPK belum tersimpan pada dokumen ini.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {(selectedSurat?.file_path || selectedSurat?.lampiran_path) && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <FileCheck size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Berkas Pengajuan</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {selectedSurat?.file_path && (
+                    <a
+                      href={selectedSurat.file_path}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileCheck size={16} className="text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-black uppercase text-foreground tracking-widest">Dokumen</p>
+                        <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
+                          {selectedSurat.file_path.split('/').pop()}
+                        </p>
+                      </div>
+                      <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </a>
+                  )}
+
+                  {selectedSurat?.lampiran_path && (
+                    <a
+                      href={selectedSurat.lampiran_path}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileCheck size={16} className="text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-black uppercase text-foreground tracking-widest">Lampiran</p>
+                        <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
+                          {selectedSurat.lampiran_path.split('/').pop()}
+                        </p>
+                      </div>
+                      <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* PIC FEEDBACK SECTION */}
             {selectedSurat?.pic_note && (
               <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -574,7 +636,7 @@ const MonitoringPage = () => {
             )}
 
             {/* SPK */}
-            {selectedSurat?.pic_review_status === 'SPK' && selectedSurat?.pic_attachment && (
+            {selectedSurat?.pic_attachment && (
               <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <FileCheck size={14} />

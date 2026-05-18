@@ -191,15 +191,21 @@ export const suratService = {
         const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
         const firstSigners = signerPayload.filter((s: any) => s.step_order === firstStepOrd);
         
-        for (const s of firstSigners) {
-          notificationService.createNotification(
-             s.user_id,
-             'Surat Masuk Baru',
-             `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
-             'info',
-             `/surat/inbox`
-          ).catch(e => console.error("Notif error:", e));
-        }
+        const notificationResults = await Promise.allSettled(
+          firstSigners.map((s: any) =>
+            notificationService.createNotification(
+              s.user_id,
+              'Surat Masuk Baru',
+              `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
+              'info',
+              `/surat/inbox`
+            )
+          )
+        );
+
+        notificationResults.forEach((result) => {
+          if (result.status === 'rejected') console.error("Notif error:", result.reason);
+        });
       }
 
       return surat;
@@ -305,7 +311,7 @@ export const suratService = {
       }
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
-      if ((updatedSurat.status === 'ON_PROGRESS' || updatedSurat.status === 'DRAFT') && updatedSurat.current_step > currentStep) {
+      if (updatedSurat.status === 'PROSES' && updatedSurat.current_step > currentStep) {
         const { data: nextSigners } = await supabase
           .from("surat_signatures")
           .select("user_id")
@@ -313,15 +319,21 @@ export const suratService = {
           .eq("step_order", updatedSurat.current_step);
           
         if (nextSigners && nextSigners.length > 0) {
-          for (const ns of nextSigners) {
-            notificationService.createNotification(
-              ns.user_id,
-              'Surat Masuk Baru',
-              `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
-              'info',
-              `/surat/inbox`
-            ).catch(e => console.error(e));
-          }
+          const notificationResults = await Promise.allSettled(
+            nextSigners.map((ns: any) =>
+              notificationService.createNotification(
+                ns.user_id,
+                'Surat Masuk Baru',
+                `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
+                'info',
+                `/surat/inbox`
+              )
+            )
+          );
+
+          notificationResults.forEach((result) => {
+            if (result.status === 'rejected') console.error("Notif error:", result.reason);
+          });
         }
       }
     }

@@ -479,6 +479,39 @@ const UserChatPage: React.FC = () => {
               </div>
             </div>
 
+            {(selected.file_path || selected.lampiran_path || selected.pic_attachment || selected.payment_file_path) && (
+              <div className="px-4 sm:px-6 py-2 border-b border-border bg-background/70 shrink-0">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {[
+                    { label: 'Dokumen', icon: FileText, url: getFileUrl(selected.file_path ?? null), show: !!selected.file_path },
+                    { label: 'Lampiran', icon: Paperclip, url: getFileUrl(selected.lampiran_path ?? null), show: !!selected.lampiran_path },
+                    { label: 'SPK', icon: FileCheck, url: getFileUrl(selected.pic_attachment ?? null), show: !!selected.pic_attachment },
+                    { label: 'Bukti Transaksi', icon: FileCheck, url: getFileUrl(selected.payment_file_path ?? null), show: !!selected.payment_file_path },
+                  ].filter(item => item.show && item.url).map(({ label, icon: Icon, url }) => (
+                    <a
+                      key={label}
+                      href={url ?? '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="h-8 px-3 rounded-lg border border-border bg-card hover:bg-accent flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-foreground shrink-0 transition-colors"
+                    >
+                      <Icon size={13} />
+                      {label}
+                      <ExternalLink size={10} className="opacity-50" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selected.pic_review_status === 'SPK' && !selected.pic_attachment && (
+              <div className="px-4 sm:px-6 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
+                <p className="text-xs sm:text-sm font-bold text-amber-600">
+                  Status SPK sudah diterbitkan, tetapi file SPK belum terlampir.
+                </p>
+              </div>
+            )}
+
             {/* Messages Area */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 scroll-smooth">
               {messages.length === 0 ? (

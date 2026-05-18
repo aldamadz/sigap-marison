@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { notificationService } from "./notification.service";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -278,6 +279,43 @@ export const picService = {
       .single();
 
     if (error) throw new Error(error.message);
+
+    const { data: surat } = await supabase
+      .from("surat_registrasi")
+      .select(`
+        id, judul_surat, created_by, pic_id,
+        penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
+          form_id,
+          master_forms(
+            department_id,
+            master_departments(master_dept_pics(user_id))
+          )
+        )
+      `)
+      .eq("id", suratId)
+      .maybeSingle();
+
+    const recipientIds = new Set<string>();
+    if (senderRole === "pic") {
+      if (surat?.created_by && surat.created_by !== user.id) recipientIds.add(surat.created_by);
+    } else {
+      if (surat?.pic_id && surat.pic_id !== user.id) recipientIds.add(surat.pic_id);
+
+      const deptPics = surat?.penggunaan?.master_forms?.master_departments?.master_dept_pics ?? [];
+      deptPics.forEach((pic: any) => {
+        if (pic.user_id && pic.user_id !== user.id) recipientIds.add(pic.user_id);
+      });
+    }
+
+    recipientIds.forEach((recipientId) => {
+      notificationService.createNotification(
+        recipientId,
+        "Pesan Diskusi Baru",
+        `${profile?.full_name ?? "Pengguna"} mengirim pesan pada "${surat?.judul_surat ?? "pengajuan"}"`,
+        "feedback",
+        senderRole === "pic" ? "/surat/chat" : "/pic/monitoring"
+      ).catch((notifError) => console.error("Chat notification error:", notifError));
+    });
 
     // Workaround trigger DB "force_unread":
     // setelah PIC membalas, pastikan pesan creator di surat yang sama tetap terbaca oleh PIC.

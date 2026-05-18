@@ -84,6 +84,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   }
 
   const getPicSuratIds = async (userId: string): Promise<string[]> => {
+    if (isUserAdmin) {
+      const { data } = await supabase
+        .from('surat_registrasi')
+        .select('id')
+        .eq('status', 'DONE')
+      return data?.map((s: any) => s.id) ?? []
+    }
+
     const { data: deptPics } = await supabase
       .from('master_dept_pics')
       .select('dept_id, master_departments(code, name)')
@@ -137,7 +145,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   }, [location.pathname, user?.id])
 
   useEffect(() => {
-    if (location.pathname.startsWith('/pic/monitoring') && user?.id && isUserPIC) {
+    if (location.pathname.startsWith('/pic/monitoring') && user?.id && (isUserPIC || isUserAdmin)) {
       const t = setTimeout(async () => {
         const suratIds = await getPicSuratIds(user.id)
         if (!suratIds.length) {
@@ -174,10 +182,10 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       }, 1500)
       return () => clearTimeout(t)
     }
-  }, [location.pathname, user?.id, isUserPIC])
+  }, [location.pathname, user?.id, isUserPIC, isUserAdmin])
 
   useEffect(() => {
-    if (location.pathname.startsWith('/surat/chat') && user?.id && isUserPIC) {
+    if (location.pathname.startsWith('/surat/chat') && user?.id && (isUserPIC || isUserAdmin)) {
       const t = setTimeout(async () => {
         const suratIds = await getPicSuratIds(user.id)
         if (!suratIds.length) {
@@ -206,7 +214,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       }, 800)
       return () => clearTimeout(t)
     }
-  }, [location.pathname, user?.id, isUserPIC])
+  }, [location.pathname, user?.id, isUserPIC, isUserAdmin])
 
   useEffect(() => {
     if (collapsed) return
@@ -251,7 +259,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   }, [user?.id])
 
   useEffect(() => {
-    if (!user?.id || !isUserPIC) return
+    if (!user?.id || (!isUserPIC && !isUserAdmin)) return
 
     const fetchChatBadge = async () => {
       const suratIds = await getPicSuratIds(user.id)
@@ -286,10 +294,10 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_chats' }, fetchChatBadge)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [user?.id, isUserPIC])
+  }, [user?.id, isUserPIC, isUserAdmin])
 
   useEffect(() => {
-    if (!isUserPIC) return
+    if (!isUserPIC && !isUserAdmin) return
     const onPicUnreadCount = (event: Event) => {
       const customEvent = event as CustomEvent<{ count?: number }>
       const n = customEvent.detail?.count ?? 0
@@ -300,7 +308,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
     return () => {
       window.removeEventListener('pic-unread-count', onPicUnreadCount as EventListener)
     }
-  }, [isUserPIC])
+  }, [isUserPIC, isUserAdmin])
 
   useEffect(() => {
     if (!user?.id) return

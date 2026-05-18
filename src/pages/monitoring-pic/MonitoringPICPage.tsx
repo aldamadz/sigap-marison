@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { picService, ChatMessage } from '@/services/pic.service';
@@ -929,6 +929,30 @@ const MonitoringPICPage: React.FC = () => {
   const unreadPerDept = (deptId: string) =>
     suratList.filter(s => suratBelongsToDept(s, deptId) && (unreadMap[s.id] ?? 0) > 0).length;
 
+  const sortedDepts = useMemo(() => {
+    const originalOrder = new Map(myDepts.map((dept, index) => [dept.id, index]));
+    const financeDeptId = keuanganDept?.id;
+    const belongsToDept = (s: SuratItem, deptId: string) => {
+      if (s.form_dept_id === deptId) return true;
+      if (
+        financeDeptId &&
+        deptId === financeDeptId &&
+        ['KEUANGAN', 'KEUANGAN_DONE', 'KEUANGAN_REJECTED'].includes(s.pic_review_status ?? '')
+      ) {
+        return true;
+      }
+      return false;
+    };
+    const getUnread = (deptId: string) =>
+      suratList.filter(s => belongsToDept(s, deptId) && (unreadMap[s.id] ?? 0) > 0).length;
+
+    return [...myDepts].sort((a, b) => {
+      const unreadDiff = getUnread(b.id) - getUnread(a.id);
+      if (unreadDiff !== 0) return unreadDiff;
+      return (originalOrder.get(a.id) ?? 0) - (originalOrder.get(b.id) ?? 0);
+    });
+  }, [myDepts, suratList, unreadMap, keuanganDept?.id]);
+
   const handleActionComplete = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['pic-chat-list'] });
   }, [queryClient]);
@@ -963,7 +987,7 @@ const MonitoringPICPage: React.FC = () => {
         {/* Tab departemen */}
         {myDepts.length > 1 && (
           <div className="flex gap-1 border-b border-white/5 overflow-x-auto shrink-0 px-3 py-2">
-            {myDepts.map(dept => {
+            {sortedDepts.map(dept => {
               const unread = unreadPerDept(dept.id);
               const isActive = activeDeptId === dept.id;
               return (

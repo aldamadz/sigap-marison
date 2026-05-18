@@ -314,13 +314,14 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
       if (action === 'APPROVE_SPK') {
         if (!file) throw new Error('File SPK wajib');
         filePath = await uploadFile(file, 'spk_files', 'spk_files', surat.id);
-        await supabase.from('surat_registrasi').update({
+        const { error: updateError } = await supabase.from('surat_registrasi').update({
           pic_review_status: 'SPK',
           pic_attachment: filePath,
           pic_note: note || null,
           pic_action_at: new Date().toISOString(),
           pic_action_by: picId,
         }).eq('id', surat.id);
+        if (updateError) throw updateError;
         await picService.sendSystemMessage(surat.id, '📋 PIC telah menerbitkan SPK untuk pengajuan ini.');
 
       } else if (action === 'APPROVE_KEUANGAN') {
@@ -333,14 +334,15 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
           .eq('surat_id', surat.id)
           .single();
         if (existing) {
-          await supabase.from('finance_reviews').update({
+          const { error: financeUpdateError } = await supabase.from('finance_reviews').update({
             payment_file_path: filePath,
             status: 'DONE',
             action_at: new Date().toISOString(),
             action_by: picId,
           }).eq('id', existing.id);
+          if (financeUpdateError) throw financeUpdateError;
         } else {
-          await supabase.from('finance_reviews').insert({
+          const { error: financeInsertError } = await supabase.from('finance_reviews').insert({
             surat_id: surat.id,
             payment_file_path: filePath,
             status: 'DONE',
@@ -348,30 +350,34 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
             action_at: new Date().toISOString(),
             action_by: picId,
           });
+          if (financeInsertError) throw financeInsertError;
         }
-        await supabase.from('surat_registrasi').update({
+        const { error: updateError } = await supabase.from('surat_registrasi').update({
           pic_review_status: 'KEUANGAN_DONE',
           pic_note: note || null,
           pic_action_at: new Date().toISOString(),
         }).eq('id', surat.id);
+        if (updateError) throw updateError;
         await picService.sendSystemMessage(surat.id, '💰 PIC telah mengunggah bukti pembayaran. Proses keuangan selesai.');
 
       } else if (action === 'APPROVE_DONE') {
-        await supabase.from('surat_registrasi').update({
+        const { error: updateError } = await supabase.from('surat_registrasi').update({
           pic_review_status: 'KEUANGAN_DONE',
           pic_note: note || null,
           pic_action_at: new Date().toISOString(),
         }).eq('id', surat.id);
+        if (updateError) throw updateError;
         await picService.sendSystemMessage(surat.id, '✅ PIC menandai pengajuan ini sebagai selesai.');
 
       } else if (action === 'REJECT') {
-        await supabase.from('surat_registrasi').update({
+        const { error: updateError } = await supabase.from('surat_registrasi').update({
           pic_review_status: 'REJECTED',
           pic_note: note,
           pic_action_at: new Date().toISOString(),
           pic_action_by: picId,
           chat_status: 'CLOSED',
         }).eq('id', surat.id);
+        if (updateError) throw updateError;
         await picService.sendSystemMessage(surat.id, `❌ Pengajuan ditolak PIC.\nAlasan: ${note}`);
       }
 

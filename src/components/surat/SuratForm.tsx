@@ -39,6 +39,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isCopied, setIsCopied]                   = useState(false);
   const [isDownloading, setIsDownloading]         = useState(false);
   const [openMatrix, setOpenMatrix]               = useState(false);
+  const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
+  const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
   const [lampiranFile, setLampiranFile]           = useState<File | null>(null);
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
@@ -95,6 +97,22 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [master.projects, formData.office_id, isPusatSelected]);
 
   const isDirty = useMemo(() => !!generatedNoSurat || !!file || formData.judul_surat.length > 0, [generatedNoSurat, file, formData.judul_surat]);
+
+  const normalizeNameSearch = (value: string) =>
+    value.toLowerCase().replace(/\s+/g, " ").trim();
+
+  const getSelectedSignerName = (userId: string) =>
+    master.users?.find((u: any) => u.id === userId)?.full_name || "";
+
+  const getFilteredSignerUsers = (index: number) => {
+    const tokens = normalizeNameSearch(signerSearch[index] || "").split(" ").filter(Boolean);
+    if (tokens.length === 0) return master.users || [];
+
+    return (master.users || []).filter((u: any) => {
+      const haystack = normalizeNameSearch(u.full_name || "");
+      return tokens.every(token => haystack.includes(token));
+    });
+  };
 
   // ── EFFECTS ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -568,16 +586,51 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                             <p className="text-xs font-black text-primary uppercase leading-tight">{s.label_jabatan}</p>
                             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">Status: {s.role_name}</p>
                           </div>
-                          <Select value={s.user_id} onValueChange={val => { const ns = [...signers]; ns[i].user_id = val; setSigners(ns); }}>
-                            <SelectTrigger className="h-10 bg-muted/20 border-none ring-1 ring-border rounded-lg focus:ring-primary">
-                              <SelectValue placeholder={`Pilih ${s.label_jabatan}...`} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {master.users?.map((u: any) => (
-                                <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover open={openSignerIndex === i} onOpenChange={(open) => setOpenSignerIndex(open ? i : null)}>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 w-full justify-between bg-muted/20 border-none ring-1 ring-border rounded-lg font-medium text-left"
+                              >
+                                <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
+                                  {s.user_id ? getSelectedSignerName(s.user_id) : `Pilih ${s.label_jabatan}...`}
+                                </span>
+                                <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                              <Command shouldFilter={false}>
+                                <CommandInput
+                                  value={signerSearch[i] || ""}
+                                  onValueChange={(value) => setSignerSearch(prev => ({ ...prev, [i]: value }))}
+                                  placeholder="Cari nama depan, tengah, atau belakang..."
+                                />
+                                <CommandList className="max-h-[260px]">
+                                  <CommandEmpty>User tidak ditemukan.</CommandEmpty>
+                                  <CommandGroup>
+                                    {getFilteredSignerUsers(i).map((u: any) => (
+                                      <CommandItem
+                                        key={u.id}
+                                        value={u.full_name}
+                                        onSelect={() => {
+                                          const ns = [...signers];
+                                          ns[i].user_id = u.id;
+                                          setSigners(ns);
+                                          setOpenSignerIndex(null);
+                                          setSignerSearch(prev => ({ ...prev, [i]: "" }));
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <Check className={cn("mr-2 h-4 w-4", s.user_id === u.id ? "opacity-100" : "opacity-0")} />
+                                        <span className="truncate">{u.full_name}</span>
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                       </div>
                       {i < signers.length - 1 && <ArrowDown className="text-primary/20 w-4 h-4 my-1" />}

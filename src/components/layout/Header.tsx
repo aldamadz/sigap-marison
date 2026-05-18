@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { id as localeID } from 'date-fns/locale'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { notificationService } from '@/services/notification.service'
 
 interface Notification {
   id: string
@@ -19,6 +20,27 @@ interface Notification {
   isRead: boolean
   url?: string
   dbId?: string
+}
+
+const mapDbNotification = (row: any): Notification => {
+  const typeMap: Record<string, Notification['type']> = {
+    success: 'completed',
+    info: 'incoming',
+    warning: 'rejected',
+    error: 'rejected',
+    feedback: 'feedback',
+  }
+
+  return {
+    id: `db-${row.id}`,
+    dbId: row.id,
+    title: row.title,
+    description: row.message,
+    type: typeMap[row.type] ?? 'completed',
+    time: new Date(row.created_at),
+    isRead: !!row.is_read,
+    url: row.link || '/surat/monitoring',
+  }
 }
 
 interface HeaderProps {
@@ -67,10 +89,7 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
     // setNotificationsOpen(false) - Removed this to prevent auto-close
 
     if (n.dbId) {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', n.dbId)
+      await notificationService.markAsRead(n.dbId)
     }
 
     if (n.url) {
@@ -81,14 +100,7 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
   }, [navigate])
 
   useEffect(() => {
-    const saved = localStorage.getItem('surat_notifs')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved).map((n: any) => ({ ...n, time: new Date(n.time) }))
-        setNotifications(parsed)
-      } catch (e) { console.error('Load notif fail', e) }
-    }
-
+    localStorage.removeItem('surat_notifs')
     const audio = new Audio('/sounds/notif.WAV')
     audio.preload = 'auto'
     audio.volume = 0.6
@@ -96,158 +108,88 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
   }, [])
 
   useEffect(() => {
-    localStorage.setItem('surat_notifs', JSON.stringify(notifications))
-  }, [notifications])
+    let notifChannel: any = null
+    let activeUserId: string | null = null
 
-  useEffect(() => {
-    let suratChannel: any
-    let notifChannel: any
+    const removeNotifChannel = () => {
+      if (notifChannel) {
+        supabase.removeChannel(notifChannel)
+        notifChannel = null
+      }
+    }
 
-    const initRealtime = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const currentUser = session?.user
-      if (!currentUser) return
+    const loadNotificationsForUser = async (userId?: string) => {
+      removeNotifChannel()
+      activeUserId = userId ?? null
 
-      suratChannel = supabase
-        .channel(`smart-notifs-${currentUser.id}`)
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'surat_registrasi',
-        }, async (payload) => {
-          const newData = payload.new as any
-          const oldData = payload.old as any
-          if (!newData?.id) return
+      if (!userId) {
+        setNotifications([])
+        return
+      }
 
-          try {
-            const isNew = payload.eventType === 'INSERT'
-            const isStepUpdate =
-              payload.eventType === 'UPDATE' &&
-              oldData &&
-              newData.current_step !== oldData.current_step
-
-            if (isNew || isStepUpdate) {
-              if (isNew) await new Promise(r => setTimeout(r, 1200))
-
-              const { data: myTurn } = await supabase
-                .from('surat_signatures')
-                .select('id, role_name')
-                .eq('surat_id', newData.id)
-                .eq('user_id', currentUser.id)
-                .eq('step_order', Number(newData.current_step))
-                .maybeSingle()
-
-              if (myTurn) {
-                addNotif({
-                  id: `in-${newData.id}-${newData.current_step}`,
-                  title: 'Permintaan Stamp Baru',
-                  description: `Surat "${newData.judul_surat}" menunggu verifikasi Anda.`,
-                  type: 'incoming',
-                  time: new Date(),
-                  isRead: false,
-                  url: '/surat/inbox',
-                })
-                queryClient.invalidateQueries({ queryKey: ['surat-inbox'] })
-              }
-            }
-
-            if (newData.created_by === currentUser.id && payload.eventType === 'UPDATE' && oldData) {
-              if (newData.pic_feedback && newData.pic_feedback !== oldData.pic_feedback) {
-                addNotif({
-                  id: `fb-${newData.id}-${Date.now()}`,
-                  title: 'Feedback PIC Baru',
-                  description: `Catatan PIC: ${newData.pic_feedback}`,
-                  type: 'feedback',
-                  time: new Date(),
-                  isRead: false,
-                  url: '/surat/monitoring',
-                })
-              }
-
-              if (newData.status === 'REJECTED' && oldData.status !== 'REJECTED') {
-                addNotif({
-                  id: `rej-${newData.id}-${Date.now()}`,
-                  title: 'Dokumen Ditolak',
-                  description: `Surat "${newData.judul_surat}" ditolak.`,
-                  type: 'rejected',
-                  time: new Date(),
-                  isRead: false,
-                  url: '/surat/monitoring',
-                })
-              }
-              else if (
-                Number(newData.current_step) > Number(oldData.current_step) &&
-                newData.status !== 'DONE'
-              ) {
-                addNotif({
-                  id: `step-${newData.id}-${newData.current_step}`,
-                  title: 'Update Progres',
-                  description: `Surat "${newData.judul_surat}" naik ke Step ${newData.current_step}.`,
-                  type: 'stamped',
-                  time: new Date(),
-                  isRead: false,
-                  url: '/surat/monitoring',
-                })
-              }
-
-              queryClient.invalidateQueries({ queryKey: ['surat-list'] })
-            }
-          } catch (err) {
-            console.error('Notif surat error:', err)
-          }
+      setNotifications([])
+      notificationService
+        .getMyNotifications()
+        .then((rows) => {
+          if (activeUserId === userId) setNotifications(rows.map(mapDbNotification))
         })
-        .subscribe()
+        .catch((err) => console.error('Load database notifications failed:', err))
 
       notifChannel = supabase
-        .channel(`db-notifs-${currentUser.id}`)
+        .channel(`db-notifs-${userId}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'notifications',
-            filter: `user_id=eq.${currentUser.id}`,
+            filter: `user_id=eq.${userId}`,
           },
           (payload) => {
+            if (activeUserId !== userId) return
             const row = payload.new as any
             if (!row) return
 
-            const typeMap: Record<string, Notification['type']> = {
-              success: 'completed',
-              info:    'incoming',
-              warning: 'rejected',
-            }
-
-            const action = (row.data?.action as string) ?? ''
-            let url = '/surat/monitoring'
-            if (action === 'chat_opened' || action === 'chat_closed') {
-              const sid = row.data?.surat_id
-              url = sid ? `/surat/pic/${sid}` : '/surat/monitoring'
-            }
-
-            addNotif({
-              id:          `db-${row.id}`,
-              dbId:        row.id,
-              title:       row.title,
-              description: row.message,
-              type:        typeMap[row.type] ?? 'completed',
-              time:        new Date(row.created_at),
-              isRead:      false,
-              url,
-            })
+            addNotif(mapDbNotification(row))
 
             queryClient.invalidateQueries({ queryKey: ['surat-list'] })
             queryClient.invalidateQueries({ queryKey: ['pic-inbox'] })
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            if (activeUserId !== userId) return
+            const row = payload.new as any
+            if (!row) return
+
+            setNotifications((prev) =>
+              prev.map((item) =>
+                item.dbId === row.id ? mapDbNotification(row) : item
+              )
+            )
+          }
+        )
         .subscribe()
     }
 
-    initRealtime()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      loadNotificationsForUser(session?.user?.id)
+    })
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadNotificationsForUser(session?.user?.id)
+    })
 
     return () => {
-      if (suratChannel) supabase.removeChannel(suratChannel)
-      if (notifChannel) supabase.removeChannel(notifChannel)
+      authListener.subscription.unsubscribe()
+      removeNotifChannel()
     }
   }, [addNotif, queryClient])
 
@@ -256,16 +198,13 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
 
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', session.user.id)
-        .eq('is_read', false)
+      await notificationService.markAllAsRead()
     }
   }, [])
 
-  const handleClearAll = useCallback(() => {
+  const handleClearAll = useCallback(async () => {
     setNotifications([])
+    await notificationService.deleteAllMyNotifications()
   }, [])
 
   return (
