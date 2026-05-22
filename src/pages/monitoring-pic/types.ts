@@ -17,6 +17,13 @@ export interface SuratItem {
   created_by: string;
   file_path: string | null;
   lampiran_path: string | null;
+  surat_attachments?: Array<{
+    id: string;
+    file_url: string;
+    file_name: string | null;
+    file_type?: string | null;
+    file_size?: number | null;
+  }>;
   // joined
   creator_name?: string | null;
   pic_name?: string | null;

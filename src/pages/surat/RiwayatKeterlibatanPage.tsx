@@ -59,6 +59,13 @@ interface SuratItem {
   pic_review_status: string | null;
   file_path: string | null;
   lampiran_path: string | null;
+  surat_attachments?: Array<{
+    id: string;
+    file_url: string;
+    file_name: string | null;
+    file_type?: string | null;
+    file_size?: number | null;
+  }>;
   pic_attachment: string | null;
   creator?: { full_name?: string | null } | null;
   pic?: { full_name?: string | null } | null;
@@ -161,6 +168,7 @@ const SELECT_SURAT = `
   id, no_surat, judul_surat, status, created_at, updated_at,
   created_by, pic_id, current_step, pic_review_status,
   file_path, lampiran_path, pic_attachment,
+  surat_attachments(id, file_url, file_name, file_type, file_size),
   creator:profiles!surat_registrasi_created_by_fkey(full_name),
   pic:profiles!surat_registrasi_pic_id_fkey(full_name),
   surat_signatures(
@@ -334,6 +342,18 @@ const RiwayatKeterlibatanPage = () => {
       return hitSearch && hitRole;
     });
   }, [prepared, search, roleFilter]);
+
+  const getAttachments = (surat: SuratItem) => {
+    const attachments = surat.surat_attachments ?? [];
+    if (attachments.length > 0) return attachments.map((attachment, index) => ({
+      label: `Lampiran Permohonan ${index + 1}`,
+      url: attachment.file_url,
+    }));
+    return [{
+      label: 'Lampiran Permohonan',
+      url: resolveStorageUrl(surat.lampiran_path, 'lampiran_surat'),
+    }];
+  };
 
   const counts = useMemo(() => ({
     total: prepared.length,
@@ -557,10 +577,7 @@ const RiwayatKeterlibatanPage = () => {
                       label: 'Dokumen Permohonan',
                       url: resolveStorageUrl(selected.file_path, 'dokumen_surat'),
                     },
-                    {
-                      label: 'Lampiran Permohonan',
-                      url: resolveStorageUrl(selected.lampiran_path, 'lampiran_surat'),
-                    },
+                    ...getAttachments(selected),
                     {
                       label: 'SPK / Attachment PIC',
                       url: resolveStorageUrl(selected.pic_attachment, 'spk_files'),

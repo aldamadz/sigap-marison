@@ -16,11 +16,12 @@ import {
 } from "lucide-react";
 import { suratService } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
-import { PreviewModal } from "@/components/surat/PreviewModal";
+import { documentPreviewService } from "@/services/document-preview.service";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea"; 
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 export default function InboxPage() {
@@ -33,7 +34,7 @@ export default function InboxPage() {
   const itemsPerPage = 5; // Menampilkan 5 data per halaman
 
   // State untuk Preview & Notes
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
@@ -150,25 +151,35 @@ const handleApprove = async (item: any) => {
 
   const openPreview = async (suratId: string, fallbackUrl: string) => {
     // Query file_path terbaru dari DB — cegah tampil file lama dari React state
-    const { data } = await supabase
-      .from("surat_registrasi")
-      .select("file_path")
-      .eq("id", suratId)
-      .single();
-    
-    const url = data?.file_path || fallbackUrl;
-    if (!url) return;
+    if (!fallbackUrl) return toast.error("File dokumen belum tersedia.");
+    setPreviewingId(suratId);
     
     // Decode dulu sebelum encode ulang — cegah %20 → %2520 → preview kosong
-    const stripped = url.split('?')[0];
-    const decoded = decodeURIComponent(stripped);
-    const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(decoded)}&wdPrint=0&wdEmbedCode=0`;
-    setPreviewUrl(viewerUrl);
+    try {
+      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
+      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal membuka PDF.");
+    } finally {
+      setPreviewingId(null);
+    }
   };
 
-  const openLampiran = (url: string) => {
+  const openLampiran = async (suratId: string, url: string) => {
     if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    try {
+      await documentPreviewService.openStoredFileInNewTab(suratId, url);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal membuka lampiran.");
+    }
+  };
+
+  const getAttachments = (surat: any) => {
+    const attachments = Array.isArray(surat?.surat_attachments) ? surat.surat_attachments : [];
+    if (attachments.length > 0) return attachments;
+    return surat?.lampiran_path
+      ? [{ id: 'legacy-lampiran', file_url: surat.lampiran_path, file_name: surat.lampiran_path.split('/').pop() }]
+      : [];
   };
 
   if (loading) {
@@ -184,6 +195,19 @@ const handleApprove = async (item: any) => {
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-10 animate-in fade-in duration-700">
+      <Dialog open={!!previewingId}>
+        <DialogContent className="max-w-sm rounded-3xl text-center">
+          <DialogHeader>
+            <DialogTitle className="flex flex-col items-center gap-3 text-sm font-black uppercase">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              PDF sedang dibuat
+            </DialogTitle>
+            <DialogDescription>
+              Dokumen sedang diproses di background. PDF akan terbuka otomatis saat siap.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-border pb-8">
@@ -265,22 +289,24 @@ const handleApprove = async (item: any) => {
 
                 {/* Actions Section */}
                 <div className="md:col-span-3 p-6 bg-muted/10 flex flex-col justify-center gap-2 border-t md:border-t-0 md:border-l border-border">
-                  {item.surat_registrasi.lampiran_path && (
-                    <Button 
-                      variant="outline" 
+                  {getAttachments(item.surat_registrasi).map((attachment: any, index: number) => (
+                    <Button
+                      key={attachment.id ?? attachment.file_url}
+                      variant="outline"
                       className="w-full h-10 text-[10px] font-black uppercase tracking-widest border-blue-500/30 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                      onClick={() => openLampiran(item.surat_registrasi.lampiran_path)}
+                      onClick={() => openLampiran(item.surat_registrasi.id, attachment.file_url)}
                     >
-                      <Paperclip size={14} className="mr-2" /> Lihat Lampiran
+                      <Paperclip size={14} className="mr-2" /> Lampiran {index + 1}
                     </Button>
-                  )}
+                  ))}
 
                   <Button 
                     variant="outline" 
                     className="w-full h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted"
+                    disabled={previewingId === item.surat_registrasi.id}
                     onClick={() => openPreview(item.surat_registrasi.id, item.surat_registrasi.file_path)}
                   >
-                    <Eye size={14} className="mr-2" /> Preview Utama
+                    {previewingId === item.surat_registrasi.id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Eye size={14} className="mr-2" />} Preview Utama
                   </Button>
 
                   <div className="grid grid-cols-2 gap-2 mt-2">
@@ -376,11 +402,6 @@ const handleApprove = async (item: any) => {
         </div>
       </div>
 
-      <PreviewModal 
-        isOpen={!!previewUrl} 
-        fileUrl={previewUrl || ""} 
-        onClose={() => setPreviewUrl(null)} 
-      />
     </div>
   );
 }

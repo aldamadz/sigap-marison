@@ -11,7 +11,6 @@ import {
   Send,
   AlertTriangle,
   AlertCircle,
-  Download,
   Copy,
   Check
 } from "lucide-react";
@@ -134,11 +133,11 @@ export default function SuratPage() {
         {/* STEP 1 */}
         <div className="relative pl-8 group">
           <div className="absolute left-0 top-0 w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center border-2 border-background ring-1 ring-primary/50 shadow-sm">
-            <Download className="w-3 h-3 text-primary" />
+            <FilePlus className="w-3 h-3 text-primary" />
           </div>
-          <h4 className="text-xs font-bold text-foreground uppercase tracking-tight">1. Persiapan Template</h4>
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-tight">1. Input by Sistem</h4>
           <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">
-            Unduh template <span className="font-bold text-foreground">.xlsx</span>, isi detail perihal, lalu unggah kembali ke sistem.
+            Isi tempat, tanggal, dan detail dokumen langsung di aplikasi. Template Excel diisi otomatis oleh sistem.
           </p>
         </div>
 
@@ -160,7 +159,7 @@ export default function SuratPage() {
           </div>
           <h4 className="text-xs font-bold text-foreground uppercase tracking-tight">3. Digital Stamping</h4>
           <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">
-            Sistem otomatis membubuhkan nomor surat dan stempel digital langsung ke dalam file Excel Anda.
+            Sistem otomatis membubuhkan nomor surat, data user, NIK, lokasi, dan stempel digital langsung ke file Excel.
           </p>
         </div>
       </div>
@@ -170,7 +169,7 @@ export default function SuratPage() {
         <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 flex gap-3 items-start">
           <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <p className="text-[10px] text-primary font-bold leading-relaxed uppercase tracking-tight">
-            Pastikan format file tetap <span className="underline">.xlsx</span> dan tidak diubah menjadi PDF agar stempel dapat diproses.
+            File proses tetap <span className="underline">.xlsx</span>. PDF dibuat otomatis saat dokumen dibuka dari progress/preview.
           </p>
         </div>
       </div>

@@ -11,17 +11,18 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { toast } from "sonner";
 
 // Import Komponen Lokal
 import { SuratSummaryCards } from '@/components/dashboard/SuratSummaryCards';
-import { PreviewModal } from "@/components/surat/PreviewModal";
+import { documentPreviewService } from "@/services/document-preview.service";
 
 const MonitoringAdminPage = () => {
   // 1. STATES
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [selectedSurat, setSelectedSurat] = useState<any | null>(null);
 
   // 2. FETCH DATA
@@ -34,9 +35,10 @@ const MonitoringAdminPage = () => {
           *,
           surat_signatures (
             id, step_order, is_signed, role_name, 
-            status, catatan, signed_at, file_path_snap,
+            status, catatan, signed_at, file_path_snap, pdf_path_snap,
             profiles:user_id ( full_name )
-          )
+          ),
+          surat_attachments ( id, file_url, file_name, file_type, file_size )
         `)
         .order('created_at', { ascending: false });
 
@@ -47,11 +49,23 @@ const MonitoringAdminPage = () => {
   });
 
   // 3. LOGIKA PREVIEW
-  const handleOpenPreview = (url: string) => {
+  const handleOpenPreview = async (url: string, suratId?: string) => {
     if (!url) return;
-    const cleanUrl = url.split('?')[0]; 
-    const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(cleanUrl)}&wdPrint=0&wdEmbedCode=0&cb=${Date.now()}`;
-    setPreviewUrl(viewerUrl);
+    if (suratId) {
+      setPreviewingId(suratId);
+      try {
+        const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
+        await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
+      } catch (error: any) {
+        toast.error(error.message || "Gagal membuka PDF.");
+      } finally {
+        setPreviewingId(null);
+      }
+      return;
+    }
+    if (selectedSurat?.id) {
+      await documentPreviewService.openStoredFileInNewTab(selectedSurat.id, url);
+    }
   };
 
   // 4. HELPER FORMAT TANGGAL & WAKTU
@@ -66,6 +80,14 @@ const MonitoringAdminPage = () => {
     return new Date(dateString).toLocaleString('id-ID', {
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
+  };
+
+  const getAttachments = (surat: any) => {
+    const attachments = Array.isArray(surat?.surat_attachments) ? surat.surat_attachments : [];
+    if (attachments.length > 0) return attachments;
+    return surat?.lampiran_path
+      ? [{ id: 'legacy-lampiran', file_url: surat.lampiran_path, file_name: surat.lampiran_path.split('/').pop() }]
+      : [];
   };
 
   // 5. LOGIKA FILTERING
@@ -101,6 +123,19 @@ const MonitoringAdminPage = () => {
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-8 animate-in fade-in duration-700">
+      <Dialog open={!!previewingId}>
+        <DialogContent className="max-w-sm rounded-3xl text-center">
+          <DialogHeader>
+            <DialogTitle className="flex flex-col items-center gap-3 text-sm font-black uppercase">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              PDF sedang dibuat
+            </DialogTitle>
+            <DialogDescription>
+              Dokumen sedang diproses di background. PDF akan terbuka otomatis saat siap.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-border pb-8">
@@ -290,16 +325,35 @@ const MonitoringAdminPage = () => {
                 </div>
               </div>
               <button 
-                onClick={() => handleOpenPreview(selectedSurat?.file_path)}
+                onClick={() => handleOpenPreview(selectedSurat?.file_path, selectedSurat?.id)}
+                disabled={previewingId === selectedSurat?.id}
                 className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary hover:text-white transition-all"
               >
-                <Download size={14} />
+                {previewingId === selectedSurat?.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                 <span className="text-[9px] font-black uppercase">Unduh File</span>
               </button>
             </div>
           </DialogHeader>
 
           <div className="p-6 max-h-[70vh] overflow-y-auto">
+            {getAttachments(selectedSurat).length > 0 && (
+              <div className="mb-6 rounded-xl border border-border bg-muted/10 p-4">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lampiran</p>
+                <div className="flex flex-wrap gap-2">
+                  {getAttachments(selectedSurat).map((attachment: any, index: number) => (
+                    <button
+                      key={attachment.id ?? attachment.file_url}
+                      type="button"
+                      onClick={() => documentPreviewService.openStoredFileInNewTab(selectedSurat.id, attachment.file_url).catch((error: any) => toast.error(error.message || 'Gagal membuka lampiran.'))}
+                      className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-[9px] font-black uppercase text-primary hover:bg-muted"
+                    >
+                      <Download size={12} /> Lampiran {index + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-8 relative">
               <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-border" />
 
@@ -343,9 +397,9 @@ const MonitoringAdminPage = () => {
                         </div>
                       </div>
 
-                      {sig.file_path_snap && (
+                      {(sig.pdf_path_snap || sig.file_path_snap) && (
                         <button 
-                          onClick={() => handleOpenPreview(sig.file_path_snap)}
+                          onClick={() => handleOpenPreview(sig.pdf_path_snap || sig.file_path_snap, selectedSurat.id)}
                           className="flex items-center gap-2 px-2 py-1 bg-background border border-border rounded text-primary hover:bg-muted transition-colors"
                         >
                           <Download size={10} />
@@ -370,11 +424,6 @@ const MonitoringAdminPage = () => {
         </DialogContent>
       </Dialog>
 
-      <PreviewModal 
-        isOpen={!!previewUrl} 
-        fileUrl={previewUrl || ""} 
-        onClose={() => setPreviewUrl(null)} 
-      />
     </div>
   );
 };

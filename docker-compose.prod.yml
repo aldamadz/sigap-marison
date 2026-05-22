@@ -1,0 +1,35 @@
+services:
+  agenda-flow:
+    build:
+      context: .
+      dockerfile: dockerfile
+    image: agenda-flow:production
+    container_name: agenda-flow-prod
+    restart: always
+    ports:
+      - "${APP_PORT:-3010}:80"
+    environment:
+      NODE_ENV: production
+      PORT: "80"
+      SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+    env_file:
+      - path: .env.production
+        required: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

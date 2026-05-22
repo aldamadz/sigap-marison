@@ -107,28 +107,13 @@ export const picService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const isAdmin = profile?.role === "admin";
-
-    // 1. Dept yang bisa dilihat user ini
-    let deptIds: string[] = [];
-    if (isAdmin) {
-      const { data: deptRows } = await supabase
-        .from("master_departments")
-        .select("id");
-      deptIds = (deptRows ?? []).map((d: any) => d.id);
-    } else {
-      const { data: deptPics } = await supabase
-        .from("master_dept_pics")
-        .select("dept_id")
-        .eq("user_id", user.id);
-      deptIds = (deptPics ?? []).map((d: any) => d.dept_id);
-    }
+    // 1. Dept yang bisa dilihat user ini.
+    // Role admin tidak otomatis menjadi PIC operasional; akses PIC selalu dari master_dept_pics.
+    const { data: deptPics } = await supabase
+      .from("master_dept_pics")
+      .select("dept_id")
+      .eq("user_id", user.id);
+    const deptIds = (deptPics ?? []).map((d: any) => d.dept_id);
 
     if (deptIds.length === 0) return [];
 

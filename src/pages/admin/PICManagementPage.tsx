@@ -48,8 +48,6 @@ const PICManagementPage = () => {
   const [userSearch, setUserSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const isAdminUser = (user: Profile) => (user.role ?? '').toLowerCase() === 'admin';
-
   // ── Fetch all data ─────────────────────────────────────────────────────────
   const fetchData = async () => {
     setIsLoading(true);
@@ -72,26 +70,12 @@ const PICManagementPage = () => {
 
       const deptList = (deptData ?? []) as Department[];
       const userList = (usersData ?? []) as Profile[];
-      const adminIds = new Set(userList.filter(isAdminUser).map((u) => u.id));
-
       // Buat lookup map user_id → profile untuk merge manual
       const profileMap = new Map<string, Profile>();
       userList.forEach((u) => profileMap.set(u.id, u));
 
-      const adminPicRows = (picRaw ?? []).filter((p: any) => adminIds.has(p.user_id));
-      if (adminPicRows.length > 0) {
-        const { error: cleanupError } = await supabase
-          .from('master_dept_pics')
-          .delete()
-          .in('id', adminPicRows.map((p: any) => p.id));
-        if (cleanupError) throw cleanupError;
-        toast.success(`${adminPicRows.length} mapping PIC admin dibersihkan`);
-      }
-
-      const safePicRows = (picRaw ?? []).filter((p: any) => !adminIds.has(p.user_id));
-
       // Gabungkan pic + profile secara manual
-      const picList: DeptPIC[] = safePicRows.map((p: any) => ({
+      const picList: DeptPIC[] = (picRaw ?? []).map((p: any) => ({
         id: p.id,
         dept_id: p.dept_id,
         user_id: p.user_id,
@@ -119,10 +103,6 @@ const PICManagementPage = () => {
   // ── Add PIC ────────────────────────────────────────────────────────────────
   const handleAddPIC = async (deptId: string, userId: string) => {
     const dept = depts.find((d) => d.id === deptId);
-    const selectedUser = allUsers.find((u) => u.id === userId);
-    if (selectedUser && isAdminUser(selectedUser)) {
-      return toast.error('Admin tidak perlu dimasukkan ke mapping PIC');
-    }
     if (dept?.pics.some((p) => p.user_id === userId)) {
       return toast.error('User sudah menjadi PIC departemen ini');
     }
@@ -167,11 +147,8 @@ const PICManagementPage = () => {
 
   const filteredUsers = allUsers.filter(
     (u) =>
-      !isAdminUser(u) &&
-      (
-        u.full_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
-        (u.email ?? '').toLowerCase().includes(userSearch.toLowerCase())
-      )
+      u.full_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      (u.email ?? '').toLowerCase().includes(userSearch.toLowerCase())
   );
 
   const totalPICs    = depts.reduce((s, d) => s + d.pics.length, 0);

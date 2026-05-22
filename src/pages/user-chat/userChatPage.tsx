@@ -32,6 +32,13 @@ interface SuratItem {
   dept_name?: string | null;
   file_path?: string | null;
   lampiran_path?: string | null;
+  surat_attachments?: Array<{
+    id: string;
+    file_url: string;
+    file_name: string | null;
+    file_type?: string | null;
+    file_size?: number | null;
+  }>;
   payment_file_path?: string | null;
 }
 
@@ -174,6 +181,7 @@ const UserChatPage: React.FC = () => {
           id, no_surat, judul_surat, status,
           pic_review_status, pic_note, chat_status, chat_opened_at, updated_at, pic_id, created_by,
           pic_attachment, file_path, lampiran_path,
+          surat_attachments(id, file_url, file_name, file_type, file_size),
           pic_profile:profiles!surat_registrasi_pic_id_fkey(full_name),
           penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
             master_forms(master_departments(name))
@@ -479,12 +487,19 @@ const UserChatPage: React.FC = () => {
               </div>
             </div>
 
-            {(selected.file_path || selected.lampiran_path || selected.pic_attachment || selected.payment_file_path) && (
+            {(selected.file_path || selected.surat_attachments?.length || selected.lampiran_path || selected.pic_attachment || selected.payment_file_path) && (
               <div className="px-4 sm:px-6 py-2 border-b border-border bg-background/70 shrink-0">
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {[
                     { label: 'Dokumen', icon: FileText, url: getFileUrl(selected.file_path ?? null), show: !!selected.file_path },
-                    { label: 'Lampiran', icon: Paperclip, url: getFileUrl(selected.lampiran_path ?? null), show: !!selected.lampiran_path },
+                    ...(selected.surat_attachments?.length
+                      ? selected.surat_attachments.map((attachment, index) => ({
+                          label: `Lampiran ${index + 1}`,
+                          icon: Paperclip,
+                          url: attachment.file_url,
+                          show: true,
+                        }))
+                      : [{ label: 'Lampiran', icon: Paperclip, url: getFileUrl(selected.lampiran_path ?? null), show: !!selected.lampiran_path }]),
                     { label: 'SPK', icon: FileCheck, url: getFileUrl(selected.pic_attachment ?? null), show: !!selected.pic_attachment },
                     { label: 'Bukti Transaksi', icon: FileCheck, url: getFileUrl(selected.payment_file_path ?? null), show: !!selected.payment_file_path },
                   ].filter(item => item.show && item.url).map(({ label, icon: Icon, url }) => (

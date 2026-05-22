@@ -3,14 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import {
-  Download, FileUp, Hash, ArrowDown, Loader2, Briefcase,
+  Hash, ArrowDown, Loader2, Briefcase,
   Check, ChevronDown, Paperclip, Copy, RefreshCcw, ChevronRight, Layers,
-  ShieldCheck, AlertTriangle, Archive, Home
+  ShieldCheck, AlertTriangle, Archive, Home, X, Plus
 } from "lucide-react";
 import { suratService } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
@@ -26,26 +27,25 @@ interface SuratFormProps {
 
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
   const { toast } = useToast();
-  const fileInputRef     = useRef<HTMLInputElement>(null);
   const lampiranInputRef = useRef<HTMLInputElement>(null);
 
   // ── STATE ──────────────────────────────────────────────────────────────────
   const [master, setMaster] = useState<any>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
   const [usageDetails, setUsageDetails]           = useState<any[]>([]);
   const [selectedUsage, setSelectedUsage]         = useState<any>(null);
-  const [file, setFile]                           = useState<File | null>(null);
   const [generatedNoSurat, setGeneratedNoSurat]   = useState<string | null>(null);
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
-  const [isDownloading, setIsDownloading]         = useState(false);
   const [openMatrix, setOpenMatrix]               = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
-  const [lampiranFile, setLampiranFile]           = useState<File | null>(null);
+  const [lampiranFiles, setLampiranFiles]         = useState<File[]>([]);
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
     office_id: "", project_id: "", judul_surat: "",
-    penggunaan_id: "", is_aset: false
+    penggunaan_id: "", is_aset: false,
+    request_place: "", request_date: new Date().toISOString().slice(0, 10),
+    form_input_data: {} as Record<string, any>
   });
   const [signers, setSigners] = useState<any[]>([]);
 
@@ -67,6 +67,79 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       const config = typeof item.ttd_config === "string" ? JSON.parse(item.ttd_config) : item.ttd_config;
       return Array.isArray(config) ? config.map((c: any) => c.labelJabatan || c.jabatan || c.roleName || c.role_name) : [];
     } catch { return []; }
+  };
+
+  const getInputSchema = (item: any) => {
+    const raw = item?.master_forms?.input_schema;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const getManualInputFields = (item: any) =>
+    getInputSchema(item).filter((field: any) => {
+      const source = field.default_source || field.defaultSource || "manual";
+      return source === "manual";
+    });
+
+  const hasPlaceDateMapping = (item: any) => {
+    const mappedSources = new Set(
+      getInputSchema(item)
+        .filter((field: any) => !!field.cell)
+        .map((field: any) => field.default_source || field.defaultSource || "manual")
+    );
+    return mappedSources.has("request_place_date") ||
+      (mappedSources.has("request_place") && mappedSources.has("request_date"));
+  };
+
+  const setInputValue = (key: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      form_input_data: { ...prev.form_input_data, [key]: value },
+    }));
+  };
+
+  const getTableRows = (key: string) => {
+    const rows = formData.form_input_data[key];
+    return Array.isArray(rows) && rows.length > 0 ? rows : [{}];
+  };
+
+  const setTableRows = (key: string, rows: any[]) => {
+    setInputValue(key, rows);
+  };
+
+  const updateTableCell = (key: string, rowIndex: number, columnKey: string, value: any) => {
+    const rows = [...getTableRows(key)];
+    rows[rowIndex] = { ...rows[rowIndex], [columnKey]: value };
+    setTableRows(key, rows);
+  };
+
+  const addTableRow = (key: string) => {
+    setTableRows(key, [...getTableRows(key), {}]);
+  };
+
+  const removeTableRow = (key: string, rowIndex: number) => {
+    const rows = getTableRows(key).filter((_, index) => index !== rowIndex);
+    setTableRows(key, rows.length > 0 ? rows : [{}]);
+  };
+
+  const isTableFieldComplete = (field: any) => {
+    const rows = getTableRows(field.key).filter((row: any) =>
+      Object.values(row ?? {}).some((value) => String(value ?? "").trim())
+    );
+    if (field.required !== false && rows.length === 0) return false;
+    return rows.every((row: any) =>
+      (field.table_config?.columns ?? [])
+        .filter((column: any) => column.required !== false)
+        .every((column: any) => String(row?.[column.key] ?? "").trim())
+    );
   };
 
   const officePusat     = useMemo(() => master.offices?.find((o: any) => o.kedudukan === "Pusat"), [master.offices]);
@@ -96,7 +169,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return master.projects.filter((p: any) => p.office_id === formData.office_id);
   }, [master.projects, formData.office_id, isPusatSelected]);
 
-  const isDirty = useMemo(() => !!generatedNoSurat || !!file || formData.judul_surat.length > 0, [generatedNoSurat, file, formData.judul_surat]);
+  const isDirty = useMemo(
+    () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
+    [generatedNoSurat, formData.judul_surat, formData.form_input_data]
+  );
 
   const normalizeNameSearch = (value: string) =>
     value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -131,7 +207,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   useEffect(() => {
     supabase.from("master_penggunaan_detail")
-      .select(`*, master_forms!fk_master_forms (id, nama_form, nomor_form, link_form, department_id)`)
+      .select(`*, master_forms!fk_master_forms (id, nama_form, nomor_form, link_form, department_id, input_schema)`)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) toast({ variant: "destructive", title: "Gagal memuat penggunaan", description: error.message });
@@ -153,7 +229,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const detail = usageDetails.find(u => u.id === val);
     if (!detail) return;
     setSelectedUsage(detail);
-    setFormData(prev => ({ ...prev, penggunaan_id: val }));
+    setFormData(prev => ({ ...prev, penggunaan_id: val, form_input_data: {} }));
     try {
       const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
       if (Array.isArray(config)) {
@@ -190,29 +266,36 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     } catch { toast({ variant: "destructive", title: "Gagal membatalkan nomor" }); }
   };
 
-  const handleDownloadTemplate = async () => {
-    if (!formData.judul_surat) return toast({ variant: "destructive", title: "Perihal Kosong" });
-    setIsDownloading(true);
-    try {
-      await suratService.downloadFilledTemplate({ ...formData, no_surat: generatedNoSurat }, selectedUsage.master_forms.link_form);
-    } catch { toast({ variant: "destructive", title: "Gagal Mengunduh" }); }
-    finally { setIsDownloading(false); }
-  };
-
   const resetForm = () => {
-    setFormData({ entity_id: "", dept_id: "", letter_type_id: "", office_id: officePusat?.id || "", project_id: "", judul_surat: "", penggunaan_id: "", is_aset: false });
-    setGeneratedNoSurat(null); setSelectedUsage(null); setFile(null); setLampiranFile(null); setSigners([]);
+    setFormData({
+      entity_id: "", dept_id: "", letter_type_id: "", office_id: officePusat?.id || "", project_id: "",
+      judul_surat: "", penggunaan_id: "", is_aset: false,
+      request_place: "", request_date: new Date().toISOString().slice(0, 10), form_input_data: {}
+    });
+    setGeneratedNoSurat(null); setSelectedUsage(null); setLampiranFiles([]); setSigners([]);
     setJudulForDisplay("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
     if (lampiranInputRef.current) lampiranInputRef.current.value = "";
   };
 
   const handleSubmit = async () => {
-    if (!file) return toast({ variant: "destructive", title: "File Utama Wajib Diunggah" });
+    if (!selectedUsage?.master_forms?.link_form) return toast({ variant: "destructive", title: "Template Belum Tersedia" });
+    if (!formData.request_place.trim()) return toast({ variant: "destructive", title: "Tempat Wajib Diisi" });
+    if (!formData.request_date) return toast({ variant: "destructive", title: "Tanggal Wajib Diisi" });
+    if (!hasPlaceDateMapping(selectedUsage)) return toast({
+      variant: "destructive",
+      title: "Mapping Tempat/Tanggal Belum Ada",
+      description: "Admin harus mapping field Tempat, Tanggal ke cell Excel di Master Template.",
+    });
+    if (lampiranFiles.length === 0) return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
+    const missingField = getManualInputFields(selectedUsage).find((field: any) => {
+      if (field.type === "table") return !isTableFieldComplete(field);
+      return field.required !== false && !String(formData.form_input_data[field.key] ?? "").trim();
+    });
+    if (missingField) return toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
     if (signers.some(s => !s.user_id)) return toast({ variant: "destructive", title: "Pejabat Belum Lengkap" });
     setIsLoading(true);
     try {
-      const result = await suratService.createRegistrasi({ ...formData, no_surat: generatedNoSurat }, signers, file, lampiranFile);
+      const result = await suratService.createRegistrasi({ ...formData, no_surat: generatedNoSurat }, signers, null, lampiranFiles);
       if (result) {
         toast({ title: "Pendaftaran Berhasil", description: `Nomor ${result.no_surat} telah disimpan.` });
         onSuccess(result.no_surat, formData.judul_surat);
@@ -224,6 +307,172 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
+  const renderTableField = (field: any) => {
+    const columns = field.table_config?.columns ?? [];
+    const rows = getTableRows(field.key);
+
+    return (
+      <div className="space-y-4">
+        <div className="hidden overflow-x-auto rounded-2xl border border-border bg-background/70 md:block">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="sticky top-0 bg-muted/70">
+              <tr>
+                <th className="w-16 px-4 py-3 text-left text-[11px] font-black uppercase text-muted-foreground">No</th>
+                {columns.map((column: any) => (
+                  <th key={column.key} className="px-4 py-3 text-left text-[11px] font-black uppercase text-muted-foreground">
+                    {column.label}{column.required !== false ? " *" : ""}
+                  </th>
+                ))}
+                <th className="w-16 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row: any, rowIndex: number) => (
+                <tr key={rowIndex} className="border-t border-border">
+                  <td className="px-4 py-3 text-xs font-black text-muted-foreground">{rowIndex + 1}</td>
+                  {columns.map((column: any) => (
+                    <td key={column.key} className="px-4 py-3">
+                      <Input
+                        type={column.type === "number" ? "number" : "text"}
+                        value={row?.[column.key] ?? ""}
+                        onChange={e => updateTableCell(field.key, rowIndex, column.key, e.target.value)}
+                        className="h-12 min-w-[130px] bg-background text-sm"
+                      />
+                    </td>
+                  ))}
+                  <td className="px-4 py-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 text-destructive"
+                      onClick={() => removeTableRow(field.key, rowIndex)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="space-y-3 md:hidden">
+          {rows.map((row: any, rowIndex: number) => (
+            <div key={rowIndex} className="rounded-2xl border border-border bg-background/70 p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-xs font-black uppercase tracking-widest text-primary">Barang {rowIndex + 1}</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-destructive"
+                  onClick={() => removeTableRow(field.key, rowIndex)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {columns.map((column: any) => (
+                  <div key={column.key} className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground">
+                      {column.label}{column.required !== false ? " *" : ""}
+                    </Label>
+                    <Input
+                      type={column.type === "number" ? "number" : "text"}
+                      value={row?.[column.key] ?? ""}
+                      onChange={e => updateTableCell(field.key, rowIndex, column.key, e.target.value)}
+                      className="h-12 bg-background text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button type="button" variant="outline" size="lg" className="h-12 rounded-2xl text-xs font-black uppercase" onClick={() => addTableRow(field.key)}>
+          <Plus className="mr-2 h-4 w-4" /> Tambah Barang
+        </Button>
+      </div>
+    );
+  };
+
+  const renderManualField = (field: any) => (
+    <div key={field.key} className={cn("space-y-2", field.type === "table" && "md:col-span-2")}>
+      <Label className="text-[11px] font-black uppercase text-muted-foreground">
+        {field.label}{field.required !== false ? " *" : ""}
+      </Label>
+      {field.type === "table" ? renderTableField(field) : field.type === "textarea" ? (
+        <Textarea
+          value={formData.form_input_data[field.key] ?? ""}
+          onChange={e => setInputValue(field.key, e.target.value)}
+          className="min-h-[140px] bg-background/70 text-sm leading-relaxed"
+        />
+      ) : (
+        <Input
+          type={field.type === "date" ? "date" : field.type === "number" || field.type === "currency" ? "number" : "text"}
+          value={formData.form_input_data[field.key] ?? ""}
+          onChange={e => setInputValue(field.key, e.target.value)}
+          className="h-12 bg-background/70 text-sm"
+        />
+      )}
+    </div>
+  );
+
+  const renderAttachmentUploader = () => (
+    <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
+      <div className={cn(
+        "relative border-2 border-dashed rounded-2xl p-6 flex items-center gap-5 transition-all",
+        lampiranFiles.length > 0 ? "border-emerald-500 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
+      )}>
+        <input
+          type="file"
+          ref={lampiranInputRef}
+          multiple
+          className="absolute inset-0 opacity-0 cursor-pointer z-10"
+          onChange={e => setLampiranFiles(Array.from(e.target.files ?? []))}
+        />
+        <div className={cn("p-4 rounded-2xl", lampiranFiles.length > 0 ? "bg-emerald-500 text-white" : "bg-amber-500 text-white")}>
+          <Paperclip className="w-6 h-6" />
+        </div>
+        <div className="text-left flex-1 min-w-0">
+          <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Lampiran Wajib</p>
+          <p className="mt-1 text-sm font-bold truncate">
+            {lampiranFiles.length > 0 ? `${lampiranFiles.length} file dipilih` : "Klik untuk unggah PDF/Gambar, bisa lebih dari satu"}
+          </p>
+        </div>
+      </div>
+
+      {lampiranFiles.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {lampiranFiles.map((file, index) => (
+            <div key={`${file.name}-${file.lastModified}`} className="flex items-center gap-3 rounded-xl border border-border bg-background/70 p-3">
+              <Paperclip className="h-4 w-4 text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">{file.name}</p>
+                <p className="text-[10px] font-medium text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-destructive"
+                onClick={() => {
+                  const next = lampiranFiles.filter((_, i) => i !== index);
+                  setLampiranFiles(next);
+                  if (lampiranInputRef.current && next.length === 0) lampiranInputRef.current.value = "";
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Card className="glass-card border-none overflow-hidden shadow-2xl bg-background/50 backdrop-blur-xl">
       <CardHeader className="bg-gradient-to-r from-primary/10 via-transparent to-transparent border-b border-border/50">
@@ -525,49 +774,59 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </div>
 
                   {selectedUsage?.master_forms?.link_form && (
-                    <Button variant="secondary" className="w-full h-11 rounded-xl font-black text-xs gap-2"
-                      onClick={handleDownloadTemplate} disabled={isDownloading}>
-                      {isDownloading ? <Loader2 className="animate-spin w-4 h-4" /> : <Download className="w-4 h-4" />}
-                      UNDUH TEMPLATE
-                    </Button>
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Template by Sistem</p>
+                      <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+                        Excel akan dibuat otomatis dari input sistem. User tidak perlu download atau upload file utama.
+                      </p>
+                    </div>
                   )}
                 </div>
 
-                {/* Kanan: upload */}
-                <div className="space-y-4">
-                  <div className={cn(
-                    "relative border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center min-h-[160px] transition-all",
-                    file ? "border-primary bg-primary/5" : "border-muted-foreground/20 bg-muted/10 hover:bg-muted/20"
-                  )}>
-                    <input type="file" ref={fileInputRef} accept=".xlsx" className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                      onChange={e => setFile(e.target.files?.[0] || null)} />
-                    <div className={cn("p-4 rounded-2xl mb-2", file ? "bg-primary text-white" : "bg-background text-muted-foreground shadow-sm")}>
-                      <FileUp className="w-6 h-6" />
+                <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tanggal Dokumen</p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-[11px] font-black uppercase text-muted-foreground">Tempat</Label>
+                      <Input
+                        value={formData.request_place}
+                        onChange={e => setFormData({ ...formData, request_place: e.target.value })}
+                        placeholder="Contoh: Jakarta"
+                        className="h-12 bg-background/70 text-sm"
+                      />
                     </div>
-                    <p className="font-black text-xs text-center max-w-[200px] truncate">{file ? file.name : "Unggah File Utama (.xlsx)"}</p>
-                    {!file && <p className="text-[10px] opacity-60 mt-1">Format Excel wajib sesuai template</p>}
-                  </div>
-
-                  <div className={cn(
-                    "relative border-2 border-dashed rounded-2xl p-5 flex items-center gap-4 transition-all",
-                    lampiranFile ? "border-emerald-500 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
-                  )}>
-                    <input type="file" ref={lampiranInputRef} className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                      onChange={e => setLampiranFile(e.target.files?.[0] || null)} />
-                    <div className={cn("p-3 rounded-xl", lampiranFile ? "bg-emerald-500 text-white" : "bg-amber-500 text-white")}>
-                      <Paperclip className="w-5 h-5" />
-                    </div>
-                    <div className="text-left flex-1 min-w-0">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">Lampiran Tambahan (Opsional)</p>
-                      <p className="text-xs font-bold truncate">{lampiranFile ? lampiranFile.name : "Klik untuk unggah PDF/Gambar"}</p>
+                    <div className="space-y-2">
+                      <Label className="text-[11px] font-black uppercase text-muted-foreground">Tanggal</Label>
+                      <Input
+                        type="date"
+                        value={formData.request_date}
+                        onChange={e => setFormData({ ...formData, request_date: e.target.value })}
+                        className="h-12 bg-background/70 text-sm"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
+
+              {selectedUsage && getManualInputFields(selectedUsage).length > 0 && (
+                <div className="space-y-5 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-primary">Input Detail Template</p>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Isi data dokumen di sini. Data ini akan masuk ke template Excel dan PDF otomatis.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    {getManualInputFields(selectedUsage).map((field: any) => renderManualField(field))}
+                  </div>
+                </div>
+              )}
+
+              {renderAttachmentUploader()}
             </section>
 
             {/* ══ SECTION 3: SIGNERS ═══════════════════════════════════════ */}
-            {signers.length > 0 && file && (
+            {signers.length > 0 && (
               <section className="space-y-8 pt-10 border-t animate-in fade-in duration-700">
                 <div className="flex items-center gap-4">
                   <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-black">3</span>

@@ -1,0 +1,17 @@
+services:
+  agenda-flow:
+    build:
+      context: .
+      dockerfile: dockerfile
+    image: agenda-flow:local
+    container_name: agenda-flow
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      PORT: "80"
+      SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+    env_file:
+      - path: .env.server
+        required: false

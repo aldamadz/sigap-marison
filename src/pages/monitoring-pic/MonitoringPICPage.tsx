@@ -30,6 +30,13 @@ interface SuratItem {
   created_by: string;
   file_path: string | null;
   lampiran_path: string | null;
+  surat_attachments?: Array<{
+    id: string;
+    file_url: string;
+    file_name: string | null;
+    file_type?: string | null;
+    file_size?: number | null;
+  }>;
   creator_name: string | null;
   form_dept_id: string;
   form_dept_name: string;
@@ -103,6 +110,7 @@ interface ActionModalProps {
   onConfirm: (note: string, file?: File) => void;
   onCancel: () => void;
   isLoading: boolean;
+  errorMessage?: string | null;
 }
 
 const ACTION_META: Record<FinalAction, {
@@ -116,7 +124,18 @@ const ACTION_META: Record<FinalAction, {
   FINANCE_REJECT: { title: 'Tolak (Keuangan)',      desc: 'Tolak dari sisi Keuangan. Wajib isi alasan.',     needsFile: false, needsNote: true,  btnClass: 'bg-red-600 hover:bg-red-700' },
 };
 
-const ActionModal: React.FC<ActionModalProps> = ({ action, hasSPK, onConfirm, onCancel, isLoading }) => {
+const getActionErrorMessage = (err: any) => {
+  const raw = err?.message || err?.details || err?.hint || err?.error_description || 'Aksi gagal';
+  if (String(raw).includes('Anda bukan PIC Departemen Keuangan')) {
+    return 'Akses ditolak. Akun ini belum terdaftar sebagai PIC Departemen Keuangan.';
+  }
+  if (String(raw).includes('Anda bukan PIC departemen surat ini')) {
+    return 'Akses ditolak. Akun ini belum terdaftar sebagai PIC departemen surat ini.';
+  }
+  return String(raw);
+};
+
+const ActionModal: React.FC<ActionModalProps> = ({ action, hasSPK, onConfirm, onCancel, isLoading, errorMessage }) => {
   const [note, setNote] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -134,6 +153,14 @@ const ActionModal: React.FC<ActionModalProps> = ({ action, hasSPK, onConfirm, on
           <p className="text-[11px] text-white/40 mt-1">{meta.desc}</p>
         </div>
         <div className="p-5 space-y-4">
+          {errorMessage && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-[11px] font-bold leading-relaxed text-red-200">
+              <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-300">
+                <AlertTriangle size={14} /> Akses Ditolak
+              </div>
+              {errorMessage}
+            </div>
+          )}
           {meta.needsFile && (
             <>
               <input ref={fileRef} type="file" className="hidden"
@@ -198,6 +225,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
   const [isTogglingChat, setIsTogglingChat] = useState(false);
   const [uploadingSPK, setUploadingSPK] = useState(false);
   const [activeAction, setActiveAction] = useState<FinalAction | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [isActing, setIsActing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -319,6 +347,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
   const handleConfirmAction = async (note: string, file?: File) => {
     if (!activeAction) return;
     setIsActing(true);
+    setActionError(null);
     try {
       if (activeAction === 'SEND_SPK') {
         if (file) {
@@ -391,10 +420,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
         chat_status: 'CLOSED',
       }));
       setActiveAction(null);
+      setActionError(null);
       queryClient.invalidateQueries({ queryKey: ['pic-chat-list'] });
       onActionComplete();
     } catch (err: any) {
-      toast.error(err.message || 'Aksi gagal');
+      const message = getActionErrorMessage(err);
+      setActionError(message);
+      toast.error(message);
     } finally {
       setIsActing(false);
     }
@@ -402,6 +434,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 
   // ✅ FIX 3: Apakah ada bukti bayar (dari state lokal atau prop awal)
   const paymentFileUrl = getFileUrl(suratData.payment_file_path ?? null);
+  const attachments = suratData.surat_attachments?.length
+    ? suratData.surat_attachments
+    : suratData.lampiran_path
+      ? [{ id: 'legacy-lampiran', file_url: suratData.lampiran_path, file_name: 'Lampiran' }]
+      : [];
 
   return (
     <div className="flex flex-col h-full bg-[#080a0f] relative">
@@ -412,8 +449,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
           suratId={suratData.id}
           hasSPK={!!suratData.pic_attachment}
           onConfirm={handleConfirmAction}
-          onCancel={() => setActiveAction(null)}
+          onCancel={() => { setActiveAction(null); setActionError(null); }}
           isLoading={isActing}
+          errorMessage={actionError}
         />
       )}
 
@@ -451,12 +489,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
               <FileText size={10} /> Dokumen
             </a>
           )}
-          {suratData.lampiran_path && (
-            <a href={suratData.lampiran_path} target="_blank" rel="noreferrer"
+          {attachments.map((attachment, index) => (
+            <a key={attachment.id ?? attachment.file_url} href={attachment.file_url} target="_blank" rel="noreferrer"
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-white/5 text-white/50 border-white/10 hover:bg-white/10 transition-all">
-              <Paperclip size={10} /> Lampiran
+              <Paperclip size={10} /> Lampiran {index + 1}
             </a>
-          )}
+          ))}
           {/* SPK — tampil di semua status jika ada */}
           {suratData.pic_attachment && (
             <a href={getFileUrl(suratData.pic_attachment) ?? '#'} target="_blank" rel="noreferrer"
@@ -694,7 +732,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 const MonitoringPICPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string; role?: string } | null>(null);
-  const [isAdminUser, setIsAdminUser] = useState(false);
   const [myDepts, setMyDepts] = useState<Department[]>([]);
   const [activeDeptId, setActiveDeptId] = useState<string | null>(null);
   const [selectedSurat, setSelectedSurat] = useState<SuratItem | null>(null);
@@ -723,21 +760,11 @@ const MonitoringPICPage: React.FC = () => {
           .eq('user_id', user.id),
       ]);
       const profile = profileRes.data as { id: string; full_name: string; role?: string } | null;
-      const admin = profile?.role === 'admin';
       if (profile) {
         setCurrentUser(profile);
-        setIsAdminUser(admin);
       }
 
-      if (admin) {
-        const { data: allDeptRows } = await supabase
-          .from('master_departments')
-          .select('id, name, code')
-          .order('name', { ascending: true });
-        const depts = (allDeptRows ?? []) as Department[];
-        setMyDepts(depts);
-        if (depts.length > 0) setActiveDeptId(depts[0].id);
-      } else if (deptRes.data) {
+      if (deptRes.data) {
         const depts = deptRes.data.map((d: any) => d.master_departments).filter(Boolean) as Department[];
         setMyDepts(depts);
         if (depts.length > 0) setActiveDeptId(depts[0].id);
@@ -747,8 +774,8 @@ const MonitoringPICPage: React.FC = () => {
   }, []);
 
   const { data: suratList = [], isLoading, refetch } = useQuery<SuratItem[]>({
-    queryKey: ['pic-chat-list', currentUser?.id, isAdminUser, myDepts.map(d => d.id).join(',')],
-    enabled: !!currentUser && (isAdminUser || myDepts.length > 0),
+    queryKey: ['pic-chat-list', currentUser?.id, myDepts.map(d => d.id).join(',')],
+    enabled: !!currentUser && myDepts.length > 0,
     queryFn: async () => {
       const deptIds = myDepts.map(d => d.id);
       if (deptIds.length === 0) return [];
@@ -772,6 +799,7 @@ const MonitoringPICPage: React.FC = () => {
               pic_review_status, pic_attachment, pic_note,
               chat_status, updated_at, created_by,
               file_path, lampiran_path,
+              surat_attachments(id, file_url, file_name, file_type, file_size),
               creator:profiles!surat_registrasi_created_by_fkey(full_name),
               penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
                 form_id,
@@ -801,6 +829,7 @@ const MonitoringPICPage: React.FC = () => {
             pic_review_status, pic_attachment, pic_note,
             chat_status, updated_at, created_by,
             file_path, lampiran_path,
+            surat_attachments(id, file_url, file_name, file_type, file_size),
             creator:profiles!surat_registrasi_created_by_fkey(full_name),
             penggunaan:master_penggunaan_detail!surat_registrasi_penggunaan_id_fkey(
               form_id,

@@ -1,6 +1,50 @@
 import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import { notificationService } from "./notification.service";
+import { documentPreviewService } from "./document-preview.service";
+
+type TableInputColumn = {
+  key: string;
+  label: string;
+  column: string;
+  required?: boolean;
+  type?: "text" | "number";
+};
+
+type TemplateInputField = {
+  key: string;
+  label: string;
+  type?: "text" | "textarea" | "date" | "number" | "currency" | "table";
+  required?: boolean;
+  cell?: string;
+  sheet?: number;
+  defaultSource?: string;
+  default_source?: string;
+  merge_range?: string;
+  mergeRange?: string;
+  horizontal?: "left" | "center" | "right";
+  vertical?: "top" | "middle" | "bottom";
+  wrap?: boolean;
+  shrink?: boolean;
+  font_name?: string;
+  fontName?: string;
+  font_size?: number;
+  fontSize?: number;
+  row_height?: number;
+  rowHeight?: number;
+  table_config?: {
+    start_row: number;
+    end_row: number;
+    no_column?: string;
+    columns: TableInputColumn[];
+  };
+  tableConfig?: {
+    startRow: number;
+    endRow: number;
+    noColumn?: string;
+    columns: TableInputColumn[];
+  };
+};
 
 export interface SuratRegistrasi {
   id: string;
@@ -24,6 +68,13 @@ export interface SuratRegistrasi {
     is_signed: boolean;
     signed_at: string | null;
     profiles?: { full_name: string };
+  }>;
+  surat_attachments?: Array<{
+    id: string;
+    file_url: string;
+    file_name: string | null;
+    file_type: string | null;
+    file_size: number | null;
   }>;
 }
 
@@ -63,6 +114,376 @@ export const suratService = {
       console.error("Error parsing ttd_config:", e);
       return [];
     }
+  },
+
+  parseInputSchema(schema: any): TemplateInputField[] {
+    if (!schema) return [];
+    if (Array.isArray(schema)) return schema;
+    if (typeof schema === "string") {
+      try {
+        const parsed = JSON.parse(schema || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  formatDateForDocument(value: string | Date | null | undefined): string {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  },
+
+  formatInputValue(value: any, type?: string): any {
+    if (value === null || value === undefined) return "";
+    if (type === "date") return this.formatDateForDocument(value);
+    if (type === "currency") {
+      const n = Number(value);
+      if (Number.isNaN(n)) return value;
+      return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
+    }
+    return value;
+  },
+
+  getTableConfig(field: TemplateInputField) {
+    const raw = field.table_config || field.tableConfig;
+    if (!raw) return null;
+    return {
+      startRow: Number((raw as any).start_row || (raw as any).startRow || 1),
+      endRow: Number((raw as any).end_row || (raw as any).endRow || 1),
+      noColumn: (raw as any).no_column || (raw as any).noColumn || "A",
+      columns: Array.isArray((raw as any).columns) ? (raw as any).columns : [],
+    };
+  },
+
+  normalizeFormInputData(inputData: any) {
+    const normalized = { ...(inputData ?? {}) };
+    if (Array.isArray(normalized.items)) {
+      normalized.items = normalized.items.filter((row: any) =>
+        Object.values(row ?? {}).some((value) => String(value ?? "").trim())
+      );
+    }
+    return normalized;
+  },
+
+  async getSignerSnapshots(signers: any[]) {
+    const userIds = signers.map((s) => s.user_id).filter(Boolean);
+    if (userIds.length === 0) return {};
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, nik, job_title, email, department_id, office_id")
+      .in("id", userIds);
+
+    return Object.fromEntries((data || []).map((profile: any) => [profile.id, profile]));
+  },
+
+  buildDataSnapshot(context: any, payload: any, signers: any[], formInputData: any, attachments: any[] = []) {
+    const place = String(payload.request_place ?? "").trim();
+    const date = this.formatDateForDocument(payload.request_date);
+
+    return {
+      surat: {
+        no_surat: payload.no_surat ?? null,
+        judul_surat: payload.judul_surat ?? null,
+        is_aset: !!payload.is_aset,
+        request_place: payload.request_place ?? null,
+        request_date: payload.request_date ?? null,
+        request_place_date: [place, date].filter(Boolean).join(", "),
+      },
+      requester: {
+        id: context.profile?.id ?? context.user?.id,
+        full_name: context.profile?.full_name ?? null,
+        nik: context.profile?.nik ?? null,
+        job_title: context.profile?.job_title ?? null,
+        email: context.profile?.email ?? context.user?.email ?? null,
+      },
+      location: {
+        entity: context.entity,
+        office: context.office,
+        project: context.project,
+        department: context.department,
+        project_code: context.project?.code ?? null,
+        department_code: context.department?.code ?? null,
+      },
+      form: context.form ? {
+        id: context.form.id,
+        nama_form: context.form.nama_form,
+        nomor_form: context.form.nomor_form,
+      } : null,
+      input: formInputData,
+      detail_barang: formInputData?.items ?? [],
+      catatan: formInputData?.catatan ?? null,
+      signers,
+      attachments,
+    };
+  },
+
+  writeTableField(workbook: ExcelJS.Workbook, field: TemplateInputField, value: any[]) {
+    const config = this.getTableConfig(field);
+    if (!config) return;
+
+    const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
+    const sheet = workbook.worksheets[sheetIndex] ?? workbook.worksheets[0];
+    const rows = Array.isArray(value)
+      ? value.filter((row) => Object.values(row ?? {}).some((cellValue) => String(cellValue ?? "").trim()))
+      : [];
+    const maxRows = Math.max(config.endRow - config.startRow + 1, 0);
+
+    rows.slice(0, maxRows).forEach((row, index) => {
+      const excelRow = config.startRow + index;
+      if (config.noColumn) sheet.getCell(`${config.noColumn}${excelRow}`).value = index + 1;
+      config.columns.forEach((column: TableInputColumn) => {
+        const rawValue = row?.[column.key];
+        sheet.getCell(`${column.column}${excelRow}`).value = this.formatInputValue(rawValue, column.type);
+      });
+    });
+  },
+
+  fitTextForBox(value: any, maxCharsPerLine = 115, maxLines = 5) {
+    const words = String(value ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    const lines: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+      const chunks = word.length > maxCharsPerLine
+        ? word.match(new RegExp(`.{1,${maxCharsPerLine}}`, "g")) || [word]
+        : [word];
+
+      for (const chunk of chunks) {
+        const next = current ? `${current} ${chunk}` : chunk;
+        if (next.length > maxCharsPerLine) {
+          if (current) lines.push(current);
+          current = chunk;
+        } else {
+          current = next;
+        }
+
+        if (lines.length >= maxLines) break;
+      }
+
+      if (lines.length >= maxLines) break;
+    }
+
+    if (current && lines.length < maxLines) lines.push(current);
+    const original = String(value ?? "").trim();
+    let fitted = lines.slice(0, maxLines).join("\n");
+    if (fitted.length < original.length && fitted) {
+      fitted = `${fitted.slice(0, Math.max(fitted.length - 3, 0))}...`;
+    }
+    return fitted;
+  },
+
+  getTopLeftCell(range: string, fallback: string) {
+    return String(range || fallback || "").split(":")[0].trim().toUpperCase();
+  },
+
+  getRowsForField(field: TemplateInputField, range: string) {
+    const source = range || field.cell || "";
+    const rowNumbers = String(source).match(/\d+/g)?.map(Number).filter(Boolean) || [];
+    if (rowNumbers.length >= 2) {
+      const start = Math.min(rowNumbers[0], rowNumbers[1]);
+      const end = Math.max(rowNumbers[0], rowNumbers[1]);
+      return Array.from({ length: end - start + 1 }, (_item, index) => start + index);
+    }
+    return rowNumbers.length === 1 ? [rowNumbers[0]] : [];
+  },
+
+  applyFieldFormatting(sheet: ExcelJS.Worksheet, field: TemplateInputField, target: ExcelJS.Cell, range: string) {
+    const fontName = field.font_name || field.fontName;
+    const fontSize = Number(field.font_size || field.fontSize || 0);
+    if (fontName || fontSize > 0) {
+      target.font = {
+        ...(target.font || {}),
+        ...(fontName ? { name: fontName } : {}),
+        ...(fontSize > 0 ? { size: fontSize } : {}),
+      };
+    }
+
+    const shouldWrap = field.wrap === true || field.type === "textarea";
+    const shouldShrink = field.shrink === true;
+    if (field.horizontal || field.vertical || shouldWrap || shouldShrink) {
+      target.alignment = {
+        ...(target.alignment || {}),
+        ...(field.horizontal ? { horizontal: field.horizontal } : {}),
+        ...(field.vertical ? { vertical: field.vertical } : {}),
+        ...(shouldWrap ? { wrapText: true } : {}),
+        ...(shouldShrink ? { shrinkToFit: true } : {}),
+      };
+    }
+
+    const rowHeight = Number(field.row_height || field.rowHeight || 0);
+    if (rowHeight > 0) {
+      this.getRowsForField(field, range).forEach((rowNumber) => {
+        sheet.getRow(rowNumber).height = rowHeight;
+      });
+    }
+  },
+
+  writeWrappedField(sheet: ExcelJS.Worksheet, field: TemplateInputField, value: any) {
+    const text = this.formatInputValue(value, field.type);
+    const configuredRange = String(field.merge_range || field.mergeRange || "").trim().toUpperCase();
+    const defaultRange = field.key === "catatan" ? "B28:N31" : "";
+    const mergeRange = configuredRange || defaultRange;
+    const cellAddress = this.getTopLeftCell(mergeRange, field.cell || "");
+    if (!cellAddress) return;
+
+    if (field.key === "catatan") {
+      if (mergeRange && !sheet.getCell(cellAddress).isMerged) {
+        sheet.mergeCells(mergeRange);
+      }
+      const target = sheet.getCell(cellAddress);
+      target.value = this.fitTextForBox(text, 115, 4);
+      target.font = { ...(target.font || {}), name: field.font_name || field.fontName || "Arial", size: Number(field.font_size || field.fontSize || 11) };
+      target.alignment = {
+        ...(target.alignment || {}),
+        wrapText: field.wrap !== false,
+        shrinkToFit: field.shrink !== false,
+        vertical: field.vertical || "top",
+        horizontal: field.horizontal || "left",
+      };
+      const rowHeight = Number(field.row_height || field.rowHeight || 15);
+      this.getRowsForField(field, mergeRange).forEach((rowNumber) => {
+        sheet.getRow(rowNumber).height = rowHeight;
+      });
+      return;
+    }
+
+    if (mergeRange && !sheet.getCell(cellAddress).isMerged) {
+      sheet.mergeCells(mergeRange);
+    }
+
+    const cell = sheet.getCell(cellAddress);
+    cell.value = text;
+    this.applyFieldFormatting(sheet, field, cell, mergeRange);
+    if (field.type === "textarea") {
+      cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: "top" };
+      const rowNumber = Number(String(cellAddress).match(/\d+/)?.[0] || 0);
+      if (rowNumber > 0 && !field.row_height && !field.rowHeight) sheet.getRow(rowNumber).height = Math.max(sheet.getRow(rowNumber).height || 15, 45);
+    }
+  },
+
+  getSystemFieldValue(source: string, context: any) {
+    switch (source) {
+      case "requester_name": return context.profile?.full_name ?? "";
+      case "requester_nik": return context.profile?.nik ?? "";
+      case "requester_job_title": return context.profile?.job_title ?? "";
+      case "department_name": return context.department?.name ?? "";
+      case "office_name": return context.office?.name ?? "";
+      case "project_name": return context.project?.name ?? "";
+      case "entity_name": return context.entity?.name ?? "";
+      case "letter_number": return context.payload?.no_surat ?? "";
+      case "letter_title": return context.payload?.judul_surat ?? "";
+      case "request_place": return context.payload?.request_place ?? "";
+      case "request_date": return this.formatDateForDocument(context.payload?.request_date);
+      case "request_place_date": {
+        const place = String(context.payload?.request_place ?? "").trim();
+        const date = this.formatDateForDocument(context.payload?.request_date);
+        return [place, date].filter(Boolean).join(", ");
+      }
+      default: return undefined;
+    }
+  },
+
+  hasPlaceDateMapping(schema: TemplateInputField[]) {
+    const mappedSources = new Set(
+      schema
+        .filter((field) => !!field.cell)
+        .map((field) => field.default_source || field.defaultSource || "manual")
+    );
+    return mappedSources.has("request_place_date") ||
+      (mappedSources.has("request_place") && mappedSources.has("request_date"));
+  },
+
+  async getTemplateContext(payload: any) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Tidak terautentikasi");
+
+    const [profileRes, officeRes, projectRes, deptRes, entityRes, usageRes] = await Promise.all([
+      supabase.from("profiles").select("id, full_name, nik, job_title, email, department_id, office_id").eq("id", user.id).single(),
+      payload.office_id ? supabase.from("master_offices").select("id, name, code, kedudukan").eq("id", payload.office_id).maybeSingle() : Promise.resolve({ data: null }),
+      payload.project_id ? supabase.from("master_projects").select("id, name, code, office_id, entity_id").eq("id", payload.project_id).maybeSingle() : Promise.resolve({ data: null }),
+      payload.dept_id ? supabase.from("master_departments").select("id, name, code, dept_index").eq("id", payload.dept_id).maybeSingle() : Promise.resolve({ data: null }),
+      payload.entity_id ? supabase.from("master_entities").select("id, name, code").eq("id", payload.entity_id).maybeSingle() : Promise.resolve({ data: null }),
+      payload.penggunaan_id
+        ? supabase
+            .from("master_penggunaan_detail")
+            .select("*, master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, department_id)")
+            .eq("id", payload.penggunaan_id)
+            .single()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    if (profileRes.error) throw profileRes.error;
+
+    return {
+      user,
+      profile: profileRes.data,
+      office: officeRes.data,
+      project: projectRes.data,
+      department: deptRes.data,
+      entity: entityRes.data,
+      usage: usageRes.data,
+      form: (usageRes.data as any)?.master_forms ?? null,
+      payload,
+    };
+  },
+
+  async buildFilledTemplateFile(payload: any): Promise<{ publicUrl: string; context: any }> {
+    const context = await this.getTemplateContext(payload);
+    const templateLink = context.form?.link_form;
+    if (!templateLink) throw new Error("Template Excel belum tersedia untuk matrix ini.");
+
+    const response = await fetch(templateLink);
+    if (!response.ok) throw new Error("Gagal mengambil template Excel.");
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await response.arrayBuffer());
+    const worksheet = workbook.worksheets[0];
+
+    worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
+    worksheet.getCell("D5").value = `: ${payload.no_surat}`;
+    if (payload.office_id && context.office?.name !== "Kantor Pusat") {
+      worksheet.getCell("L4").value = `: KC. ${context.office?.name || ""}`;
+      worksheet.getCell("L5").value = `: ${context.project?.name || ""}`;
+    } else {
+      worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
+      worksheet.getCell("L5").value = ": -";
+    }
+
+    const inputData = payload.form_input_data ?? {};
+    const schema = this.parseInputSchema(context.form?.input_schema);
+    if (!this.hasPlaceDateMapping(schema)) {
+      throw new Error("Template belum memiliki mapping cell untuk Tempat, Tanggal.");
+    }
+    schema.forEach((field) => {
+      if (field.type === "table") {
+        this.writeTableField(workbook, field, inputData[field.key]);
+        return;
+      }
+      if (!field.cell && !(field.merge_range || field.mergeRange)) return;
+      const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
+      const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
+      const source = field.default_source || field.defaultSource || "manual";
+      const systemValue = this.getSystemFieldValue(source, context);
+      const rawValue = systemValue !== undefined ? systemValue : inputData[field.key];
+      this.writeWrappedField(sheet, field, rawValue);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
+    const path = `dokumen/system_${safeNumber}_${Date.now()}.xlsx`;
+    const { error } = await supabase.storage.from("dokumen_surat").upload(path, buffer, {
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      upsert: true,
+    });
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage.from("dokumen_surat").getPublicUrl(path);
+    return { publicUrl, context };
   },
 
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
@@ -139,11 +560,43 @@ export const suratService = {
     }
   },
 
-  async createRegistrasi(payload: any, signers: any[], file: File | null, lampiranFile?: File | null) {
+  async createRegistrasi(payload: any, signers: any[], file: File | null, lampiranFiles?: File[] | File | null) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      const attachmentFiles = Array.isArray(lampiranFiles)
+        ? lampiranFiles
+        : lampiranFiles
+          ? [lampiranFiles]
+          : [];
+
+      if (attachmentFiles.length === 0) {
+        throw new Error("Minimal satu lampiran wajib diunggah.");
+      }
+
       const noUrut      = parseInt(payload.no_surat.split("/")[0]);
       const currentYear = new Date().getFullYear();
+      const normalizedFormInputData = this.normalizeFormInputData(payload.form_input_data);
+      payload = { ...payload, form_input_data: normalizedFormInputData };
+      const generated = file ? null : await this.buildFilledTemplateFile(payload);
+      const context = generated?.context ?? await this.getTemplateContext(payload);
+      const activeSigners = signers.filter(s => s.user_id);
+      const signerSnapshots = await this.getSignerSnapshots(activeSigners);
+      const totalSteps = activeSigners.length;
+      const snapshotSigners = activeSigners.map((s, idx) => {
+        const profile = signerSnapshots[s.user_id] ?? {};
+        return {
+          user_id: s.user_id,
+          full_name: profile.full_name ?? null,
+          nik: profile.nik ?? null,
+          job_title: profile.job_title ?? null,
+          email: profile.email ?? null,
+          role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
+          label_jabatan: s.label_jabatan ?? null,
+          step_order: Number(s.step_order || idx + 1),
+          status: "PENDING",
+          is_signed: false,
+        };
+      });
 
       const cleanPayload = {
         ...payload,
@@ -154,15 +607,55 @@ export const suratService = {
         letter_type_id: this.cleanUuid(payload.letter_type_id),
         penggunaan_id:  this.cleanUuid(payload.penggunaan_id),
         created_by:     user?.id,
+        requester_nik: context.profile?.nik ?? null,
+        request_place: payload.request_place ?? null,
+        request_date: payload.request_date ?? null,
+        form_input_data: normalizedFormInputData,
+        requester_snapshot: {
+          id: context.profile?.id ?? user?.id,
+          full_name: context.profile?.full_name ?? null,
+          nik: context.profile?.nik ?? null,
+          job_title: context.profile?.job_title ?? null,
+          email: context.profile?.email ?? user?.email ?? null,
+        },
+        location_snapshot: {
+          entity: context.entity,
+          office: context.office,
+          project: context.project,
+          department: context.department,
+          form: context.form ? {
+            id: context.form.id,
+            nama_form: context.form.nama_form,
+            nomor_form: context.form.nomor_form,
+          } : null,
+        },
+        data_snapshot: this.buildDataSnapshot(context, payload, snapshotSigners, normalizedFormInputData),
       };
 
       if (file)         cleanPayload.file_path     = await this.uploadFile(file);
-      if (lampiranFile) cleanPayload.lampiran_path = await this.uploadFile(lampiranFile);
+      if (!file)        cleanPayload.file_path     = generated?.publicUrl;
 
       const { data: surat, error: suratError } = await supabase
         .from("surat_registrasi").insert(cleanPayload).select().single();
 
       if (suratError) throw suratError;
+
+      const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id);
+      if (uploadedAttachments[0]?.file_url) {
+        await supabase
+          .from("surat_registrasi")
+          .update({ lampiran_path: uploadedAttachments[0].file_url })
+          .eq("id", surat.id);
+        surat.lampiran_path = uploadedAttachments[0].file_url;
+      }
+      surat.surat_attachments = uploadedAttachments;
+
+      const dataSnapshot = this.buildDataSnapshot(context, payload, snapshotSigners, normalizedFormInputData, uploadedAttachments);
+      await supabase
+        .from("surat_registrasi")
+        .update({ data_snapshot: dataSnapshot })
+        .eq("id", surat.id);
+      surat.data_snapshot = dataSnapshot;
 
       await supabase.from("surat_reservations")
         .update({ status: "USED" })
@@ -174,14 +667,14 @@ export const suratService = {
           status:      "PENDING",
         });
 
-      const activeSigners = signers.filter(s => s.user_id);
-      const totalSteps = activeSigners.length;
       const signerPayload = activeSigners.map((s, idx) => ({
         surat_id: surat.id,
         user_id: s.user_id,
         role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
+        label_jabatan: s.label_jabatan ?? null,
         step_order: s.step_order,
-        is_signed: false
+        is_signed: false,
+        signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
 
       if (signerPayload.length > 0) {
@@ -207,6 +700,10 @@ export const suratService = {
           if (result.status === 'rejected') console.error("Notif error:", result.reason);
         });
       }
+
+      documentPreviewService.enqueuePdf(surat.id).catch((pdfError) => {
+        console.error("Gagal enqueue PDF awal:", pdfError);
+      });
 
       return surat;
     } catch (error: any) {
@@ -273,12 +770,7 @@ export const suratService = {
     const { data: sigInfo } = await supabase.from("surat_signatures").select("role_name").eq("id", signatureId).single();
     if (!sigInfo) throw new Error("Data tanda tangan tidak valid.");
 
-    let baseFilePath = suratFresh.file_path;
-    if (currentStep > 1) {
-      const { data: prevSnap } = await supabase.from("surat_signatures")
-        .select("file_path_snap").eq("surat_id", suratId).eq("step_order", currentStep - 1).eq("is_signed", true).single();
-      if (prevSnap?.file_path_snap) baseFilePath = prevSnap.file_path_snap;
-    }
+    const baseFilePath = suratFresh.file_path;
 
     let finalUrl = baseFilePath ?? "";
     if (baseFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
@@ -290,6 +782,10 @@ export const suratService = {
     });
     if (rpcError) throw new Error(rpcError.message);
     if (!rpcResult?.success) throw new Error("Gagal memproses persetujuan.");
+
+    documentPreviewService.enqueuePdf(suratId, { refresh: true, signatureId }).catch((pdfError) => {
+      console.error("Gagal enqueue snapshot PDF:", pdfError);
+    });
 
     // Ambil data terbaru untuk notifikasi
     const { data: updatedSurat } = await supabase
@@ -366,7 +862,13 @@ export const suratService = {
 
   async getMyInbox(userId: string) {
     const { data, error } = await supabase
-      .from("surat_signatures").select(`id, role_name, step_order, is_signed, surat_id, surat_registrasi!inner (*)`)
+      .from("surat_signatures").select(`
+        id, role_name, step_order, is_signed, surat_id,
+        surat_registrasi!inner (
+          *,
+          surat_attachments ( id, file_url, file_name, file_type, file_size )
+        )
+      `)
       .eq("user_id", userId).eq("is_signed", false);
     if (error) return [];
     return data.map((sig: any) => {
@@ -382,9 +884,40 @@ export const suratService = {
     return supabase.storage.from("dokumen_surat").getPublicUrl(filePath).data.publicUrl;
   },
 
+  async uploadAttachmentFiles(suratId: string, files: File[], userId?: string) {
+    const rows = [];
+
+    for (const file of files) {
+      const safeName = file.name.replace(/[^\w.-]+/g, "_");
+      const filePath = `lampiran_${suratId}/${Date.now()}_${safeName}`;
+      const { error } = await supabase.storage.from("lampiran_surat").upload(filePath, file, {
+        contentType: file.type || undefined,
+        upsert: false,
+      });
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage.from("lampiran_surat").getPublicUrl(filePath);
+      rows.push({
+        surat_id: suratId,
+        file_url: publicUrl,
+        file_name: file.name,
+        file_type: file.type || null,
+        file_size: file.size,
+        created_by: userId ?? null,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("surat_attachments")
+      .insert(rows)
+      .select("*");
+    if (error) throw error;
+    return data || [];
+  },
+
   async getAllSurat(userId?: string): Promise<SuratRegistrasi[]> {
     let query = supabase.from("surat_registrasi")
-      .select(`*, surat_signatures (*, profiles:user_id (full_name))`).order("created_at", { ascending: false });
+      .select(`*, surat_signatures (*, profiles:user_id (full_name)), surat_attachments ( id, file_url, file_name, file_type, file_size )`).order("created_at", { ascending: false });
     if (userId) query = query.eq("created_by", userId);
     const { data } = await query;
     return (data || []).map((s: any) => ({

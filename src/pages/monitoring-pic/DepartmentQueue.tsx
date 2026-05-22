@@ -86,6 +86,11 @@ const SuratDetailRow: React.FC<{
 
   const actions = getAvailableActions();
   const isFinished = ['KEUANGAN_DONE', 'KEUANGAN_REJECTED', 'REJECTED'].includes(surat.pic_review_status ?? '');
+  const attachments = surat.surat_attachments?.length
+    ? surat.surat_attachments
+    : surat.lampiran_path
+      ? [{ id: 'legacy-lampiran', file_url: surat.lampiran_path, file_name: 'Lampiran' }]
+      : [];
 
   return (
     <div className={`border border-border rounded-xl overflow-hidden transition-all ${isFinished ? 'opacity-70' : ''}`}>
@@ -139,12 +144,12 @@ const SuratDetailRow: React.FC<{
                 <FileText size={12} /> Dokumen
               </a>
             )}
-            {surat.lampiran_path && (
-              <a href={surat.lampiran_path} target="_blank" rel="noreferrer"
+            {attachments.map((attachment, index) => (
+              <a key={attachment.id ?? attachment.file_url} href={attachment.file_url} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-muted text-muted-foreground border-border hover:bg-accent transition-all">
-                <Paperclip size={12} /> Lampiran
+                <Paperclip size={12} /> Lampiran {index + 1}
               </a>
-            )}
+            ))}
             {surat.pic_attachment && (
               <a href={getFileUrl(surat.pic_attachment) ?? '#'} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-emerald-500/5 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10 transition-all">
@@ -236,6 +241,7 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
           pic_attachment, pic_note, chat_status, chat_opened_at,
           updated_at, created_at, pic_id, dept_id, created_by,
           file_path, lampiran_path,
+          surat_attachments(id, file_url, file_name, file_type, file_size),
           creator:profiles!surat_registrasi_created_by_fkey(full_name),
           finance_reviews(payment_file_path, status)
         `)
@@ -255,6 +261,7 @@ export const DepartmentQueue: React.FC<DepartmentQueueProps> = ({ dept, picId })
             pic_attachment, pic_note, chat_status, chat_opened_at,
             updated_at, created_at, pic_id, dept_id, created_by,
             file_path, lampiran_path,
+            surat_attachments(id, file_url, file_name, file_type, file_size),
             creator:profiles!surat_registrasi_created_by_fkey(full_name),
             finance_reviews(payment_file_path, status)
           `)

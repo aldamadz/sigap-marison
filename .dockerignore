@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+.git
+.vscode
+.env.server
+.env.production
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

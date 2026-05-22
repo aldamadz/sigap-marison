@@ -1,0 +1,25 @@
+services:
+  agenda-pdf-worker:
+    build:
+      context: .
+      dockerfile: dockerfile
+    image: agenda-flow:production
+    container_name: agenda-pdf-worker
+    restart: always
+    command: ["node", "pdf-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      PDF_WORKER_CONCURRENCY: "${PDF_WORKER_CONCURRENCY:-3}"
+      PDF_WORKER_POLL_INTERVAL_MS: "${PDF_WORKER_POLL_INTERVAL_MS:-2000}"
+      PDF_WORKER_MAX_ATTEMPTS: "${PDF_WORKER_MAX_ATTEMPTS:-3}"
+      PDF_WORKER_CONVERT_TIMEOUT_MS: "${PDF_WORKER_CONVERT_TIMEOUT_MS:-120000}"
+    env_file:
+      - path: .env.production
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
