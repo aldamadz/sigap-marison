@@ -2,15 +2,27 @@
 
 Dokumentasi ini untuk integrasi server-to-server agar sistem eksternal dapat membaca data surat, metadata pengirim, tujuan/cabang/proyek/departemen, detail isi surat, tanda tangan, lampiran, SPK, dan bukti transaksi.
 
-API ini tidak menggunakan endpoint Supabase langsung. Semua akses lewat domain aplikasi SIGAP.
+API ini tidak menggunakan endpoint Supabase langsung. Semua akses lewat gateway eksternal SIGAP.
 
 ## Base URL
 
 ```txt
-https://sigap.marison-testing.biz.id
+https://external.marison-testing.biz.id
 ```
 
 Untuk environment lain, ganti base URL sesuai domain deployment.
+
+Dokumentasi interaktif publik tersedia di:
+
+```txt
+https://external.marison-testing.biz.id/docs
+```
+
+OpenAPI JSON tersedia di:
+
+```txt
+https://external.marison-testing.biz.id/openapi.json
+```
 
 ## Authentication
 
@@ -46,7 +58,7 @@ SHA256_HEX_BODY
 Contoh untuk request:
 
 ```http
-GET /api/external/surat?limit=10&status=DONE
+GET /api/surat?limit=10&status=DONE
 X-Timestamp: 1779446400000
 ```
 
@@ -60,7 +72,7 @@ Canonical string:
 
 ```txt
 GET
-/api/external/surat?limit=10&status=DONE
+/api/surat?limit=10&status=DONE
 1779446400000
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ```
@@ -76,7 +88,7 @@ hex(hmac_sha256(client_secret, canonical_string))
 ```js
 import crypto from "node:crypto";
 
-const baseUrl = "https://sigap.marison-testing.biz.id";
+const baseUrl = "https://external.marison-testing.biz.id";
 const token = "sigap_xxx";
 const secret = "client_hmac_secret";
 
@@ -106,7 +118,7 @@ function sign({ method, pathWithQuery, body = "" }) {
   };
 }
 
-const path = "/api/external/surat?limit=10&status=DONE";
+const path = "/api/surat?limit=10&status=DONE";
 const response = await fetch(`${baseUrl}${path}`, {
   method: "GET",
   headers: sign({ method: "GET", pathWithQuery: path }),
@@ -121,7 +133,7 @@ console.log(json);
 ### List Surat
 
 ```http
-GET /api/external/surat
+GET /api/surat
 ```
 
 Query parameters:
@@ -139,7 +151,7 @@ Query parameters:
 Contoh:
 
 ```http
-GET /api/external/surat?department_code=PGD&updated_since=2026-05-01T00:00:00Z&limit=50
+GET /api/surat?department_code=PGD&updated_since=2026-05-01T00:00:00Z&limit=50
 ```
 
 Response:
@@ -175,7 +187,7 @@ Response:
         {
           "type": "pdf",
           "file_name": "dokumen.pdf",
-          "view_url": "/api/external/surat/dc408c7c-1490-40f8-8163-85f0bba6cafd/files/pdf"
+          "view_url": "/api/surat/dc408c7c-1490-40f8-8163-85f0bba6cafd/files/pdf"
         }
       ]
     }
@@ -192,13 +204,13 @@ Response:
 ### Detail Surat
 
 ```http
-GET /api/external/surat/:id
+GET /api/surat/:id
 ```
 
 Contoh:
 
 ```http
-GET /api/external/surat/dc408c7c-1490-40f8-8163-85f0bba6cafd
+GET /api/surat/dc408c7c-1490-40f8-8163-85f0bba6cafd
 ```
 
 Response:
@@ -224,18 +236,18 @@ Response:
 File tidak diberikan sebagai URL Supabase. Response data menyediakan `view_url`, lalu sistem eksternal memanggil URL itu dengan header auth/signature yang sama.
 
 ```http
-GET /api/external/surat/:id/files/document
-GET /api/external/surat/:id/files/pdf
-GET /api/external/surat/:id/files/spk
-GET /api/external/surat/:id/files/attachment?attachment_id=<id>
-GET /api/external/surat/:id/files/signature-pdf?signature_id=<id>
-GET /api/external/surat/:id/files/payment?finance_review_id=<id>
+GET /api/surat/:id/files/document
+GET /api/surat/:id/files/pdf
+GET /api/surat/:id/files/spk
+GET /api/surat/:id/files/attachment?attachment_id=<id>
+GET /api/surat/:id/files/signature-pdf?signature_id=<id>
+GET /api/surat/:id/files/payment?finance_review_id=<id>
 ```
 
 Contoh:
 
 ```http
-GET /api/external/surat/dc408c7c-1490-40f8-8163-85f0bba6cafd/files/attachment?attachment_id=0fd0...
+GET /api/surat/dc408c7c-1490-40f8-8163-85f0bba6cafd/files/attachment?attachment_id=0fd0...
 ```
 
 Response sukses berupa stream file dengan header:
@@ -296,8 +308,27 @@ Token asli hanya tampil sekali. Simpan di secret manager milik partner dan SIGAP
 ## Integration Notes
 
 - API ini ditujukan untuk backend-to-backend, bukan dipanggil langsung dari browser.
+- Endpoint `/docs` dan `/openapi.json` publik, tetapi semua endpoint `/api/*` wajib memakai token, timestamp, dan signature.
 - Partner boleh melakukan filtering lanjutan di sistem mereka sendiri.
 - Gunakan `updated_since` untuk sinkronisasi berkala.
 - Gunakan `next_cursor` sampai bernilai `null`.
 - Jangan cache file karena endpoint file memakai `Cache-Control: no-store`.
 - Semua akses API dicatat di `external_api_audit_logs`.
+
+## Deployment
+
+Gateway eksternal adalah service Docker terpisah dari aplikasi SIGAP utama.
+
+```powershell
+docker --context ubuntu-server compose -f docker-compose.external.yml --env-file .env.production up -d --build
+```
+
+Pastikan `.env.production` berisi:
+
+```txt
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+EXTERNAL_API_PUBLIC_URL=https://external.marison-testing.biz.id
+EXTERNAL_API_PORT=3020
+```
+
+Arahkan reverse proxy atau Cloudflare Tunnel `external.marison-testing.biz.id` ke port `3020` di server deployment.

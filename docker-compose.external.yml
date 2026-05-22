@@ -1,0 +1,35 @@
+services:
+  agenda-external-api:
+    build:
+      context: ./external-api
+      dockerfile: Dockerfile
+    image: agenda-flow-external-api:production
+    container_name: agenda-flow-external-api
+    restart: always
+    ports:
+      - "${EXTERNAL_API_PORT:-3020}:80"
+    environment:
+      NODE_ENV: production
+      PORT: "80"
+      SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY in .env.production}"
+      EXTERNAL_API_PUBLIC_URL: "${EXTERNAL_API_PUBLIC_URL:-https://external.marison-testing.biz.id}"
+      EXTERNAL_API_MAX_SKEW_MS: "${EXTERNAL_API_MAX_SKEW_MS:-300000}"
+      EXTERNAL_API_MAX_LIMIT: "${EXTERNAL_API_MAX_LIMIT:-100}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1/health', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
