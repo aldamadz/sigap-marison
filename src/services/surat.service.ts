@@ -14,7 +14,7 @@ type TableInputColumn = {
 type TemplateInputField = {
   key: string;
   label: string;
-  type?: "text" | "textarea" | "date" | "number" | "currency" | "table";
+  type?: "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
   required?: boolean;
   cell?: string;
   sheet?: number;
@@ -139,6 +139,12 @@ export const suratService = {
 
   formatInputValue(value: any, type?: string): any {
     if (value === null || value === undefined) return "";
+    if (Array.isArray(value)) {
+      return value.map((item) => this.formatInputValue(item, type)).filter(Boolean).join(", ");
+    }
+    if (typeof value === "object" && !Array.isArray(value)) {
+      return value.label ?? value.name ?? value.code ?? value.value ?? "";
+    }
     if (type === "date") return this.formatDateForDocument(value);
     if (type === "currency") {
       const n = Number(value);
@@ -326,8 +332,7 @@ export const suratService = {
   writeWrappedField(sheet: ExcelJS.Worksheet, field: TemplateInputField, value: any) {
     const text = this.formatInputValue(value, field.type);
     const configuredRange = String(field.merge_range || field.mergeRange || "").trim().toUpperCase();
-    const defaultRange = field.key === "catatan" ? "B28:N31" : "";
-    const mergeRange = configuredRange || defaultRange;
+    const mergeRange = configuredRange;
     const cellAddress = this.getTopLeftCell(mergeRange, field.cell || "");
     if (!cellAddress) return;
 

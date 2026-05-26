@@ -25,6 +25,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { documentPreviewService } from '@/services/document-preview.service';
+import { toast } from 'react-hot-toast';
 
 type InvolvementKey = 'MEMBUAT' | 'MEMERIKSA' | 'MENYETUJUI' | 'PIC';
 
@@ -183,6 +185,7 @@ const RiwayatKeterlibatanPage = () => {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | InvolvementKey>('ALL');
   const [selected, setSelected] = useState<PreparedSurat | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['surat-riwayat-keterlibatan'],
@@ -347,12 +350,33 @@ const RiwayatKeterlibatanPage = () => {
     const attachments = surat.surat_attachments ?? [];
     if (attachments.length > 0) return attachments.map((attachment, index) => ({
       label: `Lampiran Permohonan ${index + 1}`,
-      url: attachment.file_url,
+      path: attachment.file_url,
     }));
     return [{
       label: 'Lampiran Permohonan',
-      url: resolveStorageUrl(surat.lampiran_path, 'lampiran_surat'),
+      path: surat.lampiran_path,
     }];
+  };
+
+  const openGeneratedPdf = async (suratId: string) => {
+    setPreviewingId(suratId);
+    try {
+      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
+      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuka PDF dokumen.');
+    } finally {
+      setPreviewingId(null);
+    }
+  };
+
+  const openStoredFile = async (suratId: string, path: string | null | undefined) => {
+    if (!path) return;
+    try {
+      await documentPreviewService.openStoredFileInNewTab(suratId, path);
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuka dokumen.');
+    }
   };
 
   const counts = useMemo(() => ({
@@ -575,29 +599,40 @@ const RiwayatKeterlibatanPage = () => {
                   {[
                     {
                       label: 'Dokumen Permohonan',
-                      url: resolveStorageUrl(selected.file_path, 'dokumen_surat'),
+                      path: selected.file_path,
+                      kind: 'pdf',
                     },
-                    ...getAttachments(selected),
+                    ...getAttachments(selected).map((doc) => ({ ...doc, kind: 'file' })),
                     {
                       label: 'SPK / Attachment PIC',
-                      url: resolveStorageUrl(selected.pic_attachment, 'spk_files'),
+                      path: selected.pic_attachment,
+                      kind: 'file',
                     },
                     {
                       label: 'Bukti Pembayaran',
-                      url: resolveStorageUrl(selected._paymentFilePath, 'payment_files'),
+                      path: selected._paymentFilePath,
+                      kind: 'file',
                     },
                   ].map((doc) => (
                     <div key={doc.label} className="rounded-lg border border-border/60 p-2.5 bg-background/40">
                       <p className="text-xs font-semibold mb-2">{doc.label}</p>
-                      {doc.url ? (
-                        <a
-                          href={doc.url}
-                          target="_blank"
-                          rel="noreferrer"
+                      {doc.path ? (
+                        <button
+                          type="button"
+                          onClick={() => doc.kind === 'pdf' ? openGeneratedPdf(selected.id) : openStoredFile(selected.id, doc.path)}
+                          disabled={doc.kind === 'pdf' && previewingId === selected.id}
                           className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                         >
-                          Lihat Dokumen <ExternalLink size={12} />
-                        </a>
+                          {doc.kind === 'pdf' && previewingId === selected.id ? (
+                            <>
+                              <Loader2 size={12} className="animate-spin" /> Menyiapkan PDF
+                            </>
+                          ) : (
+                            <>
+                              Lihat Dokumen <ExternalLink size={12} />
+                            </>
+                          )}
+                        </button>
                       ) : (
                         <p className="text-xs text-muted-foreground">Belum tersedia</p>
                       )}

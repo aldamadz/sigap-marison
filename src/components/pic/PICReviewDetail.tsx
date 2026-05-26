@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { picService, ChatMessage } from '@/services/pic.service';
+import { documentPreviewService } from '@/services/document-preview.service';
 import { supabase } from '@/lib/supabase';
 import {
   Send, ShieldCheck, CreditCard, XCircle, Loader2,
@@ -143,6 +144,7 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
   const [isSending, setIsSending] = useState(false);
   const [isTogglingChat, setIsTogglingChat] = useState(false);
   const [uploadingSPK, setUploadingSPK] = useState(false);
+  const [isOpeningPdf, setIsOpeningPdf] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string } | null>(null);
   const [activeModal, setActiveModal] = useState<ActionConfig | null>(null);
   const [isActing, setIsActing] = useState(false);
@@ -218,16 +220,20 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
   }, [messages]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const getFileUrl = (path: string | null) => {
-    if (!path) return null;
-    if (path.startsWith('http')) return path;
-    // Deteksi bucket dari prefix path
-    const bucket =
-      path.startsWith('spk_files/') ? 'spk_files' :
-      path.startsWith('chat_attachments/') ? 'chat_attachments' :
-      path.startsWith('lampiran_') ? 'lampiran_surat' :
-      'dokumen_surat';
-    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  const openStoredFile = (path: string) => {
+    documentPreviewService.openStoredFileInNewTab(suratData.id, path)
+      .catch((error: any) => toast.error(error.message || 'Gagal membuka file.'));
+  };
+  const openGeneratedPdf = async () => {
+    setIsOpeningPdf(true);
+    try {
+      const pdfUrl = await documentPreviewService.getPdfUrl(suratData.id);
+      await documentPreviewService.openStoredFileInNewTab(suratData.id, pdfUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuka PDF dokumen.');
+    } finally {
+      setIsOpeningPdf(false);
+    }
   };
 
   // ── Toggle Chat ───────────────────────────────────────────────────────────
@@ -354,15 +360,16 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
           <div className="flex items-center gap-1.5 shrink-0">
             {suratData.file_path && (
               <button
-                onClick={() => window.open(getFileUrl(suratData.file_path)!, '_blank')}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all"
+                onClick={openGeneratedPdf}
+                disabled={isOpeningPdf}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all disabled:opacity-60"
               >
-                <Eye size={12} /> Dokumen
+                {isOpeningPdf ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />} Dokumen
               </button>
             )}
             {suratData.lampiran_path && (
               <button
-                onClick={() => window.open(getFileUrl(suratData.lampiran_path)!, '_blank')}
+                onClick={() => openStoredFile(suratData.lampiran_path)}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-muted text-muted-foreground border-border hover:bg-accent transition-all"
               >
                 <FileText size={12} /> Lampiran
@@ -370,7 +377,7 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
             )}
             {suratData.pic_attachment && (
               <button
-                onClick={() => window.open(getFileUrl(suratData.pic_attachment)!, '_blank')}
+                onClick={() => openStoredFile(suratData.pic_attachment)}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-success/5 text-success border-success/20 hover:bg-success/10 transition-all"
               >
                 <FileCheck size={12} /> SPK
@@ -510,10 +517,9 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
                       : 'bg-secondary text-secondary-foreground border-border rounded-tl-none'
                   }`}>
                     {msg.attachment_url && (
-                      <a
-                        href={getFileUrl(msg.attachment_url)!}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => openStoredFile(msg.attachment_url!)}
                         className={`mb-2.5 p-2 rounded-lg flex items-center justify-between gap-4 border transition-all ${
                           isMe ? 'bg-black/20 border-white/10 hover:bg-black/30' : 'bg-background/40 border-border/50 hover:bg-background/60'
                         }`}
@@ -522,7 +528,7 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
                           <Paperclip size={12} /> Lampiran
                         </span>
                         <ExternalLink size={12} />
-                      </a>
+                      </button>
                     )}
                     <p className="text-[13px] leading-relaxed font-medium whitespace-pre-wrap">
                       {msg.message}

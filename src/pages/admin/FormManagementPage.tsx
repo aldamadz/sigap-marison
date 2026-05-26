@@ -19,7 +19,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-type TemplateInputType = "text" | "textarea" | "date" | "number" | "currency" | "table";
+type TemplateInputType = "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
 type TemplateHorizontalAlign = "left" | "center" | "right";
 type TemplateVerticalAlign = "top" | "middle" | "bottom";
 type TemplateDefaultSource =
@@ -54,6 +54,11 @@ interface TemplateInputField {
   font_name?: string;
   font_size?: number;
   row_height?: number;
+  multiple?: boolean;
+  external_source_key?: string;
+  external_dependency_key?: string;
+  external_value_path?: string;
+  external_label_path?: string;
   table_config?: {
     start_row: number;
     end_row: number;
@@ -97,6 +102,11 @@ const normalizeInputSchema = (value: any): TemplateInputField[] => {
     font_name: item.font_name || item.fontName || "",
     font_size: item.font_size || item.fontSize ? Number(item.font_size || item.fontSize) : undefined,
     row_height: item.row_height || item.rowHeight ? Number(item.row_height || item.rowHeight) : undefined,
+    multiple: item.multiple === true || item.is_multiple === true,
+    external_source_key: item.external_source_key || item.externalSourceKey || "",
+    external_dependency_key: item.external_dependency_key || item.externalDependencyKey || "",
+    external_value_path: item.external_value_path || item.externalValuePath || "",
+    external_label_path: item.external_label_path || item.externalLabelPath || "",
     table_config: item.table_config || item.tableConfig,
   }));
 };
@@ -119,6 +129,11 @@ const serializeInputSchema = (fields: TemplateInputField[]) =>
       font_name: field.font_name?.trim() || undefined,
       font_size: field.font_size ? Number(field.font_size) : undefined,
       row_height: field.row_height ? Number(field.row_height) : undefined,
+      multiple: field.multiple || undefined,
+      external_source_key: field.external_source_key?.trim() || undefined,
+      external_dependency_key: field.external_dependency_key?.trim() || undefined,
+      external_value_path: field.external_value_path?.trim() || undefined,
+      external_label_path: field.external_label_path?.trim() || undefined,
       table_config: field.table_config ? {
         start_row: Number(field.table_config.start_row || 1),
         end_row: Number(field.table_config.end_row || field.table_config.start_row || 1),
@@ -169,60 +184,6 @@ const createDefaultTableConfig = (): NonNullable<TemplateInputField["table_confi
     { key: "nama_barang", label: "Nama Barang", column: "B", required: true, type: "text" },
   ],
 });
-
-const PGD_INPUT_PRESET: TemplateInputField[] = [
-  {
-    id: "preset-place-date",
-    key: "request_place_date",
-    label: "Tempat, Tanggal",
-    type: "text",
-    required: true,
-    cell: "",
-    sheet: 1,
-    defaultSource: "request_place_date",
-  },
-  {
-    id: "preset-items",
-    key: "items",
-    label: "Daftar Barang/Jasa",
-    type: "table",
-    required: true,
-    cell: "",
-    sheet: 1,
-    defaultSource: "manual",
-    table_config: {
-      start_row: 11,
-      end_row: 25,
-      no_column: "A",
-      columns: [
-        { key: "kode", label: "Kode", column: "B", required: false, type: "text" },
-        { key: "nama_barang", label: "Nama Barang", column: "C", required: true, type: "text" },
-        { key: "sat", label: "Sat", column: "J", required: true, type: "text" },
-        { key: "jumlah", label: "Jumlah", column: "K", required: true, type: "number" },
-        { key: "status", label: "Status", column: "M", required: true, type: "text" },
-        { key: "keterangan", label: "Keterangan", column: "N", required: false, type: "text" },
-      ],
-    },
-  },
-  {
-    id: "preset-catatan",
-    key: "catatan",
-    label: "Catatan",
-    type: "textarea",
-    required: false,
-    cell: "B28",
-    sheet: 1,
-    defaultSource: "manual",
-    merge_range: "B28:N31",
-    vertical: "top",
-    horizontal: "left",
-    wrap: true,
-    shrink: true,
-    font_name: "Arial",
-    font_size: 11,
-    row_height: 15,
-  },
-];
 
 export default function FormManagementPage() {
   const { toast } = useToast();
@@ -383,6 +344,10 @@ export default function FormManagementPage() {
         ...field,
         type,
         table_config: type === "table" ? field.table_config || createDefaultTableConfig() : field.table_config,
+        external_source_key: field.external_source_key,
+        external_dependency_key: field.external_dependency_key,
+        external_value_path: field.external_value_path,
+        external_label_path: field.external_label_path,
       } : field),
     }));
   };
@@ -482,10 +447,6 @@ export default function FormManagementPage() {
       input_schema: cloneInputSchema(fields),
     }));
     toast({ title: "Preset diterapkan", description: `${label} sudah masuk ke konfigurasi input.` });
-  };
-
-  const applyPgdPreset = () => {
-    applyInputSchemaPreset(PGD_INPUT_PRESET, "Quick Preset PGD");
   };
 
   const handleSavePreset = async () => {
@@ -794,9 +755,6 @@ export default function FormManagementPage() {
                   <Button type="button" variant="outline" size="sm" className="rounded-xl text-[10px] font-black uppercase" onClick={handleSavePreset}>
                     <Save className="mr-1 h-3 w-3" /> Simpan Jadi Preset
                   </Button>
-                  <Button type="button" variant="default" size="sm" className="rounded-xl text-[10px] font-black uppercase" onClick={applyPgdPreset}>
-                    Quick Preset PGD
-                  </Button>
                   <Button type="button" variant="outline" size="sm" className="rounded-xl text-[10px] font-black uppercase" onClick={() => addInputField("manual")}>
                     <Plus className="mr-1 h-3 w-3" /> Field Manual
                   </Button>
@@ -881,6 +839,7 @@ export default function FormManagementPage() {
                             <SelectItem value="number">Angka</SelectItem>
                             <SelectItem value="currency">Rupiah</SelectItem>
                             <SelectItem value="table">Tabel</SelectItem>
+                            <SelectItem value="external_select">External Select</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -991,6 +950,58 @@ export default function FormManagementPage() {
                             <input type="checkbox" checked={field.shrink === true} onChange={(e) => updateInputField(field.id, "shrink", e.target.checked)} />
                             Shrink
                           </label>
+                        </div>
+                      )}
+                      {field.type === "external_select" && (
+                        <div className="col-span-12 grid grid-cols-12 gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                          <div className="col-span-12">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">External Data Source</p>
+                            <p className="text-[10px] text-muted-foreground">Data diambil lewat proxy server SIGAP. Secret API tidak disimpan di browser.</p>
+                          </div>
+                          <label className="col-span-12 flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 text-[10px] font-bold uppercase text-muted-foreground md:col-span-3">
+                            <input
+                              type="checkbox"
+                              checked={field.multiple === true}
+                              onChange={(e) => updateInputField(field.id, "multiple", e.target.checked)}
+                            />
+                            Multi Select
+                          </label>
+                          <div className="col-span-12 md:col-span-3 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Source Key</Label>
+                            <Input
+                              className="h-9 font-mono text-xs"
+                              value={field.external_source_key || ""}
+                              placeholder="marison_units_by_project"
+                              onChange={(e) => updateInputField(field.id, "external_source_key", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-12 md:col-span-3 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Dependency</Label>
+                            <Input
+                              className="h-9 font-mono text-xs"
+                              value={field.external_dependency_key || ""}
+                              placeholder="project_code"
+                              onChange={(e) => updateInputField(field.id, "external_dependency_key", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-6 md:col-span-3 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Value Path</Label>
+                            <Input
+                              className="h-9 font-mono text-xs"
+                              value={field.external_value_path || ""}
+                              placeholder="code"
+                              onChange={(e) => updateInputField(field.id, "external_value_path", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-6 md:col-span-3 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Label Path</Label>
+                            <Input
+                              className="h-9 font-mono text-xs"
+                              value={field.external_label_path || ""}
+                              placeholder="name"
+                              onChange={(e) => updateInputField(field.id, "external_label_path", e.target.value)}
+                            />
+                          </div>
                         </div>
                       )}
                       {field.type === "table" && field.table_config && (

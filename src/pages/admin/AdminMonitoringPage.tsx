@@ -49,22 +49,27 @@ const MonitoringAdminPage = () => {
   });
 
   // 3. LOGIKA PREVIEW
-  const handleOpenPreview = async (url: string, suratId?: string) => {
-    if (!url) return;
-    if (suratId) {
-      setPreviewingId(suratId);
-      try {
-        const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
-        await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
-      } catch (error: any) {
-        toast.error(error.message || "Gagal membuka PDF.");
-      } finally {
-        setPreviewingId(null);
-      }
-      return;
+  const handleOpenGeneratedPdf = async (suratId?: string | null) => {
+    if (!suratId) return;
+
+    setPreviewingId(suratId);
+    try {
+      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
+      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal membuka PDF.");
+    } finally {
+      setPreviewingId(null);
     }
-    if (selectedSurat?.id) {
-      await documentPreviewService.openStoredFileInNewTab(selectedSurat.id, url);
+  };
+
+  const handleOpenStoredFile = async (url?: string | null, suratId?: string | null) => {
+    if (!url || !suratId) return;
+
+    try {
+      await documentPreviewService.openStoredFileInNewTab(suratId, url);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal membuka file.");
     }
   };
 
@@ -325,7 +330,7 @@ const MonitoringAdminPage = () => {
                 </div>
               </div>
               <button 
-                onClick={() => handleOpenPreview(selectedSurat?.file_path, selectedSurat?.id)}
+                onClick={() => handleOpenGeneratedPdf(selectedSurat?.id)}
                 disabled={previewingId === selectedSurat?.id}
                 className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary hover:text-white transition-all"
               >
@@ -399,7 +404,7 @@ const MonitoringAdminPage = () => {
 
                       {(sig.pdf_path_snap || sig.file_path_snap) && (
                         <button 
-                          onClick={() => handleOpenPreview(sig.pdf_path_snap || sig.file_path_snap, selectedSurat.id)}
+                          onClick={() => handleOpenStoredFile(sig.pdf_path_snap || sig.file_path_snap, selectedSurat.id)}
                           className="flex items-center gap-2 px-2 py-1 bg-background border border-border rounded text-primary hover:bg-muted transition-colors"
                         >
                           <Download size={10} />

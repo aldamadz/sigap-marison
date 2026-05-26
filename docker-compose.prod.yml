@@ -8,11 +8,17 @@ services:
     restart: always
     ports:
       - "${APP_PORT:-3010}:80"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       NODE_ENV: production
       PORT: "80"
       SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      MARISON_EXTERNAL_CLIENT_ID: "${MARISON_EXTERNAL_CLIENT_ID:-}"
+      MARISON_EXTERNAL_CLIENT_SECRET: "${MARISON_EXTERNAL_CLIENT_SECRET:-}"
+      MARISON_EXTERNAL_SIGNING_SECRET: "${MARISON_EXTERNAL_SIGNING_SECRET:-}"
     env_file:
       - path: .env.production
         required: false

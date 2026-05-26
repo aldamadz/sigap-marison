@@ -3,6 +3,7 @@ import { SuratRegistrasi } from '@/types/surat';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from "@/lib/utils";
+import { documentPreviewService } from '@/services/document-preview.service';
 
 export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | null, loading: boolean }) => {
   if (loading) return (
@@ -27,7 +28,11 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
             <p className="text-sm text-muted-foreground font-mono mt-1">{data.no_surat || 'NOMOR BELUM TERBIT'}</p>
           </div>
           {data.status === 'SELESAI' && data.file_path && (
-            <Button size="sm" className="gap-2" onClick={() => window.open(data.file_path, '_blank')}>
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => documentPreviewService.openStoredFileInNewTab(data.id, data.file_path).catch((error: any) => alert(error.message || 'Gagal membuka dokumen.'))}
+            >
               <Download size={16} /> Unduh Final
             </Button>
           )}

@@ -10,8 +10,9 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { picService } from '@/services/pic.service';
+import { documentPreviewService } from '@/services/document-preview.service';
 import { SuratItem, ReviewAction, ReviewState, Department } from './types';
-import { getStatusBadge, StatusIcon, getFileUrl, uploadFile } from './utils';
+import { getStatusBadge, StatusIcon, uploadFile } from './utils';
 import { ReviewModal } from './ReviewModal';
 
 interface DepartmentQueueProps {
@@ -29,6 +30,7 @@ const SuratDetailRow: React.FC<{
   toggling: boolean;
 }> = ({ surat, picId, onReview, onToggleChat, toggling }) => {
   const [expanded, setExpanded] = useState(false);
+  const [isOpeningPdf, setIsOpeningPdf] = useState(false);
   const badge = getStatusBadge(surat);
 
   // Tentukan aksi yang tersedia berdasarkan status
@@ -91,6 +93,21 @@ const SuratDetailRow: React.FC<{
     : surat.lampiran_path
       ? [{ id: 'legacy-lampiran', file_url: surat.lampiran_path, file_name: 'Lampiran' }]
       : [];
+  const openStoredFile = (path: string) => {
+    documentPreviewService.openStoredFileInNewTab(surat.id, path)
+      .catch((error: any) => toast.error(error.message || 'Gagal membuka file.'));
+  };
+  const openGeneratedPdf = async () => {
+    setIsOpeningPdf(true);
+    try {
+      const pdfUrl = await documentPreviewService.getPdfUrl(surat.id);
+      await documentPreviewService.openStoredFileInNewTab(surat.id, pdfUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuka PDF dokumen.');
+    } finally {
+      setIsOpeningPdf(false);
+    }
+  };
 
   return (
     <div className={`border border-border rounded-xl overflow-hidden transition-all ${isFinished ? 'opacity-70' : ''}`}>
@@ -139,28 +156,28 @@ const SuratDetailRow: React.FC<{
           {/* File dokumen */}
           <div className="flex flex-wrap gap-2">
             {surat.file_path && (
-              <a href={surat.file_path} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all">
-                <FileText size={12} /> Dokumen
-              </a>
+              <button type="button" onClick={openGeneratedPdf} disabled={isOpeningPdf}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all disabled:opacity-60">
+                {isOpeningPdf ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Dokumen
+              </button>
             )}
             {attachments.map((attachment, index) => (
-              <a key={attachment.id ?? attachment.file_url} href={attachment.file_url} target="_blank" rel="noreferrer"
+              <button type="button" key={attachment.id ?? attachment.file_url} onClick={() => openStoredFile(attachment.file_url)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-muted text-muted-foreground border-border hover:bg-accent transition-all">
                 <Paperclip size={12} /> Lampiran {index + 1}
-              </a>
+              </button>
             ))}
             {surat.pic_attachment && (
-              <a href={getFileUrl(surat.pic_attachment) ?? '#'} target="_blank" rel="noreferrer"
+              <button type="button" onClick={() => openStoredFile(surat.pic_attachment!)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-emerald-500/5 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10 transition-all">
                 <FileCheck size={12} /> SPK
-              </a>
+              </button>
             )}
             {surat.payment_file_path && (
-              <a href={getFileUrl(surat.payment_file_path) ?? '#'} target="_blank" rel="noreferrer"
+              <button type="button" onClick={() => openStoredFile(surat.payment_file_path!)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border bg-blue-500/5 text-blue-600 border-blue-500/20 hover:bg-blue-500/10 transition-all">
                 <Download size={12} /> Bukti Bayar
-              </a>
+              </button>
             )}
           </div>
 

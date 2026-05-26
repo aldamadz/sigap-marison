@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { picService, ChatMessage } from '@/services/pic.service';
+import { documentPreviewService } from '@/services/document-preview.service';
 import {
   Send, Paperclip, X, MessageSquare, ArrowLeft,
   FileText, FileCheck, ExternalLink, Loader2,
@@ -43,19 +44,6 @@ interface SuratItem {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-const getFileUrl = (path: string | null): string | null => {
-  if (!path) return null;
-  if (path.startsWith('http')) return path;
-  const bucket =
-    path.startsWith('spk_files/') ? 'spk_files' :
-    path.startsWith('payment_files/') ? 'payment_files' :
-    path.startsWith('payment-') ? 'payment_files' :
-    path.startsWith('chat_attachments/') ? 'chat_attachments' :
-    path.startsWith('lampiran_') ? 'lampiran_surat' :
-    'dokumen_surat';
-  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-};
 
 const getStatusBadge = (surat: SuratItem) => {
   const r = surat.pic_review_status;
@@ -119,6 +107,11 @@ const UserChatPage: React.FC = () => {
   const isMobile = window.innerWidth < 768;
 
   const canSend = chatStatus === 'OPEN' && !isSending;
+  const openStoredFile = useCallback((path: string) => {
+    if (!selected?.id) return;
+    documentPreviewService.openStoredFileInNewTab(selected.id, path)
+      .catch((error: any) => toast.error(error.message || 'Gagal membuka file.'));
+  }, [selected?.id]);
 
   // ── Auth ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -491,29 +484,28 @@ const UserChatPage: React.FC = () => {
               <div className="px-4 sm:px-6 py-2 border-b border-border bg-background/70 shrink-0">
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {[
-                    { label: 'Dokumen', icon: FileText, url: getFileUrl(selected.file_path ?? null), show: !!selected.file_path },
+                    { label: 'Dokumen', icon: FileText, path: selected.file_path, show: !!selected.file_path },
                     ...(selected.surat_attachments?.length
                       ? selected.surat_attachments.map((attachment, index) => ({
                           label: `Lampiran ${index + 1}`,
                           icon: Paperclip,
-                          url: attachment.file_url,
+                          path: attachment.file_url,
                           show: true,
                         }))
-                      : [{ label: 'Lampiran', icon: Paperclip, url: getFileUrl(selected.lampiran_path ?? null), show: !!selected.lampiran_path }]),
-                    { label: 'SPK', icon: FileCheck, url: getFileUrl(selected.pic_attachment ?? null), show: !!selected.pic_attachment },
-                    { label: 'Bukti Transaksi', icon: FileCheck, url: getFileUrl(selected.payment_file_path ?? null), show: !!selected.payment_file_path },
-                  ].filter(item => item.show && item.url).map(({ label, icon: Icon, url }) => (
-                    <a
+                      : [{ label: 'Lampiran', icon: Paperclip, path: selected.lampiran_path, show: !!selected.lampiran_path }]),
+                    { label: 'SPK', icon: FileCheck, path: selected.pic_attachment, show: !!selected.pic_attachment },
+                    { label: 'Bukti Transaksi', icon: FileCheck, path: selected.payment_file_path, show: !!selected.payment_file_path },
+                  ].filter(item => item.show && item.path).map(({ label, icon: Icon, path }) => (
+                    <button
+                      type="button"
                       key={label}
-                      href={url ?? '#'}
-                      target="_blank"
-                      rel="noreferrer"
+                      onClick={() => openStoredFile(path!)}
                       className="h-8 px-3 rounded-lg border border-border bg-card hover:bg-accent flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-foreground shrink-0 transition-colors"
                     >
                       <Icon size={13} />
                       {label}
                       <ExternalLink size={10} className="opacity-50" />
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -573,16 +565,15 @@ const UserChatPage: React.FC = () => {
                               : 'bg-card border border-border text-foreground rounded-tl-none backdrop-blur-sm'
                         }`}>
                           {msg.attachment_url && (
-                            <a
-                              href={getFileUrl(msg.attachment_url) ?? '#'}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => openStoredFile(msg.attachment_url!)}
                               className={`flex items-center gap-2 mb-2 sm:mb-3 p-2 rounded-lg border text-[10px] sm:text-xs font-black uppercase ${
                                 isMe ? 'bg-black/20 border-white/10 hover:bg-black/30' : 'bg-muted border-border hover:bg-accent'
                               }`}
                             >
                               <Paperclip size={12} /> Lampiran <ExternalLink size={10} className="ml-auto opacity-40" />
-                            </a>
+                            </button>
                           )}
                           {msg.message}
                         </div>
@@ -596,16 +587,15 @@ const UserChatPage: React.FC = () => {
             {/* Payment Proof Banner */}
             {selected.payment_file_path && (
               <div className="px-4 sm:px-6 py-2 bg-emerald-500/10 border-t border-emerald-500/20 shrink-0">
-                <a 
-                  href={getFileUrl(selected.payment_file_path) ?? '#'} 
-                  target="_blank" 
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => openStoredFile(selected.payment_file_path!)}
                   className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 transition-colors"
                 >
                   <FileCheck size={16} />
                   <span className="text-xs sm:text-sm font-bold">Bukti Transaksi Tersedia</span>
                   <ExternalLink size={12} className="ml-auto" />
-                </a>
+                </button>
               </div>
             )}
 

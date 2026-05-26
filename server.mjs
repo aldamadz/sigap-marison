@@ -17,9 +17,11 @@ const supabase = supabaseUrl && serviceRoleKey
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const EXTERNAL_API_MAX_SKEW_MS = Number(process.env.EXTERNAL_API_MAX_SKEW_MS || 5 * 60 * 1000);
 const EXTERNAL_API_MAX_LIMIT = Number(process.env.EXTERNAL_API_MAX_LIMIT || 100);
+const externalAccessTokenCache = new Map();
 
 const hashFileViewToken = (token) => createHash("sha256").update(token).digest("hex");
 const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
+const hmacSha512Hex = (secret, value) => createHmac("sha512", secret).update(value).digest("hex");
 
 const safeEqual = (a, b) => {
   const left = Buffer.from(String(a || ""), "hex");
@@ -88,6 +90,183 @@ const parseExternalTimestamp = (value) => {
   return Date.parse(value);
 };
 
+const getPathValue = (value, path) => {
+  if (!path) return value;
+  return String(path).split(".").filter(Boolean).reduce((current, key) => {
+    if (current == null) return undefined;
+    if (Array.isArray(current) && /^\d+$/.test(key)) return current[Number(key)];
+    return current[key];
+  }, value);
+};
+
+const normalizeExternalOption = (item, source) => {
+  const value = getPathValue(item, source.value_path) ?? item?.code ?? item?.id ?? item?.value ?? item?.name;
+  const label = getPathValue(item, source.label_path) ?? item?.name ?? item?.label ?? item?.code ?? value;
+  return {
+    value: value == null ? "" : String(value),
+    label: label == null ? "" : String(label),
+    raw: item,
+  };
+};
+
+const requireSupabaseUser = async (token) => {
+  if (!supabase) throw new Error("Supabase server credentials are not configured.");
+  let userRes;
+  let error;
+  try {
+    const result = await supabase.auth.getUser(token);
+    userRes = result.data;
+    error = result.error;
+  } catch (fetchError) {
+    console.error("Supabase auth network error:", fetchError);
+    const err = new Error("Gagal menghubungi Supabase Auth. Periksa DNS/koneksi server.");
+    err.status = 503;
+    throw err;
+  }
+  if (error || !userRes?.user) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  return userRes.user;
+};
+
+const fillEndpointTemplate = (template, variables = {}) => {
+  const missing = [];
+  const path = String(template || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
+    const value = variables[key];
+    if (value === undefined || value === null || String(value).trim() === "") {
+      missing.push(key);
+      return "";
+    }
+    return encodeURIComponent(String(value));
+  });
+
+  if (missing.length > 0) {
+    const err = new Error(`Parameter belum lengkap: ${missing.join(", ")}`);
+    err.status = 400;
+    throw err;
+  }
+
+  return path.startsWith("/") ? path : `/${path}`;
+};
+
+const getMarisonAccessToken = async (source) => {
+  const authConfig = source.auth_config || {};
+  const clientId = process.env[authConfig.client_id_env || "MARISON_EXTERNAL_CLIENT_ID"];
+  const clientSecret = process.env[authConfig.client_secret_env || "MARISON_EXTERNAL_CLIENT_SECRET"];
+  if (!clientId || !clientSecret) {
+    const err = new Error("Credential API unit belum dikonfigurasi di server.");
+    err.status = 500;
+    throw err;
+  }
+
+  const cacheKey = `${source.source_key}:${clientId}`;
+  const cached = externalAccessTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
+
+  const baseUrl = String(source.base_url || "").replace(/\/+$/, "");
+  const response = await fetch(`${baseUrl}/access-token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(payload?.message || "Gagal membuat access token API unit.");
+    err.status = response.status;
+    throw err;
+  }
+
+  const token = payload?.data?.access_token;
+  if (!token) {
+    const err = new Error("Response access token API unit tidak valid.");
+    err.status = 502;
+    throw err;
+  }
+
+  const expiresInRaw = payload?.data?.expires_in;
+  const expiresInSeconds = Number.parseInt(String(expiresInRaw ?? "900"), 10);
+  externalAccessTokenCache.set(cacheKey, {
+    token,
+    expiresAt: Date.now() + (Number.isFinite(expiresInSeconds) ? expiresInSeconds : 900) * 1000,
+  });
+  return token;
+};
+
+const queryExternalDataSource = async (sourceKey, variables = {}) => {
+  if (!supabase) throw new Error("Supabase server credentials are not configured.");
+
+  const { data: source, error } = await supabase
+    .from("external_data_sources")
+    .select("*")
+    .eq("source_key", sourceKey)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error || !source) {
+    const err = new Error("Data source tidak ditemukan atau tidak aktif.");
+    err.status = 404;
+    throw err;
+  }
+
+  const method = String(source.method || "GET").toUpperCase();
+  if (method !== "GET") {
+    const err = new Error("Method data source belum didukung.");
+    err.status = 400;
+    throw err;
+  }
+
+  const baseUrl = String(source.base_url || "").replace(/\/+$/, "");
+  const endpointPath = fillEndpointTemplate(source.endpoint_template, variables);
+  const url = new URL(`${baseUrl}${endpointPath}`);
+
+  const headers = {};
+  if (source.auth_type === "marison_token_hmac_sha512") {
+    const token = await getMarisonAccessToken(source);
+    const authConfig = source.auth_config || {};
+    const configuredSigningSecret = process.env[authConfig.signing_secret_env || "MARISON_EXTERNAL_SIGNING_SECRET"];
+    const signingSecret = configuredSigningSecret || token;
+    if (!signingSecret) {
+      const err = new Error("Signing secret API unit belum dikonfigurasi di server.");
+      err.status = 500;
+      throw err;
+    }
+
+    const timestamp = new Date().toISOString();
+    const bodyHash = sha256Hex(Buffer.alloc(0));
+    const canonical = [method, url.pathname, token, bodyHash, timestamp].join(":");
+    headers.Authorization = `Bearer ${token}`;
+    headers["X-Timestamp"] = timestamp;
+    headers["X-Signature"] = hmacSha512Hex(signingSecret, canonical);
+  }
+
+  const response = await fetch(url, { method, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(payload?.message || "Gagal mengambil data dari API eksternal.");
+    err.status = response.status;
+    throw err;
+  }
+
+  const rawItems = getPathValue(payload, source.response_path) ?? [];
+  const items = Array.isArray(rawItems)
+    ? rawItems
+    : Array.isArray(rawItems?.data)
+      ? rawItems.data
+      : [];
+
+  return {
+    source: {
+      key: source.source_key,
+      name: source.name,
+    },
+    options: items
+      .map((item) => normalizeExternalOption(item, source))
+      .filter((item) => item.value && item.label),
+    raw_count: items.length,
+  };
+};
+
 const canReadSurat = async (surat, userId) => {
   if (!surat || !userId) return false;
   if (surat.created_by === userId || surat.pic_id === userId) return true;
@@ -145,6 +324,7 @@ const getAllowedStorageRefs = (surat) => {
     surat.lampiran_path,
     surat.pic_attachment,
     ...(surat.surat_attachments || []).map((a) => a.file_url),
+    ...(surat.surat_chats || []).map((c) => c.attachment_url),
     ...(surat.finance_reviews || []).map((f) => f.payment_file_path),
     ...(surat.surat_signatures || []).flatMap((s) => [s.file_path_snap, s.pdf_path_snap]),
   ];
@@ -163,19 +343,44 @@ const getAuthorizedSurat = async (suratId, token) => {
 
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select(`
-      id, file_path, pdf_path, lampiran_path, pic_attachment, created_by, pic_id,
-      surat_signatures(user_id, file_path_snap, pdf_path_snap),
-      surat_attachments(file_url),
-      finance_reviews(payment_file_path)
-    `)
+    .select("id, file_path, pdf_path, lampiran_path, pic_attachment, created_by, pic_id")
     .eq("id", suratId)
-    .single();
+    .maybeSingle();
   if (suratError || !surat) {
-    const err = new Error("Dokumen tidak ditemukan");
+    if (suratError) console.error("getAuthorizedSurat base query failed:", suratError);
+    const err = new Error(suratError ? `Gagal membaca dokumen: ${suratError.message}` : "Dokumen tidak ditemukan");
     err.status = 404;
     throw err;
   }
+
+  const [signaturesRes, attachmentsRes, chatsRes, financeReviewsRes] = await Promise.all([
+    supabase
+      .from("surat_signatures")
+      .select("id, user_id, file_path_snap, pdf_path_snap")
+      .eq("surat_id", suratId),
+    supabase
+      .from("surat_attachments")
+      .select("file_url")
+      .eq("surat_id", suratId),
+    supabase
+      .from("surat_chats")
+      .select("attachment_url")
+      .eq("surat_id", suratId),
+    supabase
+      .from("finance_reviews")
+      .select("payment_file_path")
+      .eq("surat_id", suratId),
+  ]);
+
+  if (signaturesRes.error) console.error("getAuthorizedSurat signatures query failed:", signaturesRes.error);
+  if (attachmentsRes.error) console.error("getAuthorizedSurat attachments query failed:", attachmentsRes.error);
+  if (chatsRes.error) console.error("getAuthorizedSurat chats query failed:", chatsRes.error);
+  if (financeReviewsRes.error) console.error("getAuthorizedSurat finance query failed:", financeReviewsRes.error);
+
+  surat.surat_signatures = signaturesRes.data || [];
+  surat.surat_attachments = attachmentsRes.data || [];
+  surat.surat_chats = chatsRes.data || [];
+  surat.finance_reviews = financeReviewsRes.data || [];
 
   if (!(await canReadSurat(surat, userRes.user.id))) {
     const err = new Error("Forbidden");
@@ -189,26 +394,60 @@ const getAuthorizedSurat = async (suratId, token) => {
 const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = null } = {}) => {
   const { surat, user } = await getAuthorizedSurat(suratId, token);
 
-  if (surat.pdf_path && !refresh) {
-    return { status: "ready", pdfUrl: surat.pdf_path, cached: true };
-  }
-
   if (!surat.file_path) throw new Error("File Excel dokumen belum tersedia.");
 
-  if (!signatureId) {
-    const { data: activeJob } = await supabase
-      .from("document_pdf_jobs")
-      .select("id, status, pdf_url, error_message")
-      .eq("surat_id", suratId)
-      .in("status", ["queued", "processing"])
-      .eq("refresh", refresh)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (activeJob) {
-      return { status: activeJob.status, jobId: activeJob.id, pdfUrl: activeJob.pdf_url, error: activeJob.error_message };
+  if (signatureId && !refresh) {
+    const signature = (surat.surat_signatures || []).find((sig) => sig.id === signatureId);
+    if (signature?.pdf_path_snap) {
+      return { status: "ready", pdfUrl: signature.pdf_path_snap, cached: true, signatureId };
     }
+  }
+
+  let activeJobQuery = supabase
+    .from("document_pdf_jobs")
+    .select("id, status, pdf_url, error_message, signature_id")
+    .eq("surat_id", suratId)
+    .in("status", ["queued", "processing"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (signatureId) activeJobQuery = activeJobQuery.eq("signature_id", signatureId);
+
+  const { data: activeJob } = await activeJobQuery.maybeSingle();
+  if (activeJob) {
+    return {
+      status: activeJob.status,
+      jobId: activeJob.id,
+      pdfUrl: activeJob.pdf_url,
+      error: activeJob.error_message,
+      signatureId: activeJob.signature_id,
+    };
+  }
+
+  let latestDoneJobQuery = supabase
+    .from("document_pdf_jobs")
+    .select("id, status, pdf_url, error_message, signature_id")
+    .eq("surat_id", suratId)
+    .eq("status", "done")
+    .not("pdf_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (signatureId) latestDoneJobQuery = latestDoneJobQuery.eq("signature_id", signatureId);
+
+  const { data: latestDoneJob } = await latestDoneJobQuery.maybeSingle();
+  if (latestDoneJob?.pdf_url && !refresh) {
+    return {
+      status: "ready",
+      jobId: latestDoneJob.id,
+      pdfUrl: latestDoneJob.pdf_url,
+      cached: true,
+      signatureId: latestDoneJob.signature_id,
+    };
+  }
+
+  if (surat.pdf_path && !refresh) {
+    return { status: "ready", pdfUrl: surat.pdf_path, cached: true };
   }
 
   const { data: job, error } = await supabase
@@ -237,7 +476,7 @@ const getPdfJobStatus = async (jobId, token) => {
 
   const { data: job, error } = await supabase
     .from("document_pdf_jobs")
-    .select("id, surat_id, status, pdf_url, error_message")
+    .select("id, surat_id, signature_id, status, pdf_url, error_message")
     .eq("id", jobId)
     .single();
   if (error || !job) {
@@ -247,7 +486,7 @@ const getPdfJobStatus = async (jobId, token) => {
   }
 
   await getAuthorizedSurat(job.surat_id, token);
-  return { status: job.status, jobId: job.id, pdfUrl: job.pdf_url, error: job.error_message };
+  return { status: job.status, jobId: job.id, signatureId: job.signature_id, pdfUrl: job.pdf_url, error: job.error_message };
 };
 
 const getAuthorizedStorageFile = async (suratId, token, rawPath) => {
@@ -276,7 +515,7 @@ const getAuthorizedStorageFile = async (suratId, token, rawPath) => {
 };
 
 const createFileViewToken = async (suratId, token, rawPath) => {
-  const { surat } = await getAuthorizedSurat(suratId, token);
+  const { surat, user } = await getAuthorizedSurat(suratId, token);
   const requested = parseStorageRef(rawPath);
   if (!requested) {
     const err = new Error("Path file tidak valid");
@@ -664,7 +903,7 @@ createServer(async (req, res) => {
       return sendJson(res, 200, result);
     }
 
-    const viewMatch = url.pathname.match(/^\/api\/files\/view\/([0-9a-f-]+)$/i);
+    const viewMatch = url.pathname.match(/^\/api\/files\/view\/([A-Za-z0-9_-]+)$/);
     if (req.method === "GET" && viewMatch) {
       const { file, ref } = await consumeFileViewToken(viewMatch[1]);
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -680,6 +919,16 @@ createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith("/api/")) {
+      const dataSourceMatch = url.pathname.match(/^\/api\/data-sources\/([a-zA-Z0-9_-]+)\/query$/);
+      if (req.method === "POST" && dataSourceMatch) {
+        const token = getBearerToken(req);
+        await requireSupabaseUser(token);
+        const body = await readRequestBody(req);
+        const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
+        const result = await queryExternalDataSource(dataSourceMatch[1], payload?.variables || {});
+        return sendJson(res, 200, result);
+      }
+
       return sendJson(res, 404, { error: "Not found" });
     }
 

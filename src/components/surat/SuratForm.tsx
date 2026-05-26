@@ -40,6 +40,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
   const [lampiranFiles, setLampiranFiles]         = useState<File[]>([]);
+  const [externalOptions, setExternalOptions]     = useState<Record<string, Array<{ value: string; label: string; raw?: any }>>>({});
+  const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
+  const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
     office_id: "", project_id: "", judul_surat: "",
@@ -88,6 +91,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       const source = field.default_source || field.defaultSource || "manual";
       return source === "manual";
     });
+
+  const getExternalInputFields = (item: any) =>
+    getManualInputFields(item).filter((field: any) => field.type === "external_select");
+
+  const isMultiSelectField = (field: any) =>
+    field.multiple === true || field.is_multiple === true || field.key === "unit";
 
   const hasPlaceDateMapping = (item: any) => {
     const mappedSources = new Set(
@@ -142,6 +151,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
+  const isManualFieldComplete = (field: any) => {
+    if (field.type === "table") return isTableFieldComplete(field);
+    const value = formData.form_input_data[field.key];
+    if (field.type === "external_select" && isMultiSelectField(field)) {
+      return field.required === false || (Array.isArray(value) && value.length > 0);
+    }
+    return field.required === false || !!String(value?.value ?? value ?? "").trim();
+  };
+
   const officePusat     = useMemo(() => master.offices?.find((o: any) => o.kedudukan === "Pusat"), [master.offices]);
   const isPusatSelected = useMemo(() => formData.office_id === officePusat?.id, [formData.office_id, officePusat]);
 
@@ -168,6 +186,30 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (isPusatSelected || !master.projects) return [];
     return master.projects.filter((p: any) => p.office_id === formData.office_id);
   }, [master.projects, formData.office_id, isPusatSelected]);
+
+  const selectedProject = useMemo(
+    () => master.projects?.find((p: any) => p.id === formData.project_id) ?? null,
+    [master.projects, formData.project_id]
+  );
+
+  const selectedProjectCode = useMemo(() => {
+    const code = String(selectedProject?.code ?? "").trim();
+    if (code) return code;
+
+    const name = String(selectedProject?.name ?? "").trim();
+    const prefix = name.match(/^([A-Za-z0-9]+)\s*-/)?.[1];
+    return prefix ? prefix.toUpperCase() : "";
+  }, [selectedProject]);
+
+  const externalVariables = useMemo(() => ({
+    project_id: formData.project_id,
+    project_code: selectedProjectCode,
+    project_name: selectedProject?.name ?? "",
+    office_id: formData.office_id,
+    entity_id: formData.entity_id,
+    dept_id: formData.dept_id,
+    ...formData.form_input_data,
+  }), [formData.project_id, formData.office_id, formData.entity_id, formData.dept_id, formData.form_input_data, selectedProject, selectedProjectCode]);
 
   const isDirty = useMemo(
     () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
@@ -218,6 +260,60 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   useEffect(() => {
     if (!generatedNoSurat) { setSelectedUsage(null); setFormData(prev => ({ ...prev, penggunaan_id: "" })); setSigners([]); }
   }, [isPusatSelected, generatedNoSurat]);
+
+  useEffect(() => {
+    const fields = getExternalInputFields(selectedUsage);
+    if (fields.length === 0) return;
+
+    let cancelled = false;
+    fields.forEach(async (field: any) => {
+      const sourceKey = field.external_source_key || field.externalSourceKey;
+      const dependencyKey = field.external_dependency_key || field.externalDependencyKey;
+      const dependencyValue = dependencyKey ? externalVariables[dependencyKey] : true;
+
+      if (!sourceKey || !dependencyValue) {
+        setExternalOptions(prev => ({ ...prev, [field.key]: [] }));
+        setExternalErrors(prev => ({ ...prev, [field.key]: dependencyKey ? `${field.label} menunggu ${dependencyKey}.` : "Data source belum diset." }));
+        return;
+      }
+
+      setExternalLoading(prev => ({ ...prev, [field.key]: true }));
+      setExternalErrors(prev => ({ ...prev, [field.key]: null }));
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Tidak terautentikasi");
+        const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ variables: externalVariables }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || "Gagal mengambil data external.");
+        if (cancelled) return;
+        setExternalOptions(prev => ({ ...prev, [field.key]: payload.options || [] }));
+        const options = payload.options || [];
+        const currentValue = formData.form_input_data[field.key];
+        if (isMultiSelectField(field)) {
+          const selected = Array.isArray(currentValue) ? currentValue : [];
+          const filtered = selected.filter((item: any) => options.some((option: any) => option.value === item?.value));
+          if (selected.length !== filtered.length) setInputValue(field.key, filtered);
+        } else if (currentValue?.value && !options.some((option: any) => option.value === currentValue.value)) {
+          setInputValue(field.key, undefined);
+        }
+      } catch (error: any) {
+        if (cancelled) return;
+        setExternalOptions(prev => ({ ...prev, [field.key]: [] }));
+        setExternalErrors(prev => ({ ...prev, [field.key]: error.message || "Gagal mengambil data external." }));
+      } finally {
+        if (!cancelled) setExternalLoading(prev => ({ ...prev, [field.key]: false }));
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [selectedUsage, externalVariables]);
 
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
@@ -287,10 +383,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       description: "Admin harus mapping field Tempat, Tanggal ke cell Excel di Master Template.",
     });
     if (lampiranFiles.length === 0) return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
-    const missingField = getManualInputFields(selectedUsage).find((field: any) => {
-      if (field.type === "table") return !isTableFieldComplete(field);
-      return field.required !== false && !String(formData.form_input_data[field.key] ?? "").trim();
-    });
+    const missingField = getManualInputFields(selectedUsage).find((field: any) => !isManualFieldComplete(field));
     if (missingField) return toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
     if (signers.some(s => !s.user_id)) return toast({ variant: "destructive", title: "Pejabat Belum Lengkap" });
     setIsLoading(true);
@@ -398,12 +491,130 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
+  const renderExternalSelectField = (field: any) => {
+    const options = externalOptions[field.key] || [];
+    const isMultiple = isMultiSelectField(field);
+    const selectedOptions = Array.isArray(formData.form_input_data[field.key]) ? formData.form_input_data[field.key] : [];
+    const selectedValues = new Set(selectedOptions.map((item: any) => item.value));
+    const currentValue = formData.form_input_data[field.key]?.value || "";
+    const dependencyKey = field.external_dependency_key || field.externalDependencyKey;
+    const dependencyValue = dependencyKey ? externalVariables[dependencyKey] : true;
+    const isDisabled = externalLoading[field.key] || !dependencyValue;
+    const toggleOption = (option: any) => {
+      if (!isMultiple) {
+        setInputValue(field.key, option || { value: option?.value, label: option?.label });
+        return;
+      }
+      const next = selectedValues.has(option.value)
+        ? selectedOptions.filter((item: any) => item.value !== option.value)
+        : [...selectedOptions, option];
+      setInputValue(field.key, next);
+    };
+
+    if (isMultiple) {
+      return (
+        <div className="space-y-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isDisabled}
+                className="h-auto min-h-12 w-full justify-between bg-background/70 px-3 py-2 text-left text-sm font-normal"
+              >
+                <span className="line-clamp-2 flex-1">
+                  {externalLoading[field.key]
+                    ? "Memuat data..."
+                    : selectedOptions.length > 0
+                      ? `${selectedOptions.length} ${field.label} dipilih`
+                      : `Pilih ${field.label}`}
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+              <Command>
+                <CommandInput placeholder={`Cari ${field.label}...`} />
+                <CommandList>
+                  <CommandEmpty>Data tidak ditemukan.</CommandEmpty>
+                  <CommandGroup>
+                    {options.map((option) => {
+                      const checked = selectedValues.has(option.value);
+                      return (
+                        <CommandItem key={`${field.key}-${option.value}`} onSelect={() => toggleOption(option)}>
+                          <div className={cn(
+                            "mr-2 flex h-4 w-4 items-center justify-center rounded border",
+                            checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
+                          )}>
+                            {checked && <Check className="h-3 w-3" />}
+                          </div>
+                          <span>{option.label}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {selectedOptions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selectedOptions.map((option: any) => (
+                <button
+                  key={`${field.key}-selected-${option.value}`}
+                  type="button"
+                  onClick={() => toggleOption(option)}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary"
+                >
+                  <span className="truncate">{option.label}</span>
+                  <X className="h-3 w-3 shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+          {externalErrors[field.key] && (
+            <p className="text-[10px] font-semibold text-amber-600">{externalErrors[field.key]}</p>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <Select
+          value={currentValue}
+          disabled={isDisabled}
+          onValueChange={(value) => {
+            const option = options.find((item) => item.value === value);
+            setInputValue(field.key, option || { value, label: value });
+          }}
+        >
+          <SelectTrigger className="h-12 bg-background/70 text-sm">
+            <SelectValue placeholder={externalLoading[field.key] ? "Memuat data..." : `Pilih ${field.label}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={`${field.key}-${option.value}`} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {externalErrors[field.key] && (
+          <p className="text-[10px] font-semibold text-amber-600">{externalErrors[field.key]}</p>
+        )}
+      </div>
+    );
+  };
+
   const renderManualField = (field: any) => (
     <div key={field.key} className={cn("space-y-2", field.type === "table" && "md:col-span-2")}>
       <Label className="text-[11px] font-black uppercase text-muted-foreground">
         {field.label}{field.required !== false ? " *" : ""}
       </Label>
-      {field.type === "table" ? renderTableField(field) : field.type === "textarea" ? (
+      {field.type === "table" ? renderTableField(field) : field.type === "external_select" ? (
+        renderExternalSelectField(field)
+      ) : field.type === "textarea" ? (
         <Textarea
           value={formData.form_input_data[field.key] ?? ""}
           onChange={e => setInputValue(field.key, e.target.value)}
@@ -541,7 +752,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </SelectTrigger>
                   <SelectContent>
                     {filteredProjects.map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

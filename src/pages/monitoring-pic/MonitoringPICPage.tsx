@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { picService, ChatMessage } from '@/services/pic.service';
+import { documentPreviewService } from '@/services/document-preview.service';
 import {
   Send, Paperclip, X, Lock, LockOpen, MessageSquare,
   FileText, FileCheck, ExternalLink, Loader2,
@@ -55,20 +56,6 @@ interface Department {
 type FinalAction = 'SEND_SPK' | 'TO_FINANCE' | 'REJECT' | 'FINANCE_DONE' | 'FINANCE_REJECT';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-const getFileUrl = (path: string | null | undefined): string | null => {
-  if (!path) return null;
-  if (path.startsWith('http')) return path;
-  const bucket =
-    path.startsWith('spk_files/')        ? 'spk_files' :
-    path.startsWith('chat_attachments/') ? 'chat_attachments' :
-    // ✅ payment_files bisa pakai prefix payment- atau payment_files/
-    path.startsWith('payment_files/')    ? 'payment_files' :
-    path.startsWith('payment-')          ? 'payment_files' :
-    path.startsWith('lampiran_')         ? 'lampiran_surat' :
-    'dokumen_surat';
-  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-};
 
 const getStatusBadge = (surat: SuratItem) => {
   const r = surat.pic_review_status;
@@ -224,6 +211,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
   const [isSending, setIsSending] = useState(false);
   const [isTogglingChat, setIsTogglingChat] = useState(false);
   const [uploadingSPK, setUploadingSPK] = useState(false);
+  const [isOpeningPdf, setIsOpeningPdf] = useState(false);
   const [activeAction, setActiveAction] = useState<FinalAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isActing, setIsActing] = useState(false);
@@ -237,6 +225,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
   // ✅ FIX 2: Finance user bisa aksi jika KEUANGAN (pending) saja — KEUANGAN_DONE sudah final
   const showFinanceActions = isFinanceUser && isKeuanganPending;
   const canSend = isChatOpen && !isSending;
+  const openStoredFile = (path: string) => {
+    documentPreviewService.openStoredFileInNewTab(suratData.id, path)
+      .catch((error: any) => toast.error(error.message || 'Gagal membuka file.'));
+  };
+  const openGeneratedPdf = async () => {
+    setIsOpeningPdf(true);
+    try {
+      const pdfUrl = await documentPreviewService.getPdfUrl(suratData.id);
+      await documentPreviewService.openStoredFileInNewTab(suratData.id, pdfUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuka PDF dokumen.');
+    } finally {
+      setIsOpeningPdf(false);
+    }
+  };
 
   useEffect(() => { setSuratData(initialSurat); }, [initialSurat]);
 
@@ -433,7 +436,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
   };
 
   // ✅ FIX 3: Apakah ada bukti bayar (dari state lokal atau prop awal)
-  const paymentFileUrl = getFileUrl(suratData.payment_file_path ?? null);
   const attachments = suratData.surat_attachments?.length
     ? suratData.surat_attachments
     : suratData.lampiran_path
@@ -484,30 +486,30 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
         {/* ✅ FIX 4: Tombol file — termasuk SPK dan Bukti Bayar selalu tampil jika ada */}
         <div className="flex flex-wrap gap-1.5 mb-3">
           {suratData.file_path && (
-            <a href={suratData.file_path} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all">
-              <FileText size={10} /> Dokumen
-            </a>
+            <button type="button" onClick={openGeneratedPdf} disabled={isOpeningPdf}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all disabled:opacity-60">
+              {isOpeningPdf ? <Loader2 size={10} className="animate-spin" /> : <FileText size={10} />} Dokumen
+            </button>
           )}
           {attachments.map((attachment, index) => (
-            <a key={attachment.id ?? attachment.file_url} href={attachment.file_url} target="_blank" rel="noreferrer"
+            <button type="button" key={attachment.id ?? attachment.file_url} onClick={() => openStoredFile(attachment.file_url)}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-white/5 text-white/50 border-white/10 hover:bg-white/10 transition-all">
               <Paperclip size={10} /> Lampiran {index + 1}
-            </a>
+            </button>
           ))}
           {/* SPK — tampil di semua status jika ada */}
           {suratData.pic_attachment && (
-            <a href={getFileUrl(suratData.pic_attachment) ?? '#'} target="_blank" rel="noreferrer"
+            <button type="button" onClick={() => openStoredFile(suratData.pic_attachment!)}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-emerald-500/5 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 transition-all">
               <FileCheck size={10} /> SPK
-            </a>
+            </button>
           )}
           {/* ✅ FIX 5: Bukti Bayar — tampil di semua status termasuk KEUANGAN_DONE */}
-          {paymentFileUrl && (
-            <a href={paymentFileUrl} target="_blank" rel="noreferrer"
+          {suratData.payment_file_path && (
+            <button type="button" onClick={() => openStoredFile(suratData.payment_file_path!)}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-blue-500/5 text-blue-400 border-blue-500/20 hover:bg-blue-500/10 transition-all">
               <Download size={10} /> Bukti Bayar
-            </a>
+            </button>
           )}
         </div>
 
@@ -669,12 +671,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
                     : 'bg-white/8 border border-white/10 text-white rounded-tl-sm'
                 }`}>
                   {msg.attachment_url && (
-                    <a href={getFileUrl(msg.attachment_url) ?? '#'} target="_blank" rel="noreferrer"
+                    <button type="button" onClick={() => openStoredFile(msg.attachment_url!)}
                       className={`flex items-center gap-2 mb-2 p-2 rounded-lg border text-[9px] font-bold uppercase ${
                         isMe ? 'bg-black/20 border-white/10' : 'bg-white/5 border-white/10'
                       }`}>
                       <Paperclip size={10} /> Lampiran <ExternalLink size={9} className="ml-auto" />
-                    </a>
+                    </button>
                   )}
                   {msg.message}
                 </div>
