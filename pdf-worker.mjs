@@ -10,6 +10,13 @@ const execFileAsync = promisify(execFile);
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const storageMode = process.env.STORAGE_MODE || "primary_supabase";
+const storageSupabaseUrl = process.env.STORAGE_SUPABASE_URL;
+const storageServiceRoleKey = process.env.STORAGE_SUPABASE_SERVICE_ROLE_KEY || process.env.STORAGE_SERVICE_ROLE_KEY;
+const storagePublicBaseUrl = String(
+  process.env.STORAGE_PUBLIC_BASE_URL ||
+  (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
+).replace(/\/+$/, "");
 const workerId = process.env.PDF_WORKER_ID || `pdf-worker-${randomUUID()}`;
 const concurrency = Math.max(Number(process.env.PDF_WORKER_CONCURRENCY || 3), 1);
 const pollIntervalMs = Math.max(Number(process.env.PDF_WORKER_POLL_INTERVAL_MS || 2000), 500);
@@ -24,17 +31,38 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
+const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
+  ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
+  : null;
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const extractStoragePath = (filePath) => {
-  if (!filePath) return "";
+const useExternalStorage = () => storageMode === "self_hosted_supabase" && !!storageSupabase;
+const uploadStorageClient = () => useExternalStorage() ? storageSupabase : supabase;
+const publicBaseUrl = (origin) => {
+  if (origin === "external" && storagePublicBaseUrl) return storagePublicBaseUrl;
+  return `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public`;
+};
+const makePublicUrl = (bucket, path, origin = useExternalStorage() ? "external" : "primary") =>
+  `${publicBaseUrl(origin)}/${bucket}/${path}`;
+
+const extractStorageRef = (filePath) => {
+  if (!filePath) return null;
   const marker = "/storage/v1/object/public/dokumen_surat/";
   const markerIndex = filePath.indexOf(marker);
   if (markerIndex >= 0) {
-    return decodeURIComponent(filePath.slice(markerIndex + marker.length).split("?")[0]);
+    return {
+      path: decodeURIComponent(filePath.slice(markerIndex + marker.length).split("?")[0]),
+      origin: storagePublicBaseUrl && filePath.startsWith(storagePublicBaseUrl) ? "external" : "primary",
+    };
   }
-  return decodeURIComponent(filePath.replace(/^dokumen_surat\//, "").split("?")[0]);
+  return {
+    path: decodeURIComponent(filePath.replace(/^dokumen_surat\//, "").split("?")[0]),
+    origin: "primary",
+  };
 };
+
+const storageClientForOrigin = (origin) => origin === "external" && storageSupabase ? storageSupabase : supabase;
 
 const claimJobs = async () => {
   const { data, error } = await supabase.rpc("claim_document_pdf_jobs", {
@@ -62,12 +90,12 @@ const markFailed = async (job, error) => {
 };
 
 const processJob = async (job) => {
-  const objectPath = extractStoragePath(job.source_file_path);
-  if (!objectPath) throw new Error("File Excel dokumen belum tersedia.");
+  const sourceRef = extractStorageRef(job.source_file_path);
+  if (!sourceRef?.path) throw new Error("File Excel dokumen belum tersedia.");
 
-  const { data: fileData, error: downloadError } = await supabase.storage
+  const { data: fileData, error: downloadError } = await storageClientForOrigin(sourceRef.origin).storage
     .from("dokumen_surat")
-    .download(objectPath);
+    .download(sourceRef.path);
   if (downloadError || !fileData) throw new Error(downloadError?.message || "Gagal mengambil file Excel.");
 
   const workDir = await mkdtemp(join(tmpdir(), "agenda-doc-"));
@@ -89,12 +117,13 @@ const processJob = async (job) => {
     const pdfFile = join(workDir, "source.pdf");
     const pdfBuffer = await readFile(pdfFile);
     const pdfPath = `pdf/${job.surat_id}_${Date.now()}.pdf`;
-    const { error: uploadError } = await supabase.storage
+    const uploadOrigin = useExternalStorage() ? "external" : "primary";
+    const { error: uploadError } = await uploadStorageClient().storage
       .from("dokumen_surat")
       .upload(pdfPath, pdfBuffer, { contentType: "application/pdf", upsert: true });
     if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage.from("dokumen_surat").getPublicUrl(pdfPath);
+    const publicUrl = makePublicUrl("dokumen_surat", pdfPath, uploadOrigin);
 
     await supabase
       .from("surat_registrasi")

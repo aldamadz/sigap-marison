@@ -24,6 +24,7 @@ import { RecentActivity }   from './RecentActivity';
 import { Skeleton }         from '@/components/ui/skeleton';
 import { AgendaParentFilter } from '@/components/agenda/AgendaParentFilter';
 import { SuratSummaryCards }  from './SuratSummaryCards';
+import { PageHeader } from '@/components/ui/Breadcrumbs';
 
 // Services
 import {
@@ -83,11 +84,11 @@ interface PeriodNavProps {
 const PeriodNav = ({
   label, mode, onMode, onBack, onForward, onToday, isCurrent, icon, title, accentClass,
 }: PeriodNavProps) => (
-  <div className="rounded-2xl border border-border bg-card p-4 space-y-3 shadow-sm">
+  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
     {/* Title */}
     <div className="flex items-center gap-2">
       <div className={cn("w-1 h-4 rounded-full", accentClass)} />
-      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         {icon} {title}
       </div>
     </div>
@@ -99,41 +100,41 @@ const PeriodNav = ({
         <button
           onClick={() => onMode('month')}
           className={cn(
-            'flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase transition-all',
-            mode === 'month' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+            mode === 'month' ? 'bg-background shadow-sm text-foreground font-medium' : 'text-muted-foreground'
           )}
         >
-          <CalendarDays className="w-3 h-3" /> Bulan
+          <CalendarDays className="w-4 h-4" /> Bulan
         </button>
         <button
           onClick={() => onMode('week')}
           className={cn(
-            'flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase transition-all',
-            mode === 'week' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+            mode === 'week' ? 'bg-background shadow-sm text-foreground font-medium' : 'text-muted-foreground'
           )}
         >
-          <CalendarRange className="w-3 h-3" /> Minggu
+          <CalendarRange className="w-4 h-4" /> Minggu
         </button>
       </div>
 
       {/* Navigasi */}
-      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg shrink-0" onClick={onBack}>
-        <ChevronLeft className="w-3.5 h-3.5" />
+      <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={onBack}>
+        <ChevronLeft className="w-4 h-4" />
       </Button>
 
-      <span className="flex-1 text-center text-xs font-black text-foreground truncate">
+      <span className="flex-1 text-center text-sm font-medium text-foreground truncate">
         {label}
       </span>
 
-      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg shrink-0"
+      <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg shrink-0"
         onClick={onForward} disabled={isCurrent}>
-        <ChevronRight className="w-3.5 h-3.5" />
+        <ChevronRight className="w-4 h-4" />
       </Button>
 
       {!isCurrent && (
-        <Button variant="outline" size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase px-3 shrink-0"
+        <Button variant="outline" size="sm" className="h-9 rounded-lg text-sm px-4 shrink-0"
           onClick={onToday}>
-          Kini
+          Hari Ini
         </Button>
       )}
     </div>
@@ -245,36 +246,28 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto bg-background min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-6 max-w-[1600px] mx-auto bg-background min-h-screen">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-card p-6 rounded-2xl border shadow-sm">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-black tracking-tighter uppercase">
-            Ringkasan <span className="font-light text-muted-foreground">Data</span>
-          </h1>
-          <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest italic">
-            {!selectedOfficeId || !user?.officeName ? 'Memantau Seluruh Aktivitas' : `Lokasi: ${user?.officeName}`}
-          </p>
-        </div>
-
+      {/* ── Header dengan PageHeader ─────────────────────────────────────────── */}
+      <PageHeader
+        title="Dashboard"
+        subtitle="Overview aktivitas agenda dan surat"
+      >
         {isParent && (
-          <div className="min-w-[300px]">
-            <AgendaParentFilter
-              onUserSelect={setSelectedUserId}
-              selectedUserId={selectedUserId}
-              onOfficeSelect={setSelectedOfficeId}
-              selectedOfficeId={selectedOfficeId}
-            />
-          </div>
+          <AgendaParentFilter
+            onUserSelect={setSelectedUserId}
+            selectedUserId={selectedUserId}
+            onOfficeSelect={setSelectedOfficeId}
+            selectedOfficeId={selectedOfficeId}
+          />
         )}
-      </div>
+      </PageHeader>
 
       {/* ── SECTION 1: SURAT ───────────────────────────────────────────────── */}
       <div className="space-y-3">
         <PeriodNav
           title="Statistik Pengajuan Surat"
-          icon={<FileText className="w-3 h-3" />}
+          icon={<FileText className="w-4 h-4" />}
           accentClass="bg-primary"
           label={suratLabel}
           mode={suratPeriodMode}
@@ -294,7 +287,7 @@ const Dashboard = () => {
       <div className="space-y-3">
         <PeriodNav
           title="Statistik Agenda"
-          icon={<LayoutList className="w-3 h-3" />}
+          icon={<LayoutList className="w-4 h-4" />}
           accentClass="bg-amber-500"
           label={agendaLabel}
           mode={agendaPeriodMode}
@@ -304,7 +297,7 @@ const Dashboard = () => {
           onToday={agendaGoToday}
           isCurrent={agendaIsCurrent}
         />
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {kpiData.map((kpi: any, index: number) => (
             <KPICard key={kpi.label} data={kpi} index={index} />
           ))}

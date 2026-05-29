@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   FileText, 
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea"; 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function InboxPage() {
@@ -36,6 +37,12 @@ export default function InboxPage() {
   // State untuk Preview & Notes
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
+  const [allocationUnits, setAllocationUnits] = useState<Record<string, Array<{ value: string; label: string; raw?: any }>>>({});
+  const [allocationSelected, setAllocationSelected] = useState<Record<string, any[]>>({});
+  const [allocationFiles, setAllocationFiles] = useState<Record<string, Record<string, File | null>>>({});
+  const [allocationLoading, setAllocationLoading] = useState<Record<string, boolean>>({});
+  const [allocationErrors, setAllocationErrors] = useState<Record<string, string | null>>({});
+  const [unitSearch, setUnitSearch] = useState<Record<string, string>>({});
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
 
@@ -79,6 +86,77 @@ export default function InboxPage() {
     return filteredInbox.slice(start, start + itemsPerPage);
   }, [filteredInbox, currentPage]);
 
+  const isUnitAllocationRequired = (item: any) =>
+    item.requires_unit_allocation === true && item.surat_registrasi?.form_input_data?.request_mode === "unit";
+
+  const getRequestedUnitCount = (item: any) =>
+    Number(item.surat_registrasi?.form_input_data?.requested_unit_count || 0);
+
+  const getRequestedProjectCode = (item: any) =>
+    String(item.surat_registrasi?.form_input_data?.requested_project?.code || "").trim();
+
+  const getUnitAttachmentRequirements = (item: any) => {
+    const requirements = item.surat_registrasi?.form_input_data?.unit_config_snapshot?.allocation_attachment_requirements;
+    return Array.isArray(requirements) && requirements.length > 0
+      ? requirements
+      : [
+          { key: "siteplan", label: "Siteplan", required: true },
+          { key: "kode_produksi", label: "Kode Produksi", required: true },
+          { key: "volume_adendum", label: "Volume Adendum", required: true },
+          { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
+        ];
+  };
+
+  const getMissingUnitAttachmentLabels = (item: any) => {
+    const files = allocationFiles[item.id] || {};
+    return getUnitAttachmentRequirements(item)
+      .filter((requirement: any) => requirement.required !== false && !files[requirement.key])
+      .map((requirement: any) => requirement.label || requirement.key);
+  };
+
+  const requestExternalOptions = async (sourceKey: string, variables: Record<string, any> = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Tidak terautentikasi");
+    const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ variables }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || "Gagal mengambil data external.");
+    return payload.options || [];
+  };
+
+  useEffect(() => {
+    paginatedData.filter(isUnitAllocationRequired).forEach((item: any) => {
+      const signatureId = item.id;
+      if (allocationUnits[signatureId] || allocationLoading[signatureId]) return;
+
+      const projectCode = getRequestedProjectCode(item);
+      if (!projectCode) {
+        setAllocationErrors(prev => ({ ...prev, [signatureId]: "Code project external belum tersedia." }));
+        return;
+      }
+
+      setAllocationLoading(prev => ({ ...prev, [signatureId]: true }));
+      setAllocationErrors(prev => ({ ...prev, [signatureId]: null }));
+      requestExternalOptions("marison_units_by_project", { project_code: projectCode })
+        .then((options) => {
+          setAllocationUnits(prev => ({ ...prev, [signatureId]: options }));
+        })
+        .catch((error: any) => {
+          setAllocationUnits(prev => ({ ...prev, [signatureId]: [] }));
+          setAllocationErrors(prev => ({ ...prev, [signatureId]: error.message || "Gagal mengambil data unit." }));
+        })
+        .finally(() => {
+          setAllocationLoading(prev => ({ ...prev, [signatureId]: false }));
+        });
+    });
+  }, [paginatedData]);
+
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
     setCurrentPage(1); // Reset ke halaman 1 saat mencari
@@ -94,13 +172,30 @@ const handleApprove = async (item: any) => {
   setProcessingId(item.id);
   try {
     const note = notes[item.id] || "";
+    const selectedUnits = allocationSelected[item.id] || [];
+    if (isUnitAllocationRequired(item) && selectedUnits.length < getRequestedUnitCount(item)) {
+      throw new Error(`Unit terpilih kurang. Minimal ${getRequestedUnitCount(item)} unit.`);
+    }
+    const missingAttachments = isUnitAllocationRequired(item) ? getMissingUnitAttachmentLabels(item) : [];
+    if (missingAttachments.length > 0) {
+      throw new Error(`Lampiran unit belum lengkap: ${missingAttachments.join(", ")}.`);
+    }
+
+    const selectedAttachmentFiles = getUnitAttachmentRequirements(item)
+      .map((requirement: any) => ({
+        key: requirement.key,
+        label: requirement.label || requirement.key,
+        file: allocationFiles[item.id]?.[requirement.key],
+      }))
+      .filter((entry: any) => entry.file);
 
     await suratService.approveSurat(
       item.id, 
       item.surat_id, 
       item.surat_registrasi.current_step, 
       currentUser.full_name,
-      note 
+      note,
+      isUnitAllocationRequired(item) ? { unitAllocation: { units: selectedUnits, attachments: selectedAttachmentFiles } } : {}
     );
     
     toast.success("Dokumen Berhasil Disetujui", {
@@ -111,6 +206,16 @@ const handleApprove = async (item: any) => {
       const newNotes = { ...prev };
       delete newNotes[item.id];
       return newNotes;
+    });
+    setAllocationSelected(prev => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+    setAllocationFiles(prev => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
     });
 
     queryClient.invalidateQueries({ queryKey: ['surat-inbox'] });
@@ -180,6 +285,115 @@ const handleApprove = async (item: any) => {
     return surat?.lampiran_path
       ? [{ id: 'legacy-lampiran', file_url: surat.lampiran_path, file_name: surat.lampiran_path.split('/').pop() }]
       : [];
+  };
+
+  const toggleAllocatedUnit = (signatureId: string, option: any) => {
+    setAllocationSelected(prev => {
+      const selected = prev[signatureId] || [];
+      const exists = selected.some((item: any) => item.value === option.value);
+      return {
+        ...prev,
+        [signatureId]: exists
+          ? selected.filter((item: any) => item.value !== option.value)
+          : [...selected, option],
+      };
+    });
+  };
+
+  const renderUnitAllocationPanel = (item: any) => {
+    if (!isUnitAllocationRequired(item)) return null;
+    const requestedCount = getRequestedUnitCount(item);
+    const selected = allocationSelected[item.id] || [];
+    const missingAttachments = getMissingUnitAttachmentLabels(item);
+    const selectedValues = new Set(selected.map((unit: any) => unit.value));
+    const search = (unitSearch[item.id] || "").toLowerCase().trim();
+    const units = (allocationUnits[item.id] || []).filter((unit) =>
+      !search || unit.label.toLowerCase().includes(search) || String(unit.value).toLowerCase().includes(search)
+    );
+    const isEnough = selected.length >= requestedCount && missingAttachments.length === 0;
+
+    return (
+      <div className={cn(
+        "rounded-2xl border p-4 space-y-3",
+        isEnough ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
+      )}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Alokasi Unit Perencanaan</p>
+            <p className="text-[10px] font-semibold text-muted-foreground">
+              {selected.length} unit / {requestedCount} unit diajukan
+            </p>
+          </div>
+          <Badge variant={isEnough ? "default" : "outline"} className="text-[9px] font-black uppercase">
+            {isEnough ? "Memenuhi" : "Kurang"}
+          </Badge>
+        </div>
+
+        <Input
+          value={unitSearch[item.id] || ""}
+          onChange={(e) => setUnitSearch(prev => ({ ...prev, [item.id]: e.target.value }))}
+          placeholder="Cari kode unit..."
+          className="h-9 bg-background/80 text-[11px] font-semibold"
+        />
+
+        {allocationLoading[item.id] ? (
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Memuat unit
+          </div>
+        ) : allocationErrors[item.id] ? (
+          <p className="text-[10px] font-semibold text-destructive">{allocationErrors[item.id]}</p>
+        ) : (
+          <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-background/70">
+            {units.length === 0 ? (
+              <p className="p-3 text-[10px] font-semibold text-muted-foreground">Unit tidak ditemukan.</p>
+            ) : units.map((unit) => (
+              <label key={`${item.id}-${unit.value}`} className="flex cursor-pointer items-center gap-2 border-b border-border/40 px-3 py-2 text-[11px] font-bold last:border-b-0 hover:bg-muted/60">
+                <input
+                  type="checkbox"
+                  checked={selectedValues.has(unit.value)}
+                  onChange={() => toggleAllocatedUnit(item.id, unit)}
+                />
+                <span>{unit.label}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lampiran Unit</p>
+          {getUnitAttachmentRequirements(item).map((requirement: any) => {
+            const file = allocationFiles[item.id]?.[requirement.key];
+            return (
+              <label key={`${item.id}-${requirement.key}`} className="grid cursor-pointer grid-cols-1 gap-2 rounded-lg border border-border/40 bg-muted/20 p-3 text-[11px] font-bold md:grid-cols-[1fr_auto] md:items-center">
+                <div>
+                  <span className="uppercase">{requirement.label || requirement.key}</span>
+                  {requirement.required !== false && <span className="ml-2 text-destructive">*</span>}
+                  <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">{file ? file.name : "Belum ada file"}</p>
+                </div>
+                <Input
+                  type="file"
+                  className="h-9 bg-background text-[10px]"
+                  onChange={(event) => {
+                    const selectedFile = event.target.files?.[0] || null;
+                    setAllocationFiles(prev => ({
+                      ...prev,
+                      [item.id]: {
+                        ...(prev[item.id] || {}),
+                        [requirement.key]: selectedFile,
+                      },
+                    }));
+                  }}
+                />
+              </label>
+            );
+          })}
+          {missingAttachments.length > 0 && (
+            <p className="text-[10px] font-semibold text-amber-600">
+              Wajib dilengkapi: {missingAttachments.join(", ")}
+            </p>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -285,6 +499,7 @@ const handleApprove = async (item: any) => {
                       className="pl-10 min-h-[80px] text-[11px] font-medium bg-muted/20 border-none rounded-lg focus-visible:ring-1 focus-visible:ring-primary/30 resize-none uppercase tracking-wider"
                     />
                   </div>
+                  {renderUnitAllocationPanel(item)}
                 </div>
 
                 {/* Actions Section */}
@@ -324,7 +539,13 @@ const handleApprove = async (item: any) => {
                     </Button>
 
                     <Button 
-                      disabled={processingId === item.id}
+                      disabled={
+                        processingId === item.id ||
+                        (isUnitAllocationRequired(item) && (
+                          (allocationSelected[item.id]?.length || 0) < getRequestedUnitCount(item) ||
+                          getMissingUnitAttachmentLabels(item).length > 0
+                        ))
+                      }
                       onClick={() => handleApprove(item)}
                       className="h-10 text-[9px] font-black uppercase tracking-widest shadow-md active:scale-95 bg-emerald-600 hover:bg-emerald-500 text-white border-none transition-all"
                     >

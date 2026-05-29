@@ -1,4 +1,4 @@
-import { Bell, Plus, Clock, FileCheck, Inbox, CheckCheck, Trash2, AlertCircle, MessageSquare, Menu } from 'lucide-react'
+import { Bell, Plus, FileCheck, Inbox, Trash2, AlertCircle, MessageSquare, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -44,14 +44,12 @@ const mapDbNotification = (row: any): Notification => {
 }
 
 interface HeaderProps {
-  title: string
-  subtitle?: string
   onNewAgenda?: () => void
   onMenuClick?: () => void
   showMenuButton?: boolean
 }
 
-export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButton = false }: HeaderProps) => {
+export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: HeaderProps) => {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const unreadCount = notifications.filter(n => !n.isRead).length
@@ -80,13 +78,9 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
   }, [])
 
   const handleNotifClick = useCallback(async (n: Notification) => {
-    // Mark as read locally first
     setNotifications(prev =>
       prev.map(item => item.id === n.id ? { ...item, isRead: true } : item)
     )
-    
-    // Don't close sheet immediately on mobile - let user decide
-    // setNotificationsOpen(false) - Removed this to prevent auto-close
 
     if (n.dbId) {
       await notificationService.markAsRead(n.dbId)
@@ -94,7 +88,6 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
 
     if (n.url) {
       navigate(n.url)
-      // Close after navigation on mobile
       setNotificationsOpen(false)
     }
   }, [navigate])
@@ -208,58 +201,60 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
   }, [])
 
   return (
-    <header className="h-14 sm:h-16 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-40 flex items-center justify-between px-3 sm:px-4 lg:px-6 shrink-0 safe-area-top">
-      <div className="flex items-center gap-3 min-w-0">
+    <header className="h-14 sm:h-16 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 lg:px-6 shrink-0 safe-area-top">
+      <div className="flex items-center gap-3">
+        {/* Mobile Menu Button */}
         {showMenuButton && (
           <Button
             variant="ghost"
             size="icon"
             onClick={onMenuClick}
-            className="lg:hidden shrink-0 -ml-1"
+            className="lg:hidden shrink-0"
           >
             <Menu className="w-5 h-5" />
           </Button>
         )}
-        
-        <div className="flex flex-col min-w-0">
-          <h1 className="text-base sm:text-lg lg:text-xl font-bold tracking-tight truncate">{title}</h1>
-          {subtitle && (
-            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-black uppercase tracking-wider truncate hidden sm:block">
-              {subtitle}
-            </p>
-          )}
-        </div>
+
+        {/* Simple Logo/Brand for now - title is in AppLayout */}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Notifications: conditionally render Sheet (mobile) or Popover (desktop) */}
+      {/* Right side actions */}
+      <div className="flex items-center gap-3">
+        {/* New Request Button - Desktop only */}
+        {onNewAgenda && (
+          <Button
+            onClick={onAgenda}
+            size="sm"
+            className="gap-2 hidden sm:flex"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Permintaan Baru</span>
+          </Button>
+        )}
+
+        {/* Notifications */}
         {isMobileView ? (
           <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen}>
             <SheetTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="relative group rounded-full h-9 w-9"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative rounded-full h-9 w-9"
               >
-                <Bell
-                  className={cn(
-                    'w-5 h-5 transition-all',
-                    unreadCount > 0 ? 'text-primary animate-ring' : 'text-muted-foreground'
-                  )}
-                />
+                <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
                 {unreadCount > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent 
-              side="right" 
+            <SheetContent
+              side="right"
               className="w-full sm:w-[380px] p-0 bg-background border-border flex flex-col"
             >
               <SheetHeader className="px-4 py-3 border-b shrink-0">
                 <div className="flex items-center justify-between">
-                  <SheetTitle className="text-sm font-black uppercase tracking-tighter">
-                    Notifications ({unreadCount})
+                  <SheetTitle className="text-sm font-semibold">
+                    Notifikasi ({unreadCount})
                   </SheetTitle>
                   <div className="flex gap-1">
                     <Button
@@ -268,7 +263,7 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                       className="h-8 w-8"
                       onClick={handleMarkAllRead}
                     >
-                      <CheckCheck className="w-4 h-4" />
+                      <FileCheck className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -281,12 +276,12 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                   </div>
                 </div>
               </SheetHeader>
-              
+
               <div className="flex-1 overflow-y-auto">
                 {notifications.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 gap-4">
                     <Inbox className="w-12 h-12 text-muted-foreground/30" />
-                    <p className="text-xs text-muted-foreground font-bold uppercase">No Activity</p>
+                    <p className="text-sm text-muted-foreground">Tidak ada notifikasi</p>
                   </div>
                 ) : (
                   notifications.map((n) => (
@@ -298,16 +293,14 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                         !n.isRead ? 'bg-primary/[0.03]' : 'opacity-60'
                       )}
                     >
-                      <div
-                        className={cn(
-                          'p-2 rounded-lg h-fit shrink-0',
-                          n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
-                          n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
-                          n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
-                          n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
-                                                        'bg-emerald-500/10 text-emerald-600'
-                        )}
-                      >
+                      <div className={cn(
+                        'p-2 rounded-lg h-fit shrink-0',
+                        n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
+                        n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
+                        n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
+                        n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
+                                                      'bg-emerald-500/10 text-emerald-600'
+                      )}>
                         {n.type === 'incoming'  && <Inbox       className="w-4 h-4" />}
                         {n.type === 'rejected'  && <AlertCircle className="w-4 h-4" />}
                         {n.type === 'stamped'   && <Clock       className="w-4 h-4" />}
@@ -316,13 +309,13 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black leading-tight mb-1 uppercase tracking-tighter truncate">
+                        <p className="text-sm font-medium leading-tight mb-1 truncate">
                           {n.title}
                         </p>
-                        <p className="text-sm text-muted-foreground leading-snug line-clamp-2">
+                        <p className="text-sm text-muted-foreground line-clamp-2">
                           {n.description}
                         </p>
-                        <p className="text-xs text-muted-foreground/50 font-bold uppercase mt-2">
+                        <p className="text-xs text-muted-foreground/50 mt-2">
                           {formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}
                         </p>
                       </div>
@@ -339,17 +332,12 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
         ) : (
           <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
             <PopoverTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="relative group rounded-full h-9 w-9 lg:h-10 lg:w-10"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative rounded-full h-9 w-9 lg:h-10 lg:w-10"
               >
-                <Bell
-                  className={cn(
-                    'w-5 h-5 transition-all',
-                    unreadCount > 0 ? 'text-primary animate-ring' : 'text-muted-foreground'
-                  )}
-                />
+                <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
                 {unreadCount > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
                 )}
@@ -361,8 +349,8 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
               align="end"
             >
               <div className="p-3 bg-muted/40 border-b flex justify-between items-center">
-                <span className="text-xs font-black uppercase tracking-tighter">
-                  Notifications ({unreadCount})
+                <span className="text-sm font-medium">
+                  Notifikasi ({unreadCount})
                 </span>
                 <div className="flex gap-1">
                   <Button
@@ -371,7 +359,7 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                     className="h-7 w-7"
                     onClick={handleMarkAllRead}
                   >
-                    <CheckCheck className="w-4 h-4" />
+                    <FileCheck className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -388,7 +376,7 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                 {notifications.length === 0 ? (
                   <div className="p-8 text-center flex flex-col items-center gap-3">
                     <Inbox className="w-10 h-10 text-muted-foreground/20" />
-                    <p className="text-xs text-muted-foreground font-bold uppercase">No Activity</p>
+                    <p className="text-sm text-muted-foreground">Tidak ada notifikasi</p>
                   </div>
                 ) : (
                   notifications.map((n) => (
@@ -400,16 +388,14 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                         !n.isRead ? 'bg-primary/[0.03]' : 'opacity-60'
                       )}
                     >
-                      <div
-                        className={cn(
-                          'p-2 rounded-lg h-fit shrink-0',
-                          n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
-                          n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
-                          n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
-                          n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
-                                                        'bg-emerald-500/10 text-emerald-600'
-                        )}
-                      >
+                      <div className={cn(
+                        'p-2 rounded-lg h-fit shrink-0',
+                        n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
+                        n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
+                        n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
+                        n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
+                                                      'bg-emerald-500/10 text-emerald-600'
+                      )}>
                         {n.type === 'incoming'  && <Inbox       className="w-4 h-4" />}
                         {n.type === 'rejected'  && <AlertCircle className="w-4 h-4" />}
                         {n.type === 'stamped'   && <Clock       className="w-4 h-4" />}
@@ -418,13 +404,13 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black leading-tight mb-1 uppercase tracking-tighter truncate">
+                        <p className="text-sm font-medium leading-tight mb-1 truncate">
                           {n.title}
                         </p>
-                        <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                        <p className="text-sm text-muted-foreground leading-snug line-clamp-2">
                           {n.description}
                         </p>
-                        <p className="text-[10px] text-muted-foreground/50 font-bold uppercase mt-2">
+                        <p className="text-xs text-muted-foreground/50 mt-2">
                           {formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}
                         </p>
                       </div>
@@ -438,17 +424,6 @@ export const Header = ({ title, subtitle, onNewAgenda, onMenuClick, showMenuButt
               </div>
             </PopoverContent>
           </Popover>
-        )}
-
-        {onNewAgenda && (
-          <Button
-            onClick={onNewAgenda}
-            size="sm"
-            className="gap-2 rounded-lg font-bold text-xs uppercase tracking-wider h-8 sm:h-9 hidden sm:flex"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Request</span>
-          </Button>
         )}
       </div>
     </header>

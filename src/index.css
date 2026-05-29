@@ -91,9 +91,58 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.875rem; /* 14px base for readability */
   }
 
-  /* Responsive base styles */
+  /* =============================================
+     IMPROVED TYPOGRAPHY SCALE v2
+     ============================================= */
+
+  /* Headings - better hierarchy */
+  h1 { @apply text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight; }
+  h2 { @apply text-xl sm:text-2xl font-bold tracking-tight; }
+  h3 { @apply text-lg sm:text-xl font-semibold; }
+  h4 { @apply text-base sm:text-lg font-semibold; }
+
+  /* Meta text - readable 12px */
+  .text-meta {
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  /* Labels - readable 13px, not uppercase */
+  .text-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  /* Navigation text */
+  .nav-text {
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+  }
+
+  /* Compact but readable */
+  .compact-text {
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* =============================================
+     STATUS SEMANTIC COLORS (Consistent)
+     ============================================= */
+
+  /* Status colors with proper contrast */
+  .status-pending   { @apply bg-blue-500/10 text-blue-400 border border-blue-500/30; }
+  .status-progress  { @apply bg-amber-500/10 text-amber-400 border border-amber-500/30; }
+  .status-completed { @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/30; }
+  .status-rejected  { @apply bg-red-500/10 text-red-400 border border-red-500/30; }
+
+  /* =============================================
+     RESPONSIVE BASE STYLES
+     ============================================= */
+
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;

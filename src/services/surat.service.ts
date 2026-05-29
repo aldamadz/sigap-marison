@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import { notificationService } from "./notification.service";
 import { documentPreviewService } from "./document-preview.service";
+import { appStorageService } from "./storage.service";
 
 type TableInputColumn = {
   key: string;
@@ -75,10 +76,52 @@ export interface SuratRegistrasi {
     file_name: string | null;
     file_type: string | null;
     file_size: number | null;
+    stage?: string | null;
+    requirement_key?: string | null;
+    requirement_label?: string | null;
+    signature_id?: string | null;
   }>;
 }
 
 export const suratService = {
+  getUnitConfigFromForm(form: any) {
+    const raw = form?.unit_config;
+    const parsed = typeof raw === "string" ? (() => {
+      try { return JSON.parse(raw || "{}"); } catch { return {}; }
+    })() : (raw || {});
+    return {
+      enabled: parsed.enabled === true,
+      allowed_department_ids: Array.isArray(parsed.allowed_department_ids) ? parsed.allowed_department_ids : [],
+      initial_attachment_required: parsed.initial_attachment_required === true,
+      allocation_attachment_requirements: Array.isArray(parsed.allocation_attachment_requirements)
+        ? parsed.allocation_attachment_requirements
+        : [],
+    };
+  },
+
+  async sendEmailNotification(userIds: string[], title: string, message: string, link?: string) {
+    const ids = [...new Set((userIds || []).filter(Boolean))];
+    if (ids.length === 0) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const response = await fetch("/api/notifications/email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ user_ids: ids, title, message, link }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error || "Gagal mengirim email.");
+      }
+    } catch (error) {
+      console.error("Email notification error:", error);
+    }
+  },
+
   cleanUuid(id: any) {
     if (!id || id === "" || id === "pusat" || id === "undefined" || id === "null") return null;
     return id;
@@ -100,6 +143,18 @@ export const suratService = {
     const parts = url.split("/dokumen_surat/");
     const path = parts.length < 2 ? url : parts[1];
     return decodeURIComponent(path.split("?")[0]);
+  },
+
+  async downloadStorageFile(pathOrUrl: string, bucket = "dokumen_surat") {
+    if (/^https?:\/\//i.test(pathOrUrl)) {
+      const response = await fetch(pathOrUrl);
+      if (!response.ok) throw new Error("Gagal download file.");
+      return response.blob();
+    }
+    const relativePath = this.getRelativePath(pathOrUrl);
+    const { data, error } = await supabase.storage.from(bucket).download(relativePath);
+    if (error || !data) throw new Error(error?.message || "Gagal download file.");
+    return data;
   },
 
   resolveStampPositions(usageDetail: any, roleName: string, stepOrder: number): any[] {
@@ -222,6 +277,10 @@ export const suratService = {
       } : null,
       input: formInputData,
       detail_barang: formInputData?.items ?? [],
+      requested_project: formInputData?.requested_project ?? null,
+      requested_unit_count: formInputData?.requested_unit_count ?? null,
+      allocated_units: formInputData?.allocated_units ?? [],
+      allocated_unit_count: formInputData?.allocated_unit_count ?? null,
       catatan: formInputData?.catatan ?? null,
       signers,
       attachments,
@@ -416,7 +475,7 @@ export const suratService = {
       payload.penggunaan_id
         ? supabase
             .from("master_penggunaan_detail")
-            .select("*, master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, department_id)")
+            .select("*, master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id)")
             .eq("id", payload.penggunaan_id)
             .single()
         : Promise.resolve({ data: null }),
@@ -481,14 +540,13 @@ export const suratService = {
     const buffer = await workbook.xlsx.writeBuffer();
     const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
     const path = `dokumen/system_${safeNumber}_${Date.now()}.xlsx`;
-    const { error } = await supabase.storage.from("dokumen_surat").upload(path, buffer, {
-      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    const uploaded = await appStorageService.upload({
+      bucket: "dokumen_surat",
+      path,
+      file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
       upsert: true,
     });
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabase.storage.from("dokumen_surat").getPublicUrl(path);
-    return { publicUrl, context };
+    return { publicUrl: uploaded.publicUrl, context };
   },
 
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
@@ -574,16 +632,24 @@ export const suratService = {
           ? [lampiranFiles]
           : [];
 
-      if (attachmentFiles.length === 0) {
-        throw new Error("Minimal satu lampiran wajib diunggah.");
-      }
-
       const noUrut      = parseInt(payload.no_surat.split("/")[0]);
       const currentYear = new Date().getFullYear();
       const normalizedFormInputData = this.normalizeFormInputData(payload.form_input_data);
       payload = { ...payload, form_input_data: normalizedFormInputData };
+      const configContext = await this.getTemplateContext(payload);
+      const unitConfig = this.getUnitConfigFromForm(configContext.form);
+      const isUnitMode = normalizedFormInputData?.request_mode === "unit";
+      if (isUnitMode) {
+        normalizedFormInputData.unit_config_snapshot = unitConfig;
+        payload = { ...payload, form_input_data: normalizedFormInputData };
+      }
+
+      if (attachmentFiles.length === 0 && (!isUnitMode || unitConfig.initial_attachment_required)) {
+        throw new Error("Minimal satu lampiran wajib diunggah.");
+      }
+
       const generated = file ? null : await this.buildFilledTemplateFile(payload);
-      const context = generated?.context ?? await this.getTemplateContext(payload);
+      const context = generated?.context ?? configContext;
       const activeSigners = signers.filter(s => s.user_id);
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
       const totalSteps = activeSigners.length;
@@ -645,7 +711,7 @@ export const suratService = {
 
       if (suratError) throw suratError;
 
-      const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id);
+      const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, { stage: "initial" });
       if (uploadedAttachments[0]?.file_url) {
         await supabase
           .from("surat_registrasi")
@@ -679,6 +745,7 @@ export const suratService = {
         label_jabatan: s.label_jabatan ?? null,
         step_order: s.step_order,
         is_signed: false,
+        requires_unit_allocation: s.requires_unit_allocation === true,
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
 
@@ -699,6 +766,12 @@ export const suratService = {
               `/surat/inbox`
             )
           )
+        );
+        this.sendEmailNotification(
+          firstSigners.map((s: any) => s.user_id),
+          "Surat Masuk Baru",
+          `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
+          "/surat/inbox"
         );
 
         notificationResults.forEach((result) => {
@@ -733,9 +806,7 @@ export const suratService = {
     const { data: usageDetail } = await supabase.from("master_penggunaan_detail").select("*").eq("id", usageId).single();
     if (!usageDetail) return currentFilePath;
 
-    const relativePath = this.getRelativePath(currentFilePath);
-    const { data: fileData, error: dlError } = await supabase.storage.from("dokumen_surat").download(relativePath);
-    if (dlError || !fileData) { console.error("Gagal download file untuk stamping:", dlError); throw new Error("Gagal download file."); }
+    const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await fileData.arrayBuffer());
@@ -756,30 +827,159 @@ export const suratService = {
       });
       const buffer  = await workbook.xlsx.writeBuffer();
       const newPath = `dokumen/signed_${suratId}_step${stepOrder}_${Date.now()}.xlsx`;
-      const { error: upError } = await supabase.storage.from("dokumen_surat").upload(newPath, buffer, {
-        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", upsert: true
+      const uploaded = await appStorageService.upload({
+        bucket: "dokumen_surat",
+        path: newPath,
+        file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+        upsert: true,
       });
-      if (upError) throw upError;
-      const { data: { publicUrl } } = supabase.storage.from("dokumen_surat").getPublicUrl(newPath);
-      return publicUrl;
+      return uploaded.publicUrl;
     }
     return currentFilePath;
   },
 
-  async approveSurat(signatureId: string, suratId: string, currentStep: number, userName: string, note: string = ""): Promise<{ success: boolean }> {
+  async applyFormInputDataToExcel(currentFilePath: string, usageId: string, formInputData: any): Promise<string> {
+    const { data: usageDetail } = await supabase
+      .from("master_penggunaan_detail")
+      .select("*, master_forms!fk_master_forms(input_schema)")
+      .eq("id", usageId)
+      .single();
+    const schema = this.parseInputSchema((usageDetail as any)?.master_forms?.input_schema);
+    if (!usageDetail || schema.length === 0) return currentFilePath;
+
+    const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await fileData.arrayBuffer());
+    const worksheet = workbook.worksheets[0];
+
+    schema.forEach((field) => {
+      const source = field.default_source || field.defaultSource || "manual";
+      if (source !== "manual") return;
+      if (field.type === "table") {
+        this.writeTableField(workbook, field, formInputData?.[field.key]);
+        return;
+      }
+      if (!field.cell && !(field.merge_range || field.mergeRange)) return;
+      const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
+      const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
+      this.writeWrappedField(sheet, field, formInputData?.[field.key]);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const path = `dokumen/updated_input_${Date.now()}.xlsx`;
+    const uploaded = await appStorageService.upload({
+      bucket: "dokumen_surat",
+      path,
+      file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      upsert: true,
+    });
+    return uploaded.publicUrl;
+  },
+
+  async approveSurat(
+    signatureId: string,
+    suratId: string,
+    currentStep: number,
+    userName: string,
+    note: string = "",
+    options: { unitAllocation?: { units: any[]; attachments?: Array<{ key: string; label: string; file: File }> } } = {}
+  ): Promise<{ success: boolean }> {
+    const { data: { user } } = await supabase.auth.getUser();
     const { data: suratFresh, error: suratErr } = await supabase
-      .from("surat_registrasi").select("current_step, file_path, penggunaan_id").eq("id", suratId).single();
+      .from("surat_registrasi")
+      .select("current_step, file_path, penggunaan_id, form_input_data, data_snapshot")
+      .eq("id", suratId)
+      .single();
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
     if (suratFresh.current_step !== currentStep) throw new Error("Dokumen sudah diproses. Silakan refresh.");
 
-    const { data: sigInfo } = await supabase.from("surat_signatures").select("role_name").eq("id", signatureId).single();
+    const { data: sigInfo } = await supabase.from("surat_signatures").select("role_name, requires_unit_allocation").eq("id", signatureId).single();
     if (!sigInfo) throw new Error("Data tanda tangan tidak valid.");
 
-    const baseFilePath = suratFresh.file_path;
+    let workingFilePath = suratFresh.file_path;
+    let formInputData = suratFresh.form_input_data ?? {};
+    let uploadedAllocationAttachments: any[] = [];
+    if (sigInfo.requires_unit_allocation) {
+      const units = options.unitAllocation?.units ?? [];
+      const allocationAttachments = options.unitAllocation?.attachments ?? [];
+      const requestedCount = Number(formInputData?.requested_unit_count || 0);
+      if (formInputData?.request_mode !== "unit") throw new Error("Dokumen ini bukan pengajuan unit.");
+      if (!Number.isFinite(requestedCount) || requestedCount < 1) throw new Error("Jumlah unit pengajuan tidak valid.");
+      if (!Array.isArray(units) || units.length < requestedCount) {
+        throw new Error(`Unit terpilih kurang. Minimal ${requestedCount} unit.`);
+      }
 
-    let finalUrl = baseFilePath ?? "";
-    if (baseFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
-      finalUrl = await this.stampApprovalExcel(suratId, baseFilePath, userName, sigInfo.role_name, suratFresh.penggunaan_id, currentStep);
+      const { data: usageDetail } = await supabase
+        .from("master_penggunaan_detail")
+        .select("master_forms!fk_master_forms(unit_config)")
+        .eq("id", suratFresh.penggunaan_id)
+        .single();
+      const unitConfig = this.getUnitConfigFromForm((usageDetail as any)?.master_forms);
+      const requirements = unitConfig.allocation_attachment_requirements || [];
+      const requiredRequirements = requirements.filter((requirement: any) => requirement.required !== false);
+      const attachedKeys = new Set(allocationAttachments.filter((item) => item.file).map((item) => item.key));
+      const missingRequirements = requiredRequirements.filter((requirement: any) => !attachedKeys.has(requirement.key));
+      if (missingRequirements.length > 0) {
+        throw new Error(`Lampiran unit belum lengkap: ${missingRequirements.map((item: any) => item.label || item.key).join(", ")}.`);
+      }
+
+      formInputData = {
+        ...formInputData,
+        allocated_units: units,
+        allocated_unit_count: units.length,
+        allocated_by_signature_id: signatureId,
+        allocated_at: new Date().toISOString(),
+      };
+
+      const { error: updateInputError } = await supabase
+        .from("surat_registrasi")
+        .update({ form_input_data: formInputData })
+        .eq("id", suratId);
+      if (updateInputError) throw updateInputError;
+
+      uploadedAllocationAttachments = await this.uploadAttachmentFiles(
+        suratId,
+        allocationAttachments.map((item) => item.file),
+        user?.id,
+        {
+          stage: "unit_allocation",
+          signature_id: signatureId,
+          requirements: Object.fromEntries(allocationAttachments.map((item) => [
+            item.file.name,
+            { key: item.key, label: item.label },
+          ])),
+        }
+      );
+
+      const { data: allAttachments } = await supabase
+        .from("surat_attachments")
+        .select("*")
+        .eq("surat_id", suratId)
+        .order("created_at", { ascending: true });
+      await supabase
+        .from("surat_registrasi")
+        .update({
+          data_snapshot: {
+            ...(suratFresh.data_snapshot || {}),
+            input: formInputData,
+            requested_project: formInputData?.requested_project ?? null,
+            requested_unit_count: formInputData?.requested_unit_count ?? null,
+            allocated_units: formInputData?.allocated_units ?? [],
+            allocated_unit_count: formInputData?.allocated_unit_count ?? null,
+            attachments: allAttachments || uploadedAllocationAttachments,
+          },
+        })
+        .eq("id", suratId);
+
+      if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
+        workingFilePath = await this.applyFormInputDataToExcel(workingFilePath, suratFresh.penggunaan_id, formInputData);
+      }
+    }
+
+    let finalUrl = workingFilePath ?? "";
+    if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
+      finalUrl = await this.stampApprovalExcel(suratId, workingFilePath, userName, sigInfo.role_name, suratFresh.penggunaan_id, currentStep);
     }
 
     const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_approve_surat_v2", {
@@ -809,6 +1009,12 @@ export const suratService = {
           'success',
           `/surat/monitoring`
         ).catch(e => console.error(e));
+        this.sendEmailNotification(
+          [updatedSurat.created_by],
+          "Surat Ditandatangani",
+          `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
+          "/surat/monitoring"
+        );
       }
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
@@ -835,6 +1041,12 @@ export const suratService = {
           notificationResults.forEach((result) => {
             if (result.status === 'rejected') console.error("Notif error:", result.reason);
           });
+          this.sendEmailNotification(
+            nextSigners.map((ns: any) => ns.user_id),
+            "Surat Masuk Baru",
+            `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
+            "/surat/inbox"
+          );
         }
       }
     }
@@ -860,6 +1072,12 @@ export const suratService = {
          'error',
          `/surat/monitoring`
        ).catch(e => console.error(e));
+       this.sendEmailNotification(
+         [suratInfo.created_by],
+         "Surat Ditolak",
+         `Surat "${suratInfo.judul_surat}" telah ditolak. Catatan: ${note}`,
+         "/surat/monitoring"
+       );
     }
 
     return true;
@@ -868,10 +1086,10 @@ export const suratService = {
   async getMyInbox(userId: string) {
     const { data, error } = await supabase
       .from("surat_signatures").select(`
-        id, role_name, step_order, is_signed, surat_id,
+        id, role_name, step_order, is_signed, surat_id, requires_unit_allocation,
         surat_registrasi!inner (
           *,
-          surat_attachments ( id, file_url, file_name, file_type, file_size )
+          surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
         )
       `)
       .eq("user_id", userId).eq("is_signed", false);
@@ -885,32 +1103,43 @@ export const suratService = {
 
   async uploadFile(file: File) {
     const filePath = `dokumen/${Date.now()}_${file.name}`;
-    await supabase.storage.from("dokumen_surat").upload(filePath, file);
-    return supabase.storage.from("dokumen_surat").getPublicUrl(filePath).data.publicUrl;
+    const uploaded = await appStorageService.upload({ bucket: "dokumen_surat", path: filePath, file });
+    return uploaded.publicUrl;
   },
 
-  async uploadAttachmentFiles(suratId: string, files: File[], userId?: string) {
+  async uploadAttachmentFiles(
+    suratId: string,
+    files: File[],
+    userId?: string,
+    meta: {
+      stage?: string;
+      signature_id?: string;
+      requirements?: Record<string, { key?: string; label?: string }>;
+    } = {}
+  ) {
     const rows = [];
 
     for (const file of files) {
+      if (!file) continue;
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
       const filePath = `lampiran_${suratId}/${Date.now()}_${safeName}`;
-      const { error } = await supabase.storage.from("lampiran_surat").upload(filePath, file, {
-        contentType: file.type || undefined,
-        upsert: false,
-      });
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage.from("lampiran_surat").getPublicUrl(filePath);
+      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file });
+      const requirement = meta.requirements?.[file.name] || {};
       rows.push({
         surat_id: suratId,
-        file_url: publicUrl,
+        file_url: uploaded.publicUrl,
         file_name: file.name,
         file_type: file.type || null,
         file_size: file.size,
         created_by: userId ?? null,
+        stage: meta.stage || "initial",
+        requirement_key: requirement.key || null,
+        requirement_label: requirement.label || null,
+        signature_id: meta.signature_id || null,
       });
     }
+
+    if (rows.length === 0) return [];
 
     const { data, error } = await supabase
       .from("surat_attachments")
@@ -922,7 +1151,7 @@ export const suratService = {
 
   async getAllSurat(userId?: string): Promise<SuratRegistrasi[]> {
     let query = supabase.from("surat_registrasi")
-      .select(`*, surat_signatures (*, profiles:user_id (full_name)), surat_attachments ( id, file_url, file_name, file_type, file_size )`).order("created_at", { ascending: false });
+      .select(`*, surat_signatures (*, profiles:user_id (full_name)), surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )`).order("created_at", { ascending: false });
     if (userId) query = query.eq("created_by", userId);
     const { data } = await query;
     return (data || []).map((s: any) => ({

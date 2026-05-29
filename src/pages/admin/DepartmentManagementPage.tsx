@@ -23,7 +23,8 @@ export default function DepartmentManagementPage() {
   const [formData, setFormData] = useState({
     name: "",
     code: "",
-    dept_index: ""
+    dept_index: "",
+    email: "",
   });
 
   const loadData = async () => {
@@ -57,11 +58,12 @@ export default function DepartmentManagementPage() {
       setFormData({ 
         name: dept.name, 
         code: dept.code || "", 
-        dept_index: dept.dept_index.toString() 
+        dept_index: dept.dept_index.toString(),
+        email: dept.email || "",
       });
     } else {
       setSelectedDept(null);
-      setFormData({ name: "", code: "", dept_index: "" });
+      setFormData({ name: "", code: "", dept_index: "", email: "" });
     }
     setIsModalOpen(true);
   };
@@ -77,7 +79,8 @@ export default function DepartmentManagementPage() {
       const payload = {
         name: formData.name,
         code: formData.code || null,
-        dept_index: parseInt(formData.dept_index)
+        dept_index: parseInt(formData.dept_index),
+        email: formData.email.trim() || null,
       };
 
       if (selectedDept) {
@@ -147,13 +150,14 @@ export default function DepartmentManagementPage() {
               <TableHead className="w-20 font-bold">INDEX</TableHead>
               <TableHead className="font-bold">NAMA</TableHead>
               <TableHead className="font-bold">KODE</TableHead>
+              <TableHead className="font-bold">EMAIL</TableHead>
               <TableHead className="text-right font-bold">AKSI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && departments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-20">
+                <TableCell colSpan={5} className="text-center py-20">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     <p className="text-muted-foreground">Memuat data...</p>
@@ -162,7 +166,7 @@ export default function DepartmentManagementPage() {
               </TableRow>
             ) : departments.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={4} className="text-center py-20 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
                         Tidak ada data ditemukan.
                     </TableCell>
                 </TableRow>
@@ -176,6 +180,7 @@ export default function DepartmentManagementPage() {
                         {dept.code || "-"}
                     </span>
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{dept.email || "-"}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleOpenModal(dept)}>
                         <Pencil className="w-4 h-4 text-amber-600" />
@@ -223,6 +228,15 @@ export default function DepartmentManagementPage() {
                   placeholder="1"
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Email Departemen</Label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                placeholder="departemen@marison.id"
+              />
             </div>
           </div>
           <DialogFooter>

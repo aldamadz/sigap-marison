@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { appStorageService } from "@/services/storage.service";
 
 type TemplateInputType = "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
 type TemplateHorizontalAlign = "left" | "center" | "right";
@@ -71,6 +72,19 @@ interface TemplateInputField {
       type?: "text" | "number";
     }>;
   };
+}
+
+interface UnitAttachmentRequirement {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+interface UnitConfig {
+  enabled: boolean;
+  allowed_department_ids: string[];
+  initial_attachment_required: boolean;
+  allocation_attachment_requirements: UnitAttachmentRequirement[];
 }
 
 const createFieldId = () =>
@@ -185,6 +199,45 @@ const createDefaultTableConfig = (): NonNullable<TemplateInputField["table_confi
   ],
 });
 
+const defaultUnitRequirements = (): UnitAttachmentRequirement[] => [
+  { key: "siteplan", label: "Siteplan", required: true },
+  { key: "kode_produksi", label: "Kode Produksi", required: true },
+  { key: "volume_adendum", label: "Volume Adendum", required: true },
+  { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
+];
+
+const normalizeUnitConfig = (value: any): UnitConfig => {
+  const raw = typeof value === "string" ? (() => {
+    try { return JSON.parse(value || "{}"); } catch { return {}; }
+  })() : (value || {});
+
+  return {
+    enabled: raw.enabled === true,
+    allowed_department_ids: Array.isArray(raw.allowed_department_ids) ? raw.allowed_department_ids : [],
+    initial_attachment_required: raw.initial_attachment_required === true,
+    allocation_attachment_requirements: Array.isArray(raw.allocation_attachment_requirements) && raw.allocation_attachment_requirements.length > 0
+      ? raw.allocation_attachment_requirements.map((item: any, index: number) => ({
+          key: item.key || `lampiran_${index + 1}`,
+          label: item.label || `Lampiran ${index + 1}`,
+          required: item.required !== false,
+        }))
+      : defaultUnitRequirements(),
+  };
+};
+
+const serializeUnitConfig = (config: UnitConfig) => ({
+  enabled: config.enabled === true,
+  allowed_department_ids: config.allowed_department_ids,
+  initial_attachment_required: config.initial_attachment_required === true,
+  allocation_attachment_requirements: config.allocation_attachment_requirements
+    .filter((item) => item.key.trim() && item.label.trim())
+    .map((item) => ({
+      key: item.key.trim().replace(/\s+/g, "_").toLowerCase(),
+      label: item.label.trim(),
+      required: item.required !== false,
+    })),
+});
+
 export default function FormManagementPage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,6 +257,7 @@ export default function FormManagementPage() {
     link_form: "",
     department_id: "",
     input_schema: [] as TemplateInputField[],
+    unit_config: normalizeUnitConfig(null),
   });
 
   const loadInitialData = async () => {
@@ -263,21 +317,18 @@ export default function FormManagementPage() {
 
       const storagePath = `${Date.now()}_${fileNameRaw.replace(/\s/g, '_')}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('templates')
-        .upload(storagePath, file, { cacheControl: '3600', upsert: true });
-
-      if (uploadError) throw uploadError;
+      const uploaded = await appStorageService.upload({
+        bucket: "templates",
+        path: storagePath,
+        file,
+        upsert: true,
+      });
       
       setUploadProgress(70);
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('templates')
-        .getPublicUrl(storagePath);
-
       setFormData(prev => ({ 
         ...prev, 
-        link_form: publicUrl,
+        link_form: uploaded.publicUrl,
         nama_form: prev.nama_form || cleanName
       }));
 
@@ -302,10 +353,11 @@ export default function FormManagementPage() {
         link_form: form.link_form,
         department_id: form.department_id || "",
         input_schema: normalizeInputSchema(form.input_schema),
+        unit_config: normalizeUnitConfig(form.unit_config),
       });
     } else {
       setSelectedForm(null);
-      setFormData({ nama_form: "", nomor_form: "", link_form: "", department_id: "", input_schema: [] });
+      setFormData({ nama_form: "", nomor_form: "", link_form: "", department_id: "", input_schema: [], unit_config: normalizeUnitConfig(null) });
     }
     setIsModalOpen(true);
   };
@@ -491,6 +543,67 @@ export default function FormManagementPage() {
     }
   };
 
+  const updateUnitConfig = (patch: Partial<UnitConfig>) => {
+    setFormData(prev => ({
+      ...prev,
+      unit_config: { ...prev.unit_config, ...patch },
+    }));
+  };
+
+  const toggleUnitDepartment = (departmentId: string) => {
+    setFormData(prev => {
+      const current = prev.unit_config.allowed_department_ids;
+      const exists = current.includes(departmentId);
+      return {
+        ...prev,
+        unit_config: {
+          ...prev.unit_config,
+          allowed_department_ids: exists
+            ? current.filter((id) => id !== departmentId)
+            : [...current, departmentId],
+        },
+      };
+    });
+  };
+
+  const updateUnitRequirement = (index: number, patch: Partial<UnitAttachmentRequirement>) => {
+    setFormData(prev => ({
+      ...prev,
+      unit_config: {
+        ...prev.unit_config,
+        allocation_attachment_requirements: prev.unit_config.allocation_attachment_requirements.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, ...patch } : item
+        ),
+      },
+    }));
+  };
+
+  const addUnitRequirement = () => {
+    setFormData(prev => {
+      const nextIndex = prev.unit_config.allocation_attachment_requirements.length + 1;
+      return {
+        ...prev,
+        unit_config: {
+          ...prev.unit_config,
+          allocation_attachment_requirements: [
+            ...prev.unit_config.allocation_attachment_requirements,
+            { key: `lampiran_${nextIndex}`, label: `Lampiran ${nextIndex}`, required: true },
+          ],
+        },
+      };
+    });
+  };
+
+  const removeUnitRequirement = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      unit_config: {
+        ...prev.unit_config,
+        allocation_attachment_requirements: prev.unit_config.allocation_attachment_requirements.filter((_item, itemIndex) => itemIndex !== index),
+      },
+    }));
+  };
+
   const handleSave = async () => {
     if (!formData.department_id || !formData.nama_form) {
       return toast({ variant: "destructive", title: "Data Tidak Lengkap", description: "Departemen dan Nama Form wajib diisi." });
@@ -504,6 +617,7 @@ export default function FormManagementPage() {
         link_form: formData.link_form,
         department_id: formData.department_id,
         input_schema: serializeInputSchema(formData.input_schema),
+        unit_config: serializeUnitConfig(formData.unit_config),
       };
 
       const { error } = selectedForm 
@@ -741,6 +855,101 @@ export default function FormManagementPage() {
                   className="bg-muted/30 border-border/30 rounded-2xl h-12 text-[10px] text-emerald-500 font-mono"
                 />
               </div>
+            </div>
+
+            <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Konfigurasi Unit</Label>
+                  <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+                    Atur departemen yang boleh ajukan unit dan lampiran wajib saat Perencanaan memilih unit.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={formData.unit_config.enabled}
+                    onChange={(e) => updateUnitConfig({ enabled: e.target.checked })}
+                  />
+                  Aktifkan Unit
+                </label>
+              </div>
+
+              {formData.unit_config.enabled && (
+                <div className="space-y-4">
+                  <label className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={formData.unit_config.initial_attachment_required}
+                      onChange={(e) => updateUnitConfig({ initial_attachment_required: e.target.checked })}
+                    />
+                    Lampiran awal tetap wajib untuk mode unit
+                  </label>
+
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Departemen yang boleh ajukan unit</p>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {departments.map((department) => (
+                        <label key={department.id} className="flex items-center gap-2 rounded-xl border border-border/40 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={formData.unit_config.allowed_department_ids.includes(department.id)}
+                            onChange={() => toggleUnitDepartment(department.id)}
+                          />
+                          <span className="truncate">{department.code ? `${department.code} - ` : ""}{department.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Lampiran saat pilih unit</p>
+                      <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase" onClick={addUnitRequirement}>
+                        <Plus className="mr-1 h-3 w-3" /> Lampiran
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {formData.unit_config.allocation_attachment_requirements.map((requirement, index) => (
+                        <div key={`${requirement.key}-${index}`} className="grid grid-cols-12 gap-2 rounded-xl border border-border/40 bg-background/60 p-3">
+                          <div className="col-span-12 md:col-span-5 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Nama Lampiran</Label>
+                            <Input
+                              className="h-9 text-xs"
+                              value={requirement.label}
+                              onChange={(e) => updateUnitRequirement(index, {
+                                label: e.target.value,
+                                key: e.target.value.replace(/\s+/g, "_").toLowerCase(),
+                              })}
+                            />
+                          </div>
+                          <div className="col-span-8 md:col-span-4 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Key</Label>
+                            <Input
+                              className="h-9 font-mono text-xs"
+                              value={requirement.key}
+                              onChange={(e) => updateUnitRequirement(index, { key: e.target.value.replace(/\s+/g, "_").toLowerCase() })}
+                            />
+                          </div>
+                          <label className="col-span-3 md:col-span-2 flex items-end gap-2 pb-2 text-[10px] font-bold uppercase text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={requirement.required}
+                              onChange={(e) => updateUnitRequirement(index, { required: e.target.checked })}
+                            />
+                            Wajib
+                          </label>
+                          <div className="col-span-1 flex items-end justify-end">
+                            <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => removeUnitRequirement(index)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/20 p-5">

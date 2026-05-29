@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { documentPreviewService } from '@/services/document-preview.service';
+import { appStorageService } from '@/services/storage.service';
 import { toast } from 'react-hot-toast';
 
 type InvolvementKey = 'MEMBUAT' | 'MEMERIKSA' | 'MENYETUJUI' | 'PIC';
@@ -163,7 +164,7 @@ function resolveStorageUrl(path: string | null | undefined, preferredBucket?: st
   );
 
   const normalized = p.startsWith(`${bucket}/`) ? p.slice(bucket.length + 1) : p;
-  return supabase.storage.from(bucket).getPublicUrl(normalized).data.publicUrl;
+  return appStorageService.getLegacyPublicUrl(bucket, normalized);
 }
 
 const SELECT_SURAT = `

@@ -1,7 +1,7 @@
-import { supabase } from '@/lib/supabase';
 import { SuratItem } from './Types';
 import { CheckCircle2, Clock, XCircle, FileText } from 'lucide-react';
 import React from 'react';
+import { appStorageService } from '@/services/storage.service';
 
 // ── Storage URL resolver ──────────────────────────────────────────────────
 export const getFileUrl = (path: string | null | undefined): string | null => {
@@ -12,7 +12,7 @@ export const getFileUrl = (path: string | null | undefined): string | null => {
     path.startsWith('payment_files/') ? 'payment_files' :
     path.startsWith('chat_attachments/') ? 'chat_attachments' :
     'dokumen_surat';
-  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  return appStorageService.getLegacyPublicUrl(bucket, path);
 };
 
 // ── Status badge ──────────────────────────────────────────────────────────
@@ -45,7 +45,6 @@ export const StatusIcon = ({ surat }: { surat: SuratItem }) => {
 // ── Upload file helper ────────────────────────────────────────────────────
 export const uploadFile = async (file: File, bucket: string, prefix: string, suratId: string): Promise<string> => {
   const path = `${prefix}/${suratId}-${Date.now()}.${file.name.split('.').pop()}`;
-  const { error } = await supabase.storage.from(bucket).upload(path, file);
-  if (error) throw error;
-  return path;
+  const uploaded = await appStorageService.upload({ bucket, path, file });
+  return uploaded.publicUrl;
 };

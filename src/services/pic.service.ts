@@ -322,7 +322,9 @@ export const picService = {
    * Signature: (suratId, storagePath) — kompatibel dengan PICReviewDetail.
    */
   async uploadSPK(suratId: string, filePath: string): Promise<void> {
-    const { data: { publicUrl } } = supabase.storage.from("spk_files").getPublicUrl(filePath);
+    const publicUrl = /^https?:\/\//i.test(filePath)
+      ? filePath
+      : supabase.storage.from("spk_files").getPublicUrl(filePath).data.publicUrl;
     const { error } = await supabase
       .from("surat_registrasi")
       .update({ pic_attachment: publicUrl, updated_at: new Date().toISOString() })

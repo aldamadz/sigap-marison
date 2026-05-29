@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { picService, ChatMessage } from '@/services/pic.service';
 import { documentPreviewService } from '@/services/document-preview.service';
+import { appStorageService } from '@/services/storage.service';
 import {
   Send, Paperclip, X, Lock, LockOpen, MessageSquare,
   FileText, FileCheck, ExternalLink, Loader2,
@@ -312,10 +313,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
     try {
       const fileName = `spk-${suratData.id}-${Date.now()}.${file.name.split('.').pop()}`;
       const filePath = `spk_files/${fileName}`;
-      const { error } = await supabase.storage.from('spk_files').upload(filePath, file);
-      if (error) throw error;
-      await picService.uploadSPK(suratData.id, filePath);
-      setSuratData(prev => ({ ...prev, pic_attachment: filePath }));
+      const uploaded = await appStorageService.upload({ bucket: 'spk_files', path: filePath, file });
+      await picService.uploadSPK(suratData.id, uploaded.publicUrl);
+      setSuratData(prev => ({ ...prev, pic_attachment: uploaded.publicUrl }));
       queryClient.invalidateQueries({ queryKey: ['pic-chat-list'] });
       toast.success('SPK berhasil diunggah', { id: toastId });
     } catch (err: any) {
@@ -334,8 +334,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
       let fileUrl: string | null = null;
       if (attachment) {
         const path = `chat_attachments/${Date.now()}-${attachment.name}`;
-        await supabase.storage.from('chat_attachments').upload(path, attachment);
-        fileUrl = supabase.storage.from('chat_attachments').getPublicUrl(path).data.publicUrl;
+        const uploaded = await appStorageService.upload({ bucket: 'chat_attachments', path, file: attachment });
+        fileUrl = uploaded.publicUrl;
       }
       await picService.sendMessage(suratData.id, newMessage, fileUrl, 'pic');
       setNewMessage('');
@@ -356,10 +356,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
         if (file) {
           const fileName = `spk-${suratData.id}-${Date.now()}.${file.name.split('.').pop()}`;
           const filePath = `spk_files/${fileName}`;
-          const { error } = await supabase.storage.from('spk_files').upload(filePath, file);
-          if (error) throw error;
-          await picService.uploadSPK(suratData.id, filePath);
-          setSuratData(prev => ({ ...prev, pic_attachment: filePath }));
+          const uploaded = await appStorageService.upload({ bucket: 'spk_files', path: filePath, file });
+          await picService.uploadSPK(suratData.id, uploaded.publicUrl);
+          setSuratData(prev => ({ ...prev, pic_attachment: uploaded.publicUrl }));
         }
         if (!suratData.pic_attachment && !file) {
           toast.error('File SPK belum diunggah!');
@@ -383,9 +382,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
         let filePath: string | null = null;
         if (file) {
           const fileName = `payment-${suratData.id}-${Date.now()}.${file.name.split('.').pop()}`;
-          const { error: uploadErr } = await supabase.storage.from('payment_files').upload(fileName, file);
-          if (uploadErr) throw uploadErr;
-          filePath = fileName;
+          const uploaded = await appStorageService.upload({ bucket: 'payment_files', path: fileName, file });
+          filePath = uploaded.publicUrl;
         }
         const { error } = await supabase.rpc('finance_take_action', {
           p_review_id: reviewId,

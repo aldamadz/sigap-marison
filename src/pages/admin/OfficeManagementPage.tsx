@@ -31,7 +31,8 @@ export default function OfficeManagementPage() {
   const [formData, setFormData] = useState({
     name: "",
     code: "",
-    kedudukan: "KC" // KC atau KCP
+    kedudukan: "KC", // KC atau KCP
+    email: "",
   });
 
   const loadData = async () => {
@@ -65,11 +66,12 @@ export default function OfficeManagementPage() {
       setFormData({ 
         name: office.name, 
         code: office.code, 
-        kedudukan: office.kedudukan || "KC" 
+        kedudukan: office.kedudukan || "KC",
+        email: office.email || "",
       });
     } else {
       setSelectedOffice(null);
-      setFormData({ name: "", code: "", kedudukan: "KC" });
+      setFormData({ name: "", code: "", kedudukan: "KC", email: "" });
     }
     setIsModalOpen(true);
   };
@@ -85,7 +87,8 @@ export default function OfficeManagementPage() {
       const payload = {
         name: formData.name,
         code: formData.code.toUpperCase(),
-        kedudukan: formData.kedudukan
+        kedudukan: formData.kedudukan,
+        email: formData.email.trim() || null,
       };
 
       if (selectedOffice) {
@@ -166,6 +169,7 @@ export default function OfficeManagementPage() {
             <TableRow>
               <TableHead className="w-[120px] font-bold">KODE</TableHead>
               <TableHead className="font-bold">NAMA KANTOR / CABANG</TableHead>
+              <TableHead className="font-bold">EMAIL</TableHead>
               <TableHead className="w-[120px] font-bold">KEDUDUKAN</TableHead>
               <TableHead className="text-right font-bold">AKSI</TableHead>
             </TableRow>
@@ -173,13 +177,13 @@ export default function OfficeManagementPage() {
           <TableBody>
             {loading && offices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-20">
+                <TableCell colSpan={5} className="text-center py-20">
                   <Loader2 className="animate-spin mx-auto w-8 h-8 text-primary"/>
                 </TableCell>
               </TableRow>
             ) : filteredOffices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-20 text-muted-foreground">
+                <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
                   Tidak ada data kantor ditemukan.
                 </TableCell>
               </TableRow>
@@ -192,6 +196,7 @@ export default function OfficeManagementPage() {
                     </code>
                   </TableCell>
                   <TableCell className="font-medium">{office.name}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{office.email || "-"}</TableCell>
                   <TableCell>
                     <BadgeKedudukan status={office.kedudukan} />
                   </TableCell>
@@ -249,6 +254,15 @@ export default function OfficeManagementPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Email Kantor/Cabang</Label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                placeholder="cabang@marison.id"
+              />
             </div>
           </div>
           <DialogFooter>

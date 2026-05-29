@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { picService, ChatMessage } from '@/services/pic.service';
 import { documentPreviewService } from '@/services/document-preview.service';
 import { supabase } from '@/lib/supabase';
+import { appStorageService } from '@/services/storage.service';
 import {
   Send, ShieldCheck, CreditCard, XCircle, Loader2,
   Paperclip, X, ExternalLink, UploadCloud,
@@ -264,10 +265,9 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
     try {
       const fileName = `spk-${suratData.id}-${Date.now()}.${file.name.split('.').pop()}`;
       const filePath = `spk_files/${fileName}`;
-      const { error: upErr } = await supabase.storage.from('spk_files').upload(filePath, file);
-      if (upErr) throw upErr;
-      await picService.uploadSPK(suratData.id, filePath);
-      setSuratData((prev: any) => ({ ...prev, pic_attachment: filePath }));
+      const uploaded = await appStorageService.upload({ bucket: 'spk_files', path: filePath, file });
+      await picService.uploadSPK(suratData.id, uploaded.publicUrl);
+      setSuratData((prev: any) => ({ ...prev, pic_attachment: uploaded.publicUrl }));
       toast.success("SPK berhasil diunggah", { id: toastId });
       queryClient.invalidateQueries({ queryKey: ['review-queue'] });
     } catch (err: any) {
@@ -287,8 +287,8 @@ export const PICReviewDetail: React.FC<Props> = ({ surat: initialSurat, onAction
       let fileUrl: string | null = null;
       if (attachment) {
         const filePath = `chat_attachments/${Date.now()}-${attachment.name}`;
-        await supabase.storage.from('chat_attachments').upload(filePath, attachment);
-        fileUrl = supabase.storage.from('chat_attachments').getPublicUrl(filePath).data.publicUrl;
+        const uploaded = await appStorageService.upload({ bucket: 'chat_attachments', path: filePath, file: attachment });
+        fileUrl = uploaded.publicUrl;
       }
       await picService.sendMessage(suratData.id, newMessage, fileUrl, 'pic');
       setNewMessage('');

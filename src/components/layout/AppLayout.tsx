@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu } from 'lucide-react'
@@ -72,15 +73,18 @@ export function AppLayout() {
       </Sheet>
 
       <main className="flex flex-1 flex-col min-w-0 relative h-screen overflow-hidden">
-        <Header 
-          title={title} 
-          subtitle={subtitle} 
+        <Header
           onMenuClick={() => setMobileMenuOpen(true)}
           showMenuButton={isMobile}
         />
         
         {/* Kontainer Scrollable */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6 safe-area-bottom">
+          {/* Breadcrumbs - Tampilkan di semua ukuran layar */}
+          <div className="mb-4">
+            <Breadcrumbs showHome={true} />
+          </div>
+
           {/* Mobile Breadcrumb/Title when sidebar collapsed */}
           {isMobile && title && (
             <div className="mb-4 lg:hidden">

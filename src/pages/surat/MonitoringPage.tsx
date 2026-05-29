@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/lib/supabase";
-import { 
+import {
   Search, Loader2, MessageSquare, Info, Eye,
   Clock, AlertCircle, CheckCircle2, User, ArrowUpRight,
   FileCheck, Banknote, XCircle, FileClock, Inbox
@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { documentPreviewService } from "@/services/document-preview.service";
 import { toast } from "sonner";
+import { EmptyState, EmptyList, ErrorState, EmptyGridSkeleton } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/Breadcrumbs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -55,7 +57,7 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
       barColor: 'bg-red-500',
       badgeClass: 'bg-red-500/10 text-red-400 border-red-500/20',
       accentClass: 'bg-red-500',
-      icon: <XCircle size={11} />,
+      icon: <XCircle size={14} />,
     };
   }
 
@@ -67,7 +69,7 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
       barColor: 'bg-emerald-500',
       badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
       accentClass: 'bg-emerald-500',
-      icon: <CheckCircle2 size={11} />,
+      icon: <CheckCircle2 size={14} />,
     };
   }
 
@@ -79,7 +81,7 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
       barColor: 'bg-blue-500',
       badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
       accentClass: 'bg-blue-500',
-      icon: <Banknote size={11} />,
+      icon: <Banknote size={14} />,
     };
   }
 
@@ -91,7 +93,7 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
       barColor: 'bg-amber-500',
       badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
       accentClass: 'bg-amber-400',
-      icon: <FileClock size={11} />,
+      icon: <FileClock size={14} />,
     };
   }
 
@@ -103,7 +105,7 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
     barColor: 'bg-amber-400',
     badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     accentClass: 'bg-amber-400',
-    icon: <Clock size={11} />,
+    icon: <Clock size={14} />,
   };
 };
 
@@ -323,17 +325,20 @@ const MonitoringPage = () => {
         </div>
       </div>
 
-      {/* GRID */}
+      {/* Loading State */}
       {isLoading ? (
         <div className="h-64 flex flex-col items-center justify-center space-y-4">
           <Loader2 className="animate-spin text-primary" size={32} />
-          <span className="text-muted-foreground font-bold text-[9px] tracking-[0.3em] uppercase">Mensinkronkan Dokumen...</span>
+          <span className="text-sm text-muted-foreground">Mensinkronkan Dokumen...</span>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="h-64 flex flex-col items-center justify-center space-y-3 opacity-30">
-          <Inbox size={40} strokeWidth={1} />
-          <p className="text-[10px] font-black uppercase tracking-widest">Tidak Ada Dokumen</p>
-        </div>
+        <EmptyState
+          variant="no-results"
+          title="Tidak Ada Dokumen"
+          description={search ? `Tidak ditemukan dokumen dengan kata kunci "${search}"` : "Belum ada dokumen pengajuan surat."}
+          action={search ? { label: 'Reset Pencarian', onClick: () => setSearch('') } : undefined}
+          icon={<Inbox size={40} strokeWidth={1} />}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
           {filtered.map((surat) => {
@@ -351,7 +356,7 @@ const MonitoringPage = () => {
 
                 <div className="flex justify-between items-center mb-6">
                   <span className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border",
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium",
                     docStatus.badgeClass
                   )}>
                     {docStatus.icon}
@@ -362,10 +367,10 @@ const MonitoringPage = () => {
                       <div className="relative">
                         <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-ping" />
                         <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
-                        <MessageSquare size={14} className="text-primary" />
+                        <MessageSquare size={16} className="text-primary" />
                       </div>
                     )}
-                    <span className="text-[10px] font-bold text-muted-foreground tracking-tighter uppercase">
+                    <span className="text-xs text-muted-foreground">
                       {new Date(surat.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
                     </span>
                   </div>
@@ -373,20 +378,20 @@ const MonitoringPage = () => {
 
                 <div className="flex-1 space-y-6">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-bold text-foreground leading-tight line-clamp-2 uppercase group-hover:text-primary transition-colors">
+                    <h3 className="text-sm font-semibold text-foreground leading-tight line-clamp-2">
                       {surat.judul_surat}
                     </h3>
-                    <p className="text-[10px] font-mono text-muted-foreground tracking-tighter bg-muted w-fit px-2 py-0.5 rounded uppercase">
+                    <p className="text-xs text-muted-foreground font-mono bg-muted w-fit px-2 py-0.5 rounded">
                       {surat.no_surat || 'NO-REF-PENDING'}
                     </p>
                   </div>
 
                   <div className="space-y-3 pt-2">
                     <div className="flex justify-between items-end">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Pipeline Progress</span>
-                      <span className="text-xs font-black tabular-nums text-primary">{Math.round(progress)}%</span>
+                      <span className="text-xs text-muted-foreground">Pipeline Progress</span>
+                      <span className="text-sm font-semibold text-primary">{Math.round(progress)}%</span>
                     </div>
-                    <div className="flex gap-1.5 h-1.5 w-full">
+                    <div className="flex gap-1.5 h-2 w-full rounded-full overflow-hidden">
                       {sigs.map((s: any, i: number) => {
                         const isCurrentWaiting = !s.is_signed && s.step_order === surat.current_step && docStatus.type === 'PROSES';
                         return (
@@ -396,7 +401,7 @@ const MonitoringPage = () => {
                               "flex-1 rounded-full transition-all duration-500",
                               s.status === 'REJECTED' ? "bg-red-500" :
                               s.is_signed ? "bg-emerald-500" :
-                              isCurrentWaiting ? "bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]" :
+                              isCurrentWaiting ? "bg-amber-400 animate-pulse" :
                               "bg-muted"
                             )}
                           />
@@ -408,16 +413,16 @@ const MonitoringPage = () => {
 
                 <div className="mt-8 pt-4 border-t border-border/40 space-y-3">
                   <div className="flex items-center gap-2 overflow-hidden flex-1">
-                    <Info size={12} className="text-muted-foreground shrink-0" />
-                    <span className="text-[9px] font-black uppercase text-foreground/70 tracking-tight truncate">
+                    <Info size={14} className="text-muted-foreground shrink-0" />
+                    <span className="text-sm text-foreground/70 truncate">
                       {docStatus.sublabel}
                     </span>
                   </div>
 
                   {picName && (
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <User size={12} className="text-muted-foreground shrink-0" />
-                      <span className="text-[9px] font-bold uppercase text-foreground/40 tracking-tight truncate">
+                      <User size={14} className="text-muted-foreground shrink-0" />
+                      <span className="text-sm text-foreground/40 truncate">
                         Ditangani: {picName}{surat._pic_dept ? ` · ${surat._pic_dept}` : ''}
                       </span>
                     </div>
@@ -430,18 +435,18 @@ const MonitoringPage = () => {
                         setIsChatOpen(true);
                         markAsRead(surat.id);
                       }}
-                      className="h-10 flex items-center justify-center gap-2 rounded-xl bg-muted text-foreground hover:bg-muted/80 transition-all border border-border"
+                      className="h-11 flex items-center justify-center gap-2 rounded-xl bg-muted hover:bg-muted/80 transition-all border border-border text-sm font-medium"
                     >
-                      <MessageSquare size={14} />
-                      <span className="text-[9px] font-black uppercase tracking-widest">Detail</span>
+                      <MessageSquare size={16} />
+                      <span>Detail</span>
                     </button>
                     <button
                       onClick={() => handleOpenPreview(surat.id, surat.file_path)}
                       disabled={previewingId === surat.id}
-                      className="h-10 flex items-center justify-center gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-sm group/btn"
+                      className="h-11 flex items-center justify-center gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-sm"
                     >
-                      {previewingId === surat.id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} className="group-hover/btn:scale-110 transition-transform" />}
-                      <span className="text-[9px] font-black uppercase tracking-widest">Preview</span>
+                      {previewingId === surat.id ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                      <span>Preview</span>
                     </button>
                   </div>
                 </div>

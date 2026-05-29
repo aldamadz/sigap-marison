@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { picService, ChatMessage } from '@/services/pic.service';
 import { documentPreviewService } from '@/services/document-preview.service';
+import { appStorageService } from '@/services/storage.service';
 import {
   Send, Paperclip, X, MessageSquare, ArrowLeft,
   FileText, FileCheck, ExternalLink, Loader2,
@@ -339,8 +340,8 @@ const UserChatPage: React.FC = () => {
       let fileUrl: string | null = null;
       if (attachment) {
         const path = `chat_attachments/${Date.now()}-${attachment.name}`;
-        await supabase.storage.from('chat_attachments').upload(path, attachment);
-        fileUrl = path;
+        const uploaded = await appStorageService.upload({ bucket: 'chat_attachments', path, file: attachment });
+        fileUrl = uploaded.publicUrl;
       }
       await picService.sendMessage(selected.id, newMessage, fileUrl, 'creator');
       setNewMessage('');

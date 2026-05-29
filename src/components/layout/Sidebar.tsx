@@ -377,15 +377,15 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               : isSubItem
                 ? "pl-10 pr-4"
                 : "px-4",
-            isActive 
-              ? "bg-primary/10 text-primary shadow-sm" 
+            isActive
+              ? "bg-primary/10 text-primary border-l-2 border-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
           whileHover={{ x: (isMobile || isDesktopCollapsed) ? 0 : 4 }}
           whileTap={{ scale: 0.98 }}
         >
           <div className="relative shrink-0">
-            <Icon className={cn(isSubItem ? "w-4 h-4" : "w-5 h-5", isActive ? "text-primary" : "text-muted-foreground")} />
+            <Icon className={cn(isSubItem ? "w-4 h-4" : "w-5 h-5", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
             {!isMobile && collapsed && label === 'Persetujuan' && inboxCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -401,29 +401,29 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           </div>
           {(isMobile || !collapsed) && (
             <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
-              <span className={cn("font-medium truncate", isSubItem ? "text-sm" : "text-base")}>{label}</span>
+              <span className={cn("font-medium truncate", isSubItem ? "text-sm" : "text-sm")}>{label}</span>
               {label === 'Persetujuan' && inboxCount > 0 && (
-                <span className="ml-2 bg-red-500 text-white text-xs font-black px-2 py-0.5 rounded shadow-sm shrink-0">
+                <span className="ml-2 bg-red-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
                   {inboxCount > 99 ? '99+' : inboxCount}
                 </span>
               )}
               {label === 'Status Pengajuan' && monitoringBadge > 0 && (
-                <span className="ml-2 bg-amber-500 text-white text-xs font-black px-2 py-0.5 rounded shadow-sm shrink-0 animate-pulse">
+                <span className="ml-2 bg-amber-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
                   {monitoringBadge > 99 ? '99+' : monitoringBadge}
                 </span>
               )}
               {label === 'Diskusi PIC' && diskusiPicBadgeCount > 0 && (
-                <span className="ml-2 bg-primary text-primary-foreground text-xs font-black px-2 py-0.5 rounded shadow-sm shrink-0 animate-pulse">
+                <span className="ml-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
                   {diskusiPicBadgeCount > 99 ? '99+' : diskusiPicBadgeCount}
                 </span>
               )}
               {label === 'Antrean Review PIC' && picQueueCount > 0 && (
-                <span className="ml-2 bg-amber-500 text-white text-xs font-black px-2 py-0.5 rounded shadow-sm shrink-0 animate-pulse">
+                <span className="ml-2 bg-amber-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
                   {picQueueCount > 99 ? '99+' : picQueueCount}
                 </span>
               )}
               {label === 'Antrean Review PIC' && chatBadgeCount > 0 && (
-                <span className="ml-2 bg-primary text-primary-foreground text-xs font-black px-2 py-0.5 rounded shadow-sm shrink-0 animate-pulse">
+                <span className="ml-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
                   {chatBadgeCount > 99 ? '99+' : chatBadgeCount}
                 </span>
               )}
@@ -502,18 +502,18 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         {/* Surat Section */}
         <div className="space-y-1">
           {(isMobile || !collapsed) && (
-            <p className="px-4 text-xs font-black text-muted-foreground/60 uppercase tracking-wider mb-2">
+            <p className="px-4 text-xs font-medium text-muted-foreground/60 mb-2">
               Korespondensi
             </p>
           )}
           <div className="space-y-1">
-            <button 
-              onClick={() => setIsSuratOpen(!isSuratOpen)} 
+            <button
+              onClick={() => setIsSuratOpen(!isSuratOpen)}
               className={cn(
                 "w-full flex items-center py-2.5 rounded-lg transition-colors group relative",
                 isDesktopCollapsed ? "justify-center px-0" : "justify-between px-4",
-                location.pathname.includes('/surat') || location.pathname.includes('/pic') 
-                  ? "text-primary bg-primary/5" 
+                location.pathname.includes('/surat') || location.pathname.includes('/pic')
+                  ? "text-primary bg-primary/5"
                   : "text-muted-foreground hover:bg-accent"
               )}
             >
@@ -527,17 +527,17 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                     </span>
                   )}
                 </div>
-                {(isMobile || !collapsed) && <span className="text-base font-medium truncate">Layanan Surat</span>}
+                {(isMobile || !collapsed) && <span className="text-sm font-medium truncate">Layanan Surat</span>}
               </div>
               {(isMobile || !collapsed) && (
                 <div className="flex items-center gap-2 shrink-0">
                   {creatorChatBadge > 0 && !isSuratOpen && (
-                    <span className="bg-primary text-primary-foreground text-xs font-black px-2 py-0.5 rounded animate-pulse">
+                    <span className="bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full">
                       {creatorChatBadge > 99 ? '99+' : creatorChatBadge}
                     </span>
                   )}
                   {picQueueCount > 0 && !isSuratOpen && (
-                    <span className="bg-amber-500 text-white text-xs font-black px-2 py-0.5 rounded animate-pulse">
+                    <span className="bg-amber-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
                       {picQueueCount > 99 ? '99+' : picQueueCount}
                     </span>
                   )}
@@ -570,13 +570,13 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         {isUserAdmin && (
           <div className="space-y-1">
             {(isMobile || !collapsed) && (
-              <p className="px-4 text-xs font-black text-muted-foreground/60 uppercase tracking-wider mb-2">
+              <p className="px-4 text-xs font-medium text-muted-foreground/60 mb-2">
                 Administration
               </p>
             )}
             <div className="space-y-1">
-              <button 
-                onClick={() => setIsMasterOpen(!isMasterOpen)} 
+              <button
+                onClick={() => setIsMasterOpen(!isMasterOpen)}
                 className={cn(
                   "w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-colors group",
                   isMasterOpen ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent"
@@ -584,7 +584,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Database className="w-5 h-5 shrink-0" />
-                  {(isMobile || !collapsed) && <span className="text-base font-medium truncate">Master Data</span>}
+                  {(isMobile || !collapsed) && <span className="text-sm font-medium truncate">Master Data</span>}
                 </div>
                 {(isMobile || !collapsed) && (
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isMasterOpen && "rotate-180")} />

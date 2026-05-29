@@ -43,6 +43,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalOptions, setExternalOptions]     = useState<Record<string, Array<{ value: string; label: string; raw?: any }>>>({});
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
+  const [externalProjects, setExternalProjects]   = useState<Array<{ value: string; label: string; raw?: any }>>([]);
+  const [projectsLoading, setProjectsLoading]     = useState(false);
+  const [projectsError, setProjectsError]         = useState<string | null>(null);
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
     office_id: "", project_id: "", judul_surat: "",
@@ -98,6 +101,53 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isMultiSelectField = (field: any) =>
     field.multiple === true || field.is_multiple === true || field.key === "unit";
 
+  const hasUnitRequestFields = (item: any) => {
+    const keys = new Set(getManualInputFields(item).map((field: any) => field.key));
+    return keys.has("items") && keys.has("unit");
+  };
+
+  const getUnitConfig = (item: any) => suratService.getUnitConfigFromForm(item?.master_forms);
+
+  const canCurrentDepartmentRequestUnit = (item: any) => {
+    if (!hasUnitRequestFields(item)) return false;
+    const config = getUnitConfig(item);
+    if (!config.enabled) return false;
+    if (config.allowed_department_ids.length === 0) return true;
+    return config.allowed_department_ids.includes(formData.dept_id);
+  };
+
+  const shouldRequireInitialAttachment = () => {
+    if (!selectedUsage || !isUnitMode) return true;
+    return getUnitConfig(selectedUsage).initial_attachment_required;
+  };
+
+  const getRequestMode = () =>
+    formData.form_input_data.request_mode === "unit" ? "unit" : "barang";
+
+  const isUnitMode = getRequestMode() === "unit";
+
+  const setRequestMode = (mode: "barang" | "unit") => {
+    if (mode === "unit" && !canCurrentDepartmentRequestUnit(selectedUsage)) {
+      toast({
+        variant: "destructive",
+        title: "Mode Unit Tidak Tersedia",
+        description: "Departemen ini belum diizinkan mengajukan unit pada template ini.",
+      });
+      return;
+    }
+    setFormData(prev => {
+      const nextInput = { ...prev.form_input_data, request_mode: mode };
+      if (mode === "unit") {
+        delete nextInput.items;
+      } else {
+        delete nextInput.requested_project;
+        delete nextInput.requested_unit_count;
+        delete nextInput.unit_request_sentence;
+      }
+      return { ...prev, form_input_data: nextInput };
+    });
+  };
+
   const hasPlaceDateMapping = (item: any) => {
     const mappedSources = new Set(
       getInputSchema(item)
@@ -113,6 +163,22 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       ...prev,
       form_input_data: { ...prev.form_input_data, [key]: value },
     }));
+  };
+
+  const requestExternalOptions = async (sourceKey: string, variables: Record<string, any> = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Tidak terautentikasi");
+    const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ variables }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || "Gagal mengambil data external.");
+    return payload.options || [];
   };
 
   const getTableRows = (key: string) => {
@@ -152,6 +218,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const isManualFieldComplete = (field: any) => {
+    if (hasUnitRequestFields(selectedUsage)) {
+      if (isUnitMode && (field.key === "items" || field.key === "unit")) return true;
+      if (!isUnitMode && field.key === "unit") return true;
+    }
     if (field.type === "table") return isTableFieldComplete(field);
     const value = formData.form_input_data[field.key];
     if (field.type === "external_select" && isMultiSelectField(field)) {
@@ -249,7 +319,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   useEffect(() => {
     supabase.from("master_penggunaan_detail")
-      .select(`*, master_forms!fk_master_forms (id, nama_form, nomor_form, link_form, department_id, input_schema)`)
+      .select(`*, master_forms!fk_master_forms (id, nama_form, nomor_form, link_form, department_id, input_schema, unit_config)`)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) toast({ variant: "destructive", title: "Gagal memuat penggunaan", description: error.message });
@@ -260,6 +330,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   useEffect(() => {
     if (!generatedNoSurat) { setSelectedUsage(null); setFormData(prev => ({ ...prev, penggunaan_id: "" })); setSigners([]); }
   }, [isPusatSelected, generatedNoSurat]);
+
+  useEffect(() => {
+    if (selectedUsage && isUnitMode && !canCurrentDepartmentRequestUnit(selectedUsage)) {
+      setRequestMode("barang");
+    }
+  }, [formData.dept_id, selectedUsage, isUnitMode]);
 
   useEffect(() => {
     const fields = getExternalInputFields(selectedUsage);
@@ -280,21 +356,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setExternalLoading(prev => ({ ...prev, [field.key]: true }));
       setExternalErrors(prev => ({ ...prev, [field.key]: null }));
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Tidak terautentikasi");
-        const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ variables: externalVariables }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload?.error || "Gagal mengambil data external.");
+        const options = await requestExternalOptions(sourceKey, externalVariables);
         if (cancelled) return;
-        setExternalOptions(prev => ({ ...prev, [field.key]: payload.options || [] }));
-        const options = payload.options || [];
+        setExternalOptions(prev => ({ ...prev, [field.key]: options }));
         const currentValue = formData.form_input_data[field.key];
         if (isMultiSelectField(field)) {
           const selected = Array.isArray(currentValue) ? currentValue : [];
@@ -315,6 +379,29 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return () => { cancelled = true; };
   }, [selectedUsage, externalVariables]);
 
+  useEffect(() => {
+    if (!selectedUsage || !hasUnitRequestFields(selectedUsage)) return;
+
+    let cancelled = false;
+    setProjectsLoading(true);
+    setProjectsError(null);
+    requestExternalOptions("marison_projects")
+      .then((options) => {
+        if (!cancelled) setExternalProjects(options);
+      })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setExternalProjects([]);
+          setProjectsError(error.message || "Gagal mengambil daftar proyek.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedUsage]);
+
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
     const proj = master.projects?.find((p: any) => p.id === projectId);
@@ -325,7 +412,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const detail = usageDetails.find(u => u.id === val);
     if (!detail) return;
     setSelectedUsage(detail);
-    setFormData(prev => ({ ...prev, penggunaan_id: val, form_input_data: {} }));
+    setFormData(prev => ({
+      ...prev,
+      penggunaan_id: val,
+      form_input_data: hasUnitRequestFields(detail) ? { request_mode: canCurrentDepartmentRequestUnit(detail) ? "barang" : "barang" } : {},
+    }));
     try {
       const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
       if (Array.isArray(config)) {
@@ -333,7 +424,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         setSigners(config.map((c: any, i: number) => ({
           role_name: normalizeRoleName(c.roleName || c.role_name || c.labelJabatan || c.label_jabatan || c.jabatan, i, total),
           label_jabatan: c.labelJabatan || c.label_jabatan || c.jabatan,
-          user_id: "", step_order: i + 1
+          user_id: "",
+          step_order: i + 1,
+          requires_unit_allocation: c.requires_unit_allocation === true || c.requiresUnitAllocation === true,
         })));
       }
     } catch { toast({ variant: "destructive", title: "Format Alur Salah" }); }
@@ -362,6 +455,41 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     } catch { toast({ variant: "destructive", title: "Gagal membatalkan nomor" }); }
   };
 
+  const handleExternalProjectChange = (value: string) => {
+    const option = externalProjects.find((item) => item.value === value);
+    const project = option?.raw;
+    if (!option || !project?.code) {
+      return toast({
+        variant: "destructive",
+        title: "Project Belum Bisa Dipakai",
+        description: "Project ini belum memiliki code dari API external, sehingga unit belum bisa diambil.",
+      });
+    }
+
+    const count = Number(formData.form_input_data.requested_unit_count || 0);
+    setInputValue("requested_project", {
+      value: option.value,
+      label: option.label,
+      id: project.id,
+      code: project.code,
+      name: project.name,
+      branch: project.branch ?? null,
+      raw: project,
+    });
+    if (count > 0) {
+      setInputValue("unit_request_sentence", `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`);
+    }
+  };
+
+  const handleRequestedUnitCountChange = (rawValue: string) => {
+    const count = Math.max(Number(rawValue || 0), 0);
+    const project = formData.form_input_data.requested_project;
+    setInputValue("requested_unit_count", count || "");
+    if (project?.name && count > 0) {
+      setInputValue("unit_request_sentence", `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       entity_id: "", dept_id: "", letter_type_id: "", office_id: officePusat?.id || "", project_id: "",
@@ -382,7 +510,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       title: "Mapping Tempat/Tanggal Belum Ada",
       description: "Admin harus mapping field Tempat, Tanggal ke cell Excel di Master Template.",
     });
-    if (lampiranFiles.length === 0) return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
+    if (lampiranFiles.length === 0 && shouldRequireInitialAttachment()) {
+      return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
+    }
+    if (hasUnitRequestFields(selectedUsage) && isUnitMode) {
+      if (!canCurrentDepartmentRequestUnit(selectedUsage)) {
+        return toast({ variant: "destructive", title: "Mode Unit Tidak Diizinkan", description: "Departemen ini tidak termasuk konfigurasi pengaju unit." });
+      }
+      const project = formData.form_input_data.requested_project;
+      const count = Number(formData.form_input_data.requested_unit_count || 0);
+      if (!project?.code) return toast({ variant: "destructive", title: "Project Unit Wajib Dipilih", description: "Pilih project yang memiliki code dari API external." });
+      if (!Number.isFinite(count) || count < 1) return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
+    }
     const missingField = getManualInputFields(selectedUsage).find((field: any) => !isManualFieldComplete(field));
     if (missingField) return toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
     if (signers.some(s => !s.user_id)) return toast({ variant: "destructive", title: "Pejabat Belum Lengkap" });
@@ -631,6 +770,92 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     </div>
   );
 
+  const getVisibleManualFields = () =>
+    getManualInputFields(selectedUsage).filter((field: any) => {
+      if (!hasUnitRequestFields(selectedUsage)) return true;
+      if (isUnitMode) return field.key !== "items" && field.key !== "unit";
+      return field.key !== "unit";
+    });
+
+  const renderUnitRequestPanel = () => {
+    if (!selectedUsage || !hasUnitRequestFields(selectedUsage) || !isUnitMode) return null;
+    const selectedProject = formData.form_input_data.requested_project;
+    const selectedValue = selectedProject?.value ? String(selectedProject.value) : "";
+
+    return (
+      <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5 md:p-6">
+        <div className="flex flex-col gap-1">
+          <p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Pengajuan Unit</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Marketing hanya mengajukan jumlah unit. Perencanaan akan memilih unit spesifik saat approval.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-[11px] font-black uppercase text-muted-foreground">Project External</Label>
+            <Select value={selectedValue} onValueChange={handleExternalProjectChange} disabled={projectsLoading}>
+              <SelectTrigger className="h-12 bg-background/70 text-sm">
+                <SelectValue placeholder={projectsLoading ? "Memuat project..." : "Pilih project"} />
+              </SelectTrigger>
+              <SelectContent>
+                {externalProjects.map((project) => {
+                  const raw = project.raw || {};
+                  const disabled = !raw.code;
+                  return (
+                    <SelectItem key={`project-${project.value}`} value={project.value} disabled={disabled}>
+                      {project.label} {raw.branch?.name ? `- ${raw.branch.name}` : ""}{disabled ? " (code belum tersedia)" : ""}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            {projectsError && <p className="text-[10px] font-semibold text-amber-600">{projectsError}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[11px] font-black uppercase text-muted-foreground">Jumlah Unit Diajukan</Label>
+            <Input
+              type="number"
+              min={1}
+              value={formData.form_input_data.requested_unit_count ?? ""}
+              onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
+              className="h-12 bg-background/70 text-sm"
+              placeholder="Contoh: 10"
+            />
+          </div>
+        </div>
+        {formData.form_input_data.unit_request_sentence && (
+          <div className="rounded-2xl border border-blue-500/20 bg-background/70 p-3 text-xs font-semibold text-blue-700">
+            {formData.form_input_data.unit_request_sentence}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderRequestModeSelector = () => {
+    if (!selectedUsage || !hasUnitRequestFields(selectedUsage) || !canCurrentDepartmentRequestUnit(selectedUsage)) return null;
+    return (
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border/60 bg-background/60 p-1">
+        {[
+          { value: "barang", label: "Barang" },
+          { value: "unit", label: "Unit" },
+        ].map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setRequestMode(option.value as "barang" | "unit")}
+            className={cn(
+              "h-11 rounded-xl text-[11px] font-black uppercase transition-all",
+              getRequestMode() === option.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const renderAttachmentUploader = () => (
     <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
       <div className={cn(
@@ -648,7 +873,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           <Paperclip className="w-6 h-6" />
         </div>
         <div className="text-left flex-1 min-w-0">
-          <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Lampiran Wajib</p>
+          <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+            {shouldRequireInitialAttachment() ? "Lampiran Wajib" : "Lampiran Opsional"}
+          </p>
           <p className="mt-1 text-sm font-bold truncate">
             {lampiranFiles.length > 0 ? `${lampiranFiles.length} file dipilih` : "Klik untuk unggah PDF/Gambar, bisa lebih dari satu"}
           </p>
@@ -1019,7 +1246,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
               </div>
 
-              {selectedUsage && getManualInputFields(selectedUsage).length > 0 && (
+              {selectedUsage && (getVisibleManualFields().length > 0 || hasUnitRequestFields(selectedUsage)) && (
                 <div className="space-y-5 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
                   <div className="flex flex-col gap-1">
                     <p className="text-[11px] font-black uppercase tracking-widest text-primary">Input Detail Template</p>
@@ -1027,9 +1254,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       Isi data dokumen di sini. Data ini akan masuk ke template Excel dan PDF otomatis.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    {getManualInputFields(selectedUsage).map((field: any) => renderManualField(field))}
-                  </div>
+                  {renderRequestModeSelector()}
+                  {renderUnitRequestPanel()}
+                  {getVisibleManualFields().length > 0 && (
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      {getVisibleManualFields().map((field: any) => renderManualField(field))}
+                    </div>
+                  )}
                 </div>
               )}
 

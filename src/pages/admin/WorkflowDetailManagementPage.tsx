@@ -39,6 +39,7 @@ interface TTDConfig {
   nama: string;         
   jabatan: string;      
   sheet: number;
+  requires_unit_allocation?: boolean;
 }
 
 type RoleName = "membuat" | "memeriksa" | "menyetujui";
@@ -89,6 +90,7 @@ const normalizeTTDConfig = (ttdConfig: any): MatrixConfigItem[] => {
       nama: item.nama || "",
       jabatan: item.jabatan || "",
       sheet: Number(item.sheet || 1),
+      requires_unit_allocation: item.requires_unit_allocation === true || item.requiresUnitAllocation === true,
     }));
   }
   if (typeof ttdConfig === "string") {
@@ -116,7 +118,7 @@ const SortableMatrixCard = ({
   onRemove,
 }: {
   item: MatrixConfigItem;
-  onChange: <K extends keyof Pick<MatrixConfigItem, "ttd" | "nama" | "jabatan" | "sheet">>(
+  onChange: <K extends keyof Pick<MatrixConfigItem, "ttd" | "nama" | "jabatan" | "sheet" | "requires_unit_allocation">>(
     id: string,
     field: K,
     value: MatrixConfigItem[K]
@@ -193,6 +195,14 @@ const SortableMatrixCard = ({
           onChange={(e) => onChange(item.id, "sheet", Number.parseInt(e.target.value) || 1)}
         />
       </div>
+      <label className="col-span-11 col-start-2 flex items-center gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-[10px] font-bold uppercase text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={item.requires_unit_allocation === true}
+          onChange={(e) => onChange(item.id, "requires_unit_allocation", e.target.checked)}
+        />
+        Wajib alokasi unit sebelum setuju
+      </label>
       <div className="col-span-1 text-right">
         <Button
           variant="ghost"
@@ -391,7 +401,7 @@ export default function WorkflowDetailManagementPage() {
     return "menyetujui";
   };
 
-  const updateConfigField = <K extends keyof Pick<MatrixConfigItem, "ttd" | "nama" | "jabatan" | "sheet">>(
+  const updateConfigField = <K extends keyof Pick<MatrixConfigItem, "ttd" | "nama" | "jabatan" | "sheet" | "requires_unit_allocation">>(
     id: string,
     field: K,
     value: MatrixConfigItem[K]

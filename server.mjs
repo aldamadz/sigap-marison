@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 const port = Number(process.env.PORT || 80);
 const distDir = resolve(process.env.DIST_DIR || "dist");
@@ -13,6 +14,29 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && serviceRoleKey
   ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
   : null;
+
+const storageMode = process.env.STORAGE_MODE || "primary_supabase";
+const storageSupabaseUrl = process.env.STORAGE_SUPABASE_URL;
+const storageServiceRoleKey = process.env.STORAGE_SUPABASE_SERVICE_ROLE_KEY || process.env.STORAGE_SERVICE_ROLE_KEY;
+const storagePublicBaseUrl = String(
+  process.env.STORAGE_PUBLIC_BASE_URL ||
+  (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
+).replace(/\/+$/, "");
+
+const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
+  ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
+  : null;
+
+const smtpConfig = {
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 465),
+  secure: String(process.env.SMTP_SECURE ?? "true").toLowerCase() === "true",
+  user: process.env.SMTP_USER,
+  pass: process.env.SMTP_PASS,
+  from: process.env.SMTP_FROM || process.env.SMTP_USER,
+};
+
+let mailTransporter = null;
 
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const EXTERNAL_API_MAX_SKEW_MS = Number(process.env.EXTERNAL_API_MAX_SKEW_MS || 5 * 60 * 1000);
@@ -51,6 +75,44 @@ const contentTypes = {
 const sendJson = (res, status, body) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
+};
+
+const getMailTransporter = () => {
+  if (!smtpConfig.host || !smtpConfig.user || !smtpConfig.pass || !smtpConfig.from) {
+    const error = new Error("SMTP belum dikonfigurasi lengkap.");
+    error.status = 503;
+    throw error;
+  }
+  if (!mailTransporter) {
+    mailTransporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+      },
+    });
+  }
+  return mailTransporter;
+};
+
+const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
+const uniqueEmails = (values) => [...new Set(values.map((value) => String(value || "").trim().toLowerCase()).filter(isEmail))];
+
+const useExternalStorage = () => storageMode === "self_hosted_supabase" && !!storageSupabase;
+const uploadStorageClient = () => useExternalStorage() ? storageSupabase : supabase;
+
+const storageOriginBase = (origin) => {
+  if (origin === "external" && storagePublicBaseUrl) return storagePublicBaseUrl;
+  if (supabaseUrl) return `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public`;
+  return "";
+};
+
+const makeStoragePublicUrl = (bucket, path, origin = useExternalStorage() ? "external" : "primary") => {
+  const base = storageOriginBase(origin);
+  return base ? `${base}/${bucket}/${path}` : `${bucket}/${path}`;
 };
 
 const readRequestBody = (req, maxBytes = 1024 * 1024) => new Promise((resolve, reject) => {
@@ -129,6 +191,123 @@ const requireSupabaseUser = async (token) => {
     throw err;
   }
   return userRes.user;
+};
+
+const sendInternalEmailNotification = async (token, payload) => {
+  const actor = await requireSupabaseUser(token);
+  const userIds = Array.isArray(payload?.user_ids) ? payload.user_ids.filter(Boolean) : [];
+  if (userIds.length === 0) return { sent: 0, recipients: [] };
+
+  const { data: profiles, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, department_id, office_id")
+    .in("id", userIds);
+  if (profileError) throw profileError;
+
+  const departmentIds = [...new Set((profiles || []).map((profile) => profile.department_id).filter(Boolean))];
+  const officeIds = [...new Set((profiles || []).map((profile) => profile.office_id).filter(Boolean))];
+
+  const [{ data: departments }, { data: offices }] = await Promise.all([
+    departmentIds.length
+      ? supabase.from("master_departments").select("id, email").in("id", departmentIds)
+      : Promise.resolve({ data: [] }),
+    officeIds.length
+      ? supabase.from("master_offices").select("id, email").in("id", officeIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const recipients = uniqueEmails([
+    ...(profiles || []).map((profile) => profile.email),
+    ...(departments || []).map((department) => department.email),
+    ...(offices || []).map((office) => office.email),
+  ]);
+
+  if (recipients.length === 0) return { sent: 0, recipients: [] };
+
+  const title = String(payload?.title || "Notifikasi SIGAP").slice(0, 160);
+  const message = String(payload?.message || "").slice(0, 4000);
+  const link = typeof payload?.link === "string" ? payload.link : "";
+  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
+  const fullLink = link && appUrl && link.startsWith("/") ? `${appUrl}${link}` : link;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
+      <h2 style="font-size:18px;margin:0 0 12px">${title}</h2>
+      <p style="font-size:14px;margin:0 0 16px">${message.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[char]))}</p>
+      ${fullLink ? `<p><a href="${fullLink}" style="display:inline-block;background:#111827;color:white;padding:10px 14px;border-radius:6px;text-decoration:none;font-size:13px">Buka SIGAP</a></p>` : ""}
+      <p style="margin-top:24px;font-size:11px;color:#6b7280">Email otomatis dari SIGAP. Dikirim oleh ${actor.email || actor.id}.</p>
+    </div>
+  `;
+
+  const transporter = getMailTransporter();
+  await transporter.sendMail({
+    from: smtpConfig.from,
+    to: recipients,
+    subject: title,
+    text: `${message}${fullLink ? `\n\n${fullLink}` : ""}`,
+    html,
+  });
+
+  return { sent: recipients.length, recipients };
+};
+
+const parseUploadForm = async (req) => {
+  const request = new Request(`http://localhost${req.url}`, {
+    method: req.method,
+    headers: req.headers,
+    body: req,
+    duplex: "half",
+  });
+  return request.formData();
+};
+
+const sanitizeStoragePath = (value) => String(value || "")
+  .replace(/\\/g, "/")
+  .split("/")
+  .filter(Boolean)
+  .map((part) => part.replace(/[^\w.-]+/g, "_"))
+  .join("/");
+
+const uploadInternalStorageFile = async (token, req) => {
+  await requireSupabaseUser(token);
+  if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
+
+  const form = await parseUploadForm(req);
+  const bucket = String(form.get("bucket") || "").trim();
+  const requestedPath = sanitizeStoragePath(form.get("path"));
+  const file = form.get("file");
+  const upsert = String(form.get("upsert") || "false").toLowerCase() === "true";
+
+  if (!bucket || !/^[a-zA-Z0-9_-]+$/.test(bucket)) {
+    const err = new Error("Bucket storage tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  if (!requestedPath) {
+    const err = new Error("Path storage tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  if (!file || typeof file.arrayBuffer !== "function") {
+    const err = new Error("File wajib dikirim.");
+    err.status = 400;
+    throw err;
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const origin = useExternalStorage() ? "external" : "primary";
+  const { error } = await uploadStorageClient().storage.from(bucket).upload(requestedPath, buffer, {
+    contentType: file.type || "application/octet-stream",
+    upsert,
+  });
+  if (error) throw error;
+
+  return {
+    bucket,
+    path: requestedPath,
+    origin,
+    publicUrl: makeStoragePublicUrl(bucket, requestedPath, origin),
+  };
 };
 
 const fillEndpointTemplate = (template, variables = {}) => {
@@ -219,6 +398,11 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
   const baseUrl = String(source.base_url || "").replace(/\/+$/, "");
   const endpointPath = fillEndpointTemplate(source.endpoint_template, variables);
   const url = new URL(`${baseUrl}${endpointPath}`);
+  Object.entries(variables?.query || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  });
 
   const headers = {};
   if (source.auth_type === "marison_token_hmac_sha512") {
@@ -298,24 +482,30 @@ const parseStorageRef = (raw) => {
     if (markerIndex >= 0) {
       const rest = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
       const slash = rest.indexOf("/");
-      if (slash > 0) return { bucket: rest.slice(0, slash), path: rest.slice(slash + 1) };
+      const origin = storagePublicBaseUrl && value.startsWith(storagePublicBaseUrl) ? "external" : "primary";
+      if (slash > 0) return { bucket: rest.slice(0, slash), path: rest.slice(slash + 1), origin };
     }
   } catch {}
 
   for (const bucket of knownBuckets) {
     if (value.startsWith(`${bucket}/`)) {
-      return { bucket, path: value.slice(bucket.length + 1) };
+      return { bucket, path: value.slice(bucket.length + 1), origin: "primary" };
     }
   }
 
-  if (value.startsWith("lampiran_")) return { bucket: "lampiran_surat", path: value };
-  if (value.startsWith("payment-")) return { bucket: "payment_files", path: value };
-  if (value.startsWith("spk-")) return { bucket: "spk_files", path: value };
+  if (value.startsWith("lampiran_")) return { bucket: "lampiran_surat", path: value, origin: "primary" };
+  if (value.startsWith("payment-")) return { bucket: "payment_files", path: value, origin: "primary" };
+  if (value.startsWith("spk-")) return { bucket: "spk_files", path: value, origin: "primary" };
 
-  return { bucket: "dokumen_surat", path: value };
+  return { bucket: "dokumen_surat", path: value, origin: "primary" };
 };
 
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
+
+const storageClientForRef = (ref) => {
+  if (ref?.origin === "external" && storageSupabase) return storageSupabase;
+  return supabase;
+};
 
 const getAllowedStorageRefs = (surat) => {
   const refs = [
@@ -504,7 +694,7 @@ const getAuthorizedStorageFile = async (suratId, token, rawPath) => {
     throw err;
   }
 
-  const { data, error } = await supabase.storage.from(requested.bucket).download(requested.path);
+  const { data, error } = await storageClientForRef(requested).storage.from(requested.bucket).download(requested.path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan");
     err.status = 404;
@@ -536,6 +726,7 @@ const createFileViewToken = async (suratId, token, rawPath) => {
       token_hash: hashFileViewToken(viewToken),
       bucket: requested.bucket,
       object_path: requested.path,
+      storage_origin: requested.origin || "primary",
       requested_by: user.id,
       surat_id: surat.id,
       expires_at: new Date(Date.now() + FILE_VIEW_TOKEN_TTL_MS).toISOString(),
@@ -561,14 +752,14 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  const { data, error } = await supabase.storage.from(tokenData.bucket).download(tokenData.object_path);
+  const { data, error } = await storageClientForRef({ origin: tokenData.storage_origin }).storage.from(tokenData.bucket).download(tokenData.object_path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan");
     err.status = 404;
     throw err;
   }
 
-  return { file: data, ref: { bucket: tokenData.bucket, path: tokenData.object_path } };
+  return { file: data, ref: { bucket: tokenData.bucket, path: tokenData.object_path, origin: tokenData.storage_origin } };
 };
 
 const writeExternalAuditLog = async ({ clientId, req, url, statusCode, errorMessage = null }) => {
@@ -785,7 +976,7 @@ const streamStorageRef = async (res, ref) => {
     throw err;
   }
 
-  const { data, error } = await supabase.storage.from(ref.bucket).download(ref.path);
+  const { data, error } = await storageClientForRef(ref).storage.from(ref.bucket).download(ref.path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan");
     err.status = 404;
@@ -919,6 +1110,20 @@ createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith("/api/")) {
+      if (req.method === "POST" && url.pathname === "/api/storage/upload") {
+        const token = getBearerToken(req);
+        const result = await uploadInternalStorageFile(token, req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/notifications/email") {
+        const token = getBearerToken(req);
+        const body = await readRequestBody(req);
+        const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
+        const result = await sendInternalEmailNotification(token, payload);
+        return sendJson(res, 200, result);
+      }
+
       const dataSourceMatch = url.pathname.match(/^\/api\/data-sources\/([a-zA-Z0-9_-]+)\/query$/);
       if (req.method === "POST" && dataSourceMatch) {
         const token = getBearerToken(req);
