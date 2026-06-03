@@ -3,7 +3,6 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -95,19 +94,9 @@ export function AppLayout() {
             </div>
           )}
 
-          {/* Bungkus Outlet dengan AnimatePresence */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="min-h-0"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          <div className="min-h-0">
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>

@@ -38,6 +38,11 @@ export default function InboxPage() {
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
   const [allocationUnits, setAllocationUnits] = useState<Record<string, Array<{ value: string; label: string; raw?: any }>>>({});
+  const [allocationProjects, setAllocationProjects] = useState<Array<{ value: string; label: string; raw?: any }>>([]);
+  const [allocationProjectSelected, setAllocationProjectSelected] = useState<Record<string, any>>({});
+  const [allocationProjectsLoading, setAllocationProjectsLoading] = useState(false);
+  const [allocationProjectsLoaded, setAllocationProjectsLoaded] = useState(false);
+  const [allocationProjectsError, setAllocationProjectsError] = useState<string | null>(null);
   const [allocationSelected, setAllocationSelected] = useState<Record<string, any[]>>({});
   const [allocationFiles, setAllocationFiles] = useState<Record<string, Record<string, File | null>>>({});
   const [allocationLoading, setAllocationLoading] = useState<Record<string, boolean>>({});
@@ -92,8 +97,8 @@ export default function InboxPage() {
   const getRequestedUnitCount = (item: any) =>
     Number(item.surat_registrasi?.form_input_data?.requested_unit_count || 0);
 
-  const getRequestedProjectCode = (item: any) =>
-    String(item.surat_registrasi?.form_input_data?.requested_project?.code || "").trim();
+  const getAllocationProject = (item: any) =>
+    allocationProjectSelected[item.id] || item.surat_registrasi?.form_input_data?.requested_project;
 
   const getUnitAttachmentRequirements = (item: any) => {
     const requirements = item.surat_registrasi?.form_input_data?.unit_config_snapshot?.allocation_attachment_requirements;
@@ -131,15 +136,25 @@ export default function InboxPage() {
   };
 
   useEffect(() => {
+    if (!paginatedData.some(isUnitAllocationRequired) || allocationProjectsLoaded || allocationProjectsLoading) return;
+    setAllocationProjectsLoading(true);
+    setAllocationProjectsError(null);
+    requestExternalOptions("marison_projects")
+      .then(setAllocationProjects)
+      .catch((error: any) => setAllocationProjectsError(error.message || "Gagal mengambil daftar project."))
+      .finally(() => {
+        setAllocationProjectsLoading(false);
+        setAllocationProjectsLoaded(true);
+      });
+  }, [paginatedData, allocationProjectsLoaded, allocationProjectsLoading]);
+
+  useEffect(() => {
     paginatedData.filter(isUnitAllocationRequired).forEach((item: any) => {
       const signatureId = item.id;
       if (allocationUnits[signatureId] || allocationLoading[signatureId]) return;
 
-      const projectCode = getRequestedProjectCode(item);
-      if (!projectCode) {
-        setAllocationErrors(prev => ({ ...prev, [signatureId]: "Code project external belum tersedia." }));
-        return;
-      }
+      const projectCode = String(getAllocationProject(item)?.code || "").trim();
+      if (!projectCode) return;
 
       setAllocationLoading(prev => ({ ...prev, [signatureId]: true }));
       setAllocationErrors(prev => ({ ...prev, [signatureId]: null }));
@@ -155,7 +170,7 @@ export default function InboxPage() {
           setAllocationLoading(prev => ({ ...prev, [signatureId]: false }));
         });
     });
-  }, [paginatedData]);
+  }, [paginatedData, allocationProjectSelected]);
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
@@ -173,6 +188,10 @@ const handleApprove = async (item: any) => {
   try {
     const note = notes[item.id] || "";
     const selectedUnits = allocationSelected[item.id] || [];
+    const selectedProject = getAllocationProject(item);
+    if (isUnitAllocationRequired(item) && !selectedProject?.code) {
+      throw new Error("Project unit wajib dipilih.");
+    }
     if (isUnitAllocationRequired(item) && selectedUnits.length < getRequestedUnitCount(item)) {
       throw new Error(`Unit terpilih kurang. Minimal ${getRequestedUnitCount(item)} unit.`);
     }
@@ -195,7 +214,7 @@ const handleApprove = async (item: any) => {
       item.surat_registrasi.current_step, 
       currentUser.full_name,
       note,
-      isUnitAllocationRequired(item) ? { unitAllocation: { units: selectedUnits, attachments: selectedAttachmentFiles } } : {}
+      isUnitAllocationRequired(item) ? { unitAllocation: { project: selectedProject, units: selectedUnits, attachments: selectedAttachmentFiles } } : {}
     );
     
     toast.success("Dokumen Berhasil Disetujui", {
@@ -213,6 +232,11 @@ const handleApprove = async (item: any) => {
       return next;
     });
     setAllocationFiles(prev => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+    setAllocationProjectSelected(prev => {
       const next = { ...prev };
       delete next[item.id];
       return next;
@@ -300,9 +324,33 @@ const handleApprove = async (item: any) => {
     });
   };
 
+  const handleAllocationProjectChange = (signatureId: string, projectValue: string) => {
+    const option = allocationProjects.find((project) => project.value === projectValue);
+    const project = option?.raw;
+    setAllocationProjectSelected(prev => ({
+      ...prev,
+      [signatureId]: project?.code ? {
+        value: option?.value,
+        label: option?.label,
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        branch: project.branch ?? null,
+      } : null,
+    }));
+    setAllocationUnits(prev => {
+      const next = { ...prev };
+      delete next[signatureId];
+      return next;
+    });
+    setAllocationSelected(prev => ({ ...prev, [signatureId]: [] }));
+    setAllocationErrors(prev => ({ ...prev, [signatureId]: null }));
+  };
+
   const renderUnitAllocationPanel = (item: any) => {
     if (!isUnitAllocationRequired(item)) return null;
     const requestedCount = getRequestedUnitCount(item);
+    const selectedProject = getAllocationProject(item);
     const selected = allocationSelected[item.id] || [];
     const missingAttachments = getMissingUnitAttachmentLabels(item);
     const selectedValues = new Set(selected.map((unit: any) => unit.value));
@@ -310,7 +358,7 @@ const handleApprove = async (item: any) => {
     const units = (allocationUnits[item.id] || []).filter((unit) =>
       !search || unit.label.toLowerCase().includes(search) || String(unit.value).toLowerCase().includes(search)
     );
-    const isEnough = selected.length >= requestedCount && missingAttachments.length === 0;
+    const isEnough = !!selectedProject?.code && selected.length >= requestedCount && missingAttachments.length === 0;
 
     return (
       <div className={cn(
@@ -328,6 +376,21 @@ const handleApprove = async (item: any) => {
             {isEnough ? "Memenuhi" : "Kurang"}
           </Badge>
         </div>
+
+        <select
+          value={selectedProject?.value || ""}
+          onChange={(event) => handleAllocationProjectChange(item.id, event.target.value)}
+          disabled={allocationProjectsLoading}
+          className="h-9 w-full rounded-md border border-input bg-background/80 px-3 text-[11px] font-semibold"
+        >
+          <option value="">{allocationProjectsLoading ? "Memuat project..." : "Pilih project unit"}</option>
+          {allocationProjects.map((project) => (
+            <option key={`${item.id}-${project.value}`} value={project.value} disabled={!project.raw?.code}>
+              {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}{!project.raw?.code ? " (code belum tersedia)" : ""}
+            </option>
+          ))}
+        </select>
+        {allocationProjectsError && <p className="text-[10px] font-semibold text-destructive">{allocationProjectsError}</p>}
 
         <Input
           value={unitSearch[item.id] || ""}
@@ -543,6 +606,7 @@ const handleApprove = async (item: any) => {
                         processingId === item.id ||
                         (isUnitAllocationRequired(item) && (
                           (allocationSelected[item.id]?.length || 0) < getRequestedUnitCount(item) ||
+                          !getAllocationProject(item)?.code ||
                           getMissingUnitAttachmentLabels(item).length > 0
                         ))
                       }

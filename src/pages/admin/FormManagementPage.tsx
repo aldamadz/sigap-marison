@@ -82,6 +82,7 @@ interface UnitAttachmentRequirement {
 
 interface UnitConfig {
   enabled: boolean;
+  request_sentence_cell: string;
   allowed_department_ids: string[];
   initial_attachment_required: boolean;
   allocation_attachment_requirements: UnitAttachmentRequirement[];
@@ -92,6 +93,9 @@ const createFieldId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+const getTopLeftCell = (range = "") =>
+  String(range).trim().toUpperCase().split(":")[0] || "";
+
 const normalizeInputSchema = (value: any): TemplateInputField[] => {
   const raw = typeof value === "string" ? (() => {
     try { return JSON.parse(value || "[]"); } catch { return []; }
@@ -99,16 +103,18 @@ const normalizeInputSchema = (value: any): TemplateInputField[] => {
 
   if (!Array.isArray(raw)) return [];
 
-  return raw.map((item: any, index: number) => ({
+  return raw.map((item: any, index: number) => {
+    const mergeRange = item.merge_range || item.mergeRange || "";
+    return ({
     id: item.id || createFieldId(),
     key: item.key || `field_${index + 1}`,
     label: item.label || `Field ${index + 1}`,
     type: item.type || "text",
     required: item.required !== false,
-    cell: item.cell || "",
+    cell: item.cell || getTopLeftCell(mergeRange),
     sheet: Number(item.sheet || 1),
     defaultSource: item.defaultSource || item.default_source || "manual",
-    merge_range: item.merge_range || item.mergeRange || "",
+    merge_range: mergeRange,
     horizontal: item.horizontal || "left",
     vertical: item.vertical || "top",
     wrap: item.wrap === true,
@@ -122,20 +128,23 @@ const normalizeInputSchema = (value: any): TemplateInputField[] => {
     external_value_path: item.external_value_path || item.externalValuePath || "",
     external_label_path: item.external_label_path || item.externalLabelPath || "",
     table_config: item.table_config || item.tableConfig,
-  }));
+    });
+  });
 };
 
 const serializeInputSchema = (fields: TemplateInputField[]) =>
   fields
     .filter(field => field.key.trim() && field.label.trim())
-    .map(({ id, ...field }) => ({
+    .map(({ id, ...field }) => {
+      const mergeRange = field.merge_range?.trim().toUpperCase() || undefined;
+      return ({
       ...field,
       key: field.key.trim(),
       label: field.label.trim(),
-      cell: field.cell.trim().toUpperCase(),
+      cell: field.cell.trim().toUpperCase() || getTopLeftCell(mergeRange),
       sheet: Number(field.sheet || 1),
       default_source: field.defaultSource,
-      merge_range: field.merge_range?.trim().toUpperCase() || undefined,
+      merge_range: mergeRange,
       horizontal: field.horizontal || undefined,
       vertical: field.vertical || undefined,
       wrap: field.wrap || undefined,
@@ -162,7 +171,8 @@ const serializeInputSchema = (fields: TemplateInputField[]) =>
             type: column.type || "text",
           })),
       } : undefined,
-    }));
+      });
+    });
 
 const getDefaultSourceLabel = (source: TemplateDefaultSource) => ({
   manual: "Field Manual",
@@ -183,7 +193,7 @@ const getDefaultSourceLabel = (source: TemplateDefaultSource) => ({
 const hasPlaceDateMapping = (inputSchema: TemplateInputField[]) => {
   const mappedSources = new Set(
     inputSchema
-      .filter((field) => !!field.cell)
+      .filter((field) => !!String(field.cell || field.merge_range || "").trim())
       .map((field) => field.defaultSource)
   );
   return mappedSources.has("request_place_date") ||
@@ -213,6 +223,7 @@ const normalizeUnitConfig = (value: any): UnitConfig => {
 
   return {
     enabled: raw.enabled === true,
+    request_sentence_cell: String(raw.request_sentence_cell || "C11").trim().toUpperCase(),
     allowed_department_ids: Array.isArray(raw.allowed_department_ids) ? raw.allowed_department_ids : [],
     initial_attachment_required: raw.initial_attachment_required === true,
     allocation_attachment_requirements: Array.isArray(raw.allocation_attachment_requirements) && raw.allocation_attachment_requirements.length > 0
@@ -227,6 +238,7 @@ const normalizeUnitConfig = (value: any): UnitConfig => {
 
 const serializeUnitConfig = (config: UnitConfig) => ({
   enabled: config.enabled === true,
+  request_sentence_cell: config.request_sentence_cell.trim().toUpperCase() || "C11",
   allowed_department_ids: config.allowed_department_ids,
   initial_attachment_required: config.initial_attachment_required === true,
   allocation_attachment_requirements: config.allocation_attachment_requirements
@@ -877,6 +889,18 @@ export default function FormManagementPage() {
 
               {formData.unit_config.enabled && (
                 <div className="space-y-4">
+                  <div className="space-y-1 rounded-xl border border-border/50 bg-background/60 p-3">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Cell Kalimat Permohonan Unit</Label>
+                    <Input
+                      className="mt-2 h-9 max-w-40 font-mono text-xs uppercase"
+                      value={formData.unit_config.request_sentence_cell}
+                      placeholder="C11"
+                      onChange={(e) => updateUnitConfig({ request_sentence_cell: e.target.value.toUpperCase() })}
+                    />
+                    <p className="mt-2 text-[10px] font-medium text-muted-foreground">
+                      Ditulis otomatis: Butuh : [jumlah] Unit, Proyek: [nama proyek], Cabang: [cabang].
+                    </p>
+                  </div>
                   <label className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
                     <input
                       type="checkbox"
@@ -955,9 +979,9 @@ export default function FormManagementPage() {
             <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/20 p-5">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Input Sistem</Label>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Konfigurasi Permohonan Biasa</Label>
                   <p className="mt-1 text-[10px] font-medium text-muted-foreground">
-                    Field ini akan diisi user di aplikasi lalu ditempelkan ke cell Excel template.
+                    Field ini dipakai saat user membuat permohonan barang atau jasa biasa.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

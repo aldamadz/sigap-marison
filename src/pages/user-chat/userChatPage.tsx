@@ -8,7 +8,7 @@ import {
   Send, Paperclip, X, MessageSquare, ArrowLeft,
   FileText, FileCheck, ExternalLink, Loader2,
   CheckCircle2, Clock, XCircle, Inbox, Search,
-  AlertCircle, Download
+  AlertCircle, Download, PanelLeft
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -89,10 +89,12 @@ const UserChatPage: React.FC = () => {
   const playNotif = useNotifSound();
   const playNotifRef = useRef(playNotif);
   useEffect(() => { playNotifRef.current = playNotif; }, [playNotif]);
-  
+
   // Mobile view state - show sidebar or chat
   const [showSidebar, setShowSidebar] = useState(true);
-  
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
   const [selected, setSelected] = useState<SuratItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatStatus, setChatStatus] = useState<'OPEN' | 'CLOSED'>('CLOSED');
@@ -105,9 +107,19 @@ const UserChatPage: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isMobile = window.innerWidth < 768;
 
   const canSend = chatStatus === 'OPEN' && !isSending;
+
+  // ── Mobile detection ─────────────────────────────────────────────────
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const openStoredFile = useCallback((path: string) => {
     if (!selected?.id) return;
     documentPreviewService.openStoredFileInNewTab(selected.id, path)
@@ -127,13 +139,15 @@ const UserChatPage: React.FC = () => {
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
-      if (!mobile && selected) {
+      setIsMobile(mobile);
+      // On desktop, always show sidebar
+      if (!mobile) {
         setShowSidebar(true);
       }
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [selected]);
+  }, []);
 
   // ── Realtime: update list surat ───────────────────────────────────────
   useEffect(() => {
@@ -207,12 +221,12 @@ const UserChatPage: React.FC = () => {
     setChatStatus(surat.chat_status ?? 'CLOSED');
     setMessages([]);
     setUnreadMap(prev => ({ ...prev, [surat.id]: 0 }));
-    
+
     // On mobile, hide sidebar when chat selected
-    if (window.innerWidth < 768) {
+    if (isMobile) {
       setShowSidebar(false);
     }
-    
+
     supabase.from('surat_chats')
       .update({ is_read: true })
       .eq('surat_id', surat.id)
@@ -229,7 +243,7 @@ const UserChatPage: React.FC = () => {
       setMessages(history);
     }
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, []);
+  }, [isMobile]);
 
   // Back button handler for mobile
   const handleBack = () => {

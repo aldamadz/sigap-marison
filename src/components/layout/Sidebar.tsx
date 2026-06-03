@@ -381,7 +381,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               ? "bg-primary/10 text-primary border-l-2 border-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
-          whileHover={{ x: (isMobile || isDesktopCollapsed) ? 0 : 4 }}
           whileTap={{ scale: 0.98 }}
         >
           <div className="relative shrink-0">

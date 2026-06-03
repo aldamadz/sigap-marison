@@ -9,12 +9,18 @@ import {
   FileText, FileCheck, ExternalLink, Loader2,
   CheckCircle2, Clock, XCircle, Inbox, Search,
   Download, ShieldCheck, CreditCard, AlertTriangle,
-  Upload, User, RefreshCw, Receipt, Banknote
+  Upload, User, RefreshCw, Receipt, Banknote,
+  ChevronLeft
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { useNotifSound } from '@/hooks/useNotifSound';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -60,13 +66,24 @@ type FinalAction = 'SEND_SPK' | 'TO_FINANCE' | 'REJECT' | 'FINANCE_DONE' | 'FINA
 
 const getStatusBadge = (surat: SuratItem) => {
   const r = surat.pic_review_status;
-  if (r === 'SPK')               return { label: 'SPK Diterbitkan',    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
-  if (r === 'KEUANGAN')          return { label: 'Dialihkan Keuangan', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
-  if (r === 'KEUANGAN_DONE')     return { label: 'Keuangan Selesai',   color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
-  if (r === 'KEUANGAN_REJECTED') return { label: 'Ditolak Keuangan',   color: 'text-red-400 bg-red-500/10 border-red-500/20' };
-  if (r === 'REJECTED')          return { label: 'Ditolak',            color: 'text-red-400 bg-red-500/10 border-red-500/20' };
-  if (r === 'PENDING')           return { label: 'Menunggu Review',    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
-  return { label: 'Baru Masuk',                                        color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
+  if (r === 'SPK')               return { label: 'SPK Diterbitkan',    color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' };
+  if (r === 'KEUANGAN')          return { label: 'Tim Keuangan',      color: 'text-blue-600 bg-blue-500/10 border-blue-500/20' };
+  if (r === 'KEUANGAN_DONE')     return { label: 'Keuangan Selesai',   color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' };
+  if (r === 'KEUANGAN_REJECTED') return { label: 'Ditolak Keuangan',  color: 'text-red-600 bg-red-500/10 border-red-500/20' };
+  if (r === 'REJECTED')          return { label: 'Ditolak PIC',        color: 'text-red-600 bg-red-500/10 border-red-500/20' };
+  if (r === 'PENDING')           return { label: 'Review PIC',          color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' };
+  return { label: 'Menunggu',                                        color: 'text-slate-500 bg-slate-500/10 border-slate-500/20' };
+};
+
+const StatusIcon = ({ surat }: { surat: SuratItem }) => {
+  const r = surat.pic_review_status;
+  if (r === 'SPK') return <CheckCircle2 size={13} className="text-emerald-600" />;
+  if (r === 'KEUANGAN') return <CheckCircle2 size={13} className="text-blue-600" />;
+  if (r === 'KEUANGAN_DONE') return <CheckCircle2 size={13} className="text-emerald-600" />;
+  if (r === 'KEUANGAN_REJECTED') return <XCircle size={13} className="text-red-600" />;
+  if (r === 'REJECTED') return <XCircle size={13} className="text-red-600" />;
+  if (r === 'PENDING') return <Clock size={13} className="text-amber-600" />;
+  return <Clock size={13} className="text-slate-400" />;
 };
 
 const buildSyntheticMessage = (surat: SuratItem): ChatMessage => ({
@@ -197,9 +214,11 @@ interface ChatPanelProps {
   currentUser: { id: string; full_name: string };
   isFinanceUser: boolean;
   onActionComplete: () => void;
+  onBack?: () => void;
+  showBackButton?: boolean;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser, isFinanceUser, onActionComplete }) => {
+const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser, isFinanceUser, onActionComplete, onBack, showBackButton }) => {
   const queryClient = useQueryClient();
   const playNotif = useNotifSound();
   // Ref agar playNotif bisa dipanggil dari dalam useEffect tanpa stale closure
@@ -441,7 +460,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
       : [];
 
   return (
-    <div className="flex flex-col h-full bg-[#080a0f] relative">
+    <div className="flex flex-col h-full bg-background relative">
 
       {activeAction && (
         <ActionModal
@@ -456,74 +475,90 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
       )}
 
       {/* ── HEADER ── */}
-      <div className="px-6 py-4 border-b border-white/5 bg-[#0d0f16] shrink-0">
-        <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-card/40 backdrop-blur-md flex justify-between items-center shrink-0 gap-3">
+        <div className="min-w-0 flex items-center gap-2 sm:gap-3">
+          {/* Back button */}
+          {showBackButton && (
+            <button
+              onClick={onBack}
+              className="md:hidden p-2 rounded-lg hover:bg-accent text-muted-foreground shrink-0"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          )}
+
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 bg-primary/20 text-primary rounded">
-                <User size={9} /> {suratData.creator_name || 'Pemohon'}
+            <div className="flex items-center gap-2 mb-1 min-w-0">
+              <span className="text-xs font-mono text-muted-foreground/60 truncate">{suratData.no_surat}</span>
+              <span className={`text-[10px] sm:text-xs font-black uppercase px-2 py-0.5 rounded border truncate ${getStatusBadge(suratData).color}`}>
+                {getStatusBadge(suratData).label}
               </span>
-              <span className="text-[9px] font-mono text-white/30">{suratData.no_surat}</span>
             </div>
-            <h2 className="text-sm font-extrabold text-white uppercase tracking-tight truncate">
-              {suratData.judul_surat}
-            </h2>
-          </div>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase shrink-0 ${
-            isChatOpen
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-              : 'bg-white/5 text-white/30 border-white/10'
-          }`}>
-            {isChatOpen
-              ? <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live</>
-              : <><Lock size={10} /> Tertutup</>
-            }
+            <h2 className="text-sm sm:text-base font-black uppercase tracking-tight text-foreground truncate">{suratData.judul_surat}</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground font-bold mt-0.5 truncate">
+              Pemohon: <span className="text-foreground/70">{suratData.creator_name || 'N/A'}</span>
+            </p>
           </div>
         </div>
 
-        {/* ✅ FIX 4: Tombol file — termasuk SPK dan Bukti Bayar selalu tampil jika ada */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {suratData.file_path && (
-            <button type="button" onClick={openGeneratedPdf} disabled={isOpeningPdf}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all disabled:opacity-60">
-              {isOpeningPdf ? <Loader2 size={10} className="animate-spin" /> : <FileText size={10} />} Dokumen
-            </button>
-          )}
-          {attachments.map((attachment, index) => (
-            <button type="button" key={attachment.id ?? attachment.file_url} onClick={() => openStoredFile(attachment.file_url)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-white/5 text-white/50 border-white/10 hover:bg-white/10 transition-all">
-              <Paperclip size={10} /> Lampiran {index + 1}
-            </button>
-          ))}
-          {/* SPK — tampil di semua status jika ada */}
-          {suratData.pic_attachment && (
-            <button type="button" onClick={() => openStoredFile(suratData.pic_attachment!)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-emerald-500/5 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 transition-all">
-              <FileCheck size={10} /> SPK
-            </button>
-          )}
-          {/* ✅ FIX 5: Bukti Bayar — tampil di semua status termasuk KEUANGAN_DONE */}
-          {suratData.payment_file_path && (
-            <button type="button" onClick={() => openStoredFile(suratData.payment_file_path!)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border bg-blue-500/5 text-blue-400 border-blue-500/20 hover:bg-blue-500/10 transition-all">
-              <Download size={10} /> Bukti Bayar
-            </button>
-          )}
+        {/* Chat status badge */}
+        <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase shrink-0 ${
+          isChatOpen
+            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            : 'bg-white/5 text-muted-foreground border-border'
+        }`}>
+          {isChatOpen
+            ? <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live</>
+            : <><Lock size={10} /> Tertutup</>
+          }
         </div>
+      </div>
 
-        {/* Panel Aksi PIC */}
+      {/* File buttons */}
+      <div className="flex gap-2 overflow-x-auto px-4 sm:px-6 py-2 border-b border-border">
+        {suratData.file_path && (
+          <button type="button" onClick={openGeneratedPdf} disabled={isOpeningPdf}
+            className="h-8 px-3 rounded-lg border border-border bg-card hover:bg-accent flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-foreground shrink-0 transition-colors disabled:opacity-60">
+            {isOpeningPdf ? <Loader2 size={10} className="animate-spin" /> : <FileText size={10} />} Dokumen
+            <ExternalLink size={9} className="opacity-50" />
+          </button>
+        )}
+        {attachments.map((attachment, index) => (
+          <button type="button" key={attachment.id ?? attachment.file_url} onClick={() => openStoredFile(attachment.file_url)}
+            className="h-8 px-3 rounded-lg border border-border bg-card hover:bg-accent flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-foreground shrink-0 transition-colors">
+            <Paperclip size={10} /> Lampiran {index + 1}
+            <ExternalLink size={9} className="opacity-50" />
+          </button>
+        ))}
+        {suratData.pic_attachment && (
+          <button type="button" onClick={() => openStoredFile(suratData.pic_attachment!)}
+            className="h-8 px-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-emerald-600 shrink-0 transition-colors hover:bg-emerald-500/20">
+            <FileCheck size={10} /> SPK
+            <ExternalLink size={9} className="opacity-50" />
+          </button>
+        )}
+        {suratData.payment_file_path && (
+          <button type="button" onClick={() => openStoredFile(suratData.payment_file_path!)}
+            className="h-8 px-3 rounded-lg border border-blue-500/20 bg-blue-500/10 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-blue-600 shrink-0 transition-colors hover:bg-blue-500/20">
+            <Download size={10} /> Bukti Bayar
+            <ExternalLink size={9} className="opacity-50" />
+          </button>
+        )}
+      </div>
+
+      {/* Panel Aksi PIC */}
         {showPICActions && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl border border-white/10">
+          <div className="space-y-2 p-3 sm:p-4 bg-card/30 border-y border-border">
+            <div className="flex items-center justify-between p-2.5 bg-background/50 rounded-xl border border-border">
               <div className="flex items-center gap-2">
                 {suratData.pic_attachment
-                  ? <><CheckCircle2 size={13} className="text-emerald-400" /><span className="text-[10px] font-bold text-emerald-400">SPK sudah diunggah</span></>
-                  : <><AlertTriangle size={13} className="text-amber-400" /><span className="text-[10px] font-bold text-white/40">Unggah SPK sebelum finalisasi</span></>
+                  ? <><CheckCircle2 size={13} className="text-emerald-600" /><span className="text-[10px] font-bold text-emerald-600">SPK sudah diunggah</span></>
+                  : <><AlertTriangle size={13} className="text-amber-600" /><span className="text-[10px] font-bold text-muted-foreground">Unggah SPK sebelum finalisasi</span></>
                 }
               </div>
               <label className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase cursor-pointer transition-all border ${
                 uploadingSPK
-                  ? 'opacity-50 pointer-events-none bg-white/5 border-white/10 text-white/30'
+                  ? 'opacity-50 pointer-events-none bg-background/50 border-border text-muted-foreground'
                   : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20'
               }`}>
                 {uploadingSPK ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
@@ -531,25 +566,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
                 <input type="file" className="hidden" onChange={handleSPKUpload} disabled={uploadingSPK} />
               </label>
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={() => setActiveAction('SEND_SPK')}
-                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all text-[9px] font-black uppercase">
+                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all text-[9px] font-black uppercase">
                 <ShieldCheck size={14} /> Kirim SPK
               </button>
               <button onClick={() => setActiveAction('TO_FINANCE')}
-                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all text-[9px] font-black uppercase">
+                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all text-[9px] font-black uppercase">
                 <CreditCard size={14} /> Keuangan
               </button>
               <button onClick={() => setActiveAction('REJECT')}
-                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all text-[9px] font-black uppercase">
+                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all text-[9px] font-black uppercase">
                 <XCircle size={14} /> Tolak
               </button>
             </div>
             <button onClick={handleToggleChat} disabled={isTogglingChat}
               className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${
                 isChatOpen
-                  ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                  ? 'bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20'
               }`}>
               {isTogglingChat
                 ? <Loader2 size={11} className="animate-spin" />
@@ -563,25 +598,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 
         {/* Panel Aksi Keuangan */}
         {showFinanceActions && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20 text-[10px] font-black uppercase text-blue-400">
+          <div className="space-y-2 p-3 sm:p-4 bg-blue-500/5 border-y border-blue-500/20">
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20 text-[10px] font-black uppercase text-blue-600">
               <Banknote size={11} /> Antrian Tim Keuangan
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setActiveAction('FINANCE_DONE')}
-                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all text-[9px] font-black uppercase">
+                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all text-[9px] font-black uppercase">
                 <Receipt size={14} /> Bukti Transaksi
               </button>
               <button onClick={() => setActiveAction('FINANCE_REJECT')}
-                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all text-[9px] font-black uppercase">
+                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all text-[9px] font-black uppercase">
                 <XCircle size={14} /> Tolak
               </button>
             </div>
             <button onClick={handleToggleChat} disabled={isTogglingChat}
               className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${
                 isChatOpen
-                  ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                  ? 'bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20'
               }`}>
               {isTogglingChat
                 ? <Loader2 size={11} className="animate-spin" />
@@ -595,23 +630,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 
         {/* Menunggu Keuangan (non-finance user) */}
         {isKeuanganPending && !isFinanceUser && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20 text-[10px] font-black uppercase text-blue-400">
-            <Clock size={11} /> Menunggu diproses Tim Keuangan
+          <div className="px-4 py-3 bg-blue-500/5 border-y border-blue-500/20">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-600">
+              <Clock size={11} /> Menunggu diproses Tim Keuangan
+            </div>
           </div>
         )}
 
-        {/* ✅ FIX 6: Status final — tampilkan info selesai + tombol toggle chat */}
+        {/* Status final */}
         {isFinalised && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl border border-white/10 text-[10px] font-black uppercase text-white/30">
-              <CheckCircle2 size={11} className="text-emerald-400" /> Dokumen sudah mendapat keputusan akhir
+          <div className="space-y-2 p-3 sm:p-4 bg-background/30 border-y border-border">
+            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/5 rounded-xl border border-emerald-500/20 text-[10px] font-black uppercase text-emerald-600">
+              <CheckCircle2 size={11} className="text-emerald-600" /> Dokumen sudah mendapat keputusan akhir
             </div>
-            {/* Toggle chat tetap tersedia meski sudah final */}
             <button onClick={handleToggleChat} disabled={isTogglingChat}
               className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${
                 isChatOpen
-                  ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                  ? 'bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20'
               }`}>
               {isTogglingChat
                 ? <Loader2 size={11} className="animate-spin" />
@@ -622,58 +658,52 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
             </button>
           </div>
         )}
-      </div>
-
       {/* Status bar */}
-      <div className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border-b shrink-0 ${
-        isChatOpen
-          ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10'
-          : 'bg-white/2 text-white/20 border-white/5'
-      }`}>
+      <div className={"px-4 py-1.5 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border-b shrink-0 " + (isChatOpen ? "bg-emerald-500/5 text-emerald-600 border-emerald-500/10" : "bg-muted/30 text-muted-foreground border-border")}>
         {isChatOpen ? <><LockOpen size={10} /> Sesi diskusi aktif</> : <><Lock size={10} /> Chat tertutup</>}
       </div>
 
       {/* ── AREA CHAT ── */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-3 scroll-smooth">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 scroll-smooth">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full opacity-10 gap-3">
-            <MessageSquare size={40} strokeWidth={1} className="text-white" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-white">Belum Ada Diskusi</p>
+          <div className="flex flex-col items-center justify-center h-full opacity-30 gap-4">
+            <MessageSquare size={48} strokeWidth={1} className="text-foreground" />
+            <p className="text-xs sm:text-sm font-black uppercase tracking-widest text-center text-muted-foreground">Belum Ada Diskusi<br />untuk dokumen ini</p>
           </div>
         )}
         {messages.map(msg => {
           const isMe = msg.sender_id === currentUser.id && msg.sender_role === 'pic';
           if (msg.is_system) {
             return (
-              <div key={msg.id} className="flex justify-center">
-                <div className="bg-white/5 border border-white/10 rounded-full px-4 py-1">
-                  <p className="text-[9px] text-white/30 text-center">{msg.message}</p>
+              <div key={msg.id} className="flex justify-center my-3 sm:my-4 animate-in fade-in zoom-in duration-300">
+                <div className="bg-secondary/40 border border-border/50 rounded-full px-4 sm:px-6 py-1.5 sm:py-2 shadow-sm backdrop-blur-sm">
+                  <p className="text-[10px] sm:text-xs font-black text-muted-foreground uppercase tracking-tight text-center">{msg.message}</p>
                 </div>
               </div>
             );
           }
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+              <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                 <div className="flex items-center gap-2 mb-1 px-1">
-                  <span className={`text-[9px] font-black uppercase ${isMe ? 'text-primary' : 'text-white/40'}`}>
+                  <span className={`text-[10px] sm:text-xs font-black uppercase ${isMe ? 'text-primary' : 'text-muted-foreground'}`}>
                     {isMe ? 'Anda (PIC)' : (msg.sender_name ?? 'Pemohon')}
                   </span>
-                  <span className="text-[8px] text-white/20 font-mono">
+                  <span className="text-[10px] font-mono text-muted-foreground/30">
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <div className={`px-4 py-2.5 rounded-2xl text-[12px] leading-relaxed font-medium whitespace-pre-wrap ${
+                <div className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-sm text-xs sm:text-sm font-bold leading-relaxed whitespace-pre-wrap ${
                   isMe
-                    ? 'bg-primary text-white rounded-tr-sm'
-                    : 'bg-white/8 border border-white/10 text-white rounded-tl-sm'
+                    ? 'bg-primary text-primary-foreground rounded-tr-none'
+                    : 'bg-card border border-border text-foreground rounded-tl-none backdrop-blur-sm'
                 }`}>
                   {msg.attachment_url && (
                     <button type="button" onClick={() => openStoredFile(msg.attachment_url!)}
-                      className={`flex items-center gap-2 mb-2 p-2 rounded-lg border text-[9px] font-bold uppercase ${
-                        isMe ? 'bg-black/20 border-white/10' : 'bg-white/5 border-white/10'
+                      className={`flex items-center gap-2 mb-2 sm:mb-3 p-2 rounded-lg border text-[10px] sm:text-xs font-black uppercase ${
+                        isMe ? 'bg-black/20 border-white/10 hover:bg-black/30' : 'bg-muted border-border hover:bg-accent'
                       }`}>
-                      <Paperclip size={10} /> Lampiran <ExternalLink size={9} className="ml-auto" />
+                      <Paperclip size={12} /> Lampiran <ExternalLink size={10} className="ml-auto opacity-40" />
                     </button>
                   )}
                   {msg.message}
@@ -685,24 +715,33 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
       </div>
 
       {/* ── INPUT ── */}
-      <div className="px-5 py-4 border-t border-white/5 bg-[#0d0f16] shrink-0">
+      <div className="p-3 sm:p-4 border-t border-border bg-card/40 backdrop-blur-sm shrink-0">
+        {!canSend && chatStatus !== 'OPEN' && (
+          <div className="mb-2 sm:mb-3 px-3 sm:px-4 py-2 sm:py-3 bg-amber-500/10 border border-amber-500/20 rounded-lg sm:rounded-xl flex items-center gap-2 sm:gap-3">
+            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+            <p className="text-xs sm:text-sm font-bold text-amber-600">Sesi chat tertutup. Tunggu PIC membuka sesi.</p>
+          </div>
+        )}
+
         {attachment && (
-          <div className="flex items-center justify-between mb-2.5 bg-primary/10 border border-primary/20 px-3 py-2 rounded-lg">
-            <span className="text-[10px] font-bold text-primary flex items-center gap-1.5 truncate">
-              <Paperclip size={11} /> {attachment.name}
+          <div className="mb-2 px-3 py-2 bg-accent/50 rounded-lg flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2 truncate">
+              <FileText size={14} />
+              <span className="truncate">{attachment.name}</span>
             </span>
-            <button onClick={() => setAttachment(null)} className="text-white/30 hover:text-red-400 ml-2 shrink-0">
-              <X size={13} />
+            <button onClick={() => setAttachment(null)} className="p-1 hover:bg-destructive/10 rounded text-destructive shrink-0">
+              <X size={14} />
             </button>
           </div>
         )}
-        <form onSubmit={handleSend} className="flex gap-2">
-          <label className={`p-2.5 rounded-xl border flex items-center justify-center shrink-0 transition-all ${
+
+        <form onSubmit={handleSend} className="flex items-end gap-2 sm:gap-3">
+          <label className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl border transition-all shrink-0 ${
             !canSend
-              ? 'bg-white/5 border-white/5 opacity-30 cursor-not-allowed'
-              : 'bg-white/5 border-white/10 hover:bg-white/10 cursor-pointer'
+              ? 'bg-muted/50 text-muted-foreground border-border opacity-50 cursor-not-allowed'
+              : 'bg-muted/50 text-muted-foreground border-border hover:bg-accent cursor-pointer'
           }`}>
-            <Paperclip size={16} className="text-white/40" />
+            <Paperclip size={18} />
             <input type="file" className="hidden" disabled={!canSend} onChange={e => setAttachment(e.target.files?.[0] || null)} />
           </label>
           <input
@@ -711,15 +750,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
             onChange={e => setNewMessage(e.target.value)}
             disabled={!canSend}
             placeholder={isChatOpen ? 'Ketik balasan...' : 'Chat tertutup...'}
-            className={`flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${
-              !canSend
-                ? 'bg-white/3 border-white/5 text-white/20 cursor-not-allowed'
-                : 'bg-white/5 border-white/10 focus:ring-2 focus:ring-primary/30 text-white placeholder:text-white/20'
-            }`}
+            className={`flex-1 min-w-0 px-3 sm:px-4 py-2.5 sm:py-3 bg-background/50 border border-border rounded-lg sm:rounded-xl text-xs sm:text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50 disabled:opacity-50 disabled:cursor-not-allowed resize-none`}
+            style={{ minHeight: '44px', maxHeight: '120px' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (canSend && (newMessage.trim() || attachment)) handleSend(e);
+              }
+            }}
           />
           <button type="submit" disabled={!canSend || (!newMessage.trim() && !attachment)}
-            className="bg-primary text-white px-4 py-2.5 rounded-xl disabled:opacity-30 transition-all hover:opacity-90 shrink-0 flex items-center gap-2 text-[11px] font-black uppercase">
-            {isSending ? <Loader2 size={15} className="animate-spin" /> : <><Send size={14} /> Kirim</>}
+            className="bg-primary text-primary-foreground p-2.5 sm:p-3 rounded-lg sm:rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:bg-primary/90 shrink-0">
+            {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
         </form>
       </div>
@@ -737,6 +779,8 @@ const MonitoringPICPage: React.FC = () => {
   const [selectedSurat, setSelectedSurat] = useState<SuratItem | null>(null);
   const [search, setSearch] = useState('');
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
+  // State for sidebar toggle
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
     const totalUnread = Object.values(unreadMap).reduce((sum, n) => sum + (n || 0), 0);
@@ -931,6 +975,7 @@ const MonitoringPICPage: React.FC = () => {
 
   const handleSelectSurat = useCallback(async (surat: SuratItem) => {
     setSelectedSurat(surat);
+    setIsSidebarOpen(false); // Minimize sidebar when selecting a surat
     setUnreadMap(prev => ({ ...prev, [surat.id]: 0 }));
     picService.markCreatorChatsRead(surat.id).catch((error) => {
       console.error('Failed to mark creator chats as read on select surat', error);
@@ -950,6 +995,7 @@ const MonitoringPICPage: React.FC = () => {
   };
 
   const filteredByDept = suratList.filter(s => activeDeptId ? suratBelongsToDept(s, activeDeptId) : false);
+
   const filteredSurat = filteredByDept.filter(s =>
     s.judul_surat?.toLowerCase().includes(search.toLowerCase()) ||
     s.no_surat?.toLowerCase().includes(search.toLowerCase())
@@ -982,6 +1028,7 @@ const MonitoringPICPage: React.FC = () => {
     });
   }, [myDepts, suratList, unreadMap, keuanganDept?.id]);
 
+  // Tab state removed - keeping it simple
   const handleActionComplete = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['pic-chat-list'] });
   }, [queryClient]);
@@ -995,27 +1042,25 @@ const MonitoringPICPage: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-[#080a0f] text-white overflow-hidden">
+    <div className="flex h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] bg-background text-foreground overflow-hidden font-sans">
 
       {/* ── SIDEBAR KIRI ── */}
-      <div className="w-[300px] shrink-0 flex flex-col border-r border-white/5 bg-[#0a0c12]">
-
-        <div className="px-5 pt-5 pb-4 border-b border-white/5">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <MessageSquare size={15} className="text-primary" />
-              <h1 className="text-sm font-black uppercase tracking-[0.15em]">Antrian PIC</h1>
-            </div>
-            <button onClick={() => refetch()} className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white/60 transition-all">
-              <RefreshCw size={13} />
-            </button>
+      <div className={cn(
+        "flex flex-col w-full md:w-72 lg:w-80 shrink-0 border-r border-border bg-card/20 backdrop-blur-xl h-full overflow-hidden transition-all duration-300",
+        isSidebarOpen ? "flex" : "hidden md:flex",
+        !isSidebarOpen && "hidden"
+      )}>
+        <div className="px-4 sm:px-5 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2 mb-1">
+            <MessageSquare size={16} className="text-primary" />
+            <h1 className="text-sm font-black uppercase tracking-wider text-foreground">Antrian PIC</h1>
           </div>
-          <p className="text-[9px] text-white/30 font-bold uppercase tracking-widest">{currentUser.full_name}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground">{currentUser.full_name}</p>
         </div>
 
         {/* Tab departemen */}
         {myDepts.length > 1 && (
-          <div className="flex gap-1 border-b border-white/5 overflow-x-auto shrink-0 px-3 py-2">
+          <div className="flex gap-1 border-b border-border overflow-x-auto shrink-0 px-3 sm:px-4 py-2">
             {sortedDepts.map(dept => {
               const unread = unreadPerDept(dept.id);
               const isActive = activeDeptId === dept.id;
@@ -1023,12 +1068,12 @@ const MonitoringPICPage: React.FC = () => {
                 <button key={dept.id}
                   onClick={() => { setActiveDeptId(dept.id); setSelectedSurat(null); }}
                   title={dept.name}
-                  className={`shrink-0 min-w-[96px] max-w-[160px] px-3 py-2 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg ${
-                    isActive ? 'border-primary text-primary' : 'border-transparent text-white/30 hover:text-white/60'
+                  className={`shrink-0 min-w-[80px] max-w-[140px] px-3 py-2 text-[9px] sm:text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg ${
+                    isActive ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}>
                   <span className="truncate">{deptLabel(dept)}</span>
                   {unread > 0 && (
-                    <span className="bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center">
+                    <span className="bg-red-500 text-white text-[7px] sm:text-[8px] font-black px-1 py-0.5 rounded-full min-w-[14px] sm:min-w-[16px] text-center">
                       {unread}
                     </span>
                   )}
@@ -1039,93 +1084,103 @@ const MonitoringPICPage: React.FC = () => {
         )}
 
         {myDepts.length === 1 && (
-          <div className="px-5 py-2 border-b border-white/5">
-            <p className="text-[9px] font-black uppercase tracking-widest text-white/30">
+          <div className="px-4 sm:px-5 py-2 border-b border-border">
+            <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-muted-foreground">
               Dept: <span className="text-primary">{myDepts[0].name}</span>
             </p>
           </div>
         )}
 
-        <div className="px-4 py-3 border-b border-white/5">
+        <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-border shrink-0">
           <div className="relative">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Cari pengajuan..."
-              className="w-full pl-8 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-white/20 text-white" />
+              className="w-full pl-9 pr-3 py-2 bg-background/50 border border-border rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50 text-foreground" />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto divide-y divide-border/30 min-h-0">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <Loader2 size={18} className="animate-spin text-primary/30" />
-              <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">Memuat...</p>
+            <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3">
+              <Loader2 size={20} className="animate-spin text-primary/40" />
+              <p className="text-xs text-muted-foreground">Memuat...</p>
             </div>
           ) : filteredSurat.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 opacity-20">
+            <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3 opacity-30">
               <Inbox size={28} strokeWidth={1} />
-              <p className="text-[9px] font-bold uppercase tracking-widest">Tidak ada pengajuan</p>
+              <p className="text-xs font-bold uppercase text-muted-foreground">Tidak ada pengajuan</p>
             </div>
           ) : (
-            <div className="divide-y divide-white/5">
-              {filteredSurat.map(surat => {
-                const badge = getStatusBadge(surat);
-                const isActive = selectedSurat?.id === surat.id;
-                return (
-                  <button key={surat.id} onClick={() => handleSelectSurat(surat)}
-                    className={`w-full text-left px-4 py-3.5 transition-all hover:bg-white/3 relative ${
-                      isActive ? 'bg-primary/5 border-l-2 border-primary' : 'border-l-2 border-transparent'
-                    }`}>
-                    {(unreadMap[surat.id] ?? 0) > 0 && (
-                      <span className="absolute top-3 right-3 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">
-                        {unreadMap[surat.id]}
-                      </span>
-                    )}
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <div className={`flex items-center gap-1 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${badge.color}`}>
-                        {badge.label}
-                      </div>
-                      <span className="text-[8px] text-white/20 font-mono shrink-0">
-                        {formatDistanceToNow(new Date(surat.updated_at), { addSuffix: true, locale: localeID })}
-                      </span>
+            filteredSurat.map(surat => {
+              const badge = getStatusBadge(surat);
+              const isActive = selectedSurat?.id === surat.id;
+              const unread = unreadMap[surat.id] ?? 0;
+              return (
+                <button key={surat.id} onClick={() => handleSelectSurat(surat)}
+                  className={`w-full text-left px-3 sm:px-4 py-3 sm:py-4 transition-all relative ${
+                    isActive ? 'bg-primary/5 border-l-4 border-primary' : 'hover:bg-secondary/30 border-l-4 border-transparent'
+                  }`}>
+                  {unread > 0 && (
+                    <span className="absolute top-2 sm:top-3 right-2 sm:right-3 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-primary-foreground text-[10px] font-black rounded-full px-1 animate-bounce">
+                      {unread > 9 ? '9+' : unread}
+                    </span>
+                  )}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-black uppercase px-2 py-0.5 rounded border ${badge.color}`}>
+                      <StatusIcon surat={surat} />
+                      <span className="truncate">{badge.label}</span>
                     </div>
-                    <p className={`text-[11px] font-bold truncate leading-tight mb-1 ${isActive ? 'text-primary' : 'text-white/80'}`}>
-                      {surat.judul_surat}
+                    <span className="text-[10px] sm:text-xs text-muted-foreground/50 font-mono shrink-0">
+                      {formatDistanceToNow(new Date(surat.updated_at), { addSuffix: true, locale: localeID })}
+                    </span>
+                  </div>
+                  <p className={`text-xs sm:text-sm font-black uppercase truncate leading-tight mb-1 ${isActive ? 'text-primary' : 'text-foreground'}`}>
+                    {surat.judul_surat}
+                  </p>
+                  <p className="text-[10px] sm:text-xs font-mono text-muted-foreground/60 truncate">{surat.no_surat}</p>
+                  {surat.creator_name && (
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5 truncate font-bold">
+                      Oleh: <span className="text-foreground/70">{surat.creator_name}</span>
                     </p>
-                    <p className="text-[8px] font-mono text-white/20 truncate mb-1">{surat.no_surat}</p>
-                    {surat.creator_name && (
-                      <p className="text-[9px] text-white/30">
-                        Oleh: <span className="font-bold text-white/50">{surat.creator_name}</span>
-                      </p>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  )}
+                </button>
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* ── PANEL KANAN ── */}
-      {!selectedSurat ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 opacity-10 select-none">
-          <MessageSquare size={52} strokeWidth={1} />
-          <div className="text-center">
-            <p className="text-xs font-black uppercase tracking-[0.2em]">Pilih Pengajuan</p>
-            <p className="text-[9px] text-white/50 mt-1 uppercase tracking-widest font-bold">untuk mulai diskusi</p>
+      {/* ── PANEL KANAN (Chat) ── */}
+      <div className={cn(
+        "flex-1 flex flex-col bg-background/50 relative overflow-hidden h-full",
+        !isSidebarOpen ? "flex" : "hidden md:flex"
+      )}>
+        {!selectedSurat ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 opacity-30 select-none">
+            <MessageSquare size={64} strokeWidth={1} />
+            <div className="text-center">
+              <p className="text-sm sm:text-base font-black uppercase tracking-wider">Pilih Pengajuan</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-2 uppercase font-bold">untuk mulai diskusi</p>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-hidden">
-          <ChatPanel
-            key={selectedSurat.id}
-            surat={selectedSurat}
-            currentUser={currentUser}
-            isFinanceUser={!!keuanganDept && activeDeptId === keuanganDept.id}
-            onActionComplete={handleActionComplete}
-          />
-        </div>
-      )}
+        ) : (
+          <div className="flex-1 overflow-hidden">
+            <ChatPanel
+              key={selectedSurat.id}
+              surat={selectedSurat}
+              currentUser={currentUser}
+              isFinanceUser={!!keuanganDept && activeDeptId === keuanganDept.id}
+              onActionComplete={handleActionComplete}
+              onBack={() => {
+                setSelectedSurat(null);
+                setIsSidebarOpen(true);
+              }}
+              showBackButton={!isSidebarOpen}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

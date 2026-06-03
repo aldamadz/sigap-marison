@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
+import { jsPDF } from "jspdf";
 import { notificationService } from "./notification.service";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
@@ -91,6 +92,7 @@ export const suratService = {
     })() : (raw || {});
     return {
       enabled: parsed.enabled === true,
+      request_sentence_cell: String(parsed.request_sentence_cell || "C11").trim().toUpperCase(),
       allowed_department_ids: Array.isArray(parsed.allowed_department_ids) ? parsed.allowed_department_ids : [],
       initial_attachment_required: parsed.initial_attachment_required === true,
       allocation_attachment_requirements: Array.isArray(parsed.allocation_attachment_requirements)
@@ -228,6 +230,71 @@ export const suratService = {
       );
     }
     return normalized;
+  },
+
+  createUnitCodesAttachment(project: any, units: any[]) {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const gap = 4;
+    const columns = 3;
+    const boxWidth = (pageWidth - (margin * 2) - (gap * (columns - 1))) / columns;
+    const boxHeight = 16;
+    let x = margin;
+    let y = 35;
+
+    const renderHeader = () => {
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text("DAFTAR KODE UNIT", margin, 17);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
+      doc.text(`Cabang: ${project?.branch?.name || "-"}`, margin, 29);
+    };
+
+    renderHeader();
+    units.forEach((unit, index) => {
+      if (y + boxHeight > 285) {
+        doc.addPage();
+        renderHeader();
+        x = margin;
+        y = 35;
+      }
+
+      const code = String(
+        unit?.raw?.code ||
+        unit?.raw?.unit_code ||
+        unit?.raw?.kode ||
+        unit?.code ||
+        unit?.value ||
+        unit?.label ||
+        "-"
+      ).trim();
+      doc.setFillColor(255, 235, 59);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.rect(x, y, boxWidth, boxHeight, "FD");
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(code, x + (boxWidth / 2), y + 9.5, { align: "center", maxWidth: boxWidth - 4 });
+
+      if ((index + 1) % columns === 0) {
+        x = margin;
+        y += boxHeight + gap;
+      } else {
+        x += boxWidth + gap;
+      }
+    });
+
+    const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
+    return new File(
+      [doc.output("blob")],
+      `Daftar_Kode_Unit_${safeProject}_${Date.now()}.pdf`,
+      { type: "application/pdf" }
+    );
   },
 
   async getSignerSnapshots(signers: any[]) {
@@ -455,7 +522,7 @@ export const suratService = {
   hasPlaceDateMapping(schema: TemplateInputField[]) {
     const mappedSources = new Set(
       schema
-        .filter((field) => !!field.cell)
+        .filter((field) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
         .map((field) => field.default_source || field.defaultSource || "manual")
     );
     return mappedSources.has("request_place_date") ||
@@ -524,6 +591,7 @@ export const suratService = {
       throw new Error("Template belum memiliki mapping cell untuk Tempat, Tanggal.");
     }
     schema.forEach((field) => {
+      if (field.key === "requested_unit_count" && inputData.request_mode !== "unit") return;
       if (field.type === "table") {
         this.writeTableField(workbook, field, inputData[field.key]);
         return;
@@ -536,6 +604,13 @@ export const suratService = {
       const rawValue = systemValue !== undefined ? systemValue : inputData[field.key];
       this.writeWrappedField(sheet, field, rawValue);
     });
+    if (inputData.request_mode === "unit") {
+      const unitConfig = this.getUnitConfigFromForm(context.form);
+      const sentence = String(inputData.unit_request_sentence || "").trim();
+      if (unitConfig.request_sentence_cell && sentence) {
+        worksheet.getCell(unitConfig.request_sentence_cell).value = sentence;
+      }
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
@@ -841,7 +916,7 @@ export const suratService = {
   async applyFormInputDataToExcel(currentFilePath: string, usageId: string, formInputData: any): Promise<string> {
     const { data: usageDetail } = await supabase
       .from("master_penggunaan_detail")
-      .select("*, master_forms!fk_master_forms(input_schema)")
+      .select("*, master_forms!fk_master_forms(input_schema, unit_config)")
       .eq("id", usageId)
       .single();
     const schema = this.parseInputSchema((usageDetail as any)?.master_forms?.input_schema);
@@ -856,6 +931,7 @@ export const suratService = {
     schema.forEach((field) => {
       const source = field.default_source || field.defaultSource || "manual";
       if (source !== "manual") return;
+      if (field.key === "requested_unit_count" && formInputData?.request_mode !== "unit") return;
       if (field.type === "table") {
         this.writeTableField(workbook, field, formInputData?.[field.key]);
         return;
@@ -865,6 +941,13 @@ export const suratService = {
       const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
       this.writeWrappedField(sheet, field, formInputData?.[field.key]);
     });
+    if (formInputData?.request_mode === "unit") {
+      const unitConfig = this.getUnitConfigFromForm((usageDetail as any)?.master_forms);
+      const sentence = String(formInputData?.unit_request_sentence || "").trim();
+      if (unitConfig.request_sentence_cell && sentence) {
+        worksheet.getCell(unitConfig.request_sentence_cell).value = sentence;
+      }
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     const path = `dokumen/updated_input_${Date.now()}.xlsx`;
@@ -883,7 +966,7 @@ export const suratService = {
     currentStep: number,
     userName: string,
     note: string = "",
-    options: { unitAllocation?: { units: any[]; attachments?: Array<{ key: string; label: string; file: File }> } } = {}
+    options: { unitAllocation?: { project?: any; units: any[]; attachments?: Array<{ key: string; label: string; file: File }> } } = {}
   ): Promise<{ success: boolean }> {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: suratFresh, error: suratErr } = await supabase
@@ -902,10 +985,12 @@ export const suratService = {
     let uploadedAllocationAttachments: any[] = [];
     if (sigInfo.requires_unit_allocation) {
       const units = options.unitAllocation?.units ?? [];
+      const project = options.unitAllocation?.project;
       const allocationAttachments = options.unitAllocation?.attachments ?? [];
       const requestedCount = Number(formInputData?.requested_unit_count || 0);
       if (formInputData?.request_mode !== "unit") throw new Error("Dokumen ini bukan pengajuan unit.");
       if (!Number.isFinite(requestedCount) || requestedCount < 1) throw new Error("Jumlah unit pengajuan tidak valid.");
+      if (!project?.code) throw new Error("Project unit wajib dipilih.");
       if (!Array.isArray(units) || units.length < requestedCount) {
         throw new Error(`Unit terpilih kurang. Minimal ${requestedCount} unit.`);
       }
@@ -926,6 +1011,7 @@ export const suratService = {
 
       formInputData = {
         ...formInputData,
+        allocated_project: project,
         allocated_units: units,
         allocated_unit_count: units.length,
         allocated_by_signature_id: signatureId,
@@ -938,17 +1024,27 @@ export const suratService = {
         .eq("id", suratId);
       if (updateInputError) throw updateInputError;
 
+      const unitCodesAttachment = this.createUnitCodesAttachment(project, units);
       uploadedAllocationAttachments = await this.uploadAttachmentFiles(
         suratId,
-        allocationAttachments.map((item) => item.file),
+        [
+          ...allocationAttachments.map((item) => item.file),
+          unitCodesAttachment,
+        ],
         user?.id,
         {
           stage: "unit_allocation",
           signature_id: signatureId,
-          requirements: Object.fromEntries(allocationAttachments.map((item) => [
-            item.file.name,
-            { key: item.key, label: item.label },
-          ])),
+          requirements: {
+            ...Object.fromEntries(allocationAttachments.map((item) => [
+              item.file.name,
+              { key: item.key, label: item.label },
+            ])),
+            [unitCodesAttachment.name]: {
+              key: "unit_codes",
+              label: "Daftar Kode Unit",
+            },
+          },
         }
       );
 
@@ -964,6 +1060,7 @@ export const suratService = {
             ...(suratFresh.data_snapshot || {}),
             input: formInputData,
             requested_project: formInputData?.requested_project ?? null,
+            allocated_project: formInputData?.allocated_project ?? null,
             requested_unit_count: formInputData?.requested_unit_count ?? null,
             allocated_units: formInputData?.allocated_units ?? [],
             allocated_unit_count: formInputData?.allocated_unit_count ?? null,

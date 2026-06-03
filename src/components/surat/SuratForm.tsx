@@ -102,8 +102,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     field.multiple === true || field.is_multiple === true || field.key === "unit";
 
   const hasUnitRequestFields = (item: any) => {
-    const keys = new Set(getManualInputFields(item).map((field: any) => field.key));
-    return keys.has("items") && keys.has("unit");
+    return getUnitConfig(item).enabled;
   };
 
   const getUnitConfig = (item: any) => suratService.getUnitConfigFromForm(item?.master_forms);
@@ -151,7 +150,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const hasPlaceDateMapping = (item: any) => {
     const mappedSources = new Set(
       getInputSchema(item)
-        .filter((field: any) => !!field.cell)
+        .filter((field: any) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
         .map((field: any) => field.default_source || field.defaultSource || "manual")
     );
     return mappedSources.has("request_place_date") ||
@@ -219,6 +218,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const isManualFieldComplete = (field: any) => {
     if (hasUnitRequestFields(selectedUsage)) {
+      if (field.key === "requested_unit_count") return true;
       if (isUnitMode && (field.key === "items" || field.key === "unit")) return true;
       if (!isUnitMode && field.key === "unit") return true;
     }
@@ -381,24 +381,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   useEffect(() => {
     if (!selectedUsage || !hasUnitRequestFields(selectedUsage)) return;
-
     let cancelled = false;
     setProjectsLoading(true);
     setProjectsError(null);
     requestExternalOptions("marison_projects")
-      .then((options) => {
-        if (!cancelled) setExternalProjects(options);
-      })
+      .then((options) => { if (!cancelled) setExternalProjects(options); })
       .catch((error: any) => {
         if (!cancelled) {
           setExternalProjects([]);
           setProjectsError(error.message || "Gagal mengambil daftar proyek.");
         }
       })
-      .finally(() => {
-        if (!cancelled) setProjectsLoading(false);
-      });
-
+      .finally(() => { if (!cancelled) setProjectsLoading(false); });
     return () => { cancelled = true; };
   }, [selectedUsage]);
 
@@ -415,7 +409,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setFormData(prev => ({
       ...prev,
       penggunaan_id: val,
-      form_input_data: hasUnitRequestFields(detail) ? { request_mode: canCurrentDepartmentRequestUnit(detail) ? "barang" : "barang" } : {},
+      form_input_data: hasUnitRequestFields(detail) ? { request_mode: canCurrentDepartmentRequestUnit(detail) ? "unit" : "barang" } : {},
     }));
     try {
       const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
@@ -455,39 +449,32 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     } catch { toast({ variant: "destructive", title: "Gagal membatalkan nomor" }); }
   };
 
+  const handleRequestedUnitCountChange = (rawValue: string) => {
+    const count = Math.max(Number(rawValue || 0), 0);
+    setInputValue("requested_unit_count", count || "");
+    const project = formData.form_input_data.requested_project;
+    setInputValue("unit_request_sentence", project?.name && count > 0
+      ? `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`
+      : "");
+  };
+
   const handleExternalProjectChange = (value: string) => {
     const option = externalProjects.find((item) => item.value === value);
     const project = option?.raw;
-    if (!option || !project?.code) {
-      return toast({
-        variant: "destructive",
-        title: "Project Belum Bisa Dipakai",
-        description: "Project ini belum memiliki code dari API external, sehingga unit belum bisa diambil.",
-      });
-    }
-
-    const count = Number(formData.form_input_data.requested_unit_count || 0);
-    setInputValue("requested_project", {
+    if (!option || !project?.code) return;
+    const requestedProject = {
       value: option.value,
       label: option.label,
       id: project.id,
       code: project.code,
       name: project.name,
       branch: project.branch ?? null,
-      raw: project,
-    });
-    if (count > 0) {
-      setInputValue("unit_request_sentence", `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`);
-    }
-  };
-
-  const handleRequestedUnitCountChange = (rawValue: string) => {
-    const count = Math.max(Number(rawValue || 0), 0);
-    const project = formData.form_input_data.requested_project;
-    setInputValue("requested_unit_count", count || "");
-    if (project?.name && count > 0) {
-      setInputValue("unit_request_sentence", `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`);
-    }
+    };
+    const count = Number(formData.form_input_data.requested_unit_count || 0);
+    setInputValue("requested_project", requestedProject);
+    setInputValue("unit_request_sentence", count > 0
+      ? `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`
+      : "");
   };
 
   const resetForm = () => {
@@ -517,9 +504,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       if (!canCurrentDepartmentRequestUnit(selectedUsage)) {
         return toast({ variant: "destructive", title: "Mode Unit Tidak Diizinkan", description: "Departemen ini tidak termasuk konfigurasi pengaju unit." });
       }
-      const project = formData.form_input_data.requested_project;
       const count = Number(formData.form_input_data.requested_unit_count || 0);
-      if (!project?.code) return toast({ variant: "destructive", title: "Project Unit Wajib Dipilih", description: "Pilih project yang memiliki code dari API external." });
+      if (!formData.form_input_data.requested_project?.code) return toast({ variant: "destructive", title: "Proyek Wajib Dipilih", description: "Pilih proyek untuk permohonan unit." });
       if (!Number.isFinite(count) || count < 1) return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
     }
     const missingField = getManualInputFields(selectedUsage).find((field: any) => !isManualFieldComplete(field));
@@ -773,6 +759,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getVisibleManualFields = () =>
     getManualInputFields(selectedUsage).filter((field: any) => {
       if (!hasUnitRequestFields(selectedUsage)) return true;
+      if (field.key === "requested_unit_count") return false;
       if (isUnitMode) return field.key !== "items" && field.key !== "unit";
       return field.key !== "unit";
     });
@@ -780,8 +767,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const renderUnitRequestPanel = () => {
     if (!selectedUsage || !hasUnitRequestFields(selectedUsage) || !isUnitMode) return null;
     const selectedProject = formData.form_input_data.requested_project;
-    const selectedValue = selectedProject?.value ? String(selectedProject.value) : "";
-
     return (
       <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5 md:p-6">
         <div className="flex flex-col gap-1">
@@ -792,24 +777,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <div className="space-y-2">
-            <Label className="text-[11px] font-black uppercase text-muted-foreground">Project External</Label>
-            <Select value={selectedValue} onValueChange={handleExternalProjectChange} disabled={projectsLoading}>
+            <Label className="text-[11px] font-black uppercase text-muted-foreground">Proyek</Label>
+            <Select value={selectedProject?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading}>
               <SelectTrigger className="h-12 bg-background/70 text-sm">
-                <SelectValue placeholder={projectsLoading ? "Memuat project..." : "Pilih project"} />
+                <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
               </SelectTrigger>
               <SelectContent>
-                {externalProjects.map((project) => {
-                  const raw = project.raw || {};
-                  const disabled = !raw.code;
-                  return (
-                    <SelectItem key={`project-${project.value}`} value={project.value} disabled={disabled}>
-                      {project.label} {raw.branch?.name ? `- ${raw.branch.name}` : ""}{disabled ? " (code belum tersedia)" : ""}
-                    </SelectItem>
-                  );
-                })}
+                {externalProjects.map((project) => (
+                  <SelectItem key={project.value} value={project.value} disabled={!project.raw?.code}>
+                    {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            {projectsError && <p className="text-[10px] font-semibold text-amber-600">{projectsError}</p>}
+            {projectsError && <p className="text-[10px] font-semibold text-destructive">{projectsError}</p>}
           </div>
           <div className="space-y-2">
             <Label className="text-[11px] font-black uppercase text-muted-foreground">Jumlah Unit Diajukan</Label>
