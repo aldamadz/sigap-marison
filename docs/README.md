@@ -45,8 +45,15 @@ SIGAP mengeliminasi *race condition* melalui sinkronisasi server-side:
 
 ## 📚 Dokumentasi Lengkap
 
+Garis besar dokumentasi:
+
+- [FITUR.md](./FITUR.md) menjadi pusat fitur fungsional dan non-fungsional.
+- Dokumen KPI project dan server tetap terpisah karena berisi target manajemen proyek dan operasional infrastruktur.
+- Dokumentasi API external tetap terpisah karena dikonsumsi oleh sistem/client lain.
+
 | File | Deskripsi |
 |------|-----------|
+| [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, dan rencana fitur berjalan |
 | [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |
