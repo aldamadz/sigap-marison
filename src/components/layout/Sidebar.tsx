@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Calendar, ClipboardList, Users, Activity, Settings,
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
-  GitMerge, Monitor, Briefcase, MessageSquare, History,
+  GitMerge, Monitor, Briefcase, MessageSquare, History, BarChart3, Network,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -49,19 +49,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       const audio = new Audio('/sounds/notif.WAV')
       audio.volume = 0.6
       audio.play().catch(() => {
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-          const osc = ctx.createOscillator()
-          const gain = ctx.createGain()
-          osc.connect(gain); gain.connect(ctx.destination)
-          osc.type = 'sine'
-          osc.frequency.setValueAtTime(1046, ctx.currentTime)
-          osc.frequency.setValueAtTime(1318, ctx.currentTime + 0.12)
-          osc.frequency.setValueAtTime(1567, ctx.currentTime + 0.24)
-          gain.gain.setValueAtTime(0.3, ctx.currentTime)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5)
-        } catch {}
+        // Browser hanya mengizinkan audio setelah interaksi user.
       })
     } catch {}
   }
@@ -265,7 +253,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
       const { count } = await supabase.from('surat_chats').select('id', { count: 'exact', head: true }).in('surat_id', suratIds).eq('sender_role', 'creator').eq('is_read', false).eq('is_system', false)
       const n = count ?? 0
-      if (n > prevChatCountRef.current && prevChatCountRef.current >= 0) playNotif()
+      if (!isMobile && n > prevChatCountRef.current && prevChatCountRef.current >= 0) playNotif()
       prevChatCountRef.current = n
       setChatBadgeCount(n)
 
@@ -277,7 +265,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         .eq('status', 'DONE')
 
       const newQ = qCount ?? 0
-      if (prevPicQueueRef.current >= 0 && newQ > prevPicQueueRef.current) {
+      if (!isMobile && prevPicQueueRef.current >= 0 && newQ > prevPicQueueRef.current) {
         playNotif()
         toast.info('Pengajuan baru masuk ke antrian PIC!', { duration: 5000, description: `${newQ} pengajuan menunggu review` })
       }
@@ -316,7 +304,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       const suratIds = surats.map((s: any) => s.id)
       const { count } = await supabase.from('surat_chats').select('id', { count: 'exact', head: true }).in('surat_id', suratIds).eq('sender_role', 'pic').eq('is_read', false).eq('is_system', false)
       const n = count ?? 0
-      if (prevCreatorBadgeRef.current >= 0 && n > prevCreatorBadgeRef.current) playNotif()
+      if (!isMobile && prevCreatorBadgeRef.current >= 0 && n > prevCreatorBadgeRef.current) playNotif()
       prevCreatorBadgeRef.current = n
       setCreatorChatBadge(n)
     }
@@ -367,7 +355,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const isDesktopCollapsed = !isMobile && collapsed
 
   const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => (
-    <NavLink to={path} end={path === '/dashboard' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
+    <NavLink to={path} end={path === '/dashboard' || path === '/admin/users' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
       {({ isActive }) => (
         <motion.div
           className={cn(
@@ -598,6 +586,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                     className="overflow-hidden space-y-0.5"
                   >
                     {renderNavLink('/admin/users', 'User Organization', Users, true)}
+                    {renderNavLink('/admin/users/hierarchy', 'Hirarki Organisasi', Network, true)}
                     {renderNavLink('/admin/departments', 'Master Departemen', Building2, true)}
                     {renderNavLink('/admin/entities', 'Master Entitas', Building, true)}
                     {renderNavLink('/admin/forms', 'Master Form', FileSignature, true)}
@@ -611,7 +600,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               </AnimatePresence>
             </div>
             {renderNavLink('/admin/monitoring', 'All Status Monitoring', Monitor)}
-            {renderNavLink('/activity-logs', 'Activity Logs', Activity)}
+            {renderNavLink('/admin/kpi-departments', 'KPI Departemen', BarChart3)}
+            {renderNavLink('/audit-logs', 'Audit Log', Activity)}
           </div>
         )}
 

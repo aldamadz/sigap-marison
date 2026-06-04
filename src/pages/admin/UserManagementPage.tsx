@@ -1,5 +1,6 @@
 // frontend/src/pages/UserManagementPage.tsx
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { getUsers } from '@/services/user.service';
 import { User } from '@/types/agenda';
@@ -14,7 +15,7 @@ import {
   Building2, Briefcase, Loader2, Download, Upload, ToggleLeft,
   ToggleRight, Phone, CheckCircle2, XCircle, AlertCircle, Calendar,
   Clock, FileSpreadsheet, LogOut, KeyRound, Mail, Hash, Info,
-  ChevronLeft, ChevronRight, X, List,
+  ChevronLeft, ChevronRight, X, List, Network,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
@@ -24,6 +25,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import { AddUserModal } from '@/components/users/AddUserModal';
 import { EditUserModal } from '@/components/users/EditUserModal';
 import { cn } from '@/lib/utils';
@@ -281,6 +283,74 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId }: 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TEMPLATE_EXAMPLE_EMAILS = new Set(['budi@marison.id', 'siti@marison.id']);
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+type ImportPhase = 'reading' | 'importing' | 'syncing' | 'refreshing' | 'done' | 'error';
+type ImportProgressState = {
+  phase: ImportPhase;
+  total: number;
+  processed: number;
+  ok: number;
+  fail: number;
+  deactivated: number;
+  message: string;
+  errors?: string[];
+};
+
+const HEADER_ALIASES: Record<string, string[]> = {
+  nik: ['nik', 'nomor induk karyawan'],
+  full_name: ['nama', 'name', 'full name', 'full_name', 'nama lengkap', 'nama karyawan'],
+  phone: ['no hp', 'no. hp', 'phone', 'telepon', 'nomor hp', 'no handphone'],
+  email: ['email', 'e-mail'],
+  join_date: ['tgl bergabung', 'tanggal bergabung', 'join date', 'join_date', 'tanggal masuk'],
+  resign_date: ['tgl keluar', 'tanggal keluar', 'resign date', 'resign_date', 'tanggal resign'],
+  job_title: ['jabatan', 'job title', 'job_title', 'posisi'],
+  role: ['role', 'hak akses'],
+  department_name: ['departemen', 'department', 'dept', 'divisi', 'bagian'],
+  office_name: ['kantor', 'office', 'cabang', 'lokasi', 'unit kerja'],
+};
+
+const normalizeImportText = (value: string) =>
+  String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+const getByHeader = (headers: string[], row: string[], key: keyof typeof HEADER_ALIASES, fallbackIndex: number) => {
+  const aliases = HEADER_ALIASES[key].map(normalizeImportText);
+  const index = headers.findIndex((header) => aliases.includes(normalizeImportText(header)));
+  return String(row[index >= 0 ? index : fallbackIndex] ?? '').trim();
+};
+
+const normalizeImportDate = (value: string) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const serial = Number(raw);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+    const parsed = XLSX.SSF.parse_date_code(serial);
+    if (parsed?.y && parsed?.m && parsed?.d) {
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    }
+  }
+
+  const slashMatch = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (slashMatch) {
+    const [, d, m, y] = slashMatch;
+    const year = y.length === 2 ? `20${y}` : y;
+    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return raw;
+};
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function UserManagementPage() {
@@ -296,6 +366,7 @@ export default function UserManagementPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [togglingId, setTogglingId]     = useState<string | null>(null);
   const [bulkLoading, setBulkLoading]   = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState<number | 'all'>(10);
@@ -478,12 +549,73 @@ export default function UserManagementPage() {
       reader.readAsArrayBuffer(file);
     });
 
+  const buildDepartmentResolver = async () => {
+    const [departmentsRes, aliasesRes] = await Promise.all([
+      supabase.from('master_departments').select('id, name, code'),
+      supabase.from('master_department_aliases').select('department_id, alias_name, normalized_alias'),
+    ]);
+    if (departmentsRes.error) throw departmentsRes.error;
+    if (aliasesRes.error) throw aliasesRes.error;
+
+    const map = new Map<string, string>();
+    (departmentsRes.data || []).forEach((department: any) => {
+      map.set(normalizeImportText(department.name), department.id);
+      if (department.code) map.set(normalizeImportText(department.code), department.id);
+    });
+    (aliasesRes.data || []).forEach((alias: any) => {
+      map.set(normalizeImportText(alias.alias_name), alias.department_id);
+      if (alias.normalized_alias) map.set(normalizeImportText(alias.normalized_alias), alias.department_id);
+    });
+
+    return (name?: string | null) => {
+      const key = normalizeImportText(name || '');
+      return key ? map.get(key) || null : null;
+    };
+  };
+
+  const buildOfficeResolver = async () => {
+    const [officesRes, aliasesRes] = await Promise.all([
+      supabase.from('master_offices').select('id, name, code, kedudukan'),
+      supabase.from('master_office_aliases').select('office_id, alias_name, normalized_alias'),
+    ]);
+    if (officesRes.error) throw officesRes.error;
+    if (aliasesRes.error) throw aliasesRes.error;
+
+    const map = new Map<string, string>();
+    (officesRes.data || []).forEach((office: any) => {
+      map.set(normalizeImportText(office.name), office.id);
+      if (office.code) map.set(normalizeImportText(office.code), office.id);
+      if (office.kedudukan && office.name) map.set(normalizeImportText(`${office.kedudukan} ${office.name}`), office.id);
+    });
+    (aliasesRes.data || []).forEach((alias: any) => {
+      map.set(normalizeImportText(alias.alias_name), alias.office_id);
+      if (alias.normalized_alias) map.set(normalizeImportText(alias.normalized_alias), alias.office_id);
+    });
+
+    return (name?: string | null) => {
+      const key = normalizeImportText(name || '');
+      return key ? map.get(key) || null : null;
+    };
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     if (importRef.current) importRef.current.value = '';
+    if (importProgress && ['reading', 'importing', 'syncing', 'refreshing'].includes(importProgress.phase)) {
+      return toast.info('Import masih berjalan. Tunggu sampai proses selesai.');
+    }
 
-    type ImportRow = { nik: string; full_name: string; phone: string; email: string; join_date: string; resign_date: string; job_title: string; role: string };
+    type ImportRow = { nik: string; full_name: string; phone: string; email: string; join_date: string; resign_date: string; job_title: string; role: string; department_name: string; office_name: string };
     const dataRows: ImportRow[] = [];
+    setImportProgress({
+      phase: 'reading',
+      total: 0,
+      processed: 0,
+      ok: 0,
+      fail: 0,
+      deactivated: 0,
+      message: `Membaca file ${file.name}...`,
+    });
 
     try {
       const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
@@ -492,39 +624,93 @@ export default function UserManagementPage() {
         const headerRowIdx = allRows.findIndex(r =>
           r.some(c => typeof c === 'string' && ['email', 'nama', 'name'].includes(String(c).trim().toLowerCase().replace(' *', '')))
         );
+        const headers = headerRowIdx >= 0 ? allRows[headerRowIdx].map(v => String(v ?? '').trim()) : [];
         const startIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 3;
         for (let i = startIdx; i < allRows.length; i++) {
           const r = allRows[i].map(v => String(v ?? '').trim());
-          const [nik, full_name, phone, email, join_date, resign_date, job_title, role] = r;
+          const nik = getByHeader(headers, r, 'nik', 0);
+          const full_name = getByHeader(headers, r, 'full_name', 1);
+          const phone = getByHeader(headers, r, 'phone', 2);
+          const email = getByHeader(headers, r, 'email', 3);
+          const join_date = normalizeImportDate(getByHeader(headers, r, 'join_date', 4));
+          const resign_date = normalizeImportDate(getByHeader(headers, r, 'resign_date', 5));
+          const job_title = getByHeader(headers, r, 'job_title', 6);
+          const role = getByHeader(headers, r, 'role', 7);
+          const department_name = getByHeader(headers, r, 'department_name', 8);
+          const office_name = getByHeader(headers, r, 'office_name', 9);
           if (!email && !full_name) continue;
           if (TEMPLATE_EXAMPLE_EMAILS.has(email.toLowerCase())) continue;
           if (!email || !full_name) continue;
-          dataRows.push({ nik, full_name, phone, email, join_date, resign_date, job_title, role });
+          dataRows.push({ nik, full_name, phone, email, join_date, resign_date, job_title, role, department_name, office_name });
         }
       } else {
         const text  = await file.text();
         const lines = text.split('\n').filter(l => l.trim());
         if (lines.length < 2) return toast.error('File CSV kosong');
+        const headers = (lines[0].match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || []).map(v => v.replace(/^"|"$/g, '').trim());
         for (const line of lines.slice(1)) {
           const cols = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)?.map(v => v.replace(/^"|"$/g, '').trim()) || [];
-          const [nik, full_name, phone, email, join_date, resign_date, job_title, role] = cols;
+          const nik = getByHeader(headers, cols, 'nik', 0);
+          const full_name = getByHeader(headers, cols, 'full_name', 1);
+          const phone = getByHeader(headers, cols, 'phone', 2);
+          const email = getByHeader(headers, cols, 'email', 3);
+          const join_date = normalizeImportDate(getByHeader(headers, cols, 'join_date', 4));
+          const resign_date = normalizeImportDate(getByHeader(headers, cols, 'resign_date', 5));
+          const job_title = getByHeader(headers, cols, 'job_title', 6);
+          const role = getByHeader(headers, cols, 'role', 7);
+          const department_name = getByHeader(headers, cols, 'department_name', 8);
+          const office_name = getByHeader(headers, cols, 'office_name', 9);
           if (!email || !full_name) continue;
           if (TEMPLATE_EXAMPLE_EMAILS.has(email.toLowerCase())) continue;
-          dataRows.push({ nik, full_name, phone, email, join_date, resign_date, job_title, role });
+          dataRows.push({ nik, full_name, phone, email, join_date, resign_date, job_title, role, department_name, office_name });
         }
       }
     } catch {
+      setImportProgress((prev) => prev ? { ...prev, phase: 'error', message: 'Gagal membaca file. Pastikan format file benar.' } : null);
       return toast.error('Gagal membaca file. Pastikan format file benar.');
     }
 
-    if (dataRows.length === 0) return toast.warning('Tidak ada data valid untuk diimpor.');
+    if (dataRows.length === 0) {
+      setImportProgress((prev) => prev ? { ...prev, phase: 'error', message: 'Tidak ada data valid untuk diimpor.' } : null);
+      return toast.warning('Tidak ada data valid untuk diimpor.');
+    }
+    const rowsWithoutNik = dataRows.filter((row) => !row.nik);
+    if (rowsWithoutNik.length > 0) {
+      setImportProgress((prev) => prev ? {
+        ...prev,
+        phase: 'error',
+        total: dataRows.length,
+        message: `${rowsWithoutNik.length} baris belum memiliki NIK. Periksa header kolom NIK di file import.`,
+      } : null);
+      return toast.error(`Import dibatalkan: ${rowsWithoutNik.length} baris belum memiliki NIK. Periksa header kolom NIK di file import.`);
+    }
 
     let ok = 0, fail = 0;
+    const importErrors: string[] = [];
+    const unmatchedDepartments = new Set<string>();
+    const unmatchedOffices = new Set<string>();
     const { data: { session } } = await supabase.auth.getSession();
+    const resolveDepartmentId = await buildDepartmentResolver();
+    const resolveOfficeId = await buildOfficeResolver();
+    const importedNiks = dataRows.map((row) => row.nik).filter(Boolean);
+    setImportProgress({
+      phase: 'importing',
+      total: dataRows.length,
+      processed: 0,
+      ok: 0,
+      fail: 0,
+      deactivated: 0,
+      message: `Mengimpor ${dataRows.length} karyawan...`,
+    });
     toast.info(`Mengimpor ${dataRows.length} karyawan...`);
 
-    for (const row of dataRows) {
+    for (const [index, row] of dataRows.entries()) {
       try {
+        const departmentId = resolveDepartmentId(row.department_name);
+        const officeId = resolveOfficeId(row.office_name);
+        const normalizedRole = (row.role || '').trim().toLowerCase();
+        if (row.department_name && !departmentId) unmatchedDepartments.add(row.department_name);
+        if (row.office_name && !officeId) unmatchedOffices.add(row.office_name);
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
@@ -532,23 +718,100 @@ export default function UserManagementPage() {
             action:      'create',
             email:       row.email,
             full_name:   row.full_name,
+            nik:         row.nik,
             job_title:   row.job_title   || null,
             phone:       row.phone       || null,
-            role:        ['admin','user'].includes((row.role||'').toLowerCase()) ? row.role.toLowerCase() : 'user',
+            role:        ['admin','user'].includes(normalizedRole) ? normalizedRole : null,
             join_date:   row.join_date   || null,
             resign_date: row.resign_date || null,
+            department_id: departmentId,
+            office_id: officeId,
           }),
         });
-        if (res.ok) ok++; else fail++;
-      } catch { fail++; }
+        const json = await res.json().catch(() => ({}));
+        if (res.ok) {
+          ok++;
+        } else {
+          fail++;
+          importErrors.push(`${row.nik || '-'} - ${row.full_name || row.email || 'Tanpa nama'}: ${json.error || `HTTP ${res.status}`}`);
+        }
+      } catch (error: any) {
+        fail++;
+        importErrors.push(`${row.nik || '-'} - ${row.full_name || row.email || 'Tanpa nama'}: ${error?.message || 'Gagal mengirim request'}`);
+      }
+      setImportProgress({
+        phase: 'importing',
+        total: dataRows.length,
+        processed: index + 1,
+        ok,
+        fail,
+        deactivated: 0,
+        message: `Memproses ${index + 1} dari ${dataRows.length} karyawan...`,
+        errors: importErrors.slice(-12),
+      });
     }
 
+    let deactivated = 0;
+    if (importedNiks.length > 0) {
+      try {
+        setImportProgress((prev) => prev ? {
+          ...prev,
+          phase: 'syncing',
+          message: 'Menyinkronkan status akun aktif...',
+        } : null);
+        const syncRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ action: 'sync_active_import', active_niks: importedNiks }),
+        });
+        const syncJson = await syncRes.json().catch(() => ({}));
+        if (!syncRes.ok) throw new Error(syncJson.error || 'Gagal sinkron status aktif.');
+        deactivated = Number(syncJson.deactivated || 0);
+        setImportProgress((prev) => prev ? { ...prev, deactivated } : null);
+      } catch (error: any) {
+        toast.error(error.message || 'Gagal menonaktifkan karyawan yang tidak ada di file import.');
+      }
+    }
+
+    setImportProgress((prev) => prev ? {
+      ...prev,
+      phase: 'refreshing',
+      deactivated,
+      message: 'Memperbarui tabel karyawan...',
+    } : null);
+    await fetchUsers();
+    setImportProgress({
+      phase: 'done',
+      total: dataRows.length,
+      processed: dataRows.length,
+      ok,
+      fail,
+      deactivated,
+      message: `Import selesai: ${ok} berhasil${fail > 0 ? `, ${fail} gagal` : ''}${deactivated > 0 ? `, ${deactivated} dinonaktifkan` : ''}.`,
+      errors: importErrors,
+    });
     toast.success(`Import selesai: ${ok} berhasil${fail > 0 ? `, ${fail} gagal` : ''}`);
-    fetchUsers();
+    if (deactivated > 0) toast.info(`${deactivated} akun dinonaktifkan karena NIK tidak ada di file import.`);
+    if (unmatchedDepartments.size > 0) {
+      toast.warning(`Departemen belum termapping: ${Array.from(unmatchedDepartments).slice(0, 8).join(', ')}${unmatchedDepartments.size > 8 ? ', ...' : ''}`);
+    }
+    if (unmatchedOffices.size > 0) {
+      toast.warning(`Kantor belum termapping: ${Array.from(unmatchedOffices).slice(0, 8).join(', ')}${unmatchedOffices.size > 8 ? ', ...' : ''}`);
+    }
   };
 
   const activeCount   = users.filter(u => (u as any).is_active !== false).length;
   const inactiveCount = users.length - activeCount;
+  const isImporting = !!importProgress && ['reading', 'importing', 'syncing', 'refreshing'].includes(importProgress.phase);
+  const importPercent = importProgress?.total
+    ? Math.round((importProgress.processed / importProgress.total) * 100)
+    : importProgress?.phase === 'reading'
+      ? 8
+      : importProgress?.phase === 'syncing' || importProgress?.phase === 'refreshing'
+        ? 96
+        : importProgress?.phase === 'done'
+          ? 100
+          : 0;
 
   const StatPill = ({ icon, label, value, cls }: { icon: React.ReactNode; label: string; value: number; cls: string }) => (
     <div className={cn("hidden sm:flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-bold", cls)}>
@@ -573,20 +836,106 @@ export default function UserManagementPage() {
             className="h-10 gap-2 font-bold text-xs uppercase rounded-xl border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10">
             <FileSpreadsheet className="w-4 h-4" /> Template
           </Button>
-          <Button variant="outline" onClick={() => importRef.current?.click()}
+          <Button variant="outline" onClick={() => importRef.current?.click()} disabled={isImporting}
             className="h-10 gap-2 font-bold text-xs uppercase rounded-xl">
-            <Upload className="w-4 h-4" /> Import
+            {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {isImporting ? 'Mengimpor...' : 'Import'}
           </Button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
           <Button variant="outline" onClick={handleExport}
             className="h-10 gap-2 font-bold text-xs uppercase rounded-xl border-primary/30 text-primary hover:bg-primary/10">
             <Download className="w-4 h-4" /> Export XLSX
           </Button>
+          <Button asChild variant="outline"
+            className="h-10 gap-2 font-bold text-xs uppercase rounded-xl border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/10">
+            <Link to="/admin/users/hierarchy">
+              <Network className="w-4 h-4" /> Hirarki
+            </Link>
+          </Button>
           <Button onClick={() => setIsAddOpen(true)} className="h-10 px-5 font-bold text-xs uppercase rounded-xl">
             <Plus className="w-4 h-4 mr-1.5" /> Tambah Karyawan
           </Button>
         </div>
       </div>
+
+      {importProgress && (
+        <div className={cn(
+          "rounded-2xl border p-4 shadow-sm",
+          importProgress.phase === 'error'
+            ? "border-red-500/25 bg-red-500/5"
+            : importProgress.phase === 'done'
+              ? "border-emerald-500/25 bg-emerald-500/5"
+              : "border-primary/25 bg-primary/5"
+        )}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+                importProgress.phase === 'error'
+                  ? "border-red-500/25 bg-red-500/10 text-red-500"
+                  : importProgress.phase === 'done'
+                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-500"
+                    : "border-primary/25 bg-primary/10 text-primary"
+              )}>
+                {isImporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : importProgress.phase === 'error' ? (
+                  <AlertCircle className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  {importProgress.phase === 'done' ? 'Import Selesai' : importProgress.phase === 'error' ? 'Import Gagal' : 'Import Berjalan'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{importProgress.message}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  <span>Diproses: {importProgress.processed}/{importProgress.total || '-'}</span>
+                  <span>Berhasil: {importProgress.ok}</span>
+                  <span>Gagal: {importProgress.fail}</span>
+                  {importProgress.deactivated > 0 && <span>Dinonaktifkan: {importProgress.deactivated}</span>}
+                </div>
+              </div>
+            </div>
+            {!isImporting && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setImportProgress(null)}
+                className="h-9 self-start rounded-xl text-xs font-bold uppercase md:self-center"
+              >
+                <X className="mr-1.5 h-3.5 w-3.5" /> Tutup
+              </Button>
+            )}
+          </div>
+          <Progress value={importPercent} className="mt-4 h-2 bg-background/70" />
+          {importProgress.errors && importProgress.errors.length > 0 && (
+            <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-red-500">
+                  Contoh kegagalan import
+                </p>
+                <span className="text-[10px] font-bold text-muted-foreground">
+                  {importProgress.errors.length} error tercatat
+                </span>
+              </div>
+              <div className="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+                {importProgress.errors.slice(0, 20).map((error, index) => (
+                  <p key={`${error}-${index}`} className="rounded-lg bg-background/60 px-2.5 py-1.5 text-xs font-medium text-foreground/85">
+                    {error}
+                  </p>
+                ))}
+              </div>
+              {importProgress.errors.length > 20 && (
+                <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
+                  Menampilkan 20 error pertama. Perbaiki pola error yang sama lalu import ulang.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Filter toolbar ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3 glass-card p-4 rounded-2xl">

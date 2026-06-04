@@ -60,9 +60,9 @@ export const AgendaTabs = ({ agendas, users, onAgendaClick, onStatusChange }: Ag
     const start = startOfWeek(currentPeriod, { weekStartsOn: 1 });
     const end   = endOfWeek(currentPeriod,   { weekStartsOn: 1 });
     if (isSameMonth(start, end)) {
-      return `${format(start, 'd')}–${format(end, 'd MMM yyyy', { locale: localeID })}`;
+      return `${format(start, 'd')} - ${format(end, 'd MMM yyyy', { locale: localeID })}`;
     }
-    return `${format(start, 'd MMM', { locale: localeID })} – ${format(end, 'd MMM yyyy', { locale: localeID })}`;
+    return `${format(start, 'd MMM', { locale: localeID })} - ${format(end, 'd MMM yyyy', { locale: localeID })}`;
   }, [currentPeriod, periodMode]);
 
   const isCurrentPeriod = useMemo(() => {
@@ -284,7 +284,7 @@ export const AgendaTabs = ({ agendas, users, onAgendaClick, onStatusChange }: Ag
                   </p>
                 </motion.div>
               ) : (
-                <motion.div layout
+                <div
                   className={viewMode === 'grid'
                     ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
                     : "flex flex-col gap-3"}>
@@ -299,7 +299,7 @@ export const AgendaTabs = ({ agendas, users, onAgendaClick, onStatusChange }: Ag
                       onClick={() => onAgendaClick(agenda)}
                     />
                   ))}
-                </motion.div>
+                </div>
               )}
             </AnimatePresence>
           </TabsContent>

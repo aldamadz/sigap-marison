@@ -4,12 +4,11 @@ import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 import { 
-  FileEdit, Plus, LogIn, Trash2, History, 
-  User as UserIcon, Calendar, CheckCircle, Search 
+  FileEdit, Plus, LogIn, Trash2, History, CheckCircle
 } from 'lucide-react';
-import { ActivityLog, User, ActivityAction } from '@/types/agenda';
+import { ActivityLog, User } from '@/types/agenda';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface RecentActivityProps {
@@ -21,6 +20,7 @@ interface RecentActivityProps {
 const actionConfigs: Record<string, { icon: any; color: string; header: string; label: string }> = {
   CREATE: { icon: Plus, label: 'Membuat', color: 'text-emerald-600 bg-emerald-500/10', header: 'bg-emerald-600' },
   INSERT: { icon: Plus, label: 'Membuat', color: 'text-emerald-600 bg-emerald-500/10', header: 'bg-emerald-600' },
+  APPROVAL: { icon: CheckCircle, label: 'Approval', color: 'text-emerald-600 bg-emerald-500/10', header: 'bg-emerald-600' },
   UPDATE: { icon: FileEdit, label: 'Memperbarui', color: 'text-blue-600 bg-blue-500/10', header: 'bg-blue-600' },
   DELETE: { icon: Trash2, label: 'Menghapus', color: 'text-rose-600 bg-rose-500/10', header: 'bg-rose-600' },
   LOGIN:  { icon: LogIn, label: 'Masuk', color: 'text-amber-600 bg-amber-500/10', header: 'bg-amber-600' },
@@ -38,16 +38,48 @@ const formatValue = (key: string, val: any) => {
   return strVal;
 };
 
+const fieldLabels: Record<string, string> = {
+  title: 'Judul agenda',
+  description: 'Deskripsi',
+  location: 'Lokasi',
+  start_time: 'Waktu mulai',
+  end_time: 'Waktu selesai',
+  status: 'Status',
+  judul_surat: 'Judul surat',
+  nomor_surat: 'Nomor surat',
+  requester_name: 'Pemohon',
+  requester_department: 'Departemen pemohon',
+  requester_office: 'Kantor pemohon',
+  note: 'Catatan',
+  signed_at: 'Waktu approval',
+  signer_name: 'Penanda tangan',
+  step_order: 'Urutan approval',
+};
+
+const importantFieldsByTable: Record<string, string[]> = {
+  agendas: ['title', 'description', 'location', 'start_time', 'end_time', 'status'],
+  surat_registrasi: ['judul_surat', 'nomor_surat', 'requester_name', 'requester_department', 'requester_office', 'status'],
+  surat_signatures: ['signer_name', 'step_order', 'signed_at', 'note'],
+};
+
 // --- Komponen Utama ---
 export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) => {
-  const [activeFilter, setActiveFilter] = useState<ActivityAction | 'ALL'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'CREATE' | 'APPROVAL'>('ALL');
   const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
+
+  const getActivityCategory = (log: ActivityLog): 'CREATE' | 'APPROVAL' | 'OTHER' => {
+    const action = log.action?.toUpperCase();
+    const table = log.tableName || (log as any).table_name;
+    if (table === 'surat_signatures' && action === 'UPDATE') return 'APPROVAL';
+    if ((table === 'agendas' || table === 'surat_registrasi') && (action === 'INSERT' || action === 'CREATE')) return 'CREATE';
+    return 'OTHER';
+  };
 
   const filteredLogs = useMemo(() => {
     const safeLogs = Array.isArray(logs) ? logs : [];
     return activeFilter === 'ALL' 
       ? safeLogs 
-      : safeLogs.filter(l => l.action?.toUpperCase() === activeFilter);
+      : safeLogs.filter(l => getActivityCategory(l) === activeFilter);
   }, [logs, activeFilter]);
 
   const getActorInfo = (log: ActivityLog) => {
@@ -62,56 +94,54 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
   const getDisplayMessage = (log: ActivityLog) => {
     const oldData = log.oldValues || (log as any).old_values || {};
     const newData = log.newValues || (log as any).new_values || {};
-    const title = newData.title || oldData.title || newData.full_name || oldData.full_name || "";
-    
-    const tableMapping: Record<string, string> = { agendas: 'agenda', profiles: 'profil' };
+    const title = newData.title || oldData.title || newData.judul_surat || oldData.judul_surat || "";
+
+    const tableMapping: Record<string, string> = {
+      agendas: 'agenda',
+      surat_registrasi: 'surat',
+      surat_signatures: 'approval surat',
+    };
     const rawTable = log.tableName || (log as any).table_name || "";
     const entityName = tableMapping[rawTable] || (rawTable ? rawTable.toLowerCase().replace(/s$/, '') : 'agenda');
 
-    // DETEKSI SOFT DELETE (Update status ke Deleted)
-    const isSoftDelete = log.action?.toUpperCase() === 'UPDATE' && 
-                        (newData.status === 'Deleted' || (newData.deleted_at && !oldData.deleted_at));
+    if (rawTable === 'surat_signatures') return `menyetujui ${entityName}${title ? ` "${title}"` : ''}`;
 
-    if (isSoftDelete) return `menghapus ${entityName} "${title}"`;
-
-    if (log.action?.toUpperCase() === 'UPDATE') {
-      if (newData.status && oldData.status && newData.status !== oldData.status) {
-        return `mengubah status ${entityName} "${title}" menjadi ${newData.status}`;
-      }
-      if (newData.location && oldData.location && newData.location !== oldData.location) {
-        return `memindahkan lokasi ${entityName} "${title}" ke ${newData.location}`;
-      }
-      if (newData.start_time && oldData.start_time && newData.start_time !== oldData.start_time) {
-        return `menjadwal ulang ${entityName} "${title}"`;
-      }
-      return `memperbarui informasi ${entityName} "${title}"`;
-    }
-
-    const config = actionConfigs[log.action?.toUpperCase()] || actionConfigs.UPDATE;
-    return `${config.label.toLowerCase()} ${entityName} ${title ? `"${title}"` : ''}`;
+    return `membuat ${entityName}${title ? ` "${title}"` : ''}`;
   };
 
   const renderDiff = (log: ActivityLog) => {
     const oldVal = log.oldValues || (log as any).old_values || {};
     const newVal = log.newValues || (log as any).new_values || {};
-    const keys = Object.keys(log.action === 'DELETE' || (newVal.status === 'Deleted') ? oldVal : newVal)
-      .filter(k => !['id', 'user_id', 'created_at', 'updated_at', 'deleted_at'].includes(k));
+    const tableName = log.tableName || (log as any).table_name || '';
+    const preferredKeys = importantFieldsByTable[tableName] || [];
+    const allKeys = Object.keys({ ...oldVal, ...newVal })
+      .filter(k => !['id', 'user_id', 'created_at', 'updated_at', 'deleted_at', 'template_data', 'excel_data', 'snapshot_data'].includes(k));
+    const keys = [
+      ...preferredKeys.filter(k => allKeys.includes(k)),
+      ...allKeys.filter(k => !preferredKeys.includes(k)),
+    ].slice(0, 8);
 
     return (
-      <div className="space-y-4 py-2">
+      <div className="space-y-3">
         {keys.map(key => (
-          <div key={key} className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-              <div className="w-1 h-1 rounded-full bg-primary" /> {key.replace(/_/g, ' ')}
+          <div key={key} className="rounded-xl border border-border bg-card p-4">
+            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              {fieldLabels[key] || key.replace(/_/g, ' ')}
             </label>
-            <div className="p-3 rounded-xl bg-muted/50 border border-border/50 text-sm">
+            <div className="mt-2 text-sm">
               {log.action === 'UPDATE' && oldVal[key] !== newVal[key] ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="line-through opacity-40 italic">{formatValue(key, oldVal[key])}</div>
-                  <div className="font-bold text-emerald-600">{formatValue(key, newVal[key])}</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sebelum</p>
+                    <div className="rounded-lg bg-muted/50 p-3 text-muted-foreground">{formatValue(key, oldVal[key])}</div>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sesudah</p>
+                    <div className="rounded-lg bg-primary/5 p-3 font-semibold text-foreground">{formatValue(key, newVal[key])}</div>
+                  </div>
                 </div>
               ) : (
-                <div className="font-semibold">{formatValue(key, newVal[key] || oldVal[key])}</div>
+                <div className="rounded-lg bg-muted/50 p-3 font-semibold text-foreground">{formatValue(key, newVal[key] ?? oldVal[key])}</div>
               )}
             </div>
           </div>
@@ -129,16 +159,20 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
             <h3 className="font-bold">Aktivitas Terbaru</h3>
           </div>
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
-            {['ALL', 'CREATE', 'UPDATE', 'DELETE'].map((f) => (
+            {[
+              { value: 'ALL', label: 'Semua' },
+              { value: 'CREATE', label: 'Membuat' },
+              { value: 'APPROVAL', label: 'Approval' },
+            ].map((filter) => (
               <button 
-                key={f} 
-                onClick={() => setActiveFilter(f as any)}
+                key={filter.value}
+                onClick={() => setActiveFilter(filter.value as any)}
                 className={cn(
                   "px-3 py-1 text-[10px] font-bold rounded-md transition-all uppercase", 
-                  activeFilter === f ? "bg-background shadow-sm text-primary" : "text-muted-foreground"
+                  activeFilter === filter.value ? "bg-background shadow-sm text-primary" : "text-muted-foreground"
                 )}
               >
-                {f === 'ALL' ? 'Semua' : f}
+                {filter.label}
               </button>
             ))}
           </div>
@@ -149,14 +183,7 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
             <div className="py-10 text-center text-muted-foreground text-sm italic">Belum ada aktivitas.</div>
           ) : (
             filteredLogs.map((log, i) => {
-              const oldData = log.oldValues || (log as any).old_values || {};
-              const newData = log.newValues || (log as any).new_values || {};
-              
-              // HIJACK LOGIC: Jika status jadi Deleted, paksa pakai config DELETE
-              const isSoftDelete = log.action?.toUpperCase() === 'UPDATE' && 
-                                  (newData.status === 'Deleted' || (newData.deleted_at && !oldData.deleted_at));
-              
-              const actionKey = isSoftDelete ? 'DELETE' : log.action?.toUpperCase();
+              const actionKey = getActivityCategory(log) === 'APPROVAL' ? 'APPROVAL' : 'CREATE';
               const config = actionConfigs[actionKey] || actionConfigs.UPDATE;
               
               const actor = getActorInfo(log);
@@ -186,24 +213,45 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
       </div>
 
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl">
+        <DialogContent className="max-w-2xl p-0 overflow-hidden rounded-2xl border shadow-2xl">
           {selectedLog && (() => {
              const newData = selectedLog.newValues || (selectedLog as any).new_values || {};
-             const isSoftDelete = selectedLog.action?.toUpperCase() === 'UPDATE' && newData.status === 'Deleted';
-             const modalConfig = actionConfigs[isSoftDelete ? 'DELETE' : selectedLog.action?.toUpperCase()] || actionConfigs.UPDATE;
+             const category = getActivityCategory(selectedLog);
+             const modalConfig = actionConfigs[category === 'APPROVAL' ? 'APPROVAL' : 'CREATE'];
+             const actor = getActorInfo(selectedLog);
+             const tableName = selectedLog.tableName || (selectedLog as any).table_name || '';
+             const tableLabel = tableName === 'agendas' ? 'Agenda' : tableName === 'surat_registrasi' ? 'Surat' : 'Approval surat';
+             const logDate = new Date(selectedLog.createdAt || (selectedLog as any).created_at || Date.now());
              
              return (
-              <div className="flex flex-col">
-                <div className={cn("p-8 text-white relative transition-colors", modalConfig.header)}>
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2">Log Explorer</p>
-                  <h2 className="text-xl font-black leading-tight">
-                    {getDisplayMessage(selectedLog)}
-                  </h2>
+              <div className="flex max-h-[82vh] flex-col bg-background">
+                <div className={cn("px-7 py-6 text-white relative transition-colors", modalConfig.header)}>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-75 mb-2">Detail Aktivitas</p>
+                  <DialogTitle className="pr-8 text-xl font-black leading-tight">{actor.name} {getDisplayMessage(selectedLog)}</DialogTitle>
+                  <DialogDescription className="mt-2 text-xs font-semibold text-white/85">
+                    {isValid(logDate) ? format(logDate, 'dd MMM yyyy, HH:mm', { locale: localeID }) : '-'}
+                  </DialogDescription>
                 </div>
-                <div className="p-8 max-h-[60vh] overflow-y-auto scrollbar-thin bg-background">
+
+                <div className="grid gap-3 border-b border-border px-7 py-4 text-xs sm:grid-cols-3">
+                  <div>
+                    <p className="font-black uppercase tracking-widest text-muted-foreground">Jenis</p>
+                    <p className="mt-1 font-bold text-foreground">{tableLabel}</p>
+                  </div>
+                  <div>
+                    <p className="font-black uppercase tracking-widest text-muted-foreground">Aksi</p>
+                    <p className="mt-1 font-bold text-foreground">{category === 'APPROVAL' ? 'Approval' : 'Membuat'}</p>
+                  </div>
+                  <div>
+                    <p className="font-black uppercase tracking-widest text-muted-foreground">Pelaku</p>
+                    <p className="mt-1 truncate font-bold text-foreground">{actor.name}</p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-7 scrollbar-thin">
                   {renderDiff(selectedLog)}
                 </div>
-                <div className="p-4 bg-muted/30 border-t flex justify-end">
+                <div className="border-t bg-muted/30 p-4 flex justify-end">
                   <button 
                     onClick={() => setSelectedLog(null)}
                     className="px-6 py-2 bg-foreground text-background text-[10px] font-bold uppercase rounded-xl hover:bg-foreground/90 transition-colors"

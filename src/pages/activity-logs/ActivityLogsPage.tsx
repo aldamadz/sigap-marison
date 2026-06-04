@@ -51,11 +51,17 @@ export default function ActivityLogsPage() {
   const filteredLogs = useMemo(() => {
     return allLogs.filter(log => {
       const actor = users?.find(u => String(u.id) === String(log.userId || log.user_id));
-      const actorName = log.profiles?.fullName || actor?.fullName || 'System';
-      const desc = (log.newValues?.title || "").toLowerCase();
+      const actorName = log.profiles?.fullName || actor?.fullName || 'Sistem';
+      const searchable = [
+        actorName,
+        log.action,
+        log.tableName || log.table_name,
+        log.recordId || log.record_id,
+        JSON.stringify(log.oldValues || {}),
+        JSON.stringify(log.newValues || {}),
+      ].join(' ').toLowerCase();
       const matchesSearch = searchQuery === '' || 
-        actorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        desc.includes(searchQuery.toLowerCase());
+        searchable.includes(searchQuery.toLowerCase());
       const matchesAction = actionFilter === 'all' || log.action?.toUpperCase() === actionFilter;
       return matchesSearch && matchesAction;
     });
@@ -72,8 +78,8 @@ export default function ActivityLogsPage() {
           <History className="h-7 w-7" />
         </div>
         <div>
-          <h1 className="text-3xl font-black tracking-tight uppercase italic">Activity Logs</h1>
-          <p className="text-muted-foreground text-sm font-medium italic">Audit jejak digital tim secara real-time.</p>
+          <h1 className="text-3xl font-black tracking-tight uppercase italic">Audit Log</h1>
+          <p className="text-muted-foreground text-sm font-medium italic">Jejak audit administratif untuk perubahan data sistem.</p>
         </div>
       </div>
 
@@ -88,7 +94,7 @@ export default function ActivityLogsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="Cari karyawan atau judul agenda..." 
+                placeholder="Cari pelaku, tabel, surat, agenda, atau perubahan data..." 
                 className="pl-10 bg-background rounded-xl border-border/60 focus-visible:ring-primary/20"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -100,6 +106,7 @@ export default function ActivityLogsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Aksi</SelectItem>
+                <SelectItem value="INSERT" className="text-emerald-600 font-bold">Inserted</SelectItem>
                 <SelectItem value="CREATE" className="text-emerald-600 font-bold">Created</SelectItem>
                 <SelectItem value="UPDATE" className="text-blue-600 font-bold">Updated</SelectItem>
                 <SelectItem value="DELETE" className="text-rose-600 font-bold">Deleted</SelectItem>

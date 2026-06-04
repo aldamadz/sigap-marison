@@ -29,6 +29,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Surat | `/surat/chat` | Diskusi PIC |
 | PIC | `/pic/monitoring` | Antrean Review PIC |
 | Admin | `/admin/users` | User Organization |
+| Admin | `/admin/users/hierarchy` | Hirarki Organisasi |
 | Admin | `/admin/departments` | Master Departemen |
 | Admin | `/admin/entities` | Master Entitas |
 | Admin | `/admin/forms` | Master Form |
@@ -253,12 +254,33 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin mengelola user.
 - Admin mengatur relasi user dengan departemen/kantor.
 - Admin melihat informasi dasar user untuk kebutuhan assignment.
+- Admin dapat mengimpor data karyawan dengan panel progress yang menampilkan tahap proses, jumlah diproses, berhasil, gagal, dan akun yang dinonaktifkan.
+- Setelah import selesai, daftar karyawan diperbarui otomatis tanpa refresh manual.
+- Import karyawan menormalisasi tanggal Excel/CSV ke format database agar tanggal serial Excel tidak menyebabkan baris gagal.
+- Import karyawan tidak menurunkan role user existing jika kolom role kosong; role lama dipertahankan kecuali file eksplisit berisi `admin` atau `user`.
+- Admin melihat hirarki organisasi pada route `/admin/users/hierarchy`.
+- Hirarki tersedia dalam dua mode: Tree List dan Chart Node.
+- Tree List mendukung expand/collapse, search, filter departemen, filter kantor, filter status aktif/nonaktif, dan fokus ke user tertentu.
+- Halaman hirarki organisasi default menampilkan user berstatus aktif.
+- Mapping hirarki karyawan dapat dipreview dari file Excel HRD sebelum diterapkan ke `parent_id`.
+- Hirarki memakai level jabatan 1-7: Pelaksana, Staff, Supervisor, Assistant Manager/Assistant Branch Manager, Manager/Branch Manager, Direktur, Direktur Utama.
+- Branch Manager menjadi top tier saat dilihat per kantor cabang karena berada di level manajerial cabang.
+- Chart Node menampilkan struktur organisasi bergaya piramid top-down untuk browser PC.
+- Node chart hanya menampilkan foto dan nama; detail user tampil saat node diklik.
+- Chart Node mendukung drag-to-pan horizontal dengan klik-tahan lalu geser.
+- Mobile tetap mengutamakan Tree List agar struktur tetap terbaca dan ringan.
+- Hirarki dapat diekspor ke XLSX berisi level, path atasan, jumlah bawahan langsung, total bawahan, status, departemen, kantor, dan catatan masalah struktur.
+- Export PDF/PNG untuk chart akan ditambahkan setelah layout Chart Node disetujui.
 
 ### Non-Fungsional
 
 - Data user harus konsisten dengan auth Supabase.
+- Import user wajib menolak baris tanpa NIK agar sistem tidak membuat NIK fallback `PENDING-*`.
 - Admin tidak boleh melihat atau mengubah secret/auth token user.
 - Perubahan organisasi user berdampak pada akses dan routing, sehingga perlu audit.
+- Hirarki harus mendeteksi masalah struktur seperti parent hilang, parent nonaktif, user menjadi parent dirinya sendiri, atau siklus parent.
+- Tampilan halaman hirarki harus berada di dalam area konten admin dan tidak menimpa breadcrumb/header.
+- Tampilan chart hirarki memakai panel admin yang netral agar tetap mudah dibaca pada desktop dan mobile.
 
 ## 14. Master Departemen
 
@@ -323,11 +345,14 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - Admin mengelola kantor pusat, cabang, dan relasi cabang.
 - Kantor/cabang dipakai dalam nomor surat, routing, filter, dan KPI.
+- Master kantor mendukung unit Kost seperti Maris Kost Ekslusif, Kost Palur, Kost Pakuwon, dan Kost Slamet Riyadi.
+- Import karyawan memakai alias kantor agar variasi nama dari data HRD tetap bisa termapping.
 
 ### Non-Fungsional
 
 - Struktur cabang harus konsisten.
 - Kode kantor/cabang harus unik.
+- Alias kantor harus unik berdasarkan nama yang sudah dinormalisasi.
 - Perubahan kantor/cabang harus menjaga histori surat lama.
 
 ## 19. Master Proyek
@@ -434,6 +459,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - Dashboard KPI menampilkan performa approval per departemen.
 - KPI dihitung per step tanda tangan di `surat_signatures`.
+- Departemen KPI adalah departemen milik user yang bertanda tangan: `signer_snapshot.department_id`, fallback ke `profiles.department_id`.
+- Departemen pengajuan/surat (`surat_registrasi.dept_id`) tidak dipakai untuk atribusi KPI penanda tangan.
 - Pending ikut dihitung sampai `now()`.
 - Admin dapat melihat antrean yang tepat waktu, telat, pending aman, pending telat, dan rejected.
 - Dashboard dapat difilter berdasarkan periode tanggal, departemen, cabang/kantor, jenis surat, form/template, dan status KPI.
@@ -510,13 +537,21 @@ Fallback data lama:
 | Step berikutnya tidak punya `available_at` | `signed_at` step sebelumnya |
 | Step pending | hitung sampai `now()` |
 
-### Tahapan Implementasi
+### Status Implementasi
 
-1. Tambah tabel config, kolom `available_at`, dan function hitung menit kerja efektif.
-2. Buat RPC/view KPI departemen dan detail antrean.
-3. Buat dashboard KPI dengan filter lengkap.
-4. Buat UI setting jam kerja, jam istirahat, hari kerja, SLA, dan timezone.
-5. Uji kasus jam istirahat, lintas hari, pending, rejected, dan data lama.
+- Route UI: `/admin/kpi-departments`.
+- Menu: `KPI Departemen` pada area admin/sidebar.
+- Database: `department_kpi_configs`, kolom `surat_signatures.available_at`, function `calculate_business_minutes`, dan RPC `get_department_kpi_summary`.
+- Frontend service: `department-kpi.service.ts`.
+- UI konfigurasi: admin dapat mengatur SLA menit, hari kerja, jam kerja, jam istirahat, dan timezone per departemen terpilih.
+- Realtime: query KPI departemen ikut direfresh saat `surat_registrasi` atau `surat_signatures` berubah.
+
+### Lanjutan yang Masih Bisa Ditambah
+
+1. Kalender hari libur nasional/perusahaan.
+2. Detail drill-down sampai daftar surat per departemen.
+3. Export KPI untuk laporan manajemen.
+4. Indikator telat langsung pada antrean approval jika diperlukan.
 
 ## 27. Keamanan dan Hak Akses
 
@@ -551,4 +586,3 @@ Fallback data lama:
 - Healthcheck container harus tersedia.
 - Dokumentasi deploy harus mengikuti perubahan arsitektur.
 - Secret deployment tidak boleh masuk repo.
-

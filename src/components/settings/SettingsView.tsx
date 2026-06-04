@@ -111,12 +111,16 @@ export const SettingsView = () => {
     }
 
     setUpdatingPassword(true);
+    const { data: authData } = await supabase.auth.getUser();
     const { error } = await supabase.auth.updateUser({ password: passwords.newPassword });
     setUpdatingPassword(false);
 
     if (error) {
       toast({ title: "Gagal", description: error.message, variant: "destructive" });
     } else {
+      if (authData.user?.id) {
+        await supabase.rpc('record_auth_audit_event', { p_event: 'password_changed' });
+      }
       toast({ title: "Berhasil", description: "Password diperbarui." });
       setPasswords({ newPassword: '', confirmPassword: '' });
     }

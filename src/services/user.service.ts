@@ -7,8 +7,13 @@ import { toUIUser } from '@/adapters/user.adapter';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
-const registrationClient = createClient(supabaseUrl, supabaseKey, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+const createRegistrationClient = () => createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    storageKey: 'sb-registration-temp',
+  },
 });
 
 const getJoinData = (data: any) => Array.isArray(data) ? data[0] : data;
@@ -140,6 +145,7 @@ export async function getSubordinates(parentId: string): Promise<User[]> {
  */
 export const registerNewUser = async (userData: any) => {
   try {
+    const registrationClient = createRegistrationClient();
     const { data, error } = await registrationClient.auth.signUp({
       email:    userData.email,
       password: userData.password,

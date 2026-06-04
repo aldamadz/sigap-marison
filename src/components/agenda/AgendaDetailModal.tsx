@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Agenda, AgendaStatus, User } from '@/types/agenda';
@@ -161,15 +161,15 @@ export const AgendaDetailModal = ({
   const owner = users.find(u => String(u.id) === String(agenda.createdBy));
 
   const fmtDateTime = (val: any) => {
-    if (!val) return '—';
-    try { return format(new Date(val), "EEEE, d MMMM yyyy · HH:mm", { locale: localeID }); }
+    if (!val) return '-';
+    try { return format(new Date(val), "EEEE, d MMMM yyyy - HH:mm", { locale: localeID }); }
     catch { return String(val); }
   };
 
   const fmtTime = (val: any) => {
-    if (!val) return '—';
+    if (!val) return '-';
     try { return format(new Date(val), "HH:mm", { locale: localeID }); }
-    catch { return '—'; }
+    catch { return '-'; }
   };
 
   const durasiLabel = (() => {
@@ -209,7 +209,7 @@ export const AgendaDetailModal = ({
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
           <FastForward className="w-4 h-4 text-amber-500 shrink-0" />
           <p className="text-[11px] font-bold text-amber-600">
-            Pindahkan ke waktu sekarang dengan durasi yang sama ({durasiLabel ?? '—'})?
+            Pindahkan ke waktu sekarang dengan durasi yang sama ({durasiLabel ?? '-'})?
           </p>
         </div>
         <div className="flex gap-2">
@@ -263,15 +263,18 @@ export const AgendaDetailModal = ({
                 <span className={cn("w-1.5 h-1.5 rounded-full", st.dot)} />
                 {st.label}
                 {phase === 'future'  && agenda.status === 'Scheduled' && (
-                  <span className="ml-1 opacity-60">· Belum dimulai</span>
+                  <span className="ml-1 opacity-60">- Belum dimulai</span>
                 )}
                 {phase === 'ongoing' && agenda.status === 'Scheduled' && (
-                  <span className="ml-1 opacity-60">· Sedang berlangsung</span>
+                  <span className="ml-1 opacity-60">- Sedang berlangsung</span>
                 )}
               </span>
               <DialogTitle className="text-lg font-black text-foreground tracking-tight leading-snug">
                 {agenda.title}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Detail agenda berisi status, waktu mulai, waktu selesai, lokasi, catatan, dan aksi yang tersedia.
+              </DialogDescription>
               {/* Owner — tampil jika ada users list (AgendaPage multi-user) */}
               {owner && (
                 <p className="text-[11px] text-muted-foreground mt-1">

@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
 import { format, isValid } from 'date-fns'; // Tambahkan isValid
+import { id as localeID } from 'date-fns/locale';
 import { Clock, User as UserIcon, MoreVertical } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -43,16 +43,11 @@ const formatDateTime = (dateInput: string | Date | null | undefined) => {
   if (!isValid(date)) return 'Invalid Date';
   
   // date-fns format sekarang pasti menerima 'date' karena sudah divalidasi
-  return format(date, 'MMM d, h:mm a');
+  return format(date, 'd MMM yyyy, HH:mm', { locale: localeID });
 };
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ delay: index * 0.05 }}
+    <div
       className={cn(
         "agenda-item flex items-start gap-4 cursor-pointer p-4 rounded-xl border border-border bg-card transition-all hover:shadow-md",
         isSelected && "ring-2 ring-primary bg-primary/5 border-primary/20"
@@ -101,6 +96,6 @@ const formatDateTime = (dateInput: string | Date | null | undefined) => {
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };

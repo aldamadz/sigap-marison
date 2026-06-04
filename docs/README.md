@@ -53,7 +53,7 @@ Garis besar dokumentasi:
 
 | File | Deskripsi |
 |------|-----------|
-| [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, dan rencana fitur berjalan |
+| [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, termasuk Hirarki Organisasi, dan rencana fitur berjalan |
 | [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |
@@ -74,4 +74,4 @@ Garis besar dokumentasi:
 
 ---
 
-*Last updated: 2026-05-29*
+*Last updated: 2026-06-04*

@@ -26,8 +26,9 @@ const ROUTE_LABELS: Record<string, string> = {
   '/pic/monitoring': 'PIC Monitoring',
   '/admin': 'Admin',
   '/admin/users': 'Manajemen User',
+  '/admin/users/hierarchy': 'Hirarki Organisasi',
   '/admin/settings': 'Pengaturan',
-  '/activity-logs': 'Log Aktivitas',
+  '/audit-logs': 'Audit Log',
   '/settings': 'Pengaturan',
   '/hierarchy': 'Struktur Organisasi',
 }

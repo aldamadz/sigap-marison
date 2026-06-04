@@ -716,7 +716,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ surat: initialSurat, currentUser,
 
       {/* ── INPUT ── */}
       <div className="p-3 sm:p-4 border-t border-border bg-card/40 backdrop-blur-sm shrink-0">
-        {!canSend && chatStatus !== 'OPEN' && (
+        {!canSend && !isChatOpen && (
           <div className="mb-2 sm:mb-3 px-3 sm:px-4 py-2 sm:py-3 bg-amber-500/10 border border-amber-500/20 rounded-lg sm:rounded-xl flex items-center gap-2 sm:gap-3">
             <AlertTriangle size={14} className="text-amber-600 shrink-0" />
             <p className="text-xs sm:text-sm font-bold text-amber-600">Sesi chat tertutup. Tunggu PIC membuka sesi.</p>

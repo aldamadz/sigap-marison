@@ -49,11 +49,21 @@ export default function LoginPage() {
       if (error) throw error;
 
       if (data.session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_active')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+        if (profile?.is_active === false) {
+          await supabase.auth.signOut();
+          throw new Error('Akun deaktif');
+        }
         toast.success('Login Berhasil!');
         navigate('/dashboard');
       }
     } catch (error: any) {
-      toast.error(error.message || 'Kredensial tidak valid');
+      const message = String(error.message || '');
+      toast.error(/ban|banned|deaktif|inactive/i.test(message) ? 'Akun deaktif' : (message || 'Kredensial tidak valid'));
       
       // Bersihkan flag jika login gagal agar tidak terjadi persistensi salah
       localStorage.removeItem('sb-remember');

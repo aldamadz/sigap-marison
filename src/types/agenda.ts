@@ -7,7 +7,7 @@ import { z } from 'zod'
 export type Role = 'admin' | 'user'
 export type OfficeType = 'Pusat' | 'Cabang' | 'KCP'
 export type AgendaStatus = 'Scheduled' | 'Ongoing' | 'Completed' | 'Deleted' | 'Overdue'
-export type ActivityAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'RESCHEDULE' | 'RESTORE' | 'COMPLETE';
+export type ActivityAction = 'CREATE' | 'INSERT' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'RESCHEDULE' | 'RESTORE' | 'COMPLETE';
 
 /* ======================================================
     INTERFACES

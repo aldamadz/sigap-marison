@@ -813,6 +813,8 @@ export const suratService = {
           status:      "PENDING",
         });
 
+      const firstStepOrder = Math.min(...activeSigners.map((s: any, idx: number) => Number(s.step_order || idx + 1)));
+      const firstAvailableAt = new Date().toISOString();
       const signerPayload = activeSigners.map((s, idx) => ({
         surat_id: surat.id,
         user_id: s.user_id,
@@ -820,6 +822,7 @@ export const suratService = {
         label_jabatan: s.label_jabatan ?? null,
         step_order: s.step_order,
         is_signed: false,
+        available_at: Number(s.step_order || idx + 1) === firstStepOrder ? firstAvailableAt : null,
         requires_unit_allocation: s.requires_unit_allocation === true,
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
@@ -1116,6 +1119,13 @@ export const suratService = {
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
       if (updatedSurat.status === 'PROSES' && updatedSurat.current_step > currentStep) {
+        await supabase
+          .from("surat_signatures")
+          .update({ available_at: new Date().toISOString() })
+          .eq("surat_id", suratId)
+          .eq("step_order", updatedSurat.current_step)
+          .is("available_at", null);
+
         const { data: nextSigners } = await supabase
           .from("surat_signatures")
           .select("user_id")

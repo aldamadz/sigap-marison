@@ -25,21 +25,23 @@ import type { Agenda, AgendaStatus } from '@/types/agenda'
 
 export default function AgendaPage() {
   const queryClient = useQueryClient()
-  const { user } = useAuth() as any
+  const { user, loading: authLoading } = useAuth() as any
 
   const [isModalOpen,  setIsModalOpen]  = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [selectedAgenda, setSelectedAgenda] = useState<Agenda | null>(null)
 
   const [isParent,         setIsParent]         = useState(false)
-  const [selectedUserId,   setSelectedUserId]   = useState<string | null>('all')
+  const [selectedUserId,   setSelectedUserId]   = useState<string | null>(null)
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null)
   const [isCheckingParent, setIsCheckingParent] = useState(true)
 
   /* ── 1. Check parent status ──────────────────────────────────────────────── */
   useEffect(() => {
     const check = async () => {
+      if (authLoading) return
       if (!user?.id) { setIsCheckingParent(false); return; }
+      setIsCheckingParent(true)
       try {
         const parentStatus = await isParentUser(user.id)
         setIsParent(parentStatus)
@@ -51,7 +53,7 @@ export default function AgendaPage() {
       }
     }
     check()
-  }, [user?.id])
+  }, [authLoading, user?.id])
 
   /* ── 2. Data fetching ────────────────────────────────────────────────────── */
   const { data: agendas = [], isLoading: isLoadingAgendas } = useQuery({
@@ -61,13 +63,14 @@ export default function AgendaPage() {
       if (isParent) return await getAgendasForParent(user.id, selectedUserId, selectedOfficeId)
       return await getAgendas()
     },
-    enabled: !!user?.id && !isCheckingParent,
+    enabled: !!user?.id && !authLoading && !isCheckingParent,
     staleTime: 1000 * 60 * 5,
   })
 
   const { data: users = [], isLoading: isLoadingUsers } = useQuery({
     queryKey: ['users'],
     queryFn: getUsers,
+    enabled: !!user?.id && !authLoading,
   })
 
   /* ── 3. Mutations ────────────────────────────────────────────────────────── */
@@ -135,7 +138,7 @@ export default function AgendaPage() {
   }
 
   /* ── 5. Render ───────────────────────────────────────────────────────────── */
-  if (isLoadingAgendas || isLoadingUsers || isCheckingParent) {
+  if (authLoading || isLoadingAgendas || isLoadingUsers || isCheckingParent) {
     return (
       <div className="p-8 space-y-8 max-w-7xl mx-auto">
         <div className="flex justify-between items-center">

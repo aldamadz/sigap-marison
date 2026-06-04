@@ -191,7 +191,8 @@ const Dashboard = () => {
   // ── Data fetching AGENDA ──────────────────────────────────────────────────
   const queryBase = {
     enabled: isReady,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,
+    refetchOnMount: true,
     placeholderData: (prev: any) => prev,
   };
 

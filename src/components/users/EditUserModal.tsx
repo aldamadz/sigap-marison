@@ -89,22 +89,26 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
 
   // Filter dept sesuai tipe kantor
   const filteredDepts = useMemo(() => {
-    if (isCabang) {
-      return departments
-        .filter(d => /\(Cabang\)/i.test(d.name))
-        .map(d => ({ ...d, label: stripCabang(d.name) }));
-    }
-    return departments
-      .filter(d => !/\(Cabang\)/i.test(d.name))
-      .map(d => ({ ...d, label: d.name }));
-  }, [departments, isCabang]);
+    const includeCurrentDepartment = (items: Array<Department & { label: string }>) => {
+      if (formData.departmentId === 'none' || items.some(d => d.id === formData.departmentId)) {
+        return items;
+      }
 
-  // Reset dept jika kantor berubah dan pilihan tidak valid lagi
-  useEffect(() => {
-    if (formData.departmentId === 'none') return;
-    const stillValid = filteredDepts.some(d => d.id === formData.departmentId);
-    if (!stillValid) setFormData(f => ({ ...f, departmentId: 'none' }));
-  }, [filteredDepts, formData.departmentId]);
+      const currentDepartment = departments.find(d => d.id === formData.departmentId);
+      return currentDepartment
+        ? [{ ...currentDepartment, label: `${currentDepartment.name} (tersimpan)` }, ...items]
+        : items;
+    };
+
+    if (isCabang) {
+      return includeCurrentDepartment(departments
+        .filter(d => /\(Cabang\)/i.test(d.name))
+        .map(d => ({ ...d, label: stripCabang(d.name) })));
+    }
+    return includeCurrentDepartment(departments
+      .filter(d => !/\(Cabang\)/i.test(d.name))
+      .map(d => ({ ...d, label: d.name })));
+  }, [departments, formData.departmentId, isCabang]);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setFormData(f => ({ ...f, [k]: e.target.value }));
@@ -116,14 +120,19 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
 
     setLoading(true);
     try {
-      const { error: edgeError } = await supabase.functions.invoke('admin-update-user', {
-        body: { userId: user.id, newEmail: formData.email, newFullName: formData.fullName },
-      });
-      if (edgeError) throw new Error(`Auth Update Error: ${edgeError.message}`);
+      const authIdentityChanged =
+        formData.email !== (user.email || '') ||
+        formData.fullName !== (user.fullName || '');
+
+      if (authIdentityChanged) {
+        const { error: edgeError } = await supabase.functions.invoke('admin-update-user', {
+          body: { userId: user.id, newEmail: formData.email, newFullName: formData.fullName },
+        });
+        if (edgeError) throw new Error(`Auth Update Error: ${edgeError.message}`);
+      }
 
       await updateUserProfile(user.id, {
-        fullName:     formData.fullName,
-        email:        formData.email,
+        ...(authIdentityChanged ? {} : { fullName: formData.fullName, email: formData.email }),
         nik:          formData.nik,
         jobTitle:     formData.jobTitle,
         role:         formData.role,

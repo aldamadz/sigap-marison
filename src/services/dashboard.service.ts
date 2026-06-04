@@ -284,17 +284,31 @@ export async function getRecentActivities(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
-    const targetUserIds = await resolveTargetIds(user.id, userId);
-    
-    const { data, error } = await supabase
-      .from('activity_logs')
-      .select(`*, profiles:user_id ( id, full_name, avatar_url )`)
-      .in('user_id', targetUserIds) 
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await supabase.rpc('get_my_recent_operational_activities', {
+      p_limit: limit,
+    });
 
-    return error ? [] : data || [];
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      user_id: row.user_id,
+      action: row.action,
+      table_name: row.table_name,
+      record_id: row.record_id,
+      old_values: row.old_values,
+      new_values: row.new_values,
+      created_at: row.created_at,
+      profiles: row.profile_full_name
+        ? {
+            id: row.user_id,
+            full_name: row.profile_full_name,
+            avatar_url: row.profile_avatar_url,
+          }
+        : null,
+    }));
   } catch (error) {
+    console.error('Recent Activities Error:', error);
     return [];
   }
 }

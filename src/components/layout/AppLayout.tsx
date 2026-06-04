@@ -12,7 +12,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/calendar': { title: 'Calendar', subtitle: 'Drag and drop to reschedule' },
   '/agenda': { title: 'Agendas', subtitle: 'Manage your tasks and meetings' },
   '/hierarchy': { title: 'Organization', subtitle: '7-level hierarchy structure' },
-  '/activity-logs': { title: 'Activity Logs', subtitle: 'Audit trail of all actions' },
+  '/audit-logs': { title: 'Audit Log', subtitle: 'Jejak audit administratif sistem' },
   '/settings': { title: 'Settings', subtitle: 'Configure your preferences' },
   '/surat/registrasi': { title: 'Registrasi Surat', subtitle: 'Kelola pendaftaran surat masuk & keluar' },
   '/surat/inbox': { title: 'Inbox Approval', subtitle: 'Daftar surat yang memerlukan persetujuan' },
@@ -20,6 +20,8 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/surat/riwayat': { title: 'Riwayat Keterlibatan', subtitle: 'Riwayat pengajuan untuk pihak yang terlibat' },
   '/surat/chat': { title: 'Diskusi', subtitle: 'Komunikasi dengan PIC' },
   '/pic/monitoring': { title: 'PIC Monitoring', subtitle: 'Kelola review dan tindak lanjut surat' },
+  '/admin/users/hierarchy': { title: 'Hirarki Organisasi', subtitle: 'Tree list dan chart node struktur karyawan' },
+  '/admin/kpi-departments': { title: 'KPI Departemen', subtitle: 'Evaluasi SLA approval berdasarkan jam kerja efektif' },
 }
 
 export function AppLayout() {
