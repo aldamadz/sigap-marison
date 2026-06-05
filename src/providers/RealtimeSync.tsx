@@ -24,6 +24,7 @@ export const RealtimeSync = () => {
 
     const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
     const suratKeys = ["recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail"];
+    const userKeys = ["users", "activity-logs", "recent-logs"];
 
     const channel = supabase
       .channel("db-persuratan-realtime")
@@ -38,6 +39,9 @@ export const RealtimeSync = () => {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () =>
+        handleSync(userKeys)
       )
       .subscribe();
 
@@ -54,6 +58,7 @@ export const RealtimeSync = () => {
           "surat-list",
           "surat-inbox",
           "surat-detail",
+          "users",
         ]);
       }
     };

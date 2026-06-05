@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { motion } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,8 +21,9 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUsers } from '@/services/user.service';
+import { supabase } from '@/lib/supabase';
 import type { User } from '@/types/agenda';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +60,19 @@ const getInitials = (name?: string) =>
 
 const normalize = (value: unknown) =>
   String(value || '').toLowerCase().trim();
+
+const hierarchyRank = (user: User) => {
+  const title = normalize(`${user.jobTitle || ''} ${(user as any).departmentName || ''}`);
+  if (title.includes('direktur utama')) return 7;
+  if (title.includes('direktur')) return 6;
+  if (title.includes('manager') && !title.includes('assistant')) return 5;
+  if (title.includes('assistant manager') || title.includes('assistant branch manager')) return 4;
+  if (title.includes('supervisor')) return 3;
+  if (title.includes('pelaksana')) return 1;
+  return 2;
+};
+
+const visualLevel = (user: User) => Math.max(0, 7 - hierarchyRank(user));
 
 const issueLabel: Record<string, string> = {
   self_parent: 'Atasan adalah dirinya sendiri',
@@ -118,9 +135,10 @@ const buildHierarchy = (users: User[]) => {
     }
   });
 
-  const buildNode = (userId: string, level: number, path: string[], visited = new Set<string>()): HierarchyNode | null => {
+  const buildNode = (userId: string, path: string[], visited = new Set<string>()): HierarchyNode | null => {
     const user = byId.get(userId);
     if (!user) return null;
+    const level = visualLevel(user);
     if (visited.has(userId)) {
       addIssue(userId, 'cycle');
       return {
@@ -138,7 +156,7 @@ const buildHierarchy = (users: User[]) => {
     nextVisited.add(userId);
     const children = (childIdsByParent.get(userId) || [])
       .sort((a, b) => normalize(byId.get(a)?.fullName).localeCompare(normalize(byId.get(b)?.fullName)))
-      .map((childId) => buildNode(childId, level + 1, [...path, user.fullName], nextVisited))
+      .map((childId) => buildNode(childId, [...path, user.fullName], nextVisited))
       .filter(Boolean) as HierarchyNode[];
 
     const node: HierarchyNode = {
@@ -156,7 +174,7 @@ const buildHierarchy = (users: User[]) => {
 
   const roots = (childIdsByParent.get(ROOT_ID) || [])
     .sort((a, b) => normalize(byId.get(a)?.fullName).localeCompare(normalize(byId.get(b)?.fullName)))
-    .map((id) => buildNode(id, 0, []))
+    .map((id) => buildNode(id, []))
     .filter(Boolean) as HierarchyNode[];
 
   const flat: HierarchyNode[] = [];
@@ -201,6 +219,54 @@ const filterTree = (
       return { ...node, children };
     })
     .filter(Boolean) as HierarchyNode[];
+
+const sortHierarchyNodes = (nodes: HierarchyNode[]) =>
+  nodes.sort((a, b) => {
+    const rankDiff = hierarchyRank(b.user) - hierarchyRank(a.user);
+    if (rankDiff !== 0) return rankDiff;
+    return normalize(a.user.fullName).localeCompare(normalize(b.user.fullName));
+  });
+
+const refreshScopedNode = (node: HierarchyNode, path: string[] = []): HierarchyNode => {
+  node.path = [...path, node.user.fullName];
+  node.children = sortHierarchyNodes(node.children).map((child) => refreshScopedNode(child, node.path));
+  collectDescendantCount(node);
+  return node;
+};
+
+const filterOfficeScopedTree = (
+  flat: HierarchyNode[],
+  query: string,
+  dept: string,
+  office: string,
+  status: string,
+): HierarchyNode[] => {
+  const clones = new Map<string, HierarchyNode>();
+
+  flat.forEach((node) => {
+    if (!nodeMatches(node, query, dept, office, status)) return;
+    clones.set(node.user.id, {
+      ...node,
+      children: [],
+      path: [node.user.fullName],
+      descendantCount: 0,
+      directCount: 0,
+    });
+  });
+
+  const roots: HierarchyNode[] = [];
+  clones.forEach((node) => {
+    const parentId = node.user.parentId;
+    const parent = parentId ? clones.get(parentId) : undefined;
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  return sortHierarchyNodes(roots).map((node) => refreshScopedNode(node));
+};
 
 const flattenNodes = (nodes: HierarchyNode[]) => {
   const result: HierarchyNode[] = [];
@@ -319,9 +385,11 @@ const ChartPersonNode = ({
 }) => {
   const active = isActive(node.user);
   return (
-    <button
+    <motion.button
+      layout
       type="button"
       onClick={() => onClick(node)}
+      transition={{ type: 'spring', stiffness: 420, damping: 36 }}
       className={cn(
         'group relative flex w-[132px] flex-col items-center rounded-2xl border bg-card/90 px-3 py-3 text-center shadow-lg backdrop-blur transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-glow',
         node.issueCodes.length > 0 ? 'border-amber-400/50' : 'border-white/10',
@@ -351,7 +419,7 @@ const ChartPersonNode = ({
           {node.directCount} bawahan
         </span>
       )}
-    </button>
+    </motion.button>
   );
 };
 
@@ -363,27 +431,35 @@ const PyramidNode = ({
   onSelect: (node: HierarchyNode) => void;
 }) => {
   const hasChildren = node.children.length > 0;
+  const maxLevelGap = hasChildren
+    ? Math.max(1, ...node.children.map((child) => Math.max(1, child.level - node.level)))
+    : 1;
+  const connectorHeight = maxLevelGap * 28;
   return (
-    <div className="flex flex-col items-center">
+    <motion.div layout transition={{ type: 'spring', stiffness: 360, damping: 34 }} className="flex flex-col items-center">
       <ChartPersonNode node={node} onClick={onSelect} />
       {hasChildren && (
         <>
-          <div className="h-7 w-px bg-primary/35" />
-          <div className="relative flex items-start justify-center gap-5 px-4 pt-7">
+          <div className="w-px bg-primary/35" style={{ height: connectorHeight }} />
+          <div className="relative flex items-start justify-center gap-5 px-4" style={{ paddingTop: connectorHeight }}>
             <div className="absolute left-1/2 right-1/2 top-0 h-px bg-primary/25" />
             {node.children.length > 1 && (
               <div className="absolute top-0 h-px bg-primary/25" style={{ left: 66, right: 66 }} />
             )}
             {node.children.map((child) => (
-              <div key={child.user.id} className="relative flex flex-col items-center">
-                <span className="absolute -top-7 h-7 w-px bg-primary/25" />
+              <div
+                key={child.user.id}
+                className="relative flex flex-col items-center"
+                style={{ marginTop: Math.max(0, child.level - node.level - 1) * 28 }}
+              >
+                <span className="absolute w-px bg-primary/25" style={{ top: -connectorHeight, height: connectorHeight }} />
                 <PyramidNode node={child} onSelect={onSelect} />
               </div>
             ))}
           </div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 };
 
@@ -403,7 +479,7 @@ const TreeRow = ({
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.user.id);
   return (
-    <div className="relative">
+    <motion.div layout transition={{ type: 'spring', stiffness: 360, damping: 34 }} className="relative">
       <div className="flex items-start gap-3">
         <div style={{ width: node.level * 24 }} className="hidden shrink-0 sm:block" />
         <button
@@ -427,11 +503,12 @@ const TreeRow = ({
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 
 export default function OrganizationHierarchyPage() {
+  const queryClient = useQueryClient();
   const { data: users = [], isLoading } = useQuery({ queryKey: ['users'], queryFn: getUsers });
   const [query, setQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -452,6 +529,26 @@ export default function OrganizationHierarchyPage() {
 
   const { roots, flat } = useMemo(() => buildHierarchy(users), [users]);
 
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refreshUsers = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ['users'], type: 'active' });
+      }, 250);
+    };
+
+    const channel = supabase
+      .channel('organization-hierarchy-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refreshUsers)
+      .subscribe();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const departments = useMemo(() =>
     Array.from(new Set(users.map((user) => user.departmentName).filter(Boolean))).sort() as string[],
   [users]);
@@ -465,8 +562,11 @@ export default function OrganizationHierarchyPage() {
       const target = findNodeById(roots, focusedId);
       return target ? [relevelNode(target)] : [];
     }
+    if (officeFilter !== 'all') {
+      return filterOfficeScopedTree(flat, query, deptFilter, officeFilter, statusFilter);
+    }
     return filterTree(roots, query, deptFilter, officeFilter, statusFilter);
-  }, [roots, query, deptFilter, officeFilter, statusFilter, focusedId]);
+  }, [roots, flat, query, deptFilter, officeFilter, statusFilter, focusedId]);
 
   const visibleFlat = useMemo(() => flattenNodes(scopedRoots), [scopedRoots]);
   useEffect(() => {
@@ -490,7 +590,7 @@ export default function OrganizationHierarchyPage() {
 
   const handleExport = () => {
     const rows = visibleFlat.map((node) => ({
-      Level: node.level + 1,
+      Level: hierarchyRank(node.user),
       Nama: node.user.fullName,
       NIK: node.user.nik || '',
       Email: node.user.email || '',
@@ -509,6 +609,61 @@ export default function OrganizationHierarchyPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Hirarki');
     XLSX.writeFile(wb, `hirarki-organisasi-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handleExportPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const generatedAt = new Date();
+    const filterInfo = [
+      `Status: ${statusFilter === 'all' ? 'Semua' : statusFilter === 'active' ? 'Aktif' : 'Nonaktif'}`,
+      `Departemen: ${deptFilter === 'all' ? 'Semua' : deptFilter}`,
+      `Kantor: ${officeFilter === 'all' ? 'Semua' : officeFilter}`,
+      query ? `Pencarian: ${query}` : null,
+      focusedId ? 'Mode: Fokus karyawan' : null,
+    ].filter(Boolean);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('Hirarki Organisasi', 40, 42);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Dibuat: ${generatedAt.toLocaleString('id-ID')}`, 40, 60);
+    doc.text(filterInfo.join(' | '), 40, 76, { maxWidth: 760 });
+
+    autoTable(doc, {
+      startY: 96,
+      head: [['Level', 'Nama', 'NIK', 'Jabatan', 'Departemen', 'Kantor', 'Atasan', 'Status']],
+      body: visibleFlat.map((node) => [
+        String(hierarchyRank(node.user)),
+        node.user.fullName || '',
+        node.user.nik || '',
+        node.user.jobTitle || '',
+        node.user.departmentName || '',
+        node.user.officeName || '',
+        node.path[node.path.length - 2] || '',
+        isActive(node.user) ? 'Aktif' : 'Nonaktif',
+      ]),
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+      headStyles: { fillColor: [18, 86, 104], textColor: 255, fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 36, halign: 'center' },
+        1: { cellWidth: 130 },
+        2: { cellWidth: 58 },
+        3: { cellWidth: 120 },
+        4: { cellWidth: 120 },
+        5: { cellWidth: 110 },
+        6: { cellWidth: 130 },
+        7: { cellWidth: 54, halign: 'center' },
+      },
+      didDrawPage: () => {
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text(`Halaman ${pageCount}`, doc.internal.pageSize.getWidth() - 80, doc.internal.pageSize.getHeight() - 20);
+      },
+    });
+
+    doc.save(`hirarki-organisasi-${generatedAt.toISOString().slice(0, 10)}.pdf`);
   };
 
   const handleChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -585,9 +740,14 @@ export default function OrganizationHierarchyPage() {
                   <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
                 </Link>
               </Button>
-              <Button onClick={handleExport} className="rounded-xl">
-                <Download className="mr-2 h-4 w-4" /> Export XLSX
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleExportPdf} variant="outline" className="rounded-xl">
+                  <Download className="mr-2 h-4 w-4" /> Export PDF
+                </Button>
+                <Button onClick={handleExport} className="rounded-xl">
+                  <Download className="mr-2 h-4 w-4" /> Export XLSX
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -716,7 +876,9 @@ export default function OrganizationHierarchyPage() {
               >
                 <div className="flex min-w-max justify-center gap-12">
                   {scopedRoots.map((node) => (
-                    <PyramidNode key={node.user.id} node={node} onSelect={handleSelectChartNode} />
+                    <div key={node.user.id} style={{ marginTop: node.level * 28 }}>
+                      <PyramidNode node={node} onSelect={handleSelectChartNode} />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -755,7 +917,7 @@ export default function OrganizationHierarchyPage() {
                   ['Departemen', selectedNode.user.departmentName || '-'],
                   ['Kantor', selectedNode.user.officeName || '-'],
                   ['Status', isActive(selectedNode.user) ? 'Aktif' : 'Nonaktif'],
-                  ['Level', String(selectedNode.level + 1)],
+                  ['Level', String(hierarchyRank(selectedNode.user))],
                   ['Bawahan langsung', String(selectedNode.directCount)],
                   ['Total bawahan', String(selectedNode.descendantCount)],
                   ['Atasan', selectedNode.path[selectedNode.path.length - 2] || '-'],

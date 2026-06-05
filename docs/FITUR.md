@@ -1,6 +1,6 @@
 # Fitur SIGAP
 
-Tanggal pembaruan: 2026-06-04  
+Tanggal pembaruan: 2026-06-05  
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 
 Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besar dan tautan, sedangkan detail fitur fungsional dan non-fungsional dicatat di file ini.
@@ -262,15 +262,20 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Hirarki tersedia dalam dua mode: Tree List dan Chart Node.
 - Tree List mendukung expand/collapse, search, filter departemen, filter kantor, filter status aktif/nonaktif, dan fokus ke user tertentu.
 - Halaman hirarki organisasi default menampilkan user berstatus aktif.
+- Halaman hirarki organisasi realtime terhadap perubahan profil/atasan dan menampilkan perpindahan node dengan animasi layout ringan.
 - Mapping hirarki karyawan dapat dipreview dari file Excel HRD sebelum diterapkan ke `parent_id`.
 - Hirarki memakai level jabatan 1-7: Pelaksana, Staff, Supervisor, Assistant Manager/Assistant Branch Manager, Manager/Branch Manager, Direktur, Direktur Utama.
+- Jarak/indent visual hirarki mengikuti level jabatan 1-7, sehingga Sekretaris Direksi sejajar dengan Staff meskipun parent langsungnya Direktur.
+- Saat filter kantor aktif, hirarki dibatasi ke karyawan kantor tersebut; Direksi Kantor Pusat tidak ikut ditampilkan sebagai ancestor kantor cabang.
 - Branch Manager menjadi top tier saat dilihat per kantor cabang karena berada di level manajerial cabang.
+- Jika sebuah kantor belum memiliki BM/ABM/Supervisor terkait, user di kantor tersebut difallback ke Direktur agar tidak tampil sebagai root palsu.
 - Chart Node menampilkan struktur organisasi bergaya piramid top-down untuk browser PC.
 - Node chart hanya menampilkan foto dan nama; detail user tampil saat node diklik.
 - Chart Node mendukung drag-to-pan horizontal dengan klik-tahan lalu geser.
 - Mobile tetap mengutamakan Tree List agar struktur tetap terbaca dan ringan.
+- Hirarki dapat diekspor ke PDF untuk laporan siap baca sesuai filter yang sedang aktif.
 - Hirarki dapat diekspor ke XLSX berisi level, path atasan, jumlah bawahan langsung, total bawahan, status, departemen, kantor, dan catatan masalah struktur.
-- Export PDF/PNG untuk chart akan ditambahkan setelah layout Chart Node disetujui.
+- Export PNG untuk chart akan ditambahkan jika layout Chart Node perlu dipakai sebagai gambar presentasi.
 
 ### Non-Fungsional
 

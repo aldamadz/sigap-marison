@@ -109,15 +109,15 @@ const getParent = (row) => {
     return findOne((candidate) => includes(candidate.position, "supervisor operasional kost"), row);
   }
   if (isBranchOffice(row)) {
-    if (isPelaksana(row)) return staffPeerInOfficeDepartment(row) || branchTop(row);
-    if (includes(row.department, "marketing cabang")) return branchMarketingParent(row);
-    if (includes(row.department, "teknik")) return branchTechnicalParent(row);
-    return branchTop(row);
+    if (isPelaksana(row)) return staffPeerInOfficeDepartment(row) || branchTop(row) || director();
+    if (includes(row.department, "marketing cabang")) return branchMarketingParent(row) || branchTop(row) || director();
+    if (includes(row.department, "teknik")) return branchTechnicalParent(row) || branchTop(row) || director();
+    return branchTop(row) || director();
   }
-  if (isPelaksana(row)) return staffPeerInOfficeDepartment(row) || departmentSupervisor(row) || departmentAssistant(row) || departmentManager(row);
-  if (isSupervisor(row)) return departmentAssistant(row) || departmentManager(row);
-  if (isCoordinator(row)) return departmentSupervisor(row) || departmentAssistant(row) || departmentManager(row);
-  return departmentSupervisor(row) || departmentAssistant(row) || departmentManager(row);
+  if (isPelaksana(row)) return staffPeerInOfficeDepartment(row) || departmentSupervisor(row) || departmentAssistant(row) || departmentManager(row) || director();
+  if (isSupervisor(row)) return departmentAssistant(row) || departmentManager(row) || director();
+  if (isCoordinator(row)) return departmentSupervisor(row) || departmentAssistant(row) || departmentManager(row) || director();
+  return departmentSupervisor(row) || departmentAssistant(row) || departmentManager(row) || director();
 };
 
 const mappings = rows.map((row) => ({ ...row, parent: getParent(row) }));
