@@ -12,7 +12,12 @@ import {
   MessageSquare,
   Paperclip,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Calendar as CalendarIcon,
+  Building2,
+  Home,
+  FileUp,
+  CheckCircle2
 } from "lucide-react";
 import { suratService } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
@@ -22,6 +27,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea"; 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -44,10 +51,12 @@ export default function InboxPage() {
   const [allocationProjectsLoaded, setAllocationProjectsLoaded] = useState(false);
   const [allocationProjectsError, setAllocationProjectsError] = useState<string | null>(null);
   const [allocationSelected, setAllocationSelected] = useState<Record<string, any[]>>({});
+  const [allocationDetails, setAllocationDetails] = useState<Record<string, Record<string, any>>>({});
   const [allocationFiles, setAllocationFiles] = useState<Record<string, Record<string, File | null>>>({});
   const [allocationLoading, setAllocationLoading] = useState<Record<string, boolean>>({});
   const [allocationErrors, setAllocationErrors] = useState<Record<string, string | null>>({});
   const [unitSearch, setUnitSearch] = useState<Record<string, string>>({});
+  const [allocationDateOpen, setAllocationDateOpen] = useState<Record<string, boolean>>({});
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
 
@@ -102,14 +111,17 @@ export default function InboxPage() {
 
   const getUnitAttachmentRequirements = (item: any) => {
     const requirements = item.surat_registrasi?.form_input_data?.unit_config_snapshot?.allocation_attachment_requirements;
-    return Array.isArray(requirements) && requirements.length > 0
+    const source = Array.isArray(requirements) && requirements.length > 0
       ? requirements
       : [
           { key: "siteplan", label: "Siteplan", required: true },
-          { key: "kode_produksi", label: "Kode Produksi", required: true },
           { key: "volume_adendum", label: "Volume Adendum", required: true },
           { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
         ];
+    return source.filter((requirement: any) =>
+      String(requirement.key || "").toLowerCase() !== "kode_produksi" &&
+      String(requirement.label || "").toLowerCase() !== "kode produksi"
+    );
   };
 
   const getMissingUnitAttachmentLabels = (item: any) => {
@@ -195,6 +207,18 @@ const handleApprove = async (item: any) => {
     if (isUnitAllocationRequired(item) && selectedUnits.length < getRequestedUnitCount(item)) {
       throw new Error(`Unit terpilih kurang. Minimal ${getRequestedUnitCount(item)} unit.`);
     }
+    if (isUnitAllocationRequired(item)) {
+      const details = allocationDetails[item.id] || {};
+      const incompleteUnit = selectedUnits.find((unit: any) => {
+        const detail = details[unit.value] || {};
+        return !String(detail.production_serial || "").trim() ||
+          !String(detail.production_block || "").trim() ||
+          !String(detail.production_date || "").trim();
+      });
+      if (incompleteUnit) {
+        throw new Error(`Kode produksi untuk ${incompleteUnit.label || incompleteUnit.value} belum lengkap.`);
+      }
+    }
     const missingAttachments = isUnitAllocationRequired(item) ? getMissingUnitAttachmentLabels(item) : [];
     if (missingAttachments.length > 0) {
       throw new Error(`Lampiran unit belum lengkap: ${missingAttachments.join(", ")}.`);
@@ -214,7 +238,16 @@ const handleApprove = async (item: any) => {
       item.surat_registrasi.current_step, 
       currentUser.full_name,
       note,
-      isUnitAllocationRequired(item) ? { unitAllocation: { project: selectedProject, units: selectedUnits, attachments: selectedAttachmentFiles } } : {}
+      isUnitAllocationRequired(item) ? {
+        unitAllocation: {
+          project: selectedProject,
+          units: selectedUnits.map((unit: any) => ({
+            ...unit,
+            allocation_detail: allocationDetails[item.id]?.[unit.value] || {},
+          })),
+          attachments: selectedAttachmentFiles,
+        }
+      } : {}
     );
     
     toast.success("Dokumen Berhasil Disetujui", {
@@ -231,6 +264,11 @@ const handleApprove = async (item: any) => {
       delete next[item.id];
       return next;
     });
+    setAllocationDetails(prev => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
     setAllocationFiles(prev => {
       const next = { ...prev };
       delete next[item.id];
@@ -239,6 +277,13 @@ const handleApprove = async (item: any) => {
     setAllocationProjectSelected(prev => {
       const next = { ...prev };
       delete next[item.id];
+      return next;
+    });
+    setAllocationDateOpen(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(`${item.id}:`)) delete next[key];
+      });
       return next;
     });
 
@@ -344,7 +389,39 @@ const handleApprove = async (item: any) => {
       return next;
     });
     setAllocationSelected(prev => ({ ...prev, [signatureId]: [] }));
+    setAllocationDetails(prev => {
+      const next = { ...prev };
+      delete next[signatureId];
+      return next;
+    });
     setAllocationErrors(prev => ({ ...prev, [signatureId]: null }));
+  };
+
+  const updateAllocationDetail = (signatureId: string, unitValue: string, key: string, value: any) => {
+    setAllocationDetails(prev => ({
+      ...prev,
+      [signatureId]: {
+        ...(prev[signatureId] || {}),
+        [unitValue]: {
+          ...((prev[signatureId] || {})[unitValue] || {}),
+          [key]: value,
+        },
+      },
+    }));
+  };
+
+  const formatDatePickerDisplay = (value: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
+  const toDateInputValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
   const renderUnitAllocationPanel = (item: any) => {
@@ -358,75 +435,305 @@ const handleApprove = async (item: any) => {
     const units = (allocationUnits[item.id] || []).filter((unit) =>
       !search || unit.label.toLowerCase().includes(search) || String(unit.value).toLowerCase().includes(search)
     );
-    const isEnough = !!selectedProject?.code && selected.length >= requestedCount && missingAttachments.length === 0;
+    const details = allocationDetails[item.id] || {};
+    const incompleteCodeUnits = selected.filter((unit: any) => {
+      const detail = details[unit.value] || {};
+      return !String(detail.production_serial || "").trim() ||
+        !String(detail.production_block || "").trim() ||
+        !String(detail.production_date || "").trim();
+    });
+    const hasEnoughUnits = selected.length >= requestedCount;
+    const isComplete = !!selectedProject?.code && hasEnoughUnits && missingAttachments.length === 0 && incompleteCodeUnits.length === 0;
+    const statusLabel = !selectedProject?.code
+      ? "Project belum dipilih"
+      : !hasEnoughUnits
+        ? "Unit kurang"
+        : missingAttachments.length > 0
+          ? "Lampiran belum lengkap"
+          : incompleteCodeUnits.length > 0
+            ? "Kode produksi belum lengkap"
+            : "Memenuhi";
+    const allocationProgress = requestedCount > 0 ? Math.min(100, Math.round((selected.length / requestedCount) * 100)) : 0;
+    const canPickMore = selected.length >= requestedCount;
 
     return (
-      <div className={cn(
-        "rounded-2xl border p-4 space-y-3",
-        isEnough ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
-      )}>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Alokasi Unit Perencanaan</p>
-            <p className="text-[10px] font-semibold text-muted-foreground">
-              {selected.length} unit / {requestedCount} unit diajukan
-            </p>
+      <div className="overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-sm">
+        <div className="border-b border-border bg-muted/25 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Alokasi Unit Perencanaan</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground">
+                    Pilih project, kavling, kode produksi, dan lampiran pendukung.
+                  </p>
+                </div>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn("h-full rounded-full transition-all", hasEnoughUnits ? "bg-emerald-500" : "bg-primary")}
+                  style={{ width: `${allocationProgress}%` }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+              <div className="rounded-xl border border-border bg-background p-3">
+                <p className="text-[9px] font-black uppercase text-muted-foreground">Diajukan</p>
+                <p className="text-lg font-black tabular-nums">{requestedCount}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-3">
+                <p className="text-[9px] font-black uppercase text-muted-foreground">Dipilih</p>
+                <p className={cn("text-lg font-black tabular-nums", hasEnoughUnits ? "text-emerald-600" : "text-primary")}>{selected.length}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-3">
+                <p className="text-[9px] font-black uppercase text-muted-foreground">Status</p>
+                <Badge className={cn(
+                  "mt-1 rounded-md text-[9px] font-black uppercase",
+                  isComplete
+                    ? "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15"
+                    : "bg-primary/10 text-primary hover:bg-primary/10"
+                )}>
+                  {statusLabel}
+                </Badge>
+              </div>
+            </div>
           </div>
-          <Badge variant={isEnough ? "default" : "outline"} className="text-[9px] font-black uppercase">
-            {isEnough ? "Memenuhi" : "Kurang"}
-          </Badge>
         </div>
 
-        <select
-          value={selectedProject?.value || ""}
-          onChange={(event) => handleAllocationProjectChange(item.id, event.target.value)}
-          disabled={allocationProjectsLoading}
-          className="h-9 w-full rounded-md border border-input bg-background/80 px-3 text-[11px] font-semibold"
-        >
-          <option value="">{allocationProjectsLoading ? "Memuat project..." : "Pilih project unit"}</option>
-          {allocationProjects.map((project) => (
-            <option key={`${item.id}-${project.value}`} value={project.value} disabled={!project.raw?.code}>
-              {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}{!project.raw?.code ? " (code belum tersedia)" : ""}
-            </option>
-          ))}
-        </select>
-        {allocationProjectsError && <p className="text-[10px] font-semibold text-destructive">{allocationProjectsError}</p>}
+        <div className="space-y-4 p-4">
+          <div className="space-y-4">
+            <section className="rounded-xl border border-border bg-background p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Project Unit</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground">{selectedProject?.name || "Belum ada project terpilih"}</p>
+                </div>
+                {selectedProject?.code && <Badge variant="outline" className="font-mono text-[10px]">{selectedProject.code}</Badge>}
+              </div>
+              <select
+                value={selectedProject?.value || ""}
+                onChange={(event) => handleAllocationProjectChange(item.id, event.target.value)}
+                disabled={allocationProjectsLoading}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-[12px] font-semibold"
+              >
+                <option value="">{allocationProjectsLoading ? "Memuat project..." : "Pilih project unit"}</option>
+                {allocationProjects.map((project) => (
+                  <option key={`${item.id}-${project.value}`} value={project.value} disabled={!project.raw?.code}>
+                    {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}{!project.raw?.code ? " (code belum tersedia)" : ""}
+                  </option>
+                ))}
+              </select>
+              {allocationProjectsError && <p className="mt-2 text-[10px] font-semibold text-destructive">{allocationProjectsError}</p>}
+            </section>
 
-        <Input
-          value={unitSearch[item.id] || ""}
-          onChange={(e) => setUnitSearch(prev => ({ ...prev, [item.id]: e.target.value }))}
-          placeholder="Cari kode unit..."
-          className="h-9 bg-background/80 text-[11px] font-semibold"
-        />
-
-        {allocationLoading[item.id] ? (
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Memuat unit
-          </div>
-        ) : allocationErrors[item.id] ? (
-          <p className="text-[10px] font-semibold text-destructive">{allocationErrors[item.id]}</p>
-        ) : (
-          <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-background/70">
-            {units.length === 0 ? (
-              <p className="p-3 text-[10px] font-semibold text-muted-foreground">Unit tidak ditemukan.</p>
-            ) : units.map((unit) => (
-              <label key={`${item.id}-${unit.value}`} className="flex cursor-pointer items-center gap-2 border-b border-border/40 px-3 py-2 text-[11px] font-bold last:border-b-0 hover:bg-muted/60">
-                <input
-                  type="checkbox"
-                  checked={selectedValues.has(unit.value)}
-                  onChange={() => toggleAllocatedUnit(item.id, unit)}
+            <section className="rounded-xl border border-border bg-background p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Pilih Kavling</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground">
+                    Minimal {requestedCount} unit. Boleh memilih lebih dari jumlah pengajuan.
+                  </p>
+                </div>
+                {canPickMore && <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15">Cukup</Badge>}
+              </div>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={unitSearch[item.id] || ""}
+                  onChange={(e) => setUnitSearch(prev => ({ ...prev, [item.id]: e.target.value }))}
+                  placeholder="Cari kode unit..."
+                  className="h-10 bg-background pl-9 text-[12px] font-semibold"
                 />
-                <span>{unit.label}</span>
-              </label>
-            ))}
+              </div>
+
+              {allocationLoading[item.id] ? (
+                <div className="flex h-28 items-center justify-center gap-2 rounded-xl border border-dashed border-border text-[10px] font-bold uppercase text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Memuat unit
+                </div>
+              ) : allocationErrors[item.id] ? (
+                <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-[10px] font-semibold text-destructive">{allocationErrors[item.id]}</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-border bg-muted/10 p-2">
+                  {units.length === 0 ? (
+                    <p className="p-3 text-[10px] font-semibold text-muted-foreground">Unit tidak ditemukan.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {units.map((unit) => {
+                        const checked = selectedValues.has(unit.value);
+                        return (
+                          <button
+                            type="button"
+                            key={`${item.id}-${unit.value}`}
+                            onClick={() => toggleAllocatedUnit(item.id, unit)}
+                            className={cn(
+                              "flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all",
+                              checked
+                                ? "border-primary bg-primary/10 text-primary shadow-sm"
+                                : "border-border bg-background hover:border-primary/40 hover:bg-primary/5"
+                            )}
+                          >
+                            <span className={cn(
+                              "flex h-5 w-5 items-center justify-center rounded-md border",
+                              checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                            )}>
+                              {checked && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-[11px] font-black uppercase">{unit.label}</span>
+                              <span className="block truncate text-[10px] font-semibold text-muted-foreground">{unit.value}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
           </div>
-        )}
-        <div className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lampiran Unit</p>
+
+          <div className="space-y-4">
+            <section className="rounded-xl border border-border bg-background p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Detail Kavling dan Kode Produksi</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground">
+                    Nominal rekap adendum opsional. Kode produksi wajib lengkap.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px]">{selected.length} unit</Badge>
+              </div>
+              {selected.length === 0 ? (
+                <div className="flex h-32 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/10 text-center">
+                  <Home className="mb-2 h-5 w-5 text-muted-foreground" />
+                  <p className="text-[11px] font-bold text-muted-foreground">Pilih kavling terlebih dahulu.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selected.map((unit: any, index: number) => {
+                    const detail = details[unit.value] || {};
+                    const dateKey = `${item.id}:${unit.value}`;
+                    const codeReady = String(detail.production_serial || "").trim() &&
+                      String(detail.production_block || "").trim() &&
+                      String(detail.production_date || "").trim();
+                    return (
+                      <div key={`${item.id}-detail-${unit.value}`} className="rounded-xl border border-border bg-muted/10 p-4">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-[12px] font-black uppercase text-foreground">{index + 1}. {unit.label}</p>
+                            <p className="font-mono text-[10px] font-semibold text-muted-foreground">
+                              {detail.production_serial || "[001]"}/UAI/PRC/{detail.production_block || "[4.1]"}/{detail.production_date ? new Date(detail.production_date).toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" }) : "[14/01/2026]"}
+                            </p>
+                          </div>
+                          <Badge className={cn(
+                            "rounded-md text-[9px] font-black uppercase",
+                            codeReady ? "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15" : "bg-primary/10 text-primary hover:bg-primary/10"
+                          )}>
+                            {codeReady ? "Lengkap" : "Belum lengkap"}
+                          </Badge>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rekap Adendum</p>
+                            <div className="grid grid-cols-1 gap-3">
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-bold text-muted-foreground">Struktur Atas</p>
+                                <Input
+                                  type="number"
+                                  value={detail.struktur_atas || ""}
+                                  onChange={(e) => updateAllocationDetail(item.id, unit.value, "struktur_atas", e.target.value)}
+                                  placeholder="Masukkan nominal struktur atas"
+                                  className="h-11 bg-background text-[13px]"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-bold text-muted-foreground">Struktur Bawah</p>
+                                <Input
+                                  type="number"
+                                  value={detail.struktur_bawah || ""}
+                                  onChange={(e) => updateAllocationDetail(item.id, unit.value, "struktur_bawah", e.target.value)}
+                                  placeholder="Masukkan nominal struktur bawah"
+                                  className="h-11 bg-background text-[13px]"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Kode Produksi</p>
+                            <div className="grid grid-cols-1 gap-3">
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-bold text-muted-foreground">Nomor</p>
+                                <Input
+                                  value={detail.production_serial || ""}
+                                  onChange={(e) => updateAllocationDetail(item.id, unit.value, "production_serial", e.target.value)}
+                                  placeholder="Contoh: 001"
+                                  className="h-11 bg-background font-mono text-[13px]"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-bold text-muted-foreground">Blok</p>
+                                <Input
+                                  value={detail.production_block || ""}
+                                  onChange={(e) => updateAllocationDetail(item.id, unit.value, "production_block", e.target.value)}
+                                  placeholder="Contoh: 4.1"
+                                  className="h-11 bg-background font-mono text-[13px]"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-bold text-muted-foreground">Tanggal</p>
+                                <Popover
+                                  open={!!allocationDateOpen[dateKey]}
+                                  onOpenChange={(open) => setAllocationDateOpen(prev => ({ ...prev, [dateKey]: open }))}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="h-11 w-full justify-start bg-background px-3 font-mono text-[13px] font-normal"
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                                      {formatDatePickerDisplay(detail.production_date || "") || "dd/mm/yyyy"}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                      mode="single"
+                                      selected={detail.production_date ? new Date(detail.production_date) : undefined}
+                                      onSelect={(date) => {
+                                        if (!date) return;
+                                        updateAllocationDetail(item.id, unit.value, "production_date", toDateInputValue(date));
+                                        setAllocationDateOpen(prev => ({ ...prev, [dateKey]: false }));
+                                      }}
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-border bg-background p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <FileUp className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Lampiran Unit</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground">Lampiran persyaratan dari konfigurasi unit.</p>
+                </div>
+              </div>
           {getUnitAttachmentRequirements(item).map((requirement: any) => {
             const file = allocationFiles[item.id]?.[requirement.key];
             return (
-              <label key={`${item.id}-${requirement.key}`} className="grid cursor-pointer grid-cols-1 gap-2 rounded-lg border border-border/40 bg-muted/20 p-3 text-[11px] font-bold md:grid-cols-[1fr_auto] md:items-center">
+              <label key={`${item.id}-${requirement.key}`} className="mb-2 grid cursor-pointer grid-cols-1 gap-2 rounded-lg border border-border bg-muted/10 p-3 text-[11px] font-bold last:mb-0 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
                   <span className="uppercase">{requirement.label || requirement.key}</span>
                   {requirement.required !== false && <span className="ml-2 text-destructive">*</span>}
@@ -450,10 +757,17 @@ const handleApprove = async (item: any) => {
             );
           })}
           {missingAttachments.length > 0 && (
-            <p className="text-[10px] font-semibold text-amber-600">
+            <p className="mt-2 rounded-lg bg-primary/10 p-2 text-[10px] font-semibold text-primary">
               Wajib dilengkapi: {missingAttachments.join(", ")}
             </p>
           )}
+          {incompleteCodeUnits.length > 0 && (
+            <p className="mt-2 rounded-lg bg-primary/10 p-2 text-[10px] font-semibold text-primary">
+              Kode produksi belum lengkap: {incompleteCodeUnits.map((unit: any) => unit.label || unit.value).join(", ")}
+            </p>
+          )}
+            </section>
+          </div>
         </div>
       </div>
     );
@@ -471,7 +785,7 @@ const handleApprove = async (item: any) => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-10 space-y-10 animate-in fade-in duration-700">
+    <div className="space-y-8 animate-in fade-in duration-300">
       <Dialog open={!!previewingId}>
         <DialogContent className="max-w-sm rounded-3xl text-center">
           <DialogHeader>

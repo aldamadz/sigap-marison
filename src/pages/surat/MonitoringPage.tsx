@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/lib/supabase";
 import {
-  Search, Loader2, MessageSquare, Info, Eye,
+  Search, Loader2, Info, Eye,
   Clock, AlertCircle, CheckCircle2, User, ArrowUpRight,
-  FileCheck, Banknote, XCircle, FileClock, Inbox
+  FileCheck, XCircle, Inbox
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,7 @@ import { PageHeader } from '@/components/ui/Breadcrumbs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-type DocStatus = 'PROSES' | 'SELESAI' | 'DITOLAK' | 'MENUNGGU_PIC' | 'KEUANGAN';
+type DocStatus = 'PROSES' | 'SELESAI' | 'DITOLAK';
 
 interface ResolvedStatus {
   type: DocStatus;
@@ -36,24 +36,15 @@ interface ResolvedStatus {
 }
 
 const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
-  const pic = surat.pic_review_status as string | null;
   const hasRejectedSig = sigs.some(s => s.status === 'REJECTED');
   const allSigned = sigs.length > 0 && sigs.every(s => s.is_signed);
 
-  if (hasRejectedSig || pic === 'REJECTED' || pic === 'KEUANGAN_REJECTED') {
-    const byKeuangan = pic === 'KEUANGAN_REJECTED';
-    const byPIC = pic === 'REJECTED';
+  if (hasRejectedSig || surat.status === 'REJECTED') {
     const rejectedSig = sigs.find(s => s.status === 'REJECTED');
     return {
       type: 'DITOLAK',
       label: 'Ditolak',
-      sublabel: byKeuangan
-        ? 'Ditolak Tim Keuangan'
-        : byPIC
-          ? 'Ditolak oleh PIC'
-          : rejectedSig
-            ? `Ditolak pada tahap: ${rejectedSig.role_name}`
-            : 'Ditolak',
+      sublabel: rejectedSig ? `Ditolak pada tahap: ${rejectedSig.role_name}` : 'Ditolak',
       barColor: 'bg-red-500',
       badgeClass: 'bg-red-500/10 text-red-400 border-red-500/20',
       accentClass: 'bg-red-500',
@@ -61,39 +52,15 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
     };
   }
 
-  if (allSigned && (pic === 'SPK' || pic === 'KEUANGAN_DONE')) {
+  if (allSigned || surat.status === 'DONE') {
     return {
       type: 'SELESAI',
       label: 'Selesai',
-      sublabel: pic === 'KEUANGAN_DONE' ? 'Bukti transaksi diterima' : 'SPK diterbitkan',
+      sublabel: 'Seluruh persetujuan selesai',
       barColor: 'bg-emerald-500',
       badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
       accentClass: 'bg-emerald-500',
       icon: <CheckCircle2 size={14} />,
-    };
-  }
-
-  if (allSigned && pic === 'KEUANGAN') {
-    return {
-      type: 'KEUANGAN',
-      label: 'Tim Keuangan',
-      sublabel: 'Menunggu proses pembayaran',
-      barColor: 'bg-blue-500',
-      badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      accentClass: 'bg-blue-500',
-      icon: <Banknote size={14} />,
-    };
-  }
-
-  if (allSigned && !pic) {
-    return {
-      type: 'MENUNGGU_PIC',
-      label: 'Review PIC',
-      sublabel: 'Menunggu keputusan PIC',
-      barColor: 'bg-amber-500',
-      badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-      accentClass: 'bg-amber-400',
-      icon: <FileClock size={14} />,
     };
   }
 
@@ -112,8 +79,6 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
 const FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'all',          label: 'Semua' },
   { value: 'PROSES',       label: 'Proses' },
-  { value: 'MENUNGGU_PIC', label: 'Review PIC' },
-  { value: 'KEUANGAN',     label: 'Keuangan' },
   { value: 'SELESAI',      label: 'Selesai' },
   { value: 'DITOLAK',      label: 'Ditolak' },
 ];
@@ -125,9 +90,8 @@ const MonitoringPage = () => {
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? 'all');
   const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
-  const [readFeedbacks, setReadFeedbacks] = useState<string[]>([]);
 
   const { data: allData = [], isLoading, error: queryError } = useQuery({
     queryKey: ['surat-monitoring-list'],
@@ -135,51 +99,24 @@ const MonitoringPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
 
-      const [{ data, error }, { data: picDeptData }] = await Promise.all([
-        supabase
-          .from('surat_registrasi')
-          .select(`
-            *,
-            pic:profiles!surat_registrasi_pic_id_fkey ( full_name ),
-            surat_signatures (
-              id, step_order, is_signed, status, role_name, signed_at, catatan,
-              profiles:user_id ( full_name )
-            ),
-            surat_attachments ( id, file_url, file_name, file_type, file_size ),
-            finance_reviews ( payment_file_path, status )
-          `)
-          .eq('created_by', session.user.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('master_dept_pics')
-          .select('user_id, dept:master_departments ( id, name, code )'),
-      ]);
+      const { data, error } = await supabase
+        .from('surat_registrasi')
+        .select(`
+          *,
+          surat_signatures (
+            id, step_order, is_signed, status, role_name, signed_at, catatan,
+            profiles:user_id ( full_name )
+          ),
+          surat_attachments ( id, file_url, file_name, file_type, file_size )
+        `)
+        .eq('created_by', session.user.id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      const picDeptMap: Record<string, any[]> = {};
-      for (const row of picDeptData ?? []) {
-        if (!picDeptMap[row.user_id]) picDeptMap[row.user_id] = [];
-        if (row.dept) picDeptMap[row.user_id].push(row.dept);
-      }
-
-      return (data ?? []).map((s: any) => ({ ...s, _pic_dept_list: picDeptMap[s.pic_id] ?? [] }));
+      return data ?? [];
     },
     refetchInterval: 10_000,
   });
-
-  useEffect(() => {
-    const saved = localStorage.getItem('read_pic_feedbacks');
-    if (saved) setReadFeedbacks(JSON.parse(saved));
-  }, []);
-
-  const markAsRead = (suratId: string) => {
-    if (!readFeedbacks.includes(suratId)) {
-      const updated = [...readFeedbacks, suratId];
-      setReadFeedbacks(updated);
-      localStorage.setItem('read_pic_feedbacks', JSON.stringify(updated));
-    }
-  };
 
   const handleOpenPreview = async (suratId: string, fallbackUrl: string) => {
     if (!fallbackUrl) return toast.error("File dokumen belum tersedia.");
@@ -213,17 +150,7 @@ const MonitoringPage = () => {
 
   const enriched = allData.map(s => {
     const sigs = [...(s.surat_signatures || [])].sort((a, b) => a.step_order - b.step_order);
-    const picName = (s.pic as any)?.full_name ?? null;
-
-    const picDepts: any[] = s._pic_dept_list ?? [];
-    const isKeuanganStatus = ['KEUANGAN', 'KEUANGAN_DONE', 'KEUANGAN_REJECTED'].includes(s.pic_review_status);
-    const picDept = isKeuanganStatus
-      ? picDepts.find((d: any) => d.code === 'KEU' || d.name?.toLowerCase().includes('keuangan'))
-      : picDepts.find((d: any) => d.code !== 'KEU' && !d.name?.toLowerCase().includes('keuangan')) ?? picDepts[0];
-    const picDeptName = picDept?.name ?? null;
-
-    const paymentPath = (s.finance_reviews?.[0]?.payment_file_path) ?? null;
-    return { ...s, _sigs: sigs, _status: resolveStatus(s, sigs), _pic_name: picName, _pic_dept: picDeptName, _payment_path: paymentPath };
+    return { ...s, _sigs: sigs, _status: resolveStatus(s, sigs) };
   });
 
   const filtered = enriched.filter(s => {
@@ -245,7 +172,7 @@ const MonitoringPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-10 space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-8 animate-in fade-in duration-300">
       <Dialog open={!!previewingId}>
         <DialogContent className="max-w-sm rounded-3xl text-center">
           <DialogHeader>
@@ -281,7 +208,7 @@ const MonitoringPage = () => {
           {[
             { label: 'Total Pengajuan', value: enriched.length, icon: <Inbox size={16} />, cls: 'text-foreground', bg: 'bg-muted/30' },
             { label: 'Selesai',  value: enriched.filter(s => s._status.type === 'SELESAI').length,  icon: <CheckCircle2 size={16} />, cls: 'text-emerald-400', bg: 'bg-emerald-500/5' },
-            { label: 'Proses',   value: enriched.filter(s => ['PROSES','MENUNGGU_PIC','KEUANGAN'].includes(s._status.type)).length, icon: <Clock size={16} />, cls: 'text-amber-400', bg: 'bg-amber-500/5' },
+            { label: 'Proses',   value: enriched.filter(s => s._status.type === 'PROSES').length, icon: <Clock size={16} />, cls: 'text-amber-400', bg: 'bg-amber-500/5' },
             { label: 'Ditolak',  value: enriched.filter(s => s._status.type === 'DITOLAK').length,  icon: <XCircle size={16} />, cls: 'text-red-400', bg: 'bg-red-500/5' },
           ].map(card => (
             <div key={card.label} className={cn("flex flex-col p-5 rounded-2xl border border-border", card.bg)}>
@@ -342,10 +269,9 @@ const MonitoringPage = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
           {filtered.map((surat) => {
-            const { _sigs: sigs, _status: docStatus, _pic_name: picName } = surat;
+            const { _sigs: sigs, _status: docStatus } = surat;
             const finishedCount = sigs.filter((s: any) => s.is_signed).length;
             const progress = sigs.length > 0 ? (finishedCount / sigs.length) * 100 : 0;
-            const hasNewFeedback = surat.pic_note && !readFeedbacks.includes(surat.id);
 
             return (
               <div
@@ -363,13 +289,6 @@ const MonitoringPage = () => {
                     {docStatus.label}
                   </span>
                   <div className="flex items-center gap-2">
-                    {hasNewFeedback && (
-                      <div className="relative">
-                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-ping" />
-                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
-                        <MessageSquare size={16} className="text-primary" />
-                      </div>
-                    )}
                     <span className="text-xs text-muted-foreground">
                       {new Date(surat.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
                     </span>
@@ -419,25 +338,15 @@ const MonitoringPage = () => {
                     </span>
                   </div>
 
-                  {picName && (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <User size={14} className="text-muted-foreground shrink-0" />
-                      <span className="text-sm text-foreground/40 truncate">
-                        Ditangani: {picName}{surat._pic_dept ? ` · ${surat._pic_dept}` : ''}
-                      </span>
-                    </div>
-                  )}
-
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => {
                         setSelectedSurat(surat);
-                        setIsChatOpen(true);
-                        markAsRead(surat.id);
+                        setIsDetailOpen(true);
                       }}
                       className="h-11 flex items-center justify-center gap-2 rounded-xl bg-muted hover:bg-muted/80 transition-all border border-border text-sm font-medium"
                     >
-                      <MessageSquare size={16} />
+                      <Info size={16} />
                       <span>Detail</span>
                     </button>
                     <button
@@ -456,8 +365,8 @@ const MonitoringPage = () => {
         </div>
       )}
 
-      {/* DETAIL & FEEDBACK MODAL */}
-      <Dialog open={isChatOpen} onOpenChange={setIsChatOpen}>
+      {/* DETAIL MODAL */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden bg-card border-border rounded-3xl shadow-2xl">
           <DialogHeader className="p-6 border-b border-border bg-muted/20">
             <div className="flex items-center gap-4">
@@ -465,7 +374,7 @@ const MonitoringPage = () => {
               <div>
                 <DialogTitle className="text-sm font-black uppercase tracking-tight">Informasi Progress Dokumen</DialogTitle>
                 <DialogDescription className="text-[10px] font-medium uppercase text-muted-foreground">
-                  Riwayat persetujuan & Feedback PIC
+                  Riwayat persetujuan dan dokumen
                 </DialogDescription>
               </div>
             </div>
@@ -479,26 +388,9 @@ const MonitoringPage = () => {
               return (
                 <div className={cn("flex items-center gap-2 px-4 py-3 rounded-xl border text-[10px] font-black uppercase", st.badgeClass)}>
                   {st.icon} {st.label} — {st.sublabel}
-                  {selectedSurat._pic_name && (
-                    <span className="ml-auto font-bold opacity-60 normal-case text-[9px]">
-                      PIC {selectedSurat._pic_dept ?? ''}: {selectedSurat._pic_name}
-                    </span>
-                  )}
                 </div>
               );
             })()}
-
-            {selectedSurat?.pic_review_status === 'SPK' && !selectedSurat?.pic_attachment && (
-              <div className="flex gap-3 p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-amber-700">
-                <Info size={16} className="shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-tight">SPK Belum Terlampir</p>
-                  <p className="text-[10px] font-bold leading-normal opacity-90">
-                    Status sudah SPK diterbitkan, tetapi file SPK belum tersimpan pada dokumen ini.
-                  </p>
-                </div>
-              </div>
-            )}
 
             {(selectedSurat?.file_path || getAttachments(selectedSurat).length > 0) && (
               <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -545,30 +437,6 @@ const MonitoringPage = () => {
                       <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                     </button>
                   ))}
-                </div>
-              </div>
-            )}
-
-            {/* PIC FEEDBACK SECTION */}
-            {selectedSurat?.pic_note && (
-              <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="flex items-center gap-2 text-primary">
-                  <MessageSquare size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Feedback dari Admin (PIC)</span>
-                </div>
-                <div className="bg-primary/5 p-4 rounded-2xl border-2 border-dashed border-primary/20">
-                  <p className="text-xs font-bold text-foreground leading-relaxed italic">
-                    "{selectedSurat.pic_note}"
-                  </p>
-                  {selectedSurat?.pic_attachment && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenStoredFile(selectedSurat.id, selectedSurat.pic_attachment)}
-                      className="mt-3 inline-flex items-center gap-2 text-[9px] font-black text-primary bg-white px-3 py-1.5 rounded-lg border border-primary/20 hover:bg-primary hover:text-white transition-all uppercase"
-                    >
-                      <ArrowUpRight size={12} /> Lihat Lampiran PIC
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -624,88 +492,6 @@ const MonitoringPage = () => {
                 ))}
               </div>
             </div>
-
-            {/* PIC Final Status */}
-            {selectedSurat?.pic_review_status && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <FileCheck size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Keputusan PIC</span>
-                </div>
-                <div className={cn(
-                  "flex flex-col gap-1 px-4 py-3 rounded-xl border text-[10px] font-black uppercase",
-                  selectedSurat._status?.badgeClass
-                )}>
-                  <div className="flex items-center gap-2">
-                    {selectedSurat._status?.icon}
-                    {{
-                      'SPK': 'SPK Diterbitkan — Proses selesai',
-                      'KEUANGAN': 'Diteruskan ke Tim Keuangan',
-                      'KEUANGAN_DONE': 'Bukti Transaksi Dikirim — Selesai',
-                      'KEUANGAN_REJECTED': 'Ditolak oleh Tim Keuangan',
-                      'REJECTED': `Ditolak oleh PIC ${selectedSurat._pic_dept ?? ''}`,
-                    }[selectedSurat.pic_review_status] || selectedSurat.pic_review_status}
-                  </div>
-                  {selectedSurat._pic_name && (
-                    <span className="text-[9px] font-bold normal-case opacity-70 pl-5">
-                      {selectedSurat._pic_name}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* SPK */}
-            {selectedSurat?.pic_attachment && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <FileCheck size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">SPK</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleOpenStoredFile(selectedSurat.id, selectedSurat.pic_attachment)}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all group"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                    <FileCheck size={16} className="text-emerald-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">Lihat SPK</p>
-                    <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
-                      {selectedSurat.pic_attachment.split('/').pop()}
-                    </p>
-                  </div>
-                  <ArrowUpRight size={14} className="text-emerald-400 shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                </button>
-              </div>
-            )}
-
-            {/* BUKTI PEMBAYARAN */}
-            {selectedSurat?._payment_path && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Banknote size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Bukti Pembayaran</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleOpenStoredFile(selectedSurat.id, selectedSurat._payment_path)}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all group"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                    <FileCheck size={16} className="text-emerald-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">Lihat Bukti Transaksi</p>
-                    <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
-                      {selectedSurat._payment_path.split('/').pop()}
-                    </p>
-                  </div>
-                  <ArrowUpRight size={14} className="text-emerald-400 shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                </button>
-              </div>
-            )}
 
             {/* ADVICE FOOTER */}
             <div className="pt-4 border-t border-border">

@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { notificationService } from "./notification.service";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
@@ -90,14 +91,23 @@ export const suratService = {
     const parsed = typeof raw === "string" ? (() => {
       try { return JSON.parse(raw || "{}"); } catch { return {}; }
     })() : (raw || {});
+    const defaultAllocationRequirements = [
+      { key: "siteplan", label: "Siteplan", required: true },
+      { key: "volume_adendum", label: "Volume Adendum", required: true },
+      { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
+    ];
+    const allocationRequirements = Array.isArray(parsed.allocation_attachment_requirements)
+      ? parsed.allocation_attachment_requirements.filter((requirement: any) =>
+          String(requirement.key || "").toLowerCase() !== "kode_produksi" &&
+          String(requirement.label || "").toLowerCase() !== "kode produksi"
+        )
+      : [];
     return {
       enabled: parsed.enabled === true,
       request_sentence_cell: String(parsed.request_sentence_cell || "C11").trim().toUpperCase(),
       allowed_department_ids: Array.isArray(parsed.allowed_department_ids) ? parsed.allowed_department_ids : [],
       initial_attachment_required: parsed.initial_attachment_required === true,
-      allocation_attachment_requirements: Array.isArray(parsed.allocation_attachment_requirements)
-        ? parsed.allocation_attachment_requirements
-        : [],
+      allocation_attachment_requirements: allocationRequirements.length > 0 ? allocationRequirements : defaultAllocationRequirements,
     };
   },
 
@@ -224,6 +234,30 @@ export const suratService = {
 
   normalizeFormInputData(inputData: any) {
     const normalized = { ...(inputData ?? {}) };
+    if (!normalized.request_category) {
+      normalized.request_category = normalized.request_mode === "unit"
+        ? "unit"
+        : normalized.is_aset === true
+          ? "asset"
+          : "non_unit";
+    }
+    if (normalized.request_category === "unit") {
+      normalized.request_mode = "unit";
+      const count = Number(normalized.requested_unit_count || 0);
+      const unitLabel = Number.isFinite(count) && count > 0 ? count : "";
+      normalized.items = [{
+        kode: "",
+        kode_barang: "",
+        nama_barang: `Permohonan Order Bangun SPK Pembangunan Rumah ${unitLabel} Unit`,
+        nama: `Permohonan Order Bangun SPK Pembangunan Rumah ${unitLabel} Unit`,
+        barang: `Permohonan Order Bangun SPK Pembangunan Rumah ${unitLabel} Unit`,
+        sat: "Unit",
+        satuan: "Unit",
+        jumlah: unitLabel,
+        status: "2",
+        keterangan: "",
+      }];
+    }
     if (Array.isArray(normalized.items)) {
       normalized.items = normalized.items.filter((row: any) =>
         Object.values(row ?? {}).some((value) => String(value ?? "").trim())
@@ -232,67 +266,181 @@ export const suratService = {
     return normalized;
   },
 
-  createUnitCodesAttachment(project: any, units: any[]) {
+  getUnitCode(unit: any) {
+    return String(
+      unit?.raw?.code ||
+      unit?.raw?.unit_code ||
+      unit?.raw?.kode ||
+      unit?.code ||
+      unit?.value ||
+      unit?.label ||
+      "-"
+    ).trim();
+  },
+
+  parseMoney(value: any) {
+    const cleaned = String(value ?? "").replace(/[^\d.-]/g, "");
+    const amount = Number(cleaned);
+    return Number.isFinite(amount) ? amount : 0;
+  },
+
+  formatRupiah(value: any) {
+    const amount = this.parseMoney(value);
+    if (amount === 0) return "";
+    return new Intl.NumberFormat("id-ID").format(amount);
+  },
+
+  buildProductionCode(unit: any) {
+    const detail = unit?.allocation_detail || {};
+    const serial = String(detail.production_serial || detail.kode_produksi_nomor || "").trim();
+    const block = String(detail.production_block || detail.kode_produksi_blok || "").trim();
+    const rawDate = String(detail.production_date || detail.kode_produksi_tanggal || "").trim();
+    const formattedDate = rawDate
+      ? this.formatProductionDate(rawDate)
+      : "";
+    if (!serial && !block && !formattedDate) return "";
+    return `${serial}/UAI/PRC/${block}/${formattedDate}`;
+  },
+
+  formatProductionDate(value: string) {
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
+  },
+
+  createUnitRecapAttachment(project: any, units: any[]) {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
-    const gap = 4;
-    const columns = 3;
-    const boxWidth = (pageWidth - (margin * 2) - (gap * (columns - 1))) / columns;
-    const boxHeight = 16;
-    let x = margin;
-    let y = 35;
+    let totalAtas = 0;
+    let totalBawah = 0;
+    const body = units.map((unit, index) => {
+      const atas = this.parseMoney(unit?.allocation_detail?.struktur_atas);
+      const bawah = this.parseMoney(unit?.allocation_detail?.struktur_bawah);
+      totalAtas += atas;
+      totalBawah += bawah;
+      return [
+        String(index + 1),
+        this.getUnitCode(unit),
+        this.formatRupiah(atas),
+        this.formatRupiah(bawah),
+        this.formatRupiah(atas + bawah),
+      ];
+    });
 
-    const renderHeader = () => {
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15);
-      doc.text("DAFTAR KODE UNIT", margin, 17);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
-      doc.text(`Cabang: ${project?.branch?.name || "-"}`, margin, 29);
-    };
+    const totalNominal = totalAtas + totalBawah;
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.text("REKAP ADENDUM UNIT", margin, 17);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
+    doc.text(`Cabang: ${project?.branch?.name || "-"}`, margin, 29);
 
-    renderHeader();
-    units.forEach((unit, index) => {
-      if (y + boxHeight > 285) {
-        doc.addPage();
-        renderHeader();
-        x = margin;
-        y = 35;
-      }
-
-      const code = String(
-        unit?.raw?.code ||
-        unit?.raw?.unit_code ||
-        unit?.raw?.kode ||
-        unit?.code ||
-        unit?.value ||
-        unit?.label ||
-        "-"
-      ).trim();
-      doc.setFillColor(255, 235, 59);
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.5);
-      doc.rect(x, y, boxWidth, boxHeight, "FD");
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text(code, x + (boxWidth / 2), y + 9.5, { align: "center", maxWidth: boxWidth - 4 });
-
-      if ((index + 1) % columns === 0) {
-        x = margin;
-        y += boxHeight + gap;
-      } else {
-        x += boxWidth + gap;
-      }
+    autoTable(doc, {
+      startY: 36,
+      margin: { left: margin, right: margin },
+      head: [["No", "Kavling", "Struktur Atas", "Struktur Bawah", "Nominal"]],
+      body,
+      foot: [["TOTAL", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
+      theme: "grid",
+      styles: {
+        font: "helvetica",
+        fontSize: 9,
+        textColor: [0, 0, 0],
+        lineColor: [0, 0, 0],
+        lineWidth: 0.15,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        halign: "center",
+      },
+      footStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        0: { cellWidth: 13, halign: "center" },
+        1: { cellWidth: 35, halign: "center" },
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "right" },
+      },
+      didParseCell: (data) => {
+        if (data.section === "foot" && data.column.index === 0) {
+          data.cell.colSpan = 2;
+          data.cell.styles.halign = "center";
+        }
+        if (data.section === "foot" && data.column.index === 1) {
+          data.cell.text = [];
+        }
+      },
     });
 
     const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
     return new File(
       [doc.output("blob")],
-      `Daftar_Kode_Unit_${safeProject}_${Date.now()}.pdf`,
+      `Rekap_Adendum_Unit_${safeProject}_${Date.now()}.pdf`,
+      { type: "application/pdf" }
+    );
+  },
+
+  createProductionCodeAttachment(project: any, units: any[]) {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const margin = 15;
+    const body = units.map((unit, index) => [
+      String(index + 1),
+      project?.name || project?.label || "-",
+      this.getUnitCode(unit),
+      this.buildProductionCode(unit) || "-",
+    ]);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.text("KODE PRODUKSI UNIT", margin, 17);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
+
+    autoTable(doc, {
+      startY: 35,
+      margin: { left: margin, right: margin },
+      head: [["No", "Proyek", "Unit", "Kode Produksi"]],
+      body,
+      theme: "grid",
+      styles: {
+        font: "helvetica",
+        fontSize: 9,
+        textColor: [0, 0, 0],
+        lineColor: [0, 0, 0],
+        lineWidth: 0.15,
+        cellPadding: 2,
+        overflow: "linebreak",
+      },
+      headStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        halign: "center",
+      },
+      columnStyles: {
+        0: { cellWidth: 13, halign: "center" },
+        1: { cellWidth: 58 },
+        2: { cellWidth: 25, halign: "center" },
+        3: { cellWidth: 84 },
+      },
+    });
+
+    const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
+    return new File(
+      [doc.output("blob")],
+      `Kode_Produksi_Unit_${safeProject}_${Date.now()}.pdf`,
       { type: "application/pdf" }
     );
   },
@@ -321,6 +469,7 @@ export const suratService = {
         request_place: payload.request_place ?? null,
         request_date: payload.request_date ?? null,
         request_place_date: [place, date].filter(Boolean).join(", "),
+        request_category: formInputData?.request_category ?? null,
       },
       requester: {
         id: context.profile?.id ?? context.user?.id,
@@ -344,6 +493,7 @@ export const suratService = {
       } : null,
       input: formInputData,
       detail_barang: formInputData?.items ?? [],
+      request_category: formInputData?.request_category ?? null,
       requested_project: formInputData?.requested_project ?? null,
       requested_unit_count: formInputData?.requested_unit_count ?? null,
       allocated_units: formInputData?.allocated_units ?? [],
@@ -577,15 +727,19 @@ export const suratService = {
 
     worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
     worksheet.getCell("D5").value = `: ${payload.no_surat}`;
+    const inputData = payload.form_input_data ?? {};
+    const requestedProject = inputData?.request_mode === "unit" ? inputData?.requested_project : null;
     if (payload.office_id && context.office?.name !== "Kantor Pusat") {
       worksheet.getCell("L4").value = `: KC. ${context.office?.name || ""}`;
       worksheet.getCell("L5").value = `: ${context.project?.name || ""}`;
+    } else if (requestedProject?.name) {
+      worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
+      worksheet.getCell("L5").value = `: ${requestedProject.name}`;
     } else {
       worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
       worksheet.getCell("L5").value = ": -";
     }
 
-    const inputData = payload.form_input_data ?? {};
     const schema = this.parseInputSchema(context.form?.input_schema);
     if (!this.hasPlaceDateMapping(schema)) {
       throw new Error("Template belum memiliki mapping cell untuk Tempat, Tanggal.");
@@ -604,14 +758,6 @@ export const suratService = {
       const rawValue = systemValue !== undefined ? systemValue : inputData[field.key];
       this.writeWrappedField(sheet, field, rawValue);
     });
-    if (inputData.request_mode === "unit") {
-      const unitConfig = this.getUnitConfigFromForm(context.form);
-      const sentence = String(inputData.unit_request_sentence || "").trim();
-      if (unitConfig.request_sentence_cell && sentence) {
-        worksheet.getCell(unitConfig.request_sentence_cell).value = sentence;
-      }
-    }
-
     const buffer = await workbook.xlsx.writeBuffer();
     const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
     const path = `dokumen/system_${safeNumber}_${Date.now()}.xlsx`;
@@ -668,13 +814,17 @@ export const suratService = {
       const deptCode   = deptRes.data?.code   || "";
       const dIndex     = deptRes.data?.dept_index  || "0";
       const tIndex     = typeRes.data?.type_index  || "0";
+      const requestCategory = payload.form_input_data?.request_category;
+      const requestedProjectCode = String(payload.form_input_data?.requested_project?.code || "").trim();
 
       const romawiBulan = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
       const bulan = romawiBulan[new Date().getMonth()];
       const tahun = new Date().getFullYear();
 
       let middleCode = "";
-      if (isPusat) {
+      if (requestCategory === "unit" && requestedProjectCode) {
+        middleCode = `${deptCode}.${tIndex}.${requestedProjectCode}`;
+      } else if (isPusat) {
         middleCode = `${deptCode}.${tIndex}`;
       } else {
         const projCode = projectRes.data?.code || "??";
@@ -700,7 +850,11 @@ export const suratService = {
 
   async createRegistrasi(payload: any, signers: any[], file: File | null, lampiranFiles?: File[] | File | null) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error("Sesi login tidak tersedia. Silakan login ulang.");
+      }
+      const user = session.user;
       const attachmentFiles = Array.isArray(lampiranFiles)
         ? lampiranFiles
         : lampiranFiles
@@ -752,7 +906,7 @@ export const suratService = {
         dept_id:        this.cleanUuid(payload.dept_id),
         letter_type_id: this.cleanUuid(payload.letter_type_id),
         penggunaan_id:  this.cleanUuid(payload.penggunaan_id),
-        created_by:     user?.id,
+        created_by:     user.id,
         requester_nik: context.profile?.nik ?? null,
         request_place: payload.request_place ?? null,
         request_date: payload.request_date ?? null,
@@ -782,9 +936,10 @@ export const suratService = {
       if (!file)        cleanPayload.file_path     = generated?.publicUrl;
 
       const { data: surat, error: suratError } = await supabase
-        .from("surat_registrasi").insert(cleanPayload).select().single();
+        .rpc("create_surat_registrasi", { p_payload: cleanPayload });
 
       if (suratError) throw suratError;
+      if (!surat?.id) throw new Error("Surat gagal dibuat.");
 
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, { stage: "initial" });
       if (uploadedAttachments[0]?.file_url) {
@@ -930,6 +1085,9 @@ export const suratService = {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await fileData.arrayBuffer());
     const worksheet = workbook.worksheets[0];
+    if (formInputData?.request_mode === "unit" && formInputData?.requested_project?.name) {
+      worksheet.getCell("L5").value = `: ${formInputData.requested_project.name}`;
+    }
 
     schema.forEach((field) => {
       const source = field.default_source || field.defaultSource || "manual";
@@ -944,14 +1102,6 @@ export const suratService = {
       const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
       this.writeWrappedField(sheet, field, formInputData?.[field.key]);
     });
-    if (formInputData?.request_mode === "unit") {
-      const unitConfig = this.getUnitConfigFromForm((usageDetail as any)?.master_forms);
-      const sentence = String(formInputData?.unit_request_sentence || "").trim();
-      if (unitConfig.request_sentence_cell && sentence) {
-        worksheet.getCell(unitConfig.request_sentence_cell).value = sentence;
-      }
-    }
-
     const buffer = await workbook.xlsx.writeBuffer();
     const path = `dokumen/updated_input_${Date.now()}.xlsx`;
     const uploaded = await appStorageService.upload({
@@ -1004,7 +1154,8 @@ export const suratService = {
         .eq("id", suratFresh.penggunaan_id)
         .single();
       const unitConfig = this.getUnitConfigFromForm((usageDetail as any)?.master_forms);
-      const requirements = unitConfig.allocation_attachment_requirements || [];
+      const requirements = (unitConfig.allocation_attachment_requirements || [])
+        .filter((requirement: any) => String(requirement.key || "").toLowerCase() !== "kode_produksi");
       const requiredRequirements = requirements.filter((requirement: any) => requirement.required !== false);
       const attachedKeys = new Set(allocationAttachments.filter((item) => item.file).map((item) => item.key));
       const missingRequirements = requiredRequirements.filter((requirement: any) => !attachedKeys.has(requirement.key));
@@ -1027,12 +1178,14 @@ export const suratService = {
         .eq("id", suratId);
       if (updateInputError) throw updateInputError;
 
-      const unitCodesAttachment = this.createUnitCodesAttachment(project, units);
+      const unitRecapAttachment = this.createUnitRecapAttachment(project, units);
+      const productionCodeAttachment = this.createProductionCodeAttachment(project, units);
       uploadedAllocationAttachments = await this.uploadAttachmentFiles(
         suratId,
         [
-          ...allocationAttachments.map((item) => item.file),
-          unitCodesAttachment,
+          ...allocationAttachments.map((item) => item.file).filter(Boolean),
+          unitRecapAttachment,
+          productionCodeAttachment,
         ],
         user?.id,
         {
@@ -1043,9 +1196,13 @@ export const suratService = {
               item.file.name,
               { key: item.key, label: item.label },
             ])),
-            [unitCodesAttachment.name]: {
-              key: "unit_codes",
-              label: "Daftar Kode Unit",
+            [unitRecapAttachment.name]: {
+              key: "rekap_adendum_unit",
+              label: "Rekap Adendum Unit",
+            },
+            [productionCodeAttachment.name]: {
+              key: "kode_produksi_unit",
+              label: "Kode Produksi Unit",
             },
           },
         }
@@ -1119,13 +1276,6 @@ export const suratService = {
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
       if (updatedSurat.status === 'PROSES' && updatedSurat.current_step > currentStep) {
-        await supabase
-          .from("surat_signatures")
-          .update({ available_at: new Date().toISOString() })
-          .eq("surat_id", suratId)
-          .eq("step_order", updatedSurat.current_step)
-          .is("available_at", null);
-
         const { data: nextSigners } = await supabase
           .from("surat_signatures")
           .select("user_id")
@@ -1162,12 +1312,13 @@ export const suratService = {
   },
 
   async rejectSurat(signatureId: string, suratId: string, note: string) {
-    const { error: sigError } = await supabase.from("surat_signatures")
-      .update({ is_signed: true, signed_at: new Date().toISOString(), catatan: note, status: "REJECTED" })
-      .eq("id", signatureId);
-    if (sigError) throw sigError;
-    const { error: suratError } = await supabase.from("surat_registrasi").update({ status: "REJECTED" }).eq("id", suratId);
-    if (suratError) throw suratError;
+    const { data: rejected, error: rejectError } = await supabase.rpc("handle_reject_surat_v2", {
+      p_sig_id: signatureId,
+      p_surat_id: suratId,
+      p_note: note,
+    });
+    if (rejectError) throw new Error(rejectError.message);
+    if (!rejected) throw new Error("Gagal memproses penolakan.");
 
     // Notif ke pembuat surat
     const { data: suratInfo } = await supabase.from('surat_registrasi').select('created_by, judul_surat').eq('id', suratId).single();

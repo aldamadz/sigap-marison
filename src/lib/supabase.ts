@@ -6,19 +6,20 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 // Helper untuk menentukan storage mana yang digunakan
 const customStorage = {
   getItem: (key: string) => {
-    // Cek di localStorage dulu, kalau tidak ada cek di sessionStorage
-    return localStorage.getItem(key) || sessionStorage.getItem(key);
+    const localValue = localStorage.getItem(key);
+    if (localValue) return localValue;
+
+    // Migrasi session lama: sebelumnya token bisa tersimpan di sessionStorage,
+    // sehingga tab baru tidak punya session. Salin ke localStorage saat masih ada.
+    const sessionValue = sessionStorage.getItem(key);
+    if (sessionValue) localStorage.setItem(key, sessionValue);
+    return sessionValue;
   },
   setItem: (key: string, value: string) => {
-    // Jika user mencentang 'remember_me', simpan di localStorage
-    // Kita akan set flag 'sb-remember' di LoginPage saat submit
-    const shouldRemember = localStorage.getItem('sb-remember') === 'true';
-    
-    if (shouldRemember) {
-      localStorage.setItem(key, value);
-    } else {
-      sessionStorage.setItem(key, value);
-    }
+    // Auth session harus lintas tab. Preferensi "remember me" hanya untuk email,
+    // bukan untuk token Supabase, karena sessionStorage memaksa tab baru login ulang.
+    localStorage.setItem(key, value);
+    sessionStorage.removeItem(key);
   },
   removeItem: (key: string) => {
     localStorage.removeItem(key);

@@ -5,8 +5,9 @@ import { differenceInYears, differenceInMonths, differenceInDays, addYears, addM
 import { 
   Shield, User as UserIcon, 
   Key, Mail, Briefcase, Building, Fingerprint, Loader2, 
-  Camera, Phone, CalendarDays
+  Camera, Phone, CalendarDays, Monitor, Moon, Sun
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ import { getOffices } from '@/services/office.service';
 import { supabase } from '@/lib/supabase';
 
 export const SettingsView = () => {
+  const { theme, setTheme } = useTheme();
   const [user, setUser] = useState<any>(null); // Gunakan any untuk fleksibilitas struktur DB
   const [officeName, setOfficeName] = useState<string>('Memuat...');
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,14 @@ export const SettingsView = () => {
     try {
       const userData = await getCurrentUser();
       setUser(userData);
+      const { data: preference } = await supabase
+        .from('profiles')
+        .select('theme_preference')
+        .eq('id', userData?.id)
+        .maybeSingle();
+      if (preference?.theme_preference) {
+        setTheme(preference.theme_preference);
+      }
 
       // Menyesuaikan office_id (snake_case)
       const oId = userData?.officeId;
@@ -126,6 +136,29 @@ export const SettingsView = () => {
     }
   };
 
+  const handleThemeChange = async (nextTheme: string) => {
+    const previousTheme = theme || 'system';
+    setTheme(nextTheme);
+    if (!user?.id) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ theme_preference: nextTheme })
+      .eq('id', user.id);
+
+    if (error) {
+      setTheme(previousTheme);
+      toast({
+        title: "Gagal",
+        description: "Preferensi tema tidak dapat disimpan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({ title: "Tampilan diperbarui", description: "Preferensi tema tersimpan untuk akun Anda." });
+  };
+
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary" /></div>;
 
   // Mapping data dari JSON: full_name dan avatar_url
@@ -154,19 +187,19 @@ export const SettingsView = () => {
   })();
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6">
       <header>
-        <h2 className="text-3xl font-bold text-foreground">Settings</h2>
-        <p className="text-muted-foreground">Kelola profil dan keamanan akun</p>
+        <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+        <p className="text-sm text-muted-foreground">Kelola profil, tampilan, dan keamanan akun.</p>
       </header>
 
-      <div className="grid gap-8">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border rounded-2xl p-8 shadow-sm">
+      <div className="grid gap-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm">
           <div className="flex flex-col md:flex-row gap-10 items-start">
             
             {/* AVATAR SECTION */}
             <div className="relative group self-center md:self-start">
-              <div className="w-36 h-36 rounded-3xl overflow-hidden bg-muted border-4 border-background shadow-xl relative">
+              <div className="relative h-36 w-36 overflow-hidden rounded-lg border-4 border-background bg-muted shadow-lg">
                 <img 
                   src={avatarSrc} 
                   alt="Profile"
@@ -188,7 +221,7 @@ export const SettingsView = () => {
               <button 
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="absolute -bottom-2 -right-2 p-3 bg-primary text-primary-foreground rounded-xl shadow-lg hover:scale-110 active:scale-95 transition-all disabled:opacity-50"
+                className="absolute -bottom-2 -right-2 rounded-lg bg-primary p-3 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
               >
                 <Camera className="w-5 h-5" />
               </button>
@@ -212,11 +245,49 @@ export const SettingsView = () => {
           </div>
         </motion.div>
 
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm"
+        >
+          <div className="mb-5">
+            <h3 className="font-semibold">Tampilan</h3>
+            <p className="text-sm text-muted-foreground">Pilih tema antarmuka yang digunakan pada akun ini.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 max-w-lg" role="radiogroup" aria-label="Tema aplikasi">
+            {[
+              { value: 'system', label: 'System', icon: Monitor },
+              { value: 'light', label: 'Light', icon: Sun },
+              { value: 'dark', label: 'Dark', icon: Moon },
+            ].map((option) => {
+              const Icon = option.icon;
+              const active = (theme || 'system') === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => handleThemeChange(option.value)}
+                  className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-md border px-3 py-3 text-sm font-semibold transition-colors ${
+                    active
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </motion.section>
+
         {/* SECURITY */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="bg-card border rounded-2xl p-8 shadow-sm"
+          className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm"
         >
           <div className="flex items-center gap-3 mb-6">
             <Key className="w-5 h-5 text-orange-500" />

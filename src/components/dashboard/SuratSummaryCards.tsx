@@ -6,17 +6,14 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 // ── Status resolver — identik dengan MonitoringPage ───────────────────────────
-type DocStatusType = 'PROSES' | 'SELESAI' | 'DITOLAK' | 'MENUNGGU_PIC' | 'KEUANGAN';
+type DocStatusType = 'PROSES' | 'SELESAI' | 'DITOLAK';
 
 const resolveStatusType = (surat: any, sigs: any[]): DocStatusType => {
-  const pic = surat.pic_review_status as string | null;
   const hasRejectedSig = sigs.some((s: any) => s.status === 'REJECTED');
   const allSigned = sigs.length > 0 && sigs.every((s: any) => s.is_signed);
 
-  if (hasRejectedSig || pic === 'REJECTED' || pic === 'KEUANGAN_REJECTED') return 'DITOLAK';
-  if (allSigned && (pic === 'SPK' || pic === 'KEUANGAN_DONE'))             return 'SELESAI';
-  if (allSigned && pic === 'KEUANGAN')                                      return 'KEUANGAN';
-  if (allSigned && !pic)                                                    return 'MENUNGGU_PIC';
+  if (hasRejectedSig || surat.status === 'REJECTED') return 'DITOLAK';
+  if (allSigned || surat.status === 'DONE') return 'SELESAI';
   return 'PROSES';
 };
 
@@ -83,7 +80,7 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
 
       let q = supabase
         .from('surat_registrasi')
-        .select('id, pic_review_status, surat_signatures ( is_signed, status )')
+        .select('id, status, surat_signatures ( is_signed, status )')
         .eq('created_by', session.user.id);
 
       if (dateFrom) q = q.gte('created_at', dateFrom.toISOString());

@@ -29,7 +29,7 @@ import { documentPreviewService } from '@/services/document-preview.service';
 import { appStorageService } from '@/services/storage.service';
 import { toast } from 'react-hot-toast';
 
-type InvolvementKey = 'MEMBUAT' | 'MEMERIKSA' | 'MENYETUJUI' | 'PIC';
+type InvolvementKey = 'MEMBUAT' | 'MEMERIKSA' | 'MENYETUJUI';
 
 interface SignatureItem {
   id: string;
@@ -44,11 +44,6 @@ interface SignatureItem {
   profiles?: { full_name?: string | null } | null;
 }
 
-interface FinanceReviewItem {
-  payment_file_path: string | null;
-  status: string | null;
-}
-
 interface SuratItem {
   id: string;
   no_surat: string;
@@ -57,9 +52,7 @@ interface SuratItem {
   created_at: string;
   updated_at: string;
   created_by: string;
-  pic_id: string | null;
   current_step: number | null;
-  pic_review_status: string | null;
   file_path: string | null;
   lampiran_path: string | null;
   surat_attachments?: Array<{
@@ -69,38 +62,31 @@ interface SuratItem {
     file_type?: string | null;
     file_size?: number | null;
   }>;
-  pic_attachment: string | null;
   creator?: { full_name?: string | null } | null;
-  pic?: { full_name?: string | null } | null;
   surat_signatures?: SignatureItem[];
-  finance_reviews?: FinanceReviewItem[];
 }
 
 interface PreparedSurat extends SuratItem {
   _involvementKeys: InvolvementKey[];
   _involvementLabels: string[];
   _creatorName: string;
-  _picName: string;
   _membuatPeople: string[];
   _memeriksaPeople: string[];
   _menyetujuiPeople: string[];
-  _paymentFilePath: string | null;
 }
 
-const ROLE_ORDER: InvolvementKey[] = ['MEMBUAT', 'MEMERIKSA', 'MENYETUJUI', 'PIC'];
+const ROLE_ORDER: InvolvementKey[] = ['MEMBUAT', 'MEMERIKSA', 'MENYETUJUI'];
 
 const ROLE_LABEL: Record<InvolvementKey, string> = {
   MEMBUAT: 'Membuat',
   MEMERIKSA: 'Memeriksa',
   MENYETUJUI: 'Menyetujui',
-  PIC: 'PIC',
 };
 
 const ROLE_BADGE_CLASS: Record<InvolvementKey, string> = {
   MEMBUAT: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
   MEMERIKSA: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
   MENYETUJUI: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
-  PIC: 'bg-purple-500/10 text-purple-500 border-purple-500/30',
 };
 
 function uniq(arr: (string | null | undefined)[]) {
@@ -158,8 +144,6 @@ function resolveStorageUrl(path: string | null | undefined, preferredBucket?: st
 
   const bucket = preferredBucket ?? (
     p.startsWith('lampiran_') || p.startsWith('lampiran_surat/') ? 'lampiran_surat' :
-    p.startsWith('spk_files/') || p.startsWith('spk-') ? 'spk_files' :
-    p.startsWith('payment_files/') || p.startsWith('payment-') ? 'payment_files' :
     'dokumen_surat'
   );
 
@@ -169,16 +153,14 @@ function resolveStorageUrl(path: string | null | undefined, preferredBucket?: st
 
 const SELECT_SURAT = `
   id, no_surat, judul_surat, status, created_at, updated_at,
-  created_by, pic_id, current_step, pic_review_status,
-  file_path, lampiran_path, pic_attachment,
+  created_by, current_step,
+  file_path, lampiran_path,
   surat_attachments(id, file_url, file_name, file_type, file_size),
   creator:profiles!surat_registrasi_created_by_fkey(full_name),
-  pic:profiles!surat_registrasi_pic_id_fkey(full_name),
   surat_signatures(
     id, surat_id, user_id, role_name, step_order, is_signed, status, signed_at, catatan,
     profiles:user_id(full_name)
-  ),
-  finance_reviews(payment_file_path, status)
+  )
 `;
 
 const RiwayatKeterlibatanPage = () => {
@@ -199,7 +181,7 @@ const RiwayatKeterlibatanPage = () => {
         supabase
           .from('surat_registrasi')
           .select(SELECT_SURAT)
-          .or(`created_by.eq.${userId},pic_id.eq.${userId}`)
+          .eq('created_by', userId)
           .order('updated_at', { ascending: false }),
         supabase
           .from('surat_signatures')
@@ -254,9 +236,6 @@ const RiwayatKeterlibatanPage = () => {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_signatures' }, () => {
           queryClient.invalidateQueries({ queryKey: ['surat-riwayat-keterlibatan'] });
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_reviews' }, () => {
-          queryClient.invalidateQueries({ queryKey: ['surat-riwayat-keterlibatan'] });
-        })
         .subscribe();
     };
 
@@ -280,8 +259,6 @@ const RiwayatKeterlibatanPage = () => {
 
       const mySet = new Set<InvolvementKey>(mineBySignature);
       if (s.created_by === data.userId) mySet.add('MEMBUAT');
-      if (s.pic_id === data.userId) mySet.add('PIC');
-
       const myKeys = ROLE_ORDER.filter((k) => mySet.has(k));
 
       const membuatPeople = uniq([
@@ -303,18 +280,14 @@ const RiwayatKeterlibatanPage = () => {
           .map((sig) => sig.profiles?.full_name)
       );
 
-      const paymentPath = (s.finance_reviews ?? []).find((fr) => !!fr.payment_file_path)?.payment_file_path ?? null;
-
       return {
         ...s,
         _involvementKeys: myKeys,
         _involvementLabels: myKeys.map((k) => ROLE_LABEL[k]),
         _creatorName: s.creator?.full_name ?? '-',
-        _picName: s.pic?.full_name ?? '-',
         _membuatPeople: membuatPeople,
         _memeriksaPeople: memeriksaPeople,
         _menyetujuiPeople: menyetujuiPeople,
-        _paymentFilePath: paymentPath,
       };
     });
   }, [data]);
@@ -330,9 +303,7 @@ const RiwayatKeterlibatanPage = () => {
 
     if (
       latest.updated_at !== selected.updated_at ||
-      latest.pic_review_status !== selected.pic_review_status ||
-      latestSigCount !== selectedSigCount ||
-      latest._paymentFilePath !== selected._paymentFilePath
+      latestSigCount !== selectedSigCount
     ) {
       setSelected(latest);
     }
@@ -385,7 +356,6 @@ const RiwayatKeterlibatanPage = () => {
     membuat: prepared.filter((x) => x._involvementKeys.includes('MEMBUAT')).length,
     memeriksa: prepared.filter((x) => x._involvementKeys.includes('MEMERIKSA')).length,
     menyetujui: prepared.filter((x) => x._involvementKeys.includes('MENYETUJUI')).length,
-    pic: prepared.filter((x) => x._involvementKeys.includes('PIC')).length,
   }), [prepared]);
 
   if (error) {
@@ -401,7 +371,7 @@ const RiwayatKeterlibatanPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6 space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300">
       <div className="border-b border-border pb-4 sm:pb-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
@@ -409,7 +379,7 @@ const RiwayatKeterlibatanPage = () => {
             <div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight uppercase">Riwayat Keterlibatan Surat</h1>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                Membuat, memeriksa, menyetujui, PIC + timeline dokumen terkait
+                Membuat, memeriksa, menyetujui, dan timeline dokumen terkait
               </p>
             </div>
           </div>
@@ -419,13 +389,12 @@ const RiwayatKeterlibatanPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Total', value: counts.total },
           { label: 'Membuat', value: counts.membuat },
           { label: 'Memeriksa', value: counts.memeriksa },
           { label: 'Menyetujui', value: counts.menyetujui },
-          { label: 'PIC', value: counts.pic },
         ].map((c) => (
           <div key={c.label} className="rounded-xl border border-border bg-card/40 p-3">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">{c.label}</p>
@@ -489,7 +458,6 @@ const RiwayatKeterlibatanPage = () => {
                     <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Membuat</th>
                     <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Memeriksa</th>
                     <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Menyetujui</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">PIC</th>
                     <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Update</th>
                     <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Aksi</th>
                   </tr>
@@ -511,7 +479,6 @@ const RiwayatKeterlibatanPage = () => {
                       <td className="px-3 py-3 text-xs text-muted-foreground">{s._membuatPeople.join(', ') || '-'}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">{s._memeriksaPeople.join(', ') || '-'}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">{s._menyetujuiPeople.join(', ') || '-'}</td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{s._picName}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">{formatDate(s.updated_at)}</td>
                       <td className="px-3 py-3">
                         <Button size="sm" variant="outline" onClick={() => setSelected(s)} className="h-8 gap-1">
@@ -545,7 +512,6 @@ const RiwayatKeterlibatanPage = () => {
                   <p><span className="text-muted-foreground">Membuat:</span> {s._membuatPeople.join(', ') || '-'}</p>
                   <p><span className="text-muted-foreground">Memeriksa:</span> {s._memeriksaPeople.join(', ') || '-'}</p>
                   <p><span className="text-muted-foreground">Menyetujui:</span> {s._menyetujuiPeople.join(', ') || '-'}</p>
-                  <p><span className="text-muted-foreground">PIC:</span> {s._picName || '-'}</p>
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-border/60">
@@ -577,7 +543,6 @@ const RiwayatKeterlibatanPage = () => {
                   <p className="text-sm"><span className="text-muted-foreground">Membuat:</span> {selected._membuatPeople.join(', ') || '-'}</p>
                   <p className="text-sm"><span className="text-muted-foreground">Memeriksa:</span> {selected._memeriksaPeople.join(', ') || '-'}</p>
                   <p className="text-sm"><span className="text-muted-foreground">Menyetujui:</span> {selected._menyetujuiPeople.join(', ') || '-'}</p>
-                  <p className="text-sm"><span className="text-muted-foreground">PIC:</span> {selected._picName || '-'}</p>
                 </div>
 
                 <div className="rounded-xl border border-border p-3 bg-card/40 space-y-2">
@@ -587,7 +552,6 @@ const RiwayatKeterlibatanPage = () => {
                   <p className="text-sm"><span className="text-muted-foreground">Status:</span> {selected.status}</p>
                   <p className="text-sm"><span className="text-muted-foreground">Created:</span> {formatDate(selected.created_at)}</p>
                   <p className="text-sm"><span className="text-muted-foreground">Updated:</span> {formatDate(selected.updated_at)}</p>
-                  <p className="text-sm"><span className="text-muted-foreground">PIC Review:</span> {selected.pic_review_status || '-'}</p>
                 </div>
               </div>
 
@@ -604,16 +568,6 @@ const RiwayatKeterlibatanPage = () => {
                       kind: 'pdf',
                     },
                     ...getAttachments(selected).map((doc) => ({ ...doc, kind: 'file' })),
-                    {
-                      label: 'SPK / Attachment PIC',
-                      path: selected.pic_attachment,
-                      kind: 'file',
-                    },
-                    {
-                      label: 'Bukti Pembayaran',
-                      path: selected._paymentFilePath,
-                      kind: 'file',
-                    },
                   ].map((doc) => (
                     <div key={doc.label} className="rounded-lg border border-border/60 p-2.5 bg-background/40">
                       <p className="text-xs font-semibold mb-2">{doc.label}</p>

@@ -284,8 +284,8 @@ function BadgeKedudukan({ status }: { status: string }) {
     <span className={cn(
       "px-2 py-0.5 rounded-full text-[10px] font-black tracking-tighter border",
       isKC 
-        ? "bg-blue-50 text-blue-700 border-blue-200" 
-        : "bg-slate-50 text-slate-600 border-slate-200"
+        ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300" 
+        : "border-border bg-muted text-muted-foreground"
     )}>
       {status}
     </span>

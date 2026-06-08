@@ -70,21 +70,21 @@ export default function ActivityLogsPage() {
   if (errorLogs) return <div className="p-10 text-center"><Button onClick={() => refetch()}>Retry</Button></div>;
 
   return (
-    <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-10 py-8 space-y-6">
+    <div className="w-full space-y-6">
       
       {/* HEADER */}
       <div className="flex items-center gap-4">
-        <div className="bg-primary/10 p-3 rounded-2xl text-primary shadow-sm">
+        <div className="rounded-lg bg-primary/10 p-3 text-primary">
           <History className="h-7 w-7" />
         </div>
         <div>
-          <h1 className="text-3xl font-black tracking-tight uppercase italic">Audit Log</h1>
-          <p className="text-muted-foreground text-sm font-medium italic">Jejak audit administratif untuk perubahan data sistem.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
+          <p className="text-sm text-muted-foreground">Jejak audit administratif untuk perubahan data sistem.</p>
         </div>
       </div>
 
       {/* TABS/CONTAINER TABEL */}
-      <div className="bg-card rounded-[2.5rem] border border-border/80 shadow-2xl overflow-hidden ring-1 ring-black/5">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         
         {/* BARIS FILTER DISATUKAN DALAM SATU BOX */}
         <div className="p-5 border-b border-border/50 bg-muted/20 flex flex-col gap-4">
@@ -95,13 +95,13 @@ export default function ActivityLogsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Cari pelaku, tabel, surat, agenda, atau perubahan data..." 
-                className="pl-10 bg-background rounded-xl border-border/60 focus-visible:ring-primary/20"
+                className="pl-10 bg-background border-border/60 focus-visible:ring-primary/20"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger className="w-full md:w-48 bg-background rounded-xl font-bold text-xs uppercase tracking-widest">
+              <SelectTrigger className="w-full md:w-48 bg-background font-bold text-xs uppercase tracking-widest">
                 <SelectValue placeholder="Pilih Aksi" />
               </SelectTrigger>
               <SelectContent>
@@ -117,7 +117,7 @@ export default function ActivityLogsPage() {
           {/* BARIS 2: Filter Kantor & User (Hanya muncul jika isParent) */}
           {isParent && (
             <div className="pt-3 border-t border-border/40">
-               <div className="bg-background/40 p-1 rounded-2xl border border-dashed border-border/80">
+               <div className="rounded-md border border-dashed border-border/80 bg-background/40 p-1">
                 <AgendaParentFilter
                   onUserSelect={setSelectedUserId}
                   selectedUserId={selectedUserId}

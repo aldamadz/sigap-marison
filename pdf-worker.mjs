@@ -35,10 +35,14 @@ const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabas
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
   : null;
 
+if (storageMode !== "self_hosted_supabase" || !storageSupabase || !storagePublicBaseUrl) {
+  throw new Error("Self-hosted storage is required. Configure STORAGE_MODE, STORAGE_SUPABASE_URL, STORAGE_SUPABASE_SERVICE_ROLE_KEY, and STORAGE_PUBLIC_BASE_URL.");
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const useExternalStorage = () => storageMode === "self_hosted_supabase" && !!storageSupabase;
-const uploadStorageClient = () => useExternalStorage() ? storageSupabase : supabase;
+const useExternalStorage = () => true;
+const uploadStorageClient = () => storageSupabase;
 const publicBaseUrl = (origin) => {
   if (origin === "external" && storagePublicBaseUrl) return storagePublicBaseUrl;
   return `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public`;

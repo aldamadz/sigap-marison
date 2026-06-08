@@ -1,17 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Calendar, ClipboardList, Users, Activity, Settings,
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
-  GitMerge, Monitor, Briefcase, MessageSquare, History, BarChart3, Network,
+  GitMerge, Monitor, Briefcase, History, BarChart3, Network,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { supabase } from "@/lib/supabase"
 import { getCurrentUser } from '@/services/user-ui.service'
-import { picService } from '@/services/pic.service'
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 
@@ -29,86 +29,11 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const [user, setUser] = useState<User | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [inboxCount, setInboxCount] = useState<number>(0)
-  const [isUserPIC, setIsUserPIC] = useState(false)
   const [isSuratOpen, setIsSuratOpen] = useState(false)
   const [isMasterOpen, setIsMasterOpen] = useState(false)
 
-  const [chatBadgeCount, setChatBadgeCount] = useState(0)
-  const [creatorChatBadge, setCreatorChatBadge] = useState(0)
   const [monitoringBadge, setMonitoringBadge] = useState(0)
-  const [picQueueCount, setPicQueueCount] = useState(0)
   const isUserAdmin = user?.role === 'admin'
-  const diskusiPicBadgeCount = creatorChatBadge
-
-  const prevChatCountRef    = useRef(0)
-  const prevCreatorBadgeRef = useRef(-1)
-  const prevPicQueueRef     = useRef(-1)
-
-  const playNotif = () => {
-    try {
-      const audio = new Audio('/sounds/notif.WAV')
-      audio.volume = 0.6
-      audio.play().catch(() => {
-        // Browser hanya mengizinkan audio setelah interaksi user.
-      })
-    } catch {}
-  }
-
-  const getPicPenggunaanIds = async (userId: string): Promise<string[] | null> => {
-    const { data: deptPics } = await supabase
-      .from('master_dept_pics').select('dept_id').eq('user_id', userId)
-    if (!deptPics?.length) return null
-    const deptIds = deptPics.map((d: any) => d.dept_id)
-
-    const { data: forms } = await supabase
-      .from('master_forms').select('id').in('department_id', deptIds)
-    if (!forms?.length) return null
-    const formIds = forms.map((f: any) => f.id)
-
-    const { data: penggunaans } = await supabase
-      .from('master_penggunaan_detail').select('id').in('form_id', formIds)
-    if (!penggunaans?.length) return null
-    return penggunaans.map((p: any) => p.id)
-  }
-
-  const getPicSuratIds = async (userId: string): Promise<string[]> => {
-    const { data: deptPics } = await supabase
-      .from('master_dept_pics')
-      .select('dept_id, master_departments(code, name)')
-      .eq('user_id', userId)
-
-    const isFinancePic = (deptPics ?? []).some((row: any) => {
-      const code = String(row?.master_departments?.code ?? '').toLowerCase()
-      const name = String(row?.master_departments?.name ?? '').toLowerCase()
-      return code.includes('keu') || name.includes('keuangan') || name.includes('akuntansi')
-    })
-
-    const penggunaanIds = await getPicPenggunaanIds(userId)
-    const usageSuratIds = penggunaanIds
-      ? (await supabase
-          .from('surat_registrasi')
-          .select('id')
-          .in('penggunaan_id', penggunaanIds)
-          .eq('status', 'DONE')).data?.map((s: any) => s.id) ?? []
-      : []
-
-    const directSuratIds = (await supabase
-      .from('surat_registrasi')
-      .select('id')
-      .eq('pic_id', userId)
-      .eq('status', 'DONE')).data?.map((s: any) => s.id) ?? []
-
-    const financeSuratIds = isFinancePic
-      ? (await supabase
-          .from('surat_registrasi')
-          .select('id')
-          .eq('status', 'DONE')
-          .in('pic_review_status', ['KEUANGAN', 'KEUANGAN_DONE', 'KEUANGAN_REJECTED'])
-        ).data?.map((s: any) => s.id) ?? []
-      : []
-
-    return Array.from(new Set([...usageSuratIds, ...directSuratIds, ...financeSuratIds]))
-  }
 
   useEffect(() => {
     if (location.pathname.startsWith('/surat/monitoring') && user?.id) {
@@ -125,82 +50,10 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   }, [location.pathname, user?.id])
 
   useEffect(() => {
-    if (location.pathname.startsWith('/pic/monitoring') && user?.id && isUserPIC) {
-      const t = setTimeout(async () => {
-        const suratIds = await getPicSuratIds(user.id)
-        if (!suratIds.length) {
-          setPicQueueCount(0)
-          setChatBadgeCount(0)
-          prevChatCountRef.current = 0
-          return
-        }
-
-        try {
-          await picService.markCreatorChatsReadBulk(suratIds)
-        } catch (error) {
-          console.error('Failed to mark creator chats as read on /pic/monitoring', error)
-        }
-
-        const { count: unreadAfterRead } = await supabase
-          .from('surat_chats')
-          .select('id', { count: 'exact', head: true })
-          .in('surat_id', suratIds)
-          .eq('sender_role', 'creator')
-          .eq('is_read', false)
-          .eq('is_system', false)
-
-        const { count } = await supabase
-          .from('surat_registrasi')
-          .select('id', { count: 'exact', head: true })
-          .in('id', suratIds)
-          .or('pic_review_status.is.null,pic_review_status.eq.PENDING,pic_review_status.eq.KEUANGAN')
-          .eq('status', 'DONE')
-        setPicQueueCount(count ?? 0)
-        const unreadCount = unreadAfterRead ?? 0
-        setChatBadgeCount(unreadCount)
-        prevChatCountRef.current = unreadCount
-      }, 1500)
-      return () => clearTimeout(t)
-    }
-  }, [location.pathname, user?.id, isUserPIC])
-
-  useEffect(() => {
-    if (location.pathname.startsWith('/surat/chat') && user?.id && isUserPIC) {
-      const t = setTimeout(async () => {
-        const suratIds = await getPicSuratIds(user.id)
-        if (!suratIds.length) {
-          setChatBadgeCount(0)
-          prevChatCountRef.current = 0
-          return
-        }
-
-        try {
-          await picService.markCreatorChatsReadBulk(suratIds)
-        } catch (error) {
-          console.error('Failed to mark creator chats as read on /surat/chat', error)
-        }
-
-        const { count: unreadAfterRead } = await supabase
-          .from('surat_chats')
-          .select('id', { count: 'exact', head: true })
-          .in('surat_id', suratIds)
-          .eq('sender_role', 'creator')
-          .eq('is_read', false)
-          .eq('is_system', false)
-
-        const unreadCount = unreadAfterRead ?? 0
-        setChatBadgeCount(unreadCount)
-        prevChatCountRef.current = unreadCount
-      }, 800)
-      return () => clearTimeout(t)
-    }
-  }, [location.pathname, user?.id, isUserPIC])
-
-  useEffect(() => {
     if (collapsed) return
     const path = location.pathname
-    if (path.startsWith('/surat') || path.startsWith('/pic')) setIsSuratOpen(true)
-    const masterDataPaths = ['/admin/users', '/admin/departments', '/admin/entities', '/admin/forms', '/admin/letter-types', '/admin/offices', '/admin/workflow-details', '/admin/master-projects', '/admin/pic-management']
+    if (path.startsWith('/surat')) setIsSuratOpen(true)
+    const masterDataPaths = ['/admin/users', '/admin/departments', '/admin/entities', '/admin/letter-types', '/admin/offices', '/admin/master-projects']
     if (masterDataPaths.some(p => path.startsWith(p))) setIsMasterOpen(true)
   }, [location.pathname, collapsed])
 
@@ -209,8 +62,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       const data = await getCurrentUser()
       if (data) {
         setUser(data)
-        const { data: deptPicData } = await supabase.from('master_dept_pics').select('id').eq('user_id', data.id).limit(1)
-        if (deptPicData && deptPicData.length > 0) setIsUserPIC(true)
       }
     }
     initSidebar()
@@ -239,75 +90,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   }, [user?.id])
 
   useEffect(() => {
-    if (!user?.id || !isUserPIC) {
-      setChatBadgeCount(0)
-      setPicQueueCount(0)
-      prevChatCountRef.current = 0
-      prevPicQueueRef.current = 0
-      return
-    }
-
-    const fetchChatBadge = async () => {
-      const suratIds = await getPicSuratIds(user.id)
-      if (!suratIds.length) { setChatBadgeCount(0); prevChatCountRef.current = 0; return }
-
-      const { count } = await supabase.from('surat_chats').select('id', { count: 'exact', head: true }).in('surat_id', suratIds).eq('sender_role', 'creator').eq('is_read', false).eq('is_system', false)
-      const n = count ?? 0
-      if (!isMobile && n > prevChatCountRef.current && prevChatCountRef.current >= 0) playNotif()
-      prevChatCountRef.current = n
-      setChatBadgeCount(n)
-
-      const { count: qCount } = await supabase
-        .from('surat_registrasi')
-        .select('id', { count: 'exact', head: true })
-        .in('id', suratIds)
-        .or('pic_review_status.is.null,pic_review_status.eq.PENDING,pic_review_status.eq.KEUANGAN')
-        .eq('status', 'DONE')
-
-      const newQ = qCount ?? 0
-      if (!isMobile && prevPicQueueRef.current >= 0 && newQ > prevPicQueueRef.current) {
-        playNotif()
-        toast.info('Pengajuan baru masuk ke antrian PIC!', { duration: 5000, description: `${newQ} pengajuan menunggu review` })
-      }
-      prevPicQueueRef.current = newQ
-      setPicQueueCount(newQ)
-    }
-
-    fetchChatBadge()
-    const ch = supabase.channel('sidebar-chat-badge')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_registrasi' }, fetchChatBadge)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'surat_chats' }, fetchChatBadge)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_chats' }, fetchChatBadge)
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [user?.id, isUserPIC])
-
-  useEffect(() => {
-    if (!isUserPIC) return
-    const onPicUnreadCount = (event: Event) => {
-      const customEvent = event as CustomEvent<{ count?: number }>
-      const n = customEvent.detail?.count ?? 0
-      setChatBadgeCount(n)
-      prevChatCountRef.current = n
-    }
-    window.addEventListener('pic-unread-count', onPicUnreadCount as EventListener)
-    return () => {
-      window.removeEventListener('pic-unread-count', onPicUnreadCount as EventListener)
-    }
-  }, [isUserPIC])
-
-  useEffect(() => {
     if (!user?.id) return
-    const fetchCreatorBadge = async () => {
-      const { data: surats } = await supabase.from('surat_registrasi').select('id').eq('created_by', user.id).eq('status', 'DONE')
-      if (!surats?.length) { setCreatorChatBadge(0); prevCreatorBadgeRef.current = 0; return }
-      const suratIds = surats.map((s: any) => s.id)
-      const { count } = await supabase.from('surat_chats').select('id', { count: 'exact', head: true }).in('surat_id', suratIds).eq('sender_role', 'pic').eq('is_read', false).eq('is_system', false)
-      const n = count ?? 0
-      if (!isMobile && prevCreatorBadgeRef.current >= 0 && n > prevCreatorBadgeRef.current) playNotif()
-      prevCreatorBadgeRef.current = n
-      setCreatorChatBadge(n)
-    }
     const fetchMonitoringBadge = async () => {
       const { data: surats } = await supabase
         .from('surat_registrasi')
@@ -319,10 +102,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       )
       setMonitoringBadge(unseen.length)
     }
-    fetchMonitoringBadge(); fetchCreatorBadge()
-    const ch = supabase.channel(`sidebar-creator-chat-badge:${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'surat_chats' }, fetchCreatorBadge)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_chats' }, fetchCreatorBadge)
+    fetchMonitoringBadge()
+    const ch = supabase.channel(`sidebar-monitoring-badge:${user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_registrasi' }, fetchMonitoringBadge)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
@@ -379,12 +160,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-sidebar"></span>
               </span>
             )}
-            {!isMobile && collapsed && label === 'Diskusi PIC' && diskusiPicBadgeCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-primary border-2 border-sidebar"></span>
-              </span>
-            )}
           </div>
           {(isMobile || !collapsed) && (
             <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
@@ -395,23 +170,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 </span>
               )}
               {label === 'Status Pengajuan' && monitoringBadge > 0 && (
-                <span className="ml-2 bg-amber-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
+                <span className="ml-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
                   {monitoringBadge > 99 ? '99+' : monitoringBadge}
-                </span>
-              )}
-              {label === 'Diskusi PIC' && diskusiPicBadgeCount > 0 && (
-                <span className="ml-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
-                  {diskusiPicBadgeCount > 99 ? '99+' : diskusiPicBadgeCount}
-                </span>
-              )}
-              {label === 'Antrean Review PIC' && picQueueCount > 0 && (
-                <span className="ml-2 bg-amber-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
-                  {picQueueCount > 99 ? '99+' : picQueueCount}
-                </span>
-              )}
-              {label === 'Antrean Review PIC' && chatBadgeCount > 0 && (
-                <span className="ml-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
-                  {chatBadgeCount > 99 ? '99+' : chatBadgeCount}
                 </span>
               )}
             </div>
@@ -425,12 +185,13 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const MobileHeader = () => (
     <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-glow">
-          <Building2 className="w-5 h-5 text-primary-foreground" />
-        </div>
+        <img
+          src="/marison-sigap-logo-v2.png"
+          alt="Logo Marison"
+          className="w-10 h-10 object-contain shrink-0"
+        />
         <div>
-          <h1 className="font-black text-foreground leading-none text-sm uppercase tracking-tight">SIGAP Digital</h1>
-          <p className="text-[10px] text-primary font-bold mt-1 uppercase tracking-widest">Enterprise System</p>
+          <h1 className="font-black text-foreground leading-none text-sm tracking-tight">Marison - SIGAP</h1>
         </div>
       </div>
       {/* Tidak ada tombol X disini karena sudah otomatis dari SheetPrimitive.Close */}
@@ -450,16 +211,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           )}
         >
           <div className={cn("flex items-center overflow-hidden min-w-0", collapsed ? "gap-0" : "gap-3")}>
-            <div className={cn(
-              "rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-glow",
-              collapsed ? "w-8 h-8" : "w-9 h-9"
-            )}>
-              <Building2 className={cn("text-primary-foreground", collapsed ? "w-4 h-4" : "w-5 h-5")} />
-            </div>
+            <img
+              src="/marison-sigap-logo-v2.png"
+              alt="Logo Marison"
+              className={cn("object-contain shrink-0", collapsed ? "w-8 h-8" : "w-9 h-9")}
+            />
             {!collapsed && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="truncate min-w-0">
-                <h1 className="font-black text-foreground leading-none text-xs uppercase tracking-tight">SIGAP Digital</h1>
-                <p className="text-[8px] text-primary font-bold mt-1 uppercase tracking-widest">Enterprise System</p>
+                <h1 className="font-black text-foreground leading-none text-xs tracking-tight">Marison - SIGAP</h1>
               </motion.div>
             )}
           </div>
@@ -499,7 +258,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               className={cn(
                 "w-full flex items-center py-2.5 rounded-lg transition-colors group relative",
                 isDesktopCollapsed ? "justify-center px-0" : "justify-between px-4",
-                location.pathname.includes('/surat') || location.pathname.includes('/pic')
+                location.pathname.includes('/surat')
                   ? "text-primary bg-primary/5"
                   : "text-muted-foreground hover:bg-accent"
               )}
@@ -507,7 +266,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               <div className={cn("flex items-center min-w-0", isDesktopCollapsed ? "gap-0" : "gap-3")}>
                 <div className="relative shrink-0">
                   <Mail className="w-5 h-5" />
-                  {!isMobile && collapsed && (inboxCount > 0 || chatBadgeCount > 0 || creatorChatBadge > 0 || picQueueCount > 0) && (
+                  {!isMobile && collapsed && inboxCount > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -518,16 +277,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               </div>
               {(isMobile || !collapsed) && (
                 <div className="flex items-center gap-2 shrink-0">
-                  {creatorChatBadge > 0 && !isSuratOpen && (
-                    <span className="bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {creatorChatBadge > 99 ? '99+' : creatorChatBadge}
-                    </span>
-                  )}
-                  {picQueueCount > 0 && !isSuratOpen && (
-                    <span className="bg-amber-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {picQueueCount > 99 ? '99+' : picQueueCount}
-                    </span>
-                  )}
                   {inboxCount > 0 && !isSuratOpen && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isSuratOpen && "rotate-180")} />
                 </div>
@@ -545,8 +294,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                   {renderNavLink('/surat/inbox', 'Persetujuan', Inbox, true)}
                   {renderNavLink('/surat/monitoring', 'Status Pengajuan', SearchCheck, true)}
                   {renderNavLink('/surat/riwayat', 'Riwayat Terlibat', History, true)}
-                  {renderNavLink('/surat/chat', 'Diskusi PIC', MessageSquare, true)}
-                  {isUserPIC && renderNavLink('/pic/monitoring', 'Antrean Review PIC', Monitor, true)}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -589,16 +336,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                     {renderNavLink('/admin/users/hierarchy', 'Hirarki Organisasi', Network, true)}
                     {renderNavLink('/admin/departments', 'Master Departemen', Building2, true)}
                     {renderNavLink('/admin/entities', 'Master Entitas', Building, true)}
-                    {renderNavLink('/admin/forms', 'Master Form', FileSignature, true)}
                     {renderNavLink('/admin/letter-types', 'Master Jenis Surat', Tag, true)}
                     {renderNavLink('/admin/offices', 'Master Kantor Cabang', MapPin, true)}
                     {renderNavLink('/admin/master-projects', 'Master Proyek', Briefcase, true)}
-                    {renderNavLink('/admin/workflow-details', 'Matriks Tanda Tangan', GitMerge, true)}
-                    {renderNavLink('/admin/pic-management', 'Manajemen PIC', ShieldCheck, true)}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
+            {renderNavLink('/admin/configuration', 'Configuration', SlidersHorizontal)}
             {renderNavLink('/admin/monitoring', 'All Status Monitoring', Monitor)}
             {renderNavLink('/admin/kpi-departments', 'KPI Departemen', BarChart3)}
             {renderNavLink('/audit-logs', 'Audit Log', Activity)}

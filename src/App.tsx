@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 
 // IMPORT KOMPONEN SYNC (Tetap statis karena global state)
 import { RealtimeSync } from "@/providers/RealtimeSync"; 
+import { UserThemeSync } from "@/providers/UserThemeSync";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
@@ -26,9 +27,6 @@ const SuratPage = lazy(() => import("@/pages/surat/SuratPage"));
 const InboxPage = lazy(() => import("@/pages/surat/InboxPage"));
 const MonitoringPage = lazy(() => import("@/pages/surat/MonitoringPage"));
 const RiwayatKeterlibatanPage = lazy(() => import("@/pages/surat/RiwayatKeterlibatanPage"));
-const PICMonitoringPage = lazy(() => import("@/pages/monitoring-pic/MonitoringPICPage"));
-const PICManagementPage = lazy(() => import("@/pages/admin/PICManagementPage"));
-const UserChatPage = lazy(() => import("@/pages/user-chat/userChatPage"));
 
 // LAZY IMPORT - ADMIN MANAGEMENT
 const UserManagementPage = lazy(() => import("@/pages/admin/UserManagementPage"));
@@ -42,6 +40,8 @@ const WorkflowDetailManagementPage = lazy(() => import("./pages/admin/WorkflowDe
 const MasterProjectManagementPage = lazy(() => import("./pages/admin/ProjectManagementPage"));
 const AdminMonitoringPage = lazy(() => import("./pages/admin/AdminMonitoringPage"));
 const DepartmentKPIPage = lazy(() => import("./pages/admin/DepartmentKPIPage"));
+const LetterNumberCounterPage = lazy(() => import("./pages/admin/LetterNumberCounterPage"));
+const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 
 // Konfigurasi Query Client
 const queryClient = new QueryClient({
@@ -123,6 +123,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         {isAuth && <RealtimeSync />}
+        {isAuth && <UserThemeSync />}
         
         <Toaster />
         <Sonner position="top-right" closeButton />
@@ -152,25 +153,25 @@ const App = () => {
               <Route path="/surat/monitoring" element={<MonitoringPage />} />
               <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
               
-              {/* SURAT CHAT */}
-              <Route path="/surat/chat" element={<UserChatPage />} />
-
-              {/* PIC MODULE */}
-              <Route path="/pic/monitoring" element={<PICMonitoringPage />} />
-
               {/* ADMIN MODULE */}
               <Route path="/admin/users" element={<UserManagementPage />} />
               <Route path="/admin/users/hierarchy" element={<OrganizationHierarchyPage />} />
               <Route path="/admin/departments" element={<DepartmentManagementPage />} />
               <Route path="/admin/entities" element={<EntityManagementPage />} />
-              <Route path="/admin/forms" element={<FormManagementPage />} />
+              <Route path="/admin/forms" element={<Navigate to="/admin/configuration/forms" replace />} />
               <Route path="/admin/letter-types" element={<LetterTypeManagementPage />} />
               <Route path="/admin/offices" element={<OfficeManagementPage />} />
-              <Route path="/admin/workflow-details" element={<WorkflowDetailManagementPage />} />
+              <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/workflows" replace />} />
               <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
-              <Route path="/admin/pic-management" element={<PICManagementPage />} />
               <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
               <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
+              <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
+                <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
+                <Route path="forms" element={<FormManagementPage embedded />} />
+                <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
+                <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
+                <Route path="numbering" element={<LetterNumberCounterPage />} />
+              </Route>
             </Route>
 
             <Route path="*" element={<NotFound />} />

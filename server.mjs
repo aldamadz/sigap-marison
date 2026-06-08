@@ -27,6 +27,10 @@ const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabas
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
   : null;
 
+if (storageMode !== "self_hosted_supabase" || !storageSupabase || !storagePublicBaseUrl) {
+  throw new Error("Self-hosted storage is required. Configure STORAGE_MODE, STORAGE_SUPABASE_URL, STORAGE_SUPABASE_SERVICE_ROLE_KEY, and STORAGE_PUBLIC_BASE_URL.");
+}
+
 const smtpConfig = {
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 465),
@@ -93,8 +97,8 @@ const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "")
 
 const uniqueEmails = (values) => [...new Set(values.map((value) => String(value || "").trim().toLowerCase()).filter(isEmail))];
 
-const useExternalStorage = () => storageMode === "self_hosted_supabase" && !!storageSupabase;
-const uploadStorageClient = () => useExternalStorage() ? storageSupabase : supabase;
+const useExternalStorage = () => true;
+const uploadStorageClient = () => storageSupabase;
 
 const storageOriginBase = (origin) => {
   if (origin === "external" && storagePublicBaseUrl) return storagePublicBaseUrl;
@@ -273,11 +277,38 @@ const uploadInternalStorageFile = async (token, req) => {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const origin = useExternalStorage() ? "external" : "primary";
-  const { error } = await uploadStorageClient().storage.from(bucket).upload(requestedPath, buffer, {
-    contentType: file.type || "application/octet-stream",
-    upsert,
-  });
-  if (error) throw error;
+  let uploadResult;
+  try {
+    uploadResult = await uploadStorageClient().storage.from(bucket).upload(requestedPath, buffer, {
+      contentType: file.type || "application/octet-stream",
+      upsert,
+    });
+  } catch (error) {
+    console.error("Storage upload network error:", {
+      bucket,
+      path: requestedPath,
+      origin,
+      storageUrl: useExternalStorage() ? storageSupabaseUrl : supabaseUrl,
+      message: error?.message,
+      cause: error?.cause?.message,
+    });
+    const err = new Error(
+      useExternalStorage()
+        ? "Server aplikasi tidak bisa menghubungi storage self-hosted. Periksa STORAGE_SUPABASE_URL dari container agenda-flow-prod."
+        : "Server aplikasi tidak bisa menghubungi storage Supabase."
+    );
+    err.status = 502;
+    throw err;
+  }
+  if (uploadResult.error) {
+    console.error("Storage upload API error:", {
+      bucket,
+      path: requestedPath,
+      origin,
+      message: uploadResult.error.message,
+    });
+    throw uploadResult.error;
+  }
 
   return {
     bucket,
@@ -430,7 +461,7 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
 
 const canReadSurat = async (surat, userId) => {
   if (!surat || !userId) return false;
-  if (surat.created_by === userId || surat.pic_id === userId) return true;
+  if (surat.created_by === userId) return true;
   if ((surat.surat_signatures || []).some((sig) => sig.user_id === userId)) return true;
 
   const { data: profile } = await supabase
@@ -447,9 +478,6 @@ const parseStorageRef = (raw) => {
   const knownBuckets = [
     "dokumen_surat",
     "lampiran_surat",
-    "spk_files",
-    "payment_files",
-    "chat_attachments",
   ];
 
   try {
@@ -471,9 +499,6 @@ const parseStorageRef = (raw) => {
   }
 
   if (value.startsWith("lampiran_")) return { bucket: "lampiran_surat", path: value, origin: "primary" };
-  if (value.startsWith("payment-")) return { bucket: "payment_files", path: value, origin: "primary" };
-  if (value.startsWith("spk-")) return { bucket: "spk_files", path: value, origin: "primary" };
-
   return { bucket: "dokumen_surat", path: value, origin: "primary" };
 };
 
@@ -489,10 +514,7 @@ const getAllowedStorageRefs = (surat) => {
     surat.file_path,
     surat.pdf_path,
     surat.lampiran_path,
-    surat.pic_attachment,
     ...(surat.surat_attachments || []).map((a) => a.file_url),
-    ...(surat.surat_chats || []).map((c) => c.attachment_url),
-    ...(surat.finance_reviews || []).map((f) => f.payment_file_path),
     ...(surat.surat_signatures || []).flatMap((s) => [s.file_path_snap, s.pdf_path_snap]),
   ];
   return new Set(refs.map(parseStorageRef).filter(Boolean).map(storageRefKey));
@@ -510,7 +532,7 @@ const getAuthorizedSurat = async (suratId, token) => {
 
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, file_path, pdf_path, lampiran_path, pic_attachment, created_by, pic_id")
+    .select("id, file_path, pdf_path, lampiran_path, created_by")
     .eq("id", suratId)
     .maybeSingle();
   if (suratError || !surat) {
@@ -520,7 +542,7 @@ const getAuthorizedSurat = async (suratId, token) => {
     throw err;
   }
 
-  const [signaturesRes, attachmentsRes, chatsRes, financeReviewsRes] = await Promise.all([
+  const [signaturesRes, attachmentsRes] = await Promise.all([
     supabase
       .from("surat_signatures")
       .select("id, user_id, file_path_snap, pdf_path_snap")
@@ -529,25 +551,12 @@ const getAuthorizedSurat = async (suratId, token) => {
       .from("surat_attachments")
       .select("file_url")
       .eq("surat_id", suratId),
-    supabase
-      .from("surat_chats")
-      .select("attachment_url")
-      .eq("surat_id", suratId),
-    supabase
-      .from("finance_reviews")
-      .select("payment_file_path")
-      .eq("surat_id", suratId),
   ]);
 
   if (signaturesRes.error) console.error("getAuthorizedSurat signatures query failed:", signaturesRes.error);
   if (attachmentsRes.error) console.error("getAuthorizedSurat attachments query failed:", attachmentsRes.error);
-  if (chatsRes.error) console.error("getAuthorizedSurat chats query failed:", chatsRes.error);
-  if (financeReviewsRes.error) console.error("getAuthorizedSurat finance query failed:", financeReviewsRes.error);
-
   surat.surat_signatures = signaturesRes.data || [];
   surat.surat_attachments = attachmentsRes.data || [];
-  surat.surat_chats = chatsRes.data || [];
-  surat.finance_reviews = financeReviewsRes.data || [];
 
   if (!(await canReadSurat(surat, userRes.user.id))) {
     const err = new Error("Forbidden");

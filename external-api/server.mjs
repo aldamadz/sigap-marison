@@ -29,6 +29,10 @@ const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabas
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
   : null;
 
+if (storageMode !== "self_hosted_supabase" || !storageSupabase || !storagePublicBaseUrl) {
+  throw new Error("Self-hosted storage is required for external file access.");
+}
+
 const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
 const hmacSha512Hex = (secret, value) => createHmac("sha512", secret).update(value).digest("hex");
 const safeHexEqual = (left, right) => {
@@ -72,7 +76,7 @@ const storageClientForRef = (ref) => ref?.origin === "external" && storageSupaba
 const parseStorageRef = (raw) => {
   if (!raw || typeof raw !== "string") return null;
   const value = raw.trim();
-  const knownBuckets = ["dokumen_surat", "lampiran_surat", "spk_files", "payment_files", "chat_attachments"];
+  const knownBuckets = ["dokumen_surat", "lampiran_surat"];
 
   try {
     const parsed = new URL(value);
@@ -90,8 +94,6 @@ const parseStorageRef = (raw) => {
     if (value.startsWith(`${bucket}/`)) return { bucket, path: value.slice(bucket.length + 1), origin: "primary" };
   }
   if (value.startsWith("lampiran_")) return { bucket: "lampiran_surat", path: value, origin: "primary" };
-  if (value.startsWith("payment-")) return { bucket: "payment_files", path: value, origin: "primary" };
-  if (value.startsWith("spk-")) return { bucket: "spk_files", path: value, origin: "primary" };
   return { bucket: "dokumen_surat", path: value, origin: "primary" };
 };
 
@@ -109,21 +111,17 @@ const makeFileDescriptor = (suratId, type, rawRef, extra = {}) => {
 const sanitizeSurat = (row) => {
   const attachments = Array.isArray(row.attachments) ? row.attachments : [];
   const signatures = Array.isArray(row.signatures) ? row.signatures : [];
-  const financeReviews = Array.isArray(row.finance_reviews) ? row.finance_reviews : [];
   const files = [
     makeFileDescriptor(row.id, "document", row.file_path),
     makeFileDescriptor(row.id, "pdf", row.pdf_path),
-    makeFileDescriptor(row.id, "spk", row.pic_attachment),
     ...attachments.map((item) => makeFileDescriptor(row.id, "attachment", item.file_url, { attachment_id: item.id })),
     ...signatures.map((item) => makeFileDescriptor(row.id, "signature-pdf", item.pdf_path_snap, { signature_id: item.id })),
-    ...financeReviews.map((item) => makeFileDescriptor(row.id, "payment", item.payment_file_path, { finance_review_id: item.id })),
   ].filter(Boolean);
 
   return {
     ...row,
     file_path: undefined,
     pdf_path: undefined,
-    pic_attachment: undefined,
     attachments: attachments.map(({ file_url, ...item }) => ({
       ...item,
       file: makeFileDescriptor(row.id, "attachment", file_url, { attachment_id: item.id }),
@@ -131,10 +129,6 @@ const sanitizeSurat = (row) => {
     signatures: signatures.map(({ pdf_path_snap, ...item }) => ({
       ...item,
       file: makeFileDescriptor(row.id, "signature-pdf", pdf_path_snap, { signature_id: item.id }),
-    })),
-    finance_reviews: financeReviews.map(({ payment_file_path, ...item }) => ({
-      ...item,
-      file: makeFileDescriptor(row.id, "payment", payment_file_path, { finance_review_id: item.id }),
     })),
     files,
   };
@@ -201,16 +195,14 @@ const authenticateRequest = async (request, reply) => {
 const resolveFileRef = async (suratId, type, query) => {
   const { data, error } = await supabase
     .from("surat_external_export")
-    .select("id, file_path, pdf_path, pic_attachment, attachments, signatures, finance_reviews")
+    .select("id, file_path, pdf_path, attachments, signatures")
     .eq("id", suratId)
     .single();
   if (error || !data) return null;
   if (type === "document") return parseStorageRef(data.file_path);
   if (type === "pdf") return parseStorageRef(data.pdf_path);
-  if (type === "spk") return parseStorageRef(data.pic_attachment);
   if (type === "attachment") return parseStorageRef((data.attachments || []).find((item) => item.id === query.attachment_id)?.file_url);
   if (type === "signature-pdf") return parseStorageRef((data.signatures || []).find((item) => item.id === query.signature_id)?.pdf_path_snap);
-  if (type === "payment") return parseStorageRef((data.finance_reviews || []).find((item) => item.id === query.finance_review_id)?.payment_file_path);
   return null;
 };
 
@@ -383,7 +375,7 @@ app.get("/api/surat/:suratId/files/:type", {
       required: ["suratId", "type"],
       properties: {
         suratId: { type: "string", format: "uuid" },
-        type: { type: "string", enum: ["document", "pdf", "spk", "attachment", "signature-pdf", "payment"] },
+        type: { type: "string", enum: ["document", "pdf", "attachment", "signature-pdf"] },
       },
     },
     querystring: {
@@ -391,7 +383,6 @@ app.get("/api/surat/:suratId/files/:type", {
       properties: {
         attachment_id: { type: "string", format: "uuid" },
         signature_id: { type: "string", format: "uuid" },
-        finance_review_id: { type: "string", format: "uuid" },
       },
     },
   },

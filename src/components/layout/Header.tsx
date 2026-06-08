@@ -146,7 +146,6 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
             addNotif(mapDbNotification(row))
 
             queryClient.invalidateQueries({ queryKey: ['surat-list'] })
-            queryClient.invalidateQueries({ queryKey: ['pic-inbox'] })
           }
         )
         .on(

@@ -127,7 +127,7 @@ const MonitoringAdminPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-10 space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-8 animate-in fade-in duration-300">
       <Dialog open={!!previewingId}>
         <DialogContent className="max-w-sm rounded-3xl text-center">
           <DialogHeader>

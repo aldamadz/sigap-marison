@@ -1,6 +1,6 @@
 # Fitur SIGAP
 
-Tanggal pembaruan: 2026-06-05  
+Tanggal pembaruan: 2026-06-08  
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 
 Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besar dan tautan, sedangkan detail fitur fungsional dan non-fungsional dicatat di file ini.
@@ -21,24 +21,23 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Core | `/calendar` | Kalender |
 | Core | `/agenda` | Agenda |
 | Core | `/settings` | Settings |
-| Core | `/activity-logs` | Activity Logs |
+| Admin | `/audit-logs` | Audit Log |
 | Surat | `/surat/registrasi` | Buat Surat |
 | Surat | `/surat/inbox` | Inbox Persetujuan |
 | Surat | `/surat/monitoring` | Status Pengajuan |
 | Surat | `/surat/riwayat` | Riwayat Terlibat |
-| Surat | `/surat/chat` | Diskusi PIC |
-| PIC | `/pic/monitoring` | Antrean Review PIC |
 | Admin | `/admin/users` | User Organization |
 | Admin | `/admin/users/hierarchy` | Hirarki Organisasi |
 | Admin | `/admin/departments` | Master Departemen |
 | Admin | `/admin/entities` | Master Entitas |
-| Admin | `/admin/forms` | Master Form |
 | Admin | `/admin/letter-types` | Master Jenis Surat |
 | Admin | `/admin/offices` | Master Kantor Cabang |
 | Admin | `/admin/master-projects` | Master Proyek |
-| Admin | `/admin/workflow-details` | Matriks Tanda Tangan |
-| Admin | `/admin/pic-management` | Manajemen PIC |
 | Admin | `/admin/monitoring` | All Status Monitoring |
+| Admin | `/admin/kpi-departments` | KPI Departemen |
+| Admin | `/admin/configuration/forms` | Configuration: Form & Template |
+| Admin | `/admin/configuration/workflows` | Configuration: Alur Persetujuan |
+| Admin | `/admin/configuration/kpi` | Configuration: SLA Departemen |
 
 ## 1. Autentikasi dan Sesi
 
@@ -48,6 +47,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - User yang sudah login diarahkan ke dashboard.
 - User yang belum login diarahkan ke halaman login.
 - Sesi digunakan untuk membatasi akses data, dokumen, lampiran, API internal, dan halaman protected.
+- Saat surat dibuat, database menetapkan `created_by` dari identitas JWT aktif; nilai pembuat tidak dipercaya dari input klien.
 
 ### Non-Fungsional
 
@@ -109,7 +109,8 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Lampiran dapat diwajibkan, opsional, atau multiple sesuai aturan form.
 - Preview dokumen menggunakan PDF.
 - Surat berjalan mengikuti matrix tanda tangan.
-- Riwayat dan monitoring surat tersedia untuk user, PIC, dan admin sesuai akses.
+- Riwayat dan monitoring surat tersedia untuk pembuat, penandatangan, dan admin sesuai akses.
+- Setelah seluruh tanda tangan selesai, proses SIGAP berakhir pada status `DONE`.
 
 ### Non-Fungsional
 
@@ -164,7 +165,14 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Admin mengaktifkan konfigurasi unit pada Master Form.
 - Admin menentukan departemen yang boleh mengajukan unit.
 - Admin menentukan cell kalimat permohonan unit, default `C11`.
-- Marketing memilih mode `Unit`, memilih proyek, dan mengisi jumlah unit.
+- Untuk jenis surat Permohonan, user memilih kategori `Aset`, `Unit`, atau `Non Unit`.
+- Jika kategori `Unit`, user memilih proyek, mengisi jumlah unit, dan catatan opsional.
+- Sistem mengisi detail barang Unit otomatis:
+  - Nama barang: `Permohonan Order Bangun SPK Pembangunan Rumah [jumlah] Unit`
+  - Satuan: `Unit`
+  - Jumlah: dari input pemohon
+  - Status: default `2`
+- Nomor surat Unit memakai format khusus, contoh `001/UAI/MKT.1.JST 3/VI/2026`.
 - Sistem menulis kalimat seperti:
 
 ```text
@@ -173,15 +181,19 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - Perencanaan memilih unit spesifik saat approval.
 - Jumlah unit yang dipilih boleh lebih banyak, tetapi tidak boleh kurang dari permintaan.
-- Perencanaan mengunggah lampiran alokasi unit sesuai konfigurasi.
-- Sistem membuat lampiran PDF otomatis berisi kode unit dalam kotak kuning, border hitam, dan font hitam.
+- Perencanaan mengisi `Struktur Atas`, `Struktur Bawah`, dan komponen kode produksi per unit.
+- Format kode produksi otomatis: `[nomor]/UAI/PRC/[blok]/[tanggal]`.
+- Perencanaan mengunggah 3 lampiran manual: `SITEPLAN`, `VOLUME ADENDUM`, dan `HITUNGAN ADENDUM`.
+- Sistem membuat 2 lampiran PDF otomatis:
+  - `Rekap Adendum Unit` dengan tabel struktur dan total nominal.
+  - `Kode Produksi Unit` dengan tabel `No`, `Proyek`, `Unit`, `Kode Produksi`.
 
 ### Non-Fungsional
 
 - Mode unit tidak boleh bercampur dengan input barang biasa.
 - Konfigurasi unit harus berada di `unit_config`, bukan disamarkan sebagai field barang.
-- Unit terpilih, proyek alokasi, lampiran, waktu, dan signature harus terekam di database.
-- Lampiran daftar kode unit harus tersimpan sebagai `stage = unit_allocation`.
+- Unit terpilih, proyek alokasi, detail struktur, kode produksi, lampiran, waktu, dan signature harus terekam di database.
+- Lampiran otomatis Unit harus tersimpan sebagai `stage = unit_allocation`.
 - Jika integrasi API external berubah, UI utama tidak perlu dirombak.
 
 ## 9. Monitoring Surat
@@ -191,7 +203,6 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - User melihat status pengajuan miliknya.
 - User melihat dokumen, lampiran, snapshot, dan riwayat tanda tangan.
 - Admin melihat semua status surat pada All Status Monitoring.
-- PIC melihat antrean review PIC.
 
 ### Non-Fungsional
 
@@ -214,29 +225,27 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - File tetap harus dibuka lewat endpoint aman.
 - Query riwayat harus tetap responsif meski data bertambah.
 
-## 11. Diskusi dan Review PIC
+## 11. Batas Proses Approval
 
 ### Fungsional
 
-- User dapat berdiskusi dengan PIC terkait surat.
-- PIC melihat antrean review.
-- PIC dapat membuka dokumen dan lampiran.
-- Badge sidebar menunjukkan antrean review PIC.
-- Departemen dengan badge antrean diprioritaskan agar mudah ditemukan.
+- SIGAP menangani pembuatan, routing, tanda tangan, monitoring, dan penyelesaian approval.
+- Setelah approval selesai, dokumen berstatus `DONE`.
+- Pengiriman dokumen ke sistem departemen akan menggunakan endpoint integrasi ketika endpoint tersebut tersedia.
+- Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
 ### Non-Fungsional
 
-- Chat/review harus tercatat.
-- Badge harus sesuai jumlah antrean aktual dan hak akses.
-- Notifikasi review baru tidak boleh dobel berlebihan.
-- File chat harus tetap melalui akses aman.
+- Tidak ada akses PIC implisit atau bypass admin pada proses approval.
+- Data hanya dapat dibaca oleh pembuat, penandatangan terkait, admin, atau external client resmi.
+- Integrasi downstream harus idempoten dan dapat diaudit ketika diaktifkan.
 
 ## 12. Notifikasi dan Realtime
 
 ### Fungsional
 
 - User mendapat notifikasi saat ada surat yang perlu diproses.
-- Badge sidebar menunjukkan antrean approval, chat, dan review.
+- Badge sidebar menunjukkan antrean approval yang relevan.
 - Data aktif disinkronkan saat realtime event masuk atau tab kembali fokus.
 - Bunyi notifikasi diputar untuk event penting.
 
@@ -293,7 +302,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - Admin mengelola daftar departemen.
 - Admin mengatur kode dan urutan departemen.
-- Departemen dipakai untuk routing, PIC, KPI, dan konfigurasi unit.
+- Departemen dipakai untuk routing tanda tangan, KPI, dan konfigurasi unit.
 
 ### Non-Fungsional
 
@@ -387,19 +396,19 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Matrix harus tersimpan sebagai konfigurasi yang dapat diaudit.
 - Perubahan matrix tidak boleh mengubah surat yang sudah berjalan kecuali memang diproses ulang dengan aturan baru.
 
-## 21. Manajemen PIC
+## 21. Fitur PIC yang Dihapus
 
 ### Fungsional
 
-- Admin mengatur PIC departemen.
-- PIC menerima antrean review sesuai departemen.
-- Admin dapat melihat konfigurasi PIC.
+- Route diskusi PIC, antrean Review PIC, dan Manajemen PIC sudah dihapus.
+- Tabel chat, master PIC, review keuangan, serta fungsi terkait sudah dihapus.
+- Histori transaksi surat lama dibersihkan pada 2026-06-08 sebelum sistem dipakai ulang.
 
 ### Non-Fungsional
 
-- Hak PIC harus konsisten dengan departemen yang ditangani.
-- Admin bukan otomatis PIC semua departemen kecuali aturan eksplisit mengizinkan.
-- Badge PIC harus hanya menghitung antrean yang relevan.
+- Kode baru tidak boleh bergantung pada tabel atau kolom PIC lama.
+- Proses approval hanya mengikuti `surat_signatures` dan urutan matrix.
+- Migrasi lama tetap dipertahankan sebagai histori skema, tetapi kondisi database aktif mengikuti migrasi penghapusan.
 
 ## 22. Activity Logs
 
@@ -418,15 +427,37 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 ### Fungsional
 
-- User/admin mengakses pengaturan aplikasi.
-- Settings menjadi tempat konfigurasi umum yang tidak masuk master data khusus.
+- User/admin mengakses pengaturan profil dan keamanan akun.
+- User dapat memilih tema `System`, `Light`, atau `Dark`.
+- Preferensi tema diterapkan segera dan disimpan per akun pada profil.
+- Mode `System` mengikuti preferensi warna perangkat atau browser.
 
 ### Non-Fungsional
 
 - Pengaturan harus valid sebelum disimpan.
 - Perubahan setting perlu efek yang jelas dan tidak merusak session user.
+- Tema harus menggunakan token warna bersama agar halaman aktif tetap terbaca pada light dan dark mode.
+- Jika penyimpanan preferensi gagal, tema dikembalikan ke pilihan sebelumnya dan user menerima pesan error.
 
-## 24. External API Read-Only Surat
+## 24. Configuration
+
+### Fungsional
+
+- Admin mengakses konfigurasi sistem dari satu menu `Configuration`.
+- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Alur Persetujuan`, `SLA Departemen`, dan `Penomoran Surat`.
+- Form & Template mengatur template Excel, mapping input, mode unit, dan lampiran.
+- Alur Persetujuan mengatur urutan penandatangan serta koordinat tanda tangan.
+- SLA Departemen mengatur target SLA, jam kerja, waktu istirahat, hari kerja, dan timezone.
+- Penomoran Surat mengatur counter awal per tahun untuk scope pusat atau cabang/proyek.
+- Route lama `/admin/forms` dan `/admin/workflow-details` dialihkan ke route Configuration yang baru.
+
+### Non-Fungsional
+
+- Seluruh route Configuration hanya dapat diakses admin melalui pemeriksaan route, bukan sekadar disembunyikan dari sidebar.
+- Master data operasional dan konfigurasi aturan sistem dipisahkan agar navigasi dan tanggung jawab halaman jelas.
+- Layout konfigurasi harus responsif dan menggunakan komponen serta token tema yang sama dengan halaman lain.
+
+## 25. External API Read-Only Surat
 
 ### Fungsional
 
@@ -443,7 +474,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - API harus bisa diaudit per client.
 - Client yang tidak aktif dapat dinonaktifkan tanpa mengganggu client lain.
 
-## 25. Integrasi Data External
+## 26. Integrasi Data External
 
 ### Fungsional
 
@@ -458,7 +489,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kegagalan API external harus tampil sebagai feedback yang jelas.
 - UI utama tidak perlu dirombak saat provider external berubah.
 
-## 26. KPI Departemen untuk SLA Approval
+## 27. KPI Departemen untuk SLA Approval
 
 ### Fungsional
 
@@ -558,11 +589,11 @@ Fallback data lama:
 3. Export KPI untuk laporan manajemen.
 4. Indikator telat langsung pada antrean approval jika diperlukan.
 
-## 27. Keamanan dan Hak Akses
+## 28. Keamanan dan Hak Akses
 
 ### Fungsional
 
-- Role admin, user, PIC, finance, dan external client memiliki akses berbeda.
+- Role admin, user, penandatangan, dan external client memiliki akses berbeda.
 - Admin mengatur master data, form, matrix, dan konfigurasi.
 - User hanya melihat surat dan file yang menjadi haknya.
 
@@ -573,8 +604,10 @@ Fallback data lama:
 - API external memakai token dan secret yang bisa dicabut.
 - RLS/RPC harus membatasi aksi sesuai peran yang konsisten.
 - Error akses harus tampil di UI.
+- Storage transaksi surat wajib menggunakan Supabase Storage self-hosted.
+- Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
 
-## 28. Operasional, Deployment, dan Worker
+## 29. Operasional, Deployment, dan Worker
 
 ### Fungsional
 

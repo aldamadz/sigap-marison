@@ -37,7 +37,7 @@ const statusOptions: Array<{ value: DepartmentKpiStatus; label: string }> = [
   { value: "on_time", label: "On-Time" },
 ];
 
-const DepartmentKPIPage = () => {
+const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: boolean }) => {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
     from: formatDateInput(startOfMonth),
@@ -122,8 +122,103 @@ const DepartmentKPIPage = () => {
 
   const optionData = optionsQuery.data;
 
+  const configurationPanel = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base font-semibold">Konfigurasi SLA Departemen</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {configurationOnly && (
+          <div className="max-w-md">
+            <FilterSelect label="Departemen" value={filters.deptId} onChange={(value) => setFilter("deptId", value)}>
+              <option value="">Pilih Departemen</option>
+              {(optionData?.departments || []).map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.code ? `${dept.code} - ${dept.name}` : dept.name}
+                </option>
+              ))}
+            </FilterSelect>
+          </div>
+        )}
+
+        {!filters.deptId ? (
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Pilih departemen untuk mengatur SLA dan jam kerja.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <NumberField
+                label="SLA Menit"
+                value={configForm.sla_minutes}
+                onChange={(value) => setConfigForm((prev) => ({ ...prev, sla_minutes: value }))}
+              />
+              <TimeField label="Mulai Kerja" value={configForm.work_start} onChange={(value) => setConfigForm((prev) => ({ ...prev, work_start: value }))} />
+              <TimeField label="Selesai Kerja" value={configForm.work_end} onChange={(value) => setConfigForm((prev) => ({ ...prev, work_end: value }))} />
+              <TimeField label="Mulai Istirahat" value={configForm.break_start} onChange={(value) => setConfigForm((prev) => ({ ...prev, break_start: value }))} />
+              <TimeField label="Selesai Istirahat" value={configForm.break_end} onChange={(value) => setConfigForm((prev) => ({ ...prev, break_end: value }))} />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Timezone</label>
+                <input
+                  value={configForm.timezone}
+                  onChange={(event) => setConfigForm((prev) => ({ ...prev, timezone: event.target.value }))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  [1, "Sen"],
+                  [2, "Sel"],
+                  [3, "Rab"],
+                  [4, "Kam"],
+                  [5, "Jum"],
+                  [6, "Sab"],
+                  [7, "Min"],
+                ].map(([day, label]) => {
+                  const active = configForm.work_days.includes(day as number);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setConfigForm((prev) => ({
+                        ...prev,
+                        work_days: active
+                          ? prev.work_days.filter((item) => item !== day)
+                          : [...prev.work_days, day as number].sort(),
+                      }))}
+                      className={cn(
+                        "h-9 rounded-md border px-3 text-xs font-black uppercase",
+                        active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                onClick={() => saveConfigMutation.mutate()}
+                disabled={saveConfigMutation.isPending || configQuery.isLoading}
+                className="gap-2"
+              >
+                {saveConfigMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Simpan Konfigurasi
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (configurationOnly) {
+    return <div className="space-y-4">{configurationPanel}</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-background p-6 lg:p-8 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -208,76 +303,6 @@ const DepartmentKPIPage = () => {
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm font-semibold text-destructive">
           {(error as Error).message || "Gagal memuat KPI departemen."}
         </div>
-      ) : null}
-
-      {filters.deptId ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-black uppercase tracking-tight">Konfigurasi SLA Departemen</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-              <NumberField
-                label="SLA Menit"
-                value={configForm.sla_minutes}
-                onChange={(value) => setConfigForm((prev) => ({ ...prev, sla_minutes: value }))}
-              />
-              <TimeField label="Mulai Kerja" value={configForm.work_start} onChange={(value) => setConfigForm((prev) => ({ ...prev, work_start: value }))} />
-              <TimeField label="Selesai Kerja" value={configForm.work_end} onChange={(value) => setConfigForm((prev) => ({ ...prev, work_end: value }))} />
-              <TimeField label="Mulai Istirahat" value={configForm.break_start} onChange={(value) => setConfigForm((prev) => ({ ...prev, break_start: value }))} />
-              <TimeField label="Selesai Istirahat" value={configForm.break_end} onChange={(value) => setConfigForm((prev) => ({ ...prev, break_end: value }))} />
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Timezone</label>
-                <input
-                  value={configForm.timezone}
-                  onChange={(event) => setConfigForm((prev) => ({ ...prev, timezone: event.target.value }))}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
-                {[
-                  [1, "Sen"],
-                  [2, "Sel"],
-                  [3, "Rab"],
-                  [4, "Kam"],
-                  [5, "Jum"],
-                  [6, "Sab"],
-                  [7, "Min"],
-                ].map(([day, label]) => {
-                  const active = configForm.work_days.includes(day as number);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => setConfigForm((prev) => ({
-                        ...prev,
-                        work_days: active
-                          ? prev.work_days.filter((item) => item !== day)
-                          : [...prev.work_days, day as number].sort(),
-                      }))}
-                      className={cn(
-                        "h-9 rounded-md border px-3 text-xs font-black uppercase",
-                        active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-              <Button
-                onClick={() => saveConfigMutation.mutate()}
-                disabled={saveConfigMutation.isPending || configQuery.isLoading}
-                className="gap-2"
-              >
-                {saveConfigMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Simpan Konfigurasi
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

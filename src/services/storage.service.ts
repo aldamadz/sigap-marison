@@ -25,13 +25,22 @@ export const appStorageService = {
     formData.set("upsert", String(upsert));
     formData.set("file", file);
 
-    const response = await fetch("/api/storage/upload", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: formData,
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/storage/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+    } catch (error: any) {
+      throw new Error(
+        error?.message === "Failed to fetch" || error?.message === "fetch failed"
+          ? "Server upload tidak bisa dihubungi. Periksa container production dan koneksi storage."
+          : error?.message || "Server upload tidak bisa dihubungi."
+      );
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.error || "Gagal upload file.");

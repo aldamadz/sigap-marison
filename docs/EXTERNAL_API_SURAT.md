@@ -1,6 +1,6 @@
 # SIGAP External Surat API
 
-API read-only untuk integrasi server-to-server agar sistem eksternal dapat membaca metadata surat, pengirim, tujuan, cabang, proyek, detail isi surat, tanda tangan, lampiran, SPK, dan bukti transaksi.
+API read-only untuk integrasi server-to-server agar sistem eksternal dapat membaca metadata surat, pengirim, tujuan, cabang, proyek, detail isi surat, tanda tangan, dan lampiran.
 
 ## URL
 
@@ -88,10 +88,8 @@ GET /api/surat
 GET /api/surat/:suratId
 GET /api/surat/:suratId/files/document
 GET /api/surat/:suratId/files/pdf
-GET /api/surat/:suratId/files/spk
 GET /api/surat/:suratId/files/attachment?attachment_id=<id>
 GET /api/surat/:suratId/files/signature-pdf?signature_id=<id>
-GET /api/surat/:suratId/files/payment?finance_review_id=<id>
 ```
 
 Filter daftar surat:
@@ -107,6 +105,8 @@ Filter daftar surat:
 | `cursor` | Cursor response sebelumnya |
 
 File di-stream melalui gateway SIGAP dengan `Cache-Control: no-store`. URL Supabase tidak diberikan langsung kepada partner.
+
+SIGAP berhenti pada approval akhir. SPK, bukti pembayaran, dan proses operasional lanjutan menjadi tanggung jawab sistem departemen.
 
 ## Create Client Credential
 

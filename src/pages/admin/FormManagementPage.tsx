@@ -211,7 +211,6 @@ const createDefaultTableConfig = (): NonNullable<TemplateInputField["table_confi
 
 const defaultUnitRequirements = (): UnitAttachmentRequirement[] => [
   { key: "siteplan", label: "Siteplan", required: true },
-  { key: "kode_produksi", label: "Kode Produksi", required: true },
   { key: "volume_adendum", label: "Volume Adendum", required: true },
   { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
 ];
@@ -220,19 +219,22 @@ const normalizeUnitConfig = (value: any): UnitConfig => {
   const raw = typeof value === "string" ? (() => {
     try { return JSON.parse(value || "{}"); } catch { return {}; }
   })() : (value || {});
+  const allocationRequirements = Array.isArray(raw.allocation_attachment_requirements)
+    ? raw.allocation_attachment_requirements
+      .filter((item: any) => String(item.key || "").toLowerCase() !== "kode_produksi" && String(item.label || "").toLowerCase() !== "kode produksi")
+      .map((item: any, index: number) => ({
+        key: item.key || `lampiran_${index + 1}`,
+        label: item.label || `Lampiran ${index + 1}`,
+        required: item.required !== false,
+      }))
+    : [];
 
   return {
     enabled: raw.enabled === true,
     request_sentence_cell: String(raw.request_sentence_cell || "C11").trim().toUpperCase(),
     allowed_department_ids: Array.isArray(raw.allowed_department_ids) ? raw.allowed_department_ids : [],
     initial_attachment_required: raw.initial_attachment_required === true,
-    allocation_attachment_requirements: Array.isArray(raw.allocation_attachment_requirements) && raw.allocation_attachment_requirements.length > 0
-      ? raw.allocation_attachment_requirements.map((item: any, index: number) => ({
-          key: item.key || `lampiran_${index + 1}`,
-          label: item.label || `Lampiran ${index + 1}`,
-          required: item.required !== false,
-        }))
-      : defaultUnitRequirements(),
+    allocation_attachment_requirements: allocationRequirements.length > 0 ? allocationRequirements : defaultUnitRequirements(),
   };
 };
 
@@ -242,7 +244,12 @@ const serializeUnitConfig = (config: UnitConfig) => ({
   allowed_department_ids: config.allowed_department_ids,
   initial_attachment_required: config.initial_attachment_required === true,
   allocation_attachment_requirements: config.allocation_attachment_requirements
-    .filter((item) => item.key.trim() && item.label.trim())
+    .filter((item) =>
+      item.key.trim() &&
+      item.label.trim() &&
+      item.key.trim().toLowerCase() !== "kode_produksi" &&
+      item.label.trim().toLowerCase() !== "kode produksi"
+    )
     .map((item) => ({
       key: item.key.trim().replace(/\s+/g, "_").toLowerCase(),
       label: item.label.trim(),
@@ -250,7 +257,7 @@ const serializeUnitConfig = (config: UnitConfig) => ({
     })),
 });
 
-export default function FormManagementPage() {
+export default function FormManagementPage({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [forms, setForms] = useState<any[]>([]);
@@ -665,37 +672,39 @@ export default function FormManagementPage() {
   );
 
   return (
-    <div className="p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700">
+    <div className="space-y-6 animate-in fade-in duration-300">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-primary rounded-2xl shadow-glow">
-              <FileText className="w-6 h-6 text-primary-foreground" />
+        {!embedded && (
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary p-3 shadow-glow">
+                <FileText className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight">Form & Template</h1>
             </div>
-            <h1 className="text-3xl font-black tracking-tighter text-gradient uppercase">Master Template</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Pusat kendali template dokumen per departemen.</p>
           </div>
-          <p className="text-muted-foreground font-medium mt-2 ml-1">Pusat kendali template dokumen per departemen</p>
-        </div>
+        )}
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className={`flex items-center gap-3 w-full md:w-auto ${embedded ? "md:ml-auto" : ""}`}>
           <div className="relative flex-1 md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
               placeholder="Cari nama form, dept, atau kode..." 
-              className="pl-10 h-12 bg-card/40 border-border/50 rounded-2xl" 
+              className="h-11 border-border/50 bg-card pl-10" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button onClick={() => handleOpenModal()} className="h-12 px-6 gap-2 font-black text-xs uppercase rounded-2xl glow-effect">
+          <Button onClick={() => handleOpenModal()} className="h-11 gap-2 px-5 text-xs font-bold">
             <Plus className="w-4 h-4" /> Tambah Form
           </Button>
         </div>
       </div>
 
       {/* TABLE */}
-      <div className="glass-card rounded-[2rem] overflow-hidden border-border/20 shadow-2xl bg-card/30 backdrop-blur-xl">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow className="border-border/50 hover:bg-transparent">
@@ -731,7 +740,7 @@ export default function FormManagementPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-500/10 rounded-2xl">
+                    <div className="rounded-lg bg-emerald-500/10 p-3">
                       <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
                     </div>
                     <div className="flex flex-col">
@@ -773,9 +782,9 @@ export default function FormManagementPage() {
 
       {/* MODAL */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto glass-card border-border/30 shadow-elevated rounded-[2.5rem] p-8 backdrop-blur-2xl">
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-lg border-border bg-card p-5 shadow-xl sm:p-6">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black tracking-tighter uppercase italic">
+            <DialogTitle className="text-xl font-bold tracking-tight">
               {selectedForm ? "Konfigurasi Template" : "Registrasi Template Baru"}
             </DialogTitle>
           </DialogHeader>
@@ -787,7 +796,7 @@ export default function FormManagementPage() {
               <div 
                 onClick={() => !isUploading && fileInputRef.current?.click()}
                 className={cn(
-                  "relative group cursor-pointer border-2 border-dashed border-border/50 rounded-[2rem] p-8 transition-all flex flex-col items-center justify-center gap-3 overflow-hidden",
+                  "relative group cursor-pointer border-2 border-dashed border-border/50 rounded-lg p-8 transition-all flex flex-col items-center justify-center gap-3 overflow-hidden",
                   formData.link_form ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "hover:border-primary/50 hover:bg-primary/[0.02]",
                   isUploading && "cursor-not-allowed opacity-80"
                 )}
@@ -812,7 +821,7 @@ export default function FormManagementPage() {
                 )}
 
                 <div className="text-center">
-                  <p className="text-sm font-black uppercase italic tracking-tighter">
+                  <p className="text-sm font-bold">
                     {isUploading ? "Mengunggah..." : formData.link_form ? "File Siap Digunakan" : "Klik untuk Pilih File Excel"}
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-1 font-medium">
@@ -826,10 +835,10 @@ export default function FormManagementPage() {
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1 text-emerald-500">Departemen</Label>
               <Select value={formData.department_id} onValueChange={(v) => setFormData({...formData, department_id: v})}>
-                <SelectTrigger className="bg-background/40 border-border/50 rounded-2xl h-12 focus:ring-emerald-500/50">
+                <SelectTrigger className="h-12 border-border/50 bg-background/40 focus:ring-emerald-500/50">
                   <SelectValue placeholder="Pilih Departemen" />
                 </SelectTrigger>
-                <SelectContent className="rounded-2xl border-border/50 shadow-2xl">
+                <SelectContent className="border-border/50 shadow-xl">
                   {departments.map((d) => (
                     <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.code} - {d.name}</SelectItem>
                   ))}
@@ -844,7 +853,7 @@ export default function FormManagementPage() {
                 value={formData.nama_form} 
                 onChange={(e) => setFormData({...formData, nama_form: e.target.value})} 
                 placeholder="Misal: Form Pengajuan Dana (PGD)"
-                className="bg-background/40 border-border/50 rounded-2xl h-12 font-bold focus:ring-primary/50"
+                className="h-12 border-border/50 bg-background/40 font-bold focus:ring-primary/50"
               />
             </div>
 
@@ -855,21 +864,21 @@ export default function FormManagementPage() {
                   value={formData.nomor_form} 
                   onChange={(e) => setFormData({...formData, nomor_form: e.target.value})} 
                   placeholder="MBN-FIN-01"
-                  className="bg-background/40 border-border/50 rounded-2xl h-12 font-mono text-[11px]"
+                  className="h-12 border-border/50 bg-background/40 font-mono text-[11px]"
                 />
               </div>
               <div className="space-y-3">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1 opacity-50 italic">URL Link (Read-Only)</Label>
+                <Label className="ml-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-50">URL Link (Read-Only)</Label>
                 <Input 
                   value={formData.link_form} 
                   readOnly
                   placeholder="Auto-filled via Upload"
-                  className="bg-muted/30 border-border/30 rounded-2xl h-12 text-[10px] text-emerald-500 font-mono"
+                  className="h-12 border-border/30 bg-muted/30 font-mono text-[10px] text-emerald-500"
                 />
               </div>
             </div>
 
-            <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5">
+            <div className="space-y-4 rounded-lg border border-blue-500/20 bg-blue-500/5 p-5">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Konfigurasi Unit</Label>

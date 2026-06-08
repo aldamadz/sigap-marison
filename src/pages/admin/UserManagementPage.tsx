@@ -820,7 +820,7 @@ export default function UserManagementPage() {
   );
 
   return (
-    <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-7 bg-background text-foreground min-h-screen">
+    <div className="space-y-7 text-foreground">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 border-b border-border pb-7">

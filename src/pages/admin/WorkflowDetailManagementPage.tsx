@@ -262,7 +262,7 @@ const QUICK_PRESETS: QuickPreset[] = [
   },
 ];
 
-export default function WorkflowDetailManagementPage() {
+export default function WorkflowDetailManagementPage({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const [details, setDetails] = useState<any[]>([]);
   const [masterForms, setMasterForms] = useState<any[]>([]);
@@ -546,13 +546,15 @@ export default function WorkflowDetailManagementPage() {
   };
 
   return (
-    <div className="p-8 max-w-[1600px] mx-auto min-h-screen space-y-8">
+    <div className="space-y-8">
       {/* Header Section */}
-      <div className="flex justify-between items-center border-b border-border pb-8">
+      <div className="flex flex-col justify-between gap-4 border-b border-border pb-5 lg:flex-row lg:items-center">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-3 text-gradient uppercase">
-            <Layers className="text-primary h-6 w-6"/> Stamp Engine v4.0
-          </h1>
+          {!embedded && (
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">
+              <Layers className="h-6 w-6 text-primary"/> Alur Persetujuan
+            </h1>
+          )}
           <div className="flex flex-wrap items-center gap-2 mt-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -590,13 +592,13 @@ export default function WorkflowDetailManagementPage() {
             </div>
           </div>
         </div>
-        <Button onClick={() => handleOpenModal()} className="font-bold px-6 h-11 glow-effect">
-          <Plus className="mr-2 h-4 w-4"/> NEW MATRIX
+        <Button onClick={() => handleOpenModal()} className="h-11 px-6 font-bold">
+          <Plus className="mr-2 h-4 w-4"/> Tambah Alur
         </Button>
       </div>
 
       {/* Table Section */}
-      <div className="elevated-card rounded-xl overflow-hidden">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-b border-border">

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -85,10 +85,12 @@ export default function LoginPage() {
         >
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
-                <ShieldCheck className="w-7 h-7" />
-              </div>
-              <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">SIGAP</h1>
+              <img
+                src="/marison-sigap-logo-v2.png"
+                alt="Logo Marison"
+                className="w-14 h-14 object-contain"
+              />
+              <h1 className="text-2xl font-black tracking-tight text-primary">Marison - SIGAP</h1>
             </div>
             <h2 className="text-2xl font-bold tracking-tight">Selamat Datang</h2>
             <p className="text-muted-foreground text-sm mt-1">Silakan masuk untuk mengelola agenda Anda.</p>
@@ -191,7 +193,7 @@ export default function LoginPage() {
             transition={{ delay: 0.3 }}
             className="text-6xl font-black text-white tracking-tighter mb-4"
           >
-            SIGAP
+            MARISON - SIGAP
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0 }}
@@ -199,7 +201,7 @@ export default function LoginPage() {
             transition={{ delay: 0.5 }}
             className="text-lg text-white uppercase tracking-[0.4em] font-light"
           >
-            Sistem Informasi Agenda & Persuratan
+            Sistem Persetujuan Digital Terintegrasi
           </motion.p>
         </div>
 

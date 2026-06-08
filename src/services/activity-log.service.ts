@@ -102,7 +102,6 @@ const ignoredAuditFields = new Set([
   'deleted_at',
   'last_signer_change_at',
   'creator_seen_at',
-  'pic_seen_at',
   'requester_seen_at',
   'seen_at',
   'read_at',
@@ -169,7 +168,7 @@ const enrichAuditValues = async (logs: ActivityLog[]) => {
     if (['office_id', 'branch_id', 'target_office_id'].includes(key)) {
       return officeMap.get(value) || value;
     }
-    if (['user_id', 'created_by', 'updated_by', 'pic_id', 'parent_id', 'signer_id', 'requester_id'].includes(key)) {
+    if (['user_id', 'created_by', 'updated_by', 'parent_id', 'signer_id', 'requester_id'].includes(key)) {
       return profileMap.get(value) || value;
     }
     if (['form_id'].includes(key)) {

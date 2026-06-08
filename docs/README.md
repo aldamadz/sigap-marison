@@ -27,7 +27,9 @@ SIGAP dibangun di atas infrastruktur **Event-Driven Architecture (EDA)** untuk m
 | **Backend** | Supabase Edge Functions (Deno) | Logika serverless untuk routing dokumen otomatis. |
 | **Database** | PostgreSQL | Penyimpanan data relasional dengan integritas tinggi. |
 | **Realtime** | Supabase Broadcast/Presence | Pengiriman notifikasi instan via WebSocket. |
-| **Storage** | Supabase Storage | Penyimpanan aman file PDF dan dokumen digital. |
+| **Storage** | Supabase Storage self-hosted | Penyimpanan privat file PDF dan lampiran transaksi. |
+
+Antarmuka menggunakan token tema bersama dengan pilihan `System`, `Light`, dan `Dark` yang disimpan per akun. Konfigurasi aturan sistem dipusatkan pada menu admin `Configuration`, terpisah dari master data operasional.
 
 ---
 
@@ -37,7 +39,7 @@ SIGAP mengeliminasi *race condition* melalui sinkronisasi server-side:
 
 1.  **Drafting**: User membuat agenda/surat di Dashboard SIGAP.
 2.  **Triggering**: Database mengirim sinyal Webhook ke Edge Function.
-3.  **Routing**: Edge Function menganalisis tabel `surat_signatures` untuk menentukan "Siapa pemeriksa saat ini?".
+3.  **Routing**: Backend menganalisis tabel `surat_signatures` untuk menentukan penandatangan aktif.
 4.  **Broadcasting**: Pesan dikirimkan secara spesifik ke ID pengguna yang dituju.
 5.  **Notifying**: Browser penerima memutar audio `notif.WAV` dan memperbarui UI secara otomatis.
 
@@ -74,4 +76,4 @@ Garis besar dokumentasi:
 
 ---
 
-*Last updated: 2026-06-04*
+*Last updated: 2026-06-08*

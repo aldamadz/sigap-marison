@@ -124,6 +124,32 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     formData.form_input_data.request_mode === "unit" ? "unit" : "barang";
 
   const isUnitMode = getRequestMode() === "unit";
+  const getRequestCategory = () =>
+    formData.form_input_data.request_category === "asset" || formData.form_input_data.request_category === "unit"
+      ? formData.form_input_data.request_category
+      : "non_unit";
+
+  const setRequestCategory = (category: "asset" | "unit" | "non_unit") => {
+    setFormData(prev => {
+      const nextInput = {
+        ...prev.form_input_data,
+        request_category: category,
+        request_mode: category === "unit" ? "unit" : "barang",
+      };
+      if (category === "unit") {
+        delete nextInput.items;
+      } else {
+        delete nextInput.requested_project;
+        delete nextInput.requested_unit_count;
+        delete nextInput.unit_request_sentence;
+      }
+      return {
+        ...prev,
+        is_aset: category === "asset",
+        form_input_data: nextInput,
+      };
+    });
+  };
 
   const setRequestMode = (mode: "barang" | "unit") => {
     if (mode === "unit" && !canCurrentDepartmentRequestUnit(selectedUsage)) {
@@ -135,7 +161,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return;
     }
     setFormData(prev => {
-      const nextInput = { ...prev.form_input_data, request_mode: mode };
+      const nextInput = {
+        ...prev.form_input_data,
+        request_mode: mode,
+        request_category: mode === "unit" ? "unit" : prev.is_aset ? "asset" : "non_unit",
+      };
       if (mode === "unit") {
         delete nextInput.items;
       } else {
@@ -262,6 +292,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [master.projects, formData.project_id]
   );
 
+  const selectedLetterType = useMemo(
+    () => master.types?.find((type: any) => type.id === formData.letter_type_id) ?? null,
+    [master.types, formData.letter_type_id]
+  );
+
+  const isPermohonanType = useMemo(() => {
+    const name = String(selectedLetterType?.name || selectedLetterType?.code || "").toLowerCase();
+    return name.includes("permohonan") || selectedLetterType?.code === "MH";
+  }, [selectedLetterType]);
+
   const selectedProjectCode = useMemo(() => {
     const code = String(selectedProject?.code ?? "").trim();
     if (code) return code;
@@ -380,7 +420,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [selectedUsage, externalVariables]);
 
   useEffect(() => {
-    if (!selectedUsage || !hasUnitRequestFields(selectedUsage)) return;
+    if (getRequestCategory() !== "unit") return;
+    if (externalProjects.length > 0) return;
     let cancelled = false;
     setProjectsLoading(true);
     setProjectsError(null);
@@ -394,7 +435,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       })
       .finally(() => { if (!cancelled) setProjectsLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedUsage]);
+  }, [formData.form_input_data.request_category, externalProjects.length]);
 
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
@@ -402,15 +443,48 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setFormData(prev => ({ ...prev, project_id: projectId, entity_id: proj?.entity_id || prev.entity_id }));
   };
 
+  const handleLetterTypeChange = (letterTypeId: string) => {
+    const type = master.types?.find((item: any) => item.id === letterTypeId);
+    const isPermohonan = String(type?.name || type?.code || "").toLowerCase().includes("permohonan") || type?.code === "MH";
+    setFormData(prev => {
+      if (isPermohonan) return { ...prev, letter_type_id: letterTypeId };
+      const nextInput = { ...prev.form_input_data };
+      delete nextInput.request_category;
+      delete nextInput.requested_project;
+      delete nextInput.requested_unit_count;
+      delete nextInput.unit_request_sentence;
+      nextInput.request_mode = "barang";
+      return { ...prev, letter_type_id: letterTypeId, is_aset: false, form_input_data: nextInput };
+    });
+  };
+
   const handleUsageChange = (val: string) => {
     const detail = usageDetails.find(u => u.id === val);
     if (!detail) return;
     setSelectedUsage(detail);
-    setFormData(prev => ({
-      ...prev,
-      penggunaan_id: val,
-      form_input_data: hasUnitRequestFields(detail) ? { request_mode: canCurrentDepartmentRequestUnit(detail) ? "unit" : "barang" } : {},
-    }));
+    setFormData(prev => {
+      const category = prev.form_input_data.request_category === "unit" && hasUnitRequestFields(detail) && canCurrentDepartmentRequestUnit(detail)
+        ? "unit"
+        : prev.form_input_data.request_category === "asset"
+          ? "asset"
+          : "non_unit";
+      const nextInput = {
+        ...prev.form_input_data,
+        request_category: category,
+        request_mode: category === "unit" ? "unit" : "barang",
+      };
+      if (category !== "unit") {
+        delete nextInput.requested_project;
+        delete nextInput.requested_unit_count;
+        delete nextInput.unit_request_sentence;
+      }
+      return {
+        ...prev,
+        penggunaan_id: val,
+        is_aset: category === "asset",
+        form_input_data: nextInput,
+      };
+    });
     try {
       const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
       if (Array.isArray(config)) {
@@ -429,6 +503,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const handleGetNumber = async () => {
     if (!isPusatSelected && !formData.project_id)
       return toast({ variant: "destructive", title: "Proyek Belum Dipilih" });
+    if (getRequestCategory() === "unit") {
+      const count = Number(formData.form_input_data.requested_unit_count || 0);
+      if (!formData.form_input_data.requested_project?.code) {
+        return toast({ variant: "destructive", title: "Proyek Unit Wajib Dipilih" });
+      }
+      if (!Number.isFinite(count) || count < 1) {
+        return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
+      }
+    }
     setIsProcessingNumber(true);
     try {
       const res = await suratService.generateNoSurat(formData);
@@ -454,7 +537,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setInputValue("requested_unit_count", count || "");
     const project = formData.form_input_data.requested_project;
     setInputValue("unit_request_sentence", project?.name && count > 0
-      ? `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`
+      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
       : "");
   };
 
@@ -473,7 +556,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const count = Number(formData.form_input_data.requested_unit_count || 0);
     setInputValue("requested_project", requestedProject);
     setInputValue("unit_request_sentence", count > 0
-      ? `Butuh : ${count} Unit, Proyek: ${project.name}, Cabang: ${project.branch?.name || "-"}`
+      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
       : "");
   };
 
@@ -500,7 +583,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (lampiranFiles.length === 0 && shouldRequireInitialAttachment()) {
       return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
     }
-    if (hasUnitRequestFields(selectedUsage) && isUnitMode) {
+    if (isUnitMode) {
+      if (!hasUnitRequestFields(selectedUsage)) {
+        return toast({ variant: "destructive", title: "Matrix Unit Tidak Valid", description: "Pilih matrix/template yang mendukung permohonan unit." });
+      }
       if (!canCurrentDepartmentRequestUnit(selectedUsage)) {
         return toast({ variant: "destructive", title: "Mode Unit Tidak Diizinkan", description: "Departemen ini tidak termasuk konfigurasi pengaju unit." });
       }
@@ -758,6 +844,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getVisibleManualFields = () =>
     getManualInputFields(selectedUsage).filter((field: any) => {
+      if (isUnitMode && (field.key === "items" || field.key === "unit")) return false;
       if (!hasUnitRequestFields(selectedUsage)) return true;
       if (field.key === "requested_unit_count") return false;
       if (isUnitMode) return field.key !== "items" && field.key !== "unit";
@@ -765,20 +852,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
 
   const renderUnitRequestPanel = () => {
-    if (!selectedUsage || !hasUnitRequestFields(selectedUsage) || !isUnitMode) return null;
+    if (!isUnitMode) return null;
     const selectedProject = formData.form_input_data.requested_project;
     return (
       <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5 md:p-6">
         <div className="flex flex-col gap-1">
           <p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Pengajuan Unit</p>
           <p className="text-xs font-medium text-muted-foreground">
-            Marketing hanya mengajukan jumlah unit. Perencanaan akan memilih unit spesifik saat approval.
+            Pemohon hanya mengajukan jumlah unit. Perencanaan akan memilih unit spesifik saat approval.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-[11px] font-black uppercase text-muted-foreground">Proyek</Label>
-            <Select value={selectedProject?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading}>
+            <Select value={selectedProject?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading || !!generatedNoSurat}>
               <SelectTrigger className="h-12 bg-background/70 text-sm">
                 <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
               </SelectTrigger>
@@ -799,6 +886,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               min={1}
               value={formData.form_input_data.requested_unit_count ?? ""}
               onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
+              disabled={!!generatedNoSurat}
               className="h-12 bg-background/70 text-sm"
               placeholder="Contoh: 10"
             />
@@ -813,8 +901,50 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
+  const renderRequestCategorySelector = () => {
+    const category = getRequestCategory();
+    const options = [
+      { value: "asset", label: "Aset", description: "Dokumen aset" },
+      { value: "unit", label: "Unit", description: "Order bangun unit" },
+      { value: "non_unit", label: "Non Unit", description: "Permohonan biasa" },
+    ] as const;
+    return (
+      <div className="space-y-3 rounded-2xl border border-border/60 bg-background/60 p-3">
+        <div className="grid grid-cols-3 gap-2">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={!!generatedNoSurat}
+              onClick={() => setRequestCategory(option.value)}
+              className={cn(
+                "rounded-xl border px-3 py-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
+                category === option.value
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-border bg-background/70 text-foreground hover:bg-muted"
+              )}
+            >
+              <span className="block text-[11px] font-black uppercase">{option.label}</span>
+              <span className={cn(
+                "mt-1 block text-[10px] font-semibold",
+                category === option.value ? "text-primary-foreground/80" : "text-muted-foreground"
+              )}>
+                {option.description}
+              </span>
+            </button>
+          ))}
+        </div>
+        {category === "unit" && (
+          <p className="text-[10px] font-semibold text-muted-foreground">
+            Nomor Unit memakai format khusus dan membutuhkan proyek serta jumlah unit sebelum nomor diterbitkan.
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const renderRequestModeSelector = () => {
-    if (!selectedUsage || !hasUnitRequestFields(selectedUsage) || !canCurrentDepartmentRequestUnit(selectedUsage)) return null;
+    if (isPermohonanType || !selectedUsage || !hasUnitRequestFields(selectedUsage) || !canCurrentDepartmentRequestUnit(selectedUsage) || getRequestCategory() === "unit") return null;
     return (
       <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border/60 bg-background/60 p-1">
         {[
@@ -1003,7 +1133,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             <div className="space-y-2">
               <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Jenis Dokumen</Label>
               <Select disabled={!!generatedNoSurat} value={formData.letter_type_id}
-                onValueChange={v => setFormData({ ...formData, letter_type_id: v })}>
+                onValueChange={handleLetterTypeChange}>
                 <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
                   <SelectValue placeholder="Pilih Jenis..." />
                 </SelectTrigger>
@@ -1016,8 +1146,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           </div>
 
+          {!generatedNoSurat && isPermohonanType && (
+            <>
+              {renderRequestCategorySelector()}
+              {getRequestCategory() === "unit" && renderUnitRequestPanel()}
+            </>
+          )}
+
           {/* ══ TOGGLE ASET — posisi baru, MENCOLOK, tepat sebelum tombol nomor ══ */}
-          {!generatedNoSurat && (
+          {false && !generatedNoSurat && (
             <div
               role="button"
               onClick={() => setFormData(f => ({ ...f, is_aset: !f.is_aset }))}
