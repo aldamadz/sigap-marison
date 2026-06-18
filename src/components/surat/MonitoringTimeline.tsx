@@ -31,7 +31,14 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
             <Button
               size="sm"
               className="gap-2"
-              onClick={() => documentPreviewService.openStoredFileInNewTab(data.id, data.file_path).catch((error: any) => alert(error.message || 'Gagal membuka dokumen.'))}
+              onClick={() =>
+                documentPreviewService
+                  .openStoredFileInNewTab(data.id, data.file_path)
+                  .catch((error: unknown) => {
+                    const message = error instanceof Error ? error.message : 'Gagal membuka dokumen.';
+                    alert(message || 'Gagal membuka dokumen.');
+                  })
+              }
             >
               <Download size={16} /> Unduh Final
             </Button>

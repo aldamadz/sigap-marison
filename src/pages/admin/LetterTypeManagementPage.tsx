@@ -15,9 +15,11 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 export default function LetterTypeManagementPage() {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [types, setTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -104,7 +106,14 @@ export default function LetterTypeManagementPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus jenis surat ini? Pastikan tidak ada surat yang sedang menggunakan tipe ini.")) return;
+    const type = types.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Jenis Surat?",
+      description: `Jenis surat ${type?.name || "ini"} akan dihapus. Pastikan tidak ada surat yang sedang menggunakan tipe ini.`,
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const { error } = await supabase.from("master_letter_types").delete().eq("id", id);

@@ -19,6 +19,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { appStorageService } from "@/services/storage.service";
+import { defaultEmailSettings, normalizeEmailSettings, type EmailFileMode, type EmailSettingsConfig } from "@/services/email-settings.service";
+import {
+  normalizeSignatureLayoutConfig,
+  type SignatureLayoutConfig,
+} from "@/services/signature-layout.service";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 type TemplateInputType = "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
 type TemplateHorizontalAlign = "left" | "center" | "right";
@@ -74,18 +80,8 @@ interface TemplateInputField {
   };
 }
 
-interface UnitAttachmentRequirement {
-  key: string;
-  label: string;
-  required: boolean;
-}
-
 interface UnitConfig {
-  enabled: boolean;
   request_sentence_cell: string;
-  allowed_department_ids: string[];
-  initial_attachment_required: boolean;
-  allocation_attachment_requirements: UnitAttachmentRequirement[];
 }
 
 const createFieldId = () =>
@@ -209,56 +205,22 @@ const createDefaultTableConfig = (): NonNullable<TemplateInputField["table_confi
   ],
 });
 
-const defaultUnitRequirements = (): UnitAttachmentRequirement[] => [
-  { key: "siteplan", label: "Siteplan", required: true },
-  { key: "volume_adendum", label: "Volume Adendum", required: true },
-  { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
-];
-
 const normalizeUnitConfig = (value: any): UnitConfig => {
   const raw = typeof value === "string" ? (() => {
     try { return JSON.parse(value || "{}"); } catch { return {}; }
   })() : (value || {});
-  const allocationRequirements = Array.isArray(raw.allocation_attachment_requirements)
-    ? raw.allocation_attachment_requirements
-      .filter((item: any) => String(item.key || "").toLowerCase() !== "kode_produksi" && String(item.label || "").toLowerCase() !== "kode produksi")
-      .map((item: any, index: number) => ({
-        key: item.key || `lampiran_${index + 1}`,
-        label: item.label || `Lampiran ${index + 1}`,
-        required: item.required !== false,
-      }))
-    : [];
-
   return {
-    enabled: raw.enabled === true,
     request_sentence_cell: String(raw.request_sentence_cell || "C11").trim().toUpperCase(),
-    allowed_department_ids: Array.isArray(raw.allowed_department_ids) ? raw.allowed_department_ids : [],
-    initial_attachment_required: raw.initial_attachment_required === true,
-    allocation_attachment_requirements: allocationRequirements.length > 0 ? allocationRequirements : defaultUnitRequirements(),
   };
 };
 
 const serializeUnitConfig = (config: UnitConfig) => ({
-  enabled: config.enabled === true,
   request_sentence_cell: config.request_sentence_cell.trim().toUpperCase() || "C11",
-  allowed_department_ids: config.allowed_department_ids,
-  initial_attachment_required: config.initial_attachment_required === true,
-  allocation_attachment_requirements: config.allocation_attachment_requirements
-    .filter((item) =>
-      item.key.trim() &&
-      item.label.trim() &&
-      item.key.trim().toLowerCase() !== "kode_produksi" &&
-      item.label.trim().toLowerCase() !== "kode produksi"
-    )
-    .map((item) => ({
-      key: item.key.trim().replace(/\s+/g, "_").toLowerCase(),
-      label: item.label.trim(),
-      required: item.required !== false,
-    })),
 });
 
 export default function FormManagementPage({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [forms, setForms] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -277,6 +239,8 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
     department_id: "",
     input_schema: [] as TemplateInputField[],
     unit_config: normalizeUnitConfig(null),
+    signature_layout: normalizeSignatureLayoutConfig(null),
+    email_config: defaultEmailSettings,
   });
 
   const loadInitialData = async () => {
@@ -373,10 +337,21 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
         department_id: form.department_id || "",
         input_schema: normalizeInputSchema(form.input_schema),
         unit_config: normalizeUnitConfig(form.unit_config),
+        signature_layout: normalizeSignatureLayoutConfig(form.signature_layout),
+        email_config: normalizeEmailSettings(form.email_config || null),
       });
     } else {
       setSelectedForm(null);
-      setFormData({ nama_form: "", nomor_form: "", link_form: "", department_id: "", input_schema: [], unit_config: normalizeUnitConfig(null) });
+      setFormData({
+        nama_form: "",
+        nomor_form: "",
+        link_form: "",
+        department_id: "",
+        input_schema: [],
+        unit_config: normalizeUnitConfig(null),
+        signature_layout: normalizeSignatureLayoutConfig(null),
+        email_config: defaultEmailSettings,
+      });
     }
     setIsModalOpen(true);
   };
@@ -526,9 +501,24 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
       return toast({ variant: "destructive", title: "Preset Kosong", description: "Tambahkan minimal satu field sebelum menyimpan preset." });
     }
 
-    const name = prompt("Nama quick preset");
+    const name = await appDialog.prompt({
+      title: "Simpan Quick Preset",
+      description: "Preset akan menyimpan konfigurasi input yang sedang aktif agar bisa dipakai ulang di template lain.",
+      label: "Nama preset",
+      placeholder: "Contoh: Tabel Barang PGD",
+      confirmText: "Simpan",
+      required: true,
+    });
     if (!name?.trim()) return;
-    const description = prompt("Catatan preset (opsional)") || "";
+    const description = await appDialog.prompt({
+      title: "Catatan Preset",
+      description: "Tambahkan catatan singkat agar preset mudah dikenali. Bagian ini boleh dilewati.",
+      label: "Catatan",
+      placeholder: "Contoh: Row 11-25, kolom barang PGD",
+      confirmText: "Simpan",
+      cancelText: "Lewati",
+      multiline: true,
+    }) || "";
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -551,7 +541,19 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
   };
 
   const handleDeletePreset = async (id: string) => {
-    if (!confirm("Hapus quick preset ini?")) return;
+    const preset = presets.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Quick Preset?",
+      description: (
+        <div className="space-y-2">
+          <p>Anda akan menghapus <span className="font-bold text-foreground">{preset?.name || "preset ini"}</span>.</p>
+          <p>Preset yang sudah diterapkan ke template tidak ikut berubah.</p>
+        </div>
+      ),
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       const { error } = await supabase.from("master_form_presets").delete().eq("id", id);
       if (error) throw error;
@@ -569,56 +571,46 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
     }));
   };
 
-  const toggleUnitDepartment = (departmentId: string) => {
-    setFormData(prev => {
-      const current = prev.unit_config.allowed_department_ids;
-      const exists = current.includes(departmentId);
-      return {
-        ...prev,
-        unit_config: {
-          ...prev.unit_config,
-          allowed_department_ids: exists
-            ? current.filter((id) => id !== departmentId)
-            : [...current, departmentId],
-        },
-      };
-    });
-  };
-
-  const updateUnitRequirement = (index: number, patch: Partial<UnitAttachmentRequirement>) => {
+  const updateSignatureLayout = (patch: Partial<SignatureLayoutConfig>) => {
     setFormData(prev => ({
       ...prev,
-      unit_config: {
-        ...prev.unit_config,
-        allocation_attachment_requirements: prev.unit_config.allocation_attachment_requirements.map((item, itemIndex) =>
-          itemIndex === index ? { ...item, ...patch } : item
-        ),
+      signature_layout: { ...prev.signature_layout, ...patch },
+    }));
+  };
+
+  const updateEmailConfig = (patch: Partial<EmailSettingsConfig>) => {
+    setFormData(prev => ({
+      ...prev,
+      email_config: { ...prev.email_config, ...patch },
+    }));
+  };
+
+  const updateEmailRecipients = (patch: Partial<EmailSettingsConfig["recipients"]>) => {
+    setFormData(prev => ({
+      ...prev,
+      email_config: {
+        ...prev.email_config,
+        recipients: { ...prev.email_config.recipients, ...patch },
       },
     }));
   };
 
-  const addUnitRequirement = () => {
-    setFormData(prev => {
-      const nextIndex = prev.unit_config.allocation_attachment_requirements.length + 1;
-      return {
-        ...prev,
-        unit_config: {
-          ...prev.unit_config,
-          allocation_attachment_requirements: [
-            ...prev.unit_config.allocation_attachment_requirements,
-            { key: `lampiran_${nextIndex}`, label: `Lampiran ${nextIndex}`, required: true },
-          ],
-        },
-      };
-    });
-  };
-
-  const removeUnitRequirement = (index: number) => {
+  const updateEmailPrivacy = (patch: Partial<EmailSettingsConfig["privacy"]>) => {
     setFormData(prev => ({
       ...prev,
-      unit_config: {
-        ...prev.unit_config,
-        allocation_attachment_requirements: prev.unit_config.allocation_attachment_requirements.filter((_item, itemIndex) => itemIndex !== index),
+      email_config: {
+        ...prev.email_config,
+        privacy: { ...prev.email_config.privacy, ...patch },
+      },
+    }));
+  };
+
+  const updateEmailFiles = (patch: Partial<EmailSettingsConfig["files"]>) => {
+    setFormData(prev => ({
+      ...prev,
+      email_config: {
+        ...prev.email_config,
+        files: { ...prev.email_config.files, ...patch },
       },
     }));
   };
@@ -637,6 +629,8 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
         department_id: formData.department_id,
         input_schema: serializeInputSchema(formData.input_schema),
         unit_config: serializeUnitConfig(formData.unit_config),
+        signature_layout: normalizeSignatureLayoutConfig(formData.signature_layout),
+        email_config: normalizeEmailSettings(formData.email_config),
       };
 
       const { error } = selectedForm 
@@ -653,7 +647,19 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus template ini secara permanen?")) return;
+    const form = forms.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Template Form?",
+      description: (
+        <div className="space-y-2">
+          <p>Anda akan menghapus <span className="font-bold text-foreground">{form?.nama_form || "template ini"}</span>.</p>
+          <p>Jika masih dipakai Kegunaan Form atau data lain, database akan menolak penghapusan.</p>
+        </div>
+      ),
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const { error } = await supabase.from("master_forms").delete().eq("id", id);
@@ -769,7 +775,12 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
                     <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-amber-500/10" onClick={() => handleOpenModal(form)}>
                       <Pencil className="w-4 h-4 text-amber-500" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-destructive/10" onClick={() => handleDelete(form.id)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 rounded-xl hover:bg-destructive/10"
+                      onClick={() => handleDelete(form.id)}
+                    >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -879,25 +890,16 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
             </div>
 
             <div className="space-y-4 rounded-lg border border-blue-500/20 bg-blue-500/5 p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
                 <div>
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Konfigurasi Unit</Label>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Mapping Teknis Template Unit</Label>
                   <p className="mt-1 text-[10px] font-medium text-muted-foreground">
-                    Atur departemen yang boleh ajukan unit dan lampiran wajib saat Perencanaan memilih unit.
+                    Dipakai hanya jika form ini dipilih oleh matrix kategori Unit. Kategori registrasi diatur pada konfigurasi Alur Persetujuan.
                   </p>
                 </div>
-                <label className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={formData.unit_config.enabled}
-                    onChange={(e) => updateUnitConfig({ enabled: e.target.checked })}
-                  />
-                  Aktifkan Unit
-                </label>
               </div>
 
-              {formData.unit_config.enabled && (
-                <div className="space-y-4">
+              <div className="space-y-4">
                   <div className="space-y-1 rounded-xl border border-border/50 bg-background/60 p-3">
                     <Label className="text-[9px] font-black uppercase text-muted-foreground">Cell Kalimat Permohonan Unit</Label>
                     <Input
@@ -910,79 +912,218 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
                       Ditulis otomatis: Butuh : [jumlah] Unit, Proyek: [nama proyek], Cabang: [cabang].
                     </p>
                   </div>
-                  <label className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={formData.unit_config.initial_attachment_required}
-                      onChange={(e) => updateUnitConfig({ initial_attachment_required: e.target.checked })}
-                    />
-                    Lampiran awal tetap wajib untuk mode unit
-                  </label>
+              </div>
+            </div>
 
+            <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-primary">
+                    Area Tanda Tangan Dinamis
+                  </Label>
+                  <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+                    Pilih preset PGD untuk mengikuti template referensi 3-6 kotak, atau Adaptif untuk form lain.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={formData.signature_layout.enabled}
+                    onChange={(event) => updateSignatureLayout({ enabled: event.target.checked })}
+                  />
+                  Aktifkan
+                </label>
+              </div>
+
+              {formData.signature_layout.enabled && (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2 md:col-span-3">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Preset Layout</Label>
+                    <Select
+                      value={formData.signature_layout.preset}
+                      onValueChange={(value: "adaptive" | "pgd") => updateSignatureLayout({
+                        preset: value,
+                        ...(value === "pgd" ? { region: "D33:N45", max_per_row: 4 } : {}),
+                      })}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pgd">PGD - mengikuti template 3-6 kotak</SelectItem>
+                        <SelectItem value="adaptive">Adaptif - pembagian otomatis</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      Preset PGD memakai bentuk kotak dan pembagian role dari file referensi di folder template Excel.
+                    </p>
+                  </div>
                   <div className="space-y-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Departemen yang boleh ajukan unit</p>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                      {departments.map((department) => (
-                        <label key={department.id} className="flex items-center gap-2 rounded-xl border border-border/40 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase text-muted-foreground">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Sheet</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formData.signature_layout.sheet}
+                      onChange={(event) => updateSignatureLayout({ sheet: Math.max(1, Number(event.target.value || 1)) })}
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Signature Region</Label>
+                    <Input
+                      value={formData.signature_layout.region}
+                      onChange={(event) => updateSignatureLayout({ region: event.target.value.toUpperCase() })}
+                      placeholder="Contoh: B33:N45"
+                      className="h-10 font-mono uppercase"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Maksimal per Baris</Label>
+                    <Select
+                      disabled={formData.signature_layout.preset === "pgd"}
+                      value={String(formData.signature_layout.max_per_row)}
+                      onValueChange={(value) => updateSignatureLayout({ max_per_row: Number(value) })}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">2 kotak</SelectItem>
+                        <SelectItem value="3">3 kotak</SelectItem>
+                        <SelectItem value="4">4 kotak</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Isi Kotak</Label>
+                    <div className="flex flex-wrap gap-3 rounded-md border border-border bg-background/60 p-3">
+                      {[
+                        ["show_role", "Label tahap"],
+                        ["show_name", "Nama signer"],
+                        ["show_job_title", "Jabatan"],
+                      ].map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
                           <input
                             type="checkbox"
-                            checked={formData.unit_config.allowed_department_ids.includes(department.id)}
-                            onChange={() => toggleUnitDepartment(department.id)}
+                            checked={Boolean(formData.signature_layout[key as keyof SignatureLayoutConfig])}
+                            onChange={(event) => updateSignatureLayout({ [key]: event.target.checked })}
                           />
-                          <span className="truncate">{department.code ? `${department.code} - ` : ""}{department.name}</span>
+                          {label}
                         </label>
                       ))}
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Lampiran saat pilih unit</p>
-                      <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase" onClick={addUnitRequirement}>
-                        <Plus className="mr-1 h-3 w-3" /> Lampiran
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      {formData.unit_config.allocation_attachment_requirements.map((requirement, index) => (
-                        <div key={`${requirement.key}-${index}`} className="grid grid-cols-12 gap-2 rounded-xl border border-border/40 bg-background/60 p-3">
-                          <div className="col-span-12 md:col-span-5 space-y-1">
-                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Nama Lampiran</Label>
-                            <Input
-                              className="h-9 text-xs"
-                              value={requirement.label}
-                              onChange={(e) => updateUnitRequirement(index, {
-                                label: e.target.value,
-                                key: e.target.value.replace(/\s+/g, "_").toLowerCase(),
-                              })}
-                            />
-                          </div>
-                          <div className="col-span-8 md:col-span-4 space-y-1">
-                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Key</Label>
-                            <Input
-                              className="h-9 font-mono text-xs"
-                              value={requirement.key}
-                              onChange={(e) => updateUnitRequirement(index, { key: e.target.value.replace(/\s+/g, "_").toLowerCase() })}
-                            />
-                          </div>
-                          <label className="col-span-3 md:col-span-2 flex items-end gap-2 pb-2 text-[10px] font-bold uppercase text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={requirement.required}
-                              onChange={(e) => updateUnitRequirement(index, { required: e.target.checked })}
-                            />
-                            Wajib
-                          </label>
-                          <div className="col-span-1 flex items-end justify-end">
-                            <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => removeUnitRequirement(index)}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <p className="md:col-span-3 text-[10px] leading-relaxed text-muted-foreground">
+                    Semua merged cell yang beririsan dengan region akan dibentuk ulang. Preset PGD memvalidasi urutan dan jumlah role agar sesuai pola template 3-6 kotak.
+                  </p>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-4 rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+              <div>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Konfigurasi Email</Label>
+                <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+                  Atur email notifikasi profesional untuk template ini.
+                </p>
+              </div>
+
+              <label className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/20 bg-background/80 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
+                Ikuti konfigurasi email global
+                <input
+                  type="checkbox"
+                  checked={formData.email_config.inherit_global}
+                  onChange={(e) => updateEmailConfig({ inherit_global: e.target.checked })}
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
+                Aktifkan email detail
+                <input
+                  type="checkbox"
+                  disabled={formData.email_config.inherit_global}
+                  checked={formData.email_config.enabled}
+                  onChange={(e) => updateEmailConfig({ enabled: e.target.checked })}
+                />
+              </label>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                {[
+                  { key: "user", label: "User tujuan" },
+                  { key: "department", label: "Departemen" },
+                  { key: "office", label: "Kantor/Cabang" },
+                ].map((item) => (
+                  <label key={item.key} className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
+                    <span>{item.label}</span>
+                    <input
+                      type="checkbox"
+                      disabled={formData.email_config.inherit_global}
+                      checked={formData.email_config.recipients[item.key as keyof EmailSettingsConfig["recipients"]]}
+                      onChange={(e) => updateEmailRecipients({ [item.key]: e.target.checked } as Partial<EmailSettingsConfig["recipients"]>)}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <label className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background/60 px-3 py-2 text-[10px] font-black uppercase text-muted-foreground">
+                Tampilkan NIK di email
+                <input
+                  type="checkbox"
+                  disabled={formData.email_config.inherit_global}
+                  checked={formData.email_config.privacy.include_nik}
+                  onChange={(e) => updateEmailPrivacy({ include_nik: e.target.checked })}
+                />
+              </label>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {[
+                  { key: "main_pdf", label: "PDF utama" },
+                  { key: "initial_attachments", label: "Lampiran Pemohon" },
+                  { key: "approval_attachments", label: "Lampiran Proses Approval" },
+                ].map((item) => (
+                  <div key={item.key} className="space-y-1 rounded-2xl border border-border/50 bg-background/60 p-3">
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground">{item.label}</Label>
+                    <Select
+                      disabled={formData.email_config.inherit_global}
+                      value={formData.email_config.files[item.key as keyof EmailSettingsConfig["files"]] as EmailFileMode}
+                      onValueChange={(value) => updateEmailFiles({ [item.key]: value } as Partial<EmailSettingsConfig["files"]>)}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="secure_link">Link aman</SelectItem>
+                        <SelectItem value="attachment">Attachment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="space-y-1 rounded-2xl border border-border/50 bg-background/60 p-3">
+                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Batas total attachment (MB)</Label>
+                  <Input
+                    disabled={formData.email_config.inherit_global}
+                    className="h-9 text-xs"
+                    type="number"
+                    min={1}
+                    value={formData.email_config.files.max_total_attachment_mb}
+                    onChange={(e) => updateEmailFiles({ max_total_attachment_mb: Number(e.target.value || 1) })}
+                  />
+                </div>
+                <div className="space-y-1 rounded-2xl border border-border/50 bg-background/60 p-3">
+                  <Label className="text-[9px] font-black uppercase text-muted-foreground">TTL link email (jam)</Label>
+                  <Input
+                    disabled={formData.email_config.inherit_global}
+                    className="h-9 text-xs"
+                    type="number"
+                    min={1}
+                    value={formData.email_config.link_ttl_hours}
+                    onChange={(e) => updateEmailConfig({ link_ttl_hours: Number(e.target.value || 1) })}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/20 p-5">

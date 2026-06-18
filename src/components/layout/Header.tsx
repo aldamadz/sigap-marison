@@ -1,4 +1,4 @@
-import { Bell, Plus, FileCheck, Inbox, Trash2, AlertCircle, MessageSquare, Menu } from 'lucide-react'
+import { Bell, Plus, FileCheck, Inbox, Trash2, AlertCircle, MessageSquare, Menu, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -222,7 +222,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
         {/* New Request Button - Desktop only */}
         {onNewAgenda && (
           <Button
-            onClick={onAgenda}
+            onClick={onNewAgenda}
             size="sm"
             className="gap-2 hidden sm:flex"
           >

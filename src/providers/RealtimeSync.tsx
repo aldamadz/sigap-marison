@@ -5,13 +5,14 @@ import { supabase } from "@/lib/supabase";
 export const RealtimeSync = () => {
   const queryClient = useQueryClient();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const hiddenAtRef = useRef<number | null>(null);
+  const lastFocusSyncRef = useRef(0);
 
   useEffect(() => {
     const handleSync = (keys: string[]) => {
       if (timerRef.current) clearTimeout(timerRef.current);
 
       timerRef.current = setTimeout(async () => {
-        console.log("Realtime Sync: Refreshing active queries...");
         const allowedKeys = new Set(keys);
 
         await queryClient.refetchQueries({
@@ -29,14 +30,8 @@ export const RealtimeSync = () => {
     const channel = supabase
       .channel("db-persuratan-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "agendas" }, () => handleSync(agendaKeys))
-      .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, () => {
-        console.log("Change detected in surat_registrasi");
-        handleSync(suratKeys);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, () => {
-        console.log("Change detected in surat_signatures");
-        handleSync(suratKeys);
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
       )
@@ -46,21 +41,29 @@ export const RealtimeSync = () => {
       .subscribe();
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        console.log("Tab Fokus: Sinkronisasi data...");
-        handleSync([
-          "agendas",
-          "kpi",
-          "status-dist",
-          "dept-activity",
-          "recent-logs",
-          "activity-logs",
-          "surat-list",
-          "surat-inbox",
-          "surat-detail",
-          "users",
-        ]);
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
       }
+
+      const now = Date.now();
+      const hiddenDuration = hiddenAtRef.current ? now - hiddenAtRef.current : 0;
+      hiddenAtRef.current = null;
+      if (hiddenDuration < 2_000 || now - lastFocusSyncRef.current < 15_000) return;
+
+      lastFocusSyncRef.current = now;
+      handleSync([
+        "agendas",
+        "kpi",
+        "status-dist",
+        "dept-activity",
+        "recent-logs",
+        "activity-logs",
+        "surat-list",
+        "surat-inbox",
+        "surat-detail",
+        "users",
+      ]);
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);

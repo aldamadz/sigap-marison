@@ -18,9 +18,11 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 export default function OfficeManagementPage() {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [offices, setOffices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -115,7 +117,14 @@ export default function OfficeManagementPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus kantor ini? Tindakan ini tidak dapat dibatalkan.")) return;
+    const office = offices.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Kantor?",
+      description: `Kantor ${office?.name || "ini"} akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const { error } = await supabase.from("master_offices").delete().eq("id", id);

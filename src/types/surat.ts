@@ -8,6 +8,7 @@ export interface SuratRegistrasi {
   judul_surat: string;
   status: 'PROSES' | 'SELESAI' | 'DITOLAK' | string; // Tambahkan string untuk fleksibilitas tipe di DB
   file_path?: string | null;
+  lampiran_path?: string | null;
   current_step: number;
   created_at: string;
   updated_at?: string;
@@ -27,6 +28,7 @@ export interface SuratRegistrasi {
   
   // Relasi dengan tabel surat_signatures
   surat_signatures?: SuratSignerDetail[];
+  surat_attachments?: SuratAttachmentDetail[];
 }
 
 /**
@@ -52,6 +54,18 @@ export interface SuratSignerDetail extends SuratSigner {
     full_name: string;
     avatar_url?: string;
   };
+}
+
+export interface SuratAttachmentDetail {
+  id: string;
+  file_url: string;
+  file_name?: string | null;
+  file_type?: string | null;
+  file_size?: number | null;
+  stage?: string | null;
+  requirement_key?: string | null;
+  requirement_label?: string | null;
+  signature_id?: string | null;
 }
 
 /**

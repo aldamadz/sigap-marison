@@ -26,6 +26,26 @@ export type DepartmentKpiSummary = {
   worst_pending_minutes: number;
 };
 
+export type DepartmentKpiDetail = {
+  signature_id: string;
+  surat_id: string;
+  no_surat: string | null;
+  judul_surat: string;
+  signer_name: string;
+  role_name: string;
+  step_order: number;
+  dept_id: string;
+  dept_name: string;
+  letter_type_name: string | null;
+  form_name: string | null;
+  started_at: string;
+  finished_at: string | null;
+  kpi_status: "pending" | "completed" | "rejected";
+  elapsed_minutes: number;
+  sla_minutes: number;
+  is_late: boolean;
+};
+
 export type KpiOption = {
   id: string;
   name: string;
@@ -75,6 +95,20 @@ export const departmentKpiService = {
 
     if (error) throw error;
     return (data || []) as DepartmentKpiSummary[];
+  },
+
+  async getDetails(filters: DepartmentKpiFilters = {}): Promise<DepartmentKpiDetail[]> {
+    const { data, error } = await supabase.rpc("get_department_kpi_details", {
+      p_from: filters.from ? new Date(`${filters.from}T00:00:00`).toISOString() : null,
+      p_to: toEndExclusive(filters.to),
+      p_dept_id: filters.deptId || null,
+      p_letter_type_id: filters.letterTypeId || null,
+      p_form_id: filters.formId || null,
+      p_status: filters.status || "all",
+    });
+
+    if (error) throw error;
+    return (data || []) as DepartmentKpiDetail[];
   },
 
   async getFilterOptions() {

@@ -30,6 +30,7 @@ import { AddUserModal } from '@/components/users/AddUserModal';
 import { EditUserModal } from '@/components/users/EditUserModal';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAppDialog } from '@/components/app/AppDialogProvider';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,9 +73,15 @@ interface DetailUserModalProps {
   onEdit: (u: User) => void;
   onToggle: (u: User) => void;
   togglingId: string | null;
+  confirmAction: (options: {
+    title: string;
+    description?: React.ReactNode;
+    confirmText?: string;
+    variant?: "default" | "destructive";
+  }) => Promise<boolean>;
 }
 
-const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId }: DetailUserModalProps) => {
+const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, confirmAction }: DetailUserModalProps) => {
   const [resetting, setResetting] = useState(false);
 
   if (!user) return null;
@@ -87,7 +94,13 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId }: 
   const role       = (user as any).role || 'user';
 
   const handleResetPassword = async () => {
-    if (!confirm(`Reset password ${user.fullName} ke "marison123"?`)) return;
+    const confirmed = await confirmAction({
+      title: "Reset Password?",
+      description: `Password ${user.fullName} akan direset ke default "marison123".`,
+      confirmText: "Reset Password",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     setResetting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -354,6 +367,7 @@ const normalizeImportDate = (value: string) => {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function UserManagementPage() {
+  const appDialog = useAppDialog();
   const [users, setUsers]               = useState<User[]>([]);
   const [loading, setLoading]           = useState(true);
   const [searchQuery, setSearchQuery]   = useState('');
@@ -440,7 +454,13 @@ export default function UserManagementPage() {
   };
 
   const bulkToggle = async (activate: boolean) => {
-    if (!confirm(`${activate ? 'Aktifkan' : 'Nonaktifkan'} ${selectedUsers.length} akun?`)) return;
+    const confirmed = await appDialog.confirm({
+      title: activate ? "Aktifkan Akun Terpilih?" : "Nonaktifkan Akun Terpilih?",
+      description: `${selectedUsers.length} akun akan ${activate ? "diaktifkan" : "dinonaktifkan"}.`,
+      confirmText: activate ? "Aktifkan" : "Nonaktifkan",
+      variant: activate ? "default" : "destructive",
+    });
+    if (!confirmed) return;
     setBulkLoading(true);
     const token = await getToken();
     let ok = 0, fail = 0;
@@ -461,7 +481,13 @@ export default function UserManagementPage() {
   };
 
   const bulkResetPassword = async () => {
-    if (!confirm(`Reset password ${selectedUsers.length} akun ke "marison123"?`)) return;
+    const confirmed = await appDialog.confirm({
+      title: "Reset Password Massal?",
+      description: `${selectedUsers.length} akun akan direset ke password default "marison123".`,
+      confirmText: "Reset Password",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     setBulkLoading(true);
     const token = await getToken();
     let ok = 0, fail = 0;
@@ -1219,6 +1245,7 @@ export default function UserManagementPage() {
         onEdit={(u) => { setSelectedUser(u); setIsEditOpen(true); }}
         onToggle={handleToggle}
         togglingId={togglingId}
+        confirmAction={appDialog.confirm}
       />
       <EditUserModal
         user={selectedUser}

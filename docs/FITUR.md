@@ -1,6 +1,6 @@
 # Fitur SIGAP
 
-Tanggal pembaruan: 2026-06-08  
+Tanggal pembaruan: 2026-06-11
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 
 Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besar dan tautan, sedangkan detail fitur fungsional dan non-fungsional dicatat di file ini.
@@ -34,10 +34,13 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Admin | `/admin/offices` | Master Kantor Cabang |
 | Admin | `/admin/master-projects` | Master Proyek |
 | Admin | `/admin/monitoring` | All Status Monitoring |
-| Admin | `/admin/kpi-departments` | KPI Departemen |
+| Admin | `/admin/kpi-departments` | SLA Departemen |
 | Admin | `/admin/configuration/forms` | Configuration: Form & Template |
-| Admin | `/admin/configuration/workflows` | Configuration: Alur Persetujuan |
+| Admin | `/admin/configuration/workflows` | Configuration: Dokumentasi Matrix Lama |
+| Admin | `/admin/configuration/form-usages` | Configuration: Kegunaan Form |
 | Admin | `/admin/configuration/kpi` | Configuration: SLA Departemen |
+| Admin | `/admin/configuration/job-title-labels` | Configuration: Label Jabatan |
+| Admin | `/admin/configuration/email` | Configuration: Email Notification |
 
 ## 1. Autentikasi dan Sesi
 
@@ -125,10 +128,11 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 
 ### Fungsional
 
-- User memilih entitas, kantor/cabang, departemen, jenis surat, dan matrix alur.
+- User memilih entitas, kantor/cabang, departemen, jenis surat, lalu klasifikasi `Aset`, `Unit`, atau `Non Unit`.
+- Sistem menyaring matrix alur berdasarkan klasifikasi, scope kantor, dan departemen.
 - User mendapatkan nomor surat.
 - User mengisi detail template berdasarkan Master Form.
-- User memilih mode permohonan biasa atau unit jika form mendukung unit.
+- Jika user memilih `Aset` atau `Non Unit`, field teknis Unit tidak ditampilkan dan tidak ditulis ke dokumen.
 - User memilih pejabat penandatangan berdasarkan matrix.
 - User mengunggah lampiran awal jika diwajibkan.
 
@@ -138,14 +142,25 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Input sistem seperti NIK, departemen, cabang, proyek, tempat, tanggal, dan detail isi surat harus terekam.
 - Validasi harus tampil sebagai feedback UI yang jelas.
 - Mode unit tidak boleh memaksa user mengisi tabel barang.
+- Form yang mendukung Unit tetap harus berperilaku sebagai form biasa ketika kategori yang dipilih bukan `Unit`.
 
 ## 7. Workflow Approval
 
 ### Fungsional
 
 - Approver melihat antrean di Inbox Persetujuan.
+- Inbox menggunakan detail approval full-width dengan task switcher di header untuk memilih antrean lain.
+- Task switcher berisi pencarian, filter kategori/KPI/tindakan, dan daftar approval ringkas tanpa panel antrean permanen.
+- Antrean diurutkan berdasarkan KPI departemen: terlambat, mendekati SLA, lalu waktu tunggu terlama.
+- Antrean dapat dicari berdasarkan nomor, judul, pengaju, atau departemen serta difilter berdasarkan kategori, KPI, dan jenis tindakan.
+- Pengajuan aktif disimpan pada query parameter `task` agar pilihan konsisten setelah refresh dan realtime update.
+- Setiap antrean menampilkan ringkasan pengajuan langsung: pengaju, jabatan, departemen, kantor, proyek, kategori, tempat-tanggal, daftar barang/unit, catatan, dan field input tambahan.
+- Detail menampilkan progres penandatangan, panel dokumen, tugas khusus step aktif, catatan, dan action bar yang selalu terlihat.
 - Approver membuka preview utama dan lampiran.
 - Approver dapat menyetujui atau menolak surat.
+- Persetujuan dan penolakan menggunakan dialog reusable; penolakan mewajibkan alasan minimal lima karakter.
+- Tombol persetujuan menjelaskan persyaratan yang belum lengkap, termasuk proyek, unit, kode produksi, dan lampiran.
+- Setelah tindakan berhasil, sistem otomatis memilih antrean prioritas berikutnya.
 - Step tanda tangan berjalan berurutan.
 - Snapshot dokumen dibuat setelah approval.
 - Notifikasi dikirim ke step berikutnya.
@@ -156,17 +171,21 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Status step harus konsisten dengan status surat.
 - Perubahan approval harus tercatat.
 - Dokumen preview harus menampilkan tanda tangan terbaru.
-- Pending approval harus bisa dipakai sebagai data KPI.
+- PDF berfungsi sebagai verifikasi visual; informasi keputusan utama harus dapat dibaca dari kartu inbox tanpa membuka PDF.
+- Pending approval harus bisa dipakai sebagai data SLA.
+- Kegagalan mengambil data harus dibedakan dari antrean kosong dan menyediakan aksi coba lagi.
+- Draft catatan, alokasi unit, kode produksi, dan pilihan file dipertahankan selama halaman masih aktif.
+- Tampilan, loading, dan action bar harus tetap nyaman digunakan pada desktop dan mobile.
 
 ## 8. Permohonan Unit
 
 ### Fungsional
 
-- Admin mengaktifkan konfigurasi unit pada Master Form.
-- Admin menentukan departemen yang boleh mengajukan unit.
+- Admin menentukan matrix yang mendukung kategori `Unit`.
+- Admin menentukan departemen yang boleh mengajukan Unit melalui halaman Configuration `Pengajuan Unit`.
 - Admin menentukan cell kalimat permohonan unit, default `C11`.
-- Untuk jenis surat Permohonan, user memilih kategori `Aset`, `Unit`, atau `Non Unit`.
-- Jika kategori `Unit`, user memilih proyek, mengisi jumlah unit, dan catatan opsional.
+- User memilih `Unit` langsung saat registrasi sebelum memilih matrix dan form.
+- Jika mode `Unit`, user memilih proyek, mengisi jumlah unit, dan catatan opsional.
 - Sistem mengisi detail barang Unit otomatis:
   - Nama barang: `Permohonan Order Bangun SPK Pembangunan Rumah [jumlah] Unit`
   - Satuan: `Unit`
@@ -182,6 +201,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Perencanaan memilih unit spesifik saat approval.
 - Jumlah unit yang dipilih boleh lebih banyak, tetapi tidak boleh kurang dari permintaan.
 - Perencanaan mengisi `Struktur Atas`, `Struktur Bawah`, dan komponen kode produksi per unit.
+- Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai carousel agar tinggi form stabil saat banyak kavling dipilih.
 - Format kode produksi otomatis: `[nomor]/UAI/PRC/[blok]/[tanggal]`.
 - Perencanaan mengunggah 3 lampiran manual: `SITEPLAN`, `VOLUME ADENDUM`, dan `HITUNGAN ADENDUM`.
 - Sistem membuat 2 lampiran PDF otomatis:
@@ -191,7 +211,12 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Non-Fungsional
 
 - Mode unit tidak boleh bercampur dengan input barang biasa.
-- Konfigurasi unit harus berada di `unit_config`, bukan disamarkan sebagai field barang.
+- Mapping field Unit hanya aktif saat kategori registrasi adalah `Unit`.
+- Kategori `Aset`, `Unit`, dan `Non Unit` harus berada pada matrix alur, bukan pada Master Form.
+- Izin Unit mengikuti departemen profil akun yang login, bukan departemen yang dipilih user pada form registrasi.
+- Matrix Unit tanpa departemen terpilih tidak dapat dipakai oleh departemen mana pun.
+- Frontend menyaring pilihan Unit dan RPC registrasi memvalidasi ulang izin yang sama di database.
+- `unit_config` pada Master Form hanya menyimpan mapping teknis template, aturan lampiran, dan cell unit.
 - Unit terpilih, proyek alokasi, detail struktur, kode produksi, lampiran, waktu, dan signature harus terekam di database.
 - Lampiran otomatis Unit harus tersimpan sebagai `stage = unit_allocation`.
 - Jika integrasi API external berubah, UI utama tidak perlu dirombak.
@@ -218,6 +243,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - User melihat surat yang pernah melibatkan dirinya.
 - User dapat membuka dokumen dan lampiran terkait surat tersebut.
 - Riwayat membantu user melacak pekerjaan approval masa lalu.
+- Riwayat dapat difilter berdasarkan tindakan `Setuju` dan `Tolak`.
+- Riwayat memiliki filter rentang tanggal dengan default bulan berjalan.
 
 ### Non-Fungsional
 
@@ -255,6 +282,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Badge harus sesuai hak akses.
 - Error akses ditolak harus terlihat oleh user, bukan hanya di console.
 - Realtime harus punya fallback refresh query.
+- Konfirmasi dan input pop-up aplikasi memakai dialog reusable SIGAP, bukan dialog browser bawaan, agar pengalaman user konsisten di semua halaman.
 
 ## 13. Master User Organization
 
@@ -329,7 +357,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin mengelola template form.
 - Admin mengatur mapping cell Excel.
 - Admin membuat konfigurasi permohonan biasa.
-- Admin membuat konfigurasi unit.
+- Admin membuat mapping teknis template unit tanpa menentukan kategori registrasi.
 - Admin menyimpan dan menerapkan quick preset.
 - Admin mengatur field manual, field sistem, tabel, textarea, external select, merge range, alignment, font, dan row height.
 
@@ -338,8 +366,10 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Mapping cell harus tervalidasi.
 - Merge range harus tetap dianggap mapping valid.
 - Preset tidak boleh hanya menjadi placeholder tanpa cell.
-- Konfigurasi biasa dan unit harus terpisah jelas.
+- Master Form tidak menentukan apakah registrasi termasuk Aset, Unit, atau Non Unit.
+- Mapping teknis biasa dan unit harus terpisah jelas.
 - Template baru harus bisa ditangani tanpa mengubah kode selama formatnya sesuai konfigurasi.
+- Konfirmasi hapus template dan quick preset memakai dialog reusable aplikasi, bukan dialog browser bawaan.
 
 ## 17. Master Jenis Surat
 
@@ -389,11 +419,16 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin mengatur urutan tanda tangan.
 - Admin mengatur label jabatan, role, cell tanda tangan, nama, jabatan, sheet, dan preset kotak tanda tangan.
 - Admin menandai step yang wajib melakukan alokasi unit.
+- Admin menentukan kategori registrasi yang didukung setiap matrix: `Aset`, `Unit`, dan/atau `Non Unit`.
+- Jika kategori `Unit` aktif, izin pemakaiannya diatur terpisah per departemen pada Configuration `Pengajuan Unit`.
 
 ### Non-Fungsional
 
 - Urutan step harus deterministik.
 - Matrix harus tersimpan sebagai konfigurasi yang dapat diaudit.
+- Daftar matrix pada registrasi harus difilter berdasarkan kategori yang dipilih user sebelum form diketahui.
+- Izin departemen Unit disimpan pada relasi `workflow_allowed_departments` dan tidak boleh bergantung pada konfigurasi Master Form.
+- Editor Alur Persetujuan tidak menjadi tempat mengatur izin departemen agar konfigurasi matrix dan akses departemen tetap terpisah.
 - Perubahan matrix tidak boleh mengubah surat yang sudah berjalan kecuali memang diproses ulang dengan aturan baru.
 
 ## 21. Fitur PIC yang Dihapus
@@ -444,11 +479,14 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Fungsional
 
 - Admin mengakses konfigurasi sistem dari satu menu `Configuration`.
-- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Alur Persetujuan`, `SLA Departemen`, dan `Penomoran Surat`.
+- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Alur Persetujuan`, `Pengajuan Unit`, `SLA Departemen`, `Penomoran Surat`, dan `Label Jabatan`.
+- Dropdown konfigurasi juga menyediakan `Email Notification` untuk penerima email, privasi, dan mode file.
 - Form & Template mengatur template Excel, mapping input, mode unit, dan lampiran.
 - Alur Persetujuan mengatur urutan penandatangan serta koordinat tanda tangan.
+- Pengajuan Unit mengatur matrix Unit yang diizinkan untuk setiap departemen.
 - SLA Departemen mengatur target SLA, jam kerja, waktu istirahat, hari kerja, dan timezone.
 - Penomoran Surat mengatur counter awal per tahun untuk scope pusat atau cabang/proyek.
+- Label Jabatan mengatur alias jabatan untuk tampilan dokumen, misalnya `Manager Pengembangan Bisnis` ditampilkan sebagai `Mgr. PO`.
 - Route lama `/admin/forms` dan `/admin/workflow-details` dialihkan ke route Configuration yang baru.
 
 ### Non-Fungsional
@@ -489,17 +527,20 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kegagalan API external harus tampil sebagai feedback yang jelas.
 - UI utama tidak perlu dirombak saat provider external berubah.
 
-## 27. KPI Departemen untuk SLA Approval
+## 27. SLA Departemen untuk Approval
 
 ### Fungsional
 
-- Dashboard KPI menampilkan performa approval per departemen.
-- KPI dihitung per step tanda tangan di `surat_signatures`.
+- Dashboard SLA menampilkan performa approval per departemen.
+- SLA dihitung per step tanda tangan di `surat_signatures`.
 - Departemen KPI adalah departemen milik user yang bertanda tangan: `signer_snapshot.department_id`, fallback ke `profiles.department_id`.
 - Departemen pengajuan/surat (`surat_registrasi.dept_id`) tidak dipakai untuk atribusi KPI penanda tangan.
-- Pending ikut dihitung sampai `now()`.
+- Pending ikut dihitung sampai `now()` hanya untuk tahap aktif yang sudah masuk ke signer.
+- Step berikutnya yang belum aktif tidak dihitung sebagai pending.
+- Jika surat ditolak, proses SLA berhenti; step setelah penolakan tidak dihitung sebagai pending.
 - Admin dapat melihat antrean yang tepat waktu, telat, pending aman, pending telat, dan rejected.
 - Dashboard dapat difilter berdasarkan periode tanggal, departemen, cabang/kantor, jenis surat, form/template, dan status KPI.
+- Baris departemen dapat dibuka untuk melihat rincian setiap tahap approval, penandatangan, surat, durasi efektif, SLA, status, jenis surat, dan form.
 
 ### Non-Fungsional
 
@@ -528,14 +569,14 @@ Contoh:
 | Senin 11:30 | Senin 13:30 | 2 jam | 1 jam |
 | Senin 16:00 | Selasa 08:30 | 16 jam 30 menit | 1 jam 30 menit |
 
-### Status KPI
+### Status SLA
 
 | Status | Definisi |
 |---|---|
 | `completed_on_time` | Sudah diproses dan durasi efektif `<= sla_minutes` |
 | `completed_late` | Sudah diproses dan durasi efektif `> sla_minutes` |
-| `pending_on_time` | Sudah masuk antrean, belum diproses, durasi efektif sampai `now()` masih `<= sla_minutes` |
-| `pending_late` | Sudah masuk antrean, belum diproses, durasi efektif sampai `now()` sudah `> sla_minutes` |
+| `pending_on_time` | Tahap aktif sudah masuk antrean signer, belum diproses, durasi efektif sampai `now()` masih `<= sla_minutes` |
+| `pending_late` | Tahap aktif sudah masuk antrean signer, belum diproses, durasi efektif sampai `now()` sudah `> sla_minutes` |
 | `rejected` | Ditolak, dipisahkan dari metrik tepat waktu/telat utama |
 
 ### Rencana Teknis
@@ -576,20 +617,44 @@ Fallback data lama:
 ### Status Implementasi
 
 - Route UI: `/admin/kpi-departments`.
-- Menu: `KPI Departemen` pada area admin/sidebar.
-- Database: `department_kpi_configs`, kolom `surat_signatures.available_at`, function `calculate_business_minutes`, dan RPC `get_department_kpi_summary`.
+- Menu: `SLA Departemen` pada area admin/sidebar.
+- Database: `department_kpi_configs`, kolom `surat_signatures.available_at`, function `calculate_business_minutes`, RPC `get_department_kpi_summary`, dan RPC `get_department_kpi_details`.
 - Frontend service: `department-kpi.service.ts`.
 - UI konfigurasi: admin dapat mengatur SLA menit, hari kerja, jam kerja, jam istirahat, dan timezone per departemen terpilih.
+- UI detail: ranking departemen dapat diklik untuk membuka drill-down KPI per tahap approval.
 - Realtime: query KPI departemen ikut direfresh saat `surat_registrasi` atau `surat_signatures` berubah.
 
 ### Lanjutan yang Masih Bisa Ditambah
 
 1. Kalender hari libur nasional/perusahaan.
-2. Detail drill-down sampai daftar surat per departemen.
-3. Export KPI untuk laporan manajemen.
-4. Indikator telat langsung pada antrean approval jika diperlukan.
+2. Export KPI untuk laporan manajemen.
+3. Indikator telat langsung pada antrean approval jika diperlukan.
 
-## 28. Keamanan dan Hak Akses
+## 28. Email Notifikasi Profesional
+
+### Fungsional
+
+- Sistem mengirim email detail saat surat masuk, ditandatangani, ditolak, atau berpindah ke step berikutnya.
+- Email menampilkan nomor surat, judul, status, pengaju, departemen, kantor, proyek, detail input dokumen, dan penandatangan.
+- Email dapat dikirim ke user tujuan, email departemen, dan email kantor/cabang sesuai konfigurasi.
+- URL tombol menuju sistem SIGAP dapat dikonfigurasi secara global sehingga perubahan domain tidak memerlukan perubahan kode.
+- Admin dapat mengatur apakah NIK ditampilkan di email.
+- Admin dapat menentukan mode file per tipe: PDF utama, lampiran awal, dan lampiran approval.
+- File bisa dikirim sebagai link aman atau attachment email sesuai konfigurasi.
+- Konfigurasi form secara default mengikuti konfigurasi global dan dapat di-override secara eksplisit per template.
+- Detail input dokumen ditampilkan sebagai tabel berlabel, termasuk tabel daftar barang, bukan JSON mentah.
+- Unit yang dialokasikan di email ditampilkan sebagai tabel Proyek, Unit, Struktur Atas, Struktur Bawah, dan Kode Produksi, bukan JSON mentah.
+- Metadata teknis alokasi seperti signature id, timestamp ISO, dan snapshot project tidak ditampilkan sebagai detail input email.
+
+### Non-Fungsional
+
+- Link file email harus memakai token aman dengan TTL.
+- Public storage URL tidak boleh dikirim langsung di email.
+- File utama email hanya memakai PDF hasil worker; file Excel sumber tidak boleh diberi label atau dikirim sebagai PDF.
+- Ukuran attachment harus dibatasi agar tidak melampaui batas SMTP.
+- Mode attachment tidak boleh berubah diam-diam menjadi link. Jika file belum tersedia atau melewati batas, email tetap terkirim tanpa file tersebut.
+
+## 29. Keamanan dan Hak Akses
 
 ### Fungsional
 
@@ -607,7 +672,7 @@ Fallback data lama:
 - Storage transaksi surat wajib menggunakan Supabase Storage self-hosted.
 - Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
 
-## 29. Operasional, Deployment, dan Worker
+## 30. Operasional, Deployment, dan Worker
 
 ### Fungsional
 
@@ -624,3 +689,51 @@ Fallback data lama:
 - Healthcheck container harus tersedia.
 - Dokumentasi deploy harus mengikuti perubahan arsitektur.
 - Secret deployment tidak boleh masuk repo.
+- `index.html` tidak di-cache, sedangkan asset ber-hash memakai cache immutable.
+- Asset build lama yang sudah hilang harus mengembalikan `404`, bukan fallback HTML.
+- Browser melakukan satu kali reload otomatis jika lazy chunk berubah setelah deployment.
+- Sinkronisasi saat tab kembali aktif memakai cooldown agar tidak memicu refetch berulang.
+- Setiap perpindahan route memvalidasi ulang seluruh query aktif dan menampilkan overlay loading sampai pengambilan data terbaru selesai.
+- Refresh route tidak melakukan browser reload sehingga sesi, koneksi realtime, dan state global aplikasi tetap terjaga.
+
+## 31. Kegunaan Form dan Tanda Tangan Dinamis
+
+### Fungsional
+
+- Satu form Excel dapat dipakai oleh banyak kegunaan bisnis.
+- Urutan registrasi adalah kategori dokumen, form, lalu kegunaan.
+- Setiap kegunaan mengatur departemen pengaju, scope pusat/cabang, 2-8 tahap approval, departemen signer, kandidat user, action approval/alokasi unit, dan persyaratan lampiran.
+- Setiap tahap dapat memiliki tim pengecek/verifikator data sebelum penanda tangan tahap tersebut dapat melakukan aksi.
+- Jika tahap membutuhkan verifikasi, penanda tangan tetap dapat melihat pengajuan tetapi tombol `Setujui` dan `Tolak` terkunci sampai tim pengecek memverifikasi data.
+- Tim pengecek melihat task `Verifikasi Data` di Inbox Persetujuan, mengunggah lampiran tahap yang diwajibkan, mengisi alokasi Unit bila tahap tersebut membutuhkan alokasi, lalu menyimpan catatan verifikasi.
+- Pada pengajuan Unit, proyek/kawasan dikunci dari pilihan pemohon dan tidak dapat diubah oleh tim pengecek atau penanda tangan; jika proyek salah, user harus membuat pengajuan baru.
+- Untuk pengajuan Unit, tim pengecek dapat memilih jumlah unit kurang dari permintaan dengan konfirmasi eksplisit sebelum verifikasi dilanjutkan.
+- Setelah data diverifikasi, penanda tangan melihat ringkasan hasil pengecekan dan tidak perlu mengunggah/mengisi data tahap yang sama.
+- Penanda tangan dapat mengembalikan task ke tim pengecek dengan catatan revisi jika data/lampiran perlu diperbaiki.
+- Lampiran dapat diwajibkan pada tahap pemohon maupun tahap signer tertentu, termasuk jumlah minimum/maksimum, multiple file, tipe MIME, dan batas ukuran.
+- Semua lampiran pemohon dan approval hanya dikonfigurasi melalui Kegunaan Form berdasarkan `stage_order`.
+- Konfigurasi lampiran lama pada Master Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
+- Saat signer memilih lampiran approval, UI menampilkan jumlah file, nama file, ukuran file, status siap unggah, dan status mengunggah ketika approval sedang diproses.
+- Form menyimpan satu `signature_layout` berupa sheet dan area persegi panjang yang dikelola sistem.
+- Konfigurasi layout menyediakan preset `PGD` yang mengikuti struktur border dan merge workbook referensi untuk 3-6 kotak; mode `Adaptif` tetap tersedia untuk form lain.
+- Preset PGD memvalidasi distribusi role: 3 tahap `1-1-1`, 4 tahap salah satu role berjumlah 2, 5 tahap salah satu role berjumlah 1, dan 6 tahap `2-2-2`.
+- Pada preset PGD, urutan tahap wajib `Membuat`, `Memeriksa`, lalu `Menyetujui`; kombinasi yang tidak tersedia pada template ditolak agar dokumen tidak rusak.
+- Saat dokumen dibuat, sistem membuka merge hanya di area tanda tangan, lalu membangun kotak 2-8 signer secara otomatis tanpa mengubah matrix tanda tangan lama.
+- Baris pertama area tanda tangan dipakai untuk `Tempat, Tanggal`, misalnya `Magelang, 20 Juli 2026`; nilainya di-merge, diberi border, rata tengah, dan selebar kotak tanda tangan paling kanan tepat di bawahnya.
+- Lebar, merge, border, dan pembagian baris kotak pada preset PGD mengikuti kolom asli template, bukan hasil pembagian lebar secara rata.
+- Label yang sama dan berdampingan dalam satu baris tanda tangan digabung pada area label, sedangkan area tanda tangan, nama, dan jabatan tetap per signer.
+- Baris jabatan pada template/PDF memakai label tahap dari konfigurasi Kegunaan Form, sehingga posisi seperti `Mgr. Marketing` tetap terbaca walaupun signer aktual berganti.
+- Email menampilkan jabatan aktual signer dari `profiles.job_title` atau alias aktif Configuration `Label Jabatan`; label tahap tetap disimpan sebagai konteks alur dan fallback data historis.
+- Posisi tanda tangan, identitas signer, kebijakan lampiran, dan konfigurasi kegunaan disimpan sebagai snapshot transaksi.
+- Approval menggunakan snapshot posisi sehingga perubahan konfigurasi setelah surat dibuat tidak menggeser tanda tangan surat lama.
+- Matrix lama tetap tersedia sebagai dokumentasi read-only dan dapat diduplikasi menjadi draft Kegunaan Form.
+- Registrasi memakai fallback matrix lama selama belum ada Kegunaan Form aktif, sehingga konfigurasi dapat disiapkan tanpa menghentikan production.
+
+### Non-Fungsional
+
+- Registrasi baru divalidasi server-side terhadap kegunaan aktif dan departemen aktor.
+- Admin yang mewakili departemen lain direkam melalui `represented_department_id` dan `represented_by_admin`.
+- Database menolak signer yang tidak termasuk kandidat pada tahap kegunaan.
+- Draft konfigurasi tidak dapat dibaca user biasa; user hanya membaca kegunaan aktif untuk departemen profilnya.
+- Data transaksi lama belum dihapus sampai konfigurasi baru aktif dan cutover produksi dikonfirmasi.
+- RLS diaktifkan untuk tabel konfigurasi baru serta master inti yang sebelumnya belum dilindungi.

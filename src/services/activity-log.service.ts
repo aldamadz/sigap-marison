@@ -160,25 +160,26 @@ const enrichAuditValues = async (logs: ActivityLog[]) => {
   ]));
 
   const resolveValue = (key: string, value: unknown) => {
-    if (!isUuid(value)) return value;
+    const normalizedValue = String(value);
+    if (!isUuid(normalizedValue)) return value;
 
     if (['department_id', 'dept_id', 'target_department_id'].includes(key)) {
-      return departmentMap.get(value) || value;
+      return departmentMap.get(normalizedValue) || value;
     }
     if (['office_id', 'branch_id', 'target_office_id'].includes(key)) {
-      return officeMap.get(value) || value;
+      return officeMap.get(normalizedValue) || value;
     }
     if (['user_id', 'created_by', 'updated_by', 'parent_id', 'signer_id', 'requester_id'].includes(key)) {
-      return profileMap.get(value) || value;
+      return profileMap.get(normalizedValue) || value;
     }
     if (['form_id'].includes(key)) {
-      return formMap.get(value) || value;
+      return formMap.get(normalizedValue) || value;
     }
     if (['project_id'].includes(key)) {
-      return projectMap.get(value) || value;
+      return projectMap.get(normalizedValue) || value;
     }
     if (['letter_type_id', 'type_id'].includes(key)) {
-      return letterTypeMap.get(value) || value;
+      return letterTypeMap.get(normalizedValue) || value;
     }
 
     return value;

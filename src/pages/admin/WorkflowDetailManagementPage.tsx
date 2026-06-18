@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 interface TTDConfig {
   roleName: string; 
@@ -43,6 +45,7 @@ interface TTDConfig {
 }
 
 type RoleName = "membuat" | "memeriksa" | "menyetujui";
+type RequestCategory = "asset" | "unit" | "non_unit";
 type MatrixConfigItem = TTDConfig & { id: string };
 
 interface QuickPresetCell {
@@ -64,6 +67,20 @@ const ROLE_LABELS: Record<RoleName, string> = {
   membuat: "Membuat",
   memeriksa: "Memeriksa",
   menyetujui: "Menyetujui",
+};
+
+const REQUEST_CATEGORY_OPTIONS: Array<{ value: RequestCategory; label: string; description: string }> = [
+  { value: "asset", label: "Aset", description: "Dokumen aset dan inventaris" },
+  { value: "unit", label: "Unit", description: "Permohonan/order bangun unit" },
+  { value: "non_unit", label: "Non Unit", description: "Dokumen umum selain unit" },
+];
+
+const normalizeRequestCategories = (value: unknown): RequestCategory[] => {
+  const values = Array.isArray(value) ? value : [];
+  const normalized = values.filter((item): item is RequestCategory =>
+    item === "asset" || item === "unit" || item === "non_unit"
+  );
+  return normalized.length > 0 ? normalized : ["asset", "non_unit"];
 };
 
 const sanitizeRoleName = (value: any): RoleName => {
@@ -262,8 +279,16 @@ const QUICK_PRESETS: QuickPreset[] = [
   },
 ];
 
-export default function WorkflowDetailManagementPage({ embedded = false }: { embedded?: boolean }) {
+export default function WorkflowDetailManagementPage({
+  embedded = false,
+  documentationOnly = true,
+}: {
+  embedded?: boolean;
+  documentationOnly?: boolean;
+}) {
+  const navigate = useNavigate();
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [details, setDetails] = useState<any[]>([]);
   const [masterForms, setMasterForms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -279,6 +304,7 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
     menyetujui: "",
     form_id: "",
     is_cabang: false,
+    request_categories: ["asset", "non_unit"] as RequestCategory[],
     ttd_config: [] as MatrixConfigItem[]
   });
   const sensors = useSensors(
@@ -348,6 +374,7 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
         workflowText,
         item.master_forms?.nama_form,
         item.is_cabang ? "cabang" : "pusat",
+        ...normalizeRequestCategories(item.request_categories),
         `level ${levelCount}`,
         configText
       ]
@@ -368,6 +395,26 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
   }, [details]);
 
   const cleanCommaInput = (val: string) => val.split(',').map(s => s.trim()).filter(s => s !== "").join(', ');
+
+  const toggleRequestCategory = (category: RequestCategory) => {
+    setFormData(prev => {
+      const exists = prev.request_categories.includes(category);
+      if (exists && prev.request_categories.length === 1) {
+        toast({
+          variant: "destructive",
+          title: "Kategori wajib tersedia",
+          description: "Matrix harus mendukung minimal satu kategori registrasi.",
+        });
+        return prev;
+      }
+      return {
+        ...prev,
+        request_categories: exists
+          ? prev.request_categories.filter(item => item !== category)
+          : [...prev.request_categories, category],
+      };
+    });
+  };
 
   const getConfigsForRole = (roleName: RoleName) =>
     formData.ttd_config.filter(item => item.roleName === roleName);
@@ -471,6 +518,7 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
         menyetujui: item.menyetujui || "",
         form_id: item.form_id || "",
         is_cabang: item.is_cabang || false,
+        request_categories: normalizeRequestCategories(item.request_categories),
         ttd_config: normalizeTTDConfig(item.ttd_config)
       });
     } else {
@@ -479,6 +527,7 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
         membuat: "", memeriksa: "", menyetujui: "",
         form_id: masterForms[0]?.id || "",
         is_cabang: false,
+        request_categories: ["asset", "non_unit"],
         ttd_config: []
       });
     }
@@ -529,14 +578,15 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
         menyetujui: cleanCommaInput(formData.menyetujui),
         form_id: formData.form_id,
         is_cabang: formData.is_cabang,
+        request_categories: formData.request_categories,
         ttd_config: serializeTTDConfig(formData.ttd_config)
       };
       
-      const { error } = selectedItem 
+      const { error } = selectedItem
         ? await supabase.from("master_penggunaan_detail").update(payload).eq("id", selectedItem.id)
         : await supabase.from("master_penggunaan_detail").insert([payload]);
-
       if (error) throw error;
+
       toast({ title: "Success", description: "Workflow configuration saved." });
       setIsModalOpen(false);
       loadData();
@@ -592,9 +642,11 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
             </div>
           </div>
         </div>
-        <Button onClick={() => handleOpenModal()} className="h-11 px-6 font-bold">
-          <Plus className="mr-2 h-4 w-4"/> Tambah Alur
-        </Button>
+        {!documentationOnly && (
+          <Button onClick={() => handleOpenModal()} className="h-11 px-6 font-bold">
+            <Plus className="mr-2 h-4 w-4"/> Tambah Alur
+          </Button>
+        )}
       </div>
 
       {/* Table Section */}
@@ -640,9 +692,16 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
                     <Database className="h-3 w-3" /> {item.master_forms?.nama_form}
                   </div>
                   <div className="mt-2">
-                    <Badge variant="outline" className="text-[10px] font-bold uppercase">
-                      Level {getLevelCount(item)}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase">
+                        Level {getLevelCount(item)}
+                      </Badge>
+                      {normalizeRequestCategories(item.request_categories).map((category) => (
+                        <Badge key={category} variant="outline" className="text-[10px] font-bold uppercase">
+                          {category === "asset" ? "Aset" : category === "unit" ? "Unit" : "Non Unit"}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -657,14 +716,32 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
                   </div>
                 </TableCell>
                 <TableCell className="text-right px-8 space-x-2">
-                  <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenModal(item)}>
-                    <Pencil className="h-3.5 w-3.5"/>
-                  </Button>
-                  <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/20 hover:bg-destructive/10" onClick={() => {
-                    if(confirm("Confirm delete?")) supabase.from("master_penggunaan_detail").delete().eq("id", item.id).then(() => loadData());
-                  }}>
-                    <Trash2 className="h-3.5 w-3.5"/>
-                  </Button>
+                  {documentationOnly ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/admin/configuration/form-usages?source_matrix=${item.id}`)}
+                    >
+                      Duplikasi ke Kegunaan
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenModal(item)}>
+                        <Pencil className="h-3.5 w-3.5"/>
+                      </Button>
+                      <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/20 hover:bg-destructive/10" onClick={async () => {
+                        const confirmed = await appDialog.confirm({
+                          title: "Hapus Matrix Lama?",
+                          description: "Matrix dokumentasi lama ini akan dihapus dari master penggunaan detail.",
+                          confirmText: "Hapus",
+                          variant: "destructive",
+                        });
+                        if (confirmed) supabase.from("master_penggunaan_detail").delete().eq("id", item.id).then(() => loadData());
+                      }}>
+                        <Trash2 className="h-3.5 w-3.5"/>
+                      </Button>
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -707,6 +784,35 @@ export default function WorkflowDetailManagementPage({ embedded = false }: { emb
                     {formData.is_cabang ? 'OPERASIONAL CABANG' : 'KANTOR PUSAT'}
                   </Button>
                 </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Kategori Registrasi</Label>
+                  <div className="space-y-2">
+                    {REQUEST_CATEGORY_OPTIONS.map((option) => {
+                      const active = formData.request_categories.includes(option.value);
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => toggleRequestCategory(option.value)}
+                          className={cn(
+                            "w-full rounded-xl border px-3 py-3 text-left transition-colors",
+                            active
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-background text-muted-foreground hover:bg-muted"
+                          )}
+                        >
+                          <span className="block text-[10px] font-black uppercase">{option.label}</span>
+                          <span className="mt-1 block text-[10px] font-medium">{option.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    User memilih kategori sebelum memilih matrix. Hanya matrix yang mendukung kategori tersebut yang ditampilkan.
+                  </p>
+                </div>
+
               </div>
 
               <div className="space-y-4 border-t border-border pt-6">

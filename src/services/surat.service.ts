@@ -5,6 +5,11 @@ import autoTable from "jspdf-autotable";
 import { notificationService } from "./notification.service";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
+import {
+  buildDynamicSignatureLayout,
+  normalizeSignatureLayoutConfig,
+  type SignaturePosition,
+} from "./signature-layout.service";
 
 type TableInputColumn = {
   key: string;
@@ -64,6 +69,7 @@ export interface SuratRegistrasi {
   dept_id?: string;
   letter_type_id?: string;
   penggunaan_id?: string;
+  form_usage_id?: string;
   surat_signatures?: Array<{
     id: string;
     role_name: string;
@@ -91,27 +97,12 @@ export const suratService = {
     const parsed = typeof raw === "string" ? (() => {
       try { return JSON.parse(raw || "{}"); } catch { return {}; }
     })() : (raw || {});
-    const defaultAllocationRequirements = [
-      { key: "siteplan", label: "Siteplan", required: true },
-      { key: "volume_adendum", label: "Volume Adendum", required: true },
-      { key: "hitungan_adendum", label: "Hitungan Adendum", required: true },
-    ];
-    const allocationRequirements = Array.isArray(parsed.allocation_attachment_requirements)
-      ? parsed.allocation_attachment_requirements.filter((requirement: any) =>
-          String(requirement.key || "").toLowerCase() !== "kode_produksi" &&
-          String(requirement.label || "").toLowerCase() !== "kode produksi"
-        )
-      : [];
     return {
-      enabled: parsed.enabled === true,
       request_sentence_cell: String(parsed.request_sentence_cell || "C11").trim().toUpperCase(),
-      allowed_department_ids: Array.isArray(parsed.allowed_department_ids) ? parsed.allowed_department_ids : [],
-      initial_attachment_required: parsed.initial_attachment_required === true,
-      allocation_attachment_requirements: allocationRequirements.length > 0 ? allocationRequirements : defaultAllocationRequirements,
     };
   },
 
-  async sendEmailNotification(userIds: string[], title: string, message: string, link?: string) {
+  async sendEmailNotification(userIds: string[], title: string, message: string, link?: string, meta: Record<string, any> = {}) {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (ids.length === 0) return;
     try {
@@ -123,7 +114,7 @@ export const suratService = {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ user_ids: ids, title, message, link }),
+        body: JSON.stringify({ user_ids: ids, title, message, link, ...meta }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -257,6 +248,15 @@ export const suratService = {
         status: "2",
         keterangan: "",
       }];
+    } else {
+      normalized.request_mode = "barang";
+      delete normalized.requested_project;
+      delete normalized.requested_unit_count;
+      delete normalized.unit_request_sentence;
+      delete normalized.unit_config_snapshot;
+      delete normalized.allocated_project;
+      delete normalized.allocated_units;
+      delete normalized.allocated_unit_count;
     }
     if (Array.isArray(normalized.items)) {
       normalized.items = normalized.items.filter((row: any) =>
@@ -264,6 +264,19 @@ export const suratService = {
       );
     }
     return normalized;
+  },
+
+  isUnitTemplateField(field: TemplateInputField) {
+    return [
+      "unit",
+      "requested_project",
+      "requested_unit_count",
+      "unit_request_sentence",
+      "unit_config_snapshot",
+      "allocated_project",
+      "allocated_units",
+      "allocated_unit_count",
+    ].includes(field.key);
   },
 
   getUnitCode(unit: any) {
@@ -449,12 +462,31 @@ export const suratService = {
     const userIds = signers.map((s) => s.user_id).filter(Boolean);
     if (userIds.length === 0) return {};
 
-    const { data } = await supabase
+    const [{ data }, { data: overrides }] = await Promise.all([
+      supabase
       .from("profiles")
       .select("id, full_name, nik, job_title, email, department_id, office_id")
-      .in("id", userIds);
+        .in("id", userIds),
+      supabase
+        .from("job_title_display_overrides")
+        .select("source_job_title, display_label")
+        .eq("is_active", true),
+    ]);
 
-    return Object.fromEntries((data || []).map((profile: any) => [profile.id, profile]));
+    const overrideMap = new Map(
+      (overrides || []).map((row: any) => [
+        String(row.source_job_title || "").toLowerCase().trim(),
+        String(row.display_label || "").trim(),
+      ])
+    );
+
+    return Object.fromEntries((data || []).map((profile: any) => {
+      const jobTitle = String(profile.job_title || "").trim();
+      return [profile.id, {
+        ...profile,
+        job_title_display: overrideMap.get(jobTitle.toLowerCase()) || jobTitle,
+      }];
+    }));
   },
 
   buildDataSnapshot(context: any, payload: any, signers: any[], formInputData: any, attachments: any[] = []) {
@@ -689,16 +721,45 @@ export const suratService = {
       payload.project_id ? supabase.from("master_projects").select("id, name, code, office_id, entity_id").eq("id", payload.project_id).maybeSingle() : Promise.resolve({ data: null }),
       payload.dept_id ? supabase.from("master_departments").select("id, name, code, dept_index").eq("id", payload.dept_id).maybeSingle() : Promise.resolve({ data: null }),
       payload.entity_id ? supabase.from("master_entities").select("id, name, code").eq("id", payload.entity_id).maybeSingle() : Promise.resolve({ data: null }),
-      payload.penggunaan_id
+      payload.form_usage_id
+        ? supabase
+            .from("form_usages")
+            .select(`
+              *,
+              form_usage_departments(department_id),
+              form_usage_steps(
+                id, step_order, role_name, label, action_type, signer_department_id,
+                form_usage_step_users(user_id)
+              ),
+              form_usage_attachment_requirements(*),
+              master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id, signature_layout)
+            `)
+            .eq("id", payload.form_usage_id)
+            .single()
+        : payload.penggunaan_id
         ? supabase
             .from("master_penggunaan_detail")
-            .select("*, master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id)")
+            .select("*, workflow_allowed_departments(department_id), master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id)")
             .eq("id", payload.penggunaan_id)
             .single()
         : Promise.resolve({ data: null }),
     ]);
 
     if (profileRes.error) throw profileRes.error;
+    if ("error" in usageRes && usageRes.error) throw usageRes.error;
+
+    const rawUsage = usageRes.data as any;
+    const usage = rawUsage
+      ? {
+          ...rawUsage,
+          workflow_allowed_departments: Array.isArray(rawUsage.form_usage_departments)
+            ? rawUsage.form_usage_departments
+            : rawUsage.workflow_allowed_departments || [],
+          request_categories: rawUsage.request_category
+            ? [rawUsage.request_category]
+            : rawUsage.request_categories || [],
+        }
+      : null;
 
     return {
       user,
@@ -707,13 +768,13 @@ export const suratService = {
       project: projectRes.data,
       department: deptRes.data,
       entity: entityRes.data,
-      usage: usageRes.data,
-      form: (usageRes.data as any)?.master_forms ?? null,
+      usage,
+      form: usage?.master_forms ?? null,
       payload,
     };
   },
 
-  async buildFilledTemplateFile(payload: any): Promise<{ publicUrl: string; context: any }> {
+  async buildFilledTemplateFile(payload: any): Promise<{ publicUrl: string; context: any; signaturePositions: SignaturePosition[] }> {
     const context = await this.getTemplateContext(payload);
     const templateLink = context.form?.link_form;
     if (!templateLink) throw new Error("Template Excel belum tersedia untuk matrix ini.");
@@ -745,7 +806,7 @@ export const suratService = {
       throw new Error("Template belum memiliki mapping cell untuk Tempat, Tanggal.");
     }
     schema.forEach((field) => {
-      if (field.key === "requested_unit_count" && inputData.request_mode !== "unit") return;
+      if (inputData.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
       if (field.type === "table") {
         this.writeTableField(workbook, field, inputData[field.key]);
         return;
@@ -758,6 +819,17 @@ export const suratService = {
       const rawValue = systemValue !== undefined ? systemValue : inputData[field.key];
       this.writeWrappedField(sheet, field, rawValue);
     });
+    const signaturePositions = buildDynamicSignatureLayout(
+      workbook,
+      normalizeSignatureLayoutConfig(context.form?.signature_layout),
+      Array.isArray(payload.signature_steps) ? payload.signature_steps : [],
+      {
+        requestPlaceDate: [
+          String(payload.request_place || "").trim(),
+          this.formatDateForDocument(payload.request_date),
+        ].filter(Boolean).join(", "),
+      }
+    );
     const buffer = await workbook.xlsx.writeBuffer();
     const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
     const path = `dokumen/system_${safeNumber}_${Date.now()}.xlsx`;
@@ -767,7 +839,7 @@ export const suratService = {
       file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
       upsert: true,
     });
-    return { publicUrl: uploaded.publicUrl, context };
+    return { publicUrl: uploaded.publicUrl, context, signaturePositions };
   },
 
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
@@ -784,6 +856,19 @@ export const suratService = {
 
       const office  = officeRes.data;
       const isPusat = office?.kedudukan === "Pusat";
+      const requestCategory = payload.form_input_data?.request_category;
+      if (requestCategory === "unit" || payload.form_input_data?.request_mode === "unit") {
+        const context = await this.getTemplateContext(payload);
+        const actorDepartmentId = context.profile?.department_id;
+        const allowedDepartments = Array.isArray(context.usage?.workflow_allowed_departments)
+          ? context.usage.workflow_allowed_departments
+          : [];
+        if (!actorDepartmentId || !allowedDepartments.some(
+          (permission: { department_id?: string }) => permission.department_id === actorDepartmentId
+        )) {
+          throw new Error("Departemen akun Anda tidak diizinkan membuat permohonan Unit pada matrix ini.");
+        }
+      }
 
       // PERUBAHAN UTAMA: tambah p_dept_id agar nomor urut dimulai dari 001 per dept/project
       const { data: nextNumber, error: rpcError } = await supabase.rpc("generate_new_letter_number", {
@@ -814,7 +899,6 @@ export const suratService = {
       const deptCode   = deptRes.data?.code   || "";
       const dIndex     = deptRes.data?.dept_index  || "0";
       const tIndex     = typeRes.data?.type_index  || "0";
-      const requestCategory = payload.form_input_data?.request_category;
       const requestedProjectCode = String(payload.form_input_data?.requested_project?.code || "").trim();
 
       const romawiBulan = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
@@ -869,17 +953,63 @@ export const suratService = {
       const unitConfig = this.getUnitConfigFromForm(configContext.form);
       const isUnitMode = normalizedFormInputData?.request_mode === "unit";
       if (isUnitMode) {
+        const workflowCategories = Array.isArray(configContext.usage?.request_categories)
+          ? configContext.usage.request_categories
+          : [];
+        if (!workflowCategories.includes("unit")) {
+          throw new Error("Matrix yang dipilih tidak mendukung registrasi Unit.");
+        }
+        const actorDepartmentId = configContext.profile?.department_id;
+        const allowedDepartments = Array.isArray(configContext.usage?.workflow_allowed_departments)
+          ? configContext.usage.workflow_allowed_departments
+          : [];
+        if (!actorDepartmentId || !allowedDepartments.some(
+          (permission: { department_id?: string }) => permission.department_id === actorDepartmentId
+        )) {
+          throw new Error("Departemen akun Anda tidak diizinkan membuat permohonan Unit pada matrix ini.");
+        }
         normalizedFormInputData.unit_config_snapshot = unitConfig;
         payload = { ...payload, form_input_data: normalizedFormInputData };
       }
 
-      if (attachmentFiles.length === 0 && (!isUnitMode || unitConfig.initial_attachment_required)) {
-        throw new Error("Minimal satu lampiran wajib diunggah.");
+      const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
+        .filter((requirement: any) => Number(requirement.stage_order) === 0);
+      const initialAttachmentMeta = payload.initial_attachment_meta || {};
+      const configuredInitialKeys = new Set(initialRequirements.map((requirement: any) => requirement.requirement_key));
+      const unconfiguredAttachment = attachmentFiles.find(file => {
+        const key = initialAttachmentMeta[file.name]?.key;
+        return !key || !configuredInitialKeys.has(key);
+      });
+      if (unconfiguredAttachment) {
+        throw new Error(`Lampiran ${unconfiguredAttachment.name} tidak memiliki konfigurasi yang valid.`);
       }
+      initialRequirements.forEach((requirement: any) => {
+        const files = attachmentFiles.filter(file => initialAttachmentMeta[file.name]?.key === requirement.requirement_key);
+        const minimum = requirement.is_required
+          ? Math.max(1, Number(requirement.min_files || 1))
+          : Number(requirement.min_files || 0);
+        const maximum = Math.max(minimum, Number(requirement.max_files || 1));
+        if (files.length < minimum) {
+          throw new Error(`Lampiran pemohon belum lengkap: ${requirement.label || requirement.requirement_key}.`);
+        }
+        if (files.length > maximum) {
+          throw new Error(`Lampiran ${requirement.label || requirement.requirement_key} melebihi batas.`);
+        }
+        files.forEach(file => {
+          const allowedTypes = Array.isArray(requirement.allowed_types) ? requirement.allowed_types : [];
+          if (allowedTypes.length > 0 && file.type && !allowedTypes.includes(file.type)) {
+            throw new Error(`Tipe file ${file.name} tidak diizinkan.`);
+          }
+          if (requirement.max_size_bytes && file.size > Number(requirement.max_size_bytes)) {
+            throw new Error(`Ukuran file ${file.name} melebihi batas.`);
+          }
+        });
+      });
 
-      const generated = file ? null : await this.buildFilledTemplateFile(payload);
-      const context = generated?.context ?? configContext;
       const activeSigners = signers.filter(s => s.user_id);
+      if (activeSigners.length < 2 || activeSigners.length > 8) {
+        throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap.");
+      }
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
       const totalSteps = activeSigners.length;
       const snapshotSigners = activeSigners.map((s, idx) => {
@@ -889,6 +1019,7 @@ export const suratService = {
           full_name: profile.full_name ?? null,
           nik: profile.nik ?? null,
           job_title: profile.job_title ?? null,
+          job_title_display: profile.job_title_display ?? profile.job_title ?? null,
           email: profile.email ?? null,
           role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
           label_jabatan: s.label_jabatan ?? null,
@@ -897,6 +1028,42 @@ export const suratService = {
           is_signed: false,
         };
       });
+      const signatureSteps = snapshotSigners.map(signer => ({
+        step_order: signer.step_order,
+        role_name: signer.role_name,
+        label: signer.label_jabatan || signer.role_name,
+        user_name: signer.full_name || "",
+        job_title: signer.job_title_display || signer.job_title || "",
+      }));
+      payload = { ...payload, signature_steps: signatureSteps };
+
+      if (payload.form_usage_id) {
+        const { data: validation, error: validationError } = await supabase.rpc(
+          "validate_form_usage_for_actor",
+          {
+            p_usage_id: payload.form_usage_id,
+            p_requested_department_id: payload.dept_id || null,
+          }
+        );
+        if (validationError) throw validationError;
+        const configuredSteps = [...(configContext.usage?.form_usage_steps || [])]
+          .sort((a: any, b: any) => a.step_order - b.step_order);
+        if (configuredSteps.length !== activeSigners.length) {
+          throw new Error("Jumlah penandatangan tidak sesuai konfigurasi kegunaan.");
+        }
+        configuredSteps.forEach((step: any, index: number) => {
+          const assignment = activeSigners[index];
+          const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
+          if (assignment.form_usage_step_id !== step.id || !eligibleIds.includes(assignment.user_id)) {
+            throw new Error(`Penandatangan tahap ${step.step_order} tidak sesuai konfigurasi.`);
+          }
+        });
+        payload.policy_validation = validation;
+      }
+
+      const generated = file ? null : await this.buildFilledTemplateFile(payload);
+      const context = generated?.context ?? configContext;
+      const signaturePositions = generated?.signaturePositions || [];
 
       const cleanPayload = {
         ...payload,
@@ -906,7 +1073,20 @@ export const suratService = {
         dept_id:        this.cleanUuid(payload.dept_id),
         letter_type_id: this.cleanUuid(payload.letter_type_id),
         penggunaan_id:  this.cleanUuid(payload.penggunaan_id),
+        form_usage_id:   this.cleanUuid(payload.form_usage_id),
         created_by:     user.id,
+        represented_department_id: payload.policy_validation?.requester_department_id || null,
+        represented_by_admin: payload.policy_validation?.represented_by_admin || null,
+        policy_snapshot: payload.form_usage_id ? {
+          usage_id: payload.form_usage_id,
+          usage_name: configContext.usage?.name || null,
+          form_id: configContext.form?.id || null,
+          request_category: configContext.usage?.request_category || null,
+          requester_department_id: payload.policy_validation?.requester_department_id || null,
+          steps: snapshotSigners,
+          attachment_requirements: configContext.usage?.form_usage_attachment_requirements || [],
+          captured_at: new Date().toISOString(),
+        } : {},
         requester_nik: context.profile?.nik ?? null,
         request_place: payload.request_place ?? null,
         request_date: payload.request_date ?? null,
@@ -941,7 +1121,10 @@ export const suratService = {
       if (suratError) throw suratError;
       if (!surat?.id) throw new Error("Surat gagal dibuat.");
 
-      const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, { stage: "initial" });
+      const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
+        stage: "initial",
+        requirements: payload.initial_attachment_meta || {},
+      });
       if (uploadedAttachments[0]?.file_url) {
         await supabase
           .from("surat_registrasi")
@@ -979,11 +1162,21 @@ export const suratService = {
         is_signed: false,
         available_at: Number(s.step_order || idx + 1) === firstStepOrder ? firstAvailableAt : null,
         requires_unit_allocation: s.requires_unit_allocation === true,
+        form_usage_step_id: this.cleanUuid(s.form_usage_step_id),
+        action_type: s.action_type || (s.requires_unit_allocation ? "unit_allocation" : "approval"),
+        attachment_requirements_snapshot: s.attachment_requirements || [],
+        signature_position_snapshot: signaturePositions.find(position =>
+          position.step_order === Number(s.step_order || idx + 1)
+        ) || {},
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
 
       if (signerPayload.length > 0) {
-        await supabase.from("surat_signatures").insert(signerPayload);
+        const { error: signerInsertError } = await supabase.from("surat_signatures").insert(signerPayload);
+        if (signerInsertError) {
+          await supabase.from("surat_registrasi").delete().eq("id", surat.id);
+          throw signerInsertError;
+        }
         
         // Notifikasi ke step pertama
         const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
@@ -1004,7 +1197,8 @@ export const suratService = {
           firstSigners.map((s: any) => s.user_id),
           "Surat Masuk Baru",
           `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
-          "/surat/inbox"
+          "/surat/inbox",
+          { surat_id: surat.id, event_type: "new_inbox" }
         );
 
         notificationResults.forEach((result) => {
@@ -1035,28 +1229,45 @@ export const suratService = {
     return true;
   },
 
-  async stampApprovalExcel(suratId: string, currentFilePath: string, userName: string, roleName: string, usageId: string, stepOrder: number): Promise<string> {
-    const { data: usageDetail } = await supabase.from("master_penggunaan_detail").select("*").eq("id", usageId).single();
-    if (!usageDetail) return currentFilePath;
+  async stampApprovalExcel(
+    suratId: string,
+    currentFilePath: string,
+    userName: string,
+    roleName: string,
+    usageId: string | null,
+    stepOrder: number,
+    positionSnapshot?: Record<string, any> | null,
+    signerJobTitle: string = ""
+  ): Promise<string> {
+    const { data: usageDetail } = usageId
+      ? await supabase.from("master_penggunaan_detail").select("*").eq("id", usageId).maybeSingle()
+      : { data: null };
 
     const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await fileData.arrayBuffer());
-    const positions = this.resolveStampPositions(usageDetail, roleName, stepOrder);
+    const positions = positionSnapshot?.ttd
+      ? [{
+          ...positionSnapshot,
+          labelJabatan: positionSnapshot.job_title || positionSnapshot.label || positionSnapshot.role_name || roleName,
+          sheet: Number(positionSnapshot.sheet || 1),
+        }]
+      : usageDetail
+        ? this.resolveStampPositions(usageDetail, roleName, stepOrder)
+        : [];
 
     if (positions && positions.length > 0) {
       const now = new Date();
-      workbook.worksheets.forEach(worksheet => {
-        positions.forEach((pos: any) => {
+      positions.forEach((pos: any) => {
+          const worksheet = workbook.worksheets[Math.max(Number(pos.sheet || 1) - 1, 0)] || workbook.worksheets[0];
           const ttdCell = worksheet.getCell(pos.ttd);
           ttdCell.value = `Approved by System\n✅\n${now.toLocaleDateString("id-ID")}\n${now.toLocaleTimeString("id-ID")} WIB`;
           ttdCell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
           const rowNum = parseInt(pos.ttd.match(/\d+/)?.[0] || "35");
           worksheet.getRow(rowNum).height = 65;
           if (pos.nama)    worksheet.getCell(pos.nama).value    = userName.toUpperCase();
-          if (pos.jabatan) worksheet.getCell(pos.jabatan).value = pos.labelJabatan || "";
-        });
+          if (pos.jabatan) worksheet.getCell(pos.jabatan).value = signerJobTitle || pos.signer_job_title || pos.jobTitle || pos.labelJabatan || "";
       });
       const buffer  = await workbook.xlsx.writeBuffer();
       const newPath = `dokumen/signed_${suratId}_step${stepOrder}_${Date.now()}.xlsx`;
@@ -1092,7 +1303,7 @@ export const suratService = {
     schema.forEach((field) => {
       const source = field.default_source || field.defaultSource || "manual";
       if (source !== "manual") return;
-      if (field.key === "requested_unit_count" && formInputData?.request_mode !== "unit") return;
+      if (formInputData?.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
       if (field.type === "table") {
         this.writeTableField(workbook, field, formInputData?.[field.key]);
         return;
@@ -1119,48 +1330,77 @@ export const suratService = {
     currentStep: number,
     userName: string,
     note: string = "",
-    options: { unitAllocation?: { project?: any; units: any[]; attachments?: Array<{ key: string; label: string; file: File }> } } = {}
+    options: {
+      unitAllocation?: { project?: any; units: any[] };
+      approvalAttachments?: Array<{ key: string; label: string; file: File }>;
+    } = {}
   ): Promise<{ success: boolean }> {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: suratFresh, error: suratErr } = await supabase
       .from("surat_registrasi")
-      .select("current_step, file_path, penggunaan_id, form_input_data, data_snapshot")
+      .select("current_step, file_path, penggunaan_id, form_usage_id, form_input_data, data_snapshot")
       .eq("id", suratId)
       .single();
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
     if (suratFresh.current_step !== currentStep) throw new Error("Dokumen sudah diproses. Silakan refresh.");
 
-    const { data: sigInfo } = await supabase.from("surat_signatures").select("role_name, requires_unit_allocation").eq("id", signatureId).single();
+    const { data: sigInfo } = await supabase
+      .from("surat_signatures")
+      .select("role_name, requires_unit_allocation, action_type, signature_position_snapshot, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
+      .eq("id", signatureId)
+      .single();
     if (!sigInfo) throw new Error("Data tanda tangan tidak valid.");
+    if ((sigInfo as any).verification_required && (sigInfo as any).verification_status !== "verified") {
+      throw new Error("Data pengajuan belum diverifikasi tim pengecek.");
+    }
+    const signerJobTitle = String(
+      (sigInfo as any).signer_snapshot?.job_title_display ||
+      (sigInfo as any).signer_snapshot?.job_title ||
+      ""
+    ).trim();
 
     let workingFilePath = suratFresh.file_path;
     let formInputData = suratFresh.form_input_data ?? {};
     let uploadedAllocationAttachments: any[] = [];
-    if (sigInfo.requires_unit_allocation) {
+    const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
+      ? sigInfo.attachment_requirements_snapshot
+      : [];
+    const approvalAttachments = options.approvalAttachments || [];
+    const isPreparedByVerifier = (sigInfo as any).verification_required && (sigInfo as any).verification_status === "verified";
+    if (!isPreparedByVerifier) {
+      approvalRequirements.forEach((requirement: any) => {
+        const files = approvalAttachments.filter(item => item.key === requirement.requirement_key);
+        const minimum = requirement.is_required ? Math.max(1, Number(requirement.min_files || 1)) : Number(requirement.min_files || 0);
+        if (files.length < minimum) {
+          throw new Error(`Lampiran approval belum lengkap: ${requirement.label || requirement.requirement_key}.`);
+        }
+        if (files.length > Number(requirement.max_files || 1)) {
+          throw new Error(`Lampiran ${requirement.label || requirement.requirement_key} melebihi batas.`);
+        }
+        files.forEach(item => {
+          const allowedTypes = Array.isArray(requirement.allowed_types) ? requirement.allowed_types : [];
+          if (allowedTypes.length > 0 && item.file.type && !allowedTypes.includes(item.file.type)) {
+            throw new Error(`Tipe file ${item.file.name} tidak diizinkan.`);
+          }
+          if (requirement.max_size_bytes && item.file.size > Number(requirement.max_size_bytes)) {
+            throw new Error(`Ukuran file ${item.file.name} melebihi batas.`);
+          }
+        });
+      });
+    }
+    if ((sigInfo.requires_unit_allocation || sigInfo.action_type === "unit_allocation") && !isPreparedByVerifier) {
       const units = options.unitAllocation?.units ?? [];
-      const project = options.unitAllocation?.project;
-      const allocationAttachments = options.unitAllocation?.attachments ?? [];
+      const requestedProject = formInputData?.requested_project || {};
+      const project = requestedProject?.code ? requestedProject : options.unitAllocation?.project;
       const requestedCount = Number(formInputData?.requested_unit_count || 0);
       if (formInputData?.request_mode !== "unit") throw new Error("Dokumen ini bukan pengajuan unit.");
       if (!Number.isFinite(requestedCount) || requestedCount < 1) throw new Error("Jumlah unit pengajuan tidak valid.");
       if (!project?.code) throw new Error("Project unit wajib dipilih.");
-      if (!Array.isArray(units) || units.length < requestedCount) {
-        throw new Error(`Unit terpilih kurang. Minimal ${requestedCount} unit.`);
+      if (options.unitAllocation?.project?.code && requestedProject?.code && options.unitAllocation.project.code !== requestedProject.code) {
+        throw new Error("Proyek unit tidak boleh diubah. Buat pengajuan baru jika proyek salah.");
       }
-
-      const { data: usageDetail } = await supabase
-        .from("master_penggunaan_detail")
-        .select("master_forms!fk_master_forms(unit_config)")
-        .eq("id", suratFresh.penggunaan_id)
-        .single();
-      const unitConfig = this.getUnitConfigFromForm((usageDetail as any)?.master_forms);
-      const requirements = (unitConfig.allocation_attachment_requirements || [])
-        .filter((requirement: any) => String(requirement.key || "").toLowerCase() !== "kode_produksi");
-      const requiredRequirements = requirements.filter((requirement: any) => requirement.required !== false);
-      const attachedKeys = new Set(allocationAttachments.filter((item) => item.file).map((item) => item.key));
-      const missingRequirements = requiredRequirements.filter((requirement: any) => !attachedKeys.has(requirement.key));
-      if (missingRequirements.length > 0) {
-        throw new Error(`Lampiran unit belum lengkap: ${missingRequirements.map((item: any) => item.label || item.key).join(", ")}.`);
+      if (!Array.isArray(units) || units.length < 1) {
+        throw new Error("Pilih minimal 1 unit.");
       }
 
       formInputData = {
@@ -1183,7 +1423,6 @@ export const suratService = {
       uploadedAllocationAttachments = await this.uploadAttachmentFiles(
         suratId,
         [
-          ...allocationAttachments.map((item) => item.file).filter(Boolean),
           unitRecapAttachment,
           productionCodeAttachment,
         ],
@@ -1192,10 +1431,6 @@ export const suratService = {
           stage: "unit_allocation",
           signature_id: signatureId,
           requirements: {
-            ...Object.fromEntries(allocationAttachments.map((item) => [
-              item.file.name,
-              { key: item.key, label: item.label },
-            ])),
             [unitRecapAttachment.name]: {
               key: "rekap_adendum_unit",
               label: "Rekap Adendum Unit",
@@ -1234,9 +1469,34 @@ export const suratService = {
       }
     }
 
+    if (approvalAttachments.length > 0) {
+      await this.uploadAttachmentFiles(
+        suratId,
+        approvalAttachments.map(item => item.file),
+        user?.id,
+        {
+          stage: "approval",
+          signature_id: signatureId,
+          requirements: Object.fromEntries(approvalAttachments.map(item => [
+            item.file.name,
+            { key: item.key, label: item.label },
+          ])),
+        }
+      );
+    }
+
     let finalUrl = workingFilePath ?? "";
-    if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
-      finalUrl = await this.stampApprovalExcel(suratId, workingFilePath, userName, sigInfo.role_name, suratFresh.penggunaan_id, currentStep);
+    if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx")) {
+      finalUrl = await this.stampApprovalExcel(
+        suratId,
+        workingFilePath,
+        userName,
+        sigInfo.role_name,
+        suratFresh.penggunaan_id,
+        currentStep,
+        sigInfo.signature_position_snapshot,
+        signerJobTitle
+      );
     }
 
     const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_approve_surat_v2", {
@@ -1270,7 +1530,8 @@ export const suratService = {
           [updatedSurat.created_by],
           "Surat Ditandatangani",
           `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
-          "/surat/monitoring"
+          "/surat/monitoring",
+          { surat_id: suratId, event_type: "signed" }
         );
       }
 
@@ -1302,7 +1563,8 @@ export const suratService = {
             nextSigners.map((ns: any) => ns.user_id),
             "Surat Masuk Baru",
             `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
-            "/surat/inbox"
+            "/surat/inbox",
+            { surat_id: suratId, event_type: "next_signer" }
           );
         }
       }
@@ -1334,27 +1596,218 @@ export const suratService = {
          [suratInfo.created_by],
          "Surat Ditolak",
          `Surat "${suratInfo.judul_surat}" telah ditolak. Catatan: ${note}`,
-         "/surat/monitoring"
+         "/surat/monitoring",
+         { surat_id: suratId, event_type: "rejected" }
        );
     }
 
     return true;
   },
 
+  async verifySignature(
+    signatureId: string,
+    note: string = "",
+    options: {
+      suratId?: string;
+      unitAllocation?: { project?: any; units: any[] };
+      approvalAttachments?: Array<{ key: string; label: string; file: File }>;
+    } = {}
+  ) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: sigInfo, error: sigError } = await supabase
+      .from("surat_signatures")
+      .select("surat_id, requires_unit_allocation, action_type, attachment_requirements_snapshot")
+      .eq("id", signatureId)
+      .single();
+    if (sigError || !sigInfo) throw new Error("Data verifikasi tidak ditemukan.");
+
+    const suratId = options.suratId || sigInfo.surat_id;
+    const { data: suratFresh, error: suratErr } = await supabase
+      .from("surat_registrasi")
+      .select("file_path, penggunaan_id, form_input_data, data_snapshot")
+      .eq("id", suratId)
+      .single();
+    if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
+
+    let formInputData = suratFresh.form_input_data ?? {};
+    let workingFilePath = suratFresh.file_path;
+    const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
+      ? sigInfo.attachment_requirements_snapshot
+      : [];
+    const approvalAttachments = options.approvalAttachments || [];
+
+    approvalRequirements.forEach((requirement: any) => {
+      const files = approvalAttachments.filter(item => item.key === requirement.requirement_key);
+      const minimum = requirement.is_required ? Math.max(1, Number(requirement.min_files || 1)) : Number(requirement.min_files || 0);
+      if (files.length < minimum) {
+        throw new Error(`Lampiran approval belum lengkap: ${requirement.label || requirement.requirement_key}.`);
+      }
+      if (files.length > Number(requirement.max_files || 1)) {
+        throw new Error(`Lampiran ${requirement.label || requirement.requirement_key} melebihi batas.`);
+      }
+      files.forEach(item => {
+        const allowedTypes = Array.isArray(requirement.allowed_types) ? requirement.allowed_types : [];
+        if (allowedTypes.length > 0 && item.file.type && !allowedTypes.includes(item.file.type)) {
+          throw new Error(`Tipe file ${item.file.name} tidak diizinkan.`);
+        }
+        if (requirement.max_size_bytes && item.file.size > Number(requirement.max_size_bytes)) {
+          throw new Error(`Ukuran file ${item.file.name} melebihi batas.`);
+        }
+      });
+    });
+
+    if (approvalAttachments.length > 0) {
+      await this.uploadAttachmentFiles(
+        suratId,
+        approvalAttachments.map(item => item.file),
+        user?.id,
+        {
+          stage: "approval",
+          signature_id: signatureId,
+          requirements: Object.fromEntries(approvalAttachments.map(item => [
+            item.file.name,
+            { key: item.key, label: item.label },
+          ])),
+        }
+      );
+    }
+
+    if (sigInfo.requires_unit_allocation || sigInfo.action_type === "unit_allocation") {
+      const units = options.unitAllocation?.units ?? [];
+      const requestedProject = formInputData?.requested_project || {};
+      const project = requestedProject?.code ? requestedProject : options.unitAllocation?.project;
+      if (formInputData?.request_mode !== "unit") throw new Error("Dokumen ini bukan pengajuan unit.");
+      if (!project?.code) throw new Error("Project unit wajib dipilih.");
+      if (options.unitAllocation?.project?.code && requestedProject?.code && options.unitAllocation.project.code !== requestedProject.code) {
+        throw new Error("Proyek unit tidak boleh diubah. Buat pengajuan baru jika proyek salah.");
+      }
+      if (!Array.isArray(units) || units.length < 1) throw new Error("Pilih minimal 1 unit.");
+
+      formInputData = {
+        ...formInputData,
+        allocated_project: project,
+        allocated_units: units,
+        allocated_unit_count: units.length,
+        allocated_by_signature_id: signatureId,
+        allocated_at: new Date().toISOString(),
+      };
+
+      const unitRecapAttachment = this.createUnitRecapAttachment(project, units);
+      const productionCodeAttachment = this.createProductionCodeAttachment(project, units);
+      await this.uploadAttachmentFiles(
+        suratId,
+        [unitRecapAttachment, productionCodeAttachment],
+        user?.id,
+        {
+          stage: "unit_allocation",
+          signature_id: signatureId,
+          requirements: {
+            [unitRecapAttachment.name]: {
+              key: "rekap_adendum_unit",
+              label: "Rekap Adendum Unit",
+            },
+            [productionCodeAttachment.name]: {
+              key: "kode_produksi_unit",
+              label: "Kode Produksi Unit",
+            },
+          },
+        }
+      );
+
+      if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
+        workingFilePath = await this.applyFormInputDataToExcel(workingFilePath, suratFresh.penggunaan_id, formInputData);
+      }
+    }
+
+    const { data: allAttachments } = await supabase
+      .from("surat_attachments")
+      .select("*")
+      .eq("surat_id", suratId)
+      .order("created_at", { ascending: true });
+
+    const { error: updateError } = await supabase
+      .from("surat_registrasi")
+      .update({
+        file_path: workingFilePath,
+        form_input_data: formInputData,
+        data_snapshot: {
+          ...(suratFresh.data_snapshot || {}),
+          input: formInputData,
+          requested_project: formInputData?.requested_project ?? null,
+          allocated_project: formInputData?.allocated_project ?? null,
+          requested_unit_count: formInputData?.requested_unit_count ?? null,
+          allocated_units: formInputData?.allocated_units ?? [],
+          allocated_unit_count: formInputData?.allocated_unit_count ?? null,
+          attachments: allAttachments || [],
+        },
+      })
+      .eq("id", suratId);
+    if (updateError) throw updateError;
+
+    const { data, error } = await supabase.rpc("verify_surat_signature", {
+      p_sig_id: signatureId,
+      p_note: note,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Gagal memverifikasi data.");
+    return true;
+  },
+
+  async requestVerificationRevision(signatureId: string, note: string) {
+    const { data, error } = await supabase.rpc("request_surat_signature_verification_revision", {
+      p_sig_id: signatureId,
+      p_note: note,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Gagal mengembalikan ke tim pengecek.");
+    return true;
+  },
+
   async getMyInbox(userId: string) {
-    const { data, error } = await supabase
-      .from("surat_signatures").select(`
-        id, role_name, step_order, is_signed, surat_id, requires_unit_allocation,
+    const selectQuery = `
+        id, role_name, label_jabatan, step_order, is_signed, surat_id, user_id, requires_unit_allocation, action_type,
+        attachment_requirements_snapshot, signature_position_snapshot, available_at, signer_snapshot,
+        verification_required, verification_status, verified_at, verified_by, verification_note, verifier_snapshot,
         surat_registrasi!inner (
           *,
-          surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
+          surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id ),
+          surat_signatures (
+            id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan,
+            available_at, signer_snapshot, verification_required, verification_status, verified_at, verified_by, verification_note, verifier_snapshot,
+            profiles:user_id ( full_name, job_title )
+          )
         )
+      `;
+    const [signerRes, verifierRes] = await Promise.all([
+      supabase
+      .from("surat_signatures").select(`
+        ${selectQuery}
       `)
-      .eq("user_id", userId).eq("is_signed", false);
-    if (error) return [];
-    return data.map((sig: any) => {
+      .eq("user_id", userId).eq("is_signed", false),
+      supabase
+        .from("surat_signatures")
+        .select(selectQuery)
+        .eq("is_signed", false)
+        .eq("verification_required", true)
+        .eq("verification_status", "pending")
+        .contains("verifier_snapshot", [{ user_id: userId }]),
+    ]);
+    if (signerRes.error) throw signerRes.error;
+    if (verifierRes.error) throw verifierRes.error;
+
+    const rows = [
+      ...((signerRes.data || []) as any[]).map((item) => ({ ...item, task_type: "approval" })),
+      ...((verifierRes.data || []) as any[]).map((item) => ({ ...item, task_type: "verification" })),
+    ];
+    const seen = new Set<string>();
+    return rows.map((sig: any) => {
       const surat = Array.isArray(sig.surat_registrasi) ? sig.surat_registrasi[0] : sig.surat_registrasi;
       if (!surat || Number(sig.step_order) !== Number(surat.current_step)) return null;
+      const key = `${sig.task_type}:${sig.id}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      surat.surat_signatures = [...(surat.surat_signatures || [])]
+        .sort((a: any, b: any) => Number(a.step_order) - Number(b.step_order));
       return { ...sig, surat_registrasi: surat };
     }).filter(Boolean);
   },

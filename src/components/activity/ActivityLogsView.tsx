@@ -48,7 +48,7 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
     master_form_presets: 'Preset form',
     master_penggunaan_detail: 'Detail penggunaan',
     master_projects: 'Proyek',
-    department_kpi_configs: 'Konfigurasi KPI',
+    department_kpi_configs: 'Konfigurasi SLA',
     external_data_sources: 'Sumber data eksternal',
     'auth.users': 'Akun login',
   };

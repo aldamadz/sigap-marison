@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { FileSpreadsheet, GitMerge, Hash, Timer } from "lucide-react";
+import { BriefcaseBusiness, FileSpreadsheet, GitMerge, Hash, Mail, Route, Timer } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -18,9 +18,15 @@ const configurationOptions = [
   },
   {
     value: "/admin/configuration/workflows",
-    label: "Alur Persetujuan",
-    description: "Urutan penandatangan dan posisi tanda tangan.",
+    label: "Dokumentasi Matrix Lama",
+    description: "Referensi read-only untuk menduplikasi konfigurasi lama ke Kegunaan Form.",
     icon: GitMerge,
+  },
+  {
+    value: "/admin/configuration/form-usages",
+    label: "Kegunaan Form",
+    description: "Kategori, departemen, 2-8 signer, dan lampiran setiap penggunaan form.",
+    icon: Route,
   },
   {
     value: "/admin/configuration/kpi",
@@ -33,6 +39,18 @@ const configurationOptions = [
     label: "Penomoran Surat",
     description: "Counter awal per tahun, departemen pusat, atau proyek cabang.",
     icon: Hash,
+  },
+  {
+    value: "/admin/configuration/job-title-labels",
+    label: "Label Jabatan",
+    description: "Alias jabatan yang ditampilkan pada dokumen tanda tangan.",
+    icon: BriefcaseBusiness,
+  },
+  {
+    value: "/admin/configuration/email",
+    label: "Email Notification",
+    description: "Penerima email, privasi, link aman, dan attachment.",
+    icon: Mail,
   },
 ];
 

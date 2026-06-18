@@ -12,9 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2, Loader2, Building2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 export default function DepartmentManagementPage() {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,7 +109,14 @@ export default function DepartmentManagementPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus departemen ini dari master?")) return;
+    const department = departments.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Departemen?",
+      description: `Departemen ${department?.name || "ini"} akan dihapus dari master. Jika masih dipakai data lain, database akan menolak penghapusan.`,
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const { error } = await supabase

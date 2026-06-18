@@ -82,7 +82,7 @@ async function filterByOffice(source: User[], officeId: string): Promise<User[]>
 
   try {
     // Ambil struktur kantor (Kantor yang dipilih + semua turunannya)
-    const relatedOffices = await getOfficeWithDescendants(numericId);
+    const relatedOffices = await getOfficeWithDescendants(String(numericId));
     
     // Kumpulkan semua ID kantor yang valid dalam Set agar pencarian O(1)
     const validOfficeIds = new Set<string>([

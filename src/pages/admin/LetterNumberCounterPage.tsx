@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 type ScopeType = "pusat" | "cabang";
 
@@ -28,6 +29,7 @@ const emptyForm = {
 
 export default function LetterNumberCounterPage() {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -154,7 +156,13 @@ export default function LetterNumberCounterPage() {
   };
 
   const deactivateConfig = async (id: string) => {
-    if (!window.confirm("Nonaktifkan konfigurasi counter ini?")) return;
+    const confirmed = await appDialog.confirm({
+      title: "Nonaktifkan Counter?",
+      description: "Konfigurasi counter ini tidak akan dipakai lagi untuk nomor surat berikutnya.",
+      confirmText: "Nonaktifkan",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       const { error } = await supabase
         .from("letter_number_counter_configs")

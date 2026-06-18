@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,13 +10,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch";
 import {
   Hash, ArrowDown, Loader2, Briefcase,
-  Check, ChevronDown, Paperclip, Copy, RefreshCcw, ChevronRight, Layers,
+  Check, ChevronDown, Copy, RefreshCcw, ChevronRight, Layers,
   ShieldCheck, AlertTriangle, Archive, Home, X, Plus
 } from "lucide-react";
 import { suratService } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 interface SuratFormProps {
   onSuccess: (noSurat: string, judul: string) => void;
@@ -25,14 +26,136 @@ interface SuratFormProps {
   setJudulForDisplay: (val: string) => void;
 }
 
+type MasterRecord = {
+  id: string;
+  full_name?: string;
+  name?: string;
+  code?: string;
+  kedudukan?: string;
+  dept_index?: number;
+  office_id?: string;
+  entity_id?: string;
+  branch?: { name?: string } | null;
+};
+
+type MasterData = {
+  entities: MasterRecord[];
+  depts: MasterRecord[];
+  offices: MasterRecord[];
+  types: MasterRecord[];
+  users: MasterRecord[];
+  projects: MasterRecord[];
+};
+
+type UsageDetailRecord = {
+  id: string;
+  name?: string;
+  form_id?: string;
+  request_category?: "asset" | "unit" | "non_unit";
+  scope_type?: "all" | "pusat" | "cabang";
+  is_cabang?: boolean;
+  request_categories?: Array<"asset" | "unit" | "non_unit">;
+  workflow_allowed_departments?: Array<{ department_id: string }>;
+  form_usage_steps?: Array<{
+    id: string;
+    step_order: number;
+    role_name: string;
+    label: string;
+    action_type?: "approval" | "unit_allocation";
+    signer_department_id?: string | null;
+    form_usage_step_users?: Array<{ user_id: string }>;
+    form_usage_step_verifiers?: Array<{ user_id: string }>;
+  }>;
+  form_usage_attachment_requirements?: Array<{
+    id: string;
+    stage_order: number;
+    requirement_key: string;
+    label: string;
+    is_required: boolean;
+    allow_multiple: boolean;
+    min_files: number;
+    max_files: number;
+    allowed_types?: string[];
+    max_size_bytes?: number | null;
+  }>;
+  ttd_config?: unknown;
+  master_forms?: {
+    id?: string;
+    nama_form?: string;
+    nomor_form?: string;
+    link_form?: string;
+    department_id?: string;
+    input_schema?: unknown;
+    unit_config?: unknown;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type TemplateField = {
+  key: string;
+  label?: string;
+  placeholder?: string;
+  type?: string;
+  required?: boolean;
+  default_source?: string;
+  defaultSource?: string;
+  cell?: string;
+  merge_range?: string;
+  mergeRange?: string;
+  multiple?: boolean;
+  is_multiple?: boolean;
+  external_source_key?: string;
+  externalSourceKey?: string;
+  external_dependency_key?: string;
+  externalDependencyKey?: string;
+  value_key?: string;
+  table_config?: {
+    columns?: Array<{
+      key: string;
+      label?: string;
+      type?: string;
+      required?: boolean;
+    }>;
+  };
+};
+
+type RequestCategory = "asset" | "unit" | "non_unit";
+type TableRow = Record<string, unknown>;
+type ExternalOption = { value: string; label: string; raw?: unknown };
+type ProjectRaw = { id: string; code?: string; name?: string; branch?: { name?: string } | null };
+type ProjectOption = { value: string; label: string; raw?: ProjectRaw };
+type FormFieldValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | { value?: string; label?: string; code?: string; name?: string; branch?: { name?: string } | null }
+  | Array<{ value?: string; label?: string } | string>
+  | Record<string, unknown>;
+type FormInputData = Record<string, FormFieldValue>;
+type SignerAssignment = {
+  step_order: number;
+  role_name: string;
+  label_jabatan: string;
+  user_id?: string | null;
+  form_usage_step_id?: string;
+  action_type?: "approval" | "unit_allocation";
+  eligible_user_ids?: string[];
+  verifier_user_ids?: string[];
+  attachment_requirements?: UsageDetailRecord["form_usage_attachment_requirements"];
+};
+
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
   const { toast } = useToast();
-  const lampiranInputRef = useRef<HTMLInputElement>(null);
+  const appDialog = useAppDialog();
 
   // ── STATE ──────────────────────────────────────────────────────────────────
-  const [master, setMaster] = useState<any>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
-  const [usageDetails, setUsageDetails]           = useState<any[]>([]);
-  const [selectedUsage, setSelectedUsage]         = useState<any>(null);
+  const [master, setMaster] = useState<MasterData>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
+  const [usageDetails, setUsageDetails]           = useState<UsageDetailRecord[]>([]);
+  const [selectedUsage, setSelectedUsage]         = useState<UsageDetailRecord | null>(null);
+  const [selectedFormId, setSelectedFormId]       = useState("");
   const [generatedNoSurat, setGeneratedNoSurat]   = useState<string | null>(null);
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
@@ -40,25 +163,39 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
   const [lampiranFiles, setLampiranFiles]         = useState<File[]>([]);
-  const [externalOptions, setExternalOptions]     = useState<Record<string, Array<{ value: string; label: string; raw?: any }>>>({});
+  const [initialAttachmentFiles, setInitialAttachmentFiles] = useState<Record<string, File[]>>({});
+  const [externalOptions, setExternalOptions]     = useState<Record<string, ExternalOption[]>>({});
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
-  const [externalProjects, setExternalProjects]   = useState<Array<{ value: string; label: string; raw?: any }>>([]);
+  const [externalProjects, setExternalProjects]   = useState<ProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading]     = useState(false);
   const [projectsError, setProjectsError]         = useState<string | null>(null);
+  const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
     office_id: "", project_id: "", judul_surat: "",
     penggunaan_id: "", is_aset: false,
+    form_usage_id: "",
     request_place: "", request_date: new Date().toISOString().slice(0, 10),
-    form_input_data: {} as Record<string, any>
+    form_input_data: {} as FormInputData
   });
-  const [signers, setSigners] = useState<any[]>([]);
+  const [signers, setSigners] = useState<SignerAssignment[]>([]);
+
+  const getFormFieldValue = (key: string) => formData.form_input_data[key];
+  const getScalarFieldValue = (value: FormFieldValue) => {
+    if (typeof value === "string" || typeof value === "number") return String(value);
+    if (value && typeof value === "object" && !Array.isArray(value) && "value" in value) {
+      const candidate = (value as { value?: unknown }).value;
+      return typeof candidate === "string" || typeof candidate === "number" ? String(candidate) : "";
+    }
+    return "";
+  };
+  const getDisplayFieldValue = (key: string) => getScalarFieldValue(getFormFieldValue(key));
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
-  const normalizeRoleName = (raw: any, index: number, total: number): "membuat" | "memeriksa" | "menyetujui" => {
+  const normalizeRoleName = (raw: unknown, index: number, total: number): "membuat" | "memeriksa" | "menyetujui" => {
     const v = String(raw ?? "").toLowerCase().trim();
-    if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as any;
+    if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as "membuat" | "memeriksa" | "menyetujui";
     if (v.includes("setuju") || v.includes("approve") || v.includes("approval") || v.includes("otoris") || v.includes("final")) return "menyetujui";
     if (v.includes("periksa") || v.includes("review") || v.includes("verifikasi") || v.includes("cek") || v.includes("paraf")) return "memeriksa";
     if (v.includes("buat") || v.includes("draft") || v.includes("pemohon") || v.includes("request")) return "membuat";
@@ -67,15 +204,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return "memeriksa";
   };
 
-  const getFullRoles = (item: any) => {
+  const getFullRoles = (item: UsageDetailRecord) => {
     if (!item?.ttd_config) return [];
     try {
       const config = typeof item.ttd_config === "string" ? JSON.parse(item.ttd_config) : item.ttd_config;
-      return Array.isArray(config) ? config.map((c: any) => c.labelJabatan || c.jabatan || c.roleName || c.role_name) : [];
+      return Array.isArray(config) ? config.map((c: { labelJabatan?: string; jabatan?: string; roleName?: string; role_name?: string }) => c.labelJabatan || c.jabatan || c.roleName || c.role_name) : [];
     } catch { return []; }
   };
 
-  const getInputSchema = (item: any) => {
+  const getInputSchema = (item: UsageDetailRecord) => {
     const raw = item?.master_forms?.input_schema;
     if (Array.isArray(raw)) return raw;
     if (typeof raw === "string") {
@@ -89,112 +226,154 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return [];
   };
 
-  const getManualInputFields = (item: any) =>
-    getInputSchema(item).filter((field: any) => {
+  const getManualInputFields = (item: UsageDetailRecord) =>
+    getInputSchema(item).filter((field: TemplateField) => {
       const source = field.default_source || field.defaultSource || "manual";
       return source === "manual";
     });
 
-  const getExternalInputFields = (item: any) =>
-    getManualInputFields(item).filter((field: any) => field.type === "external_select");
+  const getExternalInputFields = (item: UsageDetailRecord) =>
+    getManualInputFields(item).filter((field: TemplateField) => field.type === "external_select");
 
-  const isMultiSelectField = (field: any) =>
+  const isMultiSelectField = (field: TemplateField) =>
     field.multiple === true || field.is_multiple === true || field.key === "unit";
 
-  const hasUnitRequestFields = (item: any) => {
-    return getUnitConfig(item).enabled;
+  const isUnitField = (field: TemplateField) =>
+    [
+      "unit",
+      "requested_project",
+      "requested_unit_count",
+      "unit_request_sentence",
+      "unit_config_snapshot",
+      "allocated_project",
+      "allocated_units",
+      "allocated_unit_count",
+    ].includes(field.key);
+
+  const getWorkflowCategories = (item: UsageDetailRecord | null | undefined): RequestCategory[] => {
+    if (item?.request_category) return [item.request_category];
+    const categories = Array.isArray(item?.request_categories) ? item.request_categories : [];
+    return categories.length > 0 ? categories : ["asset", "non_unit"];
   };
 
-  const getUnitConfig = (item: any) => suratService.getUnitConfigFromForm(item?.master_forms);
+  const hasUnitRequestFields = (item: UsageDetailRecord) =>
+    getWorkflowCategories(item).includes("unit");
 
-  const canCurrentDepartmentRequestUnit = (item: any) => {
-    if (!hasUnitRequestFields(item)) return false;
-    const config = getUnitConfig(item);
-    if (!config.enabled) return false;
-    if (config.allowed_department_ids.length === 0) return true;
-    return config.allowed_department_ids.includes(formData.dept_id);
+  const canDepartmentRequestUnit = (item: UsageDetailRecord, deptId: string) => {
+    if (!deptId) return false;
+    const allowedDepartments = Array.isArray(item.workflow_allowed_departments)
+      ? item.workflow_allowed_departments
+      : [];
+    if (!item.form_usage_steps && !hasUnitRequestFields(item)) return true;
+    return allowedDepartments.some(permission => permission.department_id === deptId);
   };
+
+  const canCurrentDepartmentRequestUnit = (item: UsageDetailRecord) =>
+    canDepartmentRequestUnit(item, requesterDepartmentId);
 
   const shouldRequireInitialAttachment = () => {
-    if (!selectedUsage || !isUnitMode) return true;
-    return getUnitConfig(selectedUsage).initial_attachment_required;
+    const initialRules = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
+    return initialRules.some(rule => rule.is_required && rule.min_files > 0);
   };
 
-  const getRequestMode = () =>
-    formData.form_input_data.request_mode === "unit" ? "unit" : "barang";
+  const getInitialAttachmentRequirements = () =>
+    selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
 
-  const isUnitMode = getRequestMode() === "unit";
-  const getRequestCategory = () =>
-    formData.form_input_data.request_category === "asset" || formData.form_input_data.request_category === "unit"
-      ? formData.form_input_data.request_category
-      : "non_unit";
+  const getMissingInitialAttachmentLabels = () =>
+    getInitialAttachmentRequirements()
+      .filter(rule => {
+        const minimum = rule.is_required ? Math.max(1, Number(rule.min_files || 1)) : Number(rule.min_files || 0);
+        return (initialAttachmentFiles[rule.requirement_key]?.length || 0) < minimum;
+      })
+      .map(rule => rule.label || rule.requirement_key);
 
-  const setRequestCategory = (category: "asset" | "unit" | "non_unit") => {
+  const getRequestCategory = (): RequestCategory | null => {
+    const category = formData.form_input_data.request_category;
+    return category === "asset" || category === "unit" || category === "non_unit"
+      ? category
+      : null;
+  };
+
+  const getRequestMode = () => getRequestCategory() === "unit" ? "unit" : "barang";
+  const isUnitMode = getRequestCategory() === "unit";
+
+  const clearUnitInput = (inputData: Record<string, unknown>) => {
+    const nextInput = { ...inputData };
+    delete nextInput.requested_project;
+    delete nextInput.requested_unit_count;
+    delete nextInput.unit_request_sentence;
+    delete nextInput.unit_config_snapshot;
+    return nextInput;
+  };
+
+  const setRequestCategory = (category: RequestCategory) => {
+    if (category === "unit" && !canRequesterChooseUnit) {
+      toast({
+        variant: "destructive",
+        title: "Unit Tidak Diizinkan",
+        description: requesterDepartmentId
+          ? "Belum ada matrix Unit yang mengizinkan departemen akun Anda pada scope kantor ini."
+          : "Departemen akun Anda belum ditentukan.",
+      });
+      return;
+    }
     setFormData(prev => {
-      const nextInput = {
-        ...prev.form_input_data,
-        request_category: category,
-        request_mode: category === "unit" ? "unit" : "barang",
-      };
-      if (category === "unit") {
-        delete nextInput.items;
-      } else {
-        delete nextInput.requested_project;
-        delete nextInput.requested_unit_count;
-        delete nextInput.unit_request_sentence;
-      }
+      const nextInput = category === "unit"
+        ? {
+            ...prev.form_input_data,
+            request_category: category,
+            request_mode: "unit",
+          }
+        : clearUnitInput({
+            ...prev.form_input_data,
+            request_category: category,
+            request_mode: "barang",
+          });
       return {
         ...prev,
         is_aset: category === "asset",
         form_input_data: nextInput,
       };
     });
-  };
-
-  const setRequestMode = (mode: "barang" | "unit") => {
-    if (mode === "unit" && !canCurrentDepartmentRequestUnit(selectedUsage)) {
-      toast({
-        variant: "destructive",
-        title: "Mode Unit Tidak Tersedia",
-        description: "Departemen ini belum diizinkan mengajukan unit pada template ini.",
-      });
-      return;
-    }
-    setFormData(prev => {
-      const nextInput = {
-        ...prev.form_input_data,
-        request_mode: mode,
-        request_category: mode === "unit" ? "unit" : prev.is_aset ? "asset" : "non_unit",
-      };
-      if (mode === "unit") {
+    if (category === "unit") {
+      setFormData(prev => {
+        const nextInput = { ...prev.form_input_data };
         delete nextInput.items;
-      } else {
-        delete nextInput.requested_project;
-        delete nextInput.requested_unit_count;
-        delete nextInput.unit_request_sentence;
-      }
-      return { ...prev, form_input_data: nextInput };
-    });
+        return { ...prev, form_input_data: nextInput };
+      });
+    }
+    setSelectedUsage(null);
+    setSelectedFormId("");
+    setSigners([]);
+    setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
   };
 
-  const hasPlaceDateMapping = (item: any) => {
+  const hasPlaceDateMapping = (item: UsageDetailRecord) => {
     const mappedSources = new Set(
       getInputSchema(item)
-        .filter((field: any) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
-        .map((field: any) => field.default_source || field.defaultSource || "manual")
+        .filter((field: TemplateField) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
+        .map((field: TemplateField) => field.default_source || field.defaultSource || "manual")
     );
     return mappedSources.has("request_place_date") ||
       (mappedSources.has("request_place") && mappedSources.has("request_date"));
   };
 
-  const setInputValue = (key: string, value: any) => {
+  const getRequestCombinationLabel = () => {
+    const category = getRequestCategory();
+    if (category === "asset") return "Aset";
+    if (category === "unit") return "Unit";
+    if (category === "non_unit") return "Non Unit";
+    return "Belum dipilih";
+  };
+
+  const setInputValue = (key: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       form_input_data: { ...prev.form_input_data, [key]: value },
     }));
   };
 
-  const requestExternalOptions = async (sourceKey: string, variables: Record<string, any> = {}) => {
+  const requestExternalOptions = async (sourceKey: string, variables: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Tidak terautentikasi");
     const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
@@ -212,14 +391,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getTableRows = (key: string) => {
     const rows = formData.form_input_data[key];
-    return Array.isArray(rows) && rows.length > 0 ? rows : [{}];
+    if (!Array.isArray(rows) || rows.length === 0) return [{}];
+    return rows
+      .filter((row): row is TableRow => !!row && typeof row === "object" && !Array.isArray(row))
+      .map((row) => ({ ...row }));
   };
 
-  const setTableRows = (key: string, rows: any[]) => {
+  const setTableRows = (key: string, rows: TableRow[]) => {
     setInputValue(key, rows);
   };
 
-  const updateTableCell = (key: string, rowIndex: number, columnKey: string, value: any) => {
+  const updateTableCell = (key: string, rowIndex: number, columnKey: string, value: unknown) => {
     const rows = [...getTableRows(key)];
     rows[rowIndex] = { ...rows[rowIndex], [columnKey]: value };
     setTableRows(key, rows);
@@ -234,39 +416,75 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setTableRows(key, rows.length > 0 ? rows : [{}]);
   };
 
-  const isTableFieldComplete = (field: any) => {
-    const rows = getTableRows(field.key).filter((row: any) =>
+  const isTableFieldComplete = (field: TemplateField) => {
+    const rows = getTableRows(field.key).filter((row: TableRow) =>
       Object.values(row ?? {}).some((value) => String(value ?? "").trim())
     );
     if (field.required !== false && rows.length === 0) return false;
-    return rows.every((row: any) =>
+    return rows.every((row: TableRow) =>
       (field.table_config?.columns ?? [])
-        .filter((column: any) => column.required !== false)
-        .every((column: any) => String(row?.[column.key] ?? "").trim())
+        .filter((column: { required?: boolean }) => column.required !== false)
+        .every((column: { key: string }) => String(row?.[column.key] ?? "").trim())
     );
   };
 
-  const isManualFieldComplete = (field: any) => {
+  const isManualFieldComplete = (field: TemplateField) => {
+    if (!isUnitMode && isUnitField(field)) return true;
     if (hasUnitRequestFields(selectedUsage)) {
       if (field.key === "requested_unit_count") return true;
       if (isUnitMode && (field.key === "items" || field.key === "unit")) return true;
       if (!isUnitMode && field.key === "unit") return true;
     }
     if (field.type === "table") return isTableFieldComplete(field);
-    const value = formData.form_input_data[field.key];
+    const value = getFormFieldValue(field.key);
     if (field.type === "external_select" && isMultiSelectField(field)) {
       return field.required === false || (Array.isArray(value) && value.length > 0);
     }
-    return field.required === false || !!String(value?.value ?? value ?? "").trim();
+    return field.required === false || !!getScalarFieldValue(value).trim();
   };
 
-  const officePusat     = useMemo(() => master.offices?.find((o: any) => o.kedudukan === "Pusat"), [master.offices]);
+  const officePusat     = useMemo(() => master.offices?.find((o: MasterRecord) => o.kedudukan === "Pusat"), [master.offices]);
   const isPusatSelected = useMemo(() => formData.office_id === officePusat?.id, [formData.office_id, officePusat]);
 
-  const filteredUsage = useMemo(() => usageDetails.filter(i => i.is_cabang === !isPusatSelected), [usageDetails, isPusatSelected]);
+  const filteredUsage = useMemo(() => {
+    const category = getRequestCategory();
+    if (!category) return [];
+    return usageDetails.filter((item) => {
+      if (item.scope_type && item.scope_type !== "all") {
+        if (item.scope_type === "pusat" && !isPusatSelected) return false;
+        if (item.scope_type === "cabang" && isPusatSelected) return false;
+      } else if (item.is_cabang !== undefined && item.is_cabang !== !isPusatSelected) return false;
+      if (!getWorkflowCategories(item).includes(category)) return false;
+      if (!canDepartmentRequestUnit(item, formData.dept_id || requesterDepartmentId)) return false;
+      return true;
+    });
+  }, [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id, formData.form_input_data.request_category]);
+
+  const availableForms = useMemo(() => {
+    const seen = new Set<string>();
+    return filteredUsage.flatMap(item => {
+      const formId = item.form_id || item.master_forms?.id;
+      if (!formId || seen.has(formId)) return [];
+      seen.add(formId);
+      return [{ id: formId, name: item.master_forms?.nama_form || "Form tanpa nama" }];
+    });
+  }, [filteredUsage]);
+
+  const usagesForSelectedForm = useMemo(
+    () => filteredUsage.filter(item => (item.form_id || item.master_forms?.id) === selectedFormId),
+    [filteredUsage, selectedFormId]
+  );
+
+  const canRequesterChooseUnit = useMemo(
+    () => usageDetails.some(item =>
+      item.is_cabang === !isPusatSelected &&
+      canDepartmentRequestUnit(item, requesterDepartmentId)
+    ),
+    [usageDetails, isPusatSelected, requesterDepartmentId]
+  );
 
   const groupedUsage = useMemo(() => {
-    const groups: { [k: number]: any[] } = {};
+    const groups: Record<number, UsageDetailRecord[]> = {};
     filteredUsage.forEach(item => {
       const level = getFullRoles(item).length;
       if (level > 0) { if (!groups[level]) groups[level] = []; groups[level].push(item); }
@@ -276,24 +494,24 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const filteredDepts = useMemo(() => {
     if (!master.depts) return [];
-    return master.depts.filter((d: any) => {
+    return master.depts.filter((d: MasterRecord) => {
       const isCabangDept = d.name.toLowerCase().includes("(cabang)");
       return isPusatSelected ? !isCabangDept : isCabangDept;
-    }).sort((a: any, b: any) => (a.dept_index || 0) - (b.dept_index || 0));
+    }).sort((a: MasterRecord, b: MasterRecord) => (a.dept_index || 0) - (b.dept_index || 0));
   }, [master.depts, isPusatSelected]);
 
   const filteredProjects = useMemo(() => {
     if (isPusatSelected || !master.projects) return [];
-    return master.projects.filter((p: any) => p.office_id === formData.office_id);
+    return master.projects.filter((p: MasterRecord) => p.office_id === formData.office_id);
   }, [master.projects, formData.office_id, isPusatSelected]);
 
   const selectedProject = useMemo(
-    () => master.projects?.find((p: any) => p.id === formData.project_id) ?? null,
+    () => master.projects?.find((p: MasterRecord) => p.id === formData.project_id) ?? null,
     [master.projects, formData.project_id]
   );
 
   const selectedLetterType = useMemo(
-    () => master.types?.find((type: any) => type.id === formData.letter_type_id) ?? null,
+    () => master.types?.find((type: MasterRecord) => type.id === formData.letter_type_id) ?? null,
     [master.types, formData.letter_type_id]
   );
 
@@ -311,7 +529,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return prefix ? prefix.toUpperCase() : "";
   }, [selectedProject]);
 
-  const externalVariables = useMemo(() => ({
+  const externalVariables = useMemo<Record<string, unknown>>(() => ({
     project_id: formData.project_id,
     project_code: selectedProjectCode,
     project_name: selectedProject?.name ?? "",
@@ -330,13 +548,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     value.toLowerCase().replace(/\s+/g, " ").trim();
 
   const getSelectedSignerName = (userId: string) =>
-    master.users?.find((u: any) => u.id === userId)?.full_name || "";
+    master.users?.find((u: MasterRecord) => u.id === userId)?.full_name || "";
 
   const getFilteredSignerUsers = (index: number) => {
     const tokens = normalizeNameSearch(signerSearch[index] || "").split(" ").filter(Boolean);
-    if (tokens.length === 0) return master.users || [];
+    const eligibleIds = signers[index]?.eligible_user_ids || [];
+    const eligibleUsers = eligibleIds.length > 0
+      ? (master.users || []).filter(user => eligibleIds.includes(user.id))
+      : signers[index]?.form_usage_step_id
+        ? []
+        : (master.users || []);
+    if (tokens.length === 0) return eligibleUsers;
 
-    return (master.users || []).filter((u: any) => {
+    return eligibleUsers.filter((u: MasterRecord) => {
       const haystack = normalizeNameSearch(u.full_name || "");
       return tokens.every(token => haystack.includes(token));
     });
@@ -352,39 +576,148 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   useEffect(() => {
     suratService.getMasterData().then(data => {
       setMaster(data);
-      const p = data.offices?.find((o: any) => o.kedudukan === "Pusat");
+      const p = data.offices?.find((o: MasterRecord) => o.kedudukan === "Pusat");
       if (p) setFormData(prev => ({ ...prev, office_id: p.id }));
     }).catch(() => toast({ variant: "destructive", title: "Gagal memuat data master" }));
   }, [toast]);
 
   useEffect(() => {
-    supabase.from("master_penggunaan_detail")
-      .select(`*, master_forms!fk_master_forms (id, nama_form, nomor_form, link_form, department_id, input_schema, unit_config)`)
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) toast({ variant: "destructive", title: "Gagal memuat penggunaan", description: error.message });
-        else setUsageDetails(data || []);
+    let cancelled = false;
+    supabase.auth.getUser()
+      .then(async ({ data: { user } }) => {
+        if (!user) return;
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("department_id")
+          .eq("id", user.id)
+          .single();
+        if (error) throw error;
+        if (!cancelled) {
+          const departmentId = data?.department_id || "";
+          setRequesterDepartmentId(departmentId);
+          setFormData(prev => ({
+            ...prev,
+            dept_id: prev.dept_id || departmentId,
+          }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          toast({
+            variant: "destructive",
+            title: "Profil Tidak Lengkap",
+            description: "Departemen akun gagal dimuat. Pengajuan Unit tidak tersedia.",
+          });
+        }
       });
+    return () => { cancelled = true; };
+  }, [toast]);
+
+  const loadUsageDetails = useCallback(async () => {
+    const { data, error } = await supabase.from("form_usages")
+      .select(`
+        id, name, form_id, request_category, scope_type,
+        master_forms(id, nama_form, nomor_form, link_form, department_id, input_schema, unit_config, signature_layout),
+        form_usage_departments(department_id),
+        form_usage_steps(
+          id, step_order, role_name, label, action_type, signer_department_id,
+          form_usage_step_users(user_id),
+          form_usage_step_verifiers(user_id)
+        ),
+        form_usage_attachment_requirements(*)
+      `)
+      .eq("status", "active")
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      toast({ variant: "destructive", title: "Gagal memuat penggunaan", description: error.message });
+      return;
+    }
+
+    let nextUsageDetails: UsageDetailRecord[];
+    if ((data || []).length > 0) {
+      nextUsageDetails = (data || []).map((item: any) => ({
+        ...item,
+        workflow_allowed_departments: item.form_usage_departments || [],
+        request_categories: [item.request_category],
+        is_cabang: item.scope_type === "cabang",
+        ttd_config: [...(item.form_usage_steps || [])]
+          .sort((a, b) => a.step_order - b.step_order)
+          .map(step => ({
+            form_usage_step_id: step.id,
+            roleName: step.role_name,
+            labelJabatan: step.label,
+            action_type: step.action_type,
+            signer_department_id: step.signer_department_id,
+            eligible_user_ids: (step.form_usage_step_users || []).map((candidate: { user_id: string }) => candidate.user_id),
+            verifier_user_ids: (step.form_usage_step_verifiers || []).map((candidate: { user_id: string }) => candidate.user_id),
+            requires_unit_allocation: step.action_type === "unit_allocation",
+          })),
+      }));
+    } else {
+      const { data: legacyData, error: legacyError } = await supabase
+        .from("master_penggunaan_detail")
+        .select(`
+          *,
+          master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, department_id, input_schema, unit_config),
+          workflow_allowed_departments(department_id)
+        `)
+        .order("created_at", { ascending: false });
+      if (legacyError) {
+        toast({ variant: "destructive", title: "Gagal memuat fallback matrix", description: legacyError.message });
+        return;
+      }
+      nextUsageDetails = legacyData || [];
+    }
+    setUsageDetails(nextUsageDetails);
+    setSelectedUsage((current) => {
+      if (!current?.id) return current;
+      return nextUsageDetails.find((item) => item.id === current.id) || current;
+    });
   }, [toast]);
 
   useEffect(() => {
-    if (!generatedNoSurat) { setSelectedUsage(null); setFormData(prev => ({ ...prev, penggunaan_id: "" })); setSigners([]); }
+    loadUsageDetails();
+    const channel = supabase.channel("surat-form-configuration-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "master_forms" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "form_usages" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_departments" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_steps" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_step_users" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_attachment_requirements" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "master_penggunaan_detail" }, loadUsageDetails)
+      .on("postgres_changes", { event: "*", schema: "public", table: "workflow_allowed_departments" }, loadUsageDetails)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [loadUsageDetails]);
+
+  useEffect(() => {
+    if (!generatedNoSurat) {
+      setSelectedUsage(null);
+      setSelectedFormId("");
+      setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
+      setSigners([]);
+    }
   }, [isPusatSelected, generatedNoSurat]);
 
   useEffect(() => {
-    if (selectedUsage && isUnitMode && !canCurrentDepartmentRequestUnit(selectedUsage)) {
-      setRequestMode("barang");
+    if (!selectedUsage) return;
+    const category = getRequestCategory();
+    if (!category || !getWorkflowCategories(selectedUsage).includes(category)) {
+      setSelectedUsage(null);
+      setSigners([]);
     }
-  }, [formData.dept_id, selectedUsage, isUnitMode]);
+  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category]);
 
   useEffect(() => {
     const fields = getExternalInputFields(selectedUsage);
     if (fields.length === 0) return;
 
     let cancelled = false;
-    fields.forEach(async (field: any) => {
-      const sourceKey = field.external_source_key || field.externalSourceKey;
-      const dependencyKey = field.external_dependency_key || field.externalDependencyKey;
+    fields.forEach(async (field: TemplateField) => {
+      const sourceKey = String(field.external_source_key || field.externalSourceKey || "");
+      const dependencyKey = String(field.external_dependency_key || field.externalDependencyKey || "");
       const dependencyValue = dependencyKey ? externalVariables[dependencyKey] : true;
 
       if (!sourceKey || !dependencyValue) {
@@ -399,18 +732,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         const options = await requestExternalOptions(sourceKey, externalVariables);
         if (cancelled) return;
         setExternalOptions(prev => ({ ...prev, [field.key]: options }));
-        const currentValue = formData.form_input_data[field.key];
+        const currentValue = getFormFieldValue(field.key) as { value?: string } | Array<{ value?: string }> | undefined;
         if (isMultiSelectField(field)) {
           const selected = Array.isArray(currentValue) ? currentValue : [];
-          const filtered = selected.filter((item: any) => options.some((option: any) => option.value === item?.value));
+          const filtered = selected.filter((item) => options.some((option) => option.value === item?.value));
           if (selected.length !== filtered.length) setInputValue(field.key, filtered);
-        } else if (currentValue?.value && !options.some((option: any) => option.value === currentValue.value)) {
+        } else if (currentValue && !Array.isArray(currentValue) && currentValue.value && !options.some((option) => option.value === currentValue.value)) {
           setInputValue(field.key, undefined);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (cancelled) return;
         setExternalOptions(prev => ({ ...prev, [field.key]: [] }));
-        setExternalErrors(prev => ({ ...prev, [field.key]: error.message || "Gagal mengambil data external." }));
+        const message = error instanceof Error ? error.message : "Gagal mengambil data external.";
+        setExternalErrors(prev => ({ ...prev, [field.key]: message }));
       } finally {
         if (!cancelled) setExternalLoading(prev => ({ ...prev, [field.key]: false }));
       }
@@ -427,10 +761,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setProjectsError(null);
     requestExternalOptions("marison_projects")
       .then((options) => { if (!cancelled) setExternalProjects(options); })
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setExternalProjects([]);
-          setProjectsError(error.message || "Gagal mengambil daftar proyek.");
+          setProjectsError(error instanceof Error ? error.message : "Gagal mengambil daftar proyek.");
         }
       })
       .finally(() => { if (!cancelled) setProjectsLoading(false); });
@@ -439,61 +773,40 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
-    const proj = master.projects?.find((p: any) => p.id === projectId);
+    const proj = master.projects?.find((p: MasterRecord) => p.id === projectId);
     setFormData(prev => ({ ...prev, project_id: projectId, entity_id: proj?.entity_id || prev.entity_id }));
   };
 
   const handleLetterTypeChange = (letterTypeId: string) => {
-    const type = master.types?.find((item: any) => item.id === letterTypeId);
-    const isPermohonan = String(type?.name || type?.code || "").toLowerCase().includes("permohonan") || type?.code === "MH";
-    setFormData(prev => {
-      if (isPermohonan) return { ...prev, letter_type_id: letterTypeId };
-      const nextInput = { ...prev.form_input_data };
-      delete nextInput.request_category;
-      delete nextInput.requested_project;
-      delete nextInput.requested_unit_count;
-      delete nextInput.unit_request_sentence;
-      nextInput.request_mode = "barang";
-      return { ...prev, letter_type_id: letterTypeId, is_aset: false, form_input_data: nextInput };
-    });
+    setFormData(prev => ({ ...prev, letter_type_id: letterTypeId }));
   };
 
   const handleUsageChange = (val: string) => {
     const detail = usageDetails.find(u => u.id === val);
     if (!detail) return;
+    const isNewUsage = Array.isArray(detail.form_usage_steps);
     setSelectedUsage(detail);
     setFormData(prev => {
-      const category = prev.form_input_data.request_category === "unit" && hasUnitRequestFields(detail) && canCurrentDepartmentRequestUnit(detail)
-        ? "unit"
-        : prev.form_input_data.request_category === "asset"
-          ? "asset"
-          : "non_unit";
-      const nextInput = {
-        ...prev.form_input_data,
-        request_category: category,
-        request_mode: category === "unit" ? "unit" : "barang",
-      };
-      if (category !== "unit") {
-        delete nextInput.requested_project;
-        delete nextInput.requested_unit_count;
-        delete nextInput.unit_request_sentence;
-      }
       return {
         ...prev,
-        penggunaan_id: val,
-        is_aset: category === "asset",
-        form_input_data: nextInput,
+        penggunaan_id: isNewUsage ? "" : val,
+        form_usage_id: isNewUsage ? val : "",
       };
     });
     try {
       const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
       if (Array.isArray(config)) {
         const total = config.length;
-        setSigners(config.map((c: any, i: number) => ({
+        setSigners(config.map((c: { form_usage_step_id?: string; roleName?: string; role_name?: string; labelJabatan?: string; label_jabatan?: string; jabatan?: string; action_type?: "approval" | "unit_allocation"; eligible_user_ids?: string[]; verifier_user_ids?: string[]; requires_unit_allocation?: boolean; requiresUnitAllocation?: boolean }, i: number) => ({
           role_name: normalizeRoleName(c.roleName || c.role_name || c.labelJabatan || c.label_jabatan || c.jabatan, i, total),
           label_jabatan: c.labelJabatan || c.label_jabatan || c.jabatan,
           user_id: "",
           step_order: i + 1,
+          form_usage_step_id: c.form_usage_step_id,
+          action_type: c.action_type || "approval",
+          eligible_user_ids: c.eligible_user_ids || [],
+          verifier_user_ids: c.verifier_user_ids || [],
+          attachment_requirements: detail.form_usage_attachment_requirements?.filter(rule => rule.stage_order === i + 1) || [],
           requires_unit_allocation: c.requires_unit_allocation === true || c.requiresUnitAllocation === true,
         })));
       }
@@ -501,11 +814,34 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const handleGetNumber = async () => {
+    const requestCategory = getRequestCategory();
+    if (!requestCategory) {
+      return toast({
+        variant: "destructive",
+        title: "Klasifikasi Belum Dipilih",
+        description: "Pilih Aset, Unit, atau Non Unit sebelum mendapatkan nomor surat.",
+      });
+    }
+    if (!selectedUsage) {
+      return toast({
+        variant: "destructive",
+        title: "Kegunaan Form Belum Dipilih",
+        description: "Pilih form dan kegunaan sebelum mendapatkan nomor surat.",
+      });
+    }
+    if (filteredUsage.length === 0) {
+      return toast({
+        variant: "destructive",
+        title: "Matrix Belum Tersedia",
+        description: "Belum ada matrix yang mendukung klasifikasi, kantor, dan departemen yang dipilih.",
+      });
+    }
     if (!isPusatSelected && !formData.project_id)
       return toast({ variant: "destructive", title: "Proyek Belum Dipilih" });
-    if (getRequestCategory() === "unit") {
-      const count = Number(formData.form_input_data.requested_unit_count || 0);
-      if (!formData.form_input_data.requested_project?.code) {
+    if (requestCategory === "unit") {
+      const count = Number(getFormFieldValue("requested_unit_count") || 0);
+      const requestedProject = getFormFieldValue("requested_project") as { code?: string } | undefined;
+      if (!requestedProject?.code) {
         return toast({ variant: "destructive", title: "Proyek Unit Wajib Dipilih" });
       }
       if (!Number.isFinite(count) || count < 1) {
@@ -517,14 +853,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       const res = await suratService.generateNoSurat(formData);
       setGeneratedNoSurat(res.fullNumber);
       toast({ title: "Nomor Berhasil Didapatkan", description: "Silahkan lengkapi berkas dan penandatangan." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Gagal Mendapatkan Nomor", description: e.message });
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: "Gagal Mendapatkan Nomor", description: e instanceof Error ? e.message : "Gagal mendapatkan nomor surat." });
     } finally { setIsProcessingNumber(false); }
   };
 
   const handleResetNumber = async () => {
     if (!generatedNoSurat) return;
-    if (!window.confirm("Membatalkan nomor ini akan mengosongkan antrian nomor. Lanjutkan?")) return;
+    const confirmed = await appDialog.confirm({
+      title: "Batalkan Nomor Surat?",
+      description: "Nomor ini akan dikosongkan dari antrean dan tidak dipakai untuk pengajuan ini.",
+      confirmText: "Batalkan Nomor",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await suratService.cancelRegistration(generatedNoSurat);
       setGeneratedNoSurat(null);
@@ -535,14 +877,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const handleRequestedUnitCountChange = (rawValue: string) => {
     const count = Math.max(Number(rawValue || 0), 0);
     setInputValue("requested_unit_count", count || "");
-    const project = formData.form_input_data.requested_project;
+    const project = getFormFieldValue("requested_project") as { name?: string } | undefined;
     setInputValue("unit_request_sentence", project?.name && count > 0
       ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
       : "");
   };
 
   const handleExternalProjectChange = (value: string) => {
-    const option = externalProjects.find((item) => item.value === value);
+    const option = externalProjects.find((item) => item.value === value) as ProjectOption | undefined;
     const project = option?.raw;
     if (!option || !project?.code) return;
     const requestedProject = {
@@ -553,7 +895,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       name: project.name,
       branch: project.branch ?? null,
     };
-    const count = Number(formData.form_input_data.requested_unit_count || 0);
+    const count = Number(getFormFieldValue("requested_unit_count") || 0);
     setInputValue("requested_project", requestedProject);
     setInputValue("unit_request_sentence", count > 0
       ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
@@ -562,13 +904,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const resetForm = () => {
     setFormData({
-      entity_id: "", dept_id: "", letter_type_id: "", office_id: officePusat?.id || "", project_id: "",
+      entity_id: "", dept_id: requesterDepartmentId, letter_type_id: "", office_id: officePusat?.id || "", project_id: "",
       judul_surat: "", penggunaan_id: "", is_aset: false,
+      form_usage_id: "",
       request_place: "", request_date: new Date().toISOString().slice(0, 10), form_input_data: {}
     });
-    setGeneratedNoSurat(null); setSelectedUsage(null); setLampiranFiles([]); setSigners([]);
+    setGeneratedNoSurat(null); setSelectedUsage(null); setSelectedFormId(""); setLampiranFiles([]); setSigners([]);
+    setInitialAttachmentFiles({});
     setJudulForDisplay("");
-    if (lampiranInputRef.current) lampiranInputRef.current.value = "";
   };
 
   const handleSubmit = async () => {
@@ -583,6 +926,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (lampiranFiles.length === 0 && shouldRequireInitialAttachment()) {
       return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
     }
+    const missingInitialAttachments = getMissingInitialAttachmentLabels();
+    if (missingInitialAttachments.length > 0) {
+      return toast({
+        variant: "destructive",
+        title: "Lampiran Belum Lengkap",
+        description: `Lengkapi: ${missingInitialAttachments.join(", ")}.`,
+      });
+    }
     if (isUnitMode) {
       if (!hasUnitRequestFields(selectedUsage)) {
         return toast({ variant: "destructive", title: "Matrix Unit Tidak Valid", description: "Pilih matrix/template yang mendukung permohonan unit." });
@@ -590,103 +941,79 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       if (!canCurrentDepartmentRequestUnit(selectedUsage)) {
         return toast({ variant: "destructive", title: "Mode Unit Tidak Diizinkan", description: "Departemen ini tidak termasuk konfigurasi pengaju unit." });
       }
-      const count = Number(formData.form_input_data.requested_unit_count || 0);
-      if (!formData.form_input_data.requested_project?.code) return toast({ variant: "destructive", title: "Proyek Wajib Dipilih", description: "Pilih proyek untuk permohonan unit." });
+      const count = Number(getFormFieldValue("requested_unit_count") || 0);
+      const requestedProject = getFormFieldValue("requested_project") as { code?: string } | undefined;
+      if (!requestedProject?.code) return toast({ variant: "destructive", title: "Proyek Wajib Dipilih", description: "Pilih proyek untuk permohonan unit." });
       if (!Number.isFinite(count) || count < 1) return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
     }
-    const missingField = getManualInputFields(selectedUsage).find((field: any) => !isManualFieldComplete(field));
+    const missingField = getManualInputFields(selectedUsage).find((field: TemplateField) => !isManualFieldComplete(field));
     if (missingField) return toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
     if (signers.some(s => !s.user_id)) return toast({ variant: "destructive", title: "Pejabat Belum Lengkap" });
     setIsLoading(true);
     try {
-      const result = await suratService.createRegistrasi({ ...formData, no_surat: generatedNoSurat }, signers, null, lampiranFiles);
+      const initialAttachmentMeta = Object.fromEntries(
+        getInitialAttachmentRequirements().flatMap(rule =>
+          (initialAttachmentFiles[rule.requirement_key] || []).map(file => [
+            file.name,
+            { key: rule.requirement_key, label: rule.label },
+          ])
+        )
+      );
+      const result = await suratService.createRegistrasi(
+        { ...formData, no_surat: generatedNoSurat, initial_attachment_meta: initialAttachmentMeta },
+        signers,
+        null,
+        lampiranFiles
+      );
       if (result) {
         toast({ title: "Pendaftaran Berhasil", description: `Nomor ${result.no_surat} telah disimpan.` });
         onSuccess(result.no_surat, formData.judul_surat);
         resetForm();
       }
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Gagal Menyimpan", description: error.message });
+    } catch (error: unknown) {
+      toast({ variant: "destructive", title: "Gagal Menyimpan", description: error instanceof Error ? error.message : "Gagal menyimpan surat." });
     } finally { setIsLoading(false); }
   };
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
-  const renderTableField = (field: any) => {
+  const renderTableField = (field: TemplateField) => {
     const columns = field.table_config?.columns ?? [];
     const rows = getTableRows(field.key);
 
     return (
       <div className="space-y-4">
-        <div className="hidden overflow-x-auto rounded-2xl border border-border bg-background/70 md:block">
-          <table className="w-full min-w-[980px] text-sm">
-            <thead className="sticky top-0 bg-muted/70">
-              <tr>
-                <th className="w-16 px-4 py-3 text-left text-[11px] font-black uppercase text-muted-foreground">No</th>
-                {columns.map((column: any) => (
-                  <th key={column.key} className="px-4 py-3 text-left text-[11px] font-black uppercase text-muted-foreground">
-                    {column.label}{column.required !== false ? " *" : ""}
-                  </th>
-                ))}
-                <th className="w-16 px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: any, rowIndex: number) => (
-                <tr key={rowIndex} className="border-t border-border">
-                  <td className="px-4 py-3 text-xs font-black text-muted-foreground">{rowIndex + 1}</td>
-                  {columns.map((column: any) => (
-                    <td key={column.key} className="px-4 py-3">
-                      <Input
-                        type={column.type === "number" ? "number" : "text"}
-                        value={row?.[column.key] ?? ""}
-                        onChange={e => updateTableCell(field.key, rowIndex, column.key, e.target.value)}
-                        className="h-12 min-w-[130px] bg-background text-sm"
-                      />
-                    </td>
-                  ))}
-                  <td className="px-4 py-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 text-destructive"
-                      onClick={() => removeTableRow(field.key, rowIndex)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="space-y-3 md:hidden">
-          {rows.map((row: any, rowIndex: number) => (
-            <div key={rowIndex} className="rounded-2xl border border-border bg-background/70 p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-widest text-primary">Barang {rowIndex + 1}</p>
+        <div className="space-y-3">
+          {rows.map((row: TableRow, rowIndex: number) => (
+            <div key={rowIndex} className="rounded-2xl border border-border bg-background/80 p-4 shadow-sm">
+              <div className="mb-4 flex flex-col gap-2 border-b border-border/50 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-primary">Baris {rowIndex + 1}</p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    Isi detail item sesuai kolom yang sudah dikonfigurasi admin.
+                  </p>
+                </div>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 text-destructive"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-fit rounded-xl text-[10px] font-black uppercase text-destructive hover:text-destructive"
                   onClick={() => removeTableRow(field.key, rowIndex)}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="mr-1 h-3.5 w-3.5" /> Hapus
                 </Button>
               </div>
-              <div className="space-y-3">
-                {columns.map((column: any) => (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {columns.map((column: { key: string; label?: string; required?: boolean; type?: string }) => (
                   <div key={column.key} className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground">
                       {column.label}{column.required !== false ? " *" : ""}
                     </Label>
                     <Input
                       type={column.type === "number" ? "number" : "text"}
-                      value={row?.[column.key] ?? ""}
+                      value={String(row?.[column.key] ?? "")}
                       onChange={e => updateTableCell(field.key, rowIndex, column.key, e.target.value)}
                       className="h-12 bg-background text-sm"
+                      placeholder={`Isi ${column.label}`}
                     />
                   </div>
                 ))}
@@ -695,29 +1022,34 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           ))}
         </div>
 
-        <Button type="button" variant="outline" size="lg" className="h-12 rounded-2xl text-xs font-black uppercase" onClick={() => addTableRow(field.key)}>
-          <Plus className="mr-2 h-4 w-4" /> Tambah Barang
-        </Button>
+        <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] font-semibold text-muted-foreground">
+            Tambahkan baris baru untuk barang kedua, ketiga, dan seterusnya.
+          </p>
+          <Button type="button" variant="outline" size="lg" className="h-12 rounded-2xl text-xs font-black uppercase" onClick={() => addTableRow(field.key)}>
+            <Plus className="mr-2 h-4 w-4" /> Tambah Baris
+          </Button>
+        </div>
       </div>
     );
   };
 
-  const renderExternalSelectField = (field: any) => {
+  const renderExternalSelectField = (field: TemplateField) => {
     const options = externalOptions[field.key] || [];
     const isMultiple = isMultiSelectField(field);
-    const selectedOptions = Array.isArray(formData.form_input_data[field.key]) ? formData.form_input_data[field.key] : [];
-    const selectedValues = new Set(selectedOptions.map((item: any) => item.value));
-    const currentValue = formData.form_input_data[field.key]?.value || "";
-    const dependencyKey = field.external_dependency_key || field.externalDependencyKey;
+    const selectedOptions = (Array.isArray(formData.form_input_data[field.key]) ? formData.form_input_data[field.key] : []) as ExternalOption[];
+    const selectedValues = new Set(selectedOptions.map((item: ExternalOption) => item.value));
+    const currentValue = getFormFieldValue(field.key) as { value?: string } | undefined;
+    const dependencyKey = String(field.external_dependency_key || field.externalDependencyKey || "");
     const dependencyValue = dependencyKey ? externalVariables[dependencyKey] : true;
     const isDisabled = externalLoading[field.key] || !dependencyValue;
-    const toggleOption = (option: any) => {
+    const toggleOption = (option: ExternalOption) => {
       if (!isMultiple) {
         setInputValue(field.key, option || { value: option?.value, label: option?.label });
         return;
       }
       const next = selectedValues.has(option.value)
-        ? selectedOptions.filter((item: any) => item.value !== option.value)
+        ? selectedOptions.filter((item: ExternalOption) => item.value !== option.value)
         : [...selectedOptions, option];
       setInputValue(field.key, next);
     };
@@ -770,7 +1102,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </Popover>
           {selectedOptions.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {selectedOptions.map((option: any) => (
+              {selectedOptions.map((option: ExternalOption) => (
                 <button
                   key={`${field.key}-selected-${option.value}`}
                   type="button"
@@ -793,7 +1125,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return (
       <div className="space-y-2">
         <Select
-          value={currentValue}
+          value={currentValue?.value || ""}
           disabled={isDisabled}
           onValueChange={(value) => {
             const option = options.find((item) => item.value === value);
@@ -818,32 +1150,67 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
-  const renderManualField = (field: any) => (
-    <div key={field.key} className={cn("space-y-2", field.type === "table" && "md:col-span-2")}>
-      <Label className="text-[11px] font-black uppercase text-muted-foreground">
-        {field.label}{field.required !== false ? " *" : ""}
-      </Label>
-      {field.type === "table" ? renderTableField(field) : field.type === "external_select" ? (
-        renderExternalSelectField(field)
-      ) : field.type === "textarea" ? (
-        <Textarea
-          value={formData.form_input_data[field.key] ?? ""}
-          onChange={e => setInputValue(field.key, e.target.value)}
-          className="min-h-[140px] bg-background/70 text-sm leading-relaxed"
-        />
-      ) : (
-        <Input
-          type={field.type === "date" ? "date" : field.type === "number" || field.type === "currency" ? "number" : "text"}
-          value={formData.form_input_data[field.key] ?? ""}
-          onChange={e => setInputValue(field.key, e.target.value)}
-          className="h-12 bg-background/70 text-sm"
-        />
-      )}
-    </div>
-  );
+  const renderManualField = (field: TemplateField, index = 0) => {
+    const isTable = field.type === "table";
+    const isLongText = field.type === "textarea";
+    const inputPlaceholder = field.placeholder || `Isi ${field.label}`;
+
+    return (
+      <div key={field.key} className={cn(
+        "rounded-3xl border border-border/50 bg-background/70 p-4 shadow-sm md:p-5",
+        isTable && "space-y-4"
+      )}>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-primary/10 px-2 text-[10px] font-black text-primary">
+                {index + 1}
+              </span>
+              <Label className="text-[12px] font-black uppercase tracking-wide text-foreground">
+                {field.label}
+              </Label>
+            </div>
+            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+              {isTable
+                ? "Gunakan tombol tambah baris jika item lebih dari satu."
+                : "Data ini akan ditulis otomatis ke template dan PDF."}
+            </p>
+          </div>
+          <span className={cn(
+            "inline-flex w-fit rounded-full border px-2.5 py-1 text-[9px] font-black uppercase",
+            field.required !== false
+              ? "border-primary/20 bg-primary/10 text-primary"
+              : "border-border bg-muted/40 text-muted-foreground"
+          )}>
+            {field.required !== false ? "Wajib" : "Opsional"}
+          </span>
+        </div>
+
+        {isTable ? renderTableField(field) : field.type === "external_select" ? (
+          renderExternalSelectField(field)
+        ) : isLongText ? (
+          <Textarea
+            value={getDisplayFieldValue(field.key)}
+            onChange={e => setInputValue(field.key, e.target.value)}
+            className="min-h-[180px] resize-y bg-background text-sm leading-relaxed"
+            placeholder={inputPlaceholder}
+          />
+        ) : (
+          <Input
+            type={field.type === "date" ? "date" : field.type === "number" || field.type === "currency" ? "number" : "text"}
+            value={getDisplayFieldValue(field.key)}
+            onChange={e => setInputValue(field.key, e.target.value)}
+            className="h-12 bg-background text-sm"
+            placeholder={inputPlaceholder}
+          />
+        )}
+      </div>
+    );
+  };
 
   const getVisibleManualFields = () =>
-    getManualInputFields(selectedUsage).filter((field: any) => {
+    getManualInputFields(selectedUsage).filter((field: TemplateField) => {
+      if (!isUnitMode && isUnitField(field)) return false;
       if (isUnitMode && (field.key === "items" || field.key === "unit")) return false;
       if (!hasUnitRequestFields(selectedUsage)) return true;
       if (field.key === "requested_unit_count") return false;
@@ -853,7 +1220,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const renderUnitRequestPanel = () => {
     if (!isUnitMode) return null;
-    const selectedProject = formData.form_input_data.requested_project;
+    const selectedProject = getFormFieldValue("requested_project") as ProjectRaw | undefined;
     return (
       <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5 md:p-6">
         <div className="flex flex-col gap-1">
@@ -865,7 +1232,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-[11px] font-black uppercase text-muted-foreground">Proyek</Label>
-            <Select value={selectedProject?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading || !!generatedNoSurat}>
+            <Select value={(getFormFieldValue("requested_project") as { value?: string } | undefined)?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading || !!generatedNoSurat}>
               <SelectTrigger className="h-12 bg-background/70 text-sm">
                 <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
               </SelectTrigger>
@@ -884,7 +1251,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             <Input
               type="number"
               min={1}
-              value={formData.form_input_data.requested_unit_count ?? ""}
+              value={String(getFormFieldValue("requested_unit_count") ?? "")}
               onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
               disabled={!!generatedNoSurat}
               className="h-12 bg-background/70 text-sm"
@@ -892,33 +1259,42 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             />
           </div>
         </div>
-        {formData.form_input_data.unit_request_sentence && (
-          <div className="rounded-2xl border border-blue-500/20 bg-background/70 p-3 text-xs font-semibold text-blue-700">
-            {formData.form_input_data.unit_request_sentence}
-          </div>
-        )}
       </div>
     );
   };
 
-  const renderRequestCategorySelector = () => {
+  const renderRequestClassificationStep = () => {
     const category = getRequestCategory();
-    const options = [
-      { value: "asset", label: "Aset", description: "Dokumen aset" },
-      { value: "unit", label: "Unit", description: "Order bangun unit" },
-      { value: "non_unit", label: "Non Unit", description: "Permohonan biasa" },
-    ] as const;
     return (
-      <div className="space-y-3 rounded-2xl border border-border/60 bg-background/60 p-3">
-        <div className="grid grid-cols-3 gap-2">
-          {options.map((option) => (
+      <div className="space-y-3 rounded-3xl border border-border/50 bg-background/60 p-4 md:p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-primary">Klasifikasi Dokumen</p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Pilih klasifikasi sebelum sistem menentukan matrix dan template yang tersedia.
+            </p>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary">
+            {getRequestCombinationLabel()}
+          </span>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            { value: "asset", label: "Aset", description: "Dokumen aset / properti" },
+            { value: "unit", label: "Unit", description: "Permohonan/order bangun unit" },
+            { value: "non_unit", label: "Non Unit", description: "Dokumen umum selain unit" },
+          ].map((option) => (
+            (() => {
+              const unitDisabled = option.value === "unit" && !canRequesterChooseUnit;
+              return (
             <button
               key={option.value}
               type="button"
-              disabled={!!generatedNoSurat}
-              onClick={() => setRequestCategory(option.value)}
+              disabled={!!generatedNoSurat || unitDisabled}
+              onClick={() => setRequestCategory(option.value as RequestCategory)}
               className={cn(
-                "rounded-xl border px-3 py-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
+                "rounded-2xl border px-4 py-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
                 category === option.value
                   ? "border-primary bg-primary text-primary-foreground shadow-sm"
                   : "border-border bg-background/70 text-foreground hover:bg-muted"
@@ -931,96 +1307,65 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               )}>
                 {option.description}
               </span>
+              {unitDisabled && (
+                <span className="mt-2 block text-[9px] font-bold text-amber-600">
+                  Tidak tersedia untuk departemen akun Anda
+                </span>
+              )}
             </button>
+              );
+            })()
           ))}
         </div>
-        {category === "unit" && (
-          <p className="text-[10px] font-semibold text-muted-foreground">
-            Nomor Unit memakai format khusus dan membutuhkan proyek serta jumlah unit sebelum nomor diterbitkan.
-          </p>
-        )}
       </div>
     );
   };
 
-  const renderRequestModeSelector = () => {
-    if (isPermohonanType || !selectedUsage || !hasUnitRequestFields(selectedUsage) || !canCurrentDepartmentRequestUnit(selectedUsage) || getRequestCategory() === "unit") return null;
-    return (
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border/60 bg-background/60 p-1">
-        {[
-          { value: "barang", label: "Barang" },
-          { value: "unit", label: "Unit" },
-        ].map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setRequestMode(option.value as "barang" | "unit")}
-            className={cn(
-              "h-11 rounded-xl text-[11px] font-black uppercase transition-all",
-              getRequestMode() === option.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    );
+  const renderRequestWorkflowStep = () => {
+    return null;
   };
 
-  const renderAttachmentUploader = () => (
-    <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
-      <div className={cn(
-        "relative border-2 border-dashed rounded-2xl p-6 flex items-center gap-5 transition-all",
-        lampiranFiles.length > 0 ? "border-emerald-500 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
-      )}>
-        <input
-          type="file"
-          ref={lampiranInputRef}
-          multiple
-          className="absolute inset-0 opacity-0 cursor-pointer z-10"
-          onChange={e => setLampiranFiles(Array.from(e.target.files ?? []))}
-        />
-        <div className={cn("p-4 rounded-2xl", lampiranFiles.length > 0 ? "bg-emerald-500 text-white" : "bg-amber-500 text-white")}>
-          <Paperclip className="w-6 h-6" />
+  const renderAttachmentUploader = () => {
+    const configuredRequirements = getInitialAttachmentRequirements();
+    if (configuredRequirements.length > 0) {
+      return (
+        <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-primary">Lampiran Pemohon</p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">Unggah setiap dokumen sesuai persyaratan kegunaan.</p>
+          </div>
+          {configuredRequirements.map(rule => {
+            const files = initialAttachmentFiles[rule.requirement_key] || [];
+            return (
+              <label key={rule.id} className="block rounded-xl border border-border bg-background/70 p-4">
+                <div className="mb-3">
+                  <span className="text-xs font-black uppercase">{rule.label}</span>
+                  {rule.is_required && <span className="ml-2 text-destructive">*</span>}
+                  <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+                    {files.length > 0 ? `${files.length} file dipilih` : `Maksimal ${rule.max_files} file`}
+                  </p>
+                </div>
+                <Input
+                  type="file"
+                  multiple={rule.allow_multiple || rule.max_files > 1}
+                  accept={rule.allowed_types?.join(",")}
+                  onChange={event => {
+                    const selected = Array.from(event.target.files || []).slice(0, rule.max_files);
+                    setInitialAttachmentFiles(previous => {
+                      const next = { ...previous, [rule.requirement_key]: selected };
+                      setLampiranFiles(Object.values(next).flat());
+                      return next;
+                    });
+                  }}
+                />
+              </label>
+            );
+          })}
         </div>
-        <div className="text-left flex-1 min-w-0">
-          <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-            {shouldRequireInitialAttachment() ? "Lampiran Wajib" : "Lampiran Opsional"}
-          </p>
-          <p className="mt-1 text-sm font-bold truncate">
-            {lampiranFiles.length > 0 ? `${lampiranFiles.length} file dipilih` : "Klik untuk unggah PDF/Gambar, bisa lebih dari satu"}
-          </p>
-        </div>
-      </div>
-
-      {lampiranFiles.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {lampiranFiles.map((file, index) => (
-            <div key={`${file.name}-${file.lastModified}`} className="flex items-center gap-3 rounded-xl border border-border bg-background/70 p-3">
-              <Paperclip className="h-4 w-4 text-primary shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{file.name}</p>
-                <p className="text-[10px] font-medium text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0 text-destructive"
-                onClick={() => {
-                  const next = lampiranFiles.filter((_, i) => i !== index);
-                  setLampiranFiles(next);
-                  if (lampiranInputRef.current && next.length === 0) lampiranInputRef.current.value = "";
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+      );
+    }
+    return null;
+  };
 
   return (
     <Card className="glass-card border-none overflow-hidden shadow-2xl bg-background/50 backdrop-blur-xl">
@@ -1069,7 +1414,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   <SelectValue placeholder="Pilih Kantor..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {master.offices?.map((o: any) => (
+                  {master.offices?.map((o: MasterRecord) => (
                     <SelectItem key={o.id} value={o.id}>
                       {o.kedudukan === "Pusat" ? "🏢 Kantor Pusat" : `🏗️ ${o.kedudukan}. ${o.name}`}
                     </SelectItem>
@@ -1089,7 +1434,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     <SelectValue placeholder="Pilih Proyek..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredProjects.map((p: any) => (
+                    {filteredProjects.map((p: MasterRecord) => (
                       <SelectItem key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1106,7 +1451,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   <SelectValue placeholder="Pilih PT..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {master.entities?.map((e: any) => (
+                  {master.entities?.map((e: MasterRecord) => (
                     <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1122,7 +1467,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   <SelectValue placeholder="Pilih Dept..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredDepts.map((d: any) => (
+                  {filteredDepts.map((d: MasterRecord) => (
                     <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1138,7 +1483,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   <SelectValue placeholder="Pilih Jenis..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {master.types?.map((t: any) => (
+                  {master.types?.map((t: MasterRecord) => (
                     <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1146,10 +1491,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           </div>
 
-          {!generatedNoSurat && isPermohonanType && (
+          {!generatedNoSurat && !!formData.letter_type_id && (
             <>
-              {renderRequestCategorySelector()}
-              {getRequestCategory() === "unit" && renderUnitRequestPanel()}
+              {renderRequestClassificationStep()}
+              {isUnitMode && renderUnitRequestPanel()}
             </>
           )}
 
@@ -1218,6 +1563,56 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           )}
 
           {/* ── Tombol dapatkan nomor / tampilan nomor ────────────────────── */}
+          {!generatedNoSurat && getRequestCategory() && (
+            <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form Dokumen</Label>
+                <Select
+                  value={selectedFormId}
+                  onValueChange={value => {
+                    setSelectedFormId(value);
+                    setSelectedUsage(null);
+                    setSigners([]);
+                    setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
+                  }}
+                >
+                  <SelectTrigger className="h-12 bg-background">
+                    <SelectValue placeholder="Pilih form sesuai kebutuhan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableForms.map(form => (
+                      <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Kegunaan</Label>
+                <Select
+                  disabled={!selectedFormId}
+                  value={selectedUsage?.id || ""}
+                  onValueChange={handleUsageChange}
+                >
+                  <SelectTrigger className="h-12 bg-background">
+                    <SelectValue placeholder={selectedFormId ? "Pilih kegunaan dan alur approval" : "Pilih form terlebih dahulu"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {usagesForSelectedForm.map(usage => (
+                      <SelectItem key={usage.id} value={usage.id}>
+                        {usage.name || getFullRoles(usage).join(" - ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {availableForms.length === 0 && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs font-semibold text-amber-700 md:col-span-2 dark:text-amber-300">
+                  Belum ada kegunaan aktif untuk kategori, departemen, dan kantor yang dipilih.
+                </div>
+              )}
+            </div>
+          )}
+
           {!generatedNoSurat ? (
             <Button
               onClick={handleGetNumber}
@@ -1273,11 +1668,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <Label className="text-[11px] font-black uppercase text-muted-foreground">
-                      Pilih Matrix Alur ({isPusatSelected ? "Pusat" : "Cabang"})
+                      Kegunaan & Alur Approval
                     </Label>
-                    <Popover open={openMatrix} onOpenChange={setOpenMatrix}>
+                    <Popover open={false}>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full h-auto py-3 justify-between rounded-xl ring-1 ring-border bg-muted/20 hover:bg-muted/30">
+                        <Button disabled variant="outline" className="w-full h-auto py-3 justify-between rounded-xl ring-1 ring-border bg-muted/20">
                           <div className="truncate text-left">
                             {selectedUsage ? (
                               <div className="flex items-center gap-1 flex-wrap">
@@ -1300,7 +1695,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                             <CommandEmpty>Alur tidak ditemukan.</CommandEmpty>
                             {Object.keys(groupedUsage).sort((a, b) => parseInt(a) - parseInt(b)).map(level => (
                               <CommandGroup key={level} heading={`ALUR ${level} TAHAP`}>
-                                {groupedUsage[parseInt(level)].map((u: any) => (
+                                {groupedUsage[parseInt(level)].map((u: UsageDetailRecord) => (
                                   <CommandItem key={u.id} onSelect={() => { handleUsageChange(u.id); setOpenMatrix(false); }} className="p-3 cursor-pointer">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       {getFullRoles(u).map((role: string, idx: number, arr: string[]) => (
@@ -1365,18 +1760,27 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               </div>
 
               {selectedUsage && (getVisibleManualFields().length > 0 || hasUnitRequestFields(selectedUsage)) && (
-                <div className="space-y-5 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-primary">Input Detail Template</p>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Isi data dokumen di sini. Data ini akan masuk ke template Excel dan PDF otomatis.
-                    </p>
+                <div className="space-y-5 rounded-3xl border border-border/50 bg-muted/10 p-4 md:p-6">
+                  <div className="rounded-3xl border border-primary/15 bg-primary/5 p-4 md:p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-widest text-primary">Input Detail Template</p>
+                        <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-foreground">
+                          Isi data dokumen di sini. Sistem akan memasukkan data ini ke template Excel dan PDF otomatis.
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-muted-foreground">
+                          Field dibuat berurutan dari atas ke bawah agar tidak perlu mencari input kecil di banyak kolom.
+                        </p>
+                      </div>
+                      <span className="inline-flex w-fit rounded-full border border-border/50 bg-background/70 px-3 py-1 text-[10px] font-black uppercase text-muted-foreground">
+                        {getVisibleManualFields().length} field
+                      </span>
+                    </div>
                   </div>
-                  {renderRequestModeSelector()}
-                  {renderUnitRequestPanel()}
+                  {renderRequestWorkflowStep()}
                   {getVisibleManualFields().length > 0 && (
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      {getVisibleManualFields().map((field: any) => renderManualField(field))}
+                    <div className="space-y-4">
+                      {getVisibleManualFields().map((field: TemplateField, index: number) => renderManualField(field, index))}
                     </div>
                   )}
                 </div>
@@ -1428,7 +1832,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                                 <CommandList className="max-h-[260px]">
                                   <CommandEmpty>User tidak ditemukan.</CommandEmpty>
                                   <CommandGroup>
-                                    {getFilteredSignerUsers(i).map((u: any) => (
+                                    {getFilteredSignerUsers(i).map((u: MasterRecord) => (
                                       <CommandItem
                                         key={u.id}
                                         value={u.full_name}

@@ -19,7 +19,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/surat/monitoring': { title: 'Monitoring Surat', subtitle: 'Lacak status dan alur distribusi surat' },
   '/surat/riwayat': { title: 'Riwayat Keterlibatan', subtitle: 'Riwayat pengajuan untuk pihak yang terlibat' },
   '/admin/users/hierarchy': { title: 'Hirarki Organisasi', subtitle: 'Tree list dan chart node struktur karyawan' },
-  '/admin/kpi-departments': { title: 'KPI Departemen', subtitle: 'Evaluasi SLA approval berdasarkan jam kerja efektif' },
+  '/admin/kpi-departments': { title: 'SLA Departemen', subtitle: 'Evaluasi approval berdasarkan jam kerja efektif' },
   '/admin/configuration/forms': { title: 'Form & Template', subtitle: 'Konfigurasi template dan input dokumen' },
   '/admin/configuration/workflows': { title: 'Alur Persetujuan', subtitle: 'Konfigurasi urutan dan posisi tanda tangan' },
   '/admin/configuration/kpi': { title: 'SLA Departemen', subtitle: 'Konfigurasi waktu kerja efektif departemen' },

@@ -345,7 +345,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             </div>
             {renderNavLink('/admin/configuration', 'Configuration', SlidersHorizontal)}
             {renderNavLink('/admin/monitoring', 'All Status Monitoring', Monitor)}
-            {renderNavLink('/admin/kpi-departments', 'KPI Departemen', BarChart3)}
+            {renderNavLink('/admin/kpi-departments', 'SLA Departemen', BarChart3)}
             {renderNavLink('/audit-logs', 'Audit Log', Activity)}
           </div>
         )}

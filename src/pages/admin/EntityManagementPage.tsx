@@ -12,9 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2, Loader2, Building, RefreshCw, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 export default function EntityManagementPage() {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [entities, setEntities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -102,7 +104,14 @@ export default function EntityManagementPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus entitas ini? Tindakan ini mungkin mempengaruhi data yang berelasi.")) return;
+    const entity = entities.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Entitas?",
+      description: `Entitas ${entity?.name || "ini"} akan dihapus. Tindakan ini mungkin mempengaruhi data yang berelasi.`,
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const { error } = await supabase

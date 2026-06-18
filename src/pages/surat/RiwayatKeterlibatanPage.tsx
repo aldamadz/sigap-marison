@@ -76,6 +76,14 @@ interface PreparedSurat extends SuratItem {
 }
 
 const ROLE_ORDER: InvolvementKey[] = ['MEMBUAT', 'MEMERIKSA', 'MENYETUJUI'];
+type SignatureStatusFilter = 'ALL' | 'APPROVED' | 'REJECTED';
+
+const currentMonthRange = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const format = (date: Date) => date.toISOString().slice(0, 10);
+  return { from: format(start), to: format(now) };
+};
 
 const ROLE_LABEL: Record<InvolvementKey, string> = {
   MEMBUAT: 'Membuat',
@@ -167,22 +175,36 @@ const RiwayatKeterlibatanPage = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | InvolvementKey>('ALL');
+  const initialRange = useMemo(() => currentMonthRange(), []);
+  const [statusFilter, setStatusFilter] = useState<SignatureStatusFilter>('ALL');
+  const [dateFrom, setDateFrom] = useState(initialRange.from);
+  const [dateTo, setDateTo] = useState(initialRange.to);
   const [selected, setSelected] = useState<PreparedSurat | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['surat-riwayat-keterlibatan'],
+    queryKey: ['surat-riwayat-keterlibatan', dateFrom, dateTo],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('Session tidak ditemukan');
       const userId = session.user.id;
+      const fromIso = dateFrom ? new Date(`${dateFrom}T00:00:00`).toISOString() : null;
+      const toIso = dateTo ? (() => {
+        const date = new Date(`${dateTo}T00:00:00`);
+        date.setDate(date.getDate() + 1);
+        return date.toISOString();
+      })() : null;
+
+      let directQuery = supabase
+        .from('surat_registrasi')
+        .select(SELECT_SURAT)
+        .eq('created_by', userId)
+        .order('updated_at', { ascending: false });
+      if (fromIso) directQuery = directQuery.gte('updated_at', fromIso);
+      if (toIso) directQuery = directQuery.lt('updated_at', toIso);
 
       const [directRes, signRes] = await Promise.all([
-        supabase
-          .from('surat_registrasi')
-          .select(SELECT_SURAT)
-          .eq('created_by', userId)
-          .order('updated_at', { ascending: false }),
+        directQuery,
         supabase
           .from('surat_signatures')
           .select('surat_id')
@@ -196,11 +218,14 @@ const RiwayatKeterlibatanPage = () => {
 
       let signatureDocs: SuratItem[] = [];
       if (signatureIds.length > 0) {
-        const sigDocsRes = await supabase
+        let sigDocsQuery = supabase
           .from('surat_registrasi')
           .select(SELECT_SURAT)
           .in('id', signatureIds)
           .order('updated_at', { ascending: false });
+        if (fromIso) sigDocsQuery = sigDocsQuery.gte('updated_at', fromIso);
+        if (toIso) sigDocsQuery = sigDocsQuery.lt('updated_at', toIso);
+        const sigDocsRes = await sigDocsQuery;
         if (sigDocsRes.error) throw sigDocsRes.error;
         signatureDocs = (sigDocsRes.data ?? []) as SuratItem[];
       }
@@ -314,9 +339,11 @@ const RiwayatKeterlibatanPage = () => {
     return prepared.filter((s) => {
       const hitSearch = !q || s.judul_surat?.toLowerCase().includes(q) || s.no_surat?.toLowerCase().includes(q);
       const hitRole = roleFilter === 'ALL' || s._involvementKeys.includes(roleFilter);
-      return hitSearch && hitRole;
+      const mine = (s.surat_signatures || []).filter((sig) => sig.user_id === data?.userId);
+      const hitStatus = statusFilter === 'ALL' || mine.some((sig) => sig.status === statusFilter);
+      return hitSearch && hitRole && hitStatus;
     });
-  }, [prepared, search, roleFilter]);
+  }, [prepared, search, roleFilter, statusFilter, data?.userId]);
 
   const getAttachments = (surat: SuratItem) => {
     const attachments = surat.surat_attachments ?? [];
@@ -356,7 +383,9 @@ const RiwayatKeterlibatanPage = () => {
     membuat: prepared.filter((x) => x._involvementKeys.includes('MEMBUAT')).length,
     memeriksa: prepared.filter((x) => x._involvementKeys.includes('MEMERIKSA')).length,
     menyetujui: prepared.filter((x) => x._involvementKeys.includes('MENYETUJUI')).length,
-  }), [prepared]);
+    approved: prepared.filter((x) => (x.surat_signatures || []).some((sig) => sig.user_id === data?.userId && sig.status === 'APPROVED')).length,
+    rejected: prepared.filter((x) => (x.surat_signatures || []).some((sig) => sig.user_id === data?.userId && sig.status === 'REJECTED')).length,
+  }), [prepared, data?.userId]);
 
   if (error) {
     return (
@@ -389,12 +418,14 @@ const RiwayatKeterlibatanPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         {[
           { label: 'Total', value: counts.total },
           { label: 'Membuat', value: counts.membuat },
           { label: 'Memeriksa', value: counts.memeriksa },
           { label: 'Menyetujui', value: counts.menyetujui },
+          { label: 'Setuju', value: counts.approved },
+          { label: 'Tolak', value: counts.rejected },
         ].map((c) => (
           <div key={c.label} className="rounded-xl border border-border bg-card/40 p-3">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">{c.label}</p>
@@ -415,7 +446,39 @@ const RiwayatKeterlibatanPage = () => {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full gap-2 sm:grid-cols-2 md:w-auto md:grid-cols-[150px_150px]">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dari</label>
+              <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="h-10" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sampai</label>
+              <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="h-10" />
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {([
+            ['ALL', 'Semua Status'],
+            ['APPROVED', 'Setuju'],
+            ['REJECTED', 'Tolak'],
+          ] as Array<[SignatureStatusFilter, string]>).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all',
+                statusFilter === value
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-transparent text-muted-foreground border-border hover:border-primary/40'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
             {(['ALL', ...ROLE_ORDER] as Array<'ALL' | InvolvementKey>).map((v) => (
               <button
                 key={v}
@@ -430,7 +493,6 @@ const RiwayatKeterlibatanPage = () => {
                 {v === 'ALL' ? 'Semua' : ROLE_LABEL[v]}
               </button>
             ))}
-          </div>
         </div>
       </div>
 

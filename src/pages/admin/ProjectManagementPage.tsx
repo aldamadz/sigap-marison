@@ -18,9 +18,11 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 export default function MasterProjectManagementPage() {
   const { toast } = useToast();
+  const appDialog = useAppDialog();
   const [projects, setProjects] = useState<any[]>([]);
   const [offices, setOffices] = useState<any[]>([]);
   const [entities, setEntities] = useState<any[]>([]);
@@ -110,7 +112,14 @@ export default function MasterProjectManagementPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus proyek ini?")) return;
+    const project = projects.find((item) => item.id === id);
+    const confirmed = await appDialog.confirm({
+      title: "Hapus Proyek?",
+      description: `Proyek ${project?.name || "ini"} akan dihapus dari master.`,
+      confirmText: "Hapus",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const { error } = await supabase.from("master_projects").delete().eq("id", id);
