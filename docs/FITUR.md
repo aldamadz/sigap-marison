@@ -128,7 +128,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 
 ### Fungsional
 
-- User memilih entitas, kantor/cabang, departemen, jenis surat, lalu klasifikasi `Aset`, `Unit`, atau `Non Unit`.
+- User memilih entitas, kantor/cabang, departemen, jenis surat, lalu klasifikasi `Aset`, `Unit`, `Non Aset`, atau `Non Unit`.
 - Sistem menyaring matrix alur berdasarkan klasifikasi, scope kantor, dan departemen.
 - User mendapatkan nomor surat.
 - User mengisi detail template berdasarkan Master Form.
@@ -420,6 +420,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin mengatur label jabatan, role, cell tanda tangan, nama, jabatan, sheet, dan preset kotak tanda tangan.
 - Admin menandai step yang wajib melakukan alokasi unit.
 - Admin menentukan kategori registrasi yang didukung setiap matrix: `Aset`, `Unit`, dan/atau `Non Unit`.
+- Admin dapat memfilter daftar Kegunaan Form berdasarkan form dan departemen pengaju.
+- Admin dapat membuat Kegunaan Form kategori `Non Aset` selain `Aset`, `Unit`, dan `Non Unit`.
 - Jika kategori `Unit` aktif, izin pemakaiannya diatur terpisah per departemen pada Configuration `Pengajuan Unit`.
 
 ### Non-Fungsional
@@ -704,6 +706,9 @@ Fallback data lama:
 - Urutan registrasi adalah kategori dokumen, form, lalu kegunaan.
 - Setiap kegunaan mengatur departemen pengaju, scope pusat/cabang, 2-8 tahap approval, departemen signer, kandidat user, action approval/alokasi unit, dan persyaratan lampiran.
 - Setiap tahap dapat memiliki tim pengecek/verifikator data sebelum penanda tangan tahap tersebut dapat melakukan aksi.
+- Tim pengecek bersifat opsional per tahap dan hanya aktif jika admin mengaktifkan konfigurasi pengecek pada tahap tersebut.
+- Kandidat pengecek default mengikuti departemen penandatangan tahap yang akan diverifikasi; pada scope cabang, snapshot pengecek transaksi dibatasi ke kantor/cabang surat yang sama.
+- Konfigurasi tim pengecek menyediakan pencarian nama, jabatan, dan kantor agar kandidat mudah ditemukan.
 - Jika tahap membutuhkan verifikasi, penanda tangan tetap dapat melihat pengajuan tetapi tombol `Setujui` dan `Tolak` terkunci sampai tim pengecek memverifikasi data.
 - Tim pengecek melihat task `Verifikasi Data` di Inbox Persetujuan, mengunggah lampiran tahap yang diwajibkan, mengisi alokasi Unit bila tahap tersebut membutuhkan alokasi, lalu menyimpan catatan verifikasi.
 - Pada pengajuan Unit, proyek/kawasan dikunci dari pilihan pemohon dan tidak dapat diubah oleh tim pengecek atau penanda tangan; jika proyek salah, user harus membuat pengajuan baru.

@@ -32,6 +32,7 @@ export const RealtimeSync = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "agendas" }, () => handleSync(agendaKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_attachments" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
       )

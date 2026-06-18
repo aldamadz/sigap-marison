@@ -13,13 +13,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 
-type RequestCategory = "asset" | "unit" | "non_unit";
+type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type UsageStatus = "draft" | "active" | "archived";
 type RoleName = "membuat" | "memeriksa" | "menyetujui";
 type ActionType = "approval" | "unit_allocation";
 
 type Department = { id: string; name: string; code?: string | null };
-type Profile = { id: string; full_name: string; job_title?: string | null; department_id?: string | null };
+type Office = { id: string; name: string; code?: string | null; kedudukan?: string | null };
+type Profile = { id: string; full_name: string; job_title?: string | null; department_id?: string | null; office_id?: string | null };
 type MasterForm = { id: string; nama_form?: string | null; signature_layout?: { enabled?: boolean; region?: string } | null };
 type RouteStep = {
   id?: string;
@@ -106,6 +107,22 @@ const emptyAttachment = (): AttachmentRule => ({
   max_size_mb: 10,
 });
 
+const normalizeRequestCategory = (value?: string | null): RequestCategory => {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "asset" || normalized === "aset") return "asset";
+  if (normalized === "unit") return "unit";
+  if (normalized === "non_asset" || normalized === "non-aset" || normalized === "non_aset") return "non_asset";
+  return "non_unit";
+};
+
+const requestCategoryLabel = (value?: string | null) => {
+  const category = normalizeRequestCategory(value);
+  if (category === "asset") return "Aset";
+  if (category === "unit") return "Unit";
+  if (category === "non_asset") return "Non Aset";
+  return "Non Unit";
+};
+
 export default function FormUsageManagementPage() {
   const { toast } = useToast();
   const appDialog = useAppDialog();
@@ -114,11 +131,15 @@ export default function FormUsageManagementPage() {
   const [usages, setUsages] = useState<UsageRecord[]>([]);
   const [forms, setForms] = useState<MasterForm[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [offices, setOffices] = useState<Office[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [routeTemplates, setRouteTemplates] = useState<RouteTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
+  const [formFilter, setFormFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [verifierSearch, setVerifierSearch] = useState<Record<number, string>>({});
   const [open, setOpen] = useState(false);
   const [selectedUsageId, setSelectedUsageId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -138,7 +159,7 @@ export default function FormUsageManagementPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [usageResult, formResult, departmentResult, profileResult, routeResult] = await Promise.all([
+      const [usageResult, formResult, departmentResult, officeResult, profileResult, routeResult] = await Promise.all([
         supabase.from("form_usages").select(`
           *,
           master_forms(id, nama_form, signature_layout),
@@ -152,18 +173,20 @@ export default function FormUsageManagementPage() {
         `).order("sort_order").order("created_at", { ascending: false }),
         supabase.from("master_forms").select("id, nama_form, signature_layout").order("nama_form"),
         supabase.from("master_departments").select("id, name, code").order("name"),
-        supabase.from("profiles").select("id, full_name, job_title, department_id").eq("is_active", true).order("full_name"),
+        supabase.from("master_offices").select("id, name, code, kedudukan").order("name"),
+        supabase.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
         supabase.from("approval_route_templates").select(`
           id, name, description,
           approval_route_steps(step_order, role_name, label, action_type)
         `).neq("status", "archived").order("name"),
       ]);
-      for (const result of [usageResult, formResult, departmentResult, profileResult, routeResult]) {
+      for (const result of [usageResult, formResult, departmentResult, officeResult, profileResult, routeResult]) {
         if (result.error) throw result.error;
       }
       setUsages((usageResult.data || []) as UsageRecord[]);
       setForms((formResult.data || []) as MasterForm[]);
       setDepartments(departmentResult.data || []);
+      setOffices(officeResult.data || []);
       setProfiles(profileResult.data || []);
       setRouteTemplates((routeResult.data || []) as RouteTemplate[]);
     } catch (error: unknown) {
@@ -202,7 +225,7 @@ export default function FormUsageManagementPage() {
           form_id: data.form_id || forms[0]?.id || "",
           route_id: "",
           request_category: Array.isArray(data.request_categories) && data.request_categories[0]
-            ? data.request_categories[0] as RequestCategory
+            ? normalizeRequestCategory(data.request_categories[0])
             : "non_unit",
           scope_type: data.is_cabang ? "cabang" : "pusat",
           status: "draft",
@@ -234,13 +257,17 @@ export default function FormUsageManagementPage() {
 
   const filteredUsages = useMemo(() => {
     const normalized = query.toLowerCase().trim();
-    if (!normalized) return usages;
-    return usages.filter(usage =>
-      `${usage.name} ${usage.master_forms?.nama_form || ""} ${usage.request_category}`
-        .toLowerCase()
-        .includes(normalized)
-    );
-  }, [query, usages]);
+    return usages.filter(usage => {
+      const matchesSearch = !normalized ||
+        `${usage.name} ${usage.master_forms?.nama_form || ""} ${requestCategoryLabel(usage.request_category)}`
+          .toLowerCase()
+          .includes(normalized);
+      const matchesForm = formFilter === "all" || usage.form_id === formFilter;
+      const usageDepartmentIds = (usage.form_usage_departments || []).map(item => item.department_id);
+      const matchesDepartment = departmentFilter === "all" || usageDepartmentIds.includes(departmentFilter);
+      return matchesSearch && matchesForm && matchesDepartment;
+    });
+  }, [departmentFilter, formFilter, query, usages]);
 
   const resetForm = () => {
     setSelectedUsageId(null);
@@ -352,6 +379,9 @@ export default function FormUsageManagementPage() {
           next.eligible_user_ids = next.eligible_user_ids.filter(userId =>
             profiles.some(profile => profile.id === userId && profile.department_id === patch.signer_department_id)
           );
+          next.verifier_user_ids = next.verifier_user_ids.filter(userId =>
+            profiles.some(profile => profile.id === userId && profile.department_id === patch.signer_department_id)
+          );
         }
         return next;
       }),
@@ -364,6 +394,33 @@ export default function FormUsageManagementPage() {
       eligible_user_ids: step.eligible_user_ids.includes(userId)
         ? step.eligible_user_ids.filter(id => id !== userId)
         : [...step.eligible_user_ids, userId],
+    });
+  };
+
+  const officeMap = useMemo(() => new Map(offices.map(office => [office.id, office])), [offices]);
+
+  const getVerifierCandidates = (step: RouteStep, searchValue = "") => {
+    const search = searchValue.trim().toLowerCase();
+    return profiles.filter(profile => {
+      if (!step.signer_department_id || profile.department_id !== step.signer_department_id) return false;
+      if (formData.scope_type === "cabang" && !profile.office_id) return false;
+      const office = profile.office_id ? officeMap.get(profile.office_id) : null;
+      if (!search) return true;
+      return [
+        profile.full_name,
+        profile.job_title,
+        office?.name,
+        office?.code,
+      ].some(value => String(value || "").toLowerCase().includes(search));
+    });
+  };
+
+  const setVerifierTeamEnabled = (stepIndex: number, enabled: boolean) => {
+    const step = formData.steps[stepIndex];
+    updateStep(stepIndex, {
+      verifier_user_ids: enabled
+        ? getVerifierCandidates(step).map(profile => profile.id)
+        : [],
     });
   };
 
@@ -529,12 +586,28 @@ export default function FormUsageManagementPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari kegunaan atau form..." className="pl-9" />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid flex-1 gap-3 sm:grid-cols-[minmax(220px,1fr)_220px_220px]">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari kegunaan atau form..." className="pl-9" />
+          </div>
+          <Select value={formFilter} onValueChange={setFormFilter}>
+            <SelectTrigger><SelectValue placeholder="Filter form" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Form</SelectItem>
+              {forms.map(form => <SelectItem key={form.id} value={form.id}>{form.nama_form || "Tanpa nama"}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+            <SelectTrigger><SelectValue placeholder="Filter departemen" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Departemen</SelectItem>
+              {departments.map(department => <SelectItem key={department.id} value={department.id}>{department.code ? `${department.code} - ` : ""}{department.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
-        <Button onClick={() => openUsage()}>
+        <Button onClick={() => openUsage()} className="lg:shrink-0">
           <Plus className="mr-2 h-4 w-4" /> Tambah Kegunaan
         </Button>
       </div>
@@ -558,7 +631,7 @@ export default function FormUsageManagementPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="truncate text-sm font-bold">{usage.name}</h3>
                     <Badge variant={usage.status === "active" ? "default" : "outline"}>{usage.status}</Badge>
-                    <Badge variant="secondary">{usage.request_category.replace("_", " ")}</Badge>
+                    <Badge variant="secondary">{requestCategoryLabel(usage.request_category)}</Badge>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">{usage.master_forms?.nama_form || "Form tidak ditemukan"}</p>
                 </div>
@@ -614,6 +687,7 @@ export default function FormUsageManagementPage() {
                   <SelectContent>
                     <SelectItem value="asset">Aset</SelectItem>
                     <SelectItem value="unit">Unit</SelectItem>
+                    <SelectItem value="non_asset">Non Aset</SelectItem>
                     <SelectItem value="non_unit">Non Unit</SelectItem>
                   </SelectContent>
                 </Select>
@@ -739,22 +813,60 @@ export default function FormUsageManagementPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4" /> Tim Pengecek Sebelum Tahap Ini
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Jika diisi, signer tahap {step.step_order} bisa melihat dokumen tetapi tombol setuju/tolak terkunci sampai salah satu pengecek memverifikasi data.
-                        </p>
-                        <div className="max-h-36 overflow-y-auto rounded-md border border-border bg-background p-2">
-                          {profiles.map(profile => (
-                            <label key={profile.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted">
-                              <input type="checkbox" checked={step.verifier_user_ids.includes(profile.id)} onChange={() => toggleVerifierUser(index, profile.id)} />
-                              <span className="font-semibold">{profile.full_name}</span>
-                              <span className="text-muted-foreground">{profile.job_title || ""}</span>
-                            </label>
-                          ))}
+                      <div className="mt-4 space-y-3 rounded-lg border border-border bg-background p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <Label className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4" /> Tim Pengecek Sebelum Tahap Ini
+                            </Label>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Opsional. Jika aktif, pengecek menyiapkan data sebelum signer tahap {step.step_order} bisa memproses.
+                            </p>
+                          </div>
+                          <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold">
+                            <input
+                              type="checkbox"
+                              checked={step.verifier_user_ids.length > 0}
+                              onChange={event => setVerifierTeamEnabled(index, event.target.checked)}
+                            />
+                            Aktifkan
+                          </label>
                         </div>
+                        {step.verifier_user_ids.length > 0 && (() => {
+                          const candidates = getVerifierCandidates(step, verifierSearch[index] || "");
+                          return (
+                            <div className="space-y-2">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                  value={verifierSearch[index] || ""}
+                                  onChange={event => setVerifierSearch(previous => ({ ...previous, [index]: event.target.value }))}
+                                  placeholder="Cari nama, jabatan, atau kantor..."
+                                  className="h-9 pl-9 text-xs"
+                                />
+                              </div>
+                              <div className="max-h-44 overflow-y-auto rounded-md border border-border bg-muted/10 p-2">
+                                {candidates.length === 0 ? (
+                                  <p className="p-2 text-xs text-muted-foreground">Tidak ada kandidat sesuai departemen tahap ini.</p>
+                                ) : candidates.map(profile => {
+                                  const office = profile.office_id ? officeMap.get(profile.office_id) : null;
+                                  return (
+                                    <label key={profile.id} className="flex items-start gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted">
+                                      <input type="checkbox" className="mt-0.5" checked={step.verifier_user_ids.includes(profile.id)} onChange={() => toggleVerifierUser(index, profile.id)} />
+                                      <span className="min-w-0">
+                                        <span className="block font-semibold">{profile.full_name}</span>
+                                        <span className="block text-muted-foreground">{[profile.job_title, office?.name].filter(Boolean).join(" - ")}</span>
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Terpilih {step.verifier_user_ids.length} pengecek dari departemen penandatangan tahap ini.
+                              </p>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

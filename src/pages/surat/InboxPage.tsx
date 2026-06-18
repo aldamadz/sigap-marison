@@ -41,7 +41,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
@@ -80,6 +79,9 @@ export default function InboxPage() {
   const [allocationDateOpen, setAllocationDateOpen] = useState<Record<string, boolean>>({});
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
+  const selectedItemRef = useRef<any>(null);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
 
   // 1. DATA INBOX
   const { data: inbox = [], isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
@@ -94,7 +96,14 @@ export default function InboxPage() {
 
   const { data: kpiDetails = [], isLoading: kpiLoading } = useQuery({
     queryKey: ['surat-inbox-kpi'],
-    queryFn: () => departmentKpiService.getDetails({ status: 'pending' }),
+    queryFn: async () => {
+      try {
+        return await departmentKpiService.getDetails({ status: 'pending' });
+      } catch (error) {
+        console.error("Gagal memuat SLA inbox", error);
+        return [];
+      }
+    },
     staleTime: 30000,
   });
 
@@ -158,16 +167,6 @@ export default function InboxPage() {
         return matchesSearch && matchesCategory && matchesKpi && (actionFilter === "all" || action === actionFilter);
       })
       .sort((left: any, right: any) => {
-        const leftKpi = kpiBySignature.get(left.id);
-        const rightKpi = kpiBySignature.get(right.id);
-        const leftLate = leftKpi?.is_late ? 1 : 0;
-        const rightLate = rightKpi?.is_late ? 1 : 0;
-        if (leftLate !== rightLate) return rightLate - leftLate;
-        if (leftKpi && rightKpi) {
-          const leftRemaining = leftKpi.sla_minutes - leftKpi.elapsed_minutes;
-          const rightRemaining = rightKpi.sla_minutes - rightKpi.elapsed_minutes;
-          if (leftRemaining !== rightRemaining) return leftRemaining - rightRemaining;
-        }
         const leftStarted = new Date(left.available_at || left.surat_registrasi?.created_at || 0).getTime();
         const rightStarted = new Date(right.available_at || right.surat_registrasi?.created_at || 0).getTime();
         return leftStarted - rightStarted;
@@ -178,6 +177,10 @@ export default function InboxPage() {
   const selectedItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;
 
   useEffect(() => {
+    selectedItemRef.current = selectedItem;
+  }, [selectedItem]);
+
+  useEffect(() => {
     if (!selectedItem) {
       if (requestedTaskId) setSearchParams({}, { replace: true });
       return;
@@ -186,6 +189,71 @@ export default function InboxPage() {
       setSearchParams({ task: selectedItem.id }, { replace: true });
     }
   }, [selectedItem?.id, requestedTaskId, setSearchParams]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const scheduleInboxRefresh = () => {
+      if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
+      realtimeRefreshTimerRef.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["surat-inbox"] });
+        queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] });
+      }, 700);
+    };
+
+    const showRealtimeToast = (key: string, title: string, description?: string) => {
+      const now = Date.now();
+      if (lastRealtimeToastRef.current?.key === key && now - lastRealtimeToastRef.current.at < 2500) return;
+      lastRealtimeToastRef.current = { key, at: now };
+      toast(title, { description });
+    };
+
+    const isActiveSurat = (suratId?: string | null) =>
+      !!suratId && selectedItemRef.current?.surat_id === suratId;
+
+    const isActiveSignature = (signatureId?: string | null) =>
+      !!signatureId && selectedItemRef.current?.id === signatureId;
+
+    const channel = supabase
+      .channel(`inbox-live:${currentUser.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, (payload: any) => {
+        const next = payload.new || {};
+        const previous = payload.old || {};
+        const related = isActiveSignature(next.id || previous.id) || isActiveSurat(next.surat_id || previous.surat_id);
+        if (related) {
+          if (next.verification_status === "verified" && previous.verification_status !== "verified") {
+            showRealtimeToast("verification-done", "Verifikasi selesai", "Data dari tim pengecek sudah masuk. Tombol tindakan akan diperbarui.");
+          } else if (next.verification_status === "revision_requested" && previous.verification_status !== "revision_requested") {
+            showRealtimeToast("verification-revision", "Dikembalikan ke tim pengecek", "Tim pengecek perlu memperbarui data sebelum proses dilanjutkan.");
+          } else if (next.is_signed !== previous.is_signed || next.status !== previous.status) {
+            showRealtimeToast("approval-progress", "Progress persetujuan diperbarui");
+          } else if (next.verification_note !== previous.verification_note) {
+            showRealtimeToast("verification-note", "Catatan verifikasi diperbarui");
+          }
+        }
+        scheduleInboxRefresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_attachments" }, (payload: any) => {
+        const row = payload.new || payload.old || {};
+        if (isActiveSurat(row.surat_id)) {
+          showRealtimeToast("attachments-updated", "Lampiran diperbarui", "Lampiran dari tim pengecek sudah disinkronkan.");
+        }
+        scheduleInboxRefresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, (payload: any) => {
+        const row = payload.new || payload.old || {};
+        if (isActiveSurat(row.id)) {
+          showRealtimeToast("surat-updated", "Data pengajuan diperbarui", "Perubahan terbaru sedang dimuat.");
+        }
+        scheduleInboxRefresh();
+      })
+      .subscribe();
+
+    return () => {
+      if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id, queryClient]);
 
   const isUnitAllocationRequired = (item: any) =>
     item.requires_unit_allocation === true && item.surat_registrasi?.form_input_data?.request_mode === "unit";
@@ -228,6 +296,14 @@ export default function InboxPage() {
       }))
     );
 
+  const getExistingApprovalAttachments = (item: any, requirementKey: string) =>
+    (Array.isArray(item.surat_registrasi?.surat_attachments) ? item.surat_registrasi.surat_attachments : [])
+      .filter((attachment: any) =>
+        attachment.signature_id === item.id &&
+        attachment.stage === "approval" &&
+        attachment.requirement_key === requirementKey
+      );
+
   const getMissingApprovalAttachmentLabels = (item: any) => {
     const filesByKey = approvalFiles[item.id] || {};
     return getApprovalAttachmentRequirements(item)
@@ -235,7 +311,9 @@ export default function InboxPage() {
         const minimum = requirement.is_required
           ? Math.max(1, Number(requirement.min_files || 1))
           : Number(requirement.min_files || 0);
-        return (filesByKey[requirement.requirement_key]?.length || 0) < minimum;
+        const newFileCount = filesByKey[requirement.requirement_key]?.length || 0;
+        const existingCount = getExistingApprovalAttachments(item, requirement.requirement_key).length;
+        return Math.max(newFileCount, existingCount) < minimum;
       })
       .map((requirement: any) => requirement.label || requirement.requirement_key);
   };
@@ -924,10 +1002,13 @@ const handleApprove = async (item: any) => {
           {requirements.map((requirement: any) => {
             const key = requirement.requirement_key;
             const files = approvalFiles[item.id]?.[key] || [];
+            const existingFiles = getExistingApprovalAttachments(item, key);
             const multiple = requirement.allow_multiple || Number(requirement.max_files || 1) > 1;
+            const satisfied = files.length > 0 || existingFiles.length > 0;
             return (
-              <label key={key} className={cn("block rounded-lg border p-3", files.length ? "border-emerald-500/30 bg-emerald-500/5" : "border-border")}>
-                <div className="mb-2 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{requirement.label || key}{requirement.is_required && <span className="ml-1 text-destructive">*</span>}</p><p className="text-xs text-muted-foreground">{files.length ? files.length + " file siap diunggah" : "Belum ada file"}</p></div>{files.length > 0 && <CircleCheck className="h-5 w-5 text-emerald-600" />}</div>
+              <label key={key} className={cn("block rounded-lg border p-3", satisfied ? "border-emerald-500/30 bg-emerald-500/5" : "border-border")}>
+                <div className="mb-2 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{requirement.label || key}{requirement.is_required && <span className="ml-1 text-destructive">*</span>}</p><p className="text-xs text-muted-foreground">{files.length ? files.length + " file baru akan mengganti lampiran lama" : existingFiles.length ? existingFiles.length + " file sudah tersedia" : "Belum ada file"}</p></div>{satisfied && <CircleCheck className="h-5 w-5 text-emerald-600" />}</div>
+                {existingFiles.length > 0 && files.length === 0 && existingFiles.map((file: any) => <div key={file.id || file.file_url} className="mb-2 flex justify-between gap-2 rounded bg-background px-2 py-1 text-xs"><span className="truncate">{file.file_name || "Lampiran tersimpan"}</span><span className="shrink-0 text-muted-foreground">Sudah ada</span></div>)}
                 {files.map((file) => <div key={file.name + file.lastModified} className="mb-2 flex justify-between gap-2 rounded bg-background px-2 py-1 text-xs"><span className="truncate">{file.name}</span><span className="shrink-0 text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span></div>)}
                 <Input type="file" multiple={multiple} accept={Array.isArray(requirement.allowed_types) ? requirement.allowed_types.join(",") : undefined} disabled={isUploading} className="h-10 text-xs" onChange={(event) => { const selected = Array.from(event.target.files || []).slice(0, Number(requirement.max_files || 1)); setApprovalFiles((previous) => ({ ...previous, [item.id]: { ...(previous[item.id] || {}), [key]: selected } })); }} />
               </label>
@@ -976,6 +1057,64 @@ const handleApprove = async (item: any) => {
     return blockers;
   };
 
+  const renderVerificationNotePanel = (item: any) => {
+    if (!item?.verification_required) return null;
+    const signatures = item.surat_registrasi?.surat_signatures || [];
+    const signature = signatures.find((entry: any) => entry.id === item.id) || item;
+    const verifier = Array.isArray(signature.verifier_snapshot)
+      ? signature.verifier_snapshot.find((entry: any) => entry.user_id === signature.verified_by)
+      : null;
+    const verified = signature.verification_status === "verified";
+    const revisionRequested = signature.verification_status === "revision_requested";
+    const note = String(signature.verification_note || "").trim();
+
+    if (!note && !signature.verified_at && !revisionRequested) return null;
+
+    return (
+      <section className={cn(
+        "rounded-xl border bg-background p-4",
+        verified && "border-emerald-500/30",
+        revisionRequested && "border-amber-500/30",
+        !verified && !revisionRequested && "border-sky-500/30"
+      )}>
+        <div className="flex items-start gap-3">
+          <ShieldCheck className={cn(
+            "mt-0.5 h-5 w-5",
+            verified && "text-emerald-600",
+            revisionRequested && "text-amber-600",
+            !verified && !revisionRequested && "text-sky-600"
+          )} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold">Catatan tim pengecek</p>
+              <Badge variant="outline" className={cn(
+                verified && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                revisionRequested && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+              )}>
+                {verified ? "Sudah diverifikasi" : revisionRequested ? "Perlu revisi" : "Menunggu verifikasi"}
+              </Badge>
+            </div>
+            {signature.verified_at && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Diverifikasi oleh {verifier?.full_name || "tim pengecek"} pada {new Date(signature.verified_at).toLocaleString("id-ID")}
+              </p>
+            )}
+            {note && (
+              <div className={cn(
+                "mt-3 rounded-lg border p-3 text-sm leading-relaxed",
+                verified && "border-emerald-500/20 bg-emerald-500/5",
+                revisionRequested && "border-amber-500/20 bg-amber-500/5",
+                !verified && !revisionRequested && "border-border bg-muted/20"
+              )}>
+                {note}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   const renderApprovalHistory = (item: any) => {
     const signatures = item.surat_registrasi?.surat_signatures || [];
     return (
@@ -988,7 +1127,10 @@ const handleApprove = async (item: any) => {
             const label = signature.label_jabatan || signature.signer_snapshot?.job_title || signature.role_name;
             const needsVerification = signature.verification_required === true;
             const verified = signature.verification_status === "verified";
-            return <div key={signature.id} className="flex gap-3"><div className="pt-3">{signature.is_signed ? <CircleCheck className="h-5 w-5 text-emerald-600" /> : active ? <Clock3 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5 text-muted-foreground/50" />}</div><div className="min-w-0 flex-1 rounded-lg bg-muted/20 p-3"><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-semibold">{signature.step_order}. {label}</p><Badge variant={signature.is_signed ? "default" : "outline"} className={cn(signature.is_signed && "bg-emerald-600")}>{signature.is_signed ? "Selesai" : active ? "Tindakan Anda" : "Menunggu"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{signer}</p>{needsVerification && <div className={cn("mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium", verified ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300")}><ShieldCheck className="h-3.5 w-3.5" />{verified ? "Data sudah diverifikasi" : "Menunggu verifikasi data"}</div>}{signature.verified_at && <p className="mt-1 text-xs text-muted-foreground">Diverifikasi {new Date(signature.verified_at).toLocaleString("id-ID")}</p>}{signature.signed_at && <p className="mt-1 text-xs text-muted-foreground">{new Date(signature.signed_at).toLocaleString("id-ID")}</p>}{signature.catatan && <p className="mt-2 rounded border border-border bg-background p-2 text-xs">{signature.catatan}</p>}</div></div>;
+            const verifier = Array.isArray(signature.verifier_snapshot)
+              ? signature.verifier_snapshot.find((item: any) => item.user_id === signature.verified_by)
+              : null;
+            return <div key={signature.id} className="flex gap-3"><div className="pt-3">{signature.is_signed ? <CircleCheck className="h-5 w-5 text-emerald-600" /> : active ? <Clock3 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5 text-muted-foreground/50" />}</div><div className="min-w-0 flex-1 rounded-lg bg-muted/20 p-3"><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-semibold">{signature.step_order}. {label}</p><Badge variant={signature.is_signed ? "default" : "outline"} className={cn(signature.is_signed && "bg-emerald-600")}>{signature.is_signed ? "Selesai" : active ? "Tindakan Anda" : "Menunggu"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{signer}</p>{needsVerification && <div className={cn("mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium", verified ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300")}><ShieldCheck className="h-3.5 w-3.5" />{verified ? "Data sudah diverifikasi" : "Menunggu verifikasi data"}</div>}{signature.verified_at && <p className="mt-1 text-xs text-muted-foreground">Diverifikasi oleh {verifier?.full_name || "tim pengecek"} pada {new Date(signature.verified_at).toLocaleString("id-ID")}</p>}{needsVerification && !verified && signature.verification_note && <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">Catatan revisi: {signature.verification_note}</p>}{signature.signed_at && <p className="mt-1 text-xs text-muted-foreground">{new Date(signature.signed_at).toLocaleString("id-ID")}</p>}{signature.catatan && <p className="mt-2 rounded border border-border bg-background p-2 text-xs">{signature.catatan}</p>}</div></div>;
           })}</div></AccordionContent>
         </AccordionItem>
       </Accordion>
@@ -1070,7 +1212,92 @@ const handleApprove = async (item: any) => {
     <div className="space-y-5 animate-in fade-in duration-300">
       <Dialog open={Boolean(previewingId)}><DialogContent className="max-w-sm text-center"><DialogHeader><DialogTitle className="flex flex-col items-center gap-3 text-base font-semibold"><Loader2 className="h-8 w-8 animate-spin text-primary" />PDF sedang dibuat</DialogTitle><DialogDescription>Dokumen diproses di background dan akan terbuka otomatis saat siap.</DialogDescription></DialogHeader></DialogContent></Dialog>
 
-      <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-3"><div className="h-8 w-1.5 rounded-full bg-primary" /><div><h1 className="text-2xl font-bold">Inbox Persetujuan</h1><p className="mt-1 text-sm text-muted-foreground">Fokus pada satu approval. Pilih antrean lain dari switcher.</p></div></div><div className="flex flex-wrap items-center gap-2"><Popover open={taskSwitcherOpen} onOpenChange={setTaskSwitcherOpen}><PopoverTrigger asChild><Button variant="outline" className="h-10 gap-2"><ListFilter className="h-4 w-4" />Antrean {filteredInbox.findIndex((item: any) => item.id === selectedItem?.id) + 1 || 0}/{filteredInbox.length}</Button></PopoverTrigger><PopoverContent align="end" className="w-[min(92vw,460px)] p-0"><div className="border-b border-border p-3"><div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">Pilih antrean approval</p><p className="text-xs text-muted-foreground">{filteredInbox.length} dari {inbox.length} antrean sesuai filter</p></div>{isFetching || kpiLoading ? <Loader2 className="mt-1 h-4 w-4 animate-spin text-muted-foreground" /> : null}</div><div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Cari nomor, judul, pengaju, atau departemen" value={searchTerm} onChange={(event) => handleSearchChange(event.target.value)} className="h-10 pl-9 text-sm" /></div><div className="mt-3 grid gap-2 sm:grid-cols-3"><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua kategori</SelectItem><SelectItem value="asset">Aset</SelectItem><SelectItem value="unit">Unit</SelectItem><SelectItem value="non_unit">Non Unit</SelectItem></SelectContent></Select><Select value={kpiFilter} onValueChange={setKpiFilter}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua KPI</SelectItem><SelectItem value="late">Terlambat</SelectItem><SelectItem value="due">Mendekati SLA</SelectItem><SelectItem value="on_time">Dalam SLA</SelectItem></SelectContent></Select><Select value={actionFilter} onValueChange={setActionFilter}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua tindakan</SelectItem><SelectItem value="approval">Persetujuan biasa</SelectItem><SelectItem value="unit">Alokasi unit</SelectItem><SelectItem value="attachment">Butuh lampiran</SelectItem><SelectItem value="verification">Verifikasi data</SelectItem></SelectContent></Select></div></div><ScrollArea className="max-h-[420px]"><div className="space-y-2 p-3">{filteredInbox.length ? filteredInbox.map(renderQueueItem) : <div className="flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-border p-6 text-center"><ShieldCheck className="mb-3 h-8 w-8 text-muted-foreground" /><p className="text-sm font-semibold">Tidak ada antrean yang cocok</p><p className="mt-1 text-xs text-muted-foreground">Ubah pencarian atau filter.</p></div>}</div></ScrollArea></PopoverContent></Popover><Badge variant="outline" className="h-10 px-3 text-sm">{inbox.length} total</Badge>{isFetching || kpiLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}</div></header>
+      <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-1.5 rounded-full bg-primary" />
+          <div>
+            <h1 className="text-2xl font-bold">Inbox Persetujuan</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Fokus pada satu approval. Pilih antrean lain dari switcher.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Popover open={taskSwitcherOpen} onOpenChange={setTaskSwitcherOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="h-10 gap-2">
+                <ListFilter className="h-4 w-4" />
+                Antrean {filteredInbox.findIndex((item: any) => item.id === selectedItem?.id) + 1 || 0}/{filteredInbox.length}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[min(92vw,460px)] p-0">
+              <div className="border-b border-border p-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Pilih antrean approval</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredInbox.length} dari {inbox.length} antrean sesuai filter
+                    </p>
+                  </div>
+                  {isFetching || kpiLoading ? <Loader2 className="mt-1 h-4 w-4 animate-spin text-muted-foreground" /> : null}
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari nomor, judul, pengaju, atau departemen"
+                    value={searchTerm}
+                    onChange={(event) => handleSearchChange(event.target.value)}
+                    className="h-10 pl-9 text-sm"
+                  />
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua kategori</SelectItem>
+                      <SelectItem value="asset">Aset</SelectItem>
+                      <SelectItem value="unit">Unit</SelectItem>
+                      <SelectItem value="non_unit">Non Unit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={kpiFilter} onValueChange={setKpiFilter}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua KPI</SelectItem>
+                      <SelectItem value="late">Terlambat</SelectItem>
+                      <SelectItem value="due">Mendekati SLA</SelectItem>
+                      <SelectItem value="on_time">Dalam SLA</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={actionFilter} onValueChange={setActionFilter}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua tindakan</SelectItem>
+                      <SelectItem value="approval">Persetujuan biasa</SelectItem>
+                      <SelectItem value="unit">Alokasi unit</SelectItem>
+                      <SelectItem value="attachment">Butuh lampiran</SelectItem>
+                      <SelectItem value="verification">Verifikasi data</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="max-h-[min(60vh,520px)] overflow-y-auto overscroll-contain">
+                <div className="space-y-2 p-3">
+                  {filteredInbox.length ? filteredInbox.map(renderQueueItem) : (
+                    <div className="flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-border p-6 text-center">
+                      <ShieldCheck className="mb-3 h-8 w-8 text-muted-foreground" />
+                      <p className="text-sm font-semibold">Tidak ada antrean yang cocok</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Ubah pencarian atau filter.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Badge variant="outline" className="h-10 px-3 text-sm">{inbox.length} total</Badge>
+          {isFetching || kpiLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+        </div>
+      </header>
 
       <div className="rounded-xl border border-border bg-card lg:h-[calc(100vh-14rem)] lg:min-h-[520px] lg:overflow-hidden">
           <main className="min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden">
@@ -1079,7 +1306,7 @@ const handleApprove = async (item: any) => {
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{selectedItem.surat_registrasi.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{selectedItem.label_jabatan || selectedItem.role_name}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Verifikasi Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{selectedItem.surat_registrasi.judul_surat}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {new Date(selectedItem.surat_registrasi.created_at).toLocaleString("id-ID")}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-            <div data-testid="approval-detail-scroll" className="min-h-0 flex-1 lg:overflow-y-scroll lg:overscroll-contain"><div className="mx-auto max-w-4xl space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}<section className="rounded-xl border border-border bg-background p-4"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+            <div data-testid="approval-detail-scroll" className="min-h-0 flex-1 lg:overflow-y-scroll lg:overscroll-contain"><div className="mx-auto max-w-4xl space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="rounded-xl border border-border bg-background p-4"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">

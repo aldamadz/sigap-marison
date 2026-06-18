@@ -51,10 +51,10 @@ type UsageDetailRecord = {
   id: string;
   name?: string;
   form_id?: string;
-  request_category?: "asset" | "unit" | "non_unit";
+  request_category?: "asset" | "unit" | "non_unit" | "non_asset";
   scope_type?: "all" | "pusat" | "cabang";
   is_cabang?: boolean;
-  request_categories?: Array<"asset" | "unit" | "non_unit">;
+  request_categories?: Array<"asset" | "unit" | "non_unit" | "non_asset">;
   workflow_allowed_departments?: Array<{ department_id: string }>;
   form_usage_steps?: Array<{
     id: string;
@@ -120,7 +120,7 @@ type TemplateField = {
   };
 };
 
-type RequestCategory = "asset" | "unit" | "non_unit";
+type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type TableRow = Record<string, unknown>;
 type ExternalOption = { value: string; label: string; raw?: unknown };
 type ProjectRaw = { id: string; code?: string; name?: string; branch?: { name?: string } | null };
@@ -147,6 +147,13 @@ type SignerAssignment = {
   attachment_requirements?: UsageDetailRecord["form_usage_attachment_requirements"];
 };
 
+type CurrentProfile = {
+  id: string;
+  role?: string | null;
+  department_id?: string | null;
+  office_id?: string | null;
+};
+
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
   const { toast } = useToast();
   const appDialog = useAppDialog();
@@ -170,6 +177,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalProjects, setExternalProjects]   = useState<ProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading]     = useState(false);
   const [projectsError, setProjectsError]         = useState<string | null>(null);
+  const [currentProfile, setCurrentProfile]       = useState<CurrentProfile | null>(null);
   const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
@@ -289,7 +297,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getRequestCategory = (): RequestCategory | null => {
     const category = formData.form_input_data.request_category;
-    return category === "asset" || category === "unit" || category === "non_unit"
+    return category === "asset" || category === "unit" || category === "non_unit" || category === "non_asset"
       ? category
       : null;
   };
@@ -362,6 +370,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const category = getRequestCategory();
     if (category === "asset") return "Aset";
     if (category === "unit") return "Unit";
+    if (category === "non_asset") return "Non Aset";
     if (category === "non_unit") return "Non Unit";
     return "Belum dipilih";
   };
@@ -445,6 +454,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const officePusat     = useMemo(() => master.offices?.find((o: MasterRecord) => o.kedudukan === "Pusat"), [master.offices]);
   const isPusatSelected = useMemo(() => formData.office_id === officePusat?.id, [formData.office_id, officePusat]);
+  const isCurrentUserAdmin = useMemo(
+    () => ["admin", "super_admin"].includes(String(currentProfile?.role || "").toLowerCase()),
+    [currentProfile?.role]
+  );
+  const lockProfileLocation = Boolean(currentProfile) && !isCurrentUserAdmin;
+  const profileOfficeId = currentProfile?.office_id || "";
+  const profileDepartmentId = currentProfile?.department_id || requesterDepartmentId;
 
   const filteredUsage = useMemo(() => {
     const category = getRequestCategory();
@@ -499,6 +515,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return isPusatSelected ? !isCabangDept : isCabangDept;
     }).sort((a: MasterRecord, b: MasterRecord) => (a.dept_index || 0) - (b.dept_index || 0));
   }, [master.depts, isPusatSelected]);
+
+  const departmentSelectOptions = useMemo(() => {
+    if (!lockProfileLocation) return filteredDepts;
+    return master.depts.filter((dept: MasterRecord) => dept.id === formData.dept_id);
+  }, [filteredDepts, lockProfileLocation, master.depts, formData.dept_id]);
 
   const filteredProjects = useMemo(() => {
     if (isPusatSelected || !master.projects) return [];
@@ -577,7 +598,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     suratService.getMasterData().then(data => {
       setMaster(data);
       const p = data.offices?.find((o: MasterRecord) => o.kedudukan === "Pusat");
-      if (p) setFormData(prev => ({ ...prev, office_id: p.id }));
+      if (p) setFormData(prev => ({ ...prev, office_id: prev.office_id || p.id }));
     }).catch(() => toast({ variant: "destructive", title: "Gagal memuat data master" }));
   }, [toast]);
 
@@ -588,16 +609,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         if (!user) return;
         const { data, error } = await supabase
           .from("profiles")
-          .select("department_id")
+          .select("id, role, department_id, office_id")
           .eq("id", user.id)
           .single();
         if (error) throw error;
         if (!cancelled) {
           const departmentId = data?.department_id || "";
+          const officeId = data?.office_id || "";
+          const isAdmin = ["admin", "super_admin"].includes(String(data?.role || "").toLowerCase());
+          setCurrentProfile(data as CurrentProfile);
           setRequesterDepartmentId(departmentId);
           setFormData(prev => ({
             ...prev,
-            dept_id: prev.dept_id || departmentId,
+            office_id: isAdmin ? prev.office_id : officeId,
+            dept_id: isAdmin ? (prev.dept_id || departmentId) : departmentId,
           }));
         }
       })
@@ -904,7 +929,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const resetForm = () => {
     setFormData({
-      entity_id: "", dept_id: requesterDepartmentId, letter_type_id: "", office_id: officePusat?.id || "", project_id: "",
+      entity_id: "",
+      dept_id: lockProfileLocation ? profileDepartmentId : requesterDepartmentId,
+      letter_type_id: "",
+      office_id: lockProfileLocation ? profileOfficeId : (officePusat?.id || ""),
+      project_id: "",
       judul_surat: "", penggunaan_id: "", is_aset: false,
       form_usage_id: "",
       request_place: "", request_date: new Date().toISOString().slice(0, 10), form_input_data: {}
@@ -1279,10 +1308,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </span>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { value: "asset", label: "Aset", description: "Dokumen aset / properti" },
             { value: "unit", label: "Unit", description: "Permohonan/order bangun unit" },
+            { value: "non_asset", label: "Non Aset", description: "Dokumen barang/jasa non aset" },
             { value: "non_unit", label: "Non Unit", description: "Dokumen umum selain unit" },
           ].map((option) => (
             (() => {
@@ -1408,7 +1438,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             {/* Kantor */}
             <div className="space-y-2">
               <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Kantor Penerbit</Label>
-              <Select disabled={!!generatedNoSurat} value={formData.office_id}
+              <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
                 onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
                 <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
                   <SelectValue placeholder="Pilih Kantor..." />
@@ -1461,13 +1491,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             {/* Departemen */}
             <div className="space-y-2">
               <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Departemen</Label>
-              <Select disabled={!!generatedNoSurat} value={formData.dept_id}
+              <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.dept_id}
                 onValueChange={v => setFormData({ ...formData, dept_id: v })}>
                 <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
                   <SelectValue placeholder="Pilih Dept..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredDepts.map((d: MasterRecord) => (
+                  {departmentSelectOptions.map((d: MasterRecord) => (
                     <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>

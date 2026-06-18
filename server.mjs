@@ -937,6 +937,124 @@ const uploadInternalStorageFile = async (token, req) => {
   };
 };
 
+const replaceSignatureAttachmentFiles = async (token, req) => {
+  const user = await requireSupabaseUser(token);
+  if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
+
+  const form = await parseUploadForm(req);
+  const suratId = String(form.get("suratId") || "").trim();
+  const signatureId = String(form.get("signatureId") || "").trim();
+  const stage = String(form.get("stage") || "approval").trim() || "approval";
+  const rawMeta = String(form.get("metadata") || "[]");
+  const metadata = JSON.parse(rawMeta);
+  const files = form.getAll("files").filter((file) => file && typeof file.arrayBuffer === "function");
+
+  if (!suratId || !signatureId || !Array.isArray(metadata) || files.length === 0) {
+    const err = new Error("Payload lampiran tidak lengkap.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { data: signature, error: signatureError } = await supabase
+    .from("surat_signatures")
+    .select("id, surat_id, user_id, verifier_snapshot")
+    .eq("id", signatureId)
+    .eq("surat_id", suratId)
+    .maybeSingle();
+  if (signatureError || !signature) {
+    const err = new Error("Data tanda tangan tidak ditemukan.");
+    err.status = 404;
+    throw err;
+  }
+
+  const verifierIds = Array.isArray(signature.verifier_snapshot)
+    ? signature.verifier_snapshot.map((item) => item?.user_id).filter(Boolean)
+    : [];
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const allowed = signature.user_id === user.id || verifierIds.includes(user.id) || profile?.role === "admin";
+  if (!allowed) {
+    const err = new Error("Forbidden");
+    err.status = 403;
+    throw err;
+  }
+
+  const requirementKeys = Array.from(new Set(metadata.map((item) => String(item.key || "").trim()).filter(Boolean)));
+  if (requirementKeys.length === 0) {
+    const err = new Error("Requirement lampiran tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { data: oldRows, error: oldRowsError } = await supabase
+    .from("surat_attachments")
+    .select("id, file_url")
+    .eq("surat_id", suratId)
+    .eq("signature_id", signatureId)
+    .eq("stage", stage)
+    .in("requirement_key", requirementKeys);
+  if (oldRowsError) throw oldRowsError;
+
+  if ((oldRows || []).length > 0) {
+    await Promise.all((oldRows || []).map(async (row) => {
+      const ref = parseStorageRef(row.file_url);
+      if (!ref?.bucket || !ref?.path) return;
+      const { error } = await storageClientForRef(ref).storage.from(ref.bucket).remove([ref.path]);
+      if (error) console.error("Storage remove failed:", { path: row.file_url, message: error.message });
+    }));
+
+    const { error: deleteError } = await supabase
+      .from("surat_attachments")
+      .delete()
+      .eq("surat_id", suratId)
+      .eq("signature_id", signatureId)
+      .eq("stage", stage)
+      .in("requirement_key", requirementKeys);
+    if (deleteError) throw deleteError;
+  }
+
+  const rows = [];
+  for (const [index, file] of files.entries()) {
+    const meta = metadata[index] || {};
+    const key = String(meta.key || "").trim();
+    if (!key) continue;
+
+    const safeName = file.name.replace(/[^\w.-]+/g, "_");
+    const filePath = `lampiran_${suratId}/${Date.now()}_${randomBytes(4).toString("hex")}_${safeName}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { error: uploadError } = await uploadStorageClient().storage.from("lampiran_surat").upload(filePath, buffer, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    rows.push({
+      surat_id: suratId,
+      file_url: makeStoragePublicUrl("lampiran_surat", filePath, useExternalStorage() ? "external" : "primary"),
+      file_name: file.name,
+      file_type: file.type || null,
+      file_size: file.size,
+      created_by: user.id,
+      stage,
+      requirement_key: key,
+      requirement_label: meta.label || key,
+      signature_id: signatureId,
+    });
+  }
+
+  if (rows.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("surat_attachments")
+    .insert(rows)
+    .select("*");
+  if (error) throw error;
+  return data || [];
+};
+
 const fillEndpointTemplate = (template, variables = {}) => {
   const missing = [];
   const path = String(template || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
@@ -1432,6 +1550,12 @@ createServer(async (req, res) => {
       if (req.method === "POST" && url.pathname === "/api/storage/upload") {
         const token = getBearerToken(req);
         const result = await uploadInternalStorageFile(token, req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/surat/attachments/replace") {
+        const token = getBearerToken(req);
+        const result = await replaceSignatureAttachmentFiles(token, req);
         return sendJson(res, 200, result);
       }
 

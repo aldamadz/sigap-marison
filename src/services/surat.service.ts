@@ -125,6 +125,63 @@ export const suratService = {
     }
   },
 
+  getVerifierIdsFromSnapshot(snapshot: any): string[] {
+    const rows = Array.isArray(snapshot) ? snapshot : [];
+    return [...new Set(rows.map((item: any) => item?.user_id).filter(Boolean))];
+  },
+
+  async notifyInboxStepTasks(
+    suratId: string,
+    stepOrder: number,
+    judulSurat: string,
+    eventType: string
+  ) {
+    const { data: signatures, error } = await supabase
+      .from("surat_signatures")
+      .select("id, user_id, verification_required, verification_status, verifier_snapshot")
+      .eq("surat_id", suratId)
+      .eq("step_order", stepOrder)
+      .eq("is_signed", false);
+
+    if (error) {
+      console.error("Failed to load inbox notification targets:", error);
+      return;
+    }
+
+    for (const signature of signatures || []) {
+      const verifierIds = signature.verification_required && signature.verification_status !== "verified"
+        ? this.getVerifierIdsFromSnapshot(signature.verifier_snapshot)
+        : [];
+      const targetIds = verifierIds.length > 0 ? verifierIds : [signature.user_id].filter(Boolean);
+      if (targetIds.length === 0) continue;
+
+      const isVerification = verifierIds.length > 0;
+      const title = isVerification ? "Verifikasi Data Diperlukan" : "Surat Masuk Baru";
+      const message = isVerification
+        ? `Surat "${judulSurat}" perlu diverifikasi sebelum ditandatangani`
+        : `Surat "${judulSurat}" memerlukan tindakan Anda`;
+      const link = `/surat/inbox?task=${signature.id}`;
+
+      const notificationResults = await Promise.allSettled(
+        targetIds.map((userId) =>
+          notificationService.createNotification(userId, title, message, "info", link)
+        )
+      );
+
+      notificationResults.forEach((result) => {
+        if (result.status === "rejected") console.error("Notif error:", result.reason);
+      });
+
+      this.sendEmailNotification(
+        targetIds,
+        title,
+        message,
+        link,
+        { surat_id: suratId, signature_id: signature.id, event_type: eventType }
+      );
+    }
+  },
+
   cleanUuid(id: any) {
     if (!id || id === "" || id === "pusat" || id === "undefined" || id === "null") return null;
     return id;
@@ -715,13 +772,31 @@ export const suratService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Tidak terautentikasi");
 
+    const profileResult = await supabase
+      .from("profiles")
+      .select("id, full_name, nik, job_title, email, department_id, office_id, role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileResult.error) throw profileResult.error;
+
+    const profile = profileResult.data;
+    const isAdmin = ["admin", "super_admin"].includes(String(profile?.role || "").toLowerCase());
+    const effectivePayload = isAdmin
+      ? payload
+      : {
+          ...payload,
+          office_id: profile?.office_id || payload.office_id,
+          dept_id: profile?.department_id || payload.dept_id,
+        };
+
     const [profileRes, officeRes, projectRes, deptRes, entityRes, usageRes] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, nik, job_title, email, department_id, office_id").eq("id", user.id).single(),
-      payload.office_id ? supabase.from("master_offices").select("id, name, code, kedudukan").eq("id", payload.office_id).maybeSingle() : Promise.resolve({ data: null }),
-      payload.project_id ? supabase.from("master_projects").select("id, name, code, office_id, entity_id").eq("id", payload.project_id).maybeSingle() : Promise.resolve({ data: null }),
-      payload.dept_id ? supabase.from("master_departments").select("id, name, code, dept_index").eq("id", payload.dept_id).maybeSingle() : Promise.resolve({ data: null }),
-      payload.entity_id ? supabase.from("master_entities").select("id, name, code").eq("id", payload.entity_id).maybeSingle() : Promise.resolve({ data: null }),
-      payload.form_usage_id
+      Promise.resolve(profileResult),
+      effectivePayload.office_id ? supabase.from("master_offices").select("id, name, code, kedudukan").eq("id", effectivePayload.office_id).maybeSingle() : Promise.resolve({ data: null }),
+      effectivePayload.project_id ? supabase.from("master_projects").select("id, name, code, office_id, entity_id").eq("id", effectivePayload.project_id).maybeSingle() : Promise.resolve({ data: null }),
+      effectivePayload.dept_id ? supabase.from("master_departments").select("id, name, code, dept_index").eq("id", effectivePayload.dept_id).maybeSingle() : Promise.resolve({ data: null }),
+      effectivePayload.entity_id ? supabase.from("master_entities").select("id, name, code").eq("id", effectivePayload.entity_id).maybeSingle() : Promise.resolve({ data: null }),
+      effectivePayload.form_usage_id
         ? supabase
             .from("form_usages")
             .select(`
@@ -734,13 +809,13 @@ export const suratService = {
               form_usage_attachment_requirements(*),
               master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id, signature_layout)
             `)
-            .eq("id", payload.form_usage_id)
+            .eq("id", effectivePayload.form_usage_id)
             .single()
-        : payload.penggunaan_id
+        : effectivePayload.penggunaan_id
         ? supabase
             .from("master_penggunaan_detail")
             .select("*, workflow_allowed_departments(department_id), master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id)")
-            .eq("id", payload.penggunaan_id)
+            .eq("id", effectivePayload.penggunaan_id)
             .single()
         : Promise.resolve({ data: null }),
     ]);
@@ -770,7 +845,7 @@ export const suratService = {
       entity: entityRes.data,
       usage,
       form: usage?.master_forms ?? null,
-      payload,
+      payload: effectivePayload,
     };
   },
 
@@ -950,6 +1025,7 @@ export const suratService = {
       const normalizedFormInputData = this.normalizeFormInputData(payload.form_input_data);
       payload = { ...payload, form_input_data: normalizedFormInputData };
       const configContext = await this.getTemplateContext(payload);
+      payload = { ...configContext.payload, form_input_data: normalizedFormInputData };
       const unitConfig = this.getUnitConfigFromForm(configContext.form);
       const isUnitMode = normalizedFormInputData?.request_mode === "unit";
       if (isUnitMode) {
@@ -1178,32 +1254,13 @@ export const suratService = {
           throw signerInsertError;
         }
         
-        // Notifikasi ke step pertama
         const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
-        const firstSigners = signerPayload.filter((s: any) => s.step_order === firstStepOrd);
-        
-        const notificationResults = await Promise.allSettled(
-          firstSigners.map((s: any) =>
-            notificationService.createNotification(
-              s.user_id,
-              'Surat Masuk Baru',
-              `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
-              'info',
-              `/surat/inbox`
-            )
-          )
+        await this.notifyInboxStepTasks(
+          surat.id,
+          firstStepOrd,
+          cleanPayload.judul_surat,
+          "new_inbox"
         );
-        this.sendEmailNotification(
-          firstSigners.map((s: any) => s.user_id),
-          "Surat Masuk Baru",
-          `Surat "${cleanPayload.judul_surat}" telah diajukan dan memerlukan tindakan Anda`,
-          "/surat/inbox",
-          { surat_id: surat.id, event_type: "new_inbox" }
-        );
-
-        notificationResults.forEach((result) => {
-          if (result.status === 'rejected') console.error("Notif error:", result.reason);
-        });
       }
 
       documentPreviewService.enqueuePdf(surat.id).catch((pdfError) => {
@@ -1537,36 +1594,12 @@ export const suratService = {
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
       if (updatedSurat.status === 'PROSES' && updatedSurat.current_step > currentStep) {
-        const { data: nextSigners } = await supabase
-          .from("surat_signatures")
-          .select("user_id")
-          .eq("surat_id", suratId)
-          .eq("step_order", updatedSurat.current_step);
-          
-        if (nextSigners && nextSigners.length > 0) {
-          const notificationResults = await Promise.allSettled(
-            nextSigners.map((ns: any) =>
-              notificationService.createNotification(
-                ns.user_id,
-                'Surat Masuk Baru',
-                `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
-                'info',
-                `/surat/inbox`
-              )
-            )
-          );
-
-          notificationResults.forEach((result) => {
-            if (result.status === 'rejected') console.error("Notif error:", result.reason);
-          });
-          this.sendEmailNotification(
-            nextSigners.map((ns: any) => ns.user_id),
-            "Surat Masuk Baru",
-            `Surat "${updatedSurat.judul_surat}" memerlukan tindakan Anda`,
-            "/surat/inbox",
-            { surat_id: suratId, event_type: "next_signer" }
-          );
-        }
+        await this.notifyInboxStepTasks(
+          suratId,
+          updatedSurat.current_step,
+          updatedSurat.judul_surat,
+          "next_inbox"
+        );
       }
     }
 
@@ -1616,7 +1649,7 @@ export const suratService = {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: sigInfo, error: sigError } = await supabase
       .from("surat_signatures")
-      .select("surat_id, requires_unit_allocation, action_type, attachment_requirements_snapshot")
+      .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, attachment_requirements_snapshot")
       .eq("id", signatureId)
       .single();
     if (sigError || !sigInfo) throw new Error("Data verifikasi tidak ditemukan.");
@@ -1624,7 +1657,7 @@ export const suratService = {
     const suratId = options.suratId || sigInfo.surat_id;
     const { data: suratFresh, error: suratErr } = await supabase
       .from("surat_registrasi")
-      .select("file_path, penggunaan_id, form_input_data, data_snapshot")
+      .select("file_path, penggunaan_id, judul_surat, form_input_data, data_snapshot")
       .eq("id", suratId)
       .single();
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
@@ -1635,11 +1668,19 @@ export const suratService = {
       ? sigInfo.attachment_requirements_snapshot
       : [];
     const approvalAttachments = options.approvalAttachments || [];
+    const { data: existingApprovalAttachments, error: existingApprovalError } = await supabase
+      .from("surat_attachments")
+      .select("id, requirement_key")
+      .eq("surat_id", suratId)
+      .eq("signature_id", signatureId)
+      .eq("stage", "approval");
+    if (existingApprovalError) throw existingApprovalError;
 
     approvalRequirements.forEach((requirement: any) => {
       const files = approvalAttachments.filter(item => item.key === requirement.requirement_key);
+      const existingCount = (existingApprovalAttachments || []).filter(item => item.requirement_key === requirement.requirement_key).length;
       const minimum = requirement.is_required ? Math.max(1, Number(requirement.min_files || 1)) : Number(requirement.min_files || 0);
-      if (files.length < minimum) {
+      if (Math.max(files.length, existingCount) < minimum) {
         throw new Error(`Lampiran approval belum lengkap: ${requirement.label || requirement.requirement_key}.`);
       }
       if (files.length > Number(requirement.max_files || 1)) {
@@ -1657,18 +1698,11 @@ export const suratService = {
     });
 
     if (approvalAttachments.length > 0) {
-      await this.uploadAttachmentFiles(
+      await this.replaceSignatureAttachmentFiles(
         suratId,
-        approvalAttachments.map(item => item.file),
-        user?.id,
-        {
-          stage: "approval",
-          signature_id: signatureId,
-          requirements: Object.fromEntries(approvalAttachments.map(item => [
-            item.file.name,
-            { key: item.key, label: item.label },
-          ])),
-        }
+        signatureId,
+        "approval",
+        approvalAttachments
       );
     }
 
@@ -1694,24 +1728,14 @@ export const suratService = {
 
       const unitRecapAttachment = this.createUnitRecapAttachment(project, units);
       const productionCodeAttachment = this.createProductionCodeAttachment(project, units);
-      await this.uploadAttachmentFiles(
+      await this.replaceSignatureAttachmentFiles(
         suratId,
-        [unitRecapAttachment, productionCodeAttachment],
-        user?.id,
-        {
-          stage: "unit_allocation",
-          signature_id: signatureId,
-          requirements: {
-            [unitRecapAttachment.name]: {
-              key: "rekap_adendum_unit",
-              label: "Rekap Adendum Unit",
-            },
-            [productionCodeAttachment.name]: {
-              key: "kode_produksi_unit",
-              label: "Kode Produksi Unit",
-            },
-          },
-        }
+        signatureId,
+        "unit_allocation",
+        [
+          { key: "rekap_adendum_unit", label: "Rekap Adendum Unit", file: unitRecapAttachment },
+          { key: "kode_produksi_unit", label: "Kode Produksi Unit", file: productionCodeAttachment },
+        ]
       );
 
       if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
@@ -1750,6 +1774,24 @@ export const suratService = {
     });
     if (error) throw new Error(error.message);
     if (!data) throw new Error("Gagal memverifikasi data.");
+    if (sigInfo.user_id) {
+      const link = `/surat/inbox?task=${signatureId}`;
+      const message = `Surat "${suratFresh.judul_surat}" sudah diverifikasi dan siap ditindaklanjuti`;
+      await notificationService.createNotification(
+        sigInfo.user_id,
+        "Verifikasi Selesai",
+        message,
+        "info",
+        link
+      ).catch((notifError) => console.error("Notif error:", notifError));
+      this.sendEmailNotification(
+        [sigInfo.user_id],
+        "Verifikasi Selesai",
+        message,
+        link,
+        { surat_id: suratId, signature_id: signatureId, event_type: "verification_done" }
+      );
+    }
     return true;
   },
 
@@ -1790,7 +1832,7 @@ export const suratService = {
         .eq("is_signed", false)
         .eq("verification_required", true)
         .eq("verification_status", "pending")
-        .contains("verifier_snapshot", [{ user_id: userId }]),
+        .filter("verifier_snapshot", "cs", JSON.stringify([{ user_id: userId }])),
     ]);
     if (signerRes.error) throw signerRes.error;
     if (verifierRes.error) throw verifierRes.error;
@@ -1816,6 +1858,50 @@ export const suratService = {
     const filePath = `dokumen/${Date.now()}_${file.name}`;
     const uploaded = await appStorageService.upload({ bucket: "dokumen_surat", path: filePath, file });
     return uploaded.publicUrl;
+  },
+
+  async replaceSignatureAttachmentFiles(
+    suratId: string,
+    signatureId: string,
+    stage: string,
+    attachments: Array<{ key: string; label?: string; file: File }>
+  ) {
+    if (attachments.length === 0) return [];
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Tidak terautentikasi");
+
+    const formData = new FormData();
+    formData.set("suratId", suratId);
+    formData.set("signatureId", signatureId);
+    formData.set("stage", stage);
+    formData.set("metadata", JSON.stringify(attachments.map(item => ({
+      fileName: item.file.name,
+      key: item.key,
+      label: item.label || item.key,
+    }))));
+    attachments.forEach(item => formData.append("files", item.file));
+
+    let response: Response;
+    try {
+      response = await fetch("/api/surat/attachments/replace", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+    } catch (error: any) {
+      throw new Error(
+        error?.message === "Failed to fetch" || error?.message === "fetch failed"
+          ? "Server lampiran tidak bisa dihubungi."
+          : error?.message || "Gagal mengganti lampiran."
+      );
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || "Gagal mengganti lampiran.");
+    return payload || [];
   },
 
   async uploadAttachmentFiles(

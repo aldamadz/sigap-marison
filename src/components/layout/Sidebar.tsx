@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { supabase } from "@/lib/supabase"
 import { getCurrentUser } from '@/services/user-ui.service'
+import { suratService } from '@/services/surat.service'
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 
@@ -70,21 +71,18 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   useEffect(() => {
     if (!user?.id) return
     const fetchInboxCount = async () => {
-      const { data: suratProses } = await supabase.from('surat_registrasi').select('id, current_step').eq('status', 'PROSES')
-      if (!suratProses?.length) { setInboxCount(0); return }
-      const suratIds = suratProses.map((s: any) => s.id)
-      const currentStepMap: Record<string, number> = {}
-      suratProses.forEach((s: any) => { currentStepMap[s.id] = s.current_step })
-      const { data, error } = await supabase.from('surat_signatures').select('id, step_order, surat_id').eq('user_id', user.id).eq('is_signed', false).in('surat_id', suratIds)
-      if (!error && data) {
-        const actualPending = data.filter((sig: any) => sig.step_order === currentStepMap[sig.surat_id])
-        setInboxCount(actualPending.length)
+      try {
+        const rows = await suratService.getMyInbox(user.id)
+        setInboxCount(rows.length)
+      } catch (error) {
+        console.error('Failed to load sidebar inbox count:', error)
+        setInboxCount(0)
       }
     }
     fetchInboxCount()
-    const channel = supabase.channel('sidebar-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_signatures', filter: `user_id=eq.${user.id}` }, () => fetchInboxCount())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_registrasi' }, () => fetchInboxCount())
+    const channel = supabase.channel(`sidebar-realtime:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_signatures' }, () => fetchInboxCount())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_registrasi' }, () => fetchInboxCount())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [user?.id])

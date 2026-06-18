@@ -81,7 +81,12 @@ type SignatureStatusFilter = 'ALL' | 'APPROVED' | 'REJECTED';
 const currentMonthRange = () => {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const format = (date: Date) => date.toISOString().slice(0, 10);
+  const format = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
   return { from: format(start), to: format(now) };
 };
 
