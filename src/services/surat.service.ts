@@ -40,6 +40,8 @@ type TemplateInputField = {
   fontSize?: number;
   row_height?: number;
   rowHeight?: number;
+  prefix?: string;
+  suffix?: string;
   table_config?: {
     start_row: number;
     end_row: number;
@@ -695,7 +697,11 @@ export const suratService = {
   },
 
   writeWrappedField(sheet: ExcelJS.Worksheet, field: TemplateInputField, value: any) {
-    const text = this.formatInputValue(value, field.type);
+    const formatted = this.formatInputValue(value, field.type);
+    const baseText = String(formatted ?? "");
+    const text = baseText
+      ? `${field.prefix || ""}${baseText}${field.suffix || ""}`
+      : "";
     const configuredRange = String(field.merge_range || field.mergeRange || "").trim().toUpperCase();
     const mergeRange = configuredRange;
     const cellAddress = this.getTopLeftCell(mergeRange, field.cell || "");
@@ -861,19 +867,22 @@ export const suratService = {
     await workbook.xlsx.load(await response.arrayBuffer());
     const worksheet = workbook.worksheets[0];
 
-    worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
-    worksheet.getCell("D5").value = `: ${payload.no_surat}`;
     const inputData = payload.form_input_data ?? {};
     const requestedProject = inputData?.request_mode === "unit" ? inputData?.requested_project : null;
-    if (payload.office_id && context.office?.name !== "Kantor Pusat") {
-      worksheet.getCell("L4").value = `: KC. ${context.office?.name || ""}`;
-      worksheet.getCell("L5").value = `: ${context.project?.name || ""}`;
-    } else if (requestedProject?.name) {
-      worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
-      worksheet.getCell("L5").value = `: ${requestedProject.name}`;
-    } else {
-      worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
-      worksheet.getCell("L5").value = ": -";
+    const isPgdTemplate = String(context.form?.nama_form || "").toUpperCase().includes("PERMINTAAN BARANG");
+    if (isPgdTemplate) {
+      worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
+      worksheet.getCell("D5").value = `: ${payload.no_surat}`;
+      if (payload.office_id && context.office?.name !== "Kantor Pusat") {
+        worksheet.getCell("L4").value = `: KC. ${context.office?.name || ""}`;
+        worksheet.getCell("L5").value = `: ${context.project?.name || ""}`;
+      } else if (requestedProject?.name) {
+        worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
+        worksheet.getCell("L5").value = `: ${requestedProject.name}`;
+      } else {
+        worksheet.getCell("L4").value = `: ${context.department?.name || ""}`;
+        worksheet.getCell("L5").value = ": -";
+      }
     }
 
     const schema = this.parseInputSchema(context.form?.input_schema);

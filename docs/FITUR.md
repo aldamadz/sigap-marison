@@ -109,6 +109,9 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Sistem mengisi template dari input user dan data sistem.
 - User mengisi tempat dan tanggal melalui sistem.
 - User mengisi input template seperti tabel barang, catatan, atau field lain sesuai preset form.
+- Admin dapat memilih preset konfigurasi template saat upload Excel agar mapping input, kode form, departemen, dan area tanda tangan terisi otomatis.
+- Template `Rekomendasi Peremajaan Barang / Alat Kerja` tersedia sebagai form rekomendasi/prasyarat dengan nomor dokumen, tabel rekomendasi, catatan, tempat/tanggal, dan tanda tangan dinamis.
+- Nomor dokumen rekomendasi memakai penomoran sistem dan mengikuti departemen pembuat/checker dokumen agar melanjutkan counter departemen yang sama.
 - Lampiran dapat diwajibkan, opsional, atau multiple sesuai aturan form.
 - Preview dokumen menggunakan PDF.
 - Surat berjalan mengikuti matrix tanda tangan.

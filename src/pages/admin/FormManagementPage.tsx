@@ -61,6 +61,8 @@ interface TemplateInputField {
   font_name?: string;
   font_size?: number;
   row_height?: number;
+  prefix?: string;
+  suffix?: string;
   multiple?: boolean;
   external_source_key?: string;
   external_dependency_key?: string;
@@ -118,6 +120,8 @@ const normalizeInputSchema = (value: any): TemplateInputField[] => {
     font_name: item.font_name || item.fontName || "",
     font_size: item.font_size || item.fontSize ? Number(item.font_size || item.fontSize) : undefined,
     row_height: item.row_height || item.rowHeight ? Number(item.row_height || item.rowHeight) : undefined,
+    prefix: item.prefix || "",
+    suffix: item.suffix || "",
     multiple: item.multiple === true || item.is_multiple === true,
     external_source_key: item.external_source_key || item.externalSourceKey || "",
     external_dependency_key: item.external_dependency_key || item.externalDependencyKey || "",
@@ -148,6 +152,8 @@ const serializeInputSchema = (fields: TemplateInputField[]) =>
       font_name: field.font_name?.trim() || undefined,
       font_size: field.font_size ? Number(field.font_size) : undefined,
       row_height: field.row_height ? Number(field.row_height) : undefined,
+      prefix: field.prefix?.trim() || undefined,
+      suffix: field.suffix?.trim() || undefined,
       multiple: field.multiple || undefined,
       external_source_key: field.external_source_key?.trim() || undefined,
       external_dependency_key: field.external_dependency_key?.trim() || undefined,
@@ -231,6 +237,7 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedForm, setSelectedForm] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("none");
 
   const [formData, setFormData] = useState({
     nama_form: "",
@@ -278,6 +285,35 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
 
   useEffect(() => { loadInitialData(); }, []);
 
+  const applyFullTemplatePreset = (preset: any, options: { preserveUploadedName?: boolean } = {}) => {
+    const config = preset?.form_config && typeof preset.form_config === "object" ? preset.form_config : {};
+    const department = config.department_code
+      ? departments.find((item) => String(item.code || "").toUpperCase() === String(config.department_code).toUpperCase())
+      : null;
+
+    setFormData(prev => ({
+      ...prev,
+      nama_form: options.preserveUploadedName && prev.nama_form
+        ? prev.nama_form
+        : (config.nama_form || prev.nama_form),
+      nomor_form: config.nomor_form || prev.nomor_form,
+      department_id: department?.id || config.department_id || prev.department_id,
+      input_schema: cloneInputSchema(normalizeInputSchema(preset.input_schema)),
+      unit_config: normalizeUnitConfig(config.unit_config || prev.unit_config),
+      signature_layout: normalizeSignatureLayoutConfig(config.signature_layout || prev.signature_layout),
+      email_config: config.email_config ? normalizeEmailSettings(config.email_config) : prev.email_config,
+    }));
+  };
+
+  const handlePresetSelect = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    if (presetId === "none") return;
+    const preset = presets.find((item) => item.id === presetId);
+    if (!preset) return;
+    applyFullTemplatePreset(preset);
+    toast({ title: "Konfigurasi diterapkan", description: `${preset.name} siap dipakai untuk template ini.` });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -309,8 +345,13 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
       
       setUploadProgress(70);
 
-      setFormData(prev => ({ 
-        ...prev, 
+      const selectedPreset = presets.find((item) => item.id === selectedPresetId);
+      if (selectedPreset) {
+        applyFullTemplatePreset(selectedPreset);
+      }
+
+      setFormData(prev => ({
+        ...prev,
         link_form: uploaded.publicUrl,
         nama_form: prev.nama_form || cleanName
       }));
@@ -340,6 +381,7 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
         signature_layout: normalizeSignatureLayoutConfig(form.signature_layout),
         email_config: normalizeEmailSettings(form.email_config || null),
       });
+      setSelectedPresetId("none");
     } else {
       setSelectedForm(null);
       setFormData({
@@ -352,6 +394,7 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
         signature_layout: normalizeSignatureLayoutConfig(null),
         email_config: defaultEmailSettings,
       });
+      setSelectedPresetId("none");
     }
     setIsModalOpen(true);
   };
@@ -528,6 +571,14 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
           name: name.trim(),
           description: description.trim() || null,
           input_schema: schema,
+          form_config: {
+            nama_form: formData.nama_form || undefined,
+            nomor_form: formData.nomor_form || undefined,
+            department_id: formData.department_id || undefined,
+            unit_config: serializeUnitConfig(formData.unit_config),
+            signature_layout: normalizeSignatureLayoutConfig(formData.signature_layout),
+            email_config: formData.email_config,
+          },
           created_by: user?.id ?? null,
           updated_at: new Date().toISOString(),
         }]);
@@ -804,6 +855,25 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
             {/* Upload */}
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Upload File Template (.xlsx)</Label>
+              <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+                <Label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Konfigurasi awal template</Label>
+                <Select value={selectedPresetId} onValueChange={handlePresetSelect}>
+                  <SelectTrigger className="h-11 border-border/50 bg-background/60 text-xs">
+                    <SelectValue placeholder="Pilih konfigurasi template" />
+                  </SelectTrigger>
+                  <SelectContent className="border-border/50 shadow-xl">
+                    <SelectItem value="none">Tanpa preset</SelectItem>
+                    {presets.map((preset) => (
+                      <SelectItem key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-2 text-[10px] font-medium text-muted-foreground">
+                  Pilih preset sebelum upload agar mapping cell, tanda tangan, kode form, dan departemen ikut terisi otomatis jika preset mendukung.
+                </p>
+              </div>
               <div 
                 onClick={() => !isUploading && fileInputRef.current?.click()}
                 className={cn(
@@ -1167,7 +1237,10 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
                           variant="ghost"
                           size="sm"
                           className="h-8 rounded-none px-3 text-[10px] font-black uppercase"
-                          onClick={() => applyInputSchemaPreset(normalizeInputSchema(preset.input_schema), preset.name)}
+                          onClick={() => {
+                            applyFullTemplatePreset(preset);
+                            toast({ title: "Preset diterapkan", description: `${preset.name} sudah masuk ke konfigurasi template.` });
+                          }}
                           title={preset.description || preset.name}
                         >
                           {preset.name}
@@ -1268,6 +1341,24 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
                               placeholder="B28:N31"
                               value={field.merge_range || ""}
                               onChange={(e) => updateInputField(field.id, "merge_range", e.target.value.toUpperCase())}
+                            />
+                          </div>
+                          <div className="col-span-6 md:col-span-2 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Prefix</Label>
+                            <Input
+                              className="h-9 text-xs"
+                              placeholder="Nomor: "
+                              value={field.prefix || ""}
+                              onChange={(e) => updateInputField(field.id, "prefix", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-6 md:col-span-2 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Suffix</Label>
+                            <Input
+                              className="h-9 text-xs"
+                              placeholder=""
+                              value={field.suffix || ""}
+                              onChange={(e) => updateInputField(field.id, "suffix", e.target.value)}
                             />
                           </div>
                           <div className="col-span-6 md:col-span-2 space-y-1">

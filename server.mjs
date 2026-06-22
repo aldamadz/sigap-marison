@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { createHash, createHmac, randomBytes } from "node:crypto";
@@ -1460,7 +1460,9 @@ const serveStatic = async (req, res) => {
   const requested = decodeURIComponent(url.pathname);
   const candidate = normalize(requested === "/" ? "/index.html" : requested);
   let filePath = resolve(join(distDir, candidate));
-  if (!filePath.startsWith(distDir) || !existsSync(filePath)) {
+  const fileExists = filePath.startsWith(distDir) && existsSync(filePath);
+  const isDirectory = fileExists && statSync(filePath).isDirectory();
+  if (!fileExists || isDirectory) {
     const isAssetRequest = requested.startsWith("/assets/") || extname(requested) !== "";
     if (isAssetRequest) {
       res.writeHead(404, {
