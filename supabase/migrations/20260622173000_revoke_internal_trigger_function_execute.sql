@@ -1,0 +1,11 @@
+revoke execute on function public.audit_log_table_changes() from authenticated;
+revoke execute on function public.handle_activity_log() from authenticated;
+revoke execute on function public.handle_log_activity() from authenticated;
+revoke execute on function public.handle_new_user() from authenticated;
+revoke execute on function public.notify_creator_logic() from authenticated;
+revoke execute on function public.notify_signers_logic() from authenticated;
+revoke execute on function public.set_job_title_display_override_audit_fields() from authenticated;
+revoke execute on function public.touch_letter_number_counter_configs() from authenticated;
+revoke execute on function public.validate_form_usage_signature() from authenticated;
+revoke execute on function public.claim_document_pdf_jobs(text, integer, integer, interval) from authenticated;
+revoke execute on function public.consume_file_view_token(text) from authenticated;

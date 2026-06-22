@@ -134,6 +134,10 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - User memilih entitas, kantor/cabang, departemen, jenis surat, lalu klasifikasi `Aset`, `Unit`, `Non Aset`, atau `Non Unit`.
 - Sistem menyaring matrix alur berdasarkan klasifikasi, scope kantor, dan departemen.
 - User mendapatkan nomor surat.
+- Setelah nomor dipesan, sistem membuat draft registrasi dan menyimpan perubahan form otomatis ke database.
+- Draft aktif dapat dilanjutkan melalui URL `?draft=<draftId>`; jika hanya ada satu draft, halaman membukanya otomatis, sedangkan beberapa draft ditampilkan sebagai pilihan.
+- Lampiran yang dipilih setelah nomor dipesan langsung diunggah dan dikaitkan ke draft. Saat draft dibuka kembali, file tetap tersedia dan digunakan pada registrasi final tanpa unggah ulang.
+- Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
 - User mengisi detail template berdasarkan Master Form.
 - Jika user memilih `Aset` atau `Non Unit`, field teknis Unit tidak ditampilkan dan tidak ditulis ke dokumen.
 - User memilih pejabat penandatangan berdasarkan matrix.
@@ -146,6 +150,8 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Validasi harus tampil sebagai feedback UI yang jelas.
 - Mode unit tidak boleh memaksa user mengisi tabel barang.
 - Form yang mendukung Unit tetap harus berperilaku sebagai form biasa ketika kategori yang dipilih bukan `Unit`.
+- Draft hanya dapat dibaca dan diubah oleh pembuatnya; admin memiliki akses baca untuk kebutuhan audit.
+- Form yang sudah tersimpan tidak menampilkan peringatan saat tab ditutup. Peringatan hanya muncul ketika perubahan terakhir masih disimpan atau gagal disimpan.
 
 ## 7. Workflow Approval
 

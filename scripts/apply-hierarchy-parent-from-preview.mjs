@@ -1,4 +1,5 @@
-import XLSX from "xlsx";
+import fs from "node:fs";
+import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 
 const previewFile = process.argv[2] || "hierarchy-mapping-preview.csv";
@@ -18,8 +19,54 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   },
 });
 
-const workbook = XLSX.readFile(previewFile);
-const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+const parseCsvLine = (line) => {
+  const cells = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index++;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current);
+  return cells;
+};
+
+const readRows = async (file) => {
+  if (/\.csv$/i.test(file)) {
+    const [headers = [], ...body] = fs.readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).map(parseCsvLine);
+    return body.map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])));
+  }
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(file);
+  const worksheet = workbook.worksheets[0];
+  const headers = [];
+  worksheet.getRow(1).eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = String(cell.value ?? "");
+  });
+  const rows = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const item = {};
+    headers.forEach((header, index) => {
+      item[header] = String(row.getCell(index + 1).value ?? "");
+    });
+    rows.push(item);
+  });
+  return rows;
+};
+
+const rows = await readRows(previewFile);
 const mappings = rows
   .map((row) => ({
     nik: String(row.NIK || "").trim(),

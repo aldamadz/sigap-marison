@@ -117,21 +117,21 @@ const MonitoringAdminPage = () => {
   });
 
   if (queryError) return (
-    <div className="h-screen flex items-center justify-center p-10 text-center">
+    <div className="flex h-screen items-center justify-center p-10 text-center">
       <div className="space-y-4">
         <AlertCircle className="mx-auto text-destructive" size={40} />
-        <p className="text-sm font-bold uppercase tracking-widest">Connection Error</p>
+        <p className="text-sm font-semibold">Gagal memuat monitoring</p>
         <p className="text-xs text-muted-foreground">{(queryError as any).message}</p>
       </div>
     </div>
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="sigap-page animate-in fade-in duration-300">
       <Dialog open={!!previewingId}>
-        <DialogContent className="max-w-sm rounded-3xl text-center">
+        <DialogContent className="max-w-sm text-center">
           <DialogHeader>
-            <DialogTitle className="flex flex-col items-center gap-3 text-sm font-black uppercase">
+            <DialogTitle className="flex flex-col items-center gap-3 text-base font-semibold">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               PDF sedang dibuat
             </DialogTitle>
@@ -143,16 +143,15 @@ const MonitoringAdminPage = () => {
       </Dialog>
       
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-border pb-8">
+      <div className="sigap-panel sigap-panel-accent flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-8 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
-            <h1 className="text-3xl font-black text-foreground tracking-tighter uppercase">
-              Admin <span className="text-primary/50 font-light tracking-widest">Monitoring</span>
+            <h1 className="text-xl font-semibold text-foreground">
+              Monitoring Admin
             </h1>
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.4em] ml-5">
-            Log Kendali Dokumen Terpusat
+          <p className="text-sm text-muted-foreground">
+            Pantau seluruh pengajuan dan riwayat dokumen.
           </p>
         </div>
       </div>
@@ -160,25 +159,25 @@ const MonitoringAdminPage = () => {
       <SuratSummaryCards />
 
       {/* FILTER SECTION */}
-      <div className="space-y-6 bg-card/30 p-4 rounded-2xl border border-border/50 shadow-sm">
+      <div className="sigap-panel space-y-4">
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
           <div className="relative w-full md:w-96 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary" size={16} />
             <Input 
-              placeholder="CARI JUDUL ATAU NOMOR SURAT..." 
+              placeholder="Cari judul atau nomor surat"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-11 bg-background border-border rounded-xl uppercase text-[10px] font-bold tracking-widest"
+              className="h-11 pl-10 text-sm"
             />
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl border border-border/50">
+          <div className="flex items-center gap-1 rounded-md border border-border bg-muted/50 p-1">
             {['all', 'today', 'week', 'month'].map((range) => (
               <button
                 key={range}
                 onClick={() => setDateFilter(range)}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all",
+                  "rounded px-4 py-2 text-xs font-semibold transition-all",
                   dateFilter === range ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -191,7 +190,7 @@ const MonitoringAdminPage = () => {
         <div className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-4">
           <div className="flex items-center gap-2 mr-2">
             <Filter size={12} className="text-muted-foreground" />
-            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em]">Filter Status:</span>
+            <span className="text-xs font-semibold text-muted-foreground">Status:</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {['all', 'PROSES', 'SELESAI', 'REJECTED'].map((s) => (
@@ -199,7 +198,7 @@ const MonitoringAdminPage = () => {
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-[9px] font-black tracking-widest border transition-all uppercase",
+                  "rounded-md border px-3 py-1 text-xs font-semibold transition-all",
                   statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "bg-transparent text-muted-foreground border-border hover:border-primary/50"
                 )}
               >
@@ -212,12 +211,12 @@ const MonitoringAdminPage = () => {
 
       {/* LIST DATA */}
       {loading ? (
-        <div className="h-64 flex flex-col items-center justify-center space-y-4">
+        <div className="flex h-64 flex-col items-center justify-center space-y-4">
           <Loader2 className="animate-spin text-primary" size={32} />
-          <span className="text-muted-foreground font-bold text-[9px] tracking-[0.3em] uppercase">Sinkronisasi Data...</span>
+          <span className="text-sm font-medium text-muted-foreground">Memuat data...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+        <div className="grid grid-cols-1 gap-4 pb-20 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((surat) => {
             const sigs = [...(surat.surat_signatures || [])].sort((a,b) => a.step_order - b.step_order);
             const finishedCount = sigs.filter(s => s.is_signed).length;
@@ -226,7 +225,7 @@ const MonitoringAdminPage = () => {
             const lastNote = [...sigs].reverse().find(s => s.is_signed && s.catatan);
 
             return (
-              <div key={surat.id} className="group flex flex-col p-6 bg-card border border-border rounded-2xl hover:border-primary/40 transition-all duration-300 shadow-sm relative overflow-hidden">
+              <div key={surat.id} className="group relative flex flex-col overflow-hidden rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-card)] transition-all duration-200 hover:border-primary/40">
                 <div className={cn(
                   "absolute top-0 left-0 w-1.5 h-full",
                   surat.status === 'SELESAI' ? "bg-emerald-500" : 
@@ -235,25 +234,25 @@ const MonitoringAdminPage = () => {
 
                 <div className="flex justify-between items-center mb-6">
                   <Badge variant="outline" className={cn(
-                    "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest border shadow-none",
+                    "rounded-md border px-2 py-0.5 text-[11px] font-semibold shadow-none",
                     surat.status === 'SELESAI' && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
                     surat.status === 'REJECTED' && "bg-red-500/10 text-red-600 border-red-500/20",
                     surat.status === 'PROSES' && "bg-amber-500/10 text-amber-600 border-amber-500/20"
                   )}>
                     {surat.status}
                   </Badge>
-                  <span className="text-[10px] font-bold text-muted-foreground tracking-tighter uppercase">
+                  <span className="text-xs font-medium text-muted-foreground">
                     {formatFullDate(surat.created_at)}
                   </span>
                 </div>
 
                 <div className="flex-1 space-y-6">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-bold text-foreground leading-tight line-clamp-2 uppercase group-hover:text-primary transition-colors">
+                    <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-foreground transition-colors group-hover:text-primary">
                       {surat.judul_surat}
                     </h3>
-                    <p className="text-[10px] font-mono text-muted-foreground tracking-tighter bg-muted w-fit px-2 py-0.5 rounded uppercase">
-                      {surat.no_surat || 'NO-REF-SYSTEM'}
+                    <p className="w-fit rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                      {surat.no_surat || 'Nomor diproses'}
                     </p>
                   </div>
 
@@ -261,7 +260,7 @@ const MonitoringAdminPage = () => {
                     <div className="bg-muted/50 rounded-xl p-3 space-y-2 border border-border/50">
                       <div className="flex items-center gap-2 text-primary">
                          <MessageSquare size={12} />
-                         <span className="text-[9px] font-black uppercase tracking-widest">Catatan Terakhir</span>
+                         <span className="text-xs font-semibold">Catatan Terakhir</span>
                       </div>
                       <p className="text-[11px] text-muted-foreground italic leading-relaxed font-medium">
                         "{lastNote.catatan}"
@@ -271,8 +270,8 @@ const MonitoringAdminPage = () => {
 
                   <div className="space-y-3 pt-2">
                     <div className="flex justify-between items-end">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Progres Dokumen</span>
-                      <span className="text-xs font-black tabular-nums text-primary">{Math.round(progress)}%</span>
+                      <span className="text-xs font-medium text-muted-foreground">Progres Dokumen</span>
+                      <span className="text-xs font-semibold tabular-nums text-primary">{Math.round(progress)}%</span>
                     </div>
                     <div className="flex gap-1.5 h-1.5 w-full">
                       {sigs.map((s, i) => {
@@ -296,17 +295,17 @@ const MonitoringAdminPage = () => {
                 <div className="mt-8 pt-4 border-t border-border/40 space-y-3">
                   <div className="flex items-center gap-2 overflow-hidden flex-1">
                     <Info size={12} className="text-muted-foreground shrink-0" />
-                    <span className="text-[9px] font-black uppercase text-foreground/70 tracking-tight truncate">
+                    <span className="truncate text-xs font-semibold text-foreground/70">
                       {surat.status === 'PROSES' ? `Posisi: ${currentSigner?.role_name || 'Antrian'}` : 'Status Final'}
                     </span>
                   </div>
                   
                   <button 
                     onClick={() => setSelectedSurat(surat)}
-                    className="w-full h-10 flex items-center justify-center gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-sm group/btn"
+                      className="group/btn flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary text-white shadow-sm transition-all hover:bg-primary/90"
                   >
                     <History size={16} className="group-hover/btn:rotate-[-20deg] transition-transform" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Riwayat Lengkap (History)</span>
+                    <span className="text-xs font-semibold">Riwayat lengkap</span>
                   </button>
                 </div>
               </div>
@@ -317,40 +316,40 @@ const MonitoringAdminPage = () => {
 
       {/* MODAL AUDIT TRAIL LENGKAP */}
       <Dialog open={!!selectedSurat} onOpenChange={() => setSelectedSurat(null)}>
-        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-card border-border rounded-2xl">
-          <DialogHeader className="p-6 border-b border-border bg-muted/20">
+        <DialogContent className="max-w-3xl overflow-hidden border-border bg-card p-0">
+          <DialogHeader className="border-b border-border bg-muted/20 p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="bg-primary/10 p-2 rounded-lg"><FileText className="text-primary" size={20} /></div>
                 <div>
-                  <DialogTitle className="text-sm font-black uppercase tracking-tight">Audit Trail & History</DialogTitle>
-                  <DialogDescription className="text-[10px] font-medium uppercase text-muted-foreground">
-                    Log aktivitas digital untuk surat: {selectedSurat?.no_surat || 'N/A'}
+                  <DialogTitle className="text-base font-semibold">Riwayat Dokumen</DialogTitle>
+                  <DialogDescription className="text-sm text-muted-foreground">
+                    {selectedSurat?.no_surat || 'Nomor belum tersedia'}
                   </DialogDescription>
                 </div>
               </div>
               <button 
                 onClick={() => handleOpenGeneratedPdf(selectedSurat?.id)}
                 disabled={previewingId === selectedSurat?.id}
-                className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary hover:text-white transition-all"
+                className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary transition-all hover:bg-primary hover:text-white"
               >
                 {previewingId === selectedSurat?.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                <span className="text-[9px] font-black uppercase">Unduh File</span>
+                <span className="text-xs font-semibold">Unduh File</span>
               </button>
             </div>
           </DialogHeader>
 
           <div className="p-6 max-h-[70vh] overflow-y-auto">
             {getAttachments(selectedSurat).length > 0 && (
-              <div className="mb-6 rounded-xl border border-border bg-muted/10 p-4">
-                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lampiran</p>
+              <div className="mb-6 rounded-lg border border-border bg-muted/10 p-4">
+                <p className="mb-3 text-sm font-semibold text-foreground">Lampiran</p>
                 <div className="flex flex-wrap gap-2">
                   {getAttachments(selectedSurat).map((attachment: any, index: number) => (
                     <button
                       key={attachment.id ?? attachment.file_url}
                       type="button"
                       onClick={() => documentPreviewService.openStoredFileInNewTab(selectedSurat.id, attachment.file_url).catch((error: any) => toast.error(error.message || 'Gagal membuka lampiran.'))}
-                      className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-[9px] font-black uppercase text-primary hover:bg-muted"
+                      className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-primary hover:bg-muted"
                     >
                       <Download size={12} /> Lampiran {index + 1}
                     </button>
@@ -366,12 +365,12 @@ const MonitoringAdminPage = () => {
                 <div className="absolute left-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center z-10 shadow-sm border-4 border-background text-white">
                   <Calendar size={12} />
                 </div>
-                <div className="p-4 rounded-xl border border-border bg-muted/10 space-y-1">
+                <div className="space-y-1 rounded-lg border border-border bg-muted/10 p-4">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-[11px] font-black uppercase">Registrasi Dokumen</h4>
-                    <span className="text-[9px] font-mono text-muted-foreground">{formatDateTime(selectedSurat?.created_at)}</span>
+                    <h4 className="text-sm font-semibold">Registrasi Dokumen</h4>
+                    <span className="font-mono text-xs text-muted-foreground">{formatDateTime(selectedSurat?.created_at)}</span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Dokumen berhasil didaftarkan ke dalam sistem oleh pengaju.</p>
+                  <p className="text-xs text-muted-foreground">Dokumen didaftarkan ke sistem.</p>
                 </div>
               </div>
 
@@ -386,19 +385,19 @@ const MonitoringAdminPage = () => {
                   </div>
                   
                   <div className={cn(
-                    "p-4 rounded-xl border transition-all space-y-3",
+                    "space-y-3 rounded-lg border p-4 transition-all",
                     sig.is_signed ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-card"
                   )}>
                     <div className="flex justify-between items-start gap-4">
                       <div className="space-y-1">
-                        <div className="text-[11px] font-black uppercase tracking-tight flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
                           {sig.role_name}
-                          {sig.is_signed && <Badge className="bg-emerald-500 text-white text-[8px] h-4 uppercase px-1">Approved</Badge>}
-                          {sig.status === 'REJECTED' && <Badge variant="destructive" className="text-[8px] h-4 uppercase px-1">Rejected</Badge>}
+                          {sig.is_signed && <Badge className="h-5 bg-emerald-600 px-1.5 text-[11px] text-white">Selesai</Badge>}
+                          {sig.status === 'REJECTED' && <Badge variant="destructive" className="h-5 px-1.5 text-[11px]">Ditolak</Badge>}
                         </div>
-                        <div className="flex items-center gap-4 text-[9px] text-muted-foreground font-medium uppercase">
-                          <span className="flex items-center gap-1"><User size={10} /> {(sig.profiles as any)?.full_name || 'Menunggu Antrian...'}</span>
-                          <span className="flex items-center gap-1"><Clock size={10} /> {formatDateTime(sig.signed_at)}</span>
+                        <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+                          <span className="flex items-center gap-1"><User size={12} /> {(sig.profiles as any)?.full_name || 'Menunggu antrean'}</span>
+                          <span className="flex items-center gap-1"><Clock size={12} /> {formatDateTime(sig.signed_at)}</span>
                         </div>
                       </div>
 
@@ -408,14 +407,14 @@ const MonitoringAdminPage = () => {
                           className="flex items-center gap-2 px-2 py-1 bg-background border border-border rounded text-primary hover:bg-muted transition-colors"
                         >
                           <Download size={10} />
-                          <span className="text-[8px] font-black uppercase tracking-tighter">Snap</span>
+                          <span className="text-xs font-semibold">Snap</span>
                         </button>
                       )}
                     </div>
 
                     {sig.catatan && (
                       <div className="bg-background/50 p-2.5 rounded-lg border border-border/50">
-                        <p className="text-[10px] italic text-muted-foreground leading-relaxed">
+                        <p className="text-xs italic leading-relaxed text-muted-foreground">
                           <MessageSquare size={10} className="inline mr-1 opacity-50" />
                           "{sig.catatan}"
                         </p>

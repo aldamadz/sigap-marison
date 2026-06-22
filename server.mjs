@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { extname, join, normalize, resolve } from "node:path";
+import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
@@ -43,6 +43,7 @@ const smtpConfig = {
 let mailTransporter = null;
 
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
 const externalAccessTokenCache = new Map();
 
 const hashFileViewToken = (token) => createHash("sha256").update(token).digest("hex");
@@ -68,8 +69,46 @@ const contentTypes = {
   ".doc": "application/msword",
 };
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https: wss:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+};
+
+const withSecurityHeaders = (headers = {}) => ({
+  ...securityHeaders,
+  ...headers,
+});
+
+const sanitizeDownloadFilename = (value) => String(value || "file")
+  .replace(/[\r\n"]/g, "")
+  .replace(/[\\/]+/g, "_")
+  .trim() || "file";
+
+const assertRequestSize = (req, maxBytes = MAX_UPLOAD_BYTES) => {
+  const length = Number(req.headers["content-length"] || 0);
+  if (Number.isFinite(length) && length > maxBytes) {
+    const err = new Error(`Ukuran file terlalu besar. Maksimal ${Math.floor(maxBytes / 1024 / 1024)} MB.`);
+    err.status = 413;
+    throw err;
+  }
+};
+
 const sendJson = (res, status, body) => {
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(status, withSecurityHeaders({ "Content-Type": "application/json; charset=utf-8" }));
   res.end(JSON.stringify(body));
 };
 
@@ -851,6 +890,120 @@ const sendInternalEmailNotification = async (token, payload) => {
   return { sent: recipients.length, recipients, attachments: attachments.length, fileLinks: fileLinks.length };
 };
 
+const getSuratNotificationParticipants = async (suratId) => {
+  const { data: surat, error: suratError } = await supabase
+    .from("surat_registrasi")
+    .select("id, created_by")
+    .eq("id", suratId)
+    .maybeSingle();
+  if (suratError || !surat) {
+    const err = new Error(suratError ? suratError.message : "Surat tidak ditemukan.");
+    err.status = 404;
+    throw err;
+  }
+
+  const { data: signatures, error: signatureError } = await supabase
+    .from("surat_signatures")
+    .select("user_id, verifier_snapshot")
+    .eq("surat_id", suratId);
+  if (signatureError) throw signatureError;
+
+  const ids = new Set([surat.created_by].filter(Boolean));
+  for (const signature of signatures || []) {
+    if (signature.user_id) ids.add(signature.user_id);
+    if (Array.isArray(signature.verifier_snapshot)) {
+      signature.verifier_snapshot.forEach((item) => {
+        if (item?.user_id) ids.add(item.user_id);
+      });
+    }
+  }
+  return { surat, participantIds: ids };
+};
+
+const sendInternalNotification = async (token, payload) => {
+  const actor = await requireSupabaseUser(token);
+  const userIds = [...new Set((Array.isArray(payload?.user_ids) ? payload.user_ids : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean))];
+  const title = String(payload?.title || "Notifikasi SIGAP").trim().slice(0, 160);
+  const message = String(payload?.message || "").trim().slice(0, 4000);
+  const type = String(payload?.type || "info").trim().slice(0, 40);
+  const link = typeof payload?.link === "string" ? payload.link.slice(0, 500) : null;
+  const suratId = payload?.surat_id || payload?.suratId || null;
+  const shouldEmail = payload?.email !== false;
+
+  if (userIds.length === 0) return { inserted: 0, email: shouldEmail ? { sent: 0, recipients: [] } : null };
+  if (!message) {
+    const err = new Error("Pesan notifikasi wajib diisi.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { data: actorProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", actor.id)
+    .maybeSingle();
+  const isAdmin = actorProfile?.role === "admin";
+
+  if (!isAdmin) {
+    if (!suratId) {
+      const onlySelf = userIds.length === 1 && userIds[0] === actor.id;
+      if (!onlySelf) {
+        const err = new Error("Tidak diizinkan membuat notifikasi untuk user lain.");
+        err.status = 403;
+        throw err;
+      }
+    } else {
+      const { surat, participantIds } = await getSuratNotificationParticipants(suratId);
+      if (!(await canReadSurat({ ...surat, surat_signatures: [...participantIds].map((id) => ({ user_id: id })) }, actor.id))) {
+        const err = new Error("Tidak diizinkan membuat notifikasi untuk surat ini.");
+        err.status = 403;
+        throw err;
+      }
+      const invalidTarget = userIds.find((id) => !participantIds.has(id));
+      if (invalidTarget) {
+        const err = new Error("Target notifikasi tidak terkait dengan surat ini.");
+        err.status = 403;
+        throw err;
+      }
+    }
+  }
+
+  const rows = userIds.map((userId) => ({
+    user_id: userId,
+    title,
+    message,
+    type,
+    link,
+    is_read: false,
+    data: {
+      surat_id: suratId,
+      signature_id: payload?.signature_id || payload?.signatureId || null,
+      event_type: payload?.event_type || payload?.eventType || null,
+      created_by_server: true,
+    },
+  }));
+
+  const { data, error } = await supabase
+    .from("notifications")
+    .insert(rows)
+    .select("id");
+  if (error) throw error;
+
+  let email = null;
+  if (shouldEmail) {
+    try {
+      email = await sendInternalEmailNotification(token, payload);
+    } catch (emailError) {
+      console.error("Notification email failed:", emailError);
+      email = { sent: 0, recipients: [], error: emailError.message };
+    }
+  }
+
+  return { inserted: data?.length || 0, email };
+};
+
 const parseUploadForm = async (req) => {
   const request = new Request(`http://localhost${req.url}`, {
     method: req.method,
@@ -871,6 +1024,7 @@ const sanitizeStoragePath = (value) => String(value || "")
 const uploadInternalStorageFile = async (token, req) => {
   await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
+  assertRequestSize(req);
 
   const form = await parseUploadForm(req);
   const bucket = String(form.get("bucket") || "").trim();
@@ -891,6 +1045,11 @@ const uploadInternalStorageFile = async (token, req) => {
   if (!file || typeof file.arrayBuffer !== "function") {
     const err = new Error("File wajib dikirim.");
     err.status = 400;
+    throw err;
+  }
+  if (Number(file.size || 0) > MAX_UPLOAD_BYTES) {
+    const err = new Error(`Ukuran file terlalu besar. Maksimal ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.`);
+    err.status = 413;
     throw err;
   }
 
@@ -940,6 +1099,7 @@ const uploadInternalStorageFile = async (token, req) => {
 const replaceSignatureAttachmentFiles = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
+  assertRequestSize(req);
 
   const form = await parseUploadForm(req);
   const suratId = String(form.get("suratId") || "").trim();
@@ -952,6 +1112,11 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
   if (!suratId || !signatureId || !Array.isArray(metadata) || files.length === 0) {
     const err = new Error("Payload lampiran tidak lengkap.");
     err.status = 400;
+    throw err;
+  }
+  if (files.some((file) => Number(file.size || 0) > MAX_UPLOAD_BYTES)) {
+    const err = new Error(`Ukuran file terlalu besar. Maksimal ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB per file.`);
+    err.status = 413;
     throw err;
   }
 
@@ -1460,15 +1625,17 @@ const serveStatic = async (req, res) => {
   const requested = decodeURIComponent(url.pathname);
   const candidate = normalize(requested === "/" ? "/index.html" : requested);
   let filePath = resolve(join(distDir, candidate));
-  const fileExists = filePath.startsWith(distDir) && existsSync(filePath);
+  const relativePath = relative(distDir, filePath);
+  const isInsideDist = relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+  const fileExists = isInsideDist && existsSync(filePath);
   const isDirectory = fileExists && statSync(filePath).isDirectory();
   if (!fileExists || isDirectory) {
     const isAssetRequest = requested.startsWith("/assets/") || extname(requested) !== "";
     if (isAssetRequest) {
-      res.writeHead(404, {
+      res.writeHead(404, withSecurityHeaders({
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
-      });
+      }));
       res.end("Asset not found");
       return;
     }
@@ -1476,14 +1643,14 @@ const serveStatic = async (req, res) => {
   }
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
   const isHtml = extname(filePath) === ".html";
-  res.writeHead(200, {
+  res.writeHead(200, withSecurityHeaders({
     "Content-Type": type,
     "Cache-Control": isHtml
       ? "no-store, no-cache, must-revalidate"
       : requested.startsWith("/assets/")
         ? "public, max-age=31536000, immutable"
         : "public, max-age=3600",
-  });
+  }));
   createReadStream(filePath).pipe(res);
 };
 
@@ -1514,13 +1681,13 @@ createServer(async (req, res) => {
       const rawPath = url.searchParams.get("path");
       const { file, ref } = await getAuthorizedStorageFile(fileMatch[1], token, rawPath);
       const buffer = Buffer.from(await file.arrayBuffer());
-      const filename = ref.path.split("/").pop() || "file";
-      res.writeHead(200, {
+      const filename = sanitizeDownloadFilename(ref.path.split("/").pop() || "file");
+      res.writeHead(200, withSecurityHeaders({
         "Content-Type": file.type || contentTypes[extname(filename)] || "application/octet-stream",
         "Content-Length": buffer.length,
         "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
         "Cache-Control": "private, max-age=60",
-      });
+      }));
       res.end(buffer);
       return;
     }
@@ -1537,13 +1704,13 @@ createServer(async (req, res) => {
     if (req.method === "GET" && viewMatch) {
       const { file, ref } = await consumeFileViewToken(viewMatch[1]);
       const buffer = Buffer.from(await file.arrayBuffer());
-      const filename = ref.path.split("/").pop() || "file";
-      res.writeHead(200, {
+      const filename = sanitizeDownloadFilename(ref.path.split("/").pop() || "file");
+      res.writeHead(200, withSecurityHeaders({
         "Content-Type": file.type || contentTypes[extname(filename)] || "application/octet-stream",
         "Content-Length": buffer.length,
         "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
         "Cache-Control": "no-store",
-      });
+      }));
       res.end(buffer);
       return;
     }
@@ -1566,6 +1733,14 @@ createServer(async (req, res) => {
         const body = await readRequestBody(req);
         const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
         const result = await sendInternalEmailNotification(token, payload);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/notifications/send") {
+        const token = getBearerToken(req);
+        const body = await readRequestBody(req);
+        const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
+        const result = await sendInternalNotification(token, payload);
         return sendJson(res, 200, result);
       }
 

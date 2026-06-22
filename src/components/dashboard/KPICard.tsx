@@ -31,15 +31,9 @@ export const KPICard = ({ data, index }: KPICardProps) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.1 }}
-      className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm transition-all hover:shadow-md hover:border-primary/20 group"
+      className="sigap-panel min-h-[132px] p-5 transition-colors hover:border-primary/25"
     >
-      {/* Glow Effect */}
-      <div className={cn(
-        "absolute -right-4 -top-4 h-24 w-24 rounded-full blur-3xl opacity-10 transition-colors",
-        isProgressCard ? "bg-emerald-500" : "bg-primary"
-      )} />
-
-      <div className="relative z-10 space-y-4">
+      <div className="space-y-4">
         {/* Header Label */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -48,7 +42,7 @@ export const KPICard = ({ data, index }: KPICardProps) => {
             ) : (
               <FileText className="w-3 h-3 text-primary" />
             )}
-            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+            <p className="text-xs font-semibold text-muted-foreground">
               {label}
             </p>
           </div>
@@ -56,7 +50,7 @@ export const KPICard = ({ data, index }: KPICardProps) => {
           {/* Badge Persentase */}
           {showPercentBadge && (
             <div className={cn(
-              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border",
+              "flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold border",
               effectiveTrend === 'up' && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
               effectiveTrend === 'down' && "bg-rose-500/10 text-rose-600 border-rose-500/20",
               effectiveTrend === 'neutral' && "bg-muted text-muted-foreground"
@@ -69,11 +63,11 @@ export const KPICard = ({ data, index }: KPICardProps) => {
 
         {/* Value Display */}
         <div className="flex items-baseline gap-1.5">
-          <span className="text-4xl font-black tracking-tighter tabular-nums">
+          <span className="text-3xl font-semibold tracking-tight tabular-nums text-foreground">
             {value}
           </span>
           {isProgressCard && total && (
-            <span className="text-lg font-bold text-muted-foreground/40">
+            <span className="text-sm font-semibold text-muted-foreground">
               / {total}
             </span>
           )}
@@ -89,20 +83,14 @@ export const KPICard = ({ data, index }: KPICardProps) => {
                 className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
               />
             </div>
-            <div className="flex justify-between text-[9px] font-bold uppercase tracking-tighter text-muted-foreground/60">
+            <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
               <span>Progress Penyelesaian</span>
               <span>{progressPercent.toFixed(0)}%</span>
             </div>
           </div>
         )}
 
-        {!isProgressCard && (
-          <div className="pt-1">
-            <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase italic tracking-tight">
-              Porsi dari total agenda saat ini
-            </p>
-          </div>
-        )}
+        {!isProgressCard && <div className="pt-1" />}
       </div>
     </motion.div>
   );

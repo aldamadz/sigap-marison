@@ -22,8 +22,8 @@ interface DepartmentChartProps {
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-card/95 border border-border p-3 shadow-xl rounded-xl backdrop-blur-md animate-in fade-in zoom-in duration-200">
-        <p className="font-bold text-sm mb-2 text-foreground border-b border-border pb-1">
+      <div className="rounded-lg border border-border bg-card p-3 shadow-[var(--shadow-elevated)]">
+        <p className="mb-2 border-b border-border pb-1 text-sm font-semibold text-foreground">
           {label}
         </p>
         <div className="space-y-2">
@@ -36,7 +36,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                 />
                 <span className="text-muted-foreground font-medium">{entry.name}</span>
               </div>
-              <span className="font-mono font-bold text-foreground bg-muted px-1.5 rounded">
+              <span className="rounded bg-muted px-1.5 font-mono font-semibold text-foreground">
                 {entry.value}
               </span>
             </div>
@@ -52,28 +52,23 @@ export const DepartmentChart = ({ data, officeName }: DepartmentChartProps) => {
   const hasData = data && data.length > 0;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm transition-all hover:shadow-md h-full flex flex-col min-h-[450px]">
+    <div className="sigap-panel flex h-full min-h-[430px] flex-col p-5 sm:p-6">
       {/* Header Grafik */}
       <div className="flex flex-col mb-6">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold tracking-tight text-foreground">
+          <h3 className="text-base font-semibold tracking-tight text-foreground">
             Aktivitas Departemen {officeName ? `— ${officeName}` : ''}
           </h3>
-          {hasData && (
-            <span className="text-[10px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-widest">
-              Live Data
-            </span>
-          )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Perbandingan total agenda dan penyelesaian di setiap divisi.
+          Jumlah agenda dan penyelesaian per divisi.
         </p>
       </div>
 
       <div className="flex-1 w-full mt-auto relative">
         {!hasData ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center opacity-50">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-2">
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-md bg-muted">
               <span className="text-xl">📊</span>
             </div>
             <p className="text-xs font-medium text-muted-foreground">Belum ada data aktivitas divisi</p>
@@ -103,7 +98,7 @@ export const DepartmentChart = ({ data, officeName }: DepartmentChartProps) => {
                 angle={-45}  
                 textAnchor="end"
                 dy={12}      
-                className="font-bold uppercase"
+                className="font-medium"
               />
               
               <YAxis 

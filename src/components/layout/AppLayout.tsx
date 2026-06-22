@@ -3,15 +3,13 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { useState, useEffect } from 'react'
-import { Menu } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 
 const TITLE: Record<string, { title: string; subtitle: string }> = {
-  '/dashboard': { title: 'Dashboard', subtitle: 'Overview of your agenda metrics' },
-  '/calendar': { title: 'Calendar', subtitle: 'Drag and drop to reschedule' },
-  '/agenda': { title: 'Agendas', subtitle: 'Manage your tasks and meetings' },
-  '/hierarchy': { title: 'Organization', subtitle: '7-level hierarchy structure' },
+  '/dashboard': { title: 'Dashboard', subtitle: 'Ringkasan pekerjaan, antrean, dan performa persetujuan' },
+  '/calendar': { title: 'Kalender', subtitle: 'Kelola agenda dan jadwal kerja' },
+  '/agenda': { title: 'Agenda', subtitle: 'Kelola jadwal pribadi dan tim sesuai akses' },
+  '/hierarchy': { title: 'Organisasi', subtitle: 'Struktur hirarki karyawan' },
   '/audit-logs': { title: 'Audit Log', subtitle: 'Jejak audit administratif sistem' },
   '/settings': { title: 'Settings', subtitle: 'Configure your preferences' },
   '/surat/registrasi': { title: 'Registrasi Surat', subtitle: 'Kelola pendaftaran surat masuk & keluar' },
@@ -49,7 +47,7 @@ export function AppLayout() {
   }, [])
 
   return (
-    <div className="flex min-h-screen bg-background overflow-hidden">
+    <div className="flex min-h-dvh overflow-hidden bg-muted/35 text-foreground">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block">
         <Sidebar
@@ -63,7 +61,7 @@ export function AppLayout() {
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         <SheetContent 
           side="left" 
-          className="w-[280px] sm:w-[300px] p-0 bg-sidebar border-sidebar-border"
+          className="w-[286px] p-0 bg-sidebar border-sidebar-border sm:w-[306px]"
         >
           <Sidebar
             collapsed={false}
@@ -74,30 +72,30 @@ export function AppLayout() {
         </SheetContent>
       </Sheet>
 
-      <main className="flex flex-1 flex-col min-w-0 relative h-screen overflow-hidden">
+      <main className="relative flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
         <Header
           onMenuClick={() => setMobileMenuOpen(true)}
           showMenuButton={isMobile}
         />
         
         {/* Kontainer Scrollable */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6 safe-area-bottom">
+        <div className="safe-area-bottom flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5">
           {/* Breadcrumbs - Tampilkan di semua ukuran layar */}
-          <div className="mb-4">
+          <div className="mb-3">
             <Breadcrumbs showHome={true} />
           </div>
 
           {/* Mobile Breadcrumb/Title when sidebar collapsed */}
           {isMobile && title && (
-            <div className="mb-4 lg:hidden">
-              <h1 className="text-lg sm:text-xl font-bold text-foreground">{title}</h1>
+            <div className="mb-4 rounded-lg border border-border bg-card p-3 shadow-[var(--shadow-card)] lg:hidden">
+              <h1 className="text-base font-semibold text-foreground sm:text-lg">{title}</h1>
               {subtitle && (
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1">{subtitle}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">{subtitle}</p>
               )}
             </div>
           )}
 
-          <div className="mx-auto min-h-0 w-full max-w-[1600px]">
+          <div className="mx-auto min-h-0 w-full max-w-[1500px]">
             <Outlet />
           </div>
         </div>

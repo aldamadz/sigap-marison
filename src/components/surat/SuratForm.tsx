@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSearchParams } from "react-router-dom";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -10,10 +11,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch";
 import {
   Hash, ArrowDown, Loader2, Briefcase,
-  Check, ChevronDown, Copy, RefreshCcw, ChevronRight, Layers,
+  Check, ChevronDown, Copy, RefreshCcw,
   ShieldCheck, AlertTriangle, Archive, Home, X, Plus
 } from "lucide-react";
-import { suratService } from "@/services/surat.service";
+import {
+  suratService,
+  type SuratRegistrationDraft,
+  type SuratRegistrationDraftFile,
+} from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -121,6 +126,7 @@ type TemplateField = {
 };
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+type AttachmentRequirement = NonNullable<UsageDetailRecord["form_usage_attachment_requirements"]>[number];
 type TableRow = Record<string, unknown>;
 type ExternalOption = { value: string; label: string; raw?: unknown };
 type ProjectRaw = { id: string; code?: string; name?: string; branch?: { name?: string } | null };
@@ -157,6 +163,7 @@ type CurrentProfile = {
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
   const { toast } = useToast();
   const appDialog = useAppDialog();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // ── STATE ──────────────────────────────────────────────────────────────────
   const [master, setMaster] = useState<MasterData>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
@@ -166,11 +173,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [generatedNoSurat, setGeneratedNoSurat]   = useState<string | null>(null);
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
-  const [openMatrix, setOpenMatrix]               = useState(false);
+  const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);
+  const [activeDrafts, setActiveDrafts]           = useState<SuratRegistrationDraft[]>([]);
+  const [draftToRestore, setDraftToRestore]       = useState<SuratRegistrationDraft | null>(null);
+  const [draftLoading, setDraftLoading]           = useState(false);
+  const [draftSaveState, setDraftSaveState]       = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
   const [lampiranFiles, setLampiranFiles]         = useState<File[]>([]);
   const [initialAttachmentFiles, setInitialAttachmentFiles] = useState<Record<string, File[]>>({});
+  const [draftAttachments, setDraftAttachments]   = useState<SuratRegistrationDraftFile[]>([]);
+  const [uploadingRequirement, setUploadingRequirement] = useState<string | null>(null);
   const [externalOptions, setExternalOptions]     = useState<Record<string, ExternalOption[]>>({});
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
@@ -291,7 +304,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     getInitialAttachmentRequirements()
       .filter(rule => {
         const minimum = rule.is_required ? Math.max(1, Number(rule.min_files || 1)) : Number(rule.min_files || 0);
-        return (initialAttachmentFiles[rule.requirement_key]?.length || 0) < minimum;
+        const localCount = initialAttachmentFiles[rule.requirement_key]?.length || 0;
+        const persistedCount = draftAttachments.filter(
+          attachment => attachment.requirement_key === rule.requirement_key
+        ).length;
+        return localCount + persistedCount < minimum;
       })
       .map(rule => rule.label || rule.requirement_key);
 
@@ -499,15 +516,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [usageDetails, isPusatSelected, requesterDepartmentId]
   );
 
-  const groupedUsage = useMemo(() => {
-    const groups: Record<number, UsageDetailRecord[]> = {};
-    filteredUsage.forEach(item => {
-      const level = getFullRoles(item).length;
-      if (level > 0) { if (!groups[level]) groups[level] = []; groups[level].push(item); }
-    });
-    return groups;
-  }, [filteredUsage]);
-
   const filteredDepts = useMemo(() => {
     if (!master.depts) return [];
     return master.depts.filter((d: MasterRecord) => {
@@ -587,12 +595,27 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
   };
 
+  const refreshActiveDrafts = useCallback(async () => {
+    try {
+      const drafts = await suratService.getActiveRegistrationDrafts();
+      setActiveDrafts(drafts);
+      return drafts;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Draft registrasi gagal dimuat.";
+      if (!message.toLowerCase().includes("surat_registration_drafts")) {
+        toast({ variant: "destructive", title: "Gagal memuat draft", description: message });
+      }
+      return [];
+    }
+  }, [toast]);
+
   // ── EFFECTS ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const h = (e: BeforeUnloadEvent) => { if (isDirty) { e.preventDefault(); e.returnValue = ""; } };
+    const shouldWarn = isDirty && (!activeDraftId || draftSaveState !== "saved");
+    const h = (e: BeforeUnloadEvent) => { if (shouldWarn) { e.preventDefault(); e.returnValue = ""; } };
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
-  }, [isDirty]);
+  }, [isDirty, activeDraftId, draftSaveState]);
 
   useEffect(() => {
     suratService.getMasterData().then(data => {
@@ -716,6 +739,88 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
     return () => { supabase.removeChannel(channel); };
   }, [loadUsageDetails]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const draftId = searchParams.get("draft");
+    setDraftLoading(Boolean(draftId));
+
+    Promise.all([
+      refreshActiveDrafts(),
+      draftId ? suratService.getRegistrationDraft(draftId) : Promise.resolve(null),
+    ])
+      .then(([drafts, requestedDraft]) => {
+        if (cancelled) return;
+        if (requestedDraft) {
+          setDraftToRestore(requestedDraft);
+          return;
+        }
+        if (!draftId && drafts.length === 1) {
+          setSearchParams({ draft: drafts[0].id }, { replace: true });
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setSearchParams({}, { replace: true });
+        toast({
+          variant: "destructive",
+          title: "Draft tidak dapat dibuka",
+          description: error instanceof Error ? error.message : "Draft tidak ditemukan atau sudah kedaluwarsa.",
+        });
+      })
+      .finally(() => { if (!cancelled) setDraftLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [refreshActiveDrafts, searchParams, setSearchParams, toast]);
+
+  useEffect(() => {
+    if (!draftToRestore || usageDetails.length === 0) return;
+    const payload = draftToRestore.payload || {};
+    const restoredFormData = payload.formData || {};
+    const usageId = String(payload.selectedUsageId || restoredFormData.form_usage_id || restoredFormData.penggunaan_id || "");
+    const usage = usageDetails.find(item => item.id === usageId) || null;
+
+    setFormData(previous => ({
+      ...previous,
+      ...restoredFormData,
+      form_input_data: restoredFormData.form_input_data || {},
+    }));
+    setSelectedFormId(String(payload.selectedFormId || usage?.form_id || usage?.master_forms?.id || ""));
+    setSelectedUsage(usage);
+    setSigners(Array.isArray(draftToRestore.signer_assignments) ? draftToRestore.signer_assignments : []);
+    setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
+    setInitialAttachmentFiles({});
+    setLampiranFiles([]);
+    setGeneratedNoSurat(draftToRestore.no_surat);
+    setActiveDraftId(draftToRestore.id);
+    setJudulForDisplay(String(restoredFormData.judul_surat || ""));
+    setDraftSaveState("saved");
+    setDraftToRestore(null);
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("surat-registration-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [draftToRestore, usageDetails, setJudulForDisplay]);
+
+  useEffect(() => {
+    if (!activeDraftId || !generatedNoSurat || draftToRestore) return;
+    setDraftSaveState("saving");
+    const timeout = window.setTimeout(() => {
+      suratService.saveRegistrationDraft(
+        activeDraftId,
+        {
+          formData,
+          selectedFormId,
+          selectedUsageId: selectedUsage?.id || "",
+        },
+        signers,
+        "details"
+      )
+        .then(() => setDraftSaveState("saved"))
+        .catch(() => setDraftSaveState("error"));
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [activeDraftId, generatedNoSurat, formData, selectedFormId, selectedUsage?.id, signers, draftToRestore]);
 
   useEffect(() => {
     if (!generatedNoSurat) {
@@ -876,8 +981,28 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setIsProcessingNumber(true);
     try {
       const res = await suratService.generateNoSurat(formData);
+      let draft: SuratRegistrationDraft;
+      try {
+        draft = await suratService.createRegistrationDraft({
+          noUrut: res.noUrut,
+          noSurat: res.fullNumber,
+          payload: {
+            formData,
+            selectedFormId,
+            selectedUsageId: selectedUsage.id,
+          },
+          signerAssignments: signers,
+        });
+      } catch (draftError) {
+        await suratService.cancelRegistration(res.fullNumber).catch(() => undefined);
+        throw draftError;
+      }
       setGeneratedNoSurat(res.fullNumber);
-      toast({ title: "Nomor Berhasil Didapatkan", description: "Silahkan lengkapi berkas dan penandatangan." });
+      setActiveDraftId(draft.id);
+      setDraftSaveState("saved");
+      setSearchParams({ draft: draft.id }, { replace: true });
+      await refreshActiveDrafts();
+      toast({ title: "Nomor Berhasil Didapatkan", description: "Draft disimpan otomatis selama Anda melengkapi dokumen." });
     } catch (e: unknown) {
       toast({ variant: "destructive", title: "Gagal Mendapatkan Nomor", description: e instanceof Error ? e.message : "Gagal mendapatkan nomor surat." });
     } finally { setIsProcessingNumber(false); }
@@ -893,8 +1018,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
     if (!confirmed) return;
     try {
-      await suratService.cancelRegistration(generatedNoSurat);
+      if (activeDraftId) await suratService.voidRegistrationDraft(activeDraftId);
+      else await suratService.cancelRegistration(generatedNoSurat);
       setGeneratedNoSurat(null);
+      setActiveDraftId(null);
+      setDraftAttachments([]);
+      setInitialAttachmentFiles({});
+      setLampiranFiles([]);
+      setDraftSaveState("idle");
+      setSearchParams({}, { replace: true });
+      await refreshActiveDrafts();
       toast({ title: "Nomor Dibatalkan" });
     } catch { toast({ variant: "destructive", title: "Gagal membatalkan nomor" }); }
   };
@@ -940,6 +1073,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
     setGeneratedNoSurat(null); setSelectedUsage(null); setSelectedFormId(""); setLampiranFiles([]); setSigners([]);
     setInitialAttachmentFiles({});
+    setDraftAttachments([]);
+    setUploadingRequirement(null);
+    setActiveDraftId(null);
+    setDraftSaveState("idle");
+    setSearchParams({}, { replace: true });
     setJudulForDisplay("");
   };
 
@@ -952,7 +1090,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       title: "Mapping Tempat/Tanggal Belum Ada",
       description: "Admin harus mapping field Tempat, Tanggal ke cell Excel di Master Template.",
     });
-    if (lampiranFiles.length === 0 && shouldRequireInitialAttachment()) {
+    if (lampiranFiles.length + draftAttachments.length === 0 && shouldRequireInitialAttachment()) {
       return toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
     }
     const missingInitialAttachments = getMissingInitialAttachmentLabels();
@@ -992,9 +1130,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         { ...formData, no_surat: generatedNoSurat, initial_attachment_meta: initialAttachmentMeta },
         signers,
         null,
-        lampiranFiles
+        lampiranFiles,
+        draftAttachments
       );
       if (result) {
+        if (activeDraftId) {
+          await suratService.finishRegistrationDraft(activeDraftId, "SUBMITTED");
+          setActiveDrafts(previous => previous.filter(draft => draft.id !== activeDraftId));
+        }
         toast({ title: "Pendaftaran Berhasil", description: `Nomor ${result.no_surat} telah disimpan.` });
         onSuccess(result.no_surat, formData.judul_surat);
         resetForm();
@@ -1186,16 +1329,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
     return (
       <div key={field.key} className={cn(
-        "rounded-3xl border border-border/50 bg-background/70 p-4 shadow-sm md:p-5",
+        "rounded-lg border border-border bg-card p-4 shadow-[var(--shadow-card)] md:p-5",
         isTable && "space-y-4"
       )}>
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-primary/10 px-2 text-[10px] font-black text-primary">
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 text-xs font-semibold text-primary">
                 {index + 1}
               </span>
-              <Label className="text-[12px] font-black uppercase tracking-wide text-foreground">
+              <Label className="text-sm font-semibold text-foreground">
                 {field.label}
               </Label>
             </div>
@@ -1206,7 +1349,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </p>
           </div>
           <span className={cn(
-            "inline-flex w-fit rounded-full border px-2.5 py-1 text-[9px] font-black uppercase",
+            "inline-flex w-fit rounded-md border px-2.5 py-1 text-[11px] font-semibold",
             field.required !== false
               ? "border-primary/20 bg-primary/10 text-primary"
               : "border-border bg-muted/40 text-muted-foreground"
@@ -1251,16 +1394,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!isUnitMode) return null;
     const selectedProject = getFormFieldValue("requested_project") as ProjectRaw | undefined;
     return (
-      <div className="space-y-4 rounded-3xl border border-blue-500/20 bg-blue-500/5 p-5 md:p-6">
+      <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
         <div className="flex flex-col gap-1">
-          <p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Pengajuan Unit</p>
+          <p className="text-sm font-semibold text-primary">Pengajuan Unit</p>
           <p className="text-xs font-medium text-muted-foreground">
             Pemohon hanya mengajukan jumlah unit. Perencanaan akan memilih unit spesifik saat approval.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <div className="space-y-2">
-            <Label className="text-[11px] font-black uppercase text-muted-foreground">Proyek</Label>
+            <Label className="text-xs font-semibold text-muted-foreground">Proyek</Label>
             <Select value={(getFormFieldValue("requested_project") as { value?: string } | undefined)?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading || !!generatedNoSurat}>
               <SelectTrigger className="h-12 bg-background/70 text-sm">
                 <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
@@ -1276,7 +1419,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             {projectsError && <p className="text-[10px] font-semibold text-destructive">{projectsError}</p>}
           </div>
           <div className="space-y-2">
-            <Label className="text-[11px] font-black uppercase text-muted-foreground">Jumlah Unit Diajukan</Label>
+            <Label className="text-xs font-semibold text-muted-foreground">Jumlah Unit Diajukan</Label>
             <Input
               type="number"
               min={1}
@@ -1295,15 +1438,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const renderRequestClassificationStep = () => {
     const category = getRequestCategory();
     return (
-      <div className="space-y-3 rounded-3xl border border-border/50 bg-background/60 p-4 md:p-5">
+      <div className="space-y-3 rounded-lg border border-border bg-card p-4 md:p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-primary">Klasifikasi Dokumen</p>
+            <p className="text-sm font-semibold text-foreground">Klasifikasi Dokumen</p>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
               Pilih klasifikasi sebelum sistem menentukan matrix dan template yang tersedia.
             </p>
           </div>
-          <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary">
+          <span className="inline-flex w-fit items-center rounded-md border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
             {getRequestCombinationLabel()}
           </span>
         </div>
@@ -1324,13 +1467,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               disabled={!!generatedNoSurat || unitDisabled}
               onClick={() => setRequestCategory(option.value as RequestCategory)}
               className={cn(
-                "rounded-2xl border px-4 py-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
+                "rounded-md border px-4 py-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
                 category === option.value
                   ? "border-primary bg-primary text-primary-foreground shadow-sm"
                   : "border-border bg-background/70 text-foreground hover:bg-muted"
               )}
             >
-              <span className="block text-[11px] font-black uppercase">{option.label}</span>
+              <span className="block text-sm font-semibold">{option.label}</span>
               <span className={cn(
                 "mt-1 block text-[10px] font-semibold",
                 category === option.value ? "text-primary-foreground/80" : "text-muted-foreground"
@@ -1355,6 +1498,67 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return null;
   };
 
+  const handleAttachmentSelection = async (rule: AttachmentRequirement, selectedFiles: File[]) => {
+    const persisted = draftAttachments.filter(item => item.requirement_key === rule.requirement_key);
+    const local = initialAttachmentFiles[rule.requirement_key] || [];
+    const remainingSlots = Math.max(Number(rule.max_files || 1) - persisted.length - local.length, 0);
+    const selected = selectedFiles.slice(0, remainingSlots);
+    if (selected.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Batas Lampiran Tercapai",
+        description: `Maksimal ${rule.max_files || 1} file untuk ${rule.label}.`,
+      });
+      return;
+    }
+
+    if (!activeDraftId) {
+      setInitialAttachmentFiles(previous => {
+        const next = {
+          ...previous,
+          [rule.requirement_key]: [...(previous[rule.requirement_key] || []), ...selected],
+        };
+        setLampiranFiles(Object.values(next).flat());
+        return next;
+      });
+      return;
+    }
+
+    setUploadingRequirement(rule.requirement_key);
+    try {
+      const uploaded = await suratService.uploadRegistrationDraftFiles(activeDraftId, selected, {
+        key: rule.requirement_key,
+        label: rule.label,
+      });
+      setDraftAttachments(previous => [...previous, ...uploaded]);
+      toast({
+        title: "Lampiran Tersimpan",
+        description: `${uploaded.length} file tersimpan pada draft.`,
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Mengunggah Lampiran",
+        description: error instanceof Error ? error.message : "Coba unggah kembali.",
+      });
+    } finally {
+      setUploadingRequirement(null);
+    }
+  };
+
+  const handleRemoveDraftAttachment = async (attachment: SuratRegistrationDraftFile) => {
+    try {
+      await suratService.deleteRegistrationDraftFile(attachment.id);
+      setDraftAttachments(previous => previous.filter(item => item.id !== attachment.id));
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Menghapus Lampiran",
+        description: error instanceof Error ? error.message : "Coba kembali.",
+      });
+    }
+  };
+
   const renderAttachmentUploader = () => {
     const configuredRequirements = getInitialAttachmentRequirements();
     if (configuredRequirements.length > 0) {
@@ -1366,29 +1570,60 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </div>
           {configuredRequirements.map(rule => {
             const files = initialAttachmentFiles[rule.requirement_key] || [];
+            const persistedFiles = draftAttachments.filter(
+              attachment => attachment.requirement_key === rule.requirement_key
+            );
+            const totalFiles = files.length + persistedFiles.length;
+            const isUploading = uploadingRequirement === rule.requirement_key;
             return (
-              <label key={rule.id} className="block rounded-xl border border-border bg-background/70 p-4">
+              <div key={rule.id} className="rounded-xl border border-border bg-background/70 p-4">
                 <div className="mb-3">
                   <span className="text-xs font-black uppercase">{rule.label}</span>
                   {rule.is_required && <span className="ml-2 text-destructive">*</span>}
                   <p className="mt-1 text-[10px] font-medium text-muted-foreground">
-                    {files.length > 0 ? `${files.length} file dipilih` : `Maksimal ${rule.max_files} file`}
+                    {isUploading
+                      ? "Mengunggah dan menyimpan..."
+                      : totalFiles > 0
+                        ? `${totalFiles} dari ${rule.max_files} file tersimpan`
+                        : `Maksimal ${rule.max_files} file`}
                   </p>
                 </div>
+                {persistedFiles.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {persistedFiles.map(attachment => (
+                      <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-foreground">{attachment.file_name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {attachment.file_size ? `${Math.ceil(attachment.file_size / 1024)} KB` : "Tersimpan di draft"}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => void handleRemoveDraftAttachment(attachment)}
+                          aria-label={`Hapus ${attachment.file_name}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <Input
                   type="file"
                   multiple={rule.allow_multiple || rule.max_files > 1}
                   accept={rule.allowed_types?.join(",")}
+                  disabled={isUploading || totalFiles >= rule.max_files}
                   onChange={event => {
-                    const selected = Array.from(event.target.files || []).slice(0, rule.max_files);
-                    setInitialAttachmentFiles(previous => {
-                      const next = { ...previous, [rule.requirement_key]: selected };
-                      setLampiranFiles(Object.values(next).flat());
-                      return next;
-                    });
+                    const selected = Array.from(event.target.files || []);
+                    event.currentTarget.value = "";
+                    void handleAttachmentSelection(rule, selected);
                   }}
                 />
-              </label>
+              </div>
             );
           })}
         </div>
@@ -1398,29 +1633,64 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   return (
-    <Card className="glass-card border-none overflow-hidden shadow-2xl bg-background/50 backdrop-blur-xl">
-      <CardHeader className="bg-gradient-to-r from-primary/10 via-transparent to-transparent border-b border-border/50">
-        <CardTitle className="text-xl font-black flex items-center gap-3 tracking-tight uppercase">
-          <div className="p-2.5 bg-primary/20 rounded-xl shadow-inner">
-            <Layers className="w-5 h-5 text-primary" />
-          </div>
-          Registrasi Dokumen Digital
-        </CardTitle>
-      </CardHeader>
+    <Card className="overflow-hidden border border-border bg-card shadow-[var(--shadow-card)]">
+      <CardContent className="space-y-7 p-4 sm:p-5 md:p-6">
 
-      <CardContent className="p-6 md:p-10 space-y-8">
+        {!generatedNoSurat && (draftLoading || activeDrafts.length > 1) && (
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Lanjutkan draft registrasi</p>
+                <p className="mt-1 text-xs text-muted-foreground">Pilih nomor yang ingin dilanjutkan.</p>
+              </div>
+              {draftLoading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            </div>
+            {!draftLoading && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {activeDrafts.map(draft => (
+                  <button
+                    key={draft.id}
+                    type="button"
+                    onClick={() => setSearchParams({ draft: draft.id }, { replace: true })}
+                    className="min-h-16 rounded-md border border-border bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <span className="block font-mono text-xs font-semibold text-primary">{draft.no_surat}</span>
+                    <span className="mt-1 block truncate text-xs text-muted-foreground">
+                      {String(draft.payload?.formData?.judul_surat || "Belum ada judul")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── PERINGATAN nomor sudah dipesan ───────────────────────────────── */}
         {generatedNoSurat && (
           <div className="animate-in fade-in zoom-in-95 duration-300">
-            <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-2xl flex items-center gap-4 text-destructive">
-              <div className="p-2 bg-destructive rounded-lg text-white shrink-0">
-                <AlertTriangle className="w-5 h-5 animate-bounce" />
+            <div className={cn(
+              "flex items-center gap-4 rounded-lg border p-4",
+              draftSaveState === "error"
+                ? "border-destructive/20 bg-destructive/10 text-destructive"
+                : "border-primary/20 bg-primary/5 text-foreground"
+            )}>
+              <div className={cn(
+                "shrink-0 rounded-md p-2 text-white",
+                draftSaveState === "error" ? "bg-destructive" : "bg-primary"
+              )}>
+                {draftSaveState === "saving"
+                  ? <Loader2 className="h-5 w-5 animate-spin" />
+                  : draftSaveState === "error"
+                    ? <AlertTriangle className="h-5 w-5" />
+                    : <Check className="h-5 w-5" />}
               </div>
               <div>
-                <p className="text-xs font-black uppercase tracking-tight leading-none mb-1">Peringatan Keamanan Data</p>
-                <p className="text-[10px] font-medium opacity-80">
-                  Nomor surat telah dipesan. Jangan refresh sebelum klik <b>Konfirmasi Pendaftaran</b>.
+                <p className="mb-1 text-sm font-semibold leading-none">Nomor sudah dipesan</p>
+                <p className="text-xs font-medium opacity-80">
+                  {draftSaveState === "saving" && "Menyimpan perubahan..."}
+                  {draftSaveState === "saved" && "Perubahan tersimpan otomatis. Anda dapat melanjutkan draft ini nanti."}
+                  {draftSaveState === "error" && "Perubahan terakhir belum tersimpan. Periksa koneksi Anda."}
+                  {draftSaveState === "idle" && "Draft registrasi sedang disiapkan."}
                 </p>
               </div>
             </div>
@@ -1429,18 +1699,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
         {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
         <section className="space-y-6">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-black shadow-lg">1</span>
-            <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">Lokasi & Klasifikasi</h3>
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
+            <h3 className="text-sm font-semibold text-foreground">Lokasi dan Klasifikasi</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-3xl bg-muted/30 border border-border/50">
+          <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5">
             {/* Kantor */}
             <div className="space-y-2">
-              <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Kantor Penerbit</Label>
+              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Kantor Penerbit</Label>
               <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
                 onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
-                <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="Pilih Kantor..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1456,7 +1726,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             {/* Proyek (cabang saja) */}
             {!isPusatSelected && formData.office_id && (
               <div className="space-y-2 animate-in slide-in-from-top-2">
-                <Label className="text-[11px] font-black uppercase text-primary ml-1 flex items-center gap-2">
+              <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
                   <Briefcase className="w-3 h-3" /> Pilih Proyek Cabang
                 </Label>
                 <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
@@ -1474,10 +1744,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
             {/* Entitas */}
             <div className="space-y-2">
-              <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Entitas (PT)</Label>
+              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>
               <Select disabled={!!generatedNoSurat} value={formData.entity_id}
                 onValueChange={v => setFormData({ ...formData, entity_id: v })}>
-                <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="Pilih PT..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1490,10 +1760,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
             {/* Departemen */}
             <div className="space-y-2">
-              <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Departemen</Label>
+              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Departemen</Label>
               <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.dept_id}
                 onValueChange={v => setFormData({ ...formData, dept_id: v })}>
-                <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="Pilih Dept..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1506,10 +1776,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
             {/* Jenis Dokumen */}
             <div className="space-y-2">
-              <Label className="text-[11px] font-black uppercase text-muted-foreground ml-1">Jenis Dokumen</Label>
+              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Jenis Dokumen</Label>
               <Select disabled={!!generatedNoSurat} value={formData.letter_type_id}
                 onValueChange={handleLetterTypeChange}>
-                <SelectTrigger className="h-11 bg-background/50 border-none ring-1 ring-border">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="Pilih Jenis..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1647,15 +1917,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             <Button
               onClick={handleGetNumber}
               disabled={isProcessingNumber || !formData.entity_id || !formData.dept_id || !formData.letter_type_id}
-              className="w-full h-14 bg-primary text-white font-black rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-primary/20"
+              className="h-12 w-full font-semibold"
             >
               {isProcessingNumber
                 ? <Loader2 className="animate-spin mr-2 w-5 h-5" />
-                : <><Hash className="w-5 h-5 mr-2" /> DAPATKAN NOMOR SURAT</>
+                : <><Hash className="mr-2 h-4 w-4" /> Dapatkan Nomor Surat</>
               }
             </Button>
           ) : (
-            <div className="p-5 rounded-3xl bg-primary/10 border-2 border-primary/20 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/10 p-5 md:flex-row">
               <div className="flex gap-4 items-center">
                 <div className="p-3 bg-primary rounded-2xl text-primary-foreground shadow-lg"><Hash className="w-6 h-6" /></div>
                 <div>
@@ -1669,7 +1939,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     )}
                   </div>
                   <div className="flex items-center gap-3">
-                    <p className="text-2xl font-black tracking-tighter">{generatedNoSurat}</p>
+                    <p className="text-xl font-semibold tracking-tight">{generatedNoSurat}</p>
                     <Button variant="outline" size="icon" className="h-8 w-8"
                       onClick={() => { navigator.clipboard.writeText(generatedNoSurat || ""); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }}>
                       {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -1686,67 +1956,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
         {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
         {generatedNoSurat && (
-          <div className="space-y-8 animate-in slide-in-from-bottom-5 duration-500">
+          <div id="surat-registration-details" className="scroll-mt-24 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
             <section className="space-y-6">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-black">2</span>
-                <h3 className="text-sm font-black uppercase text-muted-foreground">Persetujuan & Berkas</h3>
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">2</span>
+                <h3 className="text-sm font-semibold text-foreground">Persetujuan dan Berkas</h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 {/* Kiri: matrix + judul + template */}
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label className="text-[11px] font-black uppercase text-muted-foreground">
-                      Kegunaan & Alur Approval
-                    </Label>
-                    <Popover open={false}>
-                      <PopoverTrigger asChild>
-                        <Button disabled variant="outline" className="w-full h-auto py-3 justify-between rounded-xl ring-1 ring-border bg-muted/20">
-                          <div className="truncate text-left">
-                            {selectedUsage ? (
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {getFullRoles(selectedUsage).map((role: string, idx: number, arr: string[]) => (
-                                  <React.Fragment key={idx}>
-                                    <span className="text-xs font-black uppercase">{role}</span>
-                                    {idx < arr.length - 1 && <ChevronRight className="w-3 h-3 opacity-30" />}
-                                  </React.Fragment>
-                                ))}
-                              </div>
-                            ) : <span className="text-muted-foreground text-sm">Cari Alur Matrix...</span>}
-                          </div>
-                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Cari alur..." />
-                          <CommandList className="max-h-[300px]">
-                            <CommandEmpty>Alur tidak ditemukan.</CommandEmpty>
-                            {Object.keys(groupedUsage).sort((a, b) => parseInt(a) - parseInt(b)).map(level => (
-                              <CommandGroup key={level} heading={`ALUR ${level} TAHAP`}>
-                                {groupedUsage[parseInt(level)].map((u: UsageDetailRecord) => (
-                                  <CommandItem key={u.id} onSelect={() => { handleUsageChange(u.id); setOpenMatrix(false); }} className="p-3 cursor-pointer">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      {getFullRoles(u).map((role: string, idx: number, arr: string[]) => (
-                                        <React.Fragment key={idx}>
-                                          <span className="text-[10px] px-2 py-0.5 bg-muted rounded-md font-black uppercase">{role}</span>
-                                          {idx < arr.length - 1 && <ChevronRight className="w-3 h-3 opacity-30" />}
-                                        </React.Fragment>
-                                      ))}
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            ))}
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-[11px] font-black uppercase text-muted-foreground">Perihal (Judul Surat)</Label>
+                    <Label className="text-xs font-semibold text-muted-foreground">Perihal (Judul Surat)</Label>
                     <Input className="h-12 bg-muted/20 border-none ring-1 ring-border focus-visible:ring-primary"
                       placeholder="Contoh: Permohonan Pembelian Inventaris Kantor"
                       value={formData.judul_surat}
@@ -1754,21 +1975,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     />
                   </div>
 
-                  {selectedUsage?.master_forms?.link_form && (
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Template by Sistem</p>
-                      <p className="mt-1 text-[10px] font-medium text-muted-foreground">
-                        Excel akan dibuat otomatis dari input sistem. User tidak perlu download atau upload file utama.
-                      </p>
-                    </div>
-                  )}
                 </div>
 
-                <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tanggal Dokumen</p>
+                <div className="space-y-4 rounded-lg border border-border bg-muted/10 p-5">
+                  <p className="text-sm font-semibold text-foreground">Tanggal Dokumen</p>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label className="text-[11px] font-black uppercase text-muted-foreground">Tempat</Label>
+                      <Label className="text-xs font-semibold text-muted-foreground">Tempat</Label>
                       <Input
                         value={formData.request_place}
                         onChange={e => setFormData({ ...formData, request_place: e.target.value })}
@@ -1777,7 +1990,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[11px] font-black uppercase text-muted-foreground">Tanggal</Label>
+                      <Label className="text-xs font-semibold text-muted-foreground">Tanggal</Label>
                       <Input
                         type="date"
                         value={formData.request_date}
@@ -1790,23 +2003,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               </div>
 
               {selectedUsage && (getVisibleManualFields().length > 0 || hasUnitRequestFields(selectedUsage)) && (
-                <div className="space-y-5 rounded-3xl border border-border/50 bg-muted/10 p-4 md:p-6">
-                  <div className="rounded-3xl border border-primary/15 bg-primary/5 p-4 md:p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="text-[11px] font-black uppercase tracking-widest text-primary">Input Detail Template</p>
-                        <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-foreground">
-                          Isi data dokumen di sini. Sistem akan memasukkan data ini ke template Excel dan PDF otomatis.
-                        </p>
-                        <p className="mt-1 text-xs font-medium text-muted-foreground">
-                          Field dibuat berurutan dari atas ke bawah agar tidak perlu mencari input kecil di banyak kolom.
-                        </p>
-                      </div>
-                      <span className="inline-flex w-fit rounded-full border border-border/50 bg-background/70 px-3 py-1 text-[10px] font-black uppercase text-muted-foreground">
-                        {getVisibleManualFields().length} field
-                      </span>
-                    </div>
-                  </div>
+                <div className="space-y-5">
                   {renderRequestWorkflowStep()}
                   {getVisibleManualFields().length > 0 && (
                     <div className="space-y-4">
@@ -1821,23 +2018,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
             {/* ══ SECTION 3: SIGNERS ═══════════════════════════════════════ */}
             {signers.length > 0 && (
-              <section className="space-y-8 pt-10 border-t animate-in fade-in duration-700">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-black">3</span>
-                  <h3 className="text-sm font-black uppercase text-muted-foreground">Penetapan Pejabat Penandatangan</h3>
+              <section className="space-y-6 border-t pt-8 animate-in fade-in duration-700">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">3</span>
+                  <h3 className="text-sm font-semibold text-foreground">Penetapan Pejabat Penandatangan</h3>
                 </div>
 
-                <div className="max-w-xl mx-auto space-y-4">
+                <div className="mx-auto max-w-2xl space-y-3">
                   {signers.map((s, i) => (
                     <div key={i} className="flex flex-col items-center">
-                      <div className="w-full p-5 rounded-2xl bg-card border flex items-center gap-5 shadow-sm hover:border-primary/50 transition-colors">
-                        <div className="flex flex-col items-center justify-center w-10 h-10 rounded-xl bg-muted font-black text-[10px] shrink-0">
+                      <div className="flex w-full items-center gap-4 rounded-lg border bg-card p-4 shadow-[var(--shadow-card)] transition-colors hover:border-primary/50">
+                        <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-[10px] font-semibold">
                           <span className="opacity-50 text-[7px]">KE</span>{s.step_order}
                         </div>
                         <div className="flex-1 text-left space-y-1">
                           <div className="flex flex-col mb-2">
-                            <p className="text-xs font-black text-primary uppercase leading-tight">{s.label_jabatan}</p>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">Status: {s.role_name}</p>
+                            <p className="text-xs font-semibold leading-tight text-primary">{s.label_jabatan}</p>
+                            <p className="text-[11px] font-medium text-muted-foreground">Status: {s.role_name}</p>
                           </div>
                           <Popover open={openSignerIndex === i} onOpenChange={(open) => setOpenSignerIndex(open ? i : null)}>
                             <PopoverTrigger asChild>
@@ -1893,16 +2090,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
                 <div className="pt-6">
                   <Button
-                    className="w-full h-16 bg-primary text-white text-lg font-black rounded-3xl shadow-glow transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+                    className="h-12 w-full text-base font-semibold disabled:opacity-50"
                     disabled={isLoading || signers.some(s => !s.user_id) || !formData.judul_surat}
                     onClick={handleSubmit}
                   >
                     {isLoading
-                      ? <div className="flex items-center gap-3"><Loader2 className="animate-spin w-6 h-6" /><span>MEMPROSES DATA...</span></div>
-                      : "KONFIRMASI PENDAFTARAN"
+                      ? <div className="flex items-center gap-3"><Loader2 className="h-5 w-5 animate-spin" /><span>Memproses Data...</span></div>
+                      : "Konfirmasi Pendaftaran"
                     }
                   </Button>
-                  <p className="text-center text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-widest">
+                  <p className="mt-3 text-center text-xs font-medium text-muted-foreground">
                     Pastikan semua data sudah benar sebelum konfirmasi
                   </p>
                 </div>

@@ -44,28 +44,27 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
   const pendingCount = list.filter(s => s.status !== 'SELESAI').length;
 
   return (
-    <div className="w-[420px] shrink-0 flex flex-col border-r bg-[#0a0c12] h-full">
+    <div className="flex h-full w-[420px] shrink-0 flex-col border-r bg-sidebar">
       {/* HEADER */}
-      <div className="p-6 border-b border-white/5 bg-[#0d0f16]">
+      <div className="border-b border-sidebar-border bg-sidebar p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
               <FileText size={16} className="text-primary" />
             </div>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-white">Monitoring Surat</h2>
-              <p className="text-[9px] text-white/30 font-bold uppercase tracking-widest">Tracking & Progress</p>
+              <h2 className="text-sm font-semibold text-sidebar-foreground">Monitoring Surat</h2>
             </div>
           </div>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-white/5 p-1 rounded-xl mb-4">
+        <div className="mb-4 flex rounded-md bg-sidebar-accent p-1">
           <button
             onClick={() => onTabChange('MY_SURAT')}
             className={cn(
-              "flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2",
-              activeTab === 'MY_SURAT' ? "bg-primary text-white shadow-sm" : "text-white/40 hover:text-white/60"
+              "flex flex-1 items-center justify-center gap-2 rounded px-3 py-2 text-xs font-semibold transition-all",
+              activeTab === 'MY_SURAT' ? "bg-primary text-white shadow-sm" : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
             )}
           >
             <User size={12} /> Surat Saya
@@ -73,8 +72,8 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
           <button
             onClick={() => onTabChange('OTHERS')}
             className={cn(
-              "flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2",
-              activeTab === 'OTHERS' ? "bg-primary text-white shadow-sm" : "text-white/40 hover:text-white/60"
+              "flex flex-1 items-center justify-center gap-2 rounded px-3 py-2 text-xs font-semibold transition-all",
+              activeTab === 'OTHERS' ? "bg-primary text-white shadow-sm" : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
             )}
           >
             <Users size={12} /> Terlibat
@@ -83,24 +82,24 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
 
         {/* Stats */}
         <div className="flex gap-3 mb-4">
-          <div className="flex-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2 text-center">
-            <p className="text-lg font-black text-emerald-400">{signedCount}</p>
-            <p className="text-[8px] font-bold uppercase text-emerald-400/60 tracking-widest">Selesai</p>
+          <div className="flex-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-center">
+            <p className="text-lg font-semibold text-emerald-400">{signedCount}</p>
+            <p className="text-xs font-medium text-emerald-400/70">Selesai</p>
           </div>
-          <div className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 text-center">
-            <p className="text-lg font-black text-amber-400">{pendingCount}</p>
-            <p className="text-[8px] font-bold uppercase text-amber-400/60 tracking-widest">Pending</p>
+          <div className="flex-1 rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-center">
+            <p className="text-lg font-semibold text-amber-400">{pendingCount}</p>
+            <p className="text-xs font-medium text-amber-400/70">Pending</p>
           </div>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-sidebar-foreground/35" />
           <Input
-            placeholder="CARI JUDUL ATAU NOMOR..."
+            placeholder="Cari judul atau nomor"
             value={searchValue}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9 bg-white/5 border-white/10 text-[10px] font-bold uppercase tracking-wider text-white placeholder:text-white/20 rounded-xl h-9"
+            className="h-10 border-sidebar-border bg-sidebar-accent pl-9 text-sm text-sidebar-foreground placeholder:text-sidebar-foreground/35"
           />
         </div>
       </div>
@@ -108,14 +107,14 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
       {/* LIST */}
       <div className="flex-1 overflow-y-auto">
         {filteredList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3 opacity-30">
-            <FileText size={32} strokeWidth={1} className="text-white" />
-            <p className="text-[9px] font-bold uppercase tracking-widest text-white">
+          <div className="flex h-64 flex-col items-center justify-center gap-3 opacity-50">
+            <FileText size={32} strokeWidth={1} className="text-sidebar-foreground" />
+            <p className="text-sm font-medium text-sidebar-foreground">
               {searchValue ? 'Tidak ditemukan' : 'Belum ada surat'}
             </p>
           </div>
         ) : (
-          <div className="p-4 space-y-3">
+          <div className="space-y-3 p-4">
             {filteredList.map((s: SuratRegistrasi) => {
               const isActive = selectedId === s.id;
               const attachments = getAttachments(s);
@@ -125,10 +124,10 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
                   key={s.id}
                   onClick={() => onSelect(s.id)}
                   className={cn(
-                    "group cursor-pointer rounded-2xl border transition-all duration-300 p-4 relative overflow-hidden",
+                    "group relative cursor-pointer overflow-hidden rounded-lg border p-4 transition-all duration-200",
                     isActive
-                      ? "bg-primary/5 border-primary shadow-md ring-1 ring-primary/20"
-                      : "bg-white/5 border-white/10 hover:bg-white/8 hover:border-white/20"
+                      ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/20"
+                      : "border-sidebar-border bg-sidebar-accent/60 hover:border-primary/35"
                   )}
                 >
                   {/* Status Badge & Date */}
@@ -136,7 +135,7 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
                     <Badge
                       variant={s.status === 'SELESAI' ? 'default' : 'secondary'}
                       className={cn(
-                        "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg",
+                        "px-2 py-0.5 text-[11px] font-semibold",
                         s.status === 'SELESAI'
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                           : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
@@ -144,17 +143,17 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
                     >
                       {s.status === 'SELESAI' ? 'Selesai' : 'Pending'}
                     </Badge>
-                    <span className="text-[9px] text-white/20 font-mono">
+                    <span className="font-mono text-[11px] text-sidebar-foreground/45">
                       {new Date(s.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit' })}
                     </span>
                   </div>
 
                   {/* Number & Title */}
                   <div className="mb-2">
-                    <p className="text-[10px] font-mono font-bold text-primary mb-0.5">{s.no_surat || 'PENDING'}</p>
+                    <p className="mb-0.5 font-mono text-[11px] font-semibold text-primary">{s.no_surat || 'Nomor diproses'}</p>
                     <h4 className={cn(
-                      "text-sm font-bold leading-snug transition-colors line-clamp-2",
-                      isActive ? "text-primary" : "text-white/80"
+                      "line-clamp-2 text-sm font-semibold leading-snug transition-colors",
+                      isActive ? "text-primary" : "text-sidebar-foreground"
                     )}>
                       {s.judul_surat}
                     </h4>
@@ -163,17 +162,17 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
                   {/* Attachments indicator */}
                   {attachments.length > 0 && (
                     <div className="flex items-center gap-1.5 mb-2">
-                      <Paperclip size={10} className="text-white/30" />
-                      <span className="text-[9px] text-white/30 font-bold">
+                      <Paperclip size={11} className="text-sidebar-foreground/45" />
+                      <span className="text-[11px] font-medium text-sidebar-foreground/45">
                         {attachments.length} lampiran
                       </span>
                     </div>
                   )}
 
                   {/* Current Position */}
-                  <div className="flex items-center gap-2 text-[10px]">
-                    <Clock size={11} className="text-white/40" />
-                    <span className="text-white/40">Posisi:</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <Clock size={12} className="text-sidebar-foreground/45" />
+                    <span className="text-sidebar-foreground/45">Posisi:</span>
                     <span className={cn(
                       "font-bold",
                       s.status === 'SELESAI' ? "text-emerald-400" : "text-blue-400"
@@ -184,8 +183,8 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
 
                   {/* Signature Progress - Shown when active */}
                   {isActive && s.surat_signatures && s.surat_signatures.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-white/10">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-white/30 mb-3">
+                    <div className="mt-4 border-t border-sidebar-border pt-4">
+                      <p className="mb-3 text-xs font-semibold text-sidebar-foreground/55">
                         Progress Tanda Tangan
                       </p>
                       <div className="space-y-2">
@@ -194,15 +193,15 @@ export const MonitoringSidebar: React.FC<SidebarProps> = ({ list, selectedId, ac
                           .map((sig) => (
                             <div key={sig.id} className="flex items-center gap-2.5">
                               <div className={cn(
-                                "w-4 h-4 rounded-full flex items-center justify-center shrink-0",
-                                sig.is_signed ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/30"
+                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
+                                sig.is_signed ? "bg-emerald-500/20 text-emerald-400" : "bg-sidebar-foreground/10 text-sidebar-foreground/35"
                               )}>
                                 {sig.is_signed ? <CheckCircle2 size={10} /> : <Clock size={10} />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className={cn(
-                                  "text-[10px] font-bold truncate",
-                                  sig.is_signed ? "text-white/70" : "text-white/30"
+                                  "truncate text-xs font-medium",
+                                  sig.is_signed ? "text-sidebar-foreground/75" : "text-sidebar-foreground/35"
                                 )}>
                                   {sig.role_name}
                                 </p>

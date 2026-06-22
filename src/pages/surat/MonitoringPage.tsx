@@ -172,7 +172,7 @@ const MonitoringPage = () => {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="sigap-page animate-in fade-in duration-300">
       <Dialog open={!!previewingId}>
         <DialogContent className="max-w-sm rounded-3xl text-center">
           <DialogHeader>
@@ -188,49 +188,48 @@ const MonitoringPage = () => {
       </Dialog>
 
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-border pb-8">
+      <div className="sigap-panel sigap-panel-accent flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-8 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
-            <h1 className="text-3xl font-black text-foreground tracking-tighter uppercase">
-              Status <span className="text-primary/50 font-light tracking-widest">Pengajuan</span>
+            <h1 className="text-xl font-semibold text-foreground">
+              Status Pengajuan
             </h1>
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.4em] ml-5">
-            Lacak pergerakan dokumen anda secara real-time
+          <p className="text-sm text-muted-foreground">
+            Pantau dokumen yang Anda ajukan atau ikuti.
           </p>
         </div>
       </div>
 
       {/* SUMMARY CARDS */}
       {!isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             { label: 'Total Pengajuan', value: enriched.length, icon: <Inbox size={16} />, cls: 'text-foreground', bg: 'bg-muted/30' },
             { label: 'Selesai',  value: enriched.filter(s => s._status.type === 'SELESAI').length,  icon: <CheckCircle2 size={16} />, cls: 'text-emerald-400', bg: 'bg-emerald-500/5' },
             { label: 'Proses',   value: enriched.filter(s => s._status.type === 'PROSES').length, icon: <Clock size={16} />, cls: 'text-amber-400', bg: 'bg-amber-500/5' },
             { label: 'Ditolak',  value: enriched.filter(s => s._status.type === 'DITOLAK').length,  icon: <XCircle size={16} />, cls: 'text-red-400', bg: 'bg-red-500/5' },
           ].map(card => (
-            <div key={card.label} className={cn("flex flex-col p-5 rounded-2xl border border-border", card.bg)}>
+            <div key={card.label} className={cn("flex min-h-[124px] flex-col rounded-lg border border-border p-5", card.bg)}>
               <div className={cn("mb-3", card.cls)}>{card.icon}</div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p>
-              <p className={cn("text-3xl font-black mt-1 tabular-nums", card.cls)}>{card.value}</p>
-              <p className="text-[9px] text-muted-foreground/60 font-bold uppercase mt-0.5">/ {enriched.length} items</p>
+              <p className="text-xs font-semibold text-muted-foreground">{card.label}</p>
+              <p className={cn("mt-1 text-3xl font-semibold tabular-nums", card.cls)}>{card.value}</p>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">dari {enriched.length} pengajuan</p>
             </div>
           ))}
         </div>
       )}
 
       {/* FILTER */}
-      <div className="space-y-6 bg-card/30 p-4 rounded-2xl border border-border/50 shadow-sm">
+      <div className="sigap-panel space-y-4">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full md:w-96 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary" size={16} />
             <Input
-              placeholder="CARI JUDUL ATAU NOMOR SURAT..."
+              placeholder="Cari judul atau nomor surat"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-11 bg-background border-border rounded-xl uppercase text-[10px] font-bold tracking-widest"
+              className="h-11 pl-10 text-sm"
             />
           </div>
           <div className="flex flex-wrap gap-2">

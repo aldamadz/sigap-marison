@@ -22,7 +22,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Geist', 'system-ui', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",

@@ -200,7 +200,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
   }, [])
 
   return (
-    <header className="h-14 sm:h-16 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 lg:px-6 shrink-0 safe-area-top">
+    <header className="safe-area-top sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/92 px-3 backdrop-blur-md sm:px-5 lg:px-6">
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}
         {showMenuButton && (
@@ -208,7 +208,8 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
             variant="ghost"
             size="icon"
             onClick={onMenuClick}
-            className="lg:hidden shrink-0"
+            className="shrink-0 lg:hidden"
+            aria-label="Buka navigasi"
           >
             <Menu className="w-5 h-5" />
           </Button>
@@ -224,7 +225,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
           <Button
             onClick={onNewAgenda}
             size="sm"
-            className="gap-2 hidden sm:flex"
+            className="hidden gap-2 sm:flex"
           >
             <Plus className="w-4 h-4" />
             <span>Permintaan Baru</span>
@@ -238,7 +239,8 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative rounded-full h-9 w-9"
+                className="relative h-10 w-10 rounded-md"
+                aria-label={`Buka notifikasi, ${unreadCount} belum dibaca`}
               >
                 <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
                 {unreadCount > 0 && (
@@ -248,9 +250,9 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
             </SheetTrigger>
             <SheetContent
               side="right"
-              className="w-full sm:w-[380px] p-0 bg-background border-border flex flex-col"
+              className="flex w-full flex-col border-border bg-background p-0 sm:w-[380px]"
             >
-              <SheetHeader className="px-4 py-3 border-b shrink-0">
+              <SheetHeader className="shrink-0 border-b px-4 py-3">
                 <div className="flex items-center justify-between">
                   <SheetTitle className="text-sm font-semibold">
                     Notifikasi ({unreadCount})
@@ -334,7 +336,8 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative rounded-full h-9 w-9 lg:h-10 lg:w-10"
+                    className="relative h-10 w-10 rounded-md"
+                    aria-label={`Buka notifikasi, ${unreadCount} belum dibaca`}
               >
                 <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
                 {unreadCount > 0 && (
@@ -344,10 +347,10 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
             </PopoverTrigger>
 
             <PopoverContent
-              className="w-80 p-0 mr-4 rounded-xl shadow-2xl border-border overflow-hidden"
+              className="mr-4 w-80 overflow-hidden rounded-lg border-border p-0 shadow-[var(--shadow-elevated)]"
               align="end"
             >
-              <div className="p-3 bg-muted/40 border-b flex justify-between items-center">
+              <div className="flex items-center justify-between border-b bg-muted/40 p-3">
                 <span className="text-sm font-medium">
                   Notifikasi ({unreadCount})
                 </span>

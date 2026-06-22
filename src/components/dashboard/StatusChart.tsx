@@ -22,15 +22,15 @@ const STATUS_COLORS: Record<string, string> = {
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-background/95 border border-border p-3 rounded-xl shadow-xl backdrop-blur-sm">
-        <p className="text-[11px] font-bold text-foreground mb-1">{payload[0].name}</p>
+      <div className="rounded-lg border border-border bg-card p-3 shadow-[var(--shadow-elevated)]">
+        <p className="mb-1 text-xs font-semibold text-foreground">{payload[0].name}</p>
         <div className="flex items-center gap-2">
           <div 
             className="w-2 h-2 rounded-full" 
             style={{ backgroundColor: payload[0].payload.fill }} 
           />
-          <p className="text-sm font-black text-primary">
-            {payload[0].value} <span className="text-[10px] font-medium text-muted-foreground">Agenda</span>
+          <p className="text-sm font-semibold text-primary">
+            {payload[0].value} <span className="text-xs font-medium text-muted-foreground">Agenda</span>
           </p>
         </div>
       </div>
@@ -47,25 +47,25 @@ export const StatusChart = ({ data }: StatusChartProps) => {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-border bg-card p-6 shadow-sm h-full flex flex-col min-h-[350px]"
+      className="sigap-panel flex h-full min-h-[340px] flex-col p-5 sm:p-6"
     >
-      <div className="mb-4">
-        <h3 className="text-sm font-bold flex items-center gap-2">
+      <div className="mb-5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
           Distribusi Status
           {hasData && (
-            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black">
-              {totalValue} TOTAL
+            <span className="rounded-md border border-primary/15 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              {totalValue} total
             </span>
           )}
         </h3>
-        <p className="text-xs text-muted-foreground">Persentase progress tim saat ini</p>
+        <p className="text-xs text-muted-foreground">Jumlah agenda berdasarkan status.</p>
       </div>
 
       <div className="flex-1 w-full min-h-[250px] relative">
         {!hasData ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-2">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-              <span className="text-2xl">📊</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center space-y-2 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted">
+              <span className="text-sm font-semibold text-muted-foreground">0</span>
             </div>
             <p className="text-xs font-medium text-muted-foreground">Tidak ada data untuk ditampilkan</p>
           </div>
@@ -103,7 +103,7 @@ export const StatusChart = ({ data }: StatusChartProps) => {
                           className="w-2 h-2 rounded-full" 
                           style={{ backgroundColor: STATUS_COLORS[entry.value] }} 
                         />
-                        <span className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
+                        <span className="text-xs font-medium text-muted-foreground">
                           {entry.value}
                         </span>
                       </div>

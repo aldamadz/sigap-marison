@@ -84,24 +84,24 @@ interface PeriodNavProps {
 const PeriodNav = ({
   label, mode, onMode, onBack, onForward, onToday, isCurrent, icon, title, accentClass,
 }: PeriodNavProps) => (
-  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-    {/* Title */}
-    <div className="flex items-center gap-2">
-      <div className={cn("w-1 h-4 rounded-full", accentClass)} />
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+  <div className="sigap-panel flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="flex min-w-0 items-center gap-3">
+      <div className={cn("h-9 w-1 rounded-full", accentClass)} />
+      <div>
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
         {icon} {title}
+        </div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
       </div>
     </div>
 
-    {/* Controls */}
-    <div className="flex items-center gap-2">
-      {/* Mode toggle */}
-      <div className="flex bg-muted p-0.5 rounded-lg shrink-0">
+    <div className="flex flex-wrap items-center gap-2 md:justify-end">
+      <div className="flex shrink-0 rounded-md border border-border bg-muted/60 p-1">
         <button
           onClick={() => onMode('month')}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
-            mode === 'month' ? 'bg-background shadow-sm text-foreground font-medium' : 'text-muted-foreground'
+            'flex h-8 items-center gap-1.5 rounded px-3 text-xs font-medium transition-all',
+            mode === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
         >
           <CalendarDays className="w-4 h-4" /> Bulan
@@ -109,30 +109,30 @@ const PeriodNav = ({
         <button
           onClick={() => onMode('week')}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
-            mode === 'week' ? 'bg-background shadow-sm text-foreground font-medium' : 'text-muted-foreground'
+            'flex h-8 items-center gap-1.5 rounded px-3 text-xs font-medium transition-all',
+            mode === 'week' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
         >
           <CalendarRange className="w-4 h-4" /> Minggu
         </button>
       </div>
 
-      {/* Navigasi */}
-      <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={onBack}>
+      <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={onBack} aria-label="Periode sebelumnya">
         <ChevronLeft className="w-4 h-4" />
       </Button>
 
-      <span className="flex-1 text-center text-sm font-medium text-foreground truncate">
+      <span className="hidden min-w-[150px] text-center text-sm font-medium text-foreground md:inline">
         {label}
       </span>
 
-      <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg shrink-0"
+      <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
+        aria-label="Periode berikutnya"
         onClick={onForward} disabled={isCurrent}>
         <ChevronRight className="w-4 h-4" />
       </Button>
 
       {!isCurrent && (
-        <Button variant="outline" size="sm" className="h-9 rounded-lg text-sm px-4 shrink-0"
+        <Button variant="outline" size="sm" className="h-9 shrink-0"
           onClick={onToday}>
           Hari Ini
         </Button>
@@ -237,22 +237,22 @@ const Dashboard = () => {
 
   if (authLoading || !isReady) {
     return (
-      <div className="p-6 space-y-8 max-w-[1600px] mx-auto">
-        <Skeleton className="h-20 w-full rounded-2xl" />
-        <div className="grid grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+      <div className="sigap-page">
+        <Skeleton className="h-24 w-full rounded-lg" />
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-lg" />)}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-6 space-y-6 max-w-[1600px] mx-auto bg-background min-h-screen">
+    <div className="sigap-page">
 
       {/* ── Header dengan PageHeader ─────────────────────────────────────────── */}
       <PageHeader
         title="Dashboard"
-        subtitle="Overview aktivitas agenda dan surat"
+        subtitle="Ringkasan pekerjaan dan pengajuan."
       >
         {isParent && (
           <AgendaParentFilter
@@ -265,9 +265,9 @@ const Dashboard = () => {
       </PageHeader>
 
       {/* ── SECTION 1: SURAT ───────────────────────────────────────────────── */}
-      <div className="space-y-3">
+      <section className="space-y-3">
         <PeriodNav
-          title="Statistik Pengajuan Surat"
+          title="Pengajuan Surat"
           icon={<FileText className="w-4 h-4" />}
           accentClass="bg-primary"
           label={suratLabel}
@@ -282,12 +282,12 @@ const Dashboard = () => {
           dateFrom={suratRange.start}
           dateTo={suratRange.end}
         />
-      </div>
+      </section>
 
       {/* ── SECTION 2: AGENDA ──────────────────────────────────────────────── */}
-      <div className="space-y-3">
+      <section className="space-y-3">
         <PeriodNav
-          title="Statistik Agenda"
+          title="Agenda"
           icon={<LayoutList className="w-4 h-4" />}
           accentClass="bg-amber-500"
           label={agendaLabel}
@@ -298,20 +298,20 @@ const Dashboard = () => {
           onToday={agendaGoToday}
           isCurrent={agendaIsCurrent}
         />
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {kpiData.map((kpi: any, index: number) => (
             <KPICard key={kpi.label} data={kpi} index={index} />
           ))}
         </div>
-      </div>
+      </section>
 
       {/* ── CHARTS ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <StatusChart data={statusData} />
-        <div className="lg:col-span-2">
+        <div className="xl:col-span-2">
           <DepartmentChart data={departmentData} />
         </div>
-      </div>
+      </section>
 
       <RecentActivity logs={recentActivities} users={users} />
     </div>

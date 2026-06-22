@@ -2,7 +2,6 @@ import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { notificationService } from "./notification.service";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -93,6 +92,33 @@ export interface SuratRegistrasi {
   }>;
 }
 
+export interface SuratRegistrationDraft {
+  id: string;
+  reservation_id: string;
+  created_by: string;
+  no_surat: string;
+  status: "DRAFT" | "SUBMITTED" | "VOID" | "EXPIRED";
+  payload: Record<string, any>;
+  signer_assignments: any[];
+  current_section: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+  surat_registration_draft_files?: SuratRegistrationDraftFile[];
+}
+
+export interface SuratRegistrationDraftFile {
+  id: string;
+  draft_id: string;
+  file_url: string;
+  file_name: string;
+  file_type: string | null;
+  file_size: number | null;
+  requirement_key: string | null;
+  requirement_label: string | null;
+  created_at: string;
+}
+
 export const suratService = {
   getUnitConfigFromForm(form: any) {
     const raw = form?.unit_config;
@@ -104,13 +130,13 @@ export const suratService = {
     };
   },
 
-  async sendEmailNotification(userIds: string[], title: string, message: string, link?: string, meta: Record<string, any> = {}) {
+  async sendNotification(userIds: string[], title: string, message: string, link?: string, meta: Record<string, any> = {}) {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (ids.length === 0) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
-      const response = await fetch("/api/notifications/email", {
+      const response = await fetch("/api/notifications/send", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,10 +146,10 @@ export const suratService = {
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error || "Gagal mengirim email.");
+        throw new Error(payload?.error || "Gagal mengirim notifikasi.");
       }
     } catch (error) {
-      console.error("Email notification error:", error);
+      console.error("Notification error:", error);
     }
   },
 
@@ -164,17 +190,7 @@ export const suratService = {
         : `Surat "${judulSurat}" memerlukan tindakan Anda`;
       const link = `/surat/inbox?task=${signature.id}`;
 
-      const notificationResults = await Promise.allSettled(
-        targetIds.map((userId) =>
-          notificationService.createNotification(userId, title, message, "info", link)
-        )
-      );
-
-      notificationResults.forEach((result) => {
-        if (result.status === "rejected") console.error("Notif error:", result.reason);
-      });
-
-      this.sendEmailNotification(
+      this.sendNotification(
         targetIds,
         title,
         message,
@@ -926,6 +942,120 @@ export const suratService = {
     return { publicUrl: uploaded.publicUrl, context, signaturePositions };
   },
 
+  async getActiveRegistrationDrafts(): Promise<SuratRegistrationDraft[]> {
+    const { data, error } = await supabase
+      .from("surat_registration_drafts")
+      .select("*, surat_registration_draft_files(*)")
+      .eq("status", "DRAFT")
+      .gt("expires_at", new Date().toISOString())
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    return (data || []) as SuratRegistrationDraft[];
+  },
+
+  async getRegistrationDraft(id: string): Promise<SuratRegistrationDraft> {
+    const { data, error } = await supabase
+      .from("surat_registration_drafts")
+      .select("*, surat_registration_draft_files(*)")
+      .eq("id", id)
+      .eq("status", "DRAFT")
+      .gt("expires_at", new Date().toISOString())
+      .single();
+    if (error) throw error;
+    return data as SuratRegistrationDraft;
+  },
+
+  async createRegistrationDraft(args: {
+    noUrut: number;
+    noSurat: string;
+    payload: Record<string, any>;
+    signerAssignments: any[];
+  }): Promise<SuratRegistrationDraft> {
+    const { data, error } = await supabase.rpc("create_surat_registration_draft", {
+      p_no_urut: args.noUrut,
+      p_no_surat: args.noSurat,
+      p_payload: args.payload,
+      p_signer_assignments: args.signerAssignments,
+    });
+    if (error) throw error;
+    return data as SuratRegistrationDraft;
+  },
+
+  async saveRegistrationDraft(
+    id: string,
+    payload: Record<string, any>,
+    signerAssignments: any[],
+    currentSection = "details"
+  ): Promise<void> {
+    const { error } = await supabase
+      .from("surat_registration_drafts")
+      .update({
+        payload,
+        signer_assignments: signerAssignments,
+        current_section: currentSection,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq("id", id)
+      .eq("status", "DRAFT");
+    if (error) throw error;
+  },
+
+  async finishRegistrationDraft(id: string, status: "SUBMITTED" | "VOID"): Promise<void> {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("surat_registration_drafts")
+      .update({
+        status,
+        submitted_at: status === "SUBMITTED" ? now : null,
+        voided_at: status === "VOID" ? now : null,
+      })
+      .eq("id", id)
+      .eq("status", "DRAFT");
+    if (error) throw error;
+  },
+
+  async voidRegistrationDraft(id: string): Promise<void> {
+    const { error } = await supabase.rpc("void_surat_registration_draft", { p_draft_id: id });
+    if (error) throw error;
+  },
+
+  async uploadRegistrationDraftFiles(
+    draftId: string,
+    files: File[],
+    requirement?: { key?: string; label?: string }
+  ): Promise<SuratRegistrationDraftFile[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Sesi login tidak tersedia.");
+    const rows = [];
+    for (const file of files) {
+      const safeName = file.name.replace(/[^\w.-]+/g, "_");
+      const path = `drafts/${draftId}/${crypto.randomUUID()}_${safeName}`;
+      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path, file });
+      rows.push({
+        draft_id: draftId,
+        created_by: user.id,
+        file_url: uploaded.publicUrl,
+        file_name: file.name,
+        file_type: file.type || null,
+        file_size: file.size,
+        requirement_key: requirement?.key || null,
+        requirement_label: requirement?.label || null,
+      });
+    }
+    if (rows.length === 0) return [];
+    const { data, error } = await supabase
+      .from("surat_registration_draft_files")
+      .insert(rows)
+      .select("*");
+    if (error) throw error;
+    return (data || []) as SuratRegistrationDraftFile[];
+  },
+
+  async deleteRegistrationDraftFile(id: string): Promise<void> {
+    const { error } = await supabase.from("surat_registration_draft_files").delete().eq("id", id);
+    if (error) throw error;
+  },
+
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1016,7 +1146,13 @@ export const suratService = {
     }
   },
 
-  async createRegistrasi(payload: any, signers: any[], file: File | null, lampiranFiles?: File[] | File | null) {
+  async createRegistrasi(
+    payload: any,
+    signers: any[],
+    file: File | null,
+    lampiranFiles?: File[] | File | null,
+    draftAttachments: SuratRegistrationDraftFile[] = []
+  ) {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session?.user) {
@@ -1210,6 +1346,26 @@ export const suratService = {
         stage: "initial",
         requirements: payload.initial_attachment_meta || {},
       });
+      let reusedDraftAttachments: any[] = [];
+      if (draftAttachments.length > 0) {
+        const { data, error } = await supabase
+          .from("surat_attachments")
+          .insert(draftAttachments.map(attachment => ({
+            surat_id: surat.id,
+            file_url: attachment.file_url,
+            file_name: attachment.file_name,
+            file_type: attachment.file_type,
+            file_size: attachment.file_size,
+            created_by: user.id,
+            stage: "initial",
+            requirement_key: attachment.requirement_key,
+            requirement_label: attachment.requirement_label,
+          })))
+          .select("*");
+        if (error) throw error;
+        reusedDraftAttachments = data || [];
+      }
+      uploadedAttachments.push(...reusedDraftAttachments);
       if (uploadedAttachments[0]?.file_url) {
         await supabase
           .from("surat_registrasi")
@@ -1289,7 +1445,7 @@ export const suratService = {
     const noUrut      = parseInt(noSurat.split("/")[0]);
     const currentYear = new Date().getFullYear();
     const { error } = await supabase.from("surat_reservations")
-      .update({ status: "CANCELLED" })
+      .update({ status: "VOID" })
       .match({ no_urut: noUrut, reserved_by: user?.id, year: currentYear, status: "PENDING" });
     if (error) throw error;
     return true;
@@ -1585,19 +1741,12 @@ export const suratService = {
     if (updatedSurat) {
       // 1. Notif ke pembuat surat (yang mengajukan surat)
       if (updatedSurat.created_by) {
-        notificationService.createNotification(
-          updatedSurat.created_by,
+        this.sendNotification(
+          [updatedSurat.created_by],
           'Surat Ditandatangani',
           `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
-          'success',
-          `/surat/monitoring`
-        ).catch(e => console.error(e));
-        this.sendEmailNotification(
-          [updatedSurat.created_by],
-          "Surat Ditandatangani",
-          `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
           "/surat/monitoring",
-          { surat_id: suratId, event_type: "signed" }
+          { surat_id: suratId, event_type: "signed", type: "success" }
         );
       }
 
@@ -1627,19 +1776,12 @@ export const suratService = {
     // Notif ke pembuat surat
     const { data: suratInfo } = await supabase.from('surat_registrasi').select('created_by, judul_surat').eq('id', suratId).single();
     if (suratInfo?.created_by) {
-       notificationService.createNotification(
-         suratInfo.created_by,
+       this.sendNotification(
+         [suratInfo.created_by],
          'Surat Ditolak',
          `Surat "${suratInfo.judul_surat}" telah ditolak. Catatan: ${note}`,
-         'error',
-         `/surat/monitoring`
-       ).catch(e => console.error(e));
-       this.sendEmailNotification(
-         [suratInfo.created_by],
-         "Surat Ditolak",
-         `Surat "${suratInfo.judul_surat}" telah ditolak. Catatan: ${note}`,
          "/surat/monitoring",
-         { surat_id: suratId, event_type: "rejected" }
+         { surat_id: suratId, event_type: "rejected", type: "error" }
        );
     }
 
@@ -1786,19 +1928,12 @@ export const suratService = {
     if (sigInfo.user_id) {
       const link = `/surat/inbox?task=${signatureId}`;
       const message = `Surat "${suratFresh.judul_surat}" sudah diverifikasi dan siap ditindaklanjuti`;
-      await notificationService.createNotification(
-        sigInfo.user_id,
-        "Verifikasi Selesai",
-        message,
-        "info",
-        link
-      ).catch((notifError) => console.error("Notif error:", notifError));
-      this.sendEmailNotification(
+      this.sendNotification(
         [sigInfo.user_id],
         "Verifikasi Selesai",
         message,
         link,
-        { surat_id: suratId, signature_id: signatureId, event_type: "verification_done" }
+        { surat_id: suratId, signature_id: signatureId, event_type: "verification_done", type: "info" }
       );
     }
     return true;

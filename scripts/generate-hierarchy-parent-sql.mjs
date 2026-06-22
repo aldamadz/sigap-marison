@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 const inputFile = process.argv[2] || "employeeList (2).xlsx";
 const outputFile = process.argv[3] || "hierarchy-parent-update.sql";
@@ -9,19 +9,40 @@ const normalize = (value) => String(value ?? "").trim().replace(/\s+/g, " ").toL
 const includes = (value, keyword) => normalize(value).includes(normalize(keyword));
 const sql = (value) => `'${String(value ?? "").replace(/'/g, "''")}'`;
 
-const workbook = XLSX.readFile(inputFile);
-const rows = XLSX.utils
-  .sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" })
-  .filter((row) => row.NIK && row["Nama Lengkap"])
-  .map((row) => ({
-    nik: String(row.NIK).trim(),
-    name: String(row["Nama Lengkap"]).trim(),
-    office: String(row.Cabang || "").trim(),
-    job: String(row.Jabatan || "").trim(),
-    position: String(row.Posisi || "").trim(),
-    department: String(row.Bagian || "").trim(),
-    level: String(row.Tingkatan || "").trim(),
-  }));
+const readRows = async (filePath) => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
+  const worksheet = workbook.worksheets[0];
+  const headers = [];
+
+  worksheet.getRow(1).eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = String(cell.value ?? "").trim();
+  });
+
+  const result = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const item = {};
+    headers.forEach((header, index) => {
+      item[header] = String(row.getCell(index + 1).value ?? "").trim();
+    });
+    if (item.NIK && item["Nama Lengkap"]) {
+      result.push({
+        nik: item.NIK,
+        name: item["Nama Lengkap"],
+        office: item.Cabang || "",
+        job: item.Jabatan || "",
+        position: item.Posisi || "",
+        department: item.Bagian || "",
+        level: item.Tingkatan || "",
+      });
+    }
+  });
+
+  return result;
+};
+
+const rows = await readRows(inputFile);
 
 const findOne = (predicate, current = null) => rows.find((row) => row.nik !== current?.nik && predicate(row)) || null;
 const findInOffice = (office, predicate, current = null) =>

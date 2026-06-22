@@ -802,11 +802,11 @@ const handleApprove = async (item: any) => {
     );
 
     return (
-      <section className="rounded-xl border border-border bg-background p-4">
+      <section className="sigap-panel">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <PackageOpen className="h-5 w-5 text-primary" />
-            <div><p className="text-sm font-semibold text-foreground">Ringkasan pengajuan</p><p className="text-xs text-muted-foreground">Informasi utama tersedia tanpa membuka PDF.</p></div>
+            <p className="text-sm font-semibold text-foreground">Ringkasan pengajuan</p>
           </div>
           <Badge variant="outline">{formatRequestCategory(category)}</Badge>
         </div>
@@ -826,7 +826,7 @@ const handleApprove = async (item: any) => {
           </div>
         )}
         {items.length > 0 && columns.length > 0 && (
-          <div className="mt-4 overflow-hidden rounded-lg border border-border">
+          <div className="mt-4 overflow-hidden rounded-md border border-border">
             <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold text-muted-foreground">Daftar barang / jasa</div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] text-left text-xs">
@@ -863,7 +863,7 @@ const handleApprove = async (item: any) => {
       const project = input.allocated_project || {};
       const units = Array.isArray(input.allocated_units) ? input.allocated_units : [];
       return (
-        <section className="rounded-xl border border-emerald-500/30 bg-background p-4">
+        <section className="sigap-panel border-emerald-500/30">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <Building2 className="h-5 w-5 text-emerald-600" />
@@ -914,8 +914,8 @@ const handleApprove = async (item: any) => {
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className={cn("h-full transition-all", selected.length >= requestedCount ? "bg-emerald-500" : "bg-primary")} style={{ width: Math.max(progress, selected.length ? 10 : 0) + "%" }} /></div>
         </div>
-        <div className="space-y-4 p-4">
-          <div className="rounded-lg border border-border p-3">
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="rounded-md border border-border p-3">
             <p className="mb-2 text-sm font-semibold">Proyek unit</p>
             <div className="rounded-md border border-border bg-muted/30 px-3 py-3">
               <p className="text-sm font-semibold">{selectedProject?.name || selectedProject?.label || selectedProject?.code || "Proyek belum tersedia"}</p>
@@ -924,7 +924,7 @@ const handleApprove = async (item: any) => {
             <p className="mt-2 text-xs text-muted-foreground">Proyek dikunci dari pengajuan pemohon. Jika proyek salah, buat pengajuan baru.</p>
           </div>
 
-          <div className="rounded-lg border border-border p-3">
+          <div className="rounded-md border border-border p-3">
             <div className="mb-3"><p className="text-sm font-semibold">Pilih kavling</p><p className="text-xs text-muted-foreground">Boleh memilih kurang, sama, atau lebih dari jumlah yang diajukan. Jika kurang, sistem akan meminta konfirmasi.</p></div>
             <div className="relative mb-3"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={unitSearch[item.id] || ""} onChange={(event) => setUnitSearch((previous) => ({ ...previous, [item.id]: event.target.value }))} placeholder="Cari kode unit" className="h-10 pl-9 text-sm" /></div>
             {allocationLoading[item.id] ? (
@@ -944,7 +944,7 @@ const handleApprove = async (item: any) => {
             )}
           </div>
 
-          <div className="rounded-lg border border-border p-3">
+          <div className="rounded-md border border-border p-3">
             <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-semibold">Detail kavling dan kode produksi</p><p className="text-xs text-muted-foreground">Geser untuk mengisi setiap unit.</p></div><Badge variant="outline">{selected.length} unit</Badge></div>
             {selected.length === 0 ? (
               <div className="flex h-28 flex-col items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"><Home className="mb-2 h-5 w-5" />Pilih kavling terlebih dahulu.</div>
@@ -982,7 +982,7 @@ const handleApprove = async (item: any) => {
     if (requirements.length === 0) return null;
     if (!shouldSignerInputStageData(item)) {
       return (
-        <section className="rounded-xl border border-emerald-500/30 bg-background p-4">
+        <section className="sigap-panel border-emerald-500/30">
           <div className="flex items-center gap-3">
             <FileUp className="h-5 w-5 text-emerald-600" />
             <div>
@@ -996,7 +996,7 @@ const handleApprove = async (item: any) => {
     const missing = getMissingApprovalAttachmentLabels(item);
     const isUploading = processingId === item.id;
     return (
-      <section className={cn("rounded-xl border bg-background p-4", missing.length ? "border-amber-500/30" : "border-emerald-500/30")}>
+      <section className={cn("sigap-panel", missing.length ? "border-amber-500/30" : "border-emerald-500/30")}>
         <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><FileUp className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Lampiran approval</p><p className="text-xs text-muted-foreground">Persyaratan khusus tahap tanda tangan ini.</p></div></div>{isUploading && <Badge><Loader2 className="mr-1 h-3 w-3 animate-spin" />Mengunggah</Badge>}</div>
         <div className="space-y-2">
           {requirements.map((requirement: any) => {
@@ -1072,7 +1072,7 @@ const handleApprove = async (item: any) => {
 
     return (
       <section className={cn(
-        "rounded-xl border bg-background p-4",
+        "sigap-panel",
         verified && "border-emerald-500/30",
         revisionRequested && "border-amber-500/30",
         !verified && !revisionRequested && "border-sky-500/30"
@@ -1118,7 +1118,7 @@ const handleApprove = async (item: any) => {
   const renderApprovalHistory = (item: any) => {
     const signatures = item.surat_registrasi?.surat_signatures || [];
     return (
-      <Accordion type="single" collapsible className="rounded-xl border border-border bg-background px-4">
+      <Accordion type="single" collapsible className="sigap-panel px-4 py-0">
         <AccordionItem value="history" className="border-0">
           <AccordionTrigger className="py-4 hover:no-underline"><div className="flex items-center gap-3 text-left"><FileCheck2 className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Progres persetujuan</p><p className="text-xs font-normal text-muted-foreground">Tahap {item.step_order} dari {signatures.length || item.step_order}</p></div></div></AccordionTrigger>
         <AccordionContent className="pb-4"><div data-testid="approval-history-scroll" className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-2">{signatures.map((signature: any) => {
@@ -1141,7 +1141,7 @@ const handleApprove = async (item: any) => {
     const surat = item.surat_registrasi;
     const attachments = getAttachments(surat);
     return (
-      <section className="rounded-xl border border-border bg-background p-4">
+      <section className="sigap-panel">
         <div className="mb-3 flex items-center gap-3"><Paperclip className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Dokumen dan lampiran</p><p className="text-xs text-muted-foreground">PDF digunakan untuk verifikasi visual bila diperlukan.</p></div></div>
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">Dokumen utama</p><p className="text-xs text-muted-foreground">PDF pengajuan dan tanda tangan terakhir</p></div><Button variant="outline" size="sm" disabled={previewingId === surat.id} onClick={() => openPreview(surat.id, surat.file_path)}>{previewingId === surat.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}Buka</Button></div>
@@ -1166,22 +1166,23 @@ const handleApprove = async (item: any) => {
     const requirementCount = getApprovalAttachmentRequirements(item).length;
     const verificationTask = isVerificationTask(item);
     return (
-      <button type="button" key={item.id} onClick={() => selectTask(item.id)} className={cn("w-full rounded-lg border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + item.id}>
+      <button type="button" key={item.id} onClick={() => selectTask(item.id)} className={cn("w-full rounded-md border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + item.id}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-mono text-[11px] font-semibold text-primary">{surat.no_surat || "Nomor diproses"}</p>
             <h3 className="mt-1 truncate text-sm font-semibold leading-snug">{surat.judul_surat}</h3>
           </div>
-          <span
+          <Badge
+            variant="outline"
             className={cn(
-              "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
-              kpi.tone === "late" && "bg-destructive",
-              kpi.tone === "due" && "bg-amber-500",
-              kpi.tone === "safe" && "bg-emerald-500",
-              kpi.tone === "muted" && "bg-muted-foreground"
+              "mt-0.5 shrink-0",
+              kpi.tone === "late" && "border-destructive/30 bg-destructive/10 text-destructive",
+              kpi.tone === "due" && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              kpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
             )}
-            title={kpi.label}
-          />
+          >
+            {kpi.label}
+          </Badge>
         </div>
         <p className="mt-1 truncate text-xs text-muted-foreground">{requester.full_name || "Pengaju tidak tersedia"} · {department}</p>
         <div className="mt-2 flex items-center justify-between gap-2">
@@ -1191,14 +1192,14 @@ const handleApprove = async (item: any) => {
             {item.requires_unit_allocation && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">Unit</Badge>}
             {requirementCount > 0 && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{requirementCount} lampiran</Badge>}
           </div>
-          <span className="shrink-0 text-[11px] text-muted-foreground">{kpi.label}</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">{kpi.detail}</span>
         </div>
       </button>
     );
   };
 
   if (loading) {
-    return <div className="space-y-5"><Skeleton className="h-16 w-full" /><div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]"><Skeleton className="h-[620px]" /><Skeleton className="h-[620px]" /></div></div>;
+    return <div className="sigap-page"><Skeleton className="h-20 w-full rounded-lg" /><Skeleton className="h-[620px] rounded-lg" /></div>;
   }
 
   if (inboxError) {
@@ -1209,14 +1210,13 @@ const handleApprove = async (item: any) => {
   const activeBlockers = selectedItem ? getApprovalBlockers(selectedItem) : [];
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="sigap-page animate-in fade-in duration-300">
       <Dialog open={Boolean(previewingId)}><DialogContent className="max-w-sm text-center"><DialogHeader><DialogTitle className="flex flex-col items-center gap-3 text-base font-semibold"><Loader2 className="h-8 w-8 animate-spin text-primary" />PDF sedang dibuat</DialogTitle><DialogDescription>Dokumen diproses di background dan akan terbuka otomatis saat siap.</DialogDescription></DialogHeader></DialogContent></Dialog>
 
-      <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+      <header className="sigap-panel sigap-panel-accent flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-1.5 rounded-full bg-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Inbox Persetujuan</h1>
+            <h1 className="text-xl font-semibold">Inbox Persetujuan</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Fokus pada satu approval. Pilih antrean lain dari switcher.
             </p>
@@ -1299,14 +1299,14 @@ const handleApprove = async (item: any) => {
         </div>
       </header>
 
-      <div className="rounded-xl border border-border bg-card lg:h-[calc(100vh-14rem)] lg:min-h-[520px] lg:overflow-hidden">
+      <div className="overflow-visible rounded-lg border border-border bg-card shadow-[var(--shadow-card)] lg:h-[calc(100vh-11rem)] lg:min-h-[640px] lg:overflow-hidden">
           <main className="min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden">
           {selectedItem ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
-            <div className="shrink-0 flex items-start gap-3 border-b border-border p-4 sm:p-5">
+            <div className="shrink-0 flex items-start gap-3 border-b border-border bg-card p-4 sm:p-5">
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{selectedItem.surat_registrasi.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{selectedItem.label_jabatan || selectedItem.role_name}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Verifikasi Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{selectedItem.surat_registrasi.judul_surat}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {new Date(selectedItem.surat_registrasi.created_at).toLocaleString("id-ID")}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-            <div data-testid="approval-detail-scroll" className="min-h-0 flex-1 lg:overflow-y-scroll lg:overscroll-contain"><div className="mx-auto max-w-4xl space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="rounded-xl border border-border bg-background p-4"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+            <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">

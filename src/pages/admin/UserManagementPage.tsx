@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { getUsers } from '@/services/user.service';
 import { User } from '@/types/agenda';
-import * as XLSX from 'xlsx';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -31,6 +30,7 @@ import { EditUserModal } from '@/components/users/EditUserModal';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppDialog } from '@/components/app/AppDialogProvider';
+import { excelSerialToDateInput, exportRowsToXlsx, readSpreadsheetRows } from '@/lib/excel';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <p className={cn("text-sm font-semibold text-foreground mt-0.5 break-all", mono && "font-mono text-xs")}>{value || '—'}</p>
       </div>
     </div>
@@ -141,13 +141,13 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl rounded-3xl p-0 overflow-hidden border-border">
-        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 pt-8 pb-6 border-b border-border">
+      <DialogContent className="max-w-2xl overflow-hidden border-border p-0">
+        <div className="relative border-b border-border bg-muted/30 px-6 pb-5 pt-6 sm:px-8">
           <div className="flex items-center gap-6">
             <div className="relative shrink-0">
               <Avatar className="h-20 w-20 border-2 border-primary/20 ring-4 ring-background shadow-lg">
                 <AvatarImage src={(user as any).photoUrl} />
-                <AvatarFallback className="bg-primary/10 text-primary font-extrabold text-2xl uppercase">
+                <AvatarFallback className="bg-primary/10 text-2xl font-semibold text-primary">
                   {user.fullName.substring(0, 2)}
                 </AvatarFallback>
               </Avatar>
@@ -159,14 +159,14 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-black text-foreground leading-tight">{user.fullName}</h2>
+              <h2 className="text-xl font-semibold leading-tight text-foreground">{user.fullName}</h2>
               <p className="text-sm text-muted-foreground font-medium mt-0.5">{user.jobTitle || 'Staff'}</p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border", roleConfig.cls)}>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold", roleConfig.cls)}>
                   {roleConfig.icon} {roleConfig.label}
                 </span>
                 <span className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border",
+                  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold",
                   isActive
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     : "bg-red-500/10 text-red-400 border-red-500/20"
@@ -182,7 +182,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
         <div className="px-8 py-6 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-x-8 gap-y-0">
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-2 flex items-center gap-2">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary">
                 <Info className="w-3 h-3" /> Data Karyawan
               </p>
               <Field icon={<Mail className="w-3.5 h-3.5" />}      label="Email"      value={user.email} mono />
@@ -194,14 +194,14 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
             </div>
             <div className="space-y-4">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-2 flex items-center gap-2">
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary">
                   <Clock className="w-3 h-3" /> Riwayat Kerja
                 </p>
-                <div className="bg-muted/30 rounded-2xl p-4 space-y-3 border border-border/50">
+                <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Calendar className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-bold uppercase">Bergabung</span>
+                      <span className="text-xs font-medium">Bergabung</span>
                     </div>
                     <span className="text-xs font-bold text-foreground">{formatDate(joinDate)}</span>
                   </div>
@@ -209,15 +209,15 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2 text-red-400">
                         <LogOut className="w-3.5 h-3.5" />
-                        <span className="text-[10px] font-bold uppercase">Keluar</span>
+                        <span className="text-xs font-medium">Keluar</span>
                       </div>
                       <span className="text-xs font-bold text-red-400">{formatDate(resignDate)}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-1 border-t border-border/50">
-                    <span className="text-[10px] font-black uppercase text-muted-foreground">Masa Kerja</span>
+                    <span className="text-xs font-medium text-muted-foreground">Masa kerja</span>
                     <span className={cn(
-                      "px-3 py-1 rounded-full text-[10px] font-black uppercase border",
+                      "rounded-md border px-3 py-1 text-xs font-semibold",
                       resignDate
                         ? "bg-red-500/10 text-red-400 border-red-500/20"
                         : "bg-primary/10 text-primary border-primary/20"
@@ -228,15 +228,15 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                 </div>
               </div>
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-2 flex items-center gap-2">
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary">
                   <KeyRound className="w-3 h-3" /> Keamanan Akun
                 </p>
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 space-y-3">
+                <div className="space-y-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[10px] font-black uppercase text-amber-400">Reset Password</p>
-                      <p className="text-[10px] text-muted-foreground font-medium mt-0.5 leading-relaxed">
+                      <p className="text-xs font-semibold text-amber-500">Reset password</p>
+                      <p className="mt-0.5 text-xs font-medium leading-relaxed text-muted-foreground">
                         Password akan direset ke default{' '}
                         <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">marison123</span>.
                       </p>
@@ -246,7 +246,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                     onClick={handleResetPassword}
                     disabled={resetting}
                     variant="outline"
-                    className="w-full h-9 rounded-xl border-amber-500/30 text-amber-500 hover:bg-amber-500/10 font-black uppercase text-[10px] tracking-widest"
+                    className="h-9 w-full border-amber-500/30 text-xs font-medium text-amber-500 hover:bg-amber-500/10"
                   >
                     {resetting
                       ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Mereset...</>
@@ -265,7 +265,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
             onClick={() => onToggle(user)}
             disabled={isToggling}
             className={cn(
-              "flex-1 h-10 rounded-xl font-black uppercase text-[10px] tracking-widest",
+              "h-10 flex-1 text-xs font-semibold",
               isActive
                 ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
                 : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
@@ -280,11 +280,11 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
           </Button>
           <Button
             onClick={() => { onClose(); onEdit(user); }}
-            className="flex-1 h-10 rounded-xl font-black uppercase text-[10px] tracking-widest"
+            className="h-10 flex-1 text-xs font-semibold"
           >
-            <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit Profil
+            <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit profil
           </Button>
-          <Button variant="ghost" onClick={onClose} className="w-full h-9 rounded-xl font-bold text-xs uppercase text-muted-foreground">
+          <Button variant="ghost" onClick={onClose} className="h-9 w-full text-xs font-medium text-muted-foreground">
             Tutup
           </Button>
         </div>
@@ -344,10 +344,8 @@ const normalizeImportDate = (value: string) => {
 
   const serial = Number(raw);
   if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
-    const parsed = XLSX.SSF.parse_date_code(serial);
-    if (parsed?.y && parsed?.m && parsed?.d) {
-      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
-    }
+    const parsed = excelSerialToDateInput(serial);
+    if (parsed) return parsed;
   }
 
   const slashMatch = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
@@ -531,7 +529,7 @@ export default function UserManagementPage() {
     link.click();
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const rows = filteredUsers.map((u, idx) => ({
       'No':            idx + 1,
       'Nama Lengkap':  u.fullName,
@@ -547,33 +545,14 @@ export default function UserManagementPage() {
       'Masa Kerja':    getMasaKerja((u as any).join_date, (u as any).resign_date),
       'Status':        (u as any).is_active === false ? 'Nonaktif' : 'Aktif',
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 28 }, { wch: 32 }, { wch: 16 }, { wch: 18 },
-      { wch: 22 }, { wch: 12 }, { wch: 24 }, { wch: 20 },
-      { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
-    ];
-    ws['!rows'] = [{ hpt: 28 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Data Karyawan');
-    XLSX.writeFile(wb, `karyawan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    await exportRowsToXlsx(
+      rows,
+      'Data Karyawan',
+      `karyawan_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      [5, 28, 32, 16, 18, 22, 12, 24, 20, 16, 16, 14, 12]
+    );
     toast.success(`${rows.length} data diekspor ke Excel`);
   };
-
-  const parseXlsxToRows = (file: File): Promise<string[][]> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = new Uint8Array(ev.target!.result as ArrayBuffer);
-          const wb   = XLSX.read(data, { type: 'array' });
-          const ws   = wb.Sheets[wb.SheetNames[0]];
-          resolve(XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]);
-        } catch (err) { reject(err); }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
 
   const buildDepartmentResolver = async () => {
     const [departmentsRes, aliasesRes] = await Promise.all([
@@ -646,7 +625,7 @@ export default function UserManagementPage() {
     try {
       const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
       if (isXlsx) {
-        const allRows = await parseXlsxToRows(file);
+        const allRows = await readSpreadsheetRows(file);
         const headerRowIdx = allRows.findIndex(r =>
           r.some(c => typeof c === 'string' && ['email', 'nama', 'name'].includes(String(c).trim().toLowerCase().replace(' *', '')))
         );
@@ -840,18 +819,18 @@ export default function UserManagementPage() {
           : 0;
 
   const StatPill = ({ icon, label, value, cls }: { icon: React.ReactNode; label: string; value: number; cls: string }) => (
-    <div className={cn("hidden sm:flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-bold", cls)}>
+    <div className={cn("hidden items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-medium sm:flex", cls)}>
       {icon}<span>{value} {label}</span>
     </div>
   );
 
   return (
-    <div className="space-y-7 text-foreground">
+    <div className="sigap-page text-foreground">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 border-b border-border pb-7">
+      <div className="sigap-panel sigap-panel-accent flex flex-col justify-between gap-5 p-5 md:flex-row md:items-center sm:p-6">
         <div className="space-y-1">
-          <h1 className="text-4xl font-extrabold tracking-tight text-gradient uppercase">Manajemen User</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">Manajemen Karyawan</h1>
           <p className="text-muted-foreground text-sm">Kelola hak akses, jabatan, kontak, dan riwayat masa kerja karyawan.</p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
@@ -859,34 +838,34 @@ export default function UserManagementPage() {
           <StatPill icon={<CheckCircle2 className="w-4 h-4" />} label="Aktif"    value={activeCount}   cls="bg-emerald-500/10 text-emerald-500 border-emerald-500/20" />
           {inactiveCount > 0 && <StatPill icon={<XCircle className="w-4 h-4" />} label="Nonaktif" value={inactiveCount} cls="bg-red-500/10 text-red-500 border-red-500/20" />}
           <Button variant="outline" onClick={handleDownloadTemplate}
-            className="h-10 gap-2 font-bold text-xs uppercase rounded-xl border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10">
+            className="h-10 gap-2 text-xs font-medium border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10">
             <FileSpreadsheet className="w-4 h-4" /> Template
           </Button>
           <Button variant="outline" onClick={() => importRef.current?.click()} disabled={isImporting}
-            className="h-10 gap-2 font-bold text-xs uppercase rounded-xl">
+            className="h-10 gap-2 text-xs font-medium">
             {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {isImporting ? 'Mengimpor...' : 'Import'}
+            {isImporting ? 'Mengimpor...' : 'Impor'}
           </Button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
           <Button variant="outline" onClick={handleExport}
-            className="h-10 gap-2 font-bold text-xs uppercase rounded-xl border-primary/30 text-primary hover:bg-primary/10">
-            <Download className="w-4 h-4" /> Export XLSX
+            className="h-10 gap-2 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10">
+            <Download className="w-4 h-4" /> Ekspor XLSX
           </Button>
           <Button asChild variant="outline"
-            className="h-10 gap-2 font-bold text-xs uppercase rounded-xl border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/10">
+            className="h-10 gap-2 text-xs font-medium border-cyan-400/30 text-cyan-600 hover:bg-cyan-400/10">
             <Link to="/admin/users/hierarchy">
               <Network className="w-4 h-4" /> Hirarki
             </Link>
           </Button>
-          <Button onClick={() => setIsAddOpen(true)} className="h-10 px-5 font-bold text-xs uppercase rounded-xl">
-            <Plus className="w-4 h-4 mr-1.5" /> Tambah Karyawan
+          <Button onClick={() => setIsAddOpen(true)} className="h-10 px-5 text-xs font-semibold">
+            <Plus className="w-4 h-4 mr-1.5" /> Tambah karyawan
           </Button>
         </div>
       </div>
 
       {importProgress && (
         <div className={cn(
-          "rounded-2xl border p-4 shadow-sm",
+          "rounded-lg border p-4 shadow-sm",
           importProgress.phase === 'error'
             ? "border-red-500/25 bg-red-500/5"
             : importProgress.phase === 'done'
@@ -912,11 +891,11 @@ export default function UserManagementPage() {
                 )}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                  {importProgress.phase === 'done' ? 'Import Selesai' : importProgress.phase === 'error' ? 'Import Gagal' : 'Import Berjalan'}
+                <p className="text-xs font-semibold text-muted-foreground">
+                  {importProgress.phase === 'done' ? 'Impor selesai' : importProgress.phase === 'error' ? 'Impor gagal' : 'Impor berjalan'}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{importProgress.message}</p>
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                <div className="mt-2 flex flex-wrap gap-3 text-xs font-medium text-muted-foreground">
                   <span>Diproses: {importProgress.processed}/{importProgress.total || '-'}</span>
                   <span>Berhasil: {importProgress.ok}</span>
                   <span>Gagal: {importProgress.fail}</span>
@@ -929,7 +908,7 @@ export default function UserManagementPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setImportProgress(null)}
-                className="h-9 self-start rounded-xl text-xs font-bold uppercase md:self-center"
+                className="h-9 self-start text-xs font-medium md:self-center"
               >
                 <X className="mr-1.5 h-3.5 w-3.5" /> Tutup
               </Button>
@@ -939,8 +918,8 @@ export default function UserManagementPage() {
           {importProgress.errors && importProgress.errors.length > 0 && (
             <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 p-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-red-500">
-                  Contoh kegagalan import
+                <p className="text-xs font-semibold text-red-500">
+                  Contoh kegagalan impor
                 </p>
                 <span className="text-[10px] font-bold text-muted-foreground">
                   {importProgress.errors.length} error tercatat
@@ -964,7 +943,7 @@ export default function UserManagementPage() {
       )}
 
       {/* ── Filter toolbar ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 glass-card p-4 rounded-2xl">
+      <div className="sigap-panel grid grid-cols-1 gap-3 p-4 md:grid-cols-5">
         <div className="md:col-span-2 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Cari nama, email, NIK, HP..." className="pl-10 bg-secondary/50 border-border"
@@ -990,7 +969,7 @@ export default function UserManagementPage() {
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="elevated-card rounded-2xl overflow-hidden border-border/40">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-border">
@@ -1003,7 +982,7 @@ export default function UserManagementPage() {
                 />
               </TableHead>
               {["Karyawan","No. HP","Role","Jabatan & Unit","Masa Kerja"].map(h => (
-                <TableHead key={h} className="py-5 font-bold text-muted-foreground uppercase tracking-wider text-[11px]">
+                <TableHead key={h} className="py-4 text-xs font-semibold text-muted-foreground">
                   {h}
                 </TableHead>
               ))}
@@ -1083,11 +1062,11 @@ export default function UserManagementPage() {
 
                   <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
                     {(user as any).role === 'admin' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-500">
                         <ShieldCheck className="w-3 h-3" /> Admin
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-secondary text-muted-foreground border border-border">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                         <UserIcon className="w-3 h-3" /> User
                       </span>
                     )}
@@ -1097,7 +1076,7 @@ export default function UserManagementPage() {
                     <div className="space-y-1.5">
                       <p className="text-sm font-semibold text-foreground/90">{user.jobTitle || 'Staff'}</p>
                       <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[10px] bg-primary/15 text-primary px-2 py-0.5 rounded-md font-extrabold uppercase">
+                        <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                           {user.departmentName || '—'}
                         </span>
                         {user.officeName && (
@@ -1113,16 +1092,16 @@ export default function UserManagementPage() {
                     <div className="space-y-1">
                       {joinDate ? (
                         <>
-                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <Calendar className="w-3 h-3 shrink-0" />{formatDate(joinDate)}
                           </div>
                           {hasResigned && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-bold uppercase">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-red-500">
                               <LogOut className="w-3 h-3 shrink-0" />{formatDate(resignDate)}
                             </div>
                           )}
                           <div className={cn(
-                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase border mt-0.5",
+                            "mt-0.5 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
                             hasResigned
                               ? "bg-red-500/10 text-red-400 border-red-500/20"
                               : "bg-primary/10 text-primary border-primary/20"
@@ -1144,7 +1123,7 @@ export default function UserManagementPage() {
 
       {/* ── Bulk Action Bar ──────────────────────────────────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3 animate-in slide-in-from-top-2 duration-200">
+        <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 animate-in slide-in-from-top-2 duration-200">
           <div className="flex items-center gap-2 text-primary font-bold text-sm">
             <CheckCircle2 className="w-4 h-4" />
             <span>{selectedIds.size} dipilih</span>
@@ -1152,15 +1131,15 @@ export default function UserManagementPage() {
           <div className="w-px h-5 bg-primary/20" />
           <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={bulkResetPassword} disabled={bulkLoading}
-              className="h-8 gap-1.5 text-[10px] font-bold uppercase rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10">
+              className="h-8 gap-1.5 text-xs font-medium border-amber-500/30 text-amber-600 hover:bg-amber-500/10">
               {bulkLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <KeyRound className="w-3 h-3" />} Reset Password
             </Button>
             <Button size="sm" variant="outline" onClick={() => bulkToggle(true)} disabled={bulkLoading}
-              className="h-8 gap-1.5 text-[10px] font-bold uppercase rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
+              className="h-8 gap-1.5 text-xs font-medium border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
               {bulkLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ToggleRight className="w-3 h-3" />} Aktifkan
             </Button>
             <Button size="sm" variant="outline" onClick={() => bulkToggle(false)} disabled={bulkLoading}
-              className="h-8 gap-1.5 text-[10px] font-bold uppercase rounded-xl border-red-500/30 text-red-500 hover:bg-red-500/10">
+              className="h-8 gap-1.5 text-xs font-medium border-red-500/30 text-red-500 hover:bg-red-500/10">
               {bulkLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ToggleLeft className="w-3 h-3" />} Nonaktifkan
             </Button>
           </div>
@@ -1175,7 +1154,7 @@ export default function UserManagementPage() {
       {!loading && filteredUsers.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+            <p className="text-xs font-medium text-muted-foreground">
               {showAll
                 ? `Menampilkan semua ${filteredUsers.length} karyawan`
                 : `${(page - 1) * (pageSize as number) + 1}–${Math.min(page * (pageSize as number), filteredUsers.length)} dari ${filteredUsers.length} karyawan`}
@@ -1185,14 +1164,14 @@ export default function UserManagementPage() {
             <div className="flex items-center gap-1.5 bg-muted/40 border border-border rounded-xl px-2.5 py-1">
               <List className="w-3 h-3 text-muted-foreground shrink-0" />
               <Select value={String(pageSize)} onValueChange={v => setPageSize(v === 'all' ? 'all' : Number(v))}>
-                <SelectTrigger className="h-6 border-0 bg-transparent p-0 pr-5 text-[10px] font-black uppercase focus:ring-0 focus:ring-offset-0 w-auto min-w-[64px]">
+                <SelectTrigger className="h-6 min-w-[64px] w-auto border-0 bg-transparent p-0 pr-5 text-xs font-medium focus:ring-0 focus:ring-offset-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent align="start">
                   {PAGE_SIZE_OPTIONS.map(n => (
                     <SelectItem key={n} value={String(n)} className="text-[11px] font-bold">{n} / halaman</SelectItem>
                   ))}
-                  <SelectItem value="all" className="text-[11px] font-bold text-primary">Tampilkan Semua</SelectItem>
+                  <SelectItem value="all" className="text-xs font-medium text-primary">Tampilkan semua</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1200,8 +1179,8 @@ export default function UserManagementPage() {
 
           {!showAll && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-                Hal {page} / {totalPages}
+              <span className="text-xs font-medium text-muted-foreground">
+                Halaman {page} dari {totalPages}
               </span>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={page === 1}

@@ -598,7 +598,7 @@ export default function WorkflowDetailManagementPage({
   return (
     <div className="space-y-8">
       {/* Header Section */}
-      <div className="flex flex-col justify-between gap-4 border-b border-border pb-5 lg:flex-row lg:items-center">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
           {!embedded && (
             <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">

@@ -26,7 +26,7 @@ export function ResponsiveContainer({
     <div className={cn(
       'w-full mx-auto',
       sizeClasses[size],
-      padding && 'px-3 sm:px-4 lg:px-6',
+      padding && 'px-0',
       className
     )}>
       {children}
@@ -44,15 +44,15 @@ interface PageHeaderProps {
 export function PageHeader({ title, subtitle, children, className }: PageHeaderProps) {
   return (
     <div className={cn(
-      'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6',
+      'mb-5 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 shadow-[var(--shadow-card)] sm:flex-row sm:items-center sm:justify-between',
       className
     )}>
       <div>
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
+        <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl lg:text-2xl">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
             {subtitle}
           </p>
         )}

@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Calendar as DatePickerCalendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -17,13 +19,17 @@ import {
   AlertCircle,
   History,
   Eye,
-  Calendar,
+  Calendar as CalendarIcon,
   UserRound,
   ClipboardCheck,
   FileText,
   ExternalLink,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { format } from 'date-fns';
+import { id as localeID } from 'date-fns/locale';
+import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { documentPreviewService } from '@/services/document-preview.service';
 import { appStorageService } from '@/services/storage.service';
@@ -88,6 +94,29 @@ const currentMonthRange = () => {
     return `${year}-${month}-${day}`;
   };
   return { from: format(start), to: format(now) };
+};
+
+const parseDateInput = (value: string) => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+};
+
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatRangeLabel = (from: string, to: string) => {
+  const fromDate = parseDateInput(from);
+  const toDate = parseDateInput(to);
+  if (!fromDate && !toDate) return 'Pilih rentang tanggal';
+  if (fromDate && !toDate) return format(fromDate, 'd MMM yyyy', { locale: localeID });
+  if (!fromDate && toDate) return `sampai ${format(toDate, 'd MMM yyyy', { locale: localeID })}`;
+  return `${format(fromDate!, 'd MMM yyyy', { locale: localeID })} - ${format(toDate!, 'd MMM yyyy', { locale: localeID })}`;
 };
 
 const ROLE_LABEL: Record<InvolvementKey, string> = {
@@ -186,6 +215,8 @@ const RiwayatKeterlibatanPage = () => {
   const [dateTo, setDateTo] = useState(initialRange.to);
   const [selected, setSelected] = useState<PreparedSurat | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['surat-riwayat-keterlibatan', dateFrom, dateTo],
@@ -392,29 +423,43 @@ const RiwayatKeterlibatanPage = () => {
     rejected: prepared.filter((x) => (x.surat_signatures || []).some((sig) => sig.user_id === data?.userId && sig.status === 'REJECTED')).length,
   }), [prepared, data?.userId]);
 
+  const activeFilterCount = useMemo(() => {
+    let total = 0;
+    if (dateFrom !== initialRange.from || dateTo !== initialRange.to) total += 1;
+    if (statusFilter !== 'ALL') total += 1;
+    if (roleFilter !== 'ALL') total += 1;
+    return total;
+  }, [dateFrom, dateTo, initialRange.from, initialRange.to, roleFilter, statusFilter]);
+
+  const selectedDateRange = useMemo<DateRange>(() => ({
+    from: parseDateInput(dateFrom),
+    to: parseDateInput(dateTo),
+  }), [dateFrom, dateTo]);
+
   if (error) {
     return (
-      <div className="h-[60vh] flex items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center space-y-3">
           <AlertCircle className="mx-auto text-destructive" size={34} />
-          <p className="font-bold uppercase tracking-widest text-sm">Gagal memuat riwayat</p>
-          <p className="text-xs text-muted-foreground">{(error as any).message}</p>
+          <p className="text-base font-semibold">Gagal memuat riwayat</p>
+          <p className="text-sm text-muted-foreground">{(error as any).message}</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>Coba lagi</Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="border-b border-border pb-4 sm:pb-5">
+    <div className="sigap-page animate-in fade-in duration-300">
+      <div className="sigap-panel sigap-panel-accent p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-1.5 h-8 rounded-full bg-primary" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <History size={20} />
+            </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight uppercase">Riwayat Keterlibatan Surat</h1>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                Membuat, memeriksa, menyetujui, dan timeline dokumen terkait
-              </p>
+              <h1 className="text-xl font-semibold sm:text-2xl">Riwayat Keterlibatan</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Dokumen yang pernah Anda buat, periksa, atau setujui.</p>
             </div>
           </div>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
@@ -432,16 +477,16 @@ const RiwayatKeterlibatanPage = () => {
           { label: 'Setuju', value: counts.approved },
           { label: 'Tolak', value: counts.rejected },
         ].map((c) => (
-          <div key={c.label} className="rounded-xl border border-border bg-card/40 p-3">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">{c.label}</p>
-            <p className="text-2xl font-black mt-1 tabular-nums">{c.value}</p>
+          <div key={c.label} className="min-h-24 rounded-lg border border-border bg-card p-4 shadow-sm">
+            <p className="text-xs font-medium text-muted-foreground">{c.label}</p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-card/30 border border-border rounded-2xl p-3 sm:p-4 space-y-3">
-        <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-          <div className="relative w-full md:w-[380px]">
+      <div className="sigap-panel space-y-3 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-[440px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
             <Input
               value={search}
@@ -451,87 +496,157 @@ const RiwayatKeterlibatanPage = () => {
             />
           </div>
 
-          <div className="grid w-full gap-2 sm:grid-cols-2 md:w-auto md:grid-cols-[150px_150px]">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dari</label>
-              <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="h-10" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sampai</label>
-              <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="h-10" />
-            </div>
+          <div className="flex items-center justify-between gap-2 md:justify-end">
+            <p className="text-xs text-muted-foreground">
+              {filtered.length} dari {prepared.length} riwayat
+            </p>
+            <Button
+              type="button"
+              variant={isFilterOpen ? "default" : "outline"}
+              size="sm"
+              className="h-10 gap-2"
+              onClick={() => setIsFilterOpen((value) => !value)}
+              aria-expanded={isFilterOpen}
+            >
+              <SlidersHorizontal size={15} />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className={cn(
+                  "ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold",
+                  isFilterOpen ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary text-primary-foreground"
+                )}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {([
-            ['ALL', 'Semua Status'],
-            ['APPROVED', 'Setuju'],
-            ['REJECTED', 'Tolak'],
-          ] as Array<[SignatureStatusFilter, string]>).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              className={cn(
-                'px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all',
-                statusFilter === value
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-transparent text-muted-foreground border-border hover:border-primary/40'
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
-        <div className="flex flex-wrap gap-2">
+        {isFilterOpen && (
+          <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-3 sm:p-4">
+            <div className="hidden space-y-1 md:block">
+              <label className="text-xs font-medium text-muted-foreground">Rentang tanggal</label>
+              <Popover open={isDateRangeOpen} onOpenChange={setIsDateRangeOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-full justify-start gap-2 bg-background text-left font-normal lg:w-[330px]"
+                  >
+                    <CalendarIcon size={15} className="text-muted-foreground" />
+                    <span className={cn(!dateFrom && !dateTo && "text-muted-foreground")}>
+                      {formatRangeLabel(dateFrom, dateTo)}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-0" sideOffset={8}>
+                  <DatePickerCalendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={selectedDateRange}
+                    defaultMonth={selectedDateRange.from}
+                    onSelect={(range) => {
+                      setDateFrom(range?.from ? toDateInputValue(range.from) : '');
+                      setDateTo(range?.to ? toDateInputValue(range.to) : '');
+                      if (range?.from && range?.to) setIsDateRangeOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="grid w-full gap-2 sm:grid-cols-2 md:hidden">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Dari tanggal</label>
+                <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="h-10" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Sampai tanggal</label>
+                <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="h-10" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Status tindakan</p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['ALL', 'Semua Status'],
+                  ['APPROVED', 'Setuju'],
+                  ['REJECTED', 'Tolak'],
+                ] as Array<[SignatureStatusFilter, string]>).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setStatusFilter(value)}
+                    className={cn(
+                      'min-h-9 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                      statusFilter === value
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-muted-foreground border-border hover:border-primary/40'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Keterlibatan</p>
+              <div className="flex flex-wrap gap-2">
             {(['ALL', ...ROLE_ORDER] as Array<'ALL' | InvolvementKey>).map((v) => (
               <button
                 key={v}
                 onClick={() => setRoleFilter(v)}
                 className={cn(
-                  'px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all',
+                  'min-h-9 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
                   roleFilter === v
                     ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-transparent text-muted-foreground border-border hover:border-primary/40'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/40'
                 )}
               >
                 {v === 'ALL' ? 'Semua' : ROLE_LABEL[v]}
               </button>
             ))}
-        </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
         <div className="h-56 flex flex-col items-center justify-center gap-3">
           <Loader2 className="animate-spin text-primary" size={30} />
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold">Memuat riwayat...</p>
+          <p className="text-sm text-muted-foreground">Memuat riwayat...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="h-56 flex flex-col items-center justify-center gap-3 opacity-60">
           <History size={40} />
-          <p className="text-sm font-bold uppercase tracking-widest">Tidak ada data</p>
-          <p className="text-xs text-muted-foreground">Coba ubah filter pencarian</p>
+          <p className="text-base font-semibold">Tidak ada riwayat yang sesuai</p>
+          <p className="text-sm text-muted-foreground">Ubah kata pencarian atau rentang tanggal.</p>
         </div>
       ) : (
         <>
-          <div className="hidden lg:block rounded-2xl border border-border overflow-hidden bg-card/20">
+          <div className="hidden overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:block">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1160px]">
                 <thead className="bg-muted/40">
                   <tr className="text-left">
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">No Surat</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Judul</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Keterlibatan Saya</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Membuat</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Memeriksa</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Menyetujui</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Update</th>
-                    <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Aksi</th>
+                    <th className="w-16 px-4 py-3 text-xs font-semibold">#</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Nomor surat</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Judul</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Keterlibatan saya</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Membuat</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Memeriksa</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Menyetujui</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Diperbarui</th>
+                    <th className="px-4 py-3 text-xs font-semibold">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((s) => (
+                  {filtered.map((s, index) => (
                     <tr key={s.id} className="border-t border-border/70">
+                      <td className="px-4 py-3 text-xs font-semibold tabular-nums text-muted-foreground">{index + 1}</td>
                       <td className="px-3 py-3 text-xs font-mono">{s.no_surat || '-'}</td>
                       <td className="px-3 py-3 text-xs font-semibold max-w-[220px] truncate">{s.judul_surat}</td>
                       <td className="px-3 py-3">
@@ -560,11 +675,16 @@ const RiwayatKeterlibatanPage = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
-            {filtered.map((s) => (
-              <div key={s.id} className="rounded-2xl border border-border bg-card/20 p-4 space-y-3">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-mono text-muted-foreground">{s.no_surat || '-'}</p>
-                  <h3 className="text-sm font-bold line-clamp-2">{s.judul_surat}</h3>
+            {filtered.map((s, index) => (
+              <div key={s.id} className="space-y-3 rounded-lg border border-border bg-card p-4 shadow-sm">
+                <div className="flex gap-3">
+                  <div className="flex h-7 min-w-7 items-center justify-center rounded-md bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[11px] font-mono text-muted-foreground">{s.no_surat || '-'}</p>
+                    <h3 className="text-sm font-bold line-clamp-2">{s.judul_surat}</h3>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1">
@@ -604,7 +724,7 @@ const RiwayatKeterlibatanPage = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                 <div className="rounded-xl border border-border p-3 bg-card/40 space-y-2">
-                  <p className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-1">
+                  <p className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
                     <UserRound size={13} /> Pihak Terlibat
                   </p>
                   <p className="text-sm"><span className="text-muted-foreground">Membuat:</span> {selected._membuatPeople.join(', ') || '-'}</p>
@@ -613,17 +733,17 @@ const RiwayatKeterlibatanPage = () => {
                 </div>
 
                 <div className="rounded-xl border border-border p-3 bg-card/40 space-y-2">
-                  <p className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-1">
-                    <Calendar size={13} /> Metadata
+                  <p className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                    <CalendarIcon size={13} /> Metadata
                   </p>
                   <p className="text-sm"><span className="text-muted-foreground">Status:</span> {selected.status}</p>
-                  <p className="text-sm"><span className="text-muted-foreground">Created:</span> {formatDate(selected.created_at)}</p>
-                  <p className="text-sm"><span className="text-muted-foreground">Updated:</span> {formatDate(selected.updated_at)}</p>
+                  <p className="text-sm"><span className="text-muted-foreground">Dibuat:</span> {formatDate(selected.created_at)}</p>
+                  <p className="text-sm"><span className="text-muted-foreground">Diperbarui:</span> {formatDate(selected.updated_at)}</p>
                 </div>
               </div>
 
               <div className="mt-4 rounded-xl border border-border p-3 bg-card/30">
-                <p className="text-xs uppercase tracking-widest text-muted-foreground font-bold mb-3 flex items-center gap-1">
+                <p className="mb-3 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
                   <FileText size={13} /> Dokumen Terkait
                 </p>
 
@@ -664,8 +784,8 @@ const RiwayatKeterlibatanPage = () => {
               </div>
 
               <div className="mt-4 rounded-xl border border-border p-3 bg-card/30">
-                <p className="text-xs uppercase tracking-widest text-muted-foreground font-bold mb-3 flex items-center gap-1">
-                  <ClipboardCheck size={13} /> Timeline Tanda Tangan (Realtime)
+                <p className="mb-3 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                  <ClipboardCheck size={13} /> Progres persetujuan
                 </p>
                 <div className="space-y-2">
                   {[...(selected.surat_signatures ?? [])]

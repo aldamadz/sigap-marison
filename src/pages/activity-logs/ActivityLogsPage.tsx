@@ -67,18 +67,18 @@ export default function ActivityLogsPage() {
     });
   }, [allLogs, searchQuery, actionFilter, users]);
 
-  if (errorLogs) return <div className="p-10 text-center"><Button onClick={() => refetch()}>Retry</Button></div>;
+  if (errorLogs) return <div className="p-10 text-center"><Button onClick={() => refetch()}>Coba lagi</Button></div>;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="sigap-page">
       
       {/* HEADER */}
-      <div className="flex items-center gap-4">
+      <div className="sigap-panel sigap-panel-accent flex items-center gap-4 p-5 sm:p-6">
         <div className="rounded-lg bg-primary/10 p-3 text-primary">
           <History className="h-7 w-7" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">Audit Log</h1>
           <p className="text-sm text-muted-foreground">Jejak audit administratif untuk perubahan data sistem.</p>
         </div>
       </div>
@@ -101,15 +101,15 @@ export default function ActivityLogsPage() {
               />
             </div>
             <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger className="w-full md:w-48 bg-background font-bold text-xs uppercase tracking-widest">
-                <SelectValue placeholder="Pilih Aksi" />
+              <SelectTrigger className="w-full bg-background text-sm md:w-48">
+                <SelectValue placeholder="Pilih aksi" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Aksi</SelectItem>
-                <SelectItem value="INSERT" className="text-emerald-600 font-bold">Inserted</SelectItem>
-                <SelectItem value="CREATE" className="text-emerald-600 font-bold">Created</SelectItem>
-                <SelectItem value="UPDATE" className="text-blue-600 font-bold">Updated</SelectItem>
-                <SelectItem value="DELETE" className="text-rose-600 font-bold">Deleted</SelectItem>
+                <SelectItem value="all">Semua aksi</SelectItem>
+                <SelectItem value="INSERT" className="text-emerald-600">Ditambahkan</SelectItem>
+                <SelectItem value="CREATE" className="text-emerald-600">Dibuat</SelectItem>
+                <SelectItem value="UPDATE" className="text-blue-600">Diperbarui</SelectItem>
+                <SelectItem value="DELETE" className="text-rose-600">Dihapus</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -149,14 +149,14 @@ export default function ActivityLogsPage() {
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
             variant="ghost"
-            className="rounded-full px-12 h-14 font-black uppercase tracking-widest text-[10px] hover:bg-primary/5 group border border-transparent hover:border-primary/20 transition-all"
+            className="h-11 border border-border px-6 text-sm font-medium hover:bg-primary/5"
           >
             {isFetchingNextPage ? (
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
             ) : (
               <ArrowDown className="h-5 w-5 mr-3 text-primary group-hover:animate-bounce" />
             )}
-            Muat Data Selanjutnya
+            Muat data berikutnya
           </Button>
         </div>
       )}

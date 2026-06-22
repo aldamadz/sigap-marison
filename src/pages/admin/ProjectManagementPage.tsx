@@ -138,43 +138,43 @@ export default function MasterProjectManagementPage() {
   );
 
   return (
-    <div className="p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
+    <div className="sigap-page animate-in fade-in duration-300">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div className="sigap-panel sigap-panel-accent flex flex-col items-start justify-between gap-5 p-5 md:flex-row md:items-center sm:p-6">
         <div className="space-y-1">
-          <h1 className="text-3xl font-black tracking-tighter uppercase flex items-center gap-3">
-            <Briefcase className="w-8 h-8 text-primary" />
-            Master <span className="text-primary/60 font-light">Proyek</span>
+          <h1 className="flex items-center gap-3 text-xl font-semibold sm:text-2xl">
+            <Briefcase className="h-6 w-6 text-primary" />
+            Master Proyek
           </h1>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.3em] ml-1">Project Directory & Branch Mapping</p>
+          <p className="mt-1 text-sm text-muted-foreground">Kelola proyek dan pemetaan kantor cabang.</p>
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              className="h-11 w-full rounded-xl bg-muted/50 border-none pl-10 text-xs font-bold uppercase tracking-widest"
-              placeholder="CARI PROYEK / CABANG..." 
+              className="h-11 w-full pl-10 text-sm"
+              placeholder="Cari proyek atau kantor..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button onClick={() => handleOpenModal()} className="h-11 px-6 rounded-xl font-black text-[10px] tracking-widest uppercase shadow-lg shadow-primary/20">
-            <Plus className="w-4 h-4 mr-2" /> TAMBAH
+          <Button onClick={() => handleOpenModal()} className="h-11 px-5 text-sm font-semibold">
+            <Plus className="mr-2 h-4 w-4" /> Tambah proyek
           </Button>
         </div>
       </div>
 
       {/* Table Section */}
-      <div className="border rounded-2xl overflow-hidden bg-card shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow>
-              <TableHead className="font-black text-[10px] tracking-widest uppercase pl-6 py-4">Unit Code</TableHead>
-              <TableHead className="w-[450px] font-black text-[10px] tracking-widest uppercase">Project Details</TableHead>
-              <TableHead className="font-black text-[10px] tracking-widest uppercase">Office / Branch Location</TableHead>
-              <TableHead className="font-black text-[10px] tracking-widest uppercase">Entity</TableHead>
-              <TableHead className="text-right font-black text-[10px] tracking-widest uppercase pr-8">Actions</TableHead>
+              <TableHead className="py-4 pl-6 text-xs font-semibold">Kode</TableHead>
+              <TableHead className="w-[450px] text-xs font-semibold">Detail proyek</TableHead>
+              <TableHead className="text-xs font-semibold">Kantor cabang</TableHead>
+              <TableHead className="text-xs font-semibold">Entitas</TableHead>
+              <TableHead className="pr-8 text-right text-xs font-semibold">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -183,14 +183,14 @@ export default function MasterProjectManagementPage() {
             ) : filteredProjects.map((item) => (
               <TableRow key={item.id} className="group hover:bg-muted/20 transition-colors border-b border-border/50">
                 <TableCell className="pl-6">
-                  <span className="font-mono text-[11px] font-black text-primary bg-primary/5 px-2 py-1 rounded">
-                    {item.code || "UNCAT"}
+                  <span className="rounded bg-primary/5 px-2 py-1 font-mono text-xs font-semibold text-primary">
+                    {item.code || "Belum ada"}
                   </span>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="font-bold text-sm text-foreground uppercase tracking-tight">{item.name}</span>
-                    <span className="text-[9px] text-muted-foreground font-semibold flex items-center gap-1 mt-1">
+                    <span className="text-sm font-semibold text-foreground">{item.name}</span>
+                    <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                       <Calendar size={10} /> {new Date(item.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
                     </span>
                   </div>
@@ -201,14 +201,14 @@ export default function MasterProjectManagementPage() {
                       <MapPin size={14} />
                     </div>
                     {/* PENGGABUNGAN KC/KCP DAN NAMA KANTOR DISINI */}
-                    <span className="font-bold text-xs uppercase tracking-tight">
+                    <span className="text-xs font-medium">
                       {item.master_offices?.kedudukan} {item.master_offices?.name}
                     </span>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span className="text-[10px] font-black text-muted-foreground uppercase bg-muted px-2 py-1 rounded border">
-                    {item.master_entities?.name || "PERSONAL"}
+                  <span className="rounded border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {item.master_entities?.name || "Tanpa entitas"}
                   </span>
                 </TableCell>
                 <TableCell className="text-right pr-8">
@@ -229,36 +229,36 @@ export default function MasterProjectManagementPage() {
 
       {/* Modal Dialog */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-md rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
-          <div className="bg-primary p-6 text-primary-foreground">
-            <DialogTitle className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
+        <DialogContent className="max-w-md overflow-hidden p-0">
+          <div className="border-b border-border bg-muted/30 p-6">
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
               <Building2 className="w-5 h-5" />
-              {selectedItem ? "Edit Project" : "New Project"}
+              {selectedItem ? "Edit proyek" : "Tambah proyek"}
             </DialogTitle>
-            <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">Input master data project unit</p>
+            <p className="mt-1 text-sm text-muted-foreground">Lengkapi data proyek dan kantor pengelolanya.</p>
           </div>
           
-          <div className="p-8 space-y-5">
+          <div className="space-y-5 p-6">
             <div className="space-y-1.5">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Project Name</Label>
-              <Input className="rounded-xl h-11 font-bold text-xs" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Nama Proyek..." />
+              <Label>Nama proyek</Label>
+              <Input className="h-11" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Masukkan nama proyek" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Unit Code</Label>
-                <Input className="rounded-xl h-11 font-mono uppercase text-xs font-bold" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} placeholder="PRJ001" />
+                <Label>Kode unit</Label>
+                <Input className="h-11 font-mono uppercase" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} placeholder="PRJ001" />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Location</Label>
+                <Label>Kantor</Label>
                 <Select value={formData.office_id} onValueChange={(v) => setFormData({...formData, office_id: v})}>
                   <SelectTrigger className="rounded-xl h-11 text-xs font-bold">
                     <SelectValue placeholder="Pilih Cabang" />
                   </SelectTrigger>
                   <SelectContent>
                     {offices.map(o => (
-                      <SelectItem key={o.id} value={o.id} className="text-xs font-bold uppercase">
+                      <SelectItem key={o.id} value={o.id}>
                         {o.kedudukan} {o.name}
                       </SelectItem>
                     ))}
@@ -268,15 +268,15 @@ export default function MasterProjectManagementPage() {
             </div>
 
             <div className="space-y-1.5 pt-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Entity Mapping</Label>
+              <Label>Entitas</Label>
               <Select value={formData.entity_id} onValueChange={(v) => setFormData({...formData, entity_id: v})}>
                 <SelectTrigger className="rounded-xl h-11 text-xs font-bold bg-muted/30">
                   <SelectValue placeholder="Pilih Entitas (Opsional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none" className="text-xs font-bold uppercase">Tanpa Entitas</SelectItem>
+                  <SelectItem value="none">Tanpa entitas</SelectItem>
                   {entities.map(e => (
-                    <SelectItem key={e.id} value={e.id} className="text-xs font-bold uppercase">{e.name}</SelectItem>
+                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -284,9 +284,9 @@ export default function MasterProjectManagementPage() {
           </div>
 
           <DialogFooter className="p-6 bg-muted/20 flex gap-2">
-            <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="rounded-xl font-bold text-xs">CANCEL</Button>
-            <Button onClick={handleSave} disabled={loading} className="rounded-xl px-10 font-bold text-xs">
-              {loading ? <Loader2 className="animate-spin w-4 h-4" /> : "SAVE DATA"}
+            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Batal</Button>
+            <Button onClick={handleSave} disabled={loading} className="px-8">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simpan"}
             </Button>
           </DialogFooter>
         </DialogContent>

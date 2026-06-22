@@ -63,13 +63,13 @@ export default function ConfigurationLayout() {
   const SelectedIcon = selected.icon;
 
   return (
-    <div className="space-y-6">
+    <div className="sigap-page">
       <PageHeader
-        title="Configuration"
+        title="Konfigurasi"
         subtitle="Kelola aturan sistem tanpa mencampurnya dengan master data operasional."
       >
         <Select value={selected.value} onValueChange={navigate}>
-          <SelectTrigger className="h-10 w-full sm:w-[260px] bg-card">
+          <SelectTrigger className="h-10 w-full sm:w-[300px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -88,11 +88,13 @@ export default function ConfigurationLayout() {
         </Select>
       </PageHeader>
 
-      <div className="flex items-start gap-3 border-y border-border bg-muted/30 px-4 py-3">
-        <SelectedIcon className="mt-0.5 h-5 w-5 text-primary" />
-        <div>
-          <h2 className="text-sm font-semibold">{selected.label}</h2>
-          <p className="text-xs text-muted-foreground">{selected.description}</p>
+      <div className="flex items-start gap-3 px-1 py-1">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <SelectedIcon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="sigap-section-title">{selected.label}</h2>
+          <p className="sigap-section-description mt-1">{selected.description}</p>
         </div>
       </div>
 

@@ -8,41 +8,32 @@ const getCurrentUserId = async () => {
 }
 
 export const notificationService = {
-  // Kirim notifikasi via RPC (bypass RLS)
   async createNotification(userId: string, title: string, message: string, type = 'info', link?: string) {
-    const payload = {
-      user_id: userId,
-      title,
-      message,
-      type,
-      link: link || null,
-      is_read: false,
-    }
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Tidak terautentikasi')
 
-    const { data, error } = await supabase.rpc('create_notification_rpc', {
-      p_user_id: userId,
-      p_title: title,
-      p_message: message,
-      p_type: type,
-      p_link: link
+    const response = await fetch('/api/notifications/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        user_ids: [userId],
+        title,
+        message,
+        type,
+        link: link || null,
+        email: false,
+      }),
     })
 
-    if (!error) return data
-
-    console.error('Create notification RPC error, trying direct insert:', error)
-
-    const { data: insertData, error: insertError } = await supabase
-      .from('notifications')
-      .insert(payload)
-      .select()
-      .single()
-
-    if (insertError) {
-      console.error('Create notification insert error:', insertError)
-      throw insertError
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload?.error || 'Gagal membuat notifikasi')
     }
 
-    return insertData
+    return response.json()
   },
 
   // Ambil notifikasi user yang login

@@ -104,9 +104,9 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
   });
 
   if (isLoading) return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-28 bg-muted/40 rounded-2xl animate-pulse" />
+        <div key={i} className="h-28 animate-pulse rounded-lg bg-muted/40" />
       ))}
     </div>
   );
@@ -121,7 +121,7 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {CARDS.map((card, i) => {
         const value = values[card.key] ?? 0;
         const pct   = stats.total > 0 ? (value / stats.total) * 100 : 0;
@@ -138,9 +138,9 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
                 : '/surat/monitoring'
             )}
             className={cn(
-              'relative flex flex-col text-left bg-card border rounded-2xl p-5 pb-4 overflow-hidden',
-              'shadow-sm transition-all duration-200 group cursor-pointer',
-              'hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
+              'group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-lg border bg-card p-5 text-left',
+              'shadow-[var(--shadow-card)] transition-all duration-200',
+              'hover:border-primary/35 active:translate-y-0 active:shadow-sm',
               card.border,
             )}
           >
@@ -153,24 +153,24 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
             </div>
 
             {/* Label */}
-            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground leading-none mb-2">
+            <p className="mb-2 text-xs font-semibold leading-none text-muted-foreground">
               {card.label}
             </p>
 
             {/* Value + pct */}
             <div className="flex items-baseline gap-2 mt-auto">
-              <span className={cn('text-3xl font-black tracking-tighter tabular-nums leading-none', card.color)}>
+              <span className={cn('text-3xl font-semibold tracking-tight tabular-nums leading-none', card.color)}>
                 {value}
               </span>
               {card.barColor && stats.total > 0 && (
-                <span className="text-[10px] font-bold text-muted-foreground/50 leading-none">
+                <span className="text-xs font-medium text-muted-foreground leading-none">
                   {Math.round(pct)}%
                 </span>
               )}
             </div>
 
-            <p className="text-[9px] text-muted-foreground/40 font-bold uppercase mt-1">
-              / {stats.total} items
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              dari {stats.total} pengajuan
             </p>
 
             {/* Animated progress bar */}

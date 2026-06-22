@@ -194,10 +194,10 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
         <table className="w-full text-left border-collapse table-fixed">
           <thead className="bg-muted/40 border-b border-border/50">
             <tr>
-              <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground w-24 text-center">Tipe</th>
-              <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground w-64">Pelaku</th>
-              <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Keterangan Aktivitas</th>
-              <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground w-48 text-right">Waktu</th>
+              <th className="w-24 px-6 py-4 text-center text-xs font-semibold text-muted-foreground">Tipe</th>
+              <th className="w-64 px-6 py-4 text-xs font-semibold text-muted-foreground">Pelaku</th>
+              <th className="px-6 py-4 text-xs font-semibold text-muted-foreground">Keterangan aktivitas</th>
+              <th className="w-48 px-6 py-4 text-right text-xs font-semibold text-muted-foreground">Waktu</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
@@ -217,12 +217,12 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
                     onClick={() => setSelectedLog(log)}
                     className="hover:bg-primary/[0.03] transition-colors group cursor-pointer"
                   >
-                    <td className="px-8 py-5 text-center">
-                      <div className={cn("inline-flex p-2.5 rounded-2xl transition-transform group-hover:scale-110 shadow-sm", colorClass)}>
+                    <td className="px-6 py-4 text-center">
+                      <div className={cn("inline-flex rounded-lg p-2.5 transition-colors", colorClass)}>
                         <Icon className="w-5 h-5" />
                       </div>
                     </td>
-                    <td className="px-8 py-5">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
                           <AvatarImage src={log.profiles?.avatarUrl || actor?.photoUrl} />
@@ -234,23 +234,23 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
                           <span className="font-bold text-sm truncate leading-tight mb-1">
                             {String(log.userId) === String(currentUser?.id) ? 'Anda' : actorName}
                           </span>
-                          <span className="text-[9px] uppercase font-black text-primary/70 italic">
+                          <span className="text-xs font-medium text-primary/80">
                             {actor?.role || (hasActor ? 'User' : 'Audit Otomatis')}
                           </span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-5">
+                    <td className="px-6 py-4">
                       <p className="text-sm font-medium text-foreground/90 leading-relaxed">
                         {getLogDescription(log)}
                       </p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Klik untuk melihat detail perubahan
                       </p>
                     </td>
-                    <td className="px-8 py-5 text-right">
-                      <div className="text-xs font-black text-foreground/80">{isValid(logDate) ? format(logDate, 'dd MMM yyyy') : '-'}</div>
-                      <div className="text-[10px] text-muted-foreground font-bold italic">
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-xs font-semibold text-foreground/80">{isValid(logDate) ? format(logDate, 'dd MMM yyyy') : '-'}</div>
+                      <div className="text-xs text-muted-foreground">
                         pukul {isValid(logDate) ? format(logDate, 'HH:mm') : '-'}
                       </div>
                     </td>
@@ -262,7 +262,7 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
                 <td colSpan={4} className="py-32 text-center">
                   <div className="flex flex-col items-center opacity-20 italic">
                     <Search className="h-12 w-12 mb-2" />
-                    <p className="text-lg font-black uppercase tracking-widest">Tidak ada data</p>
+                    <p className="text-base font-semibold">Tidak ada data audit</p>
                   </div>
                 </td>
               </tr>
@@ -272,7 +272,7 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
       </div>
 
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="max-w-3xl p-0 overflow-hidden rounded-2xl">
+        <DialogContent className="max-w-3xl overflow-hidden p-0">
           {selectedLog && (() => {
             const actor = users.find(u => String(u.id) === String(selectedLog.userId || selectedLog.user_id));
             const actorName = selectedLog.profiles?.fullName || actor?.fullName || 'Sistem Audit';
@@ -289,8 +289,8 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1 pr-8">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Detail Audit</p>
-                      <DialogTitle className="mt-1 text-lg font-black leading-snug text-foreground">{getLogDescription(selectedLog)}</DialogTitle>
+                      <p className="text-xs font-medium text-muted-foreground">Detail audit</p>
+                      <DialogTitle className="mt-1 text-lg font-semibold leading-snug text-foreground">{getLogDescription(selectedLog)}</DialogTitle>
                       <DialogDescription className="mt-2 text-xs font-medium text-muted-foreground">
                         {actorName} - {isValid(logDate) ? format(logDate, 'dd MMM yyyy, HH:mm') : '-'}
                       </DialogDescription>
@@ -300,16 +300,16 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
 
                 <div className="grid gap-4 border-b border-border px-6 py-4 text-xs sm:grid-cols-3">
                   <div>
-                    <p className="font-black uppercase tracking-widest text-muted-foreground">Data</p>
-                    <p className="mt-1 font-bold text-foreground">{tableLabels[tableName] || tableName || '-'}</p>
+                    <p className="font-medium text-muted-foreground">Data</p>
+                    <p className="mt-1 font-semibold text-foreground">{tableLabels[tableName] || tableName || '-'}</p>
                   </div>
                   <div>
-                    <p className="font-black uppercase tracking-widest text-muted-foreground">Record ID</p>
+                    <p className="font-medium text-muted-foreground">ID rekaman</p>
                     <p className="mt-1 break-all font-mono text-[11px] text-foreground">{selectedLog.recordId || selectedLog.record_id || '-'}</p>
                   </div>
                   <div>
-                    <p className="font-black uppercase tracking-widest text-muted-foreground">Aksi</p>
-                    <p className="mt-1 font-bold text-foreground">{getActionLabel(selectedLog.action)}</p>
+                    <p className="font-medium text-muted-foreground">Aksi</p>
+                    <p className="mt-1 font-semibold text-foreground">{getActionLabel(selectedLog.action)}</p>
                   </div>
                 </div>
 
@@ -322,15 +322,15 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
                     <div className="space-y-3">
                       {detailFields.map((field) => (
                         <div key={field.key} className="rounded-xl border border-border bg-card p-4">
-                          <p className="mb-3 text-xs font-black uppercase tracking-widest text-foreground">{field.label}</p>
+                          <p className="mb-3 text-sm font-semibold text-foreground">{field.label}</p>
                           {selectedLog.action?.toUpperCase() === 'UPDATE' ? (
                             <div className="grid gap-3 md:grid-cols-2">
                               <div>
-                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sebelum</p>
+                                <p className="mb-1 text-xs font-medium text-muted-foreground">Sebelum</p>
                                 <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">{formatAuditValue(field.key, field.before)}</pre>
                               </div>
                               <div>
-                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sesudah</p>
+                                <p className="mb-1 text-xs font-medium text-muted-foreground">Sesudah</p>
                                 <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-primary/5 p-3 text-xs font-semibold text-foreground">{formatAuditValue(field.key, field.after)}</pre>
                               </div>
                             </div>

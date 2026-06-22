@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion } from 'framer-motion';
@@ -34,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { exportRowsToXlsx } from '@/lib/excel';
 
 type HierarchyNode = {
   user: User;
@@ -588,7 +588,7 @@ export default function OrganizationHierarchyPage() {
     });
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const rows = visibleFlat.map((node) => ({
       Level: hierarchyRank(node.user),
       Nama: node.user.fullName,
@@ -605,10 +605,12 @@ export default function OrganizationHierarchyPage() {
       Masalah: node.issueCodes.map((issue) => issueLabel[issue] || issue).join('; '),
     }));
 
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Hirarki');
-    XLSX.writeFile(wb, `hirarki-organisasi-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    await exportRowsToXlsx(
+      rows,
+      'Hirarki',
+      `hirarki-organisasi-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      [8, 28, 16, 30, 24, 24, 14, 28, 40, 16, 14, 24]
+    );
   };
 
   const handleExportPdf = () => {

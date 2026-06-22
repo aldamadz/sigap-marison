@@ -140,36 +140,35 @@ export default function AgendaPage() {
   /* ── 5. Render ───────────────────────────────────────────────────────────── */
   if (authLoading || isLoadingAgendas || isLoadingUsers || isCheckingParent) {
     return (
-      <div className="p-8 space-y-8 max-w-7xl mx-auto">
+      <div className="sigap-page">
         <div className="flex justify-between items-center">
           <Skeleton className="h-12 w-64" />
           <Skeleton className="h-12 w-40 rounded-full" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-lg" />)}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto py-10 px-4 max-w-7xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+    <div className="sigap-page">
+      <div className="sigap-panel sigap-panel-accent flex flex-col items-start justify-between gap-5 p-5 md:flex-row md:items-center sm:p-6">
         <div className="space-y-1">
-          <h1 className="text-4xl font-extrabold tracking-tight">Agenda Manager</h1>
-          <p className="text-muted-foreground text-lg italic">{getSubtitle()}</p>
+          <h1 className="text-xl font-semibold sm:text-2xl">Agenda</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{getSubtitle()}</p>
         </div>
         <Button
           onClick={() => { setSelectedAgenda(null); setIsModalOpen(true); }}
-          size="lg"
-          className="rounded-full px-8 shadow-xl bg-primary hover:scale-105 transition-transform"
+          className="h-11 px-5"
         >
-          <span className="mr-2 text-xl">+</span> Agenda Baru
+          <span className="mr-2 text-lg">+</span> Agenda baru
         </Button>
       </div>
 
       {isParent && (
-        <div className="mb-6 bg-card/50 backdrop-blur-sm rounded-2xl border p-6 shadow-sm border-primary/10">
+        <div className="sigap-panel p-5">
           <AgendaParentFilter
             onUserSelect={(id) => setSelectedUserId(id || 'all')}
             selectedUserId={selectedUserId}
@@ -179,7 +178,7 @@ export default function AgendaPage() {
         </div>
       )}
 
-      <div className="bg-background/50 backdrop-blur-sm rounded-3xl border p-1 shadow-inner">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         {agendas.length === 0 ? (
           <div className="py-20 text-center">
             <p className="text-muted-foreground">Tidak ada agenda ditemukan untuk filter ini.</p>

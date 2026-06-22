@@ -1,10 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* Marison SIGAP design tokens */
-/* All colors MUST be HSL - No italics policy enforced globally */
+/* Enterprise Marison: quiet surfaces, clear hierarchy, restrained green accent */
 
 @layer base {
   /* Global No-Italic Policy */
@@ -14,26 +14,26 @@
 
   :root {
     color-scheme: light;
-    --background: 210 25% 98%;
-    --foreground: 222 35% 12%;
+    --background: 210 20% 97%;
+    --foreground: 220 31% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 35% 12%;
+    --card-foreground: 220 31% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 35% 12%;
+    --popover-foreground: 220 31% 11%;
 
-    --primary: 126 62% 43%;
+    --primary: 126 55% 39%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 215 24% 94%;
-    --secondary-foreground: 222 30% 18%;
+    --secondary: 210 18% 94%;
+    --secondary-foreground: 220 28% 18%;
 
-    --muted: 214 24% 95%;
-    --muted-foreground: 215 16% 43%;
+    --muted: 210 18% 93%;
+    --muted-foreground: 215 14% 41%;
 
-    --accent: 126 35% 93%;
-    --accent-foreground: 126 60% 25%;
+    --accent: 126 30% 92%;
+    --accent-foreground: 126 58% 23%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
@@ -53,9 +53,9 @@
     --ongoing: 158 64% 40%;
     --ongoing-foreground: 210 40% 98%;
 
-    --border: 214 22% 88%;
-    --input: 214 22% 86%;
-    --ring: 126 62% 43%;
+    --border: 214 18% 86%;
+    --input: 214 18% 84%;
+    --ring: 126 55% 39%;
 
     --radius: 0.75rem;
 
@@ -66,40 +66,40 @@
     --chart-5: 280 65% 60%;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 25% 24%;
-    --sidebar-primary: 126 62% 43%;
+    --sidebar-foreground: 220 24% 22%;
+    --sidebar-primary: 126 55% 39%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 126 35% 94%;
-    --sidebar-accent-foreground: 126 60% 25%;
-    --sidebar-border: 214 22% 88%;
-    --sidebar-ring: 126 62% 43%;
+    --sidebar-accent: 126 28% 93%;
+    --sidebar-accent-foreground: 126 58% 23%;
+    --sidebar-border: 214 18% 87%;
+    --sidebar-ring: 126 55% 39%;
 
-    /* Custom Shadows */
-    --shadow-card: 0 4px 20px -8px hsl(215 30% 25% / 0.18);
-    --shadow-elevated: 0 12px 32px -12px hsl(215 30% 20% / 0.24);
-    --shadow-glow: 0 0 32px -12px hsl(126 62% 43% / 0.3);
+    /* Enterprise shadows */
+    --shadow-card: 0 1px 2px hsl(215 30% 22% / 0.08), 0 10px 24px -18px hsl(215 30% 18% / 0.22);
+    --shadow-elevated: 0 14px 34px -22px hsl(215 30% 18% / 0.32);
+    --shadow-glow: 0 0 0 1px hsl(126 55% 39% / 0.08);
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(126 62% 43%), hsl(145 62% 36%));
+    /* Gradients kept subtle for operational UI */
+    --gradient-primary: linear-gradient(135deg, hsl(126 55% 39%), hsl(145 46% 34%));
     --gradient-success: linear-gradient(135deg, hsl(158 64% 40%), hsl(158 64% 35%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 25% 98%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 20% 98%));
   }
 
   .dark {
     color-scheme: dark;
-    --background: 222 47% 6%;
+    --background: 222 38% 7%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 9%;
+    --card: 222 34% 10%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 8%;
+    --popover: 222 34% 9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 126 62% 48%;
-    --primary-foreground: 222 47% 6%;
+    --primary: 126 55% 48%;
+    --primary-foreground: 222 38% 7%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 14%;
+    --muted: 217 28% 14%;
     --muted-foreground: 215 20% 62%;
-    --accent: 126 25% 18%;
+    --accent: 126 22% 17%;
     --accent-foreground: 126 55% 75%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
@@ -113,15 +113,15 @@
     --pending-foreground: 222 47% 6%;
     --ongoing: 158 64% 40%;
     --ongoing-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 126 62% 48%;
-    --chart-1: 126 62% 48%;
+    --border: 217 26% 18%;
+    --input: 217 26% 18%;
+    --ring: 126 55% 48%;
+    --chart-1: 126 55% 48%;
     --chart-2: 158 64% 40%;
     --chart-3: 43 96% 56%;
     --chart-4: 0 72% 51%;
     --chart-5: 280 65% 60%;
-    --sidebar-background: 222 47% 7%;
+    --sidebar-background: 222 38% 8%;
     --sidebar-foreground: 210 40% 85%;
     --sidebar-primary: 126 62% 48%;
     --sidebar-primary-foreground: 222 47% 6%;
@@ -129,10 +129,10 @@
     --sidebar-accent-foreground: 126 55% 75%;
     --sidebar-border: 217 33% 14%;
     --sidebar-ring: 126 62% 48%;
-    --shadow-card: 0 4px 24px -4px hsl(222 47% 3% / 0.5);
-    --shadow-elevated: 0 8px 32px -8px hsl(222 47% 3% / 0.6);
-    --shadow-glow: 0 0 40px -12px hsl(126 62% 48% / 0.3);
-    --gradient-primary: linear-gradient(135deg, hsl(126 62% 48%), hsl(145 62% 38%));
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.03), 0 14px 34px -24px hsl(222 47% 3% / 0.75);
+    --shadow-elevated: 0 18px 44px -24px hsl(222 47% 3% / 0.85);
+    --shadow-glow: 0 0 0 1px hsl(126 55% 48% / 0.1);
+    --gradient-primary: linear-gradient(135deg, hsl(126 55% 48%), hsl(145 48% 38%));
     --gradient-success: linear-gradient(135deg, hsl(158 64% 40%), hsl(158 64% 35%));
     --gradient-card: linear-gradient(180deg, hsl(222 47% 10%), hsl(222 47% 8%));
   }
@@ -143,8 +143,9 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 0.875rem; /* 14px base for readability */
+    font-family: 'Geist', system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 
   /* =============================================
@@ -152,10 +153,10 @@
      ============================================= */
 
   /* Headings - better hierarchy */
-  h1 { @apply text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight; }
-  h2 { @apply text-xl sm:text-2xl font-bold tracking-tight; }
-  h3 { @apply text-lg sm:text-xl font-semibold; }
-  h4 { @apply text-base sm:text-lg font-semibold; }
+  h1 { @apply text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight; }
+  h2 { @apply text-lg sm:text-xl font-semibold tracking-tight; }
+  h3 { @apply text-base sm:text-lg font-semibold; }
+  h4 { @apply text-sm sm:text-base font-semibold; }
 
   /* Meta text - readable 12px */
   .text-meta {
@@ -237,7 +238,7 @@
 @layer components {
   /* UI Containers */
   .glass-card {
-    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+    @apply bg-card/95 backdrop-blur-sm border border-border/70;
     box-shadow: var(--shadow-card);
   }
 
@@ -248,6 +249,33 @@
 
   .glow-effect {
     box-shadow: var(--shadow-glow);
+  }
+
+  .sigap-page {
+    @apply mx-auto w-full max-w-[1500px] space-y-5;
+  }
+
+  .sigap-panel {
+    @apply rounded-lg border border-border bg-card p-4 text-card-foreground sm:p-5;
+    box-shadow: var(--shadow-card);
+  }
+
+  .sigap-panel-accent {
+    @apply relative overflow-hidden rounded-lg border border-border bg-card p-4 text-card-foreground sm:p-5;
+    box-shadow: var(--shadow-card);
+  }
+
+  .sigap-toolbar {
+    @apply flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between;
+    box-shadow: var(--shadow-card);
+  }
+
+  .sigap-section-title {
+    @apply text-sm font-semibold text-foreground;
+  }
+
+  .sigap-section-description {
+    @apply text-xs leading-relaxed text-muted-foreground;
   }
 
   /* Status Badges */
@@ -298,7 +326,7 @@
 
   /* KPI & Nav Items */
   .kpi-card {
-    @apply relative overflow-hidden rounded-xl p-6;
+    @apply relative overflow-hidden rounded-lg border border-border p-4 sm:p-5;
     background: var(--gradient-card);
     box-shadow: var(--shadow-card);
   }
@@ -312,11 +340,11 @@
   .kpi-card::before {
     content: '';
     @apply absolute inset-0 opacity-50;
-    background: radial-gradient(circle at top right, hsl(var(--primary) / 0.1), transparent 50%);
+    background: linear-gradient(90deg, hsl(var(--primary) / 0.12), transparent 38%);
   }
 
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground transition-all duration-200;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-muted-foreground transition-all duration-200;
   }
 
   .nav-item:hover { @apply bg-accent text-foreground; }
@@ -396,11 +424,11 @@
 
   /* Responsive Form Elements */
   .responsive-input {
-    @apply w-full px-3 py-2 text-sm sm:text-base rounded-lg border bg-background;
+    @apply w-full px-3 py-2 text-sm rounded-md border bg-background;
   }
 
   .responsive-button {
-    @apply px-4 py-2 text-sm sm:px-6 sm:py-2.5 sm:text-base rounded-lg font-medium;
+    @apply px-4 py-2 text-sm sm:px-5 sm:py-2.5 rounded-md font-medium;
   }
 
   @media (max-width: 480px) {

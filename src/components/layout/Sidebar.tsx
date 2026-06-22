@@ -138,14 +138,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       {({ isActive }) => (
         <motion.div
           className={cn(
-            "relative w-full flex items-center gap-3 py-2.5 rounded-lg transition-all",
+            "relative w-full flex items-center gap-3 py-2.5 rounded-md transition-all duration-150",
             isDesktopCollapsed
               ? "justify-center px-0"
               : isSubItem
-                ? "pl-10 pr-4"
-                : "px-4",
+                ? "pl-9 pr-3"
+                : "px-3",
             isActive
-              ? "bg-primary/10 text-primary border-l-2 border-primary"
+              ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
           whileTap={{ scale: 0.98 }}
@@ -161,14 +161,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           </div>
           {(isMobile || !collapsed) && (
             <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
-              <span className={cn("font-medium truncate", isSubItem ? "text-sm" : "text-sm")}>{label}</span>
+              <span className={cn("truncate font-medium", isSubItem ? "text-[13px]" : "text-sm")}>{label}</span>
               {label === 'Persetujuan' && inboxCount > 0 && (
-                <span className="ml-2 bg-red-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
+                <span className="ml-2 shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
                   {inboxCount > 99 ? '99+' : inboxCount}
                 </span>
               )}
               {label === 'Status Pengajuan' && monitoringBadge > 0 && (
-                <span className="ml-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full shrink-0">
+                <span className="ml-2 shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                   {monitoringBadge > 99 ? '99+' : monitoringBadge}
                 </span>
               )}
@@ -181,7 +181,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
   // Mobile Header in sidebar - TANPA TOMBOL X (sudah ada di Sheet)
   const MobileHeader = () => (
-    <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
+    <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-4">
       <div className="flex items-center gap-3">
         <img
           src="/marison-sigap-logo-v2.png"
@@ -189,7 +189,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           className="w-10 h-10 object-contain shrink-0"
         />
         <div>
-          <h1 className="font-black text-foreground leading-none text-sm tracking-tight">Marison - SIGAP</h1>
+          <h1 className="text-sm font-semibold leading-none tracking-tight text-foreground">Marison - SIGAP</h1>
         </div>
       </div>
       {/* Tidak ada tombol X disini karena sudah otomatis dari SheetPrimitive.Close */}
@@ -216,14 +216,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             />
             {!collapsed && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="truncate min-w-0">
-                <h1 className="font-black text-foreground leading-none text-xs tracking-tight">Marison - SIGAP</h1>
+                <h1 className="text-xs font-semibold leading-none tracking-tight text-foreground">Marison - SIGAP</h1>
               </motion.div>
             )}
           </div>
 
           <button
             onClick={onToggle}
-            className="absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-6 h-10 rounded-full border border-sidebar-border bg-sidebar text-muted-foreground hover:text-foreground hover:border-primary/40 flex items-center justify-center shadow-md transition-all"
+            className="absolute -right-3 top-1/2 z-20 flex h-9 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-muted-foreground shadow-sm transition-all hover:border-primary/40 hover:text-foreground"
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Buka sidebar' : 'Minimize sidebar'}
           >
@@ -235,18 +235,18 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       {/* Mobile header */}
       {isMobile && <MobileHeader />}
 
-      <nav className="flex-1 py-4 px-3 space-y-6 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-3 py-4">
         {/* Main Navigation */}
         <div className="space-y-1">
           {renderNavLink('/dashboard', 'Dashboard', LayoutDashboard)}
-          {renderNavLink('/calendar', 'Calendar', Calendar)}
-          {renderNavLink('/agenda', 'Agendas', ClipboardList)}
+          {renderNavLink('/calendar', 'Kalender', Calendar)}
+          {renderNavLink('/agenda', 'Agenda', ClipboardList)}
         </div>
 
         {/* Surat Section */}
         <div className="space-y-1">
           {(isMobile || !collapsed) && (
-            <p className="px-4 text-xs font-medium text-muted-foreground/60 mb-2">
+            <p className="mb-2 px-3 text-[11px] font-semibold text-muted-foreground/70">
               Korespondensi
             </p>
           )}
@@ -254,10 +254,10 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             <button
               onClick={() => setIsSuratOpen(!isSuratOpen)}
               className={cn(
-                "w-full flex items-center py-2.5 rounded-lg transition-colors group relative",
+                "group relative flex w-full items-center rounded-md py-2.5 transition-colors",
                 isDesktopCollapsed ? "justify-center px-0" : "justify-between px-4",
                 location.pathname.includes('/surat')
-                  ? "text-primary bg-primary/5"
+                  ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
                   : "text-muted-foreground hover:bg-accent"
               )}
             >
@@ -271,7 +271,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                     </span>
                   )}
                 </div>
-                {(isMobile || !collapsed) && <span className="text-sm font-medium truncate">Layanan Surat</span>}
+                {(isMobile || !collapsed) && <span className="truncate text-sm font-medium">Layanan Surat</span>}
               </div>
               {(isMobile || !collapsed) && (
                 <div className="flex items-center gap-2 shrink-0">
@@ -302,21 +302,21 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         {isUserAdmin && (
           <div className="space-y-1">
             {(isMobile || !collapsed) && (
-              <p className="px-4 text-xs font-medium text-muted-foreground/60 mb-2">
-                Administration
+              <p className="mb-2 px-3 text-[11px] font-semibold text-muted-foreground/70">
+                Administrasi
               </p>
             )}
             <div className="space-y-1">
               <button
                 onClick={() => setIsMasterOpen(!isMasterOpen)}
                 className={cn(
-                  "w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-colors group",
-                  isMasterOpen ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent"
+                  "group flex w-full items-center justify-between rounded-md px-3 py-2.5 transition-colors",
+                  isMasterOpen ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]" : "text-muted-foreground hover:bg-accent"
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Database className="w-5 h-5 shrink-0" />
-                  {(isMobile || !collapsed) && <span className="text-sm font-medium truncate">Master Data</span>}
+                  {(isMobile || !collapsed) && <span className="truncate text-sm font-medium">Master Data</span>}
                 </div>
                 {(isMobile || !collapsed) && (
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isMasterOpen && "rotate-180")} />
@@ -341,8 +341,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 )}
               </AnimatePresence>
             </div>
-            {renderNavLink('/admin/configuration', 'Configuration', SlidersHorizontal)}
-            {renderNavLink('/admin/monitoring', 'All Status Monitoring', Monitor)}
+            {renderNavLink('/admin/configuration', 'Konfigurasi', SlidersHorizontal)}
+            {renderNavLink('/admin/monitoring', 'Monitoring Admin', Monitor)}
             {renderNavLink('/admin/kpi-departments', 'SLA Departemen', BarChart3)}
             {renderNavLink('/audit-logs', 'Audit Log', Activity)}
           </div>
@@ -350,24 +350,24 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
         {/* Settings */}
         <div className="pt-2">
-          {renderNavLink('/settings', 'Settings', Settings)}
+          {renderNavLink('/settings', 'Pengaturan', Settings)}
         </div>
       </nav>
 
       {/* Footer / User Info */}
-      <div className="p-4 bg-sidebar-accent/10 border-t border-sidebar-border mt-auto shrink-0">
+      <div className="mt-auto shrink-0 border-t border-sidebar-border bg-sidebar-accent/10 p-3">
         {(isMobile || !collapsed) && user && (
-          <div className="mb-3 p-3 rounded-xl bg-background/50 border border-border/50 flex items-center gap-3 min-w-0">
+          <div className="mb-3 flex min-w-0 items-center gap-3 rounded-lg border border-border/60 bg-background/70 p-3">
             <img 
               src={user.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || 'U')}&background=0D9488&color=fff`} 
-              className="w-10 h-10 rounded-lg object-cover shadow-sm ring-1 ring-border shrink-0" 
+              className="h-10 w-10 shrink-0 rounded-md object-cover shadow-sm ring-1 ring-border" 
               alt="Profile" 
             />
             <div className="flex-1 overflow-hidden min-w-0">
-              <p className="text-sm font-black truncate text-foreground uppercase tracking-tighter">{user.fullName}</p>
+              <p className="truncate text-sm font-semibold text-foreground">{user.fullName}</p>
               <div className="flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-primary shrink-0" />
-                <p className="text-xs text-muted-foreground truncate uppercase font-bold">{user.jobTitle || 'Member'}</p>
+                <p className="truncate text-xs font-medium text-muted-foreground">{user.jobTitle || 'Member'}</p>
               </div>
             </div>
           </div>
@@ -376,7 +376,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           onClick={handleLogout} 
           disabled={isLoggingOut} 
           className={cn(
-            "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors group",
+            "group flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600",
             !isMobile && collapsed && "justify-center px-2"
           )}
         >
@@ -385,7 +385,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           ) : (
             <LogOut className="w-5 h-5 group-hover:translate-x-1 transition-transform shrink-0" />
           )}
-          {(isMobile || !collapsed) && <span className="text-sm font-bold uppercase tracking-widest">Sign Out</span>}
+          {(isMobile || !collapsed) && <span className="text-sm font-medium">Keluar</span>}
         </button>
       </div>
     </>
@@ -394,7 +394,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   // Mobile sidebar (full content)
   if (isMobile) {
     return (
-      <div className="flex flex-col h-full bg-sidebar">
+      <div className="flex h-full flex-col bg-sidebar">
         {sidebarContent}
       </div>
     )
@@ -406,7 +406,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       initial={false} 
       animate={{ width: collapsed ? 72 : 260 }} 
       transition={{ duration: 0.2, ease: "easeInOut" }} 
-      className="sticky top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col shrink-0 overflow-visible"
+      className="sticky top-0 z-50 flex h-screen shrink-0 flex-col overflow-visible border-r border-sidebar-border bg-sidebar"
     >
       {sidebarContent}
     </motion.aside>

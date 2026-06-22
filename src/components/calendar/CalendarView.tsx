@@ -56,15 +56,15 @@ export const CalendarView = ({
   }, [currentMonth]);
 
   return (
-    <div className="bg-card rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden w-full">
+    <div className="flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
 
       {/* ── Header navigasi ─────────────────────────────────────────────────── */}
-      <div className="p-6 flex items-center justify-between border-b bg-muted/30 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center justify-between border-b bg-muted/30 p-4 sm:p-5">
         <div className="flex items-center gap-4">
           <div className="p-2 bg-primary/10 rounded-lg">
             <CalendarIcon className="w-7 h-7 text-primary" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight">
+          <h2 className="text-lg font-semibold sm:text-xl">
             {format(currentMonth, 'MMMM yyyy', { locale: localeID })}
           </h2>
         </div>
@@ -88,7 +88,7 @@ export const CalendarView = ({
       {/* ── Nama hari ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-7 border-b bg-muted/10 flex-shrink-0">
         {weekDays.map(d => (
-          <div key={d} className="py-4 text-center text-[11px] font-black uppercase text-muted-foreground tracking-[0.2em]">
+          <div key={d} className="py-3 text-center text-xs font-semibold text-muted-foreground">
             {d}
           </div>
         ))}

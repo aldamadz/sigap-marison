@@ -147,7 +147,7 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
   const optionData = optionsQuery.data;
 
   const configurationPanel = (
-    <Card>
+    <Card className="border-border shadow-[var(--shadow-card)]">
       <CardHeader>
         <CardTitle className="text-base font-semibold">Konfigurasi SLA Departemen</CardTitle>
       </CardHeader>
@@ -181,8 +181,8 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
               <TimeField label="Selesai Kerja" value={configForm.work_end} onChange={(value) => setConfigForm((prev) => ({ ...prev, work_end: value }))} />
               <TimeField label="Mulai Istirahat" value={configForm.break_start} onChange={(value) => setConfigForm((prev) => ({ ...prev, break_start: value }))} />
               <TimeField label="Selesai Istirahat" value={configForm.break_end} onChange={(value) => setConfigForm((prev) => ({ ...prev, break_end: value }))} />
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Timezone</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Timezone</label>
                 <input
                   value={configForm.timezone}
                   onChange={(event) => setConfigForm((prev) => ({ ...prev, timezone: event.target.value }))}
@@ -213,7 +213,7 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
                           : [...prev.work_days, day as number].sort(),
                       }))}
                       className={cn(
-                        "h-9 rounded-md border px-3 text-xs font-black uppercase",
+                        "h-9 rounded-md border px-3 text-xs font-semibold",
                         active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground"
                       )}
                     >
@@ -238,21 +238,21 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
   );
 
   if (configurationOnly) {
-    return <div className="space-y-4">{configurationPanel}</div>;
+    return <div className="sigap-page">{configurationPanel}</div>;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="sigap-page">
+      <div className="sigap-panel sigap-panel-accent flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <BarChart3 className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-foreground">SLA Departemen</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">SLA Departemen</h1>
               <p className="text-sm text-muted-foreground">
-                SLA approval dihitung dari jam kerja efektif. Pending hanya dihitung untuk tahap yang sudah masuk ke signer aktif.
+                Evaluasi approval berdasarkan jam kerja efektif.
               </p>
             </div>
           </div>
@@ -269,10 +269,10 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="grid gap-3 pt-6 md:grid-cols-2 xl:grid-cols-6">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dari</label>
+      <Card className="border-border shadow-[var(--shadow-card)]">
+        <CardContent className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">Dari</label>
             <input
               type="date"
               value={filters.from}
@@ -280,8 +280,8 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sampai</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">Sampai</label>
             <input
               type="date"
               value={filters.to}
@@ -329,7 +329,7 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard title="Total Step" value={totals.total.toLocaleString("id-ID")} icon={Timer} />
         <MetricCard
           title="Dinilai SLA"
@@ -350,9 +350,9 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
         <MetricCard title="Rata-rata" value={totals.measured > 0 ? formatMinutes(averageMinutes) : "-"} icon={BarChart3} />
       </div>
 
-      <Card>
+      <Card className="border-border shadow-[var(--shadow-card)]">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <CardTitle className="text-base font-black uppercase tracking-tight">Ranking SLA Departemen</CardTitle>
+          <CardTitle className="text-base font-semibold">Ranking SLA Departemen</CardTitle>
           <Badge variant="secondary" className="rounded-md">
             SLA default 2 jam kerja
           </Badge>
@@ -371,15 +371,15 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    <th className="py-3 pr-4">Departemen</th>
-                    <th className="py-3 pr-4 text-right">Total</th>
-                    <th className="py-3 pr-4 text-right">On-Time</th>
-                    <th className="py-3 pr-4 text-right">Telat</th>
-                    <th className="py-3 pr-4 text-right">Pending</th>
-                    <th className="py-3 pr-4 text-right">Rata-rata</th>
-                    <th className="py-3 text-right">Pending Terlama</th>
-                    <th className="py-3 pl-4 text-right">Detail</th>
+                  <tr className="border-b text-left text-xs font-semibold text-muted-foreground">
+                    <th className="py-3.5 pr-4">Departemen</th>
+                    <th className="py-3.5 pr-4 text-right">Total</th>
+                    <th className="py-3.5 pr-4 text-right">On-Time</th>
+                    <th className="py-3.5 pr-4 text-right">Telat</th>
+                    <th className="py-3.5 pr-4 text-right">Pending</th>
+                    <th className="py-3.5 pr-4 text-right">Rata-rata</th>
+                    <th className="py-3.5 text-right">Pending Terlama</th>
+                    <th className="py-3.5 pl-4 text-right">Detail</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -499,16 +499,16 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
                             {detail.is_late ? "Telat" : "On-Time"}
                           </Badge>
                         </div>
-                        <p className="truncate font-bold text-foreground">{detail.judul_surat}</p>
-                        <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                        <p className="truncate font-semibold text-foreground">{detail.judul_surat}</p>
+                        <p className="mt-1 text-xs font-medium text-muted-foreground">
                           Tahap {detail.step_order}: {detail.role_name} oleh {detail.signer_name}
                         </p>
                       </div>
                       <div className="shrink-0 rounded-lg border border-border bg-muted/20 px-4 py-3 text-right">
-                        <p className={cn("text-lg font-black", detail.is_late ? "text-amber-600" : "text-emerald-600")}>
+                        <p className={cn("text-lg font-semibold", detail.is_late ? "text-amber-600" : "text-emerald-600")}>
                           {formatMinutes(detail.elapsed_minutes)}
                         </p>
-                        <p className="text-[10px] font-black uppercase text-muted-foreground">
+                        <p className="text-xs font-medium text-muted-foreground">
                           SLA {formatMinutes(detail.sla_minutes)}
                         </p>
                       </div>
@@ -533,9 +533,9 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
 
 const DetailMetric = ({ label, value, tone = "default" }: { label: string; value: ReactNode; tone?: "default" | "success" | "danger" }) => (
   <div className="rounded-lg border border-border bg-muted/20 p-3">
-    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+    <p className="text-xs font-medium text-muted-foreground">{label}</p>
     <p className={cn(
-      "mt-1 text-lg font-black",
+      "mt-1 text-lg font-semibold",
       tone === "success" && "text-emerald-600",
       tone === "danger" && "text-amber-600"
     )}>
@@ -546,7 +546,7 @@ const DetailMetric = ({ label, value, tone = "default" }: { label: string; value
 
 const DetailField = ({ label, value }: { label: string; value: string }) => (
   <div>
-    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+    <p className="text-xs font-medium text-muted-foreground">{label}</p>
     <p className="mt-1 font-semibold text-foreground">{value}</p>
   </div>
 );
@@ -562,8 +562,8 @@ const FilterSelect = ({
   onChange: (value: string) => void;
   children: ReactNode;
 }) => (
-  <div className="space-y-1">
-    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</label>
+  <div className="space-y-1.5">
+    <label className="text-xs font-semibold text-muted-foreground">{label}</label>
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
@@ -575,8 +575,8 @@ const FilterSelect = ({
 );
 
 const NumberField = ({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) => (
-  <div className="space-y-1">
-    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</label>
+  <div className="space-y-1.5">
+    <label className="text-xs font-semibold text-muted-foreground">{label}</label>
     <input
       type="number"
       min={1}
@@ -588,8 +588,8 @@ const NumberField = ({ label, value, onChange }: { label: string; value: number;
 );
 
 const TimeField = ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
-  <div className="space-y-1">
-    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</label>
+  <div className="space-y-1.5">
+    <label className="text-xs font-semibold text-muted-foreground">{label}</label>
     <input
       type="time"
       value={value?.slice(0, 5) || ""}
@@ -621,15 +621,15 @@ const MetricCard = ({
   }[tone];
 
   return (
-    <Card>
-      <CardContent className="flex items-center gap-4 pt-6">
+    <Card className="border-border shadow-[var(--shadow-card)]">
+      <CardContent className="flex min-h-[124px] items-center gap-4 p-5">
         <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg", toneClass)}>
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{title}</p>
-          <p className="truncate text-2xl font-black text-foreground">{value}</p>
-          {detail ? <p className="text-xs font-semibold text-muted-foreground">{detail}</p> : null}
+          <p className="text-xs font-semibold text-muted-foreground">{title}</p>
+          <p className="truncate text-2xl font-semibold text-foreground">{value}</p>
+          {detail ? <p className="text-xs font-medium text-muted-foreground">{detail}</p> : null}
         </div>
       </CardContent>
     </Card>
