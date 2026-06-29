@@ -7,7 +7,8 @@ import { FileDown, FileSpreadsheet, FileText, Calendar as CalendarIcon, Plus } f
 import { CalendarView } from '@/components/calendar/CalendarView';
 import { AgendaModal } from '@/components/agenda/AgendaModal';
 import { AgendaDetailModal } from '@/components/agenda/AgendaDetailModal';
-import { getAgendas, saveAgenda } from '@/services/agenda.service';
+import { AgendaParentFilter } from '@/components/agenda/AgendaParentFilter';
+import { getAgendasForParent } from '@/services/agenda.service';
 import { exportCalendarData } from '@/services/export.service';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -19,8 +20,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Agenda } from '@/types/agenda';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function CalendarPage() {
+  const { user } = useAuth() as any;
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAgenda, setSelectedAgenda] = useState<Agenda | null>(null);
@@ -28,11 +31,30 @@ export default function CalendarPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   // Diangkat ke sini agar subtitle ikut bulan yang sedang ditampilkan
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
+  const isAllTeamSelected = selectedUserId === 'all';
+  const effectiveUserId = selectedUserId && selectedUserId !== 'all' ? selectedUserId : user?.id;
 
   // ── Fetch agendas ─────────────────────────────────────────────────────────
   const { data: agendas = [], isLoading } = useQuery({
-    queryKey: ['agendas'],
-    queryFn: getAgendas,
+    queryKey: ['agendas', user?.id, selectedUserId || user?.id, selectedOfficeId || 'all_offices'],
+    queryFn: () => getAgendasForParent(user.id, selectedUserId || user.id, selectedOfficeId),
+    enabled: !!user?.id,
+  });
+
+  const { data: activeProfile } = useQuery({
+    queryKey: ['calendar-profile', effectiveUserId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('id', effectiveUserId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!effectiveUserId,
   });
 
   // ── Realtime sync ─────────────────────────────────────────────────────────
@@ -167,18 +189,18 @@ export default function CalendarPage() {
     setIsModalOpen(true);
   };
 
-  const userName = useMemo(() => {
-    // @ts-ignore
-    return agendas[0]?.profiles?.fullName ?? 'User';
-  }, [agendas]);
+  const userName = isAllTeamSelected
+    ? 'Seluruh Anggota Tim'
+    : activeProfile?.full_name ?? agendas.find(a => a.createdBy === effectiveUserId)?.profiles?.fullName ?? 'User';
 
   const monthlyCount = useMemo(() => {
     return agendas.filter(a => {
       if (!a.startTime) return false;
+      if (!isAllTeamSelected && effectiveUserId && a.createdBy !== effectiveUserId) return false;
       const d = new Date(a.startTime);
       return d.getFullYear() === currentMonth.getFullYear() && d.getMonth() === currentMonth.getMonth();
     }).length;
-  }, [agendas, currentMonth]);
+  }, [agendas, currentMonth, effectiveUserId, isAllTeamSelected]);
 
   if (isLoading) return (
     <div className="p-8">
@@ -234,6 +256,13 @@ export default function CalendarPage() {
       </div>
 
       {/* ── Calendar ─────────────────────────────────────────────────────────── */}
+      <AgendaParentFilter
+        selectedUserId={selectedUserId || user?.id || null}
+        onUserSelect={setSelectedUserId}
+        selectedOfficeId={selectedOfficeId}
+        onOfficeSelect={setSelectedOfficeId}
+      />
+
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
         <CalendarView
           agendas={agendas}

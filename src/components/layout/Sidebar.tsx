@@ -6,15 +6,15 @@ import {
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
   GitMerge, Monitor, Briefcase, History, BarChart3, Network,
-  SlidersHorizontal,
+  SlidersHorizontal, BookOpenText, FileCheck2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { supabase } from "@/lib/supabase"
 import { getCurrentUser } from '@/services/user-ui.service'
-import { suratService } from '@/services/surat.service'
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
+import { useAttention } from '@/providers/AttentionProvider'
 
 interface SidebarProps {
   collapsed: boolean
@@ -26,14 +26,22 @@ interface SidebarProps {
 export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: SidebarProps) => {
   const location = useLocation()
   const queryClient = useQueryClient()
+  const { state: attentionState, refetch: refetchAttention } = useAttention()
   
   const [user, setUser] = useState<User | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [inboxCount, setInboxCount] = useState<number>(0)
   const [isSuratOpen, setIsSuratOpen] = useState(false)
   const [isMasterOpen, setIsMasterOpen] = useState(false)
 
-  const [monitoringBadge, setMonitoringBadge] = useState(0)
+  const inboxCount = attentionState.inboxCount
+  const canAccessRecommendation = (() => {
+    const departmentCode = String((user as any)?.departmentCode || (user as any)?.master_departments?.code || '').trim().toUpperCase()
+    const departmentName = String(user?.departmentName || (user as any)?.master_departments?.name || '').trim().toLowerCase()
+    return departmentCode === 'PBO' || departmentName === 'pengembangan organisasi' || departmentName === 'po'
+  })()
+  const recommendationCount = canAccessRecommendation ? attentionState.recommendationCount : 0
+  const monitoringBadge = attentionState.monitoringCount
+  const suratAttentionCount = inboxCount + recommendationCount
   const isUserAdmin = user?.role === 'admin'
 
   useEffect(() => {
@@ -44,11 +52,11 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           .update({ creator_seen_at: new Date().toISOString() })
           .eq('created_by', user.id)
           .eq('status', 'DONE')
-        setMonitoringBadge(0)
+        refetchAttention()
       }, 800)
       return () => clearTimeout(t)
     }
-  }, [location.pathname, user?.id])
+  }, [location.pathname, refetchAttention, user?.id])
 
   useEffect(() => {
     if (collapsed) return
@@ -67,45 +75,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
     }
     initSidebar()
   }, [])
-
-  useEffect(() => {
-    if (!user?.id) return
-    const fetchInboxCount = async () => {
-      try {
-        const rows = await suratService.getMyInbox(user.id)
-        setInboxCount(rows.length)
-      } catch (error) {
-        console.error('Failed to load sidebar inbox count:', error)
-        setInboxCount(0)
-      }
-    }
-    fetchInboxCount()
-    const channel = supabase.channel(`sidebar-realtime:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_signatures' }, () => fetchInboxCount())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_registrasi' }, () => fetchInboxCount())
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [user?.id])
-
-  useEffect(() => {
-    if (!user?.id) return
-    const fetchMonitoringBadge = async () => {
-      const { data: surats } = await supabase
-        .from('surat_registrasi')
-        .select('id, updated_at, creator_seen_at')
-        .eq('created_by', user.id)
-        .eq('status', 'DONE')
-      const unseen = (surats ?? []).filter((s: any) =>
-        !s.creator_seen_at || new Date(s.updated_at) > new Date(s.creator_seen_at)
-      )
-      setMonitoringBadge(unseen.length)
-    }
-    fetchMonitoringBadge()
-    const ch = supabase.channel(`sidebar-monitoring-badge:${user.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'surat_registrasi' }, fetchMonitoringBadge)
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [user?.id])
 
   const handleLogout = async () => {
     if (isLoggingOut) return
@@ -165,6 +134,11 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               {label === 'Persetujuan' && inboxCount > 0 && (
                 <span className="ml-2 shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
                   {inboxCount > 99 ? '99+' : inboxCount}
+                </span>
+              )}
+              {label === 'Rekomendasi' && recommendationCount > 0 && (
+                <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {recommendationCount > 99 ? '99+' : recommendationCount}
                 </span>
               )}
               {label === 'Status Pengajuan' && monitoringBadge > 0 && (
@@ -264,7 +238,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               <div className={cn("flex items-center min-w-0", isDesktopCollapsed ? "gap-0" : "gap-3")}>
                 <div className="relative shrink-0">
                   <Mail className="w-5 h-5" />
-                  {!isMobile && collapsed && inboxCount > 0 && (
+                  {!isMobile && collapsed && suratAttentionCount > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -275,7 +249,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               </div>
               {(isMobile || !collapsed) && (
                 <div className="flex items-center gap-2 shrink-0">
-                  {inboxCount > 0 && !isSuratOpen && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+                  {suratAttentionCount > 0 && !isSuratOpen && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isSuratOpen && "rotate-180")} />
                 </div>
               )}
@@ -290,6 +264,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 >
                   {renderNavLink('/surat/registrasi', 'Buat Baru', FileSignature, true)}
                   {renderNavLink('/surat/inbox', 'Persetujuan', Inbox, true)}
+                  {canAccessRecommendation && renderNavLink('/surat/rekomendasi', 'Rekomendasi', FileCheck2, true)}
                   {renderNavLink('/surat/monitoring', 'Status Pengajuan', SearchCheck, true)}
                   {renderNavLink('/surat/riwayat', 'Riwayat Terlibat', History, true)}
                 </motion.div>
@@ -349,7 +324,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         )}
 
         {/* Settings */}
-        <div className="pt-2">
+        <div className="space-y-1 pt-2">
+          {renderNavLink('/docs', 'Dokumentasi', BookOpenText)}
           {renderNavLink('/settings', 'Pengaturan', Settings)}
         </div>
       </nav>

@@ -5,24 +5,21 @@ import {
   Search, AlertCircle, Loader2, 
   MessageSquare, Info, Filter, History, FileText, Download, Calendar, User, Clock
 } from 'lucide-react';
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription 
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { toast } from "sonner";
 
 // Import Komponen Lokal
 import { SuratSummaryCards } from '@/components/dashboard/SuratSummaryCards';
-import { documentPreviewService } from "@/services/document-preview.service";
+import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
 
 const MonitoringAdminPage = () => {
   // 1. STATES
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const { openPdf, openFile, isOpening } = useDocumentOpener();
   const [selectedSurat, setSelectedSurat] = useState<any | null>(null);
 
   // 2. FETCH DATA
@@ -48,32 +45,7 @@ const MonitoringAdminPage = () => {
     refetchInterval: 10000, 
   });
 
-  // 3. LOGIKA PREVIEW
-  const handleOpenGeneratedPdf = async (suratId?: string | null) => {
-    if (!suratId) return;
-
-    setPreviewingId(suratId);
-    try {
-      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
-      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuka PDF.");
-    } finally {
-      setPreviewingId(null);
-    }
-  };
-
-  const handleOpenStoredFile = async (url?: string | null, suratId?: string | null) => {
-    if (!url || !suratId) return;
-
-    try {
-      await documentPreviewService.openStoredFileInNewTab(suratId, url);
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuka file.");
-    }
-  };
-
-  // 4. HELPER FORMAT TANGGAL & WAKTU
+  // 3. HELPER FORMAT TANGGAL & WAKTU
   const formatFullDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
       year: 'numeric', month: 'long', day: 'numeric',
@@ -128,20 +100,6 @@ const MonitoringAdminPage = () => {
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
-      <Dialog open={!!previewingId}>
-        <DialogContent className="max-w-sm text-center">
-          <DialogHeader>
-            <DialogTitle className="flex flex-col items-center gap-3 text-base font-semibold">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              PDF sedang dibuat
-            </DialogTitle>
-            <DialogDescription>
-              Dokumen sedang diproses di background. PDF akan terbuka otomatis saat siap.
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
-      
       {/* HEADER SECTION */}
       <div className="sigap-panel sigap-panel-accent flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="space-y-2">
@@ -329,12 +287,12 @@ const MonitoringAdminPage = () => {
                 </div>
               </div>
               <button 
-                onClick={() => handleOpenGeneratedPdf(selectedSurat?.id)}
-                disabled={previewingId === selectedSurat?.id}
+                onClick={() => selectedSurat?.id && void openPdf(selectedSurat.id, documentOperationKey.pdf(selectedSurat.id, "admin"))}
+                disabled={!selectedSurat?.id || isOpening(documentOperationKey.pdf(selectedSurat.id, "admin"))}
                 className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary transition-all hover:bg-primary hover:text-white"
               >
-                {previewingId === selectedSurat?.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                <span className="text-xs font-semibold">Unduh File</span>
+                {selectedSurat?.id && isOpening(documentOperationKey.pdf(selectedSurat.id, "admin")) ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                <span className="text-xs font-semibold">{selectedSurat?.id && isOpening(documentOperationKey.pdf(selectedSurat.id, "admin")) ? "Menyiapkan PDF" : "Unduh File"}</span>
               </button>
             </div>
           </DialogHeader>
@@ -344,16 +302,22 @@ const MonitoringAdminPage = () => {
               <div className="mb-6 rounded-lg border border-border bg-muted/10 p-4">
                 <p className="mb-3 text-sm font-semibold text-foreground">Lampiran</p>
                 <div className="flex flex-wrap gap-2">
-                  {getAttachments(selectedSurat).map((attachment: any, index: number) => (
-                    <button
-                      key={attachment.id ?? attachment.file_url}
-                      type="button"
-                      onClick={() => documentPreviewService.openStoredFileInNewTab(selectedSurat.id, attachment.file_url).catch((error: any) => toast.error(error.message || 'Gagal membuka lampiran.'))}
-                      className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-primary hover:bg-muted"
-                    >
-                      <Download size={12} /> Lampiran {index + 1}
-                    </button>
-                  ))}
+                  {getAttachments(selectedSurat).map((attachment: any, index: number) => {
+                    const attachmentKey = documentOperationKey.file(selectedSurat.id, String(attachment.id ?? attachment.file_url ?? index));
+                    const opening = isOpening(attachmentKey);
+                    return (
+                      <button
+                        key={attachment.id ?? attachment.file_url}
+                        type="button"
+                        disabled={opening || !attachment.file_url}
+                        onClick={() => void openFile(selectedSurat.id, attachment.file_url, attachmentKey)}
+                        className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-primary hover:bg-muted disabled:cursor-wait disabled:opacity-70"
+                      >
+                        {opening ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                        {opening ? "Membuka lampiran" : `Lampiran ${index + 1}`}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -401,15 +365,21 @@ const MonitoringAdminPage = () => {
                         </div>
                       </div>
 
-                      {(sig.pdf_path_snap || sig.file_path_snap) && (
-                        <button 
-                          onClick={() => handleOpenStoredFile(sig.pdf_path_snap || sig.file_path_snap, selectedSurat.id)}
-                          className="flex items-center gap-2 px-2 py-1 bg-background border border-border rounded text-primary hover:bg-muted transition-colors"
-                        >
-                          <Download size={10} />
-                          <span className="text-xs font-semibold">Snap</span>
-                        </button>
-                      )}
+                      {(sig.pdf_path_snap || sig.file_path_snap) && (() => {
+                        const snapPath = sig.pdf_path_snap || sig.file_path_snap;
+                        const snapKey = documentOperationKey.file(selectedSurat.id, String(sig.id || snapPath));
+                        const opening = isOpening(snapKey);
+                        return (
+                          <button 
+                            disabled={opening}
+                            onClick={() => void openFile(selectedSurat.id, snapPath, snapKey)}
+                            className="flex items-center gap-2 px-2 py-1 bg-background border border-border rounded text-primary hover:bg-muted transition-colors disabled:cursor-wait disabled:opacity-70"
+                          >
+                            {opening ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                            <span className="text-xs font-semibold">{opening ? "Membuka" : "Snap"}</span>
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     {sig.catatan && (

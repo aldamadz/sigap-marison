@@ -7,6 +7,9 @@ services:
     container_name: agenda-pdf-worker
     restart: always
     command: ["node", "pdf-worker.mjs"]
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       NODE_ENV: production
       SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"

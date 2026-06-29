@@ -8,9 +8,8 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 
-// IMPORT KOMPONEN SYNC (Tetap statis karena global state)
-import { RealtimeSync } from "@/providers/RealtimeSync"; 
 import { UserThemeSync } from "@/providers/UserThemeSync";
+import { AttentionProvider } from "@/providers/AttentionProvider";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
@@ -21,6 +20,7 @@ const AgendaPage = lazy(() => import("@/pages/agenda/AgendaPage"));
 const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
 const ActivityLogsPage = lazy(() => import("@/pages/activity-logs/ActivityLogsPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const PublicDocsPage = lazy(() => import("@/pages/docs/PublicDocsPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 // LAZY IMPORT - SURAT & MONITORING
@@ -28,6 +28,7 @@ const SuratPage = lazy(() => import("@/pages/surat/SuratPage"));
 const InboxPage = lazy(() => import("@/pages/surat/InboxPage"));
 const MonitoringPage = lazy(() => import("@/pages/surat/MonitoringPage"));
 const RiwayatKeterlibatanPage = lazy(() => import("@/pages/surat/RiwayatKeterlibatanPage"));
+const RecommendationTasksPage = lazy(() => import("@/pages/surat/RecommendationTasksPage"));
 
 // LAZY IMPORT - ADMIN MANAGEMENT
 const UserManagementPage = lazy(() => import("@/pages/admin/UserManagementPage"));
@@ -161,70 +162,78 @@ const App = () => {
   if (initializing) return <PageLoader />;
 
   const isAuth = !!session;
+  const appShell = (
+    <>
+      {isAuth && <UserThemeSync />}
+      {isAuth && <RouteDataRefresh />}
+
+      <Toaster />
+      <Sonner position="top-right" closeButton />
+
+      <Suspense fallback={<PageLoader />}>
+        <Routes location={location}>
+        {/* PUBLIC ROUTE */}
+        <Route
+          path="/"
+          element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        />
+        <Route path="/docs" element={<PublicDocsPage />} />
+        <Route path="/docs/:topicSlug" element={<PublicDocsPage />} />
+        <Route path="/docs/:topicSlug/:sectionSlug" element={<PublicDocsPage />} />
+
+        {/* PROTECTED ROUTES */}
+        <Route
+          element={isAuth ? <AppLayout /> : <Navigate to="/" replace />}
+        >
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/agenda" element={<AgendaPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
+          <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
+          <Route path="/settings" element={<SettingsPage />} />
+
+          {/* SURAT MODULE */}
+          <Route path="/surat/registrasi" element={<SuratPage />} />
+          <Route path="/surat/inbox" element={<InboxPage />} />
+          <Route path="/surat/rekomendasi" element={<RecommendationTasksPage />} />
+          <Route path="/surat/monitoring" element={<MonitoringPage />} />
+          <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
+
+          {/* ADMIN MODULE */}
+          <Route path="/admin/users" element={<UserManagementPage />} />
+          <Route path="/admin/users/hierarchy" element={<OrganizationHierarchyPage />} />
+          <Route path="/admin/departments" element={<DepartmentManagementPage />} />
+          <Route path="/admin/entities" element={<EntityManagementPage />} />
+          <Route path="/admin/forms" element={<Navigate to="/admin/configuration/forms" replace />} />
+          <Route path="/admin/letter-types" element={<LetterTypeManagementPage />} />
+          <Route path="/admin/offices" element={<OfficeManagementPage />} />
+          <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/workflows" replace />} />
+          <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
+          <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
+          <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
+          <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
+            <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
+            <Route path="forms" element={<FormManagementPage embedded />} />
+            <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
+            <Route path="form-usages" element={<FormUsageManagementPage />} />
+            <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
+            <Route path="numbering" element={<LetterNumberCounterPage />} />
+            <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
+            <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
+          </Route>
+        </Route>
+
+        <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </>
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppDialogProvider>
-          {isAuth && <RealtimeSync />}
-          {isAuth && <UserThemeSync />}
-          {isAuth && <RouteDataRefresh />}
-          
-          <Toaster />
-          <Sonner position="top-right" closeButton />
-
-          <Suspense fallback={<PageLoader />}>
-            <Routes location={location}>
-            {/* PUBLIC ROUTE */}
-            <Route 
-              path="/" 
-              element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />} 
-            />
-
-            {/* PROTECTED ROUTES */}
-            <Route 
-              element={isAuth ? <AppLayout /> : <Navigate to="/" replace />}
-            >
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/agenda" element={<AgendaPage />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
-              <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
-              <Route path="/settings" element={<SettingsPage />} />
-              
-              {/* SURAT MODULE */}
-              <Route path="/surat/registrasi" element={<SuratPage />} />
-              <Route path="/surat/inbox" element={<InboxPage />} />
-              <Route path="/surat/monitoring" element={<MonitoringPage />} />
-              <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
-              
-              {/* ADMIN MODULE */}
-              <Route path="/admin/users" element={<UserManagementPage />} />
-              <Route path="/admin/users/hierarchy" element={<OrganizationHierarchyPage />} />
-              <Route path="/admin/departments" element={<DepartmentManagementPage />} />
-              <Route path="/admin/entities" element={<EntityManagementPage />} />
-              <Route path="/admin/forms" element={<Navigate to="/admin/configuration/forms" replace />} />
-              <Route path="/admin/letter-types" element={<LetterTypeManagementPage />} />
-              <Route path="/admin/offices" element={<OfficeManagementPage />} />
-              <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/workflows" replace />} />
-              <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
-              <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
-              <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
-              <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
-                <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
-                <Route path="forms" element={<FormManagementPage embedded />} />
-                <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
-                <Route path="form-usages" element={<FormUsageManagementPage />} />
-                <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
-                <Route path="numbering" element={<LetterNumberCounterPage />} />
-                <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
-                <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
-              </Route>
-            </Route>
-
-            <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+          {isAuth ? <AttentionProvider>{appShell}</AttentionProvider> : appShell}
         </AppDialogProvider>
       </TooltipProvider>
     </QueryClientProvider>

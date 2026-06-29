@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
 import { notificationService } from '@/services/notification.service'
 import { useAuth } from './use-auth'
+import { useAttention } from '@/providers/AttentionProvider'
 
 export interface Notification {
   id: string
@@ -17,6 +17,7 @@ export interface Notification {
 
 export function useNotifications() {
   const { user } = useAuth()
+  const { eventVersion, refetch: refetchAttention } = useAttention()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -41,6 +42,7 @@ export function useNotifications() {
   const markAsRead = useCallback(async (id: string) => {
     try {
       await notificationService.markAsRead(id)
+      await refetchAttention()
       await fetchNotifications() // Refresh
     } catch (error) {
       console.error('Failed to mark as read:', error)
@@ -51,39 +53,19 @@ export function useNotifications() {
   const markAllAsRead = useCallback(async () => {
     try {
       await notificationService.markAllAsRead()
+      await refetchAttention()
       await fetchNotifications() // Refresh
     } catch (error) {
       console.error('Failed to mark all as read:', error)
     }
   }, [fetchNotifications])
 
-  // Initial fetch dan realtime subscription
+  // Initial fetch dan sinkronisasi dari AttentionProvider (SSE)
   useEffect(() => {
     if (!user) return
 
     fetchNotifications()
-    
-    // Subscribe realtime ke notifikasi
-    const channel = supabase
-      .channel(`notifications-${user.id}`)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        }, 
-        (payload) => {
-          // Refresh saat ada notifikasi baru
-          fetchNotifications()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user, fetchNotifications])
+  }, [eventVersion, user, fetchNotifications])
 
   return {
     notifications,

@@ -29,21 +29,20 @@ import {
   AlertTriangle,
   FileCheck2
 } from "lucide-react";
-import { suratService } from "@/services/surat.service";
+import { suratService, type LinkedSuratDocument } from "@/services/surat.service";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase } from "@/lib/supabase";
-import { documentPreviewService } from "@/services/document-preview.service";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea"; 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
 import {
   Carousel,
   CarouselContent,
@@ -53,6 +52,7 @@ import {
 } from "@/components/ui/carousel";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 
 export default function InboxPage() {
   const queryClient = useQueryClient();
@@ -65,8 +65,8 @@ export default function InboxPage() {
   const [actionFilter, setActionFilter] = useState("all");
   const [taskSwitcherOpen, setTaskSwitcherOpen] = useState(false);
 
-  // State untuk Preview & Notes
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  // State untuk dokumen & notes
+  const { openPdf, openFile, isOpening } = useDocumentOpener();
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
   const [allocationUnits, setAllocationUnits] = useState<Record<string, Array<{ value: string; label: string; raw?: any }>>>({});
   const [allocationProjectSelected, setAllocationProjectSelected] = useState<Record<string, any>>({});
@@ -175,6 +175,14 @@ export default function InboxPage() {
 
   const requestedTaskId = searchParams.get("task");
   const selectedItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;
+  const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
+
+  const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+    queryKey: ["surat-linked-documents", selectedSuratId],
+    queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
+    enabled: Boolean(selectedSuratId),
+    staleTime: 15000,
+  });
 
   useEffect(() => {
     selectedItemRef.current = selectedItem;
@@ -198,6 +206,7 @@ export default function InboxPage() {
       realtimeRefreshTimerRef.current = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["surat-inbox"] });
         queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] });
+        queryClient.invalidateQueries({ queryKey: ["surat-linked-documents"] });
       }, 700);
     };
 
@@ -247,6 +256,13 @@ export default function InboxPage() {
         }
         scheduleInboxRefresh();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_linked_documents" }, (payload: any) => {
+        const row = payload.new || payload.old || {};
+        if (isActiveSurat(row.parent_surat_id)) {
+          showRealtimeToast("linked-documents-updated", "Dokumen rekomendasi diperbarui");
+        }
+        scheduleInboxRefresh();
+      })
       .subscribe();
 
     return () => {
@@ -255,8 +271,13 @@ export default function InboxPage() {
     };
   }, [currentUser?.id, queryClient]);
 
-  const isUnitAllocationRequired = (item: any) =>
-    item.requires_unit_allocation === true && item.surat_registrasi?.form_input_data?.request_mode === "unit";
+  const isUnitAllocationRequired = (item: any) => {
+    const input = item.surat_registrasi?.form_input_data || {};
+    const category = String(input.request_category || "").trim();
+    const mode = String(input.request_mode || "").trim();
+    const isUnitRequest = category ? category === "unit" : mode === "unit";
+    return item.requires_unit_allocation === true && isUnitRequest;
+  };
 
   const getRequestedUnitCount = (item: any) =>
     Number(item.surat_registrasi?.form_input_data?.requested_unit_count || 0);
@@ -370,6 +391,10 @@ const handleApprove = async (item: any) => {
   }
 
   try {
+    const blockers = getApprovalBlockers(item);
+    if (blockers.length > 0) {
+      throw new Error(`Belum siap: ${blockers.join(", ")}.`);
+    }
     const note = notes[item.id] || "";
     const selectedUnits = getSelectedAllocationUnits(item);
     const selectedProject = getAllocationProject(item);
@@ -662,30 +687,6 @@ const handleApprove = async (item: any) => {
     }
   };
 
-  const openPreview = async (suratId: string, fallbackUrl: string) => {
-    // Ambil file terbaru agar preview tidak menampilkan versi tanda tangan lama.
-    if (!fallbackUrl) return toast.error("File dokumen belum tersedia.");
-    setPreviewingId(suratId);
-    
-    try {
-      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
-      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuka PDF.");
-    } finally {
-      setPreviewingId(null);
-    }
-  };
-
-  const openLampiran = async (suratId: string, url: string) => {
-    if (!url) return;
-    try {
-      await documentPreviewService.openStoredFileInNewTab(suratId, url);
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuka lampiran.");
-    }
-  };
-
   const getAttachments = (surat: any) => {
     const attachments = Array.isArray(surat?.surat_attachments) ? surat.surat_attachments : [];
     if (attachments.length > 0) return attachments;
@@ -732,42 +733,6 @@ const handleApprove = async (item: any) => {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return year + "-" + month + "-" + day;
-  };
-
-  const formatRequestCategory = (value: unknown) => {
-    const category = String(value || "").toLowerCase();
-    if (category === "asset") return "Aset";
-    if (category === "unit") return "Unit";
-    if (category === "non_unit") return "Non Unit";
-    return String(value || "-");
-  };
-
-  const formatSummaryValue = (value: unknown): string => {
-    if (value == null || value === "") return "-";
-    if (typeof value === "boolean") return value ? "Ya" : "Tidak";
-    if (typeof value === "string" || typeof value === "number") return String(value);
-    if (Array.isArray(value)) {
-      return value.map((entry: any) => typeof entry === "object" ? entry?.label || entry?.name || entry?.code || entry?.value : entry).filter(Boolean).join(", ");
-    }
-    if (typeof value === "object") {
-      const entry = value as Record<string, unknown>;
-      return String(entry.label || entry.name || entry.code || entry.value || "-");
-    }
-    return String(value);
-  };
-
-  const humanizeInputKey = (key: string) => {
-    const labels: Record<string, string> = {
-      catatan: "Catatan",
-      nama_barang: "Nama Barang",
-      sat: "Satuan",
-      jumlah: "Jumlah",
-      status: "Status",
-      keterangan: "Keterangan",
-      kode: "Kode",
-      requested_unit_count: "Jumlah Unit Diajukan",
-    };
-    return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   };
 
   const renderRequestSummary = (item: any) => {
@@ -1038,10 +1003,38 @@ const handleApprove = async (item: any) => {
     return { label: "Dalam SLA", tone: "safe", detail: formatMinutes(remaining) + " tersisa" };
   };
 
+  const getRecommendationRequirement = (item: any) => {
+    const input = item.surat_registrasi?.form_input_data || {};
+    if (input.requires_recommendation !== true) return null;
+    const config = item.surat_registrasi?.policy_snapshot?.recommendation_config || {};
+    return {
+      config,
+      requiredBeforeStep: Math.max(1, Number(config.required_before_step || 3)),
+    };
+  };
+
+  const getRecommendationDocuments = () =>
+    (linkedDocuments as LinkedSuratDocument[]).filter(document =>
+      document.link_type === "recommendation" && document.status === "active"
+    );
+
+  const isRecommendationDone = () =>
+    getRecommendationDocuments().some(document =>
+      ["DONE", "SELESAI", "COMPLETED"].includes(String(document.child_status || "").toUpperCase())
+    );
+
   const getApprovalBlockers = (item: any) => {
     const blockers: string[] = [];
     if (!isVerificationTask(item) && isWaitingVerification(item)) {
       blockers.push("Menunggu verifikasi tim pengecek");
+    }
+    const recommendation = getRecommendationRequirement(item);
+    if (
+      recommendation &&
+      Number(item.step_order || 0) >= recommendation.requiredBeforeStep &&
+      !isRecommendationDone()
+    ) {
+      blockers.push("Dokumen rekomendasi belum selesai");
     }
     if (shouldSignerInputStageData(item) && isUnitAllocationRequired(item)) {
       const selected = getSelectedAllocationUnits(item);
@@ -1137,15 +1130,128 @@ const handleApprove = async (item: any) => {
     );
   };
 
+  const renderRecommendationPanel = (item: any) => {
+    const recommendation = getRecommendationRequirement(item);
+    if (!recommendation) return null;
+
+    const docs = getRecommendationDocuments();
+    const done = isRecommendationDone();
+
+    return (
+      <section className={cn(
+        "sigap-panel",
+        done ? "border-emerald-500/30" : "border-amber-500/30"
+      )}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <FileCheck2 className={cn("h-5 w-5", done ? "text-emerald-600" : "text-amber-600")} />
+              <p className="text-sm font-semibold">Rekomendasi aset</p>
+              <Badge
+                variant="outline"
+                className={cn(
+                  done && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  !done && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                )}
+              >
+                {done ? "Selesai" : "Menunggu rekomendasi"}
+              </Badge>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              Nomor rekomendasi dibuat otomatis setelah pengajuan induk dikonfirmasi. Staff IT menyelesaikannya dari menu Rekomendasi.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {linkedDocumentsLoading && (
+            <div className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Memuat dokumen rekomendasi...
+            </div>
+          )}
+          {!linkedDocumentsLoading && docs.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+              Belum ada dokumen rekomendasi yang tertaut.
+            </div>
+          )}
+          {docs.map(document => {
+            const operationKey = documentOperationKey.pdf(document.child_surat_id, "linked");
+            const opening = isOpening(operationKey);
+
+            return (
+            <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="min-w-0">
+                <p className="truncate font-mono text-xs font-semibold text-primary">{document.child_no_surat || "Nomor diproses"}</p>
+                <p className="mt-1 truncate text-sm font-semibold">{document.child_judul_surat || "Dokumen rekomendasi"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Status {document.child_status || "-"}
+                  {document.child_created_at ? ` · ${new Date(document.child_created_at).toLocaleString("id-ID")}` : ""}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={opening || !document.child_surat_id}
+                onClick={() => void openPdf(document.child_surat_id, operationKey)}
+              >
+                {opening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                {opening ? "Menyiapkan PDF" : "Buka"}
+              </Button>
+            </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
   const renderDocumentsPanel = (item: any) => {
     const surat = item.surat_registrasi;
     const attachments = getAttachments(surat);
+    const documentKey = documentOperationKey.pdf(surat.id, "inbox");
+    const documentOpening = isOpening(documentKey);
     return (
       <section className="sigap-panel">
         <div className="mb-3 flex items-center gap-3"><Paperclip className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Dokumen dan lampiran</p><p className="text-xs text-muted-foreground">PDF digunakan untuk verifikasi visual bila diperlukan.</p></div></div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">Dokumen utama</p><p className="text-xs text-muted-foreground">PDF pengajuan dan tanda tangan terakhir</p></div><Button variant="outline" size="sm" disabled={previewingId === surat.id} onClick={() => openPreview(surat.id, surat.file_path)}>{previewingId === surat.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}Buka</Button></div>
-          {attachments.map((attachment: any, index: number) => <div key={attachment.id || attachment.file_url} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{attachment.file_name || "Lampiran " + (index + 1)}</p><p className="text-xs text-muted-foreground">{[attachment.requirement_label || attachment.stage || "Lampiran", attachment.file_size ? (attachment.file_size / 1024 / 1024).toFixed(2) + " MB" : null].filter(Boolean).join(" · ")}</p></div><Button variant="ghost" size="sm" onClick={() => openLampiran(surat.id, attachment.file_url)}><Eye className="mr-2 h-4 w-4" />Buka</Button></div>)}
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">Dokumen utama</p>
+              <p className="text-xs text-muted-foreground">PDF pengajuan dan tanda tangan terakhir</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={documentOpening || !surat.id}
+              onClick={() => void openPdf(surat.id, documentKey)}
+            >
+              {documentOpening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+              {documentOpening ? "Menyiapkan PDF" : "Buka"}
+            </Button>
+          </div>
+          {attachments.map((attachment: any, index: number) => {
+            const attachmentKey = documentOperationKey.file(surat.id, String(attachment.id || attachment.file_url || index));
+            const attachmentOpening = isOpening(attachmentKey);
+            return (
+              <div key={attachment.id || attachment.file_url} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{attachment.file_name || "Lampiran " + (index + 1)}</p>
+                  <p className="text-xs text-muted-foreground">{[attachment.requirement_label || attachment.stage || "Lampiran", attachment.file_size ? (attachment.file_size / 1024 / 1024).toFixed(2) + " MB" : null].filter(Boolean).join(" � ")}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={attachmentOpening || !attachment.file_url}
+                  onClick={() => void openFile(surat.id, attachment.file_url, attachmentKey)}
+                >
+                  {attachmentOpening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                  {attachmentOpening ? "Membuka" : "Buka"}
+                </Button>
+              </div>
+            );
+          })}
         </div>
       </section>
     );
@@ -1211,7 +1317,6 @@ const handleApprove = async (item: any) => {
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
-      <Dialog open={Boolean(previewingId)}><DialogContent className="max-w-sm text-center"><DialogHeader><DialogTitle className="flex flex-col items-center gap-3 text-base font-semibold"><Loader2 className="h-8 w-8 animate-spin text-primary" />PDF sedang dibuat</DialogTitle><DialogDescription>Dokumen diproses di background dan akan terbuka otomatis saat siap.</DialogDescription></DialogHeader></DialogContent></Dialog>
 
       <header className="sigap-panel sigap-panel-accent flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex items-center gap-3">
@@ -1306,7 +1411,7 @@ const handleApprove = async (item: any) => {
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{selectedItem.surat_registrasi.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{selectedItem.label_jabatan || selectedItem.role_name}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Verifikasi Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{selectedItem.surat_registrasi.judul_surat}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {new Date(selectedItem.surat_registrasi.created_at).toLocaleString("id-ID")}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-            <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+            <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">

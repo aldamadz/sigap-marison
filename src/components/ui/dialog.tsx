@@ -12,14 +12,23 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
+type DialogMotion = "default" | "docs";
+
+interface DialogOverlayProps
+  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay> {
+  motion?: DialogMotion;
+}
+
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+  DialogOverlayProps
+>(({ className, motion = "default", ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]",
+      motion === "default" && "app-dialog-overlay",
+      motion === "docs" && "docs-dialog-overlay",
       className,
     )}
     {...props}
@@ -27,28 +36,70 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+interface DialogContentProps
+  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  motion?: DialogMotion;
+  overlayClassName?: string;
+  accessibilityTitle?: string;
+  accessibilityDescription?: string;
+}
+
+const hasDialogSemanticChild = (children: React.ReactNode, displayName: string): boolean =>
+  React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) return false;
+    const type = child.type as { displayName?: string };
+    if (type.displayName === displayName) return true;
+    const nestedChildren = (child.props as { children?: React.ReactNode }).children;
+    return nestedChildren ? hasDialogSemanticChild(nestedChildren, displayName) : false;
+  });
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-4 shadow-[var(--shadow-elevated)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-98 data-[state=open]:zoom-in-98 sm:rounded-lg sm:p-5",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground opacity-80 ring-offset-background transition-colors data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:bg-accent hover:text-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+  DialogContentProps
+>(({
+  className,
+  children,
+  motion = "default",
+  overlayClassName,
+  accessibilityTitle = "Dialog",
+  accessibilityDescription = "Jendela dialog SIGAP.",
+  ...props
+}, ref) => {
+  const hasTitle = hasDialogSemanticChild(children, DialogPrimitive.Title.displayName);
+  const hasDescription = hasDialogSemanticChild(children, DialogPrimitive.Description.displayName);
+
+  return (
+    <DialogPortal>
+      <DialogOverlay motion={motion} className={overlayClassName} />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-lg gap-4 overflow-y-auto border bg-background p-4 shadow-[var(--shadow-elevated)]",
+          motion === "default" && "app-dialog-content",
+          motion === "docs" && "docs-dialog-content",
+          className,
+        )}
+        {...props}
+      >
+        {!hasTitle && (
+          <DialogPrimitive.Title className="sr-only">
+            {accessibilityTitle}
+          </DialogPrimitive.Title>
+        )}
+        {!hasDescription && (
+          <DialogPrimitive.Description className="sr-only">
+            {accessibilityDescription}
+          </DialogPrimitive.Description>
+        )}
+        {children}
+        <DialogPrimitive.Close className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground opacity-80 ring-offset-background transition-colors data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:bg-accent hover:text-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

@@ -1,0 +1,357 @@
+import { ExternalLink, FileCheck2, FileText, Image as ImageIcon, Loader2, Paperclip, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  formatLongDate,
+  formatRequestCategory,
+  formatSummaryValue,
+  getSafeExternalUrl,
+  humanizeInputKey,
+} from "@/components/surat/request-summary";
+
+export type RegistrationSummaryField = {
+  key: string;
+  label: string;
+  type?: string;
+  value: unknown;
+};
+
+export type RegistrationSummaryAttachment = {
+  id: string;
+  name: string;
+  type?: string | null;
+  size?: number | null;
+  label?: string | null;
+};
+
+export type RegistrationSummarySigner = {
+  step: number;
+  role: string;
+  name: string;
+  jobTitle?: string;
+};
+
+export type RegistrationSummaryData = {
+  noSurat: string;
+  title: string;
+  category: unknown;
+  usageName: string;
+  formName: string;
+  requesterName: string;
+  requesterJobTitle?: string;
+  departmentName: string;
+  officeName: string;
+  projectName?: string;
+  requestPlace: string;
+  requestDate: string;
+  fields: RegistrationSummaryField[];
+  attachments: RegistrationSummaryAttachment[];
+  signers: RegistrationSummarySigner[];
+  isRecommendation: boolean;
+};
+
+type Props = {
+  open: boolean;
+  data: RegistrationSummaryData;
+  submitting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+};
+
+const formatFileSize = (bytes?: number | null) => {
+  const size = Number(bytes || 0);
+  if (!Number.isFinite(size) || size <= 0) return "Ukuran tidak tersedia";
+  if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const asRows = (value: unknown) => Array.isArray(value)
+  ? value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+  : [];
+
+const AttachmentPreview = ({ row, index }: { row: Record<string, unknown>; index: number }) => {
+  const attachment = row.recommendation_attachment && typeof row.recommendation_attachment === "object"
+    ? row.recommendation_attachment as Record<string, unknown>
+    : null;
+  const imageUrl = String(attachment?.file_url || row.recommendation_attachment_url || "").trim();
+  const referenceUrl = getSafeExternalUrl(row.reference_link);
+
+  return (
+    <article className="overflow-hidden rounded-md border border-border bg-background">
+      <div className="grid gap-4 p-4 md:grid-cols-[160px_1fr]">
+        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md border border-border bg-muted/20">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={`Lampiran item rekomendasi ${index + 1}`}
+              className="h-full w-full object-contain"
+              loading="lazy"
+            />
+          ) : <ImageIcon className="h-7 w-7 text-muted-foreground" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground">Item {index + 1}</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{formatSummaryValue(row.nama_barang)}</p>
+          <dl className="mt-3 grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+            {[
+              ["Lokasi / PIC", row.lokasi_pic],
+              ["No. Registrasi", row.no_registrasi],
+              ["Kerusakan", row.kerusakan],
+              ["Rekomendasi", row.recommendation_action],
+              ["Uraian", row.uraian],
+              ["Keterangan", row.keterangan],
+            ].map(([label, value]) => (
+              <div key={String(label)}>
+                <dt className="text-muted-foreground">{String(label)}</dt>
+                <dd className="mt-0.5 whitespace-pre-wrap font-medium text-foreground">{formatSummaryValue(value)}</dd>
+              </div>
+            ))}
+          </dl>
+          {referenceUrl && (
+            <a
+              href={referenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex min-h-9 items-center gap-2 text-xs font-semibold text-primary underline-offset-4 hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Buka link referensi
+            </a>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+};
+
+const TableSummary = ({ field }: { field: RegistrationSummaryField }) => {
+  const rows = asRows(field.value);
+  if (rows.length === 0) return null;
+  if (field.key === "recommendation_items") {
+    return <div className="space-y-3">{rows.map((row, index) => <AttachmentPreview key={index} row={row} index={index} />)}</div>;
+  }
+  const excluded = new Set(["recommendation_attachment"]);
+  const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
+    .filter((key) => !excluded.has(key) && !key.startsWith("recommendation_attachment_") && rows.some((row) => formatSummaryValue(row[key]) !== "-"));
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full min-w-[640px] text-left text-xs">
+        <thead className="bg-muted/40 text-muted-foreground">
+          <tr><th className="px-3 py-2 text-center">No.</th>{columns.map((key) => <th key={key} className="px-3 py-2">{humanizeInputKey(key)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index} className="border-t border-border">
+              <td className="px-3 py-2 text-center tabular-nums">{index + 1}</td>
+              {columns.map((key) => <td key={key} className="max-w-64 whitespace-pre-wrap px-3 py-2 align-top">{formatSummaryValue(row[key])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export function RegistrationSummaryDocument({ data }: { data: RegistrationSummaryData }) {
+  return (
+    <div className="mx-auto max-w-5xl overflow-hidden rounded-md border border-border bg-background shadow-sm">
+      <header className="border-b-2 border-foreground px-5 py-6 text-center sm:px-8">
+        <img
+          src="/logo-marison-regency-group.png"
+          alt="Marison Regency Group"
+          className="mx-auto h-16 w-auto object-contain sm:h-20"
+          loading="lazy"
+        />
+        <h2 className="mt-5 text-lg font-semibold leading-snug text-foreground sm:text-xl">{data.title || "Tanpa judul"}</h2>
+        <p className="mt-2 break-words text-sm font-medium tabular-nums text-foreground">{data.noSurat || "Nomor belum tersedia"}</p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <Badge variant="outline">{formatRequestCategory(data.category)}</Badge>
+          {data.isRecommendation && <Badge>Dokumen Rekomendasi</Badge>}
+        </div>
+      </header>
+
+      <div className="space-y-6 p-4 sm:p-7">
+        <section>
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Identitas Dokumen</h3>
+          <dl className="grid overflow-hidden rounded-md border border-border sm:grid-cols-2">
+            {[
+              ["Pengaju", data.requesterName, data.requesterJobTitle],
+              ["Departemen", data.departmentName, data.officeName],
+              ["Form", data.formName, data.usageName],
+              ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, data.projectName || "Tanpa proyek"],
+            ].map(([label, value, detail]) => (
+              <div key={label} className="border-b border-border p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
+                <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                <dd className="mt-1 text-sm font-semibold text-foreground">{value || "-"}</dd>
+                <dd className="mt-1 text-xs text-muted-foreground">{detail || "-"}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        {data.fields.length > 0 && (
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground">Isi Dokumen</h3>
+            {data.fields.map((field) => field.type === "table" || Array.isArray(field.value) ? (
+              <div key={field.key} className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">{field.label}</p>
+                <TableSummary field={field} />
+              </div>
+            ) : (
+              <div key={field.key} className="rounded-md border border-border p-4">
+                <p className="text-xs font-medium text-muted-foreground">{field.label}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{formatSummaryValue(field.value)}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section className="grid gap-5 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Paperclip className="h-4 w-4 text-primary" /> Lampiran</h3>
+            <div className="space-y-2">
+              {data.attachments.length > 0 ? data.attachments.map((attachment) => (
+                <div key={attachment.id} className="flex items-center gap-3 rounded-md border border-border p-3">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-foreground">{attachment.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{attachment.label || attachment.type || "Lampiran"} - {formatFileSize(attachment.size)}</p>
+                  </div>
+                </div>
+              )) : <p className="rounded-md border border-dashed border-border p-4 text-xs text-muted-foreground">Tidak ada lampiran tambahan.</p>}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><UserRound className="h-4 w-4 text-primary" /> Penandatangan</h3>
+            <ol className="space-y-2">
+              {data.signers.map((signer) => (
+                <li key={signer.step} className="flex gap-3 rounded-md border border-border p-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{signer.step}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground">{signer.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{signer.jobTitle || signer.role}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{signer.role}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange, onConfirm }: Props) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next); }}>
+      <DialogContent className="flex max-h-[94dvh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100vw-2rem)]">
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4 text-left sm:px-7">
+          <div className="flex items-start gap-3 pr-8">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <FileCheck2 className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold sm:text-lg">Periksa sebelum didaftarkan</DialogTitle>
+              <DialogDescription className="mt-1 text-xs leading-relaxed sm:text-sm">
+                Pastikan isi dokumen, lampiran, dan penandatangan sudah sesuai.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/20 px-3 py-4 sm:px-6 sm:py-6">
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-md border border-border bg-background shadow-sm">
+            <header className="border-b-2 border-foreground px-5 py-6 text-center sm:px-8">
+              <img
+                src="/logo-marison-regency-group.png"
+                alt="Marison Regency Group"
+                className="mx-auto h-16 w-auto object-contain sm:h-20"
+                loading="lazy"
+              />
+              <h2 className="mt-5 text-lg font-semibold leading-snug text-foreground sm:text-xl">{data.title || "Tanpa judul"}</h2>
+              <p className="mt-2 break-words text-sm font-medium tabular-nums text-foreground">{data.noSurat || "Nomor belum tersedia"}</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <Badge variant="outline">{formatRequestCategory(data.category)}</Badge>
+                {data.isRecommendation && <Badge>Dokumen Rekomendasi</Badge>}
+              </div>
+            </header>
+
+            <div className="space-y-6 p-4 sm:p-7">
+              <section>
+                <h3 className="mb-3 text-sm font-semibold text-foreground">Identitas Dokumen</h3>
+                <dl className="grid overflow-hidden rounded-md border border-border sm:grid-cols-2">
+                  {[
+                    ["Pengaju", data.requesterName, data.requesterJobTitle],
+                    ["Departemen", data.departmentName, data.officeName],
+                    ["Form", data.formName, data.usageName],
+                    ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, data.projectName || "Tanpa proyek"],
+                  ].map(([label, value, detail]) => (
+                    <div key={label} className="border-b border-border p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
+                      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                      <dd className="mt-1 text-sm font-semibold text-foreground">{value || "-"}</dd>
+                      <dd className="mt-1 text-xs text-muted-foreground">{detail || "-"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+
+              {data.fields.length > 0 && (
+                <section className="space-y-4">
+                  <h3 className="text-sm font-semibold text-foreground">Isi Dokumen</h3>
+                  {data.fields.map((field) => field.type === "table" || Array.isArray(field.value) ? (
+                    <div key={field.key} className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground">{field.label}</p>
+                      <TableSummary field={field} />
+                    </div>
+                  ) : (
+                    <div key={field.key} className="rounded-md border border-border p-4">
+                      <p className="text-xs font-medium text-muted-foreground">{field.label}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{formatSummaryValue(field.value)}</p>
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              <section className="grid gap-5 lg:grid-cols-2">
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Paperclip className="h-4 w-4 text-primary" /> Lampiran</h3>
+                  <div className="space-y-2">
+                    {data.attachments.length > 0 ? data.attachments.map((attachment) => (
+                      <div key={attachment.id} className="flex items-center gap-3 rounded-md border border-border p-3">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0"><p className="truncate text-xs font-semibold text-foreground">{attachment.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{attachment.label || attachment.type || "Lampiran"} · {formatFileSize(attachment.size)}</p></div>
+                      </div>
+                    )) : <p className="rounded-md border border-dashed border-border p-4 text-xs text-muted-foreground">Tidak ada lampiran tambahan.</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><UserRound className="h-4 w-4 text-primary" /> Penandatangan</h3>
+                  <ol className="space-y-2">
+                    {data.signers.map((signer) => (
+                      <li key={signer.step} className="flex gap-3 rounded-md border border-border p-3">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{signer.step}</span>
+                        <div className="min-w-0"><p className="text-xs font-semibold text-foreground">{signer.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{signer.jobTitle || signer.role}</p><p className="mt-0.5 text-xs text-muted-foreground">{signer.role}</p></div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <footer className="shrink-0 border-t border-border bg-background px-4 py-3 sm:px-7 sm:py-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="min-h-11 sm:min-w-36" disabled={submitting} onClick={() => onOpenChange(false)}>Kembali Perbaiki</Button>
+            <Button type="button" className="min-h-11 sm:min-w-56" disabled={submitting} onClick={onConfirm}>
+              {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Mendaftarkan...</> : "Data Sudah Benar, Daftarkan"}
+            </Button>
+          </div>
+        </footer>
+      </DialogContent>
+    </Dialog>
+  );
+}

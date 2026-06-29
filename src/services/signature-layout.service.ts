@@ -94,6 +94,14 @@ export const parseSignatureRegion = (region: string): ParsedRange => {
 const formatRange = (startCol: number, startRow: number, endCol: number, endRow: number) =>
   `${numberToColumn(startCol)}${startRow}:${numberToColumn(endCol)}${endRow}`;
 
+const formatWorksheetPrintArea = (worksheet: ExcelJS.Worksheet, region: ParsedRange) =>
+  formatRange(
+    1,
+    1,
+    Math.max(worksheet.actualColumnCount || 0, region.endCol),
+    Math.max(worksheet.actualRowCount || 0, region.endRow)
+  );
+
 const topLeftCell = (range: string) => range.split(":")[0];
 
 const rangesOverlap = (left: ParsedRange, right: ParsedRange) =>
@@ -364,12 +372,7 @@ export const buildDynamicSignatureLayout = (
 
   if (config.preset === "pgd") {
     const positions = buildPgdSignatureLayout(worksheet, config, steps, region, baseStyle, options);
-    worksheet.pageSetup.printArea = formatRange(
-      1,
-      1,
-      Math.max(worksheet.columnCount, region.endCol),
-      Math.max(worksheet.rowCount, region.endRow)
-    );
+    worksheet.pageSetup.printArea = formatWorksheetPrintArea(worksheet, region);
     return positions;
   }
 
@@ -479,11 +482,6 @@ export const buildDynamicSignatureLayout = (
     });
   }
 
-  worksheet.pageSetup.printArea = formatRange(
-    1,
-    1,
-    Math.max(worksheet.columnCount, region.endCol),
-    Math.max(worksheet.rowCount, region.endRow)
-  );
+  worksheet.pageSetup.printArea = formatWorksheetPrintArea(worksheet, region);
   return positions;
 };

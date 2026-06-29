@@ -5,9 +5,55 @@ type PdfJobResponse = {
   jobId?: string;
   pdfUrl?: string;
   error?: string;
+  requestId?: string;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const normalizeJobResponse = (payload: Record<string, unknown>): PdfJobResponse => ({
+  status: payload.status as PdfJobResponse["status"],
+  jobId: String(payload.jobId || payload.job_id || "") || undefined,
+  pdfUrl: String(payload.pdfUrl || payload.pdf_url || "") || undefined,
+  error: String(payload.error || payload.error_message || "") || undefined,
+  requestId: String(payload.requestId || payload.request_id || "") || undefined,
+});
+
+const formatApiError = (payload: Record<string, unknown>, fallback: string, response?: Response) => {
+  const requestId = String(payload.requestId || payload.request_id || response?.headers.get("x-request-id") || "").trim();
+  const message = String(payload.error || fallback);
+  return requestId ? `${message} (ID: ${requestId})` : message;
+};
+
+const readJsonPayload = async (response: Response) => {
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Respons server tidak valid (HTTP ${response.status}).`);
+  }
+  return await response.json().catch(() => ({})) as Record<string, unknown>;
+};
+
+const openLoadingTab = () => {
+  const target = window.open("about:blank", "_blank");
+  if (!target) return null;
+  target.opener = null;
+  try {
+    target.document.title = "Menyiapkan dokumen - Marison SIGAP";
+    target.document.body.textContent = "Dokumen sedang disiapkan...";
+    target.document.body.style.fontFamily = "Arial, sans-serif";
+    target.document.body.style.padding = "32px";
+  } catch {
+    // Navigasi tetap dapat dilanjutkan meski browser membatasi akses ke tab sementara.
+  }
+  return target;
+};
+
+const navigatePreviewTab = (target: Window | null, url: string) => {
+  if (target && !target.closed) {
+    target.location.replace(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+};
 
 export const documentPreviewService = {
   async requestPdfJob(
@@ -21,16 +67,23 @@ export const documentPreviewService = {
     if (options.refresh) params.set("refresh", "1");
     if (options.signatureId) params.set("signature_id", options.signatureId);
     const query = params.toString() ? `?${params.toString()}` : "";
-    const response = await fetch(`/api/documents/${suratId}/pdf${query}`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload?.error || "Gagal membuat PDF dokumen.");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(`/api/documents/${suratId}/pdf${query}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      });
+      const payload = await readJsonPayload(response);
+      if (!response.ok) {
+        throw new Error(formatApiError(payload, "Gagal membuat PDF dokumen.", response));
+      }
+      const normalized = normalizeJobResponse(payload);
+      const valid = Boolean(normalized.status && (
+        normalized.jobId || normalized.pdfUrl || normalized.status === "failed"
+      ));
+      if (valid) return normalized;
+      if (attempt === 0) await sleep(250);
     }
-
-    return payload as PdfJobResponse;
+    throw new Error("Server tidak memberikan identitas job atau URL PDF.");
   },
 
   async getJobStatus(jobId: string): Promise<PdfJobResponse> {
@@ -41,12 +94,11 @@ export const documentPreviewService = {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
 
-    const payload = await response.json().catch(() => ({}));
+    const payload = await readJsonPayload(response);
     if (!response.ok) {
-      throw new Error(payload?.error || "Gagal membaca status PDF.");
+      throw new Error(formatApiError(payload, "Gagal membaca status PDF.", response));
     }
-
-    return payload as PdfJobResponse;
+    return normalizeJobResponse(payload);
   },
 
   async enqueuePdf(suratId: string, options: { refresh?: boolean; signatureId?: string | null } = {}) {
@@ -86,19 +138,56 @@ export const documentPreviewService = {
     window.open(pdfUrl, "_blank", "noopener,noreferrer");
   },
 
-  async openStoredFileInNewTab(suratId: string, path: string) {
+  async createStoredFileViewUrl(suratId: string, path: string) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Tidak terautentikasi");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch(`/api/documents/${suratId}/file-token?path=${encodeURIComponent(path)}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: "no-store",
+        });
+        const payload = await readJsonPayload(response);
+        if (!response.ok) {
+          const error = new Error(formatApiError(payload, "Gagal membuat token file.", response));
+          if (response.status < 500 || attempt > 0) throw error;
+        } else {
+          const viewUrl = String(payload.viewUrl || payload.view_url || "").trim();
+          if (viewUrl) return viewUrl;
+          if (attempt > 0) throw new Error("URL preview file tidak tersedia.");
+        }
+      } catch (error) {
+        if (attempt > 0) throw error;
+      }
+      await sleep(250);
+    }
+    throw new Error("Gagal membuat token file.");
+  },
 
-    const response = await fetch(`/api/documents/${suratId}/file-token?path=${encodeURIComponent(path)}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
+  async openStoredFileInNewTab(suratId: string, path: string) {
+    const target = openLoadingTab();
+    try {
+      const viewUrl = await this.createStoredFileViewUrl(suratId, path);
+      navigatePreviewTab(target, viewUrl);
+    } catch (error) {
+      target?.close();
+      throw error;
+    }
+  },
 
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.error || "Gagal membuat token file.");
-    if (!payload?.viewUrl) throw new Error("URL preview file tidak tersedia.");
-
-    window.open(payload.viewUrl, "_blank", "noopener,noreferrer");
+  async openGeneratedPdfInNewTab(
+    suratId: string,
+    options: { refresh?: boolean; signatureId?: string | null; pollIntervalMs?: number; timeoutMs?: number } = {}
+  ) {
+    const target = openLoadingTab();
+    try {
+      const pdfUrl = await this.getPdfUrl(suratId, options);
+      const viewUrl = await this.createStoredFileViewUrl(suratId, pdfUrl);
+      navigatePreviewTab(target, viewUrl);
+    } catch (error) {
+      target?.close();
+      throw error;
+    }
   },
 };

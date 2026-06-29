@@ -16,8 +16,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { documentPreviewService } from "@/services/document-preview.service";
-import { toast } from "sonner";
+import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
 import { EmptyState, EmptyList, ErrorState, EmptyGridSkeleton } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/Breadcrumbs';
 
@@ -89,7 +88,7 @@ const MonitoringPage = () => {
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? 'all');
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const { openPdf, openFile, isOpening } = useDocumentOpener();
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
 
@@ -117,28 +116,6 @@ const MonitoringPage = () => {
     },
     refetchInterval: 10_000,
   });
-
-  const handleOpenPreview = async (suratId: string, fallbackUrl: string) => {
-    if (!fallbackUrl) return toast.error("File dokumen belum tersedia.");
-    setPreviewingId(suratId);
-    try {
-      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
-      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuka PDF.");
-    } finally {
-      setPreviewingId(null);
-    }
-  };
-
-  const handleOpenStoredFile = async (suratId: string, path: string | null | undefined) => {
-    if (!path) return toast.error("File belum tersedia.");
-    try {
-      await documentPreviewService.openStoredFileInNewTab(suratId, path);
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuka file.");
-    }
-  };
 
   const getAttachments = (surat: any) => {
     const attachments = Array.isArray(surat?.surat_attachments) ? surat.surat_attachments : [];
@@ -173,20 +150,6 @@ const MonitoringPage = () => {
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
-      <Dialog open={!!previewingId}>
-        <DialogContent className="max-w-sm rounded-3xl text-center">
-          <DialogHeader>
-            <DialogTitle className="flex flex-col items-center gap-3 text-sm font-black uppercase">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              PDF sedang dibuat
-            </DialogTitle>
-            <DialogDescription>
-              Dokumen sedang diproses di background. PDF akan terbuka otomatis saat siap.
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
-
       {/* HEADER */}
       <div className="sigap-panel sigap-panel-accent flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="space-y-2">
@@ -349,12 +312,12 @@ const MonitoringPage = () => {
                       <span>Detail</span>
                     </button>
                     <button
-                      onClick={() => handleOpenPreview(surat.id, surat.file_path)}
-                      disabled={previewingId === surat.id}
+                      onClick={() => void openPdf(surat.id)}
+                      disabled={isOpening(documentOperationKey.pdf(surat.id))}
                       className="h-11 flex items-center justify-center gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-sm"
                     >
-                      {previewingId === surat.id ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
-                      <span>Preview</span>
+                      {isOpening(documentOperationKey.pdf(surat.id)) ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                      <span>{isOpening(documentOperationKey.pdf(surat.id)) ? "Menyiapkan" : "Preview"}</span>
                     </button>
                   </div>
                 </div>
@@ -401,41 +364,46 @@ const MonitoringPage = () => {
                   {selectedSurat?.file_path && (
                     <button
                       type="button"
-                      onClick={() => handleOpenPreview(selectedSurat.id, selectedSurat.file_path)}
+                      onClick={() => void openPdf(selectedSurat.id)}
+                      disabled={isOpening(documentOperationKey.pdf(selectedSurat.id))}
                       className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group"
                     >
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <FileCheck size={16} className="text-primary" />
+                        {isOpening(documentOperationKey.pdf(selectedSurat.id)) ? <Loader2 size={16} className="animate-spin text-primary" /> : <FileCheck size={16} className="text-primary" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-black uppercase text-foreground tracking-widest">Dokumen</p>
                         <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
-                          PDF Preview
+                          {isOpening(documentOperationKey.pdf(selectedSurat.id)) ? "Menyiapkan PDF..." : "PDF Preview"}
                         </p>
                       </div>
                       <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                     </button>
                   )}
 
-                  {getAttachments(selectedSurat).map((attachment: any, index: number) => (
+                  {getAttachments(selectedSurat).map((attachment: any, index: number) => {
+                    const fileKey = documentOperationKey.file(selectedSurat.id, String(attachment.id || index));
+                    return (
                     <button
                       key={attachment.id ?? attachment.file_url}
                       type="button"
-                      onClick={() => handleOpenStoredFile(selectedSurat.id, attachment.file_url)}
+                      onClick={() => void openFile(selectedSurat.id, attachment.file_url, fileKey)}
+                      disabled={isOpening(fileKey)}
                       className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group"
                     >
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <FileCheck size={16} className="text-primary" />
+                        {isOpening(fileKey) ? <Loader2 size={16} className="animate-spin text-primary" /> : <FileCheck size={16} className="text-primary" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-black uppercase text-foreground tracking-widest">Lampiran {index + 1}</p>
                         <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
-                          {attachment.file_name || attachment.file_url.split('/').pop()}
+                          {isOpening(fileKey) ? "Membuka lampiran..." : attachment.file_name || attachment.file_url.split('/').pop()}
                         </p>
                       </div>
                       <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

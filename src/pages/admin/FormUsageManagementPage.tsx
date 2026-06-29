@@ -17,6 +17,8 @@ type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type UsageStatus = "draft" | "active" | "archived";
 type RoleName = "membuat" | "memeriksa" | "menyetujui";
 type ActionType = "approval" | "unit_allocation";
+type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
+type CandidateSort = "name_asc" | "job_asc" | "office_asc";
 
 type Department = { id: string; name: string; code?: string | null };
 type Office = { id: string; name: string; code?: string | null; kedudukan?: string | null };
@@ -28,6 +30,7 @@ type RouteStep = {
   role_name: RoleName;
   label: string;
   action_type: ActionType;
+  candidate_scope: CandidateScope;
   signer_department_id: string;
   eligible_user_ids: string[];
   verifier_user_ids: string[];
@@ -90,6 +93,7 @@ const emptyStep = (stepOrder: number): RouteStep => ({
   role_name: stepOrder === 1 ? "membuat" : "menyetujui",
   label: stepOrder === 1 ? "Membuat" : `Penyetuju ${stepOrder}`,
   action_type: "approval",
+  candidate_scope: "manual",
   signer_department_id: "",
   eligible_user_ids: [],
   verifier_user_ids: [],
@@ -123,6 +127,17 @@ const requestCategoryLabel = (value?: string | null) => {
   return "Non Unit";
 };
 
+const candidateScopeLabel = (value?: string | null) => {
+  if (value === "request_office") return "Kantor pemohon";
+  if (value === "request_department") return "Departemen pemohon";
+  if (value === "branch_office_or_request_department") return "BM cabang / dept pusat";
+  if (value === "head_office") return "Kantor pusat";
+  if (value === "all_offices") return "Semua kantor";
+  return "Manual";
+};
+
+const isDynamicCandidateScope = (value?: CandidateScope | null) => Boolean(value && value !== "manual");
+
 export default function FormUsageManagementPage() {
   const { toast } = useToast();
   const appDialog = useAppDialog();
@@ -139,6 +154,9 @@ export default function FormUsageManagementPage() {
   const [query, setQuery] = useState("");
   const [formFilter, setFormFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [candidateSearch, setCandidateSearch] = useState<Record<number, string>>({});
+  const [candidateJobFilter, setCandidateJobFilter] = useState<Record<number, string>>({});
+  const [candidateSort, setCandidateSort] = useState<Record<number, CandidateSort>>({});
   const [verifierSearch, setVerifierSearch] = useState<Record<number, string>>({});
   const [open, setOpen] = useState(false);
   const [selectedUsageId, setSelectedUsageId] = useState<string | null>(null);
@@ -166,6 +184,7 @@ export default function FormUsageManagementPage() {
           form_usage_departments(department_id),
           form_usage_steps(
             id, step_order, role_name, label, action_type, signer_department_id,
+            candidate_scope,
             form_usage_step_users(user_id),
             form_usage_step_verifiers(user_id)
           ),
@@ -236,6 +255,7 @@ export default function FormUsageManagementPage() {
             role_name: (step.roleName || step.role_name || (index === 0 ? "membuat" : "menyetujui")) as RoleName,
             label: step.labelJabatan || step.jabatan || `Tahap ${index + 1}`,
             action_type: step.requires_unit_allocation ? "unit_allocation" : "approval",
+            candidate_scope: "manual",
             signer_department_id: "",
             eligible_user_ids: [],
             verifier_user_ids: [],
@@ -311,6 +331,7 @@ export default function FormUsageManagementPage() {
           role_name: step.role_name,
           label: step.label,
           action_type: step.action_type,
+          candidate_scope: step.candidate_scope || "manual",
           signer_department_id: step.signer_department_id || "",
           eligible_user_ids: (step.form_usage_step_users || []).map(item => item.user_id),
           verifier_user_ids: (step.form_usage_step_verifiers || []).map(item => item.user_id),
@@ -343,6 +364,7 @@ export default function FormUsageManagementPage() {
           role_name: step.role_name,
           label: step.label,
           action_type: step.action_type,
+          candidate_scope: "manual",
           signer_department_id: "",
           eligible_user_ids: [],
           verifier_user_ids: [],
@@ -399,10 +421,66 @@ export default function FormUsageManagementPage() {
 
   const officeMap = useMemo(() => new Map(offices.map(office => [office.id, office])), [offices]);
 
+  const headOfficeIds = useMemo(() => new Set(
+    offices
+      .filter(office => String(office.kedudukan || "").toLowerCase() === "pusat")
+      .map(office => office.id)
+  ), [offices]);
+
+  const getStepDepartmentUsers = (step: RouteStep) => {
+    if (step.signer_department_id) {
+      return profiles.filter(profile => profile.department_id === step.signer_department_id);
+    }
+    if (!isDynamicCandidateScope(step.candidate_scope)) return [];
+    if (step.candidate_scope === "head_office") {
+      return profiles.filter(profile => Boolean(profile.office_id && headOfficeIds.has(profile.office_id)));
+    }
+    return profiles;
+  };
+
+  const getJobTitleOptions = (users: Profile[]) =>
+    Array.from(new Set(
+      users
+        .map(profile => String(profile.job_title || "").trim())
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, "id"));
+
+  const getSignerCandidates = (
+    step: RouteStep,
+    searchValue = "",
+    jobFilter = "all",
+    sortValue: CandidateSort = "name_asc"
+  ) => {
+    const search = searchValue.trim().toLowerCase();
+    return getStepDepartmentUsers(step)
+      .filter(profile => {
+        const office = profile.office_id ? officeMap.get(profile.office_id) : null;
+        const jobTitle = String(profile.job_title || "").trim();
+        if (jobFilter !== "all" && jobTitle !== jobFilter) return false;
+        if (!search) return true;
+        return [
+          profile.full_name,
+          profile.job_title,
+          office?.name,
+          office?.code,
+        ].some(value => String(value || "").toLowerCase().includes(search));
+      })
+      .sort((a, b) => {
+        const officeA = a.office_id ? officeMap.get(a.office_id)?.name || "" : "";
+        const officeB = b.office_id ? officeMap.get(b.office_id)?.name || "" : "";
+        if (sortValue === "job_asc") {
+          return `${a.job_title || ""} ${a.full_name}`.localeCompare(`${b.job_title || ""} ${b.full_name}`, "id");
+        }
+        if (sortValue === "office_asc") {
+          return `${officeA} ${a.full_name}`.localeCompare(`${officeB} ${b.full_name}`, "id");
+        }
+        return String(a.full_name || "").localeCompare(String(b.full_name || ""), "id");
+      });
+  };
+
   const getVerifierCandidates = (step: RouteStep, searchValue = "") => {
     const search = searchValue.trim().toLowerCase();
-    return profiles.filter(profile => {
-      if (!step.signer_department_id || profile.department_id !== step.signer_department_id) return false;
+    return getStepDepartmentUsers(step).filter(profile => {
       if (formData.scope_type === "cabang" && !profile.office_id) return false;
       const office = profile.office_id ? officeMap.get(profile.office_id) : null;
       if (!search) return true;
@@ -492,10 +570,15 @@ export default function FormUsageManagementPage() {
     if (!formData.name.trim() || !formData.form_id) return "Nama kegunaan dan form wajib diisi.";
     if (formData.department_ids.length === 0) return "Pilih minimal satu departemen pengaju.";
     if (formData.steps.length < 2 || formData.steps.length > 8) return "Tahap approval harus berjumlah 2 sampai 8.";
-    const incompleteStep = formData.steps.find(step =>
-      !step.label.trim() || !step.signer_department_id || step.eligible_user_ids.length === 0
-    );
-    if (incompleteStep) return `Tahap ${incompleteStep.step_order} belum memiliki label, departemen, dan kandidat signer.`;
+    for (const step of formData.steps) {
+      const missing: string[] = [];
+      if (!step.label.trim()) missing.push("label tahap");
+      if (!isDynamicCandidateScope(step.candidate_scope) && !step.signer_department_id) {
+        missing.push("departemen penandatangan");
+      }
+      if (step.eligible_user_ids.length === 0) missing.push("kandidat signer");
+      if (missing.length > 0) return `Tahap ${step.step_order} belum memiliki ${missing.join(", ")}.`;
+    }
     if (formData.status === "active") {
       const selectedForm = forms.find(item => item.id === formData.form_id);
       const layout = selectedForm?.signature_layout;
@@ -533,6 +616,7 @@ export default function FormUsageManagementPage() {
           action_type: step.action_type,
           eligible_user_ids: step.eligible_user_ids,
           verifier_user_ids: step.verifier_user_ids,
+          candidate_scope: step.candidate_scope || "manual",
       }));
       const attachmentsPayload = formData.attachments
         .filter(rule => rule.label.trim() && rule.requirement_key.trim())
@@ -751,7 +835,14 @@ export default function FormUsageManagementPage() {
 
               <div className="space-y-3">
                 {formData.steps.map((step, index) => {
-                  const departmentUsers = profiles.filter(profile => profile.department_id === step.signer_department_id);
+                  const departmentUsers = getStepDepartmentUsers(step);
+                  const jobOptions = getJobTitleOptions(departmentUsers);
+                  const visibleCandidates = getSignerCandidates(
+                    step,
+                    candidateSearch[index] || "",
+                    candidateJobFilter[index] || "all",
+                    candidateSort[index] || "name_asc"
+                  );
                   return (
                     <div key={index} className="rounded-lg border border-border bg-muted/10 p-4">
                       <div className="grid gap-3 md:grid-cols-[70px_1fr_170px_170px_auto]">
@@ -791,24 +882,108 @@ export default function FormUsageManagementPage() {
 
                       <div className="mt-4 grid gap-4 md:grid-cols-[260px_1fr]">
                         <div className="space-y-2">
-                          <Label>Departemen Penandatangan</Label>
-                          <Select value={step.signer_department_id} onValueChange={value => updateStep(index, { signer_department_id: value })}>
+                          <Label>
+                            Departemen Penandatangan
+                            {isDynamicCandidateScope(step.candidate_scope) && <span className="ml-1 font-normal text-muted-foreground">(opsional)</span>}
+                          </Label>
+                          <Select
+                            value={step.signer_department_id || "__dynamic__"}
+                            onValueChange={value => updateStep(index, { signer_department_id: value === "__dynamic__" ? "" : value })}
+                          >
                             <SelectTrigger><SelectValue placeholder="Pilih departemen" /></SelectTrigger>
-                            <SelectContent>{departments.map(department => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent>
+                            <SelectContent>
+                              {isDynamicCandidateScope(step.candidate_scope) && <SelectItem value="__dynamic__">Mengikuti scope kandidat</SelectItem>}
+                              {departments.map(department => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}
+                            </SelectContent>
                           </Select>
+                          <div className="space-y-2 pt-2">
+                            <Label>Scope Kandidat</Label>
+                            <Select value={step.candidate_scope || "manual"} onValueChange={value => updateStep(index, { candidate_scope: value as CandidateScope })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="manual">Manual</SelectItem>
+                                <SelectItem value="request_office">Kantor pemohon</SelectItem>
+                                <SelectItem value="request_department">Departemen pemohon</SelectItem>
+                                <SelectItem value="branch_office_or_request_department">BM cabang / dept pusat</SelectItem>
+                                <SelectItem value="head_office">Kantor pusat</SelectItem>
+                                <SelectItem value="all_offices">Semua kantor</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-muted-foreground">
+                              {step.candidate_scope === "request_office"
+                                ? "Saat registrasi cabang, kandidat difilter sesuai kantor pemohon."
+                                : step.candidate_scope === "request_department"
+                                  ? "Saat registrasi, kandidat difilter sesuai departemen pengaju."
+                                  : step.candidate_scope === "branch_office_or_request_department"
+                                    ? "Jika pemohon cabang, kandidat mengikuti kantor pemohon. Jika pusat, kandidat mengikuti departemen pengaju."
+                                : step.candidate_scope === "head_office"
+                                  ? "Kandidat difilter ke Kantor Pusat."
+                                  : step.candidate_scope === "all_offices"
+                                    ? "Semua kandidat terpilih tetap tampil."
+                                    : "Tidak ada filter kantor otomatis."}
+                            </p>
+                          </div>
                         </div>
                         <div className="space-y-2">
-                          <Label className="flex items-center gap-2"><Users className="h-4 w-4" /> Kandidat Signer</Label>
+                          <Label className="flex items-center gap-2">
+                            <Users className="h-4 w-4" /> Kandidat Signer
+                            <Badge variant="outline" className="ml-1">{candidateScopeLabel(step.candidate_scope)}</Badge>
+                          </Label>
+                          <div className="grid gap-2 lg:grid-cols-[minmax(180px,1fr)_220px_170px]">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                value={candidateSearch[index] || ""}
+                                onChange={event => setCandidateSearch(previous => ({ ...previous, [index]: event.target.value }))}
+                                placeholder="Cari nama, jabatan, atau kantor..."
+                                className="h-9 pl-9 text-xs"
+                              />
+                            </div>
+                            <Select
+                              value={candidateJobFilter[index] || "all"}
+                              onValueChange={value => setCandidateJobFilter(previous => ({ ...previous, [index]: value }))}
+                            >
+                              <SelectTrigger className="h-9 text-xs">
+                                <SelectValue placeholder="Filter jabatan" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Semua jabatan</SelectItem>
+                                {jobOptions.map(jobTitle => (
+                                  <SelectItem key={jobTitle} value={jobTitle}>{jobTitle}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={candidateSort[index] || "name_asc"}
+                              onValueChange={value => setCandidateSort(previous => ({ ...previous, [index]: value as CandidateSort }))}
+                            >
+                              <SelectTrigger className="h-9 text-xs">
+                                <SelectValue placeholder="Urutkan" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="name_asc">Nama A-Z</SelectItem>
+                                <SelectItem value="job_asc">Jabatan A-Z</SelectItem>
+                                <SelectItem value="office_asc">Kantor A-Z</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <div className="max-h-36 overflow-y-auto rounded-md border border-border bg-background p-2">
                             {departmentUsers.length === 0 ? (
                               <p className="p-2 text-xs text-muted-foreground">Pilih departemen atau tambahkan user aktif pada departemen tersebut.</p>
-                            ) : departmentUsers.map(profile => (
-                              <label key={profile.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted">
-                                <input type="checkbox" checked={step.eligible_user_ids.includes(profile.id)} onChange={() => toggleEligibleUser(index, profile.id)} />
-                                <span className="font-semibold">{profile.full_name}</span>
-                                <span className="text-muted-foreground">{profile.job_title || ""}</span>
-                              </label>
-                            ))}
+                            ) : visibleCandidates.length === 0 ? (
+                              <p className="p-2 text-xs text-muted-foreground">Tidak ada kandidat yang cocok dengan filter.</p>
+                            ) : visibleCandidates.map(profile => {
+                              const office = profile.office_id ? officeMap.get(profile.office_id) : null;
+                              return (
+                                <label key={profile.id} className="flex items-start gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted">
+                                  <input className="mt-0.5" type="checkbox" checked={step.eligible_user_ids.includes(profile.id)} onChange={() => toggleEligibleUser(index, profile.id)} />
+                                  <span className="min-w-0">
+                                    <span className="block font-semibold">{profile.full_name}</span>
+                                    <span className="block text-muted-foreground">{[profile.job_title, office?.name].filter(Boolean).join(" - ")}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -878,7 +1053,7 @@ export default function FormUsageManagementPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold">Persyaratan Lampiran</h3>
-                  <p className="text-xs text-muted-foreground">Tahap 0 adalah lampiran pemohon; tahap 1–8 mengikuti signer.</p>
+                  <p className="text-xs text-muted-foreground">Lampiran pemohon diunggah saat registrasi; tahap 1–8 mengikuti penandatangan.</p>
                 </div>
                 <Button type="button" variant="outline" onClick={addAttachment}><Plus className="mr-2 h-4 w-4" /> Lampiran</Button>
               </div>
@@ -889,7 +1064,7 @@ export default function FormUsageManagementPage() {
                     <Select value={String(rule.stage_order)} onValueChange={value => updateAttachment(index, { stage_order: Number(value) })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0">Pemohon</SelectItem>
+                        <SelectItem value="0">Pemohon (Saat Registrasi)</SelectItem>
                         {formData.steps.map(step => <SelectItem key={step.step_order} value={String(step.step_order)}>Tahap {step.step_order}</SelectItem>)}
                       </SelectContent>
                     </Select>

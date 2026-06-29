@@ -9,9 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Tag, Plus, Pencil, Trash2, Loader2, 
-  Search, RefreshCw, Hash 
+  Search, RefreshCw, Building2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,8 @@ export default function LetterTypeManagementPage() {
   const { toast } = useToast();
   const appDialog = useAppDialog();
   const [types, setTypes] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [mappings, setMappings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<any>(null);
@@ -29,19 +32,26 @@ export default function LetterTypeManagementPage() {
   const [formData, setFormData] = useState({
     name: "",
     code: "",
-    type_index: ""
+    type_index: "",
+    dept_ids: [] as string[],
+    dept_indexes: {} as Record<string, string>,
   });
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("master_letter_types")
-        .select("*")
-        .order("type_index", { ascending: true });
+      const [typesRes, departmentsRes, mappingsRes] = await Promise.all([
+        supabase.from("master_letter_types").select("*").order("type_index", { ascending: true }),
+        supabase.from("master_departments").select("id, name, code, dept_index").order("dept_index", { ascending: true }).order("name", { ascending: true }),
+        supabase.from("master_dept_letter_types").select("id, dept_id, letter_type_id, sort_index"),
+      ]);
 
-      if (error) throw error;
-      setTypes(data || []);
+      if (typesRes.error) throw typesRes.error;
+      if (departmentsRes.error) throw departmentsRes.error;
+      if (mappingsRes.error) throw mappingsRes.error;
+      setTypes(typesRes.data || []);
+      setDepartments(departmentsRes.data || []);
+      setMappings(mappingsRes.data || []);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: "Gagal memuat jenis surat" });
     } finally {
@@ -56,14 +66,25 @@ export default function LetterTypeManagementPage() {
   const handleOpenModal = (type: any = null) => {
     if (type) {
       setSelectedType(type);
+      const typeMappings = mappings.filter((item) => item.letter_type_id === type.id);
+      const deptIds = typeMappings.map((item) => item.dept_id);
+      const deptIndexes = Object.fromEntries(typeMappings.map((item) => [item.dept_id, String(item.sort_index ?? type.type_index ?? "")]));
       setFormData({ 
         name: type.name, 
         code: type.code, 
-        type_index: type.type_index?.toString() || "" 
+        type_index: type.type_index?.toString() || "",
+        dept_ids: deptIds,
+        dept_indexes: deptIndexes,
       });
     } else {
       setSelectedType(null);
-      setFormData({ name: "", code: "", type_index: "" });
+      setFormData({
+        name: "",
+        code: "",
+        type_index: "",
+        dept_ids: departments.map((dept) => dept.id),
+        dept_indexes: {},
+      });
     }
     setIsModalOpen(true);
   };
@@ -81,6 +102,7 @@ export default function LetterTypeManagementPage() {
         code: formData.code.toUpperCase(),
         type_index: formData.type_index ? parseInt(formData.type_index) : null
       };
+      let savedTypeId = selectedType?.id || null;
 
       if (selectedType) {
         const { error } = await supabase
@@ -89,10 +111,33 @@ export default function LetterTypeManagementPage() {
           .eq("id", selectedType.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("master_letter_types")
-          .insert([payload]);
+          .insert([payload])
+          .select("id")
+          .single();
         if (error) throw error;
+        savedTypeId = data?.id || null;
+      }
+
+      if (savedTypeId) {
+        const { error: deleteError } = await supabase
+          .from("master_dept_letter_types")
+          .delete()
+          .eq("letter_type_id", savedTypeId);
+        if (deleteError) throw deleteError;
+
+        if (formData.dept_ids.length > 0) {
+          const rows = formData.dept_ids.map((deptId) => ({
+            dept_id: deptId,
+            letter_type_id: savedTypeId,
+            sort_index: formData.dept_indexes[deptId] ? parseInt(formData.dept_indexes[deptId], 10) : payload.type_index ?? 999,
+          }));
+          const { error: insertError } = await supabase
+            .from("master_dept_letter_types")
+            .insert(rows);
+          if (insertError) throw insertError;
+        }
       }
 
       toast({ title: "Berhasil", description: "Jenis surat telah diperbarui" });
@@ -132,6 +177,31 @@ export default function LetterTypeManagementPage() {
     t.code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const getTypeDepartments = (typeId: string) => {
+    const deptIds = new Set(mappings.filter((item) => item.letter_type_id === typeId).map((item) => item.dept_id));
+    return departments.filter((dept) => deptIds.has(dept.id));
+  };
+
+  const toggleDepartment = (deptId: string, checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      dept_ids: checked
+        ? Array.from(new Set([...prev.dept_ids, deptId]))
+        : prev.dept_ids.filter((id) => id !== deptId),
+      dept_indexes: checked
+        ? { ...prev.dept_indexes, [deptId]: prev.dept_indexes[deptId] || prev.type_index }
+        : Object.fromEntries(Object.entries(prev.dept_indexes).filter(([id]) => id !== deptId)),
+    }));
+  };
+
+  const setDepartmentIndex = (deptId: string, value: string) => {
+    const numericValue = value.replace(/[^\d]/g, "");
+    setFormData((prev) => ({
+      ...prev,
+      dept_indexes: { ...prev.dept_indexes, [deptId]: numericValue },
+    }));
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-end">
@@ -167,35 +237,61 @@ export default function LetterTypeManagementPage() {
               <TableHead className="w-[80px] font-bold text-center">INDEX</TableHead>
               <TableHead className="w-[120px] font-bold">KODE</TableHead>
               <TableHead className="font-bold">NAMA KLASIFIKASI</TableHead>
+              <TableHead className="font-bold">DEPARTEMEN</TableHead>
               <TableHead className="text-right font-bold">AKSI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && types.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-20"><Loader2 className="animate-spin mx-auto w-8 h-8 text-primary"/></TableCell></TableRow>
-            ) : filteredTypes.map((type) => (
-              <TableRow key={type.id} className="hover:bg-muted/30">
-                <TableCell className="text-center">
-                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary/5 text-primary text-xs font-bold border border-primary/10">
-                    {type.type_index}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <code className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs font-bold">
-                    {type.code}
-                  </code>
-                </TableCell>
-                <TableCell className="font-medium">{type.name}</TableCell>
-                <TableCell className="text-right space-x-1">
-                  <Button variant="ghost" size="icon" onClick={() => handleOpenModal(type)}>
-                    <Pencil className="w-4 h-4 text-amber-600" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(type.id)}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+              <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto w-8 h-8 text-primary"/></TableCell></TableRow>
+            ) : filteredTypes.map((type) => {
+              const mappedDepartments = getTypeDepartments(type.id);
+              return (
+                <TableRow key={type.id} className="hover:bg-muted/30">
+                  <TableCell className="text-center">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary/5 text-primary text-xs font-bold border border-primary/10">
+                      {type.type_index}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <code className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs font-bold">
+                      {type.code}
+                    </code>
+                  </TableCell>
+                  <TableCell className="font-medium">{type.name}</TableCell>
+                  <TableCell>
+                    <div className="flex max-w-md flex-wrap gap-1.5">
+                      {mappedDepartments.length === departments.length ? (
+                        <span className="rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">
+                          Semua departemen
+                        </span>
+                      ) : mappedDepartments.length > 0 ? (
+                        mappedDepartments.slice(0, 4).map((dept) => (
+                          <span key={dept.id} className="rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-secondary-foreground">
+                            {dept.name} #{mappings.find((item) => item.letter_type_id === type.id && item.dept_id === dept.id)?.sort_index ?? type.type_index ?? "-"}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs font-medium text-destructive">Belum dipakai departemen mana pun</span>
+                      )}
+                      {mappedDepartments.length > 4 && mappedDepartments.length !== departments.length && (
+                        <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                          +{mappedDepartments.length - 4}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(type)}>
+                      <Pencil className="w-4 h-4 text-amber-600" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(type.id)}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -232,6 +328,61 @@ export default function LetterTypeManagementPage() {
                 onChange={(e) => setFormData({...formData, name: e.target.value})} 
                 placeholder="E.g. Berita Acara Serah Terima"
               />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Dipakai Departemen</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFormData((prev) => ({
+                      ...prev,
+                      dept_ids: departments.map((dept) => dept.id),
+                      dept_indexes: Object.fromEntries(departments.map((dept) => [dept.id, prev.dept_indexes[dept.id] || prev.type_index])),
+                    }))}
+                  >
+                    Pilih semua
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFormData((prev) => ({ ...prev, dept_ids: [] }))}
+                  >
+                    Kosongkan
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-muted/20 p-2">
+                {departments.map((dept) => {
+                  const checked = formData.dept_ids.includes(dept.id);
+                  return (
+                    <div key={dept.id} className="grid grid-cols-[auto_1fr_88px] items-center gap-3 rounded-md px-3 py-2 hover:bg-background">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => toggleDepartment(dept.id, value === true)}
+                      />
+                      <label className="flex min-w-0 cursor-pointer items-center gap-2" onClick={() => toggleDepartment(dept.id, !checked)}>
+                        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate text-sm font-medium">{dept.name}</span>
+                        {dept.code && <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[10px] font-bold">{dept.code}</span>}
+                      </label>
+                      <Input
+                        disabled={!checked}
+                        inputMode="numeric"
+                        value={formData.dept_indexes[dept.id] || ""}
+                        onChange={(event) => setDepartmentIndex(dept.id, event.target.value)}
+                        placeholder="Index"
+                        className="h-8 text-center text-xs"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <DialogFooter>

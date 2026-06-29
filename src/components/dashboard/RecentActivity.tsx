@@ -201,7 +201,7 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
                       <span className="font-bold text-foreground">{actor.name}</span> 
                       <span className="text-muted-foreground"> {getDisplayMessage(log)}</span>
                     </p>
-                    <span className="text-[10px] text-muted-foreground/60 font-bold uppercase tracking-tighter">
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">
                       {log.createdAt && formatDistanceToNow(new Date(log.createdAt), { addSuffix: true, locale: localeID })}
                     </span>
                   </div>

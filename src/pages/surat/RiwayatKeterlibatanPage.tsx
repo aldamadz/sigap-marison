@@ -31,7 +31,7 @@ import { format } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
-import { documentPreviewService } from '@/services/document-preview.service';
+import { documentOperationKey, useDocumentOpener } from '@/hooks/useDocumentOpener';
 import { appStorageService } from '@/services/storage.service';
 import { toast } from 'react-hot-toast';
 
@@ -214,7 +214,7 @@ const RiwayatKeterlibatanPage = () => {
   const [dateFrom, setDateFrom] = useState(initialRange.from);
   const [dateTo, setDateTo] = useState(initialRange.to);
   const [selected, setSelected] = useState<PreparedSurat | null>(null);
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const { openPdf, openFile, isOpening } = useDocumentOpener();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
 
@@ -384,34 +384,15 @@ const RiwayatKeterlibatanPage = () => {
   const getAttachments = (surat: SuratItem) => {
     const attachments = surat.surat_attachments ?? [];
     if (attachments.length > 0) return attachments.map((attachment, index) => ({
+      id: attachment.id || `attachment-${index}`,
       label: `Lampiran Permohonan ${index + 1}`,
       path: attachment.file_url,
     }));
     return [{
+      id: 'legacy-attachment',
       label: 'Lampiran Permohonan',
       path: surat.lampiran_path,
     }];
-  };
-
-  const openGeneratedPdf = async (suratId: string) => {
-    setPreviewingId(suratId);
-    try {
-      const pdfUrl = await documentPreviewService.getPdfUrl(suratId);
-      await documentPreviewService.openStoredFileInNewTab(suratId, pdfUrl);
-    } catch (error: any) {
-      toast.error(error.message || 'Gagal membuka PDF dokumen.');
-    } finally {
-      setPreviewingId(null);
-    }
-  };
-
-  const openStoredFile = async (suratId: string, path: string | null | undefined) => {
-    if (!path) return;
-    try {
-      await documentPreviewService.openStoredFileInNewTab(suratId, path);
-    } catch (error: any) {
-      toast.error(error.message || 'Gagal membuka dokumen.');
-    }
   };
 
   const counts = useMemo(() => ({
@@ -750,36 +731,46 @@ const RiwayatKeterlibatanPage = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
                     {
+                      id: 'main-document',
                       label: 'Dokumen Permohonan',
                       path: selected.file_path,
                       kind: 'pdf',
                     },
                     ...getAttachments(selected).map((doc) => ({ ...doc, kind: 'file' })),
-                  ].map((doc) => (
-                    <div key={doc.label} className="rounded-lg border border-border/60 p-2.5 bg-background/40">
-                      <p className="text-xs font-semibold mb-2">{doc.label}</p>
-                      {doc.path ? (
-                        <button
-                          type="button"
-                          onClick={() => doc.kind === 'pdf' ? openGeneratedPdf(selected.id) : openStoredFile(selected.id, doc.path)}
-                          disabled={doc.kind === 'pdf' && previewingId === selected.id}
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          {doc.kind === 'pdf' && previewingId === selected.id ? (
-                            <>
-                              <Loader2 size={12} className="animate-spin" /> Menyiapkan PDF
-                            </>
-                          ) : (
-                            <>
-                              Lihat Dokumen <ExternalLink size={12} />
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Belum tersedia</p>
-                      )}
-                    </div>
-                  ))}
+                  ].map((doc) => {
+                    const operationKey = doc.kind === 'pdf'
+                      ? documentOperationKey.pdf(selected.id, 'history')
+                      : documentOperationKey.file(selected.id, String(doc.id || doc.path || doc.label));
+                    const opening = isOpening(operationKey);
+
+                    return (
+                      <div key={`${doc.kind}-${doc.id || doc.path || doc.label}`} className="rounded-lg border border-border/60 p-2.5 bg-background/40">
+                        <p className="text-xs font-semibold mb-2">{doc.label}</p>
+                        {doc.path ? (
+                          <button
+                            type="button"
+                            onClick={() => doc.kind === 'pdf'
+                              ? void openPdf(selected.id, operationKey)
+                              : void openFile(selected.id, doc.path, operationKey)}
+                            disabled={opening}
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-wait disabled:opacity-70"
+                          >
+                            {opening ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin" /> {doc.kind === 'pdf' ? 'Menyiapkan PDF' : 'Membuka lampiran'}
+                              </>
+                            ) : (
+                              <>
+                                Lihat Dokumen <ExternalLink size={12} />
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Belum tersedia</p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

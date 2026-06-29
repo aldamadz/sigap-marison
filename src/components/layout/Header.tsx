@@ -1,15 +1,14 @@
 import { Bell, Plus, FileCheck, Inbox, Trash2, AlertCircle, MessageSquare, Menu, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { formatDistanceToNow } from 'date-fns'
 import { id as localeID } from 'date-fns/locale'
-import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { notificationService } from '@/services/notification.service'
+import { useAttention } from '@/providers/AttentionProvider'
 
 interface Notification {
   id: string
@@ -52,9 +51,10 @@ interface HeaderProps {
 export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: HeaderProps) => {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const unreadCount = notifications.filter(n => !n.isRead).length
+  const { state: attentionState, eventVersion, refetch: refetchAttention, requestPushPermission } = useAttention()
+  const unreadCount = attentionState.unreadNotifications
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const queryClient = useQueryClient()
+  const previousUnreadRef = useRef<number | null>(null)
   const navigate = useNavigate()
   const [isMobileView, setIsMobileView] = useState(typeof window !== 'undefined' ? window.innerWidth < 640 : false)
 
@@ -64,19 +64,6 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  const addNotif = useCallback((n: Notification) => {
-    setNotifications(prev => {
-      if (prev.find(item => item.id === n.id)) return prev
-
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0
-        audioRef.current.play().catch(() => {})
-      }
-
-      return [n, ...prev].slice(0, 50)
-    })
-  }, [])
-
   const handleNotifClick = useCallback(async (n: Notification) => {
     setNotifications(prev =>
       prev.map(item => item.id === n.id ? { ...item, isRead: true } : item)
@@ -84,13 +71,14 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
 
     if (n.dbId) {
       await notificationService.markAsRead(n.dbId)
+      await refetchAttention()
     }
 
     if (n.url) {
       navigate(n.url)
       setNotificationsOpen(false)
     }
-  }, [navigate])
+  }, [navigate, refetchAttention])
 
   useEffect(() => {
     localStorage.removeItem('surat_notifs')
@@ -100,104 +88,45 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
     audioRef.current = audio
   }, [])
 
+  const loadNotifications = useCallback(async () => {
+    try {
+      const rows = await notificationService.getMyNotifications()
+      const mapped = rows.map(mapDbNotification)
+      const nextUnread = mapped.filter((item) => !item.isRead).length
+      const previousUnread = previousUnreadRef.current
+      if (previousUnread !== null && nextUnread > previousUnread && audioRef.current) {
+        audioRef.current.currentTime = 0
+        audioRef.current.play().catch(() => {})
+      }
+      previousUnreadRef.current = nextUnread
+      setNotifications(mapped)
+    } catch (err) {
+      console.error('Load database notifications failed:', err)
+    }
+  }, [])
+
   useEffect(() => {
-    let notifChannel: any = null
-    let activeUserId: string | null = null
+    loadNotifications()
+  }, [eventVersion, loadNotifications])
 
-    const removeNotifChannel = () => {
-      if (notifChannel) {
-        supabase.removeChannel(notifChannel)
-        notifChannel = null
-      }
-    }
-
-    const loadNotificationsForUser = async (userId?: string) => {
-      removeNotifChannel()
-      activeUserId = userId ?? null
-
-      if (!userId) {
-        setNotifications([])
-        return
-      }
-
-      setNotifications([])
-      notificationService
-        .getMyNotifications()
-        .then((rows) => {
-          if (activeUserId === userId) setNotifications(rows.map(mapDbNotification))
-        })
-        .catch((err) => console.error('Load database notifications failed:', err))
-
-      notifChannel = supabase
-        .channel(`db-notifs-${userId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload) => {
-            if (activeUserId !== userId) return
-            const row = payload.new as any
-            if (!row) return
-
-            addNotif(mapDbNotification(row))
-
-            queryClient.invalidateQueries({ queryKey: ['surat-list'] })
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload) => {
-            if (activeUserId !== userId) return
-            const row = payload.new as any
-            if (!row) return
-
-            setNotifications((prev) =>
-              prev.map((item) =>
-                item.dbId === row.id ? mapDbNotification(row) : item
-              )
-            )
-          }
-        )
-        .subscribe()
-    }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      loadNotificationsForUser(session?.user?.id)
-    })
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadNotificationsForUser(session?.user?.id)
-    })
-
-    return () => {
-      authListener.subscription.unsubscribe()
-      removeNotifChannel()
-    }
-  }, [addNotif, queryClient])
+  useEffect(() => {
+    if (!notificationsOpen) return
+    requestPushPermission().catch(() => {})
+  }, [notificationsOpen, requestPushPermission])
 
   const handleMarkAllRead = useCallback(async () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
-
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user) {
-      await notificationService.markAllAsRead()
-    }
-  }, [])
+    await notificationService.markAllAsRead()
+    previousUnreadRef.current = 0
+    await refetchAttention()
+  }, [refetchAttention])
 
   const handleClearAll = useCallback(async () => {
     setNotifications([])
     await notificationService.deleteAllMyNotifications()
-  }, [])
+    previousUnreadRef.current = 0
+    await refetchAttention()
+  }, [refetchAttention])
 
   return (
     <header className="safe-area-top sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/92 px-3 backdrop-blur-md sm:px-5 lg:px-6">
@@ -316,7 +245,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
                         <p className="text-sm text-muted-foreground line-clamp-2">
                           {n.description}
                         </p>
-                        <p className="text-xs text-muted-foreground/50 mt-2">
+                        <p className="text-xs text-muted-foreground mt-2">
                           {formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}
                         </p>
                       </div>
@@ -412,7 +341,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
                         <p className="text-sm text-muted-foreground leading-snug line-clamp-2">
                           {n.description}
                         </p>
-                        <p className="text-xs text-muted-foreground/50 mt-2">
+                        <p className="text-xs text-muted-foreground mt-2">
                           {formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}
                         </p>
                       </div>

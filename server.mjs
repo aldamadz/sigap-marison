@@ -2,9 +2,10 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
+import webpush from "web-push";
 
 const port = Number(process.env.PORT || 80);
 const distDir = resolve(process.env.DIST_DIR || "dist");
@@ -45,6 +46,19 @@ let mailTransporter = null;
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
 const externalAccessTokenCache = new Map();
+const ATTENTION_STREAM_TOKEN_TTL_MS = 60 * 1000;
+const ATTENTION_POLL_INTERVAL_MS = Number(process.env.ATTENTION_POLL_INTERVAL_MS || 3000);
+const attentionStreamTokens = new Map();
+
+const webPushConfig = {
+  publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
+  privateKey: process.env.WEB_PUSH_PRIVATE_KEY,
+  subject: process.env.WEB_PUSH_SUBJECT || `mailto:${smtpConfig?.from || "noreply@marison.id"}`,
+};
+
+if (webPushConfig.publicKey && webPushConfig.privateKey) {
+  webpush.setVapidDetails(webPushConfig.subject, webPushConfig.publicKey, webPushConfig.privateKey);
+}
 
 const hashFileViewToken = (token) => createHash("sha256").update(token).digest("hex");
 const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
@@ -55,6 +69,7 @@ const contentTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -62,6 +77,7 @@ const contentTypes = {
   ".ico": "image/x-icon",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
   ".pdf": "application/pdf",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".xls": "application/vnd.ms-excel",
@@ -77,9 +93,9 @@ const securityHeaders = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "Content-Security-Policy": [
     "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "script-src 'self' https://static.cloudflareinsights.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https: wss:",
     "object-src 'none'",
@@ -257,6 +273,18 @@ const readRequestBody = (req, maxBytes = 1024 * 1024) => new Promise((resolve, r
   req.on("error", reject);
 });
 
+const readJsonBody = async (req, maxBytes = 1024 * 1024) => {
+  const body = await readRequestBody(req, maxBytes);
+  if (!body.length) return {};
+  try {
+    return JSON.parse(body.toString("utf8"));
+  } catch {
+    const err = new Error("Payload JSON tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+};
+
 const getBearerToken = (req) => {
   const auth = req.headers.authorization || "";
   return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
@@ -301,6 +329,305 @@ const requireSupabaseUser = async (token) => {
     throw err;
   }
   return userRes.user;
+};
+
+const isActiveSuratSignature = (signature) => {
+  const surat = Array.isArray(signature?.surat_registrasi)
+    ? signature.surat_registrasi[0]
+    : signature?.surat_registrasi;
+  return surat?.status === "PROSES" && Number(signature?.step_order) === Number(surat?.current_step);
+};
+
+const getAttentionStateForUser = async (userId) => {
+  if (!supabase) throw new Error("Supabase server credentials are not configured.");
+  if (!userId) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+
+  const [signerRes, verifierRes, recommendationRes, unreadRes, monitoringRes] = await Promise.all([
+    supabase
+      .from("surat_signatures")
+      .select("id, step_order, surat_registrasi!inner(id, current_step, status)")
+      .eq("user_id", userId)
+      .eq("is_signed", false),
+    supabase
+      .from("surat_signatures")
+      .select("id, step_order, verifier_snapshot, surat_registrasi!inner(id, current_step, status)")
+      .eq("is_signed", false)
+      .eq("verification_required", true)
+      .eq("verification_status", "pending")
+      .filter("verifier_snapshot", "cs", JSON.stringify([{ user_id: userId }])),
+    supabase
+      .from("surat_recommendation_tasks")
+      .select("id, status, claimed_by, candidate_snapshot")
+      .in("status", ["waiting", "claimed"])
+      .filter("candidate_snapshot", "cs", JSON.stringify([{ user_id: userId }])),
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_read", false),
+    supabase
+      .from("surat_registrasi")
+      .select("id, updated_at, creator_seen_at")
+      .eq("created_by", userId)
+      .eq("status", "DONE"),
+  ]);
+
+  if (signerRes.error) throw signerRes.error;
+  if (verifierRes.error) throw verifierRes.error;
+  if (recommendationRes.error && recommendationRes.error.code !== "42P01") throw recommendationRes.error;
+  if (unreadRes.error) throw unreadRes.error;
+  if (monitoringRes.error) throw monitoringRes.error;
+
+  const approvalCount = (signerRes.data || []).filter(isActiveSuratSignature).length;
+  const verificationCount = (verifierRes.data || []).filter(isActiveSuratSignature).length;
+  const recommendationCount = (recommendationRes.data || []).filter((task) =>
+    task.status === "waiting" || task.claimed_by === userId
+  ).length;
+  const monitoringCount = (monitoringRes.data || []).filter((item) =>
+    !item.creator_seen_at || new Date(item.updated_at) > new Date(item.creator_seen_at)
+  ).length;
+
+  return {
+    approvalCount,
+    verificationCount,
+    recommendationCount,
+    inboxCount: approvalCount + verificationCount,
+    unreadNotifications: unreadRes.count || 0,
+    monitoringCount,
+    generatedAt: new Date().toISOString(),
+  };
+};
+
+const getAttentionStateFromRequest = async (token) => {
+  const user = await requireSupabaseUser(token);
+  return getAttentionStateForUser(user.id);
+};
+
+const pruneAttentionStreamTokens = () => {
+  const now = Date.now();
+  for (const [hash, value] of attentionStreamTokens.entries()) {
+    if (!value?.expiresAt || value.expiresAt <= now) attentionStreamTokens.delete(hash);
+  }
+};
+
+const createAttentionStreamToken = async (token) => {
+  const user = await requireSupabaseUser(token);
+  pruneAttentionStreamTokens();
+  const streamToken = randomBytes(32).toString("base64url");
+  attentionStreamTokens.set(sha256Hex(streamToken), {
+    userId: user.id,
+    expiresAt: Date.now() + ATTENTION_STREAM_TOKEN_TTL_MS,
+  });
+  return {
+    token: streamToken,
+    expires_at: new Date(Date.now() + ATTENTION_STREAM_TOKEN_TTL_MS).toISOString(),
+    ttl_ms: ATTENTION_STREAM_TOKEN_TTL_MS,
+  };
+};
+
+const consumeAttentionStreamToken = (token) => {
+  pruneAttentionStreamTokens();
+  const hash = sha256Hex(String(token || ""));
+  const value = attentionStreamTokens.get(hash);
+  attentionStreamTokens.delete(hash);
+  if (!value || value.expiresAt <= Date.now()) {
+    const err = new Error("Token stream tidak valid atau sudah kedaluwarsa.");
+    err.status = 401;
+    throw err;
+  }
+  return value.userId;
+};
+
+const writeSseEvent = (res, event, data) => {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
+const attentionClients = new Map();
+
+const notifyAttentionUsers = async (userIds) => {
+  for (const userId of [...new Set((userIds || []).filter(Boolean))]) {
+    const clients = attentionClients.get(userId);
+    if (!clients?.size) continue;
+    let state = null;
+    try {
+      state = await getAttentionStateForUser(userId);
+    } catch (error) {
+      console.error("Attention state refresh failed:", error);
+    }
+    for (const client of clients) {
+      client.push(state);
+    }
+  }
+};
+
+const openAttentionStream = async (req, res, token) => {
+  const userId = consumeAttentionStreamToken(token);
+  res.writeHead(200, withSecurityHeaders({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  }));
+  res.write(": connected\n\n");
+
+  let lastSignature = "";
+  let closed = false;
+  let pollTimer = null;
+  let heartbeatTimer = null;
+
+  const sendState = async (explicitState = null) => {
+    if (closed || res.destroyed) return;
+    try {
+      const state = explicitState || await getAttentionStateForUser(userId);
+      const signature = JSON.stringify({
+        approvalCount: state.approvalCount,
+        verificationCount: state.verificationCount,
+        recommendationCount: state.recommendationCount,
+        unreadNotifications: state.unreadNotifications,
+        monitoringCount: state.monitoringCount,
+      });
+      if (signature !== lastSignature) {
+        lastSignature = signature;
+        writeSseEvent(res, "attention_changed", state);
+      }
+    } catch (error) {
+      writeSseEvent(res, "attention_error", { message: "Gagal menyinkronkan badge." });
+    }
+  };
+
+  const client = { push: sendState };
+  if (!attentionClients.has(userId)) attentionClients.set(userId, new Set());
+  attentionClients.get(userId).add(client);
+
+  await sendState();
+  pollTimer = setInterval(sendState, Math.max(ATTENTION_POLL_INTERVAL_MS, 1500));
+  heartbeatTimer = setInterval(() => {
+    if (!closed && !res.destroyed) res.write(": heartbeat\n\n");
+  }, 25000);
+
+  const cleanup = () => {
+    closed = true;
+    if (pollTimer) clearInterval(pollTimer);
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    const clients = attentionClients.get(userId);
+    if (clients) {
+      clients.delete(client);
+      if (clients.size === 0) attentionClients.delete(userId);
+    }
+  };
+
+  req.on("close", cleanup);
+  req.on("error", cleanup);
+};
+
+const normalizePushSubscription = (value) => {
+  const endpoint = String(value?.endpoint || "").trim();
+  const p256dh = String(value?.keys?.p256dh || "").trim();
+  const auth = String(value?.keys?.auth || "").trim();
+  if (!/^https:\/\//i.test(endpoint) || !p256dh || !auth) {
+    const err = new Error("Subscription Web Push tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  return {
+    endpoint,
+    expirationTime: value?.expirationTime || null,
+    keys: { p256dh, auth },
+  };
+};
+
+const getWebPushPublicKey = async (token) => {
+  await requireSupabaseUser(token);
+  return {
+    enabled: Boolean(webPushConfig.publicKey && webPushConfig.privateKey),
+    publicKey: webPushConfig.publicKey || null,
+  };
+};
+
+const saveWebPushSubscription = async (token, payload, req) => {
+  const user = await requireSupabaseUser(token);
+  if (!webPushConfig.publicKey || !webPushConfig.privateKey) {
+    const err = new Error("Web Push belum dikonfigurasi di server.");
+    err.status = 503;
+    throw err;
+  }
+  const subscription = normalizePushSubscription(payload?.subscription || payload);
+  const { error } = await supabase
+    .from("web_push_subscriptions")
+    .upsert({
+      user_id: user.id,
+      endpoint: subscription.endpoint,
+      subscription,
+      user_agent: String(req.headers["user-agent"] || "").slice(0, 500),
+      disabled_at: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "endpoint" });
+  if (error) throw error;
+  return { ok: true };
+};
+
+const removeWebPushSubscription = async (token, payload) => {
+  const user = await requireSupabaseUser(token);
+  const endpoint = String(payload?.endpoint || payload?.subscription?.endpoint || "").trim();
+  if (!endpoint) return { ok: true };
+  const { error } = await supabase
+    .from("web_push_subscriptions")
+    .update({ disabled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .eq("endpoint", endpoint);
+  if (error) throw error;
+  return { ok: true };
+};
+
+const sendWebPushToUsers = async (userIds, payload = {}) => {
+  if (!webPushConfig.publicKey || !webPushConfig.privateKey) return { sent: 0, skipped: "not_configured" };
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  if (ids.length === 0) return { sent: 0 };
+
+  const { data, error } = await supabase
+    .from("web_push_subscriptions")
+    .select("id, user_id, endpoint, subscription")
+    .in("user_id", ids)
+    .is("disabled_at", null);
+  if (error) {
+    console.error("Load push subscriptions failed:", error);
+    return { sent: 0, error: error.message };
+  }
+
+  let sent = 0;
+  for (const row of data || []) {
+    try {
+      await webpush.sendNotification(row.subscription, JSON.stringify({
+        title: "Marison - SIGAP",
+        message: "Ada pembaruan yang perlu dicek.",
+        link: payload.link || "/dashboard",
+        tag: "sigap-attention",
+      }), { TTL: 60 });
+      sent += 1;
+      supabase
+        .from("web_push_subscriptions")
+        .update({ last_success_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .then(() => {});
+    } catch (error) {
+      const statusCode = error?.statusCode || error?.status;
+      if (statusCode === 404 || statusCode === 410) {
+        supabase
+          .from("web_push_subscriptions")
+          .update({ disabled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq("id", row.id)
+          .then(() => {});
+      } else {
+        console.error("Web Push send failed:", error?.message || error);
+      }
+    }
+  }
+  return { sent };
 };
 
 const getEmailSettings = async (formId = null) => {
@@ -420,6 +747,17 @@ const escapeEmailHtml = (value) => String(value ?? "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 
+const getSafeEmailHttpUrl = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+};
+
 const humanizeEmailKey = (key) => {
   const labels = {
     catatan: "Catatan",
@@ -431,6 +769,9 @@ const humanizeEmailKey = (key) => {
     kode: "Kode",
     requested_unit_count: "Jumlah Unit Diajukan",
     unit_request_sentence: "Ringkasan Permohonan",
+    requires_recommendation: "Perlu Rekomendasi",
+    recommendation_template_name: "Template Rekomendasi",
+    recommendation_attachment_note: "Catatan Rekomendasi",
   };
   return labels[key] || String(key || "")
     .replaceAll("_", " ")
@@ -452,6 +793,8 @@ const formatEmailCategory = (value) => {
     unit: "Unit",
     non_unit: "Non Unit",
     nonunit: "Non Unit",
+    non_asset: "Non Aset",
+    nonasset: "Non Aset",
   };
   return labels[category] || value || "-";
 };
@@ -548,15 +891,19 @@ const renderEmailInputDetails = (inputValue) => {
     "allocated_units",
     "allocated_unit_count",
     "allocated_by_signature_id",
+    "recommendation_items",
     "signers",
   ]);
   const items = Array.isArray(input.items) ? input.items : [];
+  const recommendationItems = Array.isArray(input.recommendation_items) ? input.recommendation_items : [];
   const detailRows = Object.entries(input)
     .filter(([key, value]) => !hiddenKeys.has(key) && value !== "" && value != null)
     .map(([key, value]) => {
-      const displayValue = typeof value === "object"
-        ? value?.label || value?.name || JSON.stringify(value)
-        : value;
+      const displayValue = typeof value === "boolean"
+        ? (value ? "Ya" : "Tidak")
+        : typeof value === "object"
+          ? value?.label || value?.name || JSON.stringify(value)
+          : value;
       return `
         <tr>
           <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:12px;width:180px;vertical-align:top">${escapeEmailHtml(humanizeEmailKey(key))}</td>
@@ -597,12 +944,57 @@ const renderEmailInputDetails = (inputValue) => {
       </div>`
     : "";
 
+  const recommendationItemsHtml = recommendationItems.length
+    ? `
+      <div style="margin-bottom:${detailRows || itemsHtml ? "16px" : "0"}">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#0f172a">Daftar Rekomendasi</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1">
+            <thead>
+              <tr style="background:#e2e8f0">
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;color:#334155">No.</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Nama Barang</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Lokasi / PIC</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Hasil</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Uraian</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Link</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Lampiran</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recommendationItems.map((item, index) => {
+                const actionLabel = item?.recommendation_action === "service"
+                  ? "Service"
+                  : item?.recommendation_action === "ganti"
+                    ? "Ganti"
+                    : item?.recommendation_action === "beli_baru"
+                      ? "Beli Baru"
+                      : "-";
+                const link = getSafeEmailHttpUrl(item?.reference_link);
+                const attachment = item?.recommendation_attachment || {};
+                return `
+                  <tr>
+                    <td style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px">${index + 1}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;white-space:pre-wrap">${escapeEmailHtml(item?.nama_barang || "-")}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;white-space:pre-wrap">${escapeEmailHtml(item?.lokasi_pic || "-")}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${escapeEmailHtml(actionLabel)}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;white-space:pre-wrap">${escapeEmailHtml(item?.uraian || "-")}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${link ? `<a href="${escapeEmailHtml(link)}" style="color:#047857;text-decoration:none">Buka link</a>` : escapeEmailHtml(item?.reference_link || "-")}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;white-space:pre-wrap">${escapeEmailHtml(attachment?.file_name || "-")}</td>
+                  </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>`
+    : "";
+
   const detailsHtml = detailRows
     ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb">${detailRows}</table>`
     : "";
 
-  return itemsHtml || detailsHtml
-    ? `${itemsHtml}${detailsHtml}`
+  return itemsHtml || recommendationItemsHtml || detailsHtml
+    ? `${itemsHtml}${recommendationItemsHtml}${detailsHtml}`
     : `<div style="color:#64748b;font-size:13px">Tidak ada detail input tambahan.</div>`;
 };
 
@@ -990,6 +1382,13 @@ const sendInternalNotification = async (token, payload) => {
     .insert(rows)
     .select("id");
   if (error) throw error;
+  notifyAttentionUsers(userIds).catch((attentionError) => {
+    console.error("Attention SSE notify failed:", attentionError);
+  });
+  const push = await sendWebPushToUsers(userIds, { link }).catch((pushError) => {
+    console.error("Web Push notify failed:", pushError);
+    return { sent: 0, error: pushError.message };
+  });
 
   let email = null;
   if (shouldEmail) {
@@ -1001,7 +1400,7 @@ const sendInternalNotification = async (token, payload) => {
     }
   }
 
-  return { inserted: data?.length || 0, email };
+  return { inserted: data?.length || 0, email, push };
 };
 
 const parseUploadForm = async (req) => {
@@ -1392,6 +1791,25 @@ const getAllowedStorageRefs = (surat) => {
   return new Set(refs.map(parseStorageRef).filter(Boolean).map(storageRefKey));
 };
 
+const isStorageRefAllowedForSurat = async (surat, requested) => {
+  if (getAllowedStorageRefs(surat).has(storageRefKey(requested))) return true;
+  if (requested?.bucket !== "dokumen_surat") return false;
+
+  const { data: completedJobs, error } = await supabase
+    .from("document_pdf_jobs")
+    .select("pdf_url")
+    .eq("surat_id", surat.id)
+    .eq("status", "done")
+    .not("pdf_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(25);
+  if (error) throw error;
+  return (completedJobs || []).some((job) => {
+    const jobRef = parseStorageRef(job.pdf_url);
+    return jobRef && storageRefKey(jobRef) === storageRefKey(requested);
+  });
+};
+
 const getAuthorizedSurat = async (suratId, token) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
 
@@ -1461,7 +1879,8 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
 
   if (signatureId) activeJobQuery = activeJobQuery.eq("signature_id", signatureId);
 
-  const { data: activeJob } = await activeJobQuery.maybeSingle();
+  const { data: activeJob, error: activeJobError } = await activeJobQuery.maybeSingle();
+  if (activeJobError) throw activeJobError;
   if (activeJob) {
     return {
       status: activeJob.status,
@@ -1483,7 +1902,8 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
 
   if (signatureId) latestDoneJobQuery = latestDoneJobQuery.eq("signature_id", signatureId);
 
-  const { data: latestDoneJob } = await latestDoneJobQuery.maybeSingle();
+  const { data: latestDoneJob, error: latestDoneJobError } = await latestDoneJobQuery.maybeSingle();
+  if (latestDoneJobError) throw latestDoneJobError;
   if (latestDoneJob?.pdf_url && !refresh) {
     return {
       status: "ready",
@@ -1510,6 +1930,11 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
     .select("id, status")
     .single();
   if (error) throw error;
+  if (!job?.id || !job?.status) {
+    const err = new Error("Job PDF gagal dibuat.");
+    err.status = 503;
+    throw err;
+  }
 
   return { status: job.status, jobId: job.id, cached: false, refreshed: refresh };
 };
@@ -1546,7 +1971,7 @@ const getAuthorizedStorageFile = async (suratId, token, rawPath) => {
     throw err;
   }
 
-  if (!getAllowedStorageRefs(surat).has(storageRefKey(requested))) {
+  if (!(await isStorageRefAllowedForSurat(surat, requested))) {
     const err = new Error("File tidak terkait dengan surat ini");
     err.status = 403;
     throw err;
@@ -1571,7 +1996,7 @@ const createFileViewToken = async (suratId, token, rawPath) => {
     throw err;
   }
 
-  if (!getAllowedStorageRefs(surat).has(storageRefKey(requested))) {
+  if (!(await isStorageRefAllowedForSurat(surat, requested))) {
     const err = new Error("File tidak terkait dengan surat ini");
     err.status = 403;
     throw err;
@@ -1643,10 +2068,13 @@ const serveStatic = async (req, res) => {
   }
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
   const isHtml = extname(filePath) === ".html";
+  const isServiceWorker = requested === "/sigap-sw.js";
   res.writeHead(200, withSecurityHeaders({
     "Content-Type": type,
     "Cache-Control": isHtml
-      ? "no-store, no-cache, must-revalidate"
+      ? "private, no-cache, must-revalidate"
+      : isServiceWorker
+        ? "no-cache, must-revalidate"
       : requested.startsWith("/assets/")
         ? "public, max-age=31536000, immutable"
         : "public, max-age=3600",
@@ -1657,6 +2085,10 @@ const serveStatic = async (req, res) => {
 await mkdir(distDir, { recursive: true });
 
 createServer(async (req, res) => {
+  const requestIdHeader = String(req.headers["x-request-id"] || "").trim();
+  const requestId = /^[A-Za-z0-9_-]{8,80}$/.test(requestIdHeader) ? requestIdHeader : randomUUID();
+  const requestPath = String(req.url || "").split("?")[0];
+  res.setHeader("X-Request-Id", requestId);
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const match = url.pathname.match(/^\/api\/documents\/([0-9a-f-]+)\/pdf$/i);
@@ -1716,6 +2148,43 @@ createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith("/api/")) {
+      if (req.method === "GET" && url.pathname === "/api/attention/state") {
+        const token = getBearerToken(req);
+        const result = await getAttentionStateFromRequest(token);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/attention/stream-token") {
+        const token = getBearerToken(req);
+        const result = await createAttentionStreamToken(token);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/attention/stream") {
+        await openAttentionStream(req, res, url.searchParams.get("token"));
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/push/public-key") {
+        const token = getBearerToken(req);
+        const result = await getWebPushPublicKey(token);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/push/subscribe") {
+        const token = getBearerToken(req);
+        const payload = await readJsonBody(req);
+        const result = await saveWebPushSubscription(token, payload, req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/push/unsubscribe") {
+        const token = getBearerToken(req);
+        const payload = await readJsonBody(req);
+        const result = await removeWebPushSubscription(token, payload);
+        return sendJson(res, 200, result);
+      }
+
       if (req.method === "POST" && url.pathname === "/api/storage/upload") {
         const token = getBearerToken(req);
         const result = await uploadInternalStorageFile(token, req);
@@ -1730,16 +2199,14 @@ createServer(async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/notifications/email") {
         const token = getBearerToken(req);
-        const body = await readRequestBody(req);
-        const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
+        const payload = await readJsonBody(req);
         const result = await sendInternalEmailNotification(token, payload);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/notifications/send") {
         const token = getBearerToken(req);
-        const body = await readRequestBody(req);
-        const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
+        const payload = await readJsonBody(req);
         const result = await sendInternalNotification(token, payload);
         return sendJson(res, 200, result);
       }
@@ -1748,8 +2215,7 @@ createServer(async (req, res) => {
       if (req.method === "POST" && dataSourceMatch) {
         const token = getBearerToken(req);
         await requireSupabaseUser(token);
-        const body = await readRequestBody(req);
-        const payload = body.length ? JSON.parse(body.toString("utf8")) : {};
+        const payload = await readJsonBody(req);
         const result = await queryExternalDataSource(dataSourceMatch[1], payload?.variables || {});
         return sendJson(res, 200, result);
       }
@@ -1760,7 +2226,8 @@ createServer(async (req, res) => {
     await serveStatic(req, res);
   } catch (error) {
     const status = error.status || 500;
-    sendJson(res, status, { error: error.message || "Internal server error" });
+    console.error(`[api:${requestId}] ${req.method || "UNKNOWN"} ${requestPath} -> ${status}: ${error.message || "Internal server error"}`);
+    sendJson(res, status, { error: error.message || "Internal server error", requestId });
   }
 }).listen(port, () => {
   console.log(`Agenda Flow server listening on ${port}`);

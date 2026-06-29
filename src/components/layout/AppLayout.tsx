@@ -12,6 +12,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/hierarchy': { title: 'Organisasi', subtitle: 'Struktur hirarki karyawan' },
   '/audit-logs': { title: 'Audit Log', subtitle: 'Jejak audit administratif sistem' },
   '/settings': { title: 'Settings', subtitle: 'Configure your preferences' },
+  '/docs': { title: 'Dokumentasi', subtitle: 'Panduan penggunaan, admin, dan problem solving SIGAP' },
   '/surat/registrasi': { title: 'Registrasi Surat', subtitle: 'Kelola pendaftaran surat masuk & keluar' },
   '/surat/inbox': { title: 'Inbox Approval', subtitle: 'Daftar surat yang memerlukan persetujuan' },
   '/surat/monitoring': { title: 'Monitoring Surat', subtitle: 'Lacak status dan alur distribusi surat' },

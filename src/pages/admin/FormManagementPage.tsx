@@ -77,7 +77,9 @@ interface TemplateInputField {
       label: string;
       column: string;
       required?: boolean;
-      type?: "text" | "number";
+      type?: "text" | "number" | "date" | "select";
+      options?: Array<{ label?: string; value: string | number } | string | number>;
+      helper_text?: string;
     }>;
   };
 }
@@ -171,6 +173,8 @@ const serializeInputSchema = (fields: TemplateInputField[]) =>
             column: column.column.trim().toUpperCase(),
             required: column.required === true,
             type: column.type || "text",
+            options: column.type === "select" ? (column.options || []) : undefined,
+            helper_text: column.helper_text?.trim() || undefined,
           })),
       } : undefined,
       });
@@ -1572,14 +1576,41 @@ export default function FormManagementPage({ embedded = false }: { embedded?: bo
                                 </div>
                                 <div className="col-span-6 md:col-span-2 space-y-1">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground">Tipe</Label>
-                                  <Select value={column.type || "text"} onValueChange={(v) => updateTableColumn(field.id, columnIndex, { type: v as "text" | "number" })}>
+                                  <Select value={column.type || "text"} onValueChange={(v) => updateTableColumn(field.id, columnIndex, { type: v as "text" | "number" | "date" | "select" })}>
                                     <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="text">Text</SelectItem>
                                       <SelectItem value="number">Angka</SelectItem>
+                                      <SelectItem value="date">Tanggal</SelectItem>
+                                      <SelectItem value="select">Dropdown</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>
+                                <div className="col-span-12 md:col-span-4 space-y-1">
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Keterangan</Label>
+                                  <Input
+                                    className="h-9 text-xs"
+                                    placeholder="Contoh: 1 = H+1, 2 = H+3"
+                                    value={column.helper_text || ""}
+                                    onChange={(e) => updateTableColumn(field.id, columnIndex, { helper_text: e.target.value })}
+                                  />
+                                </div>
+                                {column.type === "select" && (
+                                  <div className="col-span-12 space-y-1">
+                                    <Label className="text-[9px] font-black uppercase text-muted-foreground">Opsi Dropdown</Label>
+                                    <Textarea
+                                      className="min-h-[74px] font-mono text-xs"
+                                      placeholder={"1\n2\n3\n4"}
+                                      value={(column.options || []).map((option) => typeof option === "object" ? String(option.value) : String(option)).join("\n")}
+                                      onChange={(e) => updateTableColumn(field.id, columnIndex, {
+                                        options: e.target.value
+                                          .split(/\r?\n|,/)
+                                          .map((item) => item.trim())
+                                          .filter(Boolean),
+                                      })}
+                                    />
+                                  </div>
+                                )}
                                 <label className="col-span-6 md:col-span-2 flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground">
                                   <input
                                     type="checkbox"

@@ -15,7 +15,9 @@ type TableInputColumn = {
   label: string;
   column: string;
   required?: boolean;
-  type?: "text" | "number";
+  type?: "text" | "number" | "date" | "select";
+  options?: Array<{ label?: string; value: string | number } | string | number>;
+  helper_text?: string;
 };
 
 type TemplateInputField = {
@@ -105,6 +107,45 @@ export interface SuratRegistrationDraft {
   created_at: string;
   updated_at: string;
   surat_registration_draft_files?: SuratRegistrationDraftFile[];
+}
+
+export interface RecommendationTask {
+  id: string;
+  parent_surat_id: string;
+  submitted_surat_id: string | null;
+  no_surat: string;
+  status: "waiting" | "claimed" | "submitted" | "cancelled";
+  required_before_step: number;
+  claimed_by: string | null;
+  claimed_by_name: string | null;
+  claimed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  candidate_snapshot: Array<{ user_id?: string; full_name?: string; job_title?: string }> | unknown;
+  draft_id: string | null;
+  parent_no_surat: string | null;
+  parent_judul_surat: string | null;
+  parent_status: string | null;
+  parent_created_at: string | null;
+  parent_requester_name: string | null;
+}
+
+export interface LinkedSuratDocument {
+  id: string;
+  parent_surat_id: string;
+  child_surat_id: string;
+  link_type: "recommendation";
+  status: "active" | "cancelled";
+  required_before_step: number | null;
+  created_at: string;
+  child_no_surat: string | null;
+  child_judul_surat: string | null;
+  child_status: string | null;
+  child_current_step: number | null;
+  child_file_path: string | null;
+  child_pdf_path: string | null;
+  child_created_at: string | null;
+  child_created_by: string | null;
 }
 
 export interface SuratRegistrationDraftFile {
@@ -298,7 +339,67 @@ export const suratService = {
     };
   },
 
-  normalizeFormInputData(inputData: any) {
+  normalizeRecommendationItems(value: any[]) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((row) => Object.values(row ?? {}).some((cellValue) => String(cellValue ?? "").trim()))
+      .map((row, index) => {
+        const actionRaw = String(row?.recommendation_action || "").trim();
+        const action = actionRaw || (String(row?.service || "").trim() ? "service" : String(row?.ganti || "").trim() ? "ganti" : "");
+        const nestedAttachment = row?.recommendation_attachment &&
+          typeof row.recommendation_attachment === "object" &&
+          !Array.isArray(row.recommendation_attachment)
+          ? row.recommendation_attachment
+          : null;
+        const attachmentSource = nestedAttachment || {
+          draft_file_id: row?.recommendation_attachment_draft_file_id,
+          file_url: row?.recommendation_attachment_url,
+          file_name: row?.recommendation_attachment_file_name,
+          file_type: row?.recommendation_attachment_file_type,
+          file_size: row?.recommendation_attachment_file_size,
+          uploaded_at: row?.recommendation_attachment_uploaded_at,
+          source: row?.recommendation_attachment_source,
+        };
+        const hasAttachment = Boolean(String(
+          attachmentSource?.draft_file_id || attachmentSource?.file_url || attachmentSource?.file_name || ""
+        ).trim());
+        const normalized = {
+          ...row,
+          no: index + 1,
+          recommendation_action: action || null,
+          nama_barang: String(row?.nama_barang ?? "").trim(),
+          no_registrasi: String(row?.no_registrasi ?? "").trim(),
+          lokasi_pic: String(row?.lokasi_pic ?? "").trim(),
+          kerusakan: String(row?.kerusakan ?? "").trim(),
+          service: action === "service" ? "✓" : "",
+          ganti: action === "ganti" ? "✓" : "",
+          uraian: String(row?.uraian ?? "").trim(),
+          keterangan: String(row?.keterangan ?? "").trim(),
+          reference_link: String(row?.reference_link ?? row?.link ?? "").trim(),
+          recommendation_attachment: hasAttachment
+            ? {
+                draft_file_id: String(attachmentSource.draft_file_id || "").trim() || null,
+                file_url: String(attachmentSource.file_url || "").trim() || null,
+                file_name: String(attachmentSource.file_name || "").trim() || null,
+                file_type: attachmentSource.file_type || null,
+                file_size: Number(attachmentSource.file_size || 0) || null,
+                uploaded_at: String(attachmentSource.uploaded_at || "").trim() || null,
+                source: String(attachmentSource.source || "").trim() || null,
+              }
+            : null,
+        };
+        delete normalized.recommendation_attachment_draft_file_id;
+        delete normalized.recommendation_attachment_url;
+        delete normalized.recommendation_attachment_file_name;
+        delete normalized.recommendation_attachment_file_type;
+        delete normalized.recommendation_attachment_file_size;
+        delete normalized.recommendation_attachment_uploaded_at;
+        delete normalized.recommendation_attachment_source;
+        return normalized;
+      });
+  },
+
+  normalizeFormInputData(inputData: any, context?: { requesterDepartmentCode?: string | null; requesterDepartmentName?: string | null }) {
     const normalized = { ...(inputData ?? {}) };
     if (!normalized.request_category) {
       normalized.request_category = normalized.request_mode === "unit"
@@ -333,10 +434,30 @@ export const suratService = {
       delete normalized.allocated_units;
       delete normalized.allocated_unit_count;
     }
+    const requesterDepartmentCode = String(context?.requesterDepartmentCode || "").trim().toUpperCase();
+    const requesterDepartmentName = String(context?.requesterDepartmentName || "").trim().toLowerCase();
+    const canUseRecommendation = requesterDepartmentCode === "PBO" ||
+      requesterDepartmentName === "pengembangan organisasi" ||
+      requesterDepartmentName === "po";
+    if (normalized.request_category === "asset" && canUseRecommendation) {
+      normalized.requires_recommendation = normalized.requires_recommendation === true;
+      normalized.recommendation_template_name = normalized.recommendation_template_name || "Rekomendasi Peremajaan Alat";
+      normalized.recommendation_attachment_note = normalized.recommendation_attachment_note ||
+        (normalized.requires_recommendation
+          ? "Pemohon membutuhkan lampiran rekomendasi untuk permohonan aset ini."
+          : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.");
+    } else {
+      delete normalized.requires_recommendation;
+      delete normalized.recommendation_template_name;
+      delete normalized.recommendation_attachment_note;
+    }
     if (Array.isArray(normalized.items)) {
       normalized.items = normalized.items.filter((row: any) =>
         Object.values(row ?? {}).some((value) => String(value ?? "").trim())
       );
+    }
+    if (Array.isArray(normalized.recommendation_items)) {
+      normalized.recommendation_items = this.normalizeRecommendationItems(normalized.recommendation_items);
     }
     return normalized;
   },
@@ -611,6 +732,18 @@ export const suratService = {
     };
   },
 
+  applyGeneratedCellPadding(cell: ExcelJS.Cell, options: { horizontal?: "left" | "center" | "right"; vertical?: "top" | "middle" | "bottom"; wrap?: boolean } = {}) {
+    const horizontal = options.horizontal || (cell.alignment?.horizontal as "left" | "center" | "right" | undefined) || "left";
+    cell.alignment = {
+      ...(cell.alignment || {}),
+      horizontal,
+      vertical: options.vertical || (cell.alignment?.vertical as "top" | "middle" | "bottom" | undefined) || "middle",
+      wrapText: options.wrap ?? cell.alignment?.wrapText ?? true,
+      shrinkToFit: cell.alignment?.shrinkToFit ?? false,
+      ...(horizontal === "left" ? { indent: Math.max(Number(cell.alignment?.indent || 0), 1) } : {}),
+    };
+  },
+
   writeTableField(workbook: ExcelJS.Workbook, field: TemplateInputField, value: any[]) {
     const config = this.getTableConfig(field);
     if (!config) return;
@@ -624,11 +757,23 @@ export const suratService = {
 
     rows.slice(0, maxRows).forEach((row, index) => {
       const excelRow = config.startRow + index;
-      if (config.noColumn) sheet.getCell(`${config.noColumn}${excelRow}`).value = index + 1;
+      if (config.noColumn) {
+        const noCell = sheet.getCell(`${config.noColumn}${excelRow}`);
+        noCell.value = index + 1;
+        this.applyGeneratedCellPadding(noCell, { horizontal: "center", vertical: "middle", wrap: true });
+      }
       config.columns.forEach((column: TableInputColumn) => {
         const rawValue = row?.[column.key];
-        sheet.getCell(`${column.column}${excelRow}`).value = this.formatInputValue(rawValue, column.type);
+        const cell = sheet.getCell(`${column.column}${excelRow}`);
+        cell.value = this.formatInputValue(rawValue, column.type);
+        this.applyGeneratedCellPadding(cell, {
+          horizontal: ["number", "select"].includes(String(column.type || "")) ? "center" : "left",
+          vertical: "middle",
+          wrap: true,
+        });
       });
+      const rowRef = sheet.getRow(excelRow);
+      rowRef.height = Math.max(Number(rowRef.height || 0), 28);
     });
   },
 
@@ -703,6 +848,11 @@ export const suratService = {
         ...(shouldShrink ? { shrinkToFit: true } : {}),
       };
     }
+    this.applyGeneratedCellPadding(target, {
+      horizontal: field.horizontal || (field.type === "number" || field.type === "currency" ? "right" : "left"),
+      vertical: field.vertical || (field.type === "textarea" ? "top" : "middle"),
+      wrap: field.wrap !== false,
+    });
 
     const rowHeight = Number(field.row_height || field.rowHeight || 0);
     if (rowHeight > 0) {
@@ -736,6 +886,7 @@ export const suratService = {
         shrinkToFit: field.shrink !== false,
         vertical: field.vertical || "top",
         horizontal: field.horizontal || "left",
+        indent: Math.max(Number(target.alignment?.indent || 0), 1),
       };
       const rowHeight = Number(field.row_height || field.rowHeight || 15);
       this.getRowsForField(field, mergeRange).forEach((rowNumber) => {
@@ -1019,6 +1170,59 @@ export const suratService = {
     if (error) throw error;
   },
 
+  async getMyRecommendationTasks(): Promise<RecommendationTask[]> {
+    const { data, error } = await supabase.rpc("get_my_recommendation_tasks");
+    if (error) throw error;
+    return (data || []) as RecommendationTask[];
+  },
+
+  async claimRecommendationTask(taskId: string): Promise<SuratRegistrationDraft> {
+    const { data, error } = await supabase.rpc("claim_recommendation_task", {
+      p_task_id: taskId,
+    });
+    if (error) throw error;
+    return data as SuratRegistrationDraft;
+  },
+
+  async completeRecommendationTask(taskId: string, childSuratId: string): Promise<void> {
+    const { error } = await supabase.rpc("complete_recommendation_task", {
+      p_task_id: taskId,
+      p_child_surat_id: childSuratId,
+    });
+    if (error) throw error;
+  },
+
+  async autoApproveRecommendationFirstStep(suratId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Sesi login tidak tersedia.");
+
+    const { data: signature, error: signatureError } = await supabase
+      .from("surat_signatures")
+      .select("id, surat_id, step_order, user_id, is_signed, surat_registrasi!inner(current_step)")
+      .eq("surat_id", suratId)
+      .eq("step_order", 1)
+      .eq("user_id", user.id)
+      .eq("is_signed", false)
+      .maybeSingle();
+
+    if (signatureError) throw signatureError;
+    if (!signature) throw new Error("Signer pertama rekomendasi tidak ditemukan untuk akun ini.");
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    await this.approveSurat(
+      signature.id,
+      suratId,
+      1,
+      profile?.full_name || user.email || "Pembuat Rekomendasi",
+      "Dikonfirmasi oleh pembuat rekomendasi"
+    );
+  },
+
   async uploadRegistrationDraftFiles(
     draftId: string,
     files: File[],
@@ -1101,18 +1305,22 @@ export const suratService = {
         projectIdClean
           ? supabase.from("master_projects").select("code").eq("id", projectIdClean).single()
           : Promise.resolve({ data: null }),
-        // Ambil type_index langsung dari master_letter_types (bukan mapping yang kosong)
-        supabase.from("master_letter_types")
-          .select("type_index")
-          .eq("id", payload.letter_type_id)
+        supabase.from("master_dept_letter_types")
+          .select("sort_index")
+          .eq("dept_id", deptIdClean)
+          .eq("letter_type_id", payload.letter_type_id)
           .single()
       ]);
+
+      if (typeRes.error || !typeRes.data) {
+        throw new Error("Jenis surat tidak tersedia untuk departemen pengaju.");
+      }
 
       const noUrutStr  = String(nextNumber).padStart(3, "0");
       const entityCode = entityRes.data?.code || "??";
       const deptCode   = deptRes.data?.code   || "";
       const dIndex     = deptRes.data?.dept_index  || "0";
-      const tIndex     = typeRes.data?.type_index  || "0";
+      const tIndex     = typeRes.data?.sort_index  || "0";
       const requestedProjectCode = String(payload.form_input_data?.requested_project?.code || "").trim();
 
       const romawiBulan = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
@@ -1167,9 +1375,13 @@ export const suratService = {
 
       const noUrut      = parseInt(payload.no_surat.split("/")[0]);
       const currentYear = new Date().getFullYear();
-      const normalizedFormInputData = this.normalizeFormInputData(payload.form_input_data);
-      payload = { ...payload, form_input_data: normalizedFormInputData };
+      const preliminaryInputData = this.normalizeFormInputData(payload.form_input_data);
+      payload = { ...payload, form_input_data: preliminaryInputData };
       const configContext = await this.getTemplateContext(payload);
+      const normalizedFormInputData = this.normalizeFormInputData(configContext.payload.form_input_data, {
+        requesterDepartmentCode: configContext.department?.code,
+        requesterDepartmentName: configContext.department?.name,
+      });
       payload = { ...configContext.payload, form_input_data: normalizedFormInputData };
       const unitConfig = this.getUnitConfigFromForm(configContext.form);
       const isUnitMode = normalizedFormInputData?.request_mode === "unit";
@@ -1303,6 +1515,7 @@ export const suratService = {
           usage_name: configContext.usage?.name || null,
           form_id: configContext.form?.id || null,
           request_category: configContext.usage?.request_category || null,
+          recommendation_config: configContext.usage?.recommendation_config || {},
           requester_department_id: payload.policy_validation?.requester_department_id || null,
           steps: snapshotSigners,
           attachment_requirements: configContext.usage?.form_usage_attachment_requirements || [],
@@ -1998,6 +2211,29 @@ export const suratService = {
     }).filter(Boolean);
   },
 
+  async getLinkedDocuments(parentSuratId: string): Promise<LinkedSuratDocument[]> {
+    if (!parentSuratId) return [];
+    const { data, error } = await supabase.rpc("get_surat_linked_documents", {
+      p_parent_surat_id: parentSuratId,
+    });
+    if (error) throw new Error(error.message);
+    return (data || []) as LinkedSuratDocument[];
+  },
+
+  async linkRecommendationDocument(
+    parentSuratId: string,
+    childSuratId: string,
+    requiredBeforeStep?: number | null
+  ): Promise<LinkedSuratDocument> {
+    const { data, error } = await supabase.rpc("link_surat_recommendation", {
+      p_parent_surat_id: parentSuratId,
+      p_child_surat_id: childSuratId,
+      p_required_before_step: requiredBeforeStep ?? null,
+    });
+    if (error) throw new Error(error.message);
+    return data as LinkedSuratDocument;
+  },
+
   async uploadFile(file: File) {
     const filePath = `dokumen/${Date.now()}_${file.name}`;
     const uploaded = await appStorageService.upload({ bucket: "dokumen_surat", path: filePath, file });
@@ -2106,15 +2342,40 @@ export const suratService = {
       supabase.from("master_offices").select("*"),
       supabase.from("master_departments").select("*"),
       supabase.from("master_letter_types").select("*"),
-      supabase.from("profiles").select("id, full_name").order("full_name"),
+      supabase.from("master_dept_letter_types").select("dept_id, letter_type_id, sort_index"),
+      supabase.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
       supabase.from("master_projects").select("*").order("name"),
       supabase.from("master_penggunaan_detail").select("*").order("created_at", { ascending: false })
     ]);
+    const typeDepartmentMap = new Map<string, string[]>();
+    const typeSortMap = new Map<string, number>();
+    const typeDepartmentSortMap = new Map<string, Record<string, number>>();
+    (res[4].data || []).forEach((row: any) => {
+      if (!row.letter_type_id || !row.dept_id) return;
+      const ids = typeDepartmentMap.get(row.letter_type_id) || [];
+      ids.push(row.dept_id);
+      typeDepartmentMap.set(row.letter_type_id, ids);
+      if (!typeSortMap.has(row.letter_type_id)) typeSortMap.set(row.letter_type_id, row.sort_index ?? 999);
+      typeDepartmentSortMap.set(row.letter_type_id, {
+        ...(typeDepartmentSortMap.get(row.letter_type_id) || {}),
+        [row.dept_id]: row.sort_index ?? 999,
+      });
+    });
+    const letterTypes = (res[3].data || [])
+      .map((type: any) => ({
+        ...type,
+        departmentIds: typeDepartmentMap.get(type.id) || [],
+        dept_ids: typeDepartmentMap.get(type.id) || [],
+        departmentSortIndexes: typeDepartmentSortMap.get(type.id) || {},
+        dept_sort_indexes: typeDepartmentSortMap.get(type.id) || {},
+        department_sort_index: typeSortMap.get(type.id) ?? type.type_index ?? 999,
+      }))
+      .sort((a: any, b: any) => (a.department_sort_index ?? 999) - (b.department_sort_index ?? 999) || String(a.name || "").localeCompare(String(b.name || ""), "id"));
     return {
       entities:   res[0].data || [], offices:    res[1].data || [],
-      depts:      res[2].data || [], types:      res[3].data || [],
-      users:      res[4].data || [], projects:   res[5].data || [],
-      penggunaan: res[6].data || []
+      depts:      res[2].data || [], types:      letterTypes,
+      users:      res[5].data || [], projects:   res[6].data || [],
+      penggunaan: res[7].data || []
     };
   },
 

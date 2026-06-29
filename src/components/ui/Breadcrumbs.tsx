@@ -32,6 +32,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/settings': 'Pengaturan',
   '/audit-logs': 'Audit Log',
   '/settings': 'Pengaturan',
+  '/docs': 'Dokumentasi',
   '/hierarchy': 'Struktur Organisasi',
 }
 

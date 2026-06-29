@@ -698,7 +698,9 @@ export default function OrganizationHierarchyPage() {
     setIsPanning(false);
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {}
+    } catch {
+      // Pointer capture can already be released when the pointer leaves the viewport.
+    }
     if (panRef.current.moved) {
       window.setTimeout(() => {
         panRef.current.suppressClick = false;

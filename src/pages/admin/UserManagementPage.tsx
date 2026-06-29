@@ -14,7 +14,7 @@ import {
   Building2, Briefcase, Loader2, Download, Upload, ToggleLeft,
   ToggleRight, Phone, CheckCircle2, XCircle, AlertCircle, Calendar,
   Clock, FileSpreadsheet, LogOut, KeyRound, Mail, Hash, Info,
-  ChevronLeft, ChevronRight, X, List, Network,
+  ChevronLeft, ChevronRight, X, List, Network, SlidersHorizontal,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,6 +31,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppDialog } from '@/components/app/AppDialogProvider';
 import { excelSerialToDateInput, exportRowsToXlsx, readSpreadsheetRows } from '@/lib/excel';
+
+type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -348,7 +350,7 @@ const normalizeImportDate = (value: string) => {
     if (parsed) return parsed;
   }
 
-  const slashMatch = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  const slashMatch = raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
   if (slashMatch) {
     const [, d, m, y] = slashMatch;
     const year = y.length === 2 ? `20${y}` : y;
@@ -372,6 +374,9 @@ export default function UserManagementPage() {
   const [officeFilter, setOfficeFilter] = useState('all');
   const [deptFilter, setDeptFilter]     = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [jobFilter, setJobFilter]       = useState('all');
+  const [sortBy, setSortBy]             = useState<UserSort>('name_asc');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditOpen, setIsEditOpen]     = useState(false);
   const [isAddOpen, setIsAddOpen]       = useState(false);
@@ -397,22 +402,44 @@ export default function UserManagementPage() {
     Array.from(new Set(users.map(u => u.officeName).filter(Boolean))).sort() as string[], [users]);
   const uniqueDepts = useMemo(() =>
     Array.from(new Set(users.map(u => u.departmentName).filter(Boolean))).sort() as string[], [users]);
+  const uniqueJobs = useMemo(() =>
+    Array.from(new Set(users.map(u => u.jobTitle).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'id')) as string[], [users]);
+  const activeFilterCount = [
+    statusFilter !== 'all',
+    officeFilter !== 'all',
+    deptFilter !== 'all',
+    jobFilter !== 'all',
+    sortBy !== 'name_asc',
+  ].filter(Boolean).length;
 
-  const filteredUsers = useMemo(() => users.filter(u => {
-    const s = searchQuery.toLowerCase();
-    const ok = u.fullName.toLowerCase().includes(s)
-      || (u.email?.toLowerCase() || '').includes(s)
-      || (u.jobTitle?.toLowerCase() || '').includes(s)
-      || (u.nik?.toLowerCase() || '').includes(s)
-      || ((u as any).phone?.toLowerCase() || '').includes(s);
-    const isActive = (u as any).is_active !== false;
-    return ok
-      && (officeFilter === 'all' || u.officeName === officeFilter)
-      && (deptFilter   === 'all' || u.departmentName === deptFilter)
-      && (statusFilter === 'all' || (statusFilter === 'active' ? isActive : !isActive));
-  }), [users, searchQuery, officeFilter, deptFilter, statusFilter]);
+  const filteredUsers = useMemo(() => users
+    .filter(u => {
+      const s = searchQuery.toLowerCase();
+      const ok = u.fullName.toLowerCase().includes(s)
+        || (u.email?.toLowerCase() || '').includes(s)
+        || (u.jobTitle?.toLowerCase() || '').includes(s)
+        || (u.nik?.toLowerCase() || '').includes(s)
+        || ((u as any).phone?.toLowerCase() || '').includes(s);
+      const isActive = (u as any).is_active !== false;
+      return ok
+        && (officeFilter === 'all' || u.officeName === officeFilter)
+        && (deptFilter   === 'all' || u.departmentName === deptFilter)
+        && (jobFilter    === 'all' || u.jobTitle === jobFilter)
+        && (statusFilter === 'all' || (statusFilter === 'active' ? isActive : !isActive));
+    })
+    .sort((a, b) => {
+      if (sortBy === 'job_asc') return `${a.jobTitle || ''} ${a.fullName}`.localeCompare(`${b.jobTitle || ''} ${b.fullName}`, 'id');
+      if (sortBy === 'department_asc') return `${a.departmentName || ''} ${a.fullName}`.localeCompare(`${b.departmentName || ''} ${b.fullName}`, 'id');
+      if (sortBy === 'office_asc') return `${a.officeName || ''} ${a.fullName}`.localeCompare(`${b.officeName || ''} ${b.fullName}`, 'id');
+      if (sortBy === 'status_asc') {
+        const statusA = (a as any).is_active === false ? '1-nonaktif' : '0-aktif';
+        const statusB = (b as any).is_active === false ? '1-nonaktif' : '0-aktif';
+        return `${statusA} ${a.fullName}`.localeCompare(`${statusB} ${b.fullName}`, 'id');
+      }
+      return String(a.fullName || '').localeCompare(String(b.fullName || ''), 'id');
+    }), [users, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
 
-  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, statusFilter, pageSize]);
+  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy, pageSize]);
 
   const showAll    = pageSize === 'all';
   const totalPages = showAll ? 1 : Math.max(1, Math.ceil(filteredUsers.length / (pageSize as number)));
@@ -438,7 +465,8 @@ export default function UserManagementPage() {
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   }, []);
@@ -572,10 +600,11 @@ export default function UserManagementPage() {
       if (alias.normalized_alias) map.set(normalizeImportText(alias.normalized_alias), alias.department_id);
     });
 
-    return (name?: string | null) => {
+    const resolve = (name?: string | null) => {
       const key = normalizeImportText(name || '');
       return key ? map.get(key) || null : null;
     };
+    return { resolve };
   };
 
   const buildOfficeResolver = async () => {
@@ -587,7 +616,9 @@ export default function UserManagementPage() {
     if (aliasesRes.error) throw aliasesRes.error;
 
     const map = new Map<string, string>();
+    const officeById = new Map<string, any>();
     (officesRes.data || []).forEach((office: any) => {
+      officeById.set(office.id, office);
       map.set(normalizeImportText(office.name), office.id);
       if (office.code) map.set(normalizeImportText(office.code), office.id);
       if (office.kedudukan && office.name) map.set(normalizeImportText(`${office.kedudukan} ${office.name}`), office.id);
@@ -597,10 +628,13 @@ export default function UserManagementPage() {
       if (alias.normalized_alias) map.set(normalizeImportText(alias.normalized_alias), alias.office_id);
     });
 
-    return (name?: string | null) => {
+    const resolve = (name?: string | null) => {
       const key = normalizeImportText(name || '');
       return key ? map.get(key) || null : null;
     };
+    const isHeadOffice = (officeId?: string | null) =>
+      String(officeById.get(String(officeId || ''))?.kedudukan || '').toLowerCase() === 'pusat';
+    return { resolve, isHeadOffice };
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -695,8 +729,8 @@ export default function UserManagementPage() {
     const unmatchedDepartments = new Set<string>();
     const unmatchedOffices = new Set<string>();
     const { data: { session } } = await supabase.auth.getSession();
-    const resolveDepartmentId = await buildDepartmentResolver();
-    const resolveOfficeId = await buildOfficeResolver();
+    const departmentResolver = await buildDepartmentResolver();
+    const officeResolver = await buildOfficeResolver();
     const importedNiks = dataRows.map((row) => row.nik).filter(Boolean);
     setImportProgress({
       phase: 'importing',
@@ -711,8 +745,15 @@ export default function UserManagementPage() {
 
     for (const [index, row] of dataRows.entries()) {
       try {
-        const departmentId = resolveDepartmentId(row.department_name);
-        const officeId = resolveOfficeId(row.office_name);
+        const officeId = officeResolver.resolve(row.office_name);
+        let departmentId = departmentResolver.resolve(row.department_name);
+        const normalizedDepartmentName = normalizeImportText(row.department_name);
+        if (
+          officeResolver.isHeadOffice(officeId)
+          && (normalizedDepartmentName === 'marketing cabang' || normalizedDepartmentName === 'marketing (cabang)')
+        ) {
+          departmentId = departmentResolver.resolve('Marketing') || departmentId;
+        }
         const normalizedRole = (row.role || '').trim().toLowerCase();
         if (row.department_name && !departmentId) unmatchedDepartments.add(row.department_name);
         if (row.office_name && !officeId) unmatchedOffices.add(row.office_name);
@@ -943,37 +984,71 @@ export default function UserManagementPage() {
       )}
 
       {/* ── Filter toolbar ───────────────────────────────────────────────────── */}
-      <div className="sigap-panel grid grid-cols-1 gap-3 p-4 md:grid-cols-5">
-        <div className="md:col-span-2 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Cari nama, email, NIK, HP..." className="pl-10 bg-secondary/50 border-border"
-            value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+      <div className="sigap-panel space-y-3 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Cari nama, email, NIK, HP..."
+              className="h-11 border-border bg-secondary/50 pl-10"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsFilterOpen(prev => !prev)}
+            className="h-11 justify-between gap-2 border-border bg-card px-4 lg:min-w-[150px]"
+            aria-expanded={isFilterOpen}
+          >
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filter
+            </span>
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
         </div>
-        {[
-          { val: statusFilter, set: setStatusFilter, icon: <AlertCircle className="w-4 h-4 text-primary" />, ph: "Status Akun",
-            opts: [["all","Semua Status"],["active","Aktif"],["inactive","Nonaktif"]] },
-          { val: officeFilter, set: setOfficeFilter, icon: <Building2 className="w-4 h-4 text-primary" />,   ph: "Kantor",
-            opts: [["all","Semua Kantor"], ...uniqueOffices.map(o => [o,o])] },
-          { val: deptFilter,   set: setDeptFilter,   icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Departemen",
-            opts: [["all","Semua Departemen"], ...uniqueDepts.map(d => [d,d])] },
-        ].map(({ val, set, icon, ph, opts }) => (
-          <Select key={ph} value={val} onValueChange={set}>
-            <SelectTrigger className="bg-secondary/50 border-border">
-              <div className="flex items-center gap-2">{icon}<SelectValue placeholder={ph} /></div>
-            </SelectTrigger>
-            <SelectContent>
-              {opts.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        ))}
+        {isFilterOpen && (
+          <div className="grid grid-cols-1 gap-3 border-t border-border/60 pt-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              { val: statusFilter, set: (value: string) => setStatusFilter(value), icon: <AlertCircle className="w-4 h-4 text-primary" />, ph: "Status Akun",
+                opts: [["all","Semua Status"],["active","Aktif"],["inactive","Nonaktif"]] },
+              { val: officeFilter, set: (value: string) => setOfficeFilter(value), icon: <Building2 className="w-4 h-4 text-primary" />,   ph: "Kantor",
+                opts: [["all","Semua Kantor"], ...uniqueOffices.map(o => [o,o])] },
+              { val: deptFilter,   set: (value: string) => setDeptFilter(value),   icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Departemen",
+                opts: [["all","Semua Departemen"], ...uniqueDepts.map(d => [d,d])] },
+              { val: jobFilter,    set: (value: string) => setJobFilter(value),    icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Jabatan",
+                opts: [["all","Semua Jabatan"], ...uniqueJobs.map(j => [j,j])] },
+              { val: sortBy,       set: (value: string) => setSortBy(value as UserSort), icon: <List className="w-4 h-4 text-primary" />, ph: "Urutkan",
+                opts: [["name_asc","Nama A-Z"],["job_asc","Jabatan A-Z"],["department_asc","Departemen A-Z"],["office_asc","Kantor A-Z"],["status_asc","Status"]] },
+            ].map(({ val, set, icon, ph, opts }) => (
+              <Select key={ph} value={val} onValueChange={set}>
+                <SelectTrigger className="h-10 border-border bg-secondary/50">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {icon}
+                    <SelectValue placeholder={ph} />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {opts.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        <Table>
-          <TableHeader className="bg-muted/30">
+      <div className="relative bg-card shadow-sm">
+        <Table className="min-w-[980px]" containerClassName="max-h-[calc(100dvh-24rem)] min-h-[380px]">
+          <TableHeader className="sticky top-0 z-20 bg-card/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
             <TableRow className="hover:bg-transparent border-border">
-              <TableHead className="w-12 py-5 pl-5">
+              <TableHead className="sticky top-0 z-20 w-12 bg-card/95 py-5 pl-5 backdrop-blur supports-[backdrop-filter]:bg-card/80">
                 <Checkbox
                   checked={allPageSelected}
                   ref={(el) => { if (el) (el as any).indeterminate = somePageSelected && !allPageSelected; }}
@@ -981,9 +1056,15 @@ export default function UserManagementPage() {
                   className="border-muted-foreground/40"
                 />
               </TableHead>
-              {["Karyawan","No. HP","Role","Jabatan & Unit","Masa Kerja"].map(h => (
-                <TableHead key={h} className="py-4 text-xs font-semibold text-muted-foreground">
-                  {h}
+              {[
+                { label: "Karyawan", className: "min-w-[280px]" },
+                { label: "No. HP", className: "min-w-[150px]" },
+                { label: "Role", className: "min-w-[120px]" },
+                { label: "Jabatan & Unit", className: "min-w-[260px]" },
+                { label: "Masa Kerja", className: "min-w-[170px]" },
+              ].map(h => (
+                <TableHead key={h.label} className={cn("sticky top-0 z-20 bg-card/95 py-4 text-xs font-semibold text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-card/80", h.className)}>
+                  {h.label}
                 </TableHead>
               ))}
             </TableRow>
@@ -1057,7 +1138,7 @@ export default function UserManagementPage() {
                         <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         {(user as any).phone}
                       </div>
-                    ) : <span className="text-muted-foreground/40 text-xs font-bold">—</span>}
+                    ) : <span className="text-muted-foreground text-xs font-bold">—</span>}
                   </TableCell>
 
                   <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
@@ -1088,8 +1169,8 @@ export default function UserManagementPage() {
                     </div>
                   </TableCell>
 
-                  <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
-                    <div className="space-y-1">
+                  <TableCell className="min-w-[170px]" onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
+                    <div className="space-y-1.5 whitespace-nowrap">
                       {joinDate ? (
                         <>
                           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -1101,7 +1182,7 @@ export default function UserManagementPage() {
                             </div>
                           )}
                           <div className={cn(
-                            "mt-0.5 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
+                            "mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
                             hasResigned
                               ? "bg-red-500/10 text-red-400 border-red-500/20"
                               : "bg-primary/10 text-primary border-primary/20"
@@ -1110,7 +1191,7 @@ export default function UserManagementPage() {
                           </div>
                         </>
                       ) : (
-                        <span className="text-muted-foreground/40 text-xs font-bold">Belum diisi</span>
+                        <span className="text-muted-foreground text-xs font-bold">Belum diisi</span>
                       )}
                     </div>
                   </TableCell>

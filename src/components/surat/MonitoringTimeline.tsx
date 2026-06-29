@@ -3,9 +3,11 @@ import { SuratRegistrasi } from '@/types/surat';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from "@/lib/utils";
-import { documentPreviewService } from '@/services/document-preview.service';
+import { documentOperationKey, useDocumentOpener } from '@/hooks/useDocumentOpener';
 
 export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | null, loading: boolean }) => {
+  const { openPdf, isOpening } = useDocumentOpener();
+
   if (loading) return (
     <div className="h-full flex items-center justify-center text-muted-foreground"><Loader2 className="animate-spin mr-2" /> Memuat data...</div>
   );
@@ -27,22 +29,21 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
             <h1 className="text-2xl font-black tracking-tight">{data.judul_surat}</h1>
             <p className="text-sm text-muted-foreground font-mono mt-1">{data.no_surat || 'NOMOR BELUM TERBIT'}</p>
           </div>
-          {data.status === 'SELESAI' && data.file_path && (
-            <Button
-              size="sm"
-              className="gap-2"
-              onClick={() =>
-                documentPreviewService
-                  .openStoredFileInNewTab(data.id, data.file_path)
-                  .catch((error: unknown) => {
-                    const message = error instanceof Error ? error.message : 'Gagal membuka dokumen.';
-                    alert(message || 'Gagal membuka dokumen.');
-                  })
-              }
-            >
-              <Download size={16} /> Unduh Final
-            </Button>
-          )}
+          {data.status === 'SELESAI' && data.file_path && (() => {
+            const pdfKey = documentOperationKey.pdf(data.id, "timeline");
+            const opening = isOpening(pdfKey);
+            return (
+              <Button
+                size="sm"
+                className="gap-2"
+                disabled={opening}
+                onClick={() => void openPdf(data.id, pdfKey)}
+              >
+                {opening ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                {opening ? "Menyiapkan PDF" : "Buka PDF Final"}
+              </Button>
+            );
+          })()}
         </div>
       </Card>
 

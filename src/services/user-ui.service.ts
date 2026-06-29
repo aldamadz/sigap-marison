@@ -16,7 +16,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
       .from('profiles')
       .select(`
         *,
-        master_departments (name)
+        master_departments (name, code)
       `)
       .eq('id', authUser.id)
       .maybeSingle();
@@ -34,7 +34,8 @@ export const getCurrentUser = async (): Promise<User | null> => {
       email: authUser.email || uiUser.email,
       // Pastikan photoUrl terisi dari avatar_url database
       photoUrl: profile.avatar_url || uiUser.photoUrl || null,
-      departmentName: profile.master_departments?.name || 'Umum'
+      departmentName: profile.master_departments?.name || 'Umum',
+      departmentCode: profile.master_departments?.code || null,
     };
   } catch (error) {
     console.error('Error fetching current profile:', error);

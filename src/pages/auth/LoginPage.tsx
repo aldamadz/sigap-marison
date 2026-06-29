@@ -1,20 +1,41 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Sun, Moon, Cloud } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
+type LoginSkyMode = 'light' | 'dark';
+
 export default function LoginPage() {
+  const { resolvedTheme, setTheme } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [skyMode, setSkyMode] = useState<LoginSkyMode>(() => (resolvedTheme === 'dark' ? 'dark' : 'light'));
+  const [isThemeAnimating, setIsThemeAnimating] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false); // State untuk Checkbox
   const navigate = useNavigate();
+  const isDark = skyMode === 'dark';
+  const stars = [
+    { top: '9%', left: '12%', size: 1.4, delay: '0.1s', duration: '3.8s' },
+    { top: '15%', left: '74%', size: 1.8, delay: '0.8s', duration: '4.5s' },
+    { top: '23%', left: '40%', size: 1.2, delay: '1.3s', duration: '3.2s' },
+    { top: '31%', left: '88%', size: 1.7, delay: '0.4s', duration: '4.8s' },
+    { top: '40%', left: '19%', size: 1.1, delay: '1.9s', duration: '3.6s' },
+    { top: '48%', left: '61%', size: 1.9, delay: '0.7s', duration: '4.2s' },
+    { top: '58%', left: '82%', size: 1.3, delay: '2.2s', duration: '3.9s' },
+    { top: '67%', left: '30%', size: 1.6, delay: '1.1s', duration: '4.6s' },
+    { top: '75%', left: '69%', size: 1.2, delay: '2.7s', duration: '3.4s' },
+    { top: '83%', left: '46%', size: 1.8, delay: '1.6s', duration: '4.1s' },
+    { top: '18%', left: '25%', size: 1.1, delay: '2.9s', duration: '3.3s' },
+    { top: '72%', left: '9%', size: 1.5, delay: '0.2s', duration: '4.4s' },
+  ];
 
   // Load email jika sebelumnya memilih 'Remember Me'
   useEffect(() => {
@@ -24,6 +45,22 @@ export default function LoginPage() {
       setRememberMe(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (isThemeAnimating) return;
+    setSkyMode(resolvedTheme === 'dark' ? 'dark' : 'light');
+  }, [isThemeAnimating, resolvedTheme]);
+
+  const handleThemeToggle = () => {
+    const nextMode: LoginSkyMode = isDark ? 'light' : 'dark';
+    setIsThemeAnimating(true);
+    setSkyMode(nextMode);
+
+    window.setTimeout(() => {
+      setTheme(nextMode);
+      window.setTimeout(() => setIsThemeAnimating(false), 260);
+    }, 120);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,10 +110,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-[#020617] overflow-hidden">
+    <div data-sky-mode={skyMode} className="login-shell flex min-h-screen w-full overflow-hidden bg-sky-50 text-slate-950 dark:bg-[#020617] dark:text-white">
       
       {/* SISI KIRI: FORM LOGIN */}
-      <div className="w-full lg:w-[480px] relative z-20 flex items-center justify-center p-8 md:p-12 bg-background border-r border-border">
+      <div className="relative z-20 flex min-h-screen w-full items-center justify-center bg-white/88 p-6 shadow-[18px_0_70px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:bg-background/96 md:p-10 lg:w-[480px] lg:border-r lg:border-slate-200/70 dark:lg:border-border">
+        <button
+          type="button"
+          onClick={handleThemeToggle}
+          disabled={isThemeAnimating}
+          className="absolute right-5 top-5 inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-border dark:bg-card/80 dark:text-muted-foreground dark:hover:bg-muted"
+          aria-label={isDark ? 'Gunakan mode terang' : 'Gunakan mode gelap'}
+          aria-busy={isThemeAnimating}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={isDark ? 'sun' : 'moon'}
+              className="inline-flex"
+              initial={{ opacity: 0, rotate: -45, scale: 0.72 }}
+              animate={{ opacity: 1, rotate: 0, scale: 1 }}
+              exit={{ opacity: 0, rotate: 45, scale: 0.72 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </motion.span>
+          </AnimatePresence>
+          <span className="hidden sm:inline">{isDark ? 'Mode terang' : 'Mode gelap'}</span>
+        </button>
+
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -93,7 +153,7 @@ export default function LoginPage() {
               <h1 className="text-2xl font-black tracking-tight text-primary">Marison - SIGAP</h1>
             </div>
             <h2 className="text-2xl font-bold tracking-tight">Selamat Datang</h2>
-            <p className="text-muted-foreground text-sm mt-1">Silakan masuk untuk mengelola agenda Anda.</p>
+            <p className="text-muted-foreground text-sm mt-1">Masuk untuk memproses agenda, surat, dan persetujuan.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -107,7 +167,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="aldamaaa.id@gmail.com"
-                  className="flex h-11 w-full rounded-xl border border-input bg-muted/40 pl-10 pr-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                  className="flex h-11 w-full rounded-xl border border-input bg-white/80 pl-10 pr-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all dark:bg-muted/40"
                   required
                 />
               </div>
@@ -126,7 +186,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="flex h-11 w-full rounded-xl border border-input bg-muted/40 pl-10 pr-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                  className="flex h-11 w-full rounded-xl border border-input bg-white/80 pl-10 pr-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all dark:bg-muted/40"
                   required
                 />
                 <button
@@ -164,48 +224,61 @@ export default function LoginPage() {
         </motion.div>
       </div>
 
-      {/* SISI KANAN: ANIMASI BINTANG JATUH */}
-      <div className="hidden lg:flex flex-1 relative items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          {[...Array(60)].map((_, i) => (
+      {/* SISI KANAN: SKY SCENE */}
+      <div className="login-visual hidden flex-1 items-center justify-center overflow-hidden lg:flex">
+        <div className="login-day-scene">
+          <div className="login-sun">
+            <Sun className="h-20 w-20 text-amber-500" />
+          </div>
+          <div className="login-cloud login-cloud-one">
+            <Cloud className="h-24 w-24" />
+          </div>
+          <div className="login-cloud login-cloud-two">
+            <Cloud className="h-16 w-16" />
+          </div>
+          <div className="login-horizon" />
+        </div>
+
+        <div className="login-night-scene">
+          {stars.map((star, i) => (
             <div 
               key={i} 
-              className="star absolute bg-white rounded-full opacity-30" 
+              className="star absolute rounded-full bg-white opacity-35" 
               style={{
-                width: Math.random() * 2 + 'px',
-                height: Math.random() * 2 + 'px',
-                top: Math.random() * 100 + '%',
-                left: Math.random() * 100 + '%',
-                animation: `twinkle ${Math.random() * 3 + 2}s infinite ease-in-out`
+                width: `${star.size}px`,
+                height: `${star.size}px`,
+                top: star.top,
+                left: star.left,
+                animation: `twinkle ${star.duration} infinite ease-in-out`,
+                animationDelay: star.delay,
               }}
             />
           ))}
-        </div>
 
-        <div className="shooting-star" style={{ top: '10%', right: '10%' }} />
-        <div className="shooting-star delay-v-slow" style={{ top: '30%', right: '5%' }} />
-        <div className="shooting-star delay-slow" style={{ top: '0%', right: '40%' }} />
+          <div className="shooting-star" style={{ top: '10%', right: '10%' }} />
+          <div className="shooting-star delay-v-slow" style={{ top: '30%', right: '5%' }} />
+          <div className="shooting-star delay-slow" style={{ top: '0%', right: '40%' }} />
+        </div>
 
         <div className="relative z-10 text-center px-10">
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="text-6xl font-black text-white tracking-tighter mb-4"
+            className="login-hero-title mb-4 text-6xl font-black tracking-tighter"
           >
             MARISON - SIGAP
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.6 }}
+            animate={{ opacity: 0.72 }}
             transition={{ delay: 0.5 }}
-            className="text-lg text-white uppercase tracking-[0.4em] font-light"
+            className="login-hero-subtitle text-lg font-medium uppercase tracking-[0.34em]"
           >
             Sistem Persetujuan Digital Terintegrasi
           </motion.p>
         </div>
 
-        <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/20 rounded-full blur-[150px]" />
       </div>
 
     </div>
