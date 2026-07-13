@@ -18,6 +18,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Area | Route | Fitur |
 |---|---|---|
 | Public | `/` | Login |
+| Public | `/reset-password` | Reset kata sandi dari tautan email |
 | Public/Core | `/docs` | Dokumentasi Pengguna dan Admin |
 | Core | `/dashboard` | Dashboard |
 | Core | `/calendar` | Kalender |
@@ -88,6 +89,8 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - User login untuk mengakses aplikasi.
 - User yang sudah login diarahkan ke dashboard.
 - User yang belum login diarahkan ke halaman login.
+- User yang lupa kata sandi dapat meminta tautan reset dari halaman login. Tautan dikirim ke email terdaftar, membuka `/reset-password`, lalu user membuat kata sandi baru tanpa admin mengetahui password lama.
+- Halaman `/reset-password` mendukung link reset default Supabase dan link berbasis `token_hash` dari email template custom.
 - Sesi digunakan untuk membatasi akses data, dokumen, lampiran, API internal, dan halaman protected.
 - Saat surat dibuat, database menetapkan `created_by` dari identitas JWT aktif; nilai pembuat tidak dipercaya dari input klien.
 
@@ -96,6 +99,9 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Token session tidak boleh ditulis ke log atau dokumen.
 - Route protected harus menolak user tanpa session.
 - Error akses harus tampil jelas ke user, bukan hanya di console.
+- Reset kata sandi tidak boleh membedakan email terdaftar dan tidak terdaftar pada pesan UI agar daftar akun tidak mudah ditebak.
+- Email template reset password harus mengarah ke domain SIGAP aktif dan disarankan memakai `token_hash` agar tidak kembali ke domain lama.
+- Perubahan kata sandi dicatat sebagai audit event tanpa menyimpan nilai password.
 - Multiple client/session warning perlu dijaga agar tidak menyebabkan perilaku auth tidak stabil.
 
 ## 2. Dashboard

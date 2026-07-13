@@ -13,6 +13,7 @@ import { AttentionProvider } from "@/providers/AttentionProvider";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
+import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
 
 // LAZY IMPORT - GENERAL PAGES
 const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
@@ -179,6 +180,7 @@ const App = () => {
           path="/"
           element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />}
         />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/docs" element={<PublicDocsPage />} />
         <Route path="/docs/:topicSlug" element={<PublicDocsPage />} />
         <Route path="/docs/:topicSlug/:sectionSlug" element={<PublicDocsPage />} />

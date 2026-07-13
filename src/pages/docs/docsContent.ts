@@ -2421,8 +2421,12 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Login berhasil tetapi menu tidak sesuai.",
       "Muncul pesan akun nonaktif.",
       "Akses halaman admin ditolak.",
+      "User lupa kata sandi dan perlu membuat kata sandi baru melalui email.",
     ],
     steps: [
+      "Jika lupa kata sandi, buka halaman login lalu pilih Lupa sandi.",
+      "Masukkan email kerja yang terdaftar dan cek inbox email.",
+      "Buka tautan reset dari email, isi kata sandi baru, lalu login ulang.",
       "Pastikan akun ada di User Organization dan statusnya aktif.",
       "Cek role akun, departemen, kantor, dan jabatan.",
       "Jika user baru import, minta user logout lalu login ulang.",
@@ -2430,10 +2434,29 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     examples: [
       "User cabang tidak bisa memilih departemen karena kantor dan departemen mengikuti profil.",
       "Admin bisa melihat konfigurasi, user biasa tidak bisa membuka halaman admin.",
+      "Jika user lupa kata sandi, admin tidak perlu mengetahui password lama; user cukup memakai link reset dari email.",
     ],
     troubleshooting: [
+      "Jika email reset tidak masuk, cek folder spam dan pastikan email akun benar.",
+      "Jika link reset kedaluwarsa, kirim ulang link dari halaman login.",
       "Jika akun nonaktif, lakukan import data aktif atau aktifkan ulang secara admin.",
       "Jika role salah, ubah role di User Organization lalu minta user login ulang.",
+    ],
+    sections: [
+      {
+        type: "table",
+        title: "Reset kata sandi",
+        columns: ["Bagian", "Perilaku"],
+        rows: [
+          ["Permintaan link", "User menekan Lupa sandi di halaman login dan memasukkan email kerja."],
+          ["Keamanan pesan", "SIGAP menampilkan pesan berhasil tanpa membedakan apakah email terdaftar agar tidak membuka daftar akun."],
+          ["Tautan email", "Link mengarah ke halaman Reset Kata Sandi untuk membuat password baru."],
+          ["Template email", "Untuk menghindari redirect lama, template Supabase sebaiknya memakai `/reset-password?token_hash={{ .TokenHash }}&type=recovery`."],
+          ["Click tracking", "Matikan click tracking untuk email auth agar link reset tidak dibungkus domain tracking email."],
+          ["Setelah berhasil", "Session reset ditutup dan user diminta login ulang memakai kata sandi baru."],
+          ["Audit", "Perubahan kata sandi dicatat sebagai event audit tanpa menyimpan nilai password."],
+        ],
+      },
     ],
   },
   {
@@ -2649,6 +2672,8 @@ export const DOCS_CHANGELOG = [
       "Memperjelas keterangan cell pada template Excel alokasi Unit untuk Struktur Atas, Struktur Bawah, Nomor Kode Produksi, Blok, dan Tanggal Produksi.",
       "Menambahkan contoh input nominal `1000000`, `1.000.000`, dan `1,000,000` pada template agar tim pemeriksa tidak bingung saat mengisi nilai struktur.",
       "Menambahkan contoh input tanggal `01/01/25`, `01/01/2025`, dan `01-01-2025` serta catatan bahwa datepicker mengikuti aplikasi Excel yang digunakan.",
+      "Mengaktifkan alur Lupa Sandi dari halaman login agar user dapat menerima email reset password dan membuat kata sandi baru secara mandiri.",
+      "Menambahkan dukungan reset password berbasis `token_hash` agar email auth tidak bergantung pada redirect lama dan lebih aman terhadap link scanner.",
     ],
   },
   {

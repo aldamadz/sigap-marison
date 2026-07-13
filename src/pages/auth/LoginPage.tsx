@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Sun, Moon, Cloud } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Sun, Moon, Cloud, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
@@ -20,6 +29,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false); // State untuk Checkbox
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const isDark = skyMode === 'dark';
   const stars = [
@@ -109,7 +121,40 @@ export default function LoginPage() {
     }
   };
 
+  const handleOpenReset = () => {
+    setResetEmail(email.trim());
+    setResetOpen(true);
+  };
+
+  const handlePasswordResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetEmail = resetEmail.trim().toLowerCase();
+
+    if (!targetEmail) {
+      toast.error('Masukkan email kerja terlebih dahulu.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo,
+      });
+
+      if (error) throw error;
+
+      toast.success('Link reset kata sandi sudah dikirim jika email terdaftar.');
+      setResetOpen(false);
+    } catch (error: any) {
+      toast.error(error?.message || 'Gagal mengirim link reset kata sandi.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
+    <>
     <div data-sky-mode={skyMode} className="login-shell flex min-h-screen w-full overflow-hidden bg-sky-50 text-slate-950 dark:bg-[#020617] dark:text-white">
       
       {/* SISI KIRI: FORM LOGIN */}
@@ -179,7 +224,13 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Kata Sandi</Label>
-                <button type="button" className="text-xs text-primary hover:underline font-semibold">Lupa sandi?</button>
+                <button
+                  type="button"
+                  onClick={handleOpenReset}
+                  className="text-xs text-primary hover:underline font-semibold"
+                >
+                  Lupa sandi?
+                </button>
               </div>
               <div className="relative group">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
@@ -285,5 +336,63 @@ export default function LoginPage() {
       </div>
 
     </div>
+    <Dialog open={resetOpen} onOpenChange={(open) => !resetLoading && setResetOpen(open)}>
+      <DialogContent
+        className="max-w-md rounded-2xl border-border/70 p-0"
+        accessibilityTitle="Reset kata sandi"
+        accessibilityDescription="Kirim tautan reset kata sandi ke email kerja pengguna."
+      >
+        <form onSubmit={handlePasswordResetRequest}>
+          <DialogHeader className="border-b border-border/70 px-6 py-5 text-left">
+            <DialogTitle>Reset kata sandi</DialogTitle>
+            <DialogDescription>
+              Masukkan email kerja. Jika akun terdaftar, SIGAP akan mengirim tautan untuk membuat kata sandi baru.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 px-6 py-5">
+            <Label htmlFor="reset-email">Email kerja</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="reset-email"
+                type="email"
+                value={resetEmail}
+                onChange={(event) => setResetEmail(event.target.value)}
+                placeholder="nama@marison.id"
+                className="h-11 rounded-xl bg-background pl-10"
+                autoComplete="email"
+                disabled={resetLoading}
+                required
+              />
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Demi keamanan, pesan berhasil tidak membedakan apakah email terdaftar atau tidak.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 border-t border-border/70 px-6 py-4 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetOpen(false)}
+              disabled={resetLoading}
+              className="rounded-xl"
+            >
+              Batal
+            </Button>
+            <Button type="submit" disabled={resetLoading} className="rounded-xl">
+              {resetLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Mengirim...
+                </>
+              ) : (
+                'Kirim Link Reset'
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
