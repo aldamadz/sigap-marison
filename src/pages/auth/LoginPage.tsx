@@ -154,6 +154,9 @@ export default function LoginPage() {
             </div>
             <h2 className="text-2xl font-bold tracking-tight">Selamat Datang</h2>
             <p className="text-muted-foreground text-sm mt-1">Masuk untuk memproses agenda, surat, dan persetujuan.</p>
+            <p className="mt-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              Deploy test dari perangkat lokal
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
