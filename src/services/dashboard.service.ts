@@ -118,76 +118,34 @@ export async function getDashboardStats(
 export async function getDepartmentActivity(
   startDate?: Date,
   endDate?: Date,
-  userId?: string | null,
-  officeId?: string | null | number
+  _userId?: string | null,
+  _officeId?: string | null | number
 ): Promise<DepartmentActivity[]> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return [];
 
     // 1. Cek tipe user (pusat vs cabang) dari dept-nya sendiri
     //    Logika: dept user punya code → pusat; tidak punya code → cabang
-    const { data: currentProfile } = await supabase
-      .from('profiles')
-      .select('department_id, master_departments(code)')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    const userDeptCode = (currentProfile?.master_departments as any)?.code ?? null;
-    const isPusat = userDeptCode !== null;
-
-    // 2. Ambil hanya dept yang relevan sesuai tipe user
-    const deptQuery = supabase
-      .from('master_departments')
-      .select('name, code')
-      .order('name');
-
-    const { data: allDepartments } = isPusat
-      ? await deptQuery.not('code', 'is', null)  // pusat: hanya dept ber-code
-      : await deptQuery.is('code', null);           // cabang: hanya dept tanpa code
-
-    if (!allDepartments || allDepartments.length === 0) return [];
-
-    // 3. Inisialisasi grouped dengan nilai 0
-    const grouped: Record<string, { tasks: number; completed: number }> = {};
-    allDepartments.forEach(dept => {
-      grouped[dept.name] = { tasks: 0, completed: 0 };
-    });
-
-    // 4. Tentukan target IDs (hirarki atau spesifik)
-    const targetIds = await resolveTargetIds(user.id, userId);
-
-    // 5. Ambil data agenda
-    const { data: agendas } = await fetchAgendasInternal(targetIds, startDate, endDate);
-
-    // 6. Ambil profil dengan dept masing-masing
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, master_departments(name)')
-      .in('id', targetIds);
-
-    // 7. Masukkan data agenda ke grouped (hanya dept yang ada di master list)
-    if (agendas) {
-      agendas.forEach(agenda => {
-        const profile = profiles?.find(p => p.id === agenda.created_by);
-        const deptName = (profile?.master_departments as any)?.name;
-
-        if (deptName && grouped[deptName] !== undefined) {
-          grouped[deptName].tasks++;
-          if (agenda.status === 'Completed') {
-            grouped[deptName].completed++;
-          }
-        }
-      });
+    const params = new URLSearchParams();
+    if (startDate) params.set('start', startDate.toISOString());
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      params.set('end', endOfDay.toISOString());
     }
+    const response = await fetch(`/api/dashboard/department-activity?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const payload = await response.json().catch(() => []);
+    if (!response.ok) throw new Error(payload?.error || 'Gagal memuat aktivitas departemen.');
 
-    return Object.entries(grouped)
-      .map(([fullName, data]) => ({
-        name: shortenDeptName(fullName),
-        fullName,
-        tasks: data.tasks,
-        completed: data.completed,
-      }));
+    return (Array.isArray(payload) ? payload : []).map((item) => ({
+      name: shortenDeptName(String(item.name || '')),
+      fullName: String(item.name || ''),
+      tasks: Number(item.tasks || 0),
+      completed: Number(item.completed || 0),
+    }));
 
   } catch (error) {
     console.error("Dept Activity Error:", error);
@@ -281,8 +239,8 @@ export async function getRecentActivities(
   limit = 10, userId?: string | null, officeId?: string | null
 ): Promise<any[]> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return [];
 
     const { data, error } = await supabase.rpc('get_my_recent_operational_activities', {
       p_limit: limit,

@@ -27,8 +27,11 @@ import {
   Circle,
   CircleCheck,
   AlertTriangle,
-  FileCheck2
+  FileCheck2,
+  FileDown
 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { suratService, type LinkedSuratDocument } from "@/services/surat.service";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase } from "@/lib/supabase";
@@ -41,18 +44,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
+import { getActiveRecommendationDocuments } from "@/components/surat/linked-documents";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
+import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
+import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
+import { approvalBadgeClass } from "@/components/surat/approval-status-style";
+import { formatRupiahInput, normalizeRupiahDigits } from "@/lib/rupiah";
+import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/components/surat/revision-utils";
+import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
 
 export default function InboxPage() {
   const queryClient = useQueryClient();
@@ -64,6 +69,18 @@ export default function InboxPage() {
   const [kpiFilter, setKpiFilter] = useState("all");
   const [actionFilter, setActionFilter] = useState("all");
   const [taskSwitcherOpen, setTaskSwitcherOpen] = useState(false);
+  const [revisionTarget, setRevisionTarget] = useState("checker");
+  const [revisionDialogItem, setRevisionDialogItem] = useState<any | null>(null);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [revisionRows, setRevisionRows] = useState<Array<{
+    index: number;
+    nama_barang: string;
+    action: "keep" | "reject" | "adjust";
+    value_type: "unit_count" | "quantity" | "money" | "recommendation" | "text";
+    nilai_diajukan: string;
+    nilai_disetujui: string;
+    alasan: string;
+  }>>([]);
 
   // State untuk dokumen & notes
   const { openPdf, openFile, isOpening } = useDocumentOpener();
@@ -77,11 +94,15 @@ export default function InboxPage() {
   const [allocationErrors, setAllocationErrors] = useState<Record<string, string | null>>({});
   const [unitSearch, setUnitSearch] = useState<Record<string, string>>({});
   const [allocationDateOpen, setAllocationDateOpen] = useState<Record<string, boolean>>({});
+  const [verificationDraftState, setVerificationDraftState] = useState<Record<string, "idle" | "saving" | "saved" | "error">>({});
+  const [summaryExportingId, setSummaryExportingId] = useState<string | null>(null);
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const selectedItemRef = useRef<any>(null);
   const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
+  const hydrationRef = useRef<Record<string, boolean>>({});
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1. DATA INBOX
   const { data: inbox = [], isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
@@ -123,6 +144,22 @@ export default function InboxPage() {
   });
 
   const isVerificationTask = (item: any) => item?.task_type === "verification";
+
+  const hasVerifierTargets = (item: any) =>
+    Array.isArray(item?.verifier_snapshot) && item.verifier_snapshot.some((entry: any) => entry?.user_id);
+
+  const getVerifierDisplayName = (item: any) => {
+    const names = Array.isArray(item?.verifier_snapshot)
+      ? item.verifier_snapshot
+          .map((entry: any) => String(entry?.full_name || entry?.name || entry?.display_name || "").trim())
+          .filter(Boolean)
+      : [];
+    const uniqueNames = Array.from(new Set(names));
+    if (uniqueNames.length === 0) return "tim pemeriksa";
+    if (uniqueNames.length === 1) return uniqueNames[0];
+    if (uniqueNames.length === 2) return `${uniqueNames[0]} dan ${uniqueNames[1]}`;
+    return `${uniqueNames.slice(0, 2).join(", ")} dan ${uniqueNames.length - 2} lainnya`;
+  };
 
   const isWaitingVerification = (item: any) =>
     item?.verification_required === true && item?.verification_status !== "verified";
@@ -184,9 +221,51 @@ export default function InboxPage() {
     staleTime: 15000,
   });
 
+  const { data: revisionHistory = [] } = useQuery({
+    queryKey: ["surat-revision-history", selectedSuratId],
+    queryFn: () => suratService.getRevisionHistory(selectedSuratId),
+    enabled: Boolean(selectedSuratId),
+    staleTime: 10000,
+  });
+
   useEffect(() => {
     selectedItemRef.current = selectedItem;
   }, [selectedItem]);
+
+  useEffect(() => {
+    if (!selectedItem || !isVerificationTask(selectedItem) || hydrationRef.current[selectedItem.id]) return;
+    const draft = getVerificationDraft(selectedItem);
+    if (!draft) {
+      hydrationRef.current[selectedItem.id] = true;
+      return;
+    }
+    const input = draft.input && typeof draft.input === "object" ? draft.input : {};
+    if (String(draft.note || "").trim()) {
+      setNotes((previous) => ({ ...previous, [selectedItem.id]: String(draft.note || "") }));
+    }
+    if ((input as any).allocated_project) {
+      setAllocationProjectSelected((previous) => ({ ...previous, [selectedItem.id]: (input as any).allocated_project }));
+    }
+    if (Array.isArray((input as any).allocated_units)) {
+      setAllocationSelected((previous) => ({ ...previous, [selectedItem.id]: (input as any).allocated_units }));
+      setAllocationDetails((previous) => ({
+        ...previous,
+        [selectedItem.id]: Object.fromEntries((input as any).allocated_units.map((unit: any) => [
+          unit.value || unit.label,
+          unit.allocation_detail || {},
+        ])),
+      }));
+    }
+    setVerificationDraftState((previous) => ({ ...previous, [selectedItem.id]: "saved" }));
+    hydrationRef.current[selectedItem.id] = true;
+  }, [selectedItem?.id]);
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    if (revisionTarget === "checker" && !hasVerifierTargets(selectedItem)) {
+      setRevisionTarget("requester");
+    }
+  }, [selectedItem, revisionTarget]);
 
   useEffect(() => {
     if (!selectedItem) {
@@ -231,13 +310,13 @@ export default function InboxPage() {
         const related = isActiveSignature(next.id || previous.id) || isActiveSurat(next.surat_id || previous.surat_id);
         if (related) {
           if (next.verification_status === "verified" && previous.verification_status !== "verified") {
-            showRealtimeToast("verification-done", "Verifikasi selesai", "Data dari tim pengecek sudah masuk. Tombol tindakan akan diperbarui.");
+            showRealtimeToast("verification-done", "Pemeriksaan selesai", "Data dari tim pemeriksa sudah masuk. Tombol tindakan akan diperbarui.");
           } else if (next.verification_status === "revision_requested" && previous.verification_status !== "revision_requested") {
-            showRealtimeToast("verification-revision", "Dikembalikan ke tim pengecek", "Tim pengecek perlu memperbarui data sebelum proses dilanjutkan.");
+            showRealtimeToast("verification-revision", "Dikembalikan ke tim pemeriksa", "Tim pemeriksa perlu memperbarui data sebelum proses dilanjutkan.");
           } else if (next.is_signed !== previous.is_signed || next.status !== previous.status) {
             showRealtimeToast("approval-progress", "Progress persetujuan diperbarui");
           } else if (next.verification_note !== previous.verification_note) {
-            showRealtimeToast("verification-note", "Catatan verifikasi diperbarui");
+            showRealtimeToast("verification-note", "Catatan pemeriksaan diperbarui");
           }
         }
         scheduleInboxRefresh();
@@ -245,7 +324,7 @@ export default function InboxPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_attachments" }, (payload: any) => {
         const row = payload.new || payload.old || {};
         if (isActiveSurat(row.surat_id)) {
-          showRealtimeToast("attachments-updated", "Lampiran diperbarui", "Lampiran dari tim pengecek sudah disinkronkan.");
+          showRealtimeToast("attachments-updated", "Lampiran diperbarui", "Lampiran dari tim pemeriksa sudah disinkronkan.");
         }
         scheduleInboxRefresh();
       })
@@ -280,19 +359,27 @@ export default function InboxPage() {
   };
 
   const getRequestedUnitCount = (item: any) =>
-    Number(item.surat_registrasi?.form_input_data?.requested_unit_count || 0);
+    Number(getUnitAllocationData(item.surat_registrasi).requestedCount || 0);
+
+  const hasStoredUnitAllocation = (item: any) =>
+    getUnitAllocationData(item.surat_registrasi).units.length > 0;
+
+  const shouldInputUnitAllocation = (item: any) =>
+    isUnitAllocationRequired(item) &&
+    (
+      isVerificationTask(item) ||
+      (item?.verification_required !== true && !hasStoredUnitAllocation(item) && shouldSignerInputStageData(item))
+    );
 
   const getAllocationProject = (item: any) =>
-    item.surat_registrasi?.form_input_data?.requested_project ||
+    getUnitAllocationData(item.surat_registrasi).project ||
     allocationProjectSelected[item.id] ||
+    item.surat_registrasi?.form_input_data?.requested_project ||
     item.surat_registrasi?.form_input_data?.allocated_project;
 
   const getSelectedAllocationUnits = (item: any) => {
     if (allocationSelected[item.id]) return allocationSelected[item.id];
-    if (isVerificationTask(item) && Array.isArray(item.surat_registrasi?.form_input_data?.allocated_units)) {
-      return item.surat_registrasi.form_input_data.allocated_units;
-    }
-    return [];
+    return getUnitAllocationData(item.surat_registrasi).units;
   };
 
   const getAllocationDetailMap = (item: any) => {
@@ -301,6 +388,27 @@ export default function InboxPage() {
       unit.value || unit.label,
       unit.allocation_detail || {},
     ]));
+  };
+
+  const getVerificationDraft = (item: any) => {
+    const drafts = item?.surat_registrasi?.data_snapshot?.verification_drafts;
+    const draft = drafts && typeof drafts === "object" ? drafts[item.id] : null;
+    return draft && typeof draft === "object" ? draft : null;
+  };
+
+  const buildVerificationDraftPayload = (item: any) => {
+    const selectedUnits = getSelectedAllocationUnits(item);
+    const selectedProject = getAllocationProject(item);
+    return {
+      ...(isUnitAllocationRequired(item) ? {
+        allocated_project: selectedProject || null,
+        allocated_units: selectedUnits.map((unit: any) => ({
+          ...unit,
+          allocation_detail: getAllocationDetailMap(item)?.[unit.value] || unit.allocation_detail || {},
+        })),
+        allocated_unit_count: selectedUnits.length,
+      } : {}),
+    };
   };
 
   const getApprovalAttachmentRequirements = (item: any) =>
@@ -331,7 +439,7 @@ export default function InboxPage() {
       .filter((requirement: any) => {
         const minimum = requirement.is_required
           ? Math.max(1, Number(requirement.min_files || 1))
-          : Number(requirement.min_files || 0);
+          : 0;
         const newFileCount = filesByKey[requirement.requirement_key]?.length || 0;
         const existingCount = getExistingApprovalAttachments(item, requirement.requirement_key).length;
         return Math.max(newFileCount, existingCount) < minimum;
@@ -379,6 +487,38 @@ export default function InboxPage() {
     });
   }, [selectedItem, allocationProjectSelected]);
 
+  useEffect(() => {
+    if (!selectedItem || !isVerificationTask(selectedItem) || !hydrationRef.current[selectedItem.id]) return;
+    const signatureId = selectedItem.id;
+    const payload = buildVerificationDraftPayload(selectedItem);
+    const note = notes[signatureId] || "";
+    const hasDraftContent = note.trim() || Object.keys(payload).length > 0;
+    if (!hasDraftContent) return;
+
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = setTimeout(() => {
+      setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "saving" }));
+      suratService.saveVerificationDraft(signatureId, payload, note)
+        .then(() => {
+          setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "saved" }));
+        })
+        .catch((error) => {
+          console.error("Gagal menyimpan draft pemeriksaan", error);
+          setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "error" }));
+        });
+    }, 1200);
+
+    return () => {
+      if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+    };
+  }, [
+    selectedItem?.id,
+    notes[selectedItem?.id || ""],
+    JSON.stringify(allocationProjectSelected[selectedItem?.id || ""] || null),
+    JSON.stringify(allocationSelected[selectedItem?.id || ""] || []),
+    JSON.stringify(allocationDetails[selectedItem?.id || ""] || {}),
+  ]);
+
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
   };
@@ -398,7 +538,7 @@ const handleApprove = async (item: any) => {
     const note = notes[item.id] || "";
     const selectedUnits = getSelectedAllocationUnits(item);
     const selectedProject = getAllocationProject(item);
-    const stageDataPreparedByVerifier = isPreparedByVerifier(item);
+    const stageDataPreparedByVerifier = isPreparedByVerifier(item) || (isUnitAllocationRequired(item) && hasStoredUnitAllocation(item) && !isVerificationTask(item));
     if (!stageDataPreparedByVerifier && isUnitAllocationRequired(item) && !selectedProject?.code) {
       throw new Error("Project unit wajib dipilih.");
     }
@@ -579,26 +719,26 @@ const handleApprove = async (item: any) => {
       if (isUnitAllocationRequired(item) && selectedUnits.length < getRequestedUnitCount(item)) {
         const proceedLess = await appDialog.confirm({
           title: "Unit terpilih kurang dari permintaan",
-          description: `Permohonan meminta ${getRequestedUnitCount(item)} unit, tetapi tim pengecek memilih ${selectedUnits.length} unit. Lanjutkan verifikasi dengan jumlah tersebut?`,
-          confirmText: "Lanjutkan verifikasi",
+          description: `Permohonan meminta ${getRequestedUnitCount(item)} unit, tetapi tim pemeriksa memilih ${selectedUnits.length} unit. Lanjutkan pemeriksaan dengan jumlah tersebut?`,
+          confirmText: "Lanjutkan pemeriksaan",
           cancelText: "Periksa lagi",
         });
         if (!proceedLess) return;
       }
     } catch (error: any) {
-      toast.error(error.message || "Data verifikasi belum lengkap.");
+      toast.error(error.message || "Data pemeriksaan belum lengkap.");
       return;
     }
 
     const confirmed = await appDialog.confirm({
-      title: "Verifikasi data pengajuan?",
+      title: "Simpan hasil pemeriksaan?",
       description: (
         <div className="space-y-2 text-left">
           <p className="font-semibold text-foreground">{item.surat_registrasi.judul_surat}</p>
-          <p>Setelah diverifikasi, penanda tangan tahap ini dapat menyetujui atau menolak pengajuan.</p>
+          <p>Hasil pemeriksaan akan disimpan dan pengajuan dilanjutkan ke penanda tangan tahap ini.</p>
         </div>
       ),
-      confirmText: "Verifikasi data",
+      confirmText: "Simpan & lanjutkan",
       cancelText: "Periksa lagi",
     });
     if (!confirmed) return;
@@ -618,7 +758,7 @@ const handleApprove = async (item: any) => {
           },
         } : {}),
       });
-      toast.success("Data berhasil diverifikasi", {
+      toast.success("Data berhasil diperiksa", {
         description: "Pengajuan sudah dapat diproses oleh penanda tangan.",
       });
       setNotes(prev => {
@@ -646,42 +786,293 @@ const handleApprove = async (item: any) => {
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
       ]);
     } catch (error: any) {
-      toast.error(error.message || "Gagal memverifikasi data.");
+      toast.error(error.message || "Gagal menyimpan pemeriksaan data.");
     } finally {
       setProcessingId(null);
     }
   };
 
-  const handleRequestVerificationRevision = async (item: any) => {
-    const note = await appDialog.prompt({
-      title: "Kembalikan ke tim pengecek?",
-      description: `Tuliskan data yang perlu diperbaiki untuk "${item.surat_registrasi.judul_surat}".`,
-      label: "Catatan revisi",
-      placeholder: "Contoh: Mohon ganti unit B14 dan lengkapi lampiran siteplan.",
-      defaultValue: notes[item.id] || "",
-      confirmText: "Kembalikan",
-      cancelText: "Batal",
-      multiline: true,
-      required: true,
-    });
-    if (note === null) return;
+  const getRevisionSourceItems = (item: any) => {
+    const input = item?.surat_registrasi?.form_input_data || item?.surat_registrasi?.data_snapshot?.input || {};
+    const rows = Array.isArray(input.items) ? input.items : [];
+    return rows.filter((row: any) => row && typeof row === "object");
+  };
+
+  const getRevisionContext = (item: any) => {
+    const input = item?.surat_registrasi?.form_input_data || item?.surat_registrasi?.data_snapshot?.input || {};
+    const category = String(input.request_category || input.request_mode || "").toLowerCase();
+    const title = String(item?.surat_registrasi?.judul_surat || "").toLowerCase();
+    const itemText = getRevisionSourceItems(item).map((row: any) =>
+      String(row?.nama_barang || row?.nama || row?.barang || "")
+    ).join(" ").toLowerCase();
+    if (category === "unit" || title.includes("unit") || itemText.includes("unit")) return "unit";
+    if (input.requires_recommendation || title.includes("rekomendasi")) return "recommendation";
+    if (category === "asset" || title.includes("aset")) return "asset";
+    if (category === "non_asset" || category === "non_unit" || title.includes("non aset")) return "non_asset";
+    return "general";
+  };
+
+  const getRevisionValueType = (item: any, row?: any): (typeof revisionRows)[number]["value_type"] => {
+    const context = getRevisionContext(item);
+    if (context === "unit") return "unit_count";
+    if (context === "recommendation") return "recommendation";
+    const raw = String(row?.nominal || row?.nilai || row?.harga || row?.keterangan || "").toLowerCase();
+    if (raw.includes("rp") || raw.includes("biaya") || raw.includes("nominal")) return "money";
+    return "quantity";
+  };
+
+  const getGeneralRevisionPlaceholder = (item: any) => {
+    const context = getRevisionContext(item);
+    const targetText = revisionTarget === "checker"
+      ? "Mohon tim pemeriksa memperbarui data sesuai catatan ini."
+      : revisionTarget === "requester"
+        ? "Mohon pemohon meninjau perubahan ini sebelum proses dilanjutkan."
+        : revisionTarget === "recommendation"
+          ? "Mohon tim rekomendasi memperbarui rekomendasi sesuai catatan ini."
+          : "Mohon signer sebelumnya meninjau kembali tahap terkait.";
+    const examples: Record<string, string> = {
+      unit: `Contoh: Unit yang dapat disetujui hanya 8 dari 10 unit. ${targetText}`,
+      asset: `Contoh: Item disetujui sebagian karena jumlah/kebutuhan perlu disesuaikan. ${targetText}`,
+      non_asset: `Contoh: Nominal biaya perlu disesuaikan dengan batas persetujuan. ${targetText}`,
+      recommendation: `Contoh: Spesifikasi rekomendasi terlalu tinggi. Mohon revisi opsi service/ganti/beli baru beserta lampiran pendukung.`,
+      general: `Contoh: Data pengajuan perlu diperbaiki sebelum proses dilanjutkan. ${targetText}`,
+    };
+    return examples[context] || examples.general;
+  };
+
+  const getApprovedValuePlaceholder = (item: any, row: (typeof revisionRows)[number]) => {
+    const context = getRevisionContext(item);
+    if (context === "unit") {
+      const requestedCount = getRequestedUnitCount(item);
+      return requestedCount > 0 ? `Contoh: ${Math.max(requestedCount - 1, 1)} unit` : "Contoh: 8 unit";
+    }
+    if (context === "asset") return "Contoh: 2 unit atau Rp 15.000.000";
+    if (context === "recommendation") return "Contoh: Service adaptor / Ganti komponen";
+    if (context === "non_asset") return "Contoh: 300.000.000";
+    return row.nilai_diajukan ? `Contoh lebih kecil dari ${row.nilai_diajukan}` : "Contoh: 300.000.000";
+  };
+
+  const getRevisionReasonPlaceholder = (item: any, row: (typeof revisionRows)[number]) => {
+    const context = getRevisionContext(item);
+    if (row.action === "reject") {
+      const rejectExamples: Record<string, string> = {
+        unit: "Contoh: Unit ini tidak disetujui karena stok/kavling tidak memenuhi kebutuhan.",
+        asset: "Contoh: Item ini belum prioritas atau belum sesuai kebutuhan operasional.",
+        non_asset: "Contoh: Biaya ini belum dapat disetujui karena dokumen pendukung kurang.",
+        recommendation: "Contoh: Rekomendasi item ini tidak disetujui karena spesifikasi belum sesuai.",
+        general: "Contoh: Item ini tidak disetujui karena alasan operasional.",
+      };
+      return rejectExamples[context] || rejectExamples.general;
+    }
+    const adjustExamples: Record<string, string> = {
+      unit: "Contoh: Jumlah unit disetujui lebih sedikit karena ketersediaan unit terbatas.",
+      asset: "Contoh: Jumlah/nilai disetujui disesuaikan dengan prioritas kebutuhan.",
+      non_asset: "Contoh: Nominal disetujui mengikuti batas anggaran yang disetujui.",
+      recommendation: "Contoh: Spek/nilai rekomendasi perlu disesuaikan agar lebih efisien.",
+      general: "Contoh: Data disetujui sebagian sesuai hasil peninjauan.",
+    };
+    return adjustExamples[context] || adjustExamples.general;
+  };
+
+  const getRevisionRequestedLabel = (item: any) => {
+    const context = getRevisionContext(item);
+    if (context === "unit") return "Jumlah diajukan";
+    if (context === "recommendation") return "Rekomendasi diajukan";
+    return "Nilai diajukan";
+  };
+
+  const getRevisionApprovedLabel = (item: any) => {
+    const context = getRevisionContext(item);
+    if (context === "unit") return "Jumlah disetujui";
+    if (context === "recommendation") return "Rekomendasi disetujui";
+    return "Nilai disetujui";
+  };
+
+  const getRevisionDecisionLabel = (action: (typeof revisionRows)[number]["action"]) => {
+    if (action === "adjust") return "Disetujui sebagian";
+    if (action === "reject") return "Tidak disetujui";
+    return "Tidak berubah";
+  };
+
+  const updateApprovedRevisionValue = (item: any, row: (typeof revisionRows)[number], value: string) => {
+    if (row.value_type === "unit_count" || row.value_type === "quantity") {
+      const digits = value.replace(/[^\d]/g, "");
+      const approvedCount = Number(digits || 0);
+      const requestedCount = Number(String(row.nilai_diajukan || "").replace(/[^\d]/g, "")) || getRequestedUnitCount(item);
+      const nextAction: (typeof revisionRows)[number]["action"] = !digits || approvedCount === requestedCount
+        ? "keep"
+        : approvedCount <= 0
+          ? "reject"
+          : "adjust";
+      updateRevisionRow(row.index, { nilai_disetujui: digits, action: nextAction });
+      return;
+    }
+    if (row.value_type === "money") {
+      updateRevisionRow(row.index, { nilai_disetujui: formatRupiahInput(value) });
+      return;
+    }
+    updateRevisionRow(row.index, { nilai_disetujui: value });
+  };
+
+  const openRevisionDialog = (item: any) => {
+    const rows = getRevisionSourceItems(item);
+    const context = getRevisionContext(item);
+    const requestedUnitCount = getRequestedUnitCount(item);
+    setRevisionDialogItem(item);
+    setRevisionNote(notes[item.id] || "");
+    setRevisionRows(rows.map((row: any, index: number) => {
+      const valueType = getRevisionValueType(item, row);
+      return {
+        index,
+        nama_barang: String(row.nama_barang || row.nama || row.barang || `Item ${index + 1}`),
+        action: "keep",
+        value_type: valueType,
+        nilai_diajukan: valueType === "unit_count" && requestedUnitCount > 0
+          ? String(requestedUnitCount)
+          : String(row.nilai_diajukan || row.jumlah || row.nominal || row.keterangan || ""),
+        nilai_disetujui: "",
+        alasan: "",
+      };
+    }));
+  };
+
+  const updateRevisionRow = (index: number, patch: Partial<(typeof revisionRows)[number]>) => {
+    setRevisionRows((current) => current.map((row) => row.index === index ? { ...row, ...patch } : row));
+  };
+
+  const isGenericRevisionNote = (value: unknown) => {
+    const normalized = String(value || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return !normalized ||
+      normalized === "instruksi utama" ||
+      normalized === "catatan revisi" ||
+      normalized === "tuliskan instruksi perbaikan" ||
+      normalized === "tulis instruksi perbaikan" ||
+      normalized === "instruksi perbaikan";
+  };
+
+  const normalizeRevisionMainNote = (note: string, itemRevisions: Array<{ alasan?: string; nama_barang?: string }>) => {
+    const trimmed = note.trim();
+    if (!isGenericRevisionNote(trimmed)) return trimmed;
+    const firstReason = itemRevisions.map((row) => String(row.alasan || "").trim()).find(Boolean);
+    if (firstReason) return firstReason;
+    const firstItem = itemRevisions.map((row) => String(row.nama_barang || "").trim()).find(Boolean);
+    return firstItem ? `Perbaikan diperlukan pada ${firstItem}.` : "";
+  };
+
+  const getRevisionDisplayReason = (event: any) => {
+    const reason = String(event?.reason || "").trim();
+    if (!isGenericRevisionNote(reason)) return reason;
+    const firstReason = Array.isArray(event?.changes?.item_revisions)
+      ? event.changes.item_revisions
+          .map((row: any) => String(row?.alasan || row?.reason || "").trim())
+          .find(Boolean)
+      : "";
+    return firstReason || "Perbaikan sudah tercatat pada detail item.";
+  };
+
+  const buildCheckerInputSnapshot = (item: any) => {
+    const input = item?.surat_registrasi?.form_input_data || item?.surat_registrasi?.data_snapshot?.input || {};
+    const allocation = getUnitAllocationData(item?.surat_registrasi);
+    const snapshot = {
+      ...input,
+      allocated_project: allocation.project || input.allocated_project || input.requested_project || null,
+      allocated_units: allocation.units,
+      allocated_unit_count: allocation.units.length || input.allocated_unit_count || null,
+      requested_unit_count: allocation.requestedCount || input.requested_unit_count || null,
+    };
+    return Array.isArray(snapshot.allocated_units) && snapshot.allocated_units.length > 0
+      ? snapshot
+      : null;
+  };
+
+  const handleReturnForRevision = async (item: any) => {
+    const target = revisionTarget as "requester" | "checker" | "signer" | "recommendation";
+    const targetLabel: Record<string, string> = {
+      requester: "pemohon",
+      checker: "tim pemeriksa",
+      signer: "signer sebelumnya",
+      recommendation: "tim IT/rekomendasi",
+    };
+    const itemRevisions = revisionRows
+      .filter((row) => row.action !== "keep" || row.alasan.trim().length > 0)
+      .map((row) => ({
+        index: row.index,
+        action: row.action,
+        value_type: row.value_type,
+        nama_barang: row.nama_barang,
+        nilai_diajukan: row.value_type === "money" ? (normalizeRupiahDigits(row.nilai_diajukan) || row.nilai_diajukan) : row.nilai_diajukan,
+        nilai_disetujui: row.value_type === "money" ? (normalizeRupiahDigits(row.nilai_disetujui) || row.nilai_disetujui) : row.nilai_disetujui,
+        ...(row.value_type === "unit_count" ? {
+          unit_diajukan: row.nilai_diajukan,
+          unit_disetujui: row.nilai_disetujui,
+          jumlah_diajukan: row.nilai_diajukan,
+          jumlah_disetujui: row.nilai_disetujui,
+        } : {}),
+        ...(row.value_type === "quantity" ? {
+          jumlah_diajukan: row.nilai_diajukan,
+          jumlah_disetujui: row.nilai_disetujui,
+        } : {}),
+        ...(row.value_type === "money" ? {
+          nominal_diajukan: normalizeRupiahDigits(row.nilai_diajukan) || row.nilai_diajukan,
+          nominal_disetujui: normalizeRupiahDigits(row.nilai_disetujui) || row.nilai_disetujui,
+        } : {}),
+        alasan: row.alasan.trim(),
+      }));
+    if (revisionRows.length > 0 && itemRevisions.length === 0) {
+      toast.error("Pilih minimal satu item yang perlu diperbaiki, atau isi instruksi perbaikan pada item.");
+      return;
+    }
+    const note = normalizeRevisionMainNote(revisionRows.length > 0 ? "" : revisionNote, itemRevisions);
     if (note.trim().length < 5) {
       toast.error("Catatan revisi minimal 5 karakter.");
+      return;
+    }
+    const invalid = itemRevisions.find((row) => String(row.alasan || "").trim().length < 5);
+    if (invalid) {
+      toast.error(`Alasan perubahan item "${invalid.nama_barang}" minimal 5 karakter.`);
       return;
     }
 
     setProcessingId(item.id);
     try {
-      await suratService.requestVerificationRevision(item.id, note);
-      toast.success("Dikembalikan ke tim pengecek", {
-        description: "Signer belum dapat memproses sampai data diverifikasi ulang.",
+      const restartStep = target === "signer"
+        ? Math.max(1, Number(item.step_order || 1) - 1)
+        : Number(item.step_order || 1);
+      const checkerInputSnapshot = target === "checker" ? buildCheckerInputSnapshot(item) : null;
+      await suratService.requestProcessRevision({
+        suratId: item.surat_id,
+        signatureId: item.id,
+        targetType: target,
+        targetStep: target === "signer"
+          ? restartStep
+          : target === "checker"
+            ? Number(item.step_order || 1)
+            : null,
+        reason: note,
+        changes: {
+          note,
+          requested_by: "approval_inbox",
+          requires_resign: true,
+          restart_step: restartStep,
+          item_revisions: itemRevisions,
+          ...(checkerInputSnapshot ? { checker_input_snapshot: checkerInputSnapshot } : {}),
+        },
+      });
+      toast.success("Proses dikembalikan", {
+        description: `Pengajuan masuk status Menunggu Perbaikan dan dikirim ke ${targetLabel[target] || "tujuan revisi"}.`,
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
       ]);
+      setRevisionDialogItem(null);
     } catch (error: any) {
-      toast.error(error.message || "Gagal mengembalikan ke tim pengecek.");
+      toast.error(error.message || "Gagal mengembalikan proses.");
     } finally {
       setProcessingId(null);
     }
@@ -721,6 +1112,128 @@ const handleApprove = async (item: any) => {
     }));
   };
 
+  const normalizeImportHeader = (value: unknown) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+
+  const getImportColumnIndex = (headers: string[], aliases: string[]) => {
+    const normalizedAliases = aliases.map(normalizeImportHeader);
+    return headers.findIndex((header) => normalizedAliases.includes(normalizeImportHeader(header)));
+  };
+
+  const normalizeImportDate = (value: unknown) => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const serialDate = excelSerialToDateInput(text);
+    if (serialDate) return serialDate;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+    if (!match) return text;
+    const day = match[1].padStart(2, "0");
+    const month = match[2].padStart(2, "0");
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${month}-${day}`;
+  };
+
+  const downloadAllocationTemplate = async (item: any) => {
+    const selected = getSelectedAllocationUnits(item);
+    if (selected.length === 0) {
+      toast.error("Pilih kavling terlebih dahulu sebelum mengunduh template.");
+      return;
+    }
+    const details = getAllocationDetailMap(item);
+    const project = getAllocationProject(item);
+    const rows = selected.map((unit: any, index: number) => {
+      const detail = details[unit.value] || unit.allocation_detail || {};
+      return {
+        No: index + 1,
+        Proyek: project?.name || project?.label || project?.code || "",
+        Kavling: unit.label || unit.value,
+        "Struktur Atas": detail.struktur_atas ? formatRupiahInput(detail.struktur_atas) : "",
+        "Struktur Bawah": detail.struktur_bawah ? formatRupiahInput(detail.struktur_bawah) : "",
+        "Nomor Kode Produksi": detail.production_serial || "",
+        "Blok": detail.production_block || "",
+        "Tanggal Produksi": detail.production_date ? formatDatePickerDisplay(detail.production_date) : "",
+      };
+    });
+    await exportUnitAllocationTemplateToXlsx(
+      rows,
+      `template_alokasi_unit_${item.surat_registrasi?.no_surat || item.id}.xlsx`.replace(/[^\w.-]+/g, "_"),
+    );
+  };
+
+  const importAllocationTemplate = async (item: any, file: File | null) => {
+    if (!file) return;
+    const selected = getSelectedAllocationUnits(item);
+    if (selected.length === 0) {
+      toast.error("Pilih kavling terlebih dahulu sebelum import data.");
+      return;
+    }
+    try {
+      const rows = await readSpreadsheetRows(file);
+      const headerIndex = rows.findIndex((row) => row.some((cell) => normalizeImportHeader(cell) === "kavling"));
+      if (headerIndex < 0) throw new Error("Header Kavling tidak ditemukan.");
+
+      const headers = rows[headerIndex];
+      const kavlingIndex = getImportColumnIndex(headers, ["Kavling", "Unit"]);
+      const strukturAtasIndex = getImportColumnIndex(headers, ["Struktur Atas", "Atas"]);
+      const strukturBawahIndex = getImportColumnIndex(headers, ["Struktur Bawah", "Bawah"]);
+      const serialIndex = getImportColumnIndex(headers, ["Nomor Kode Produksi", "Nomor", "Serial", "Production Serial"]);
+      const blockIndex = getImportColumnIndex(headers, ["Blok", "Production Block"]);
+      const dateIndex = getImportColumnIndex(headers, ["Tanggal Produksi", "Tanggal", "Production Date"]);
+      if (kavlingIndex < 0) throw new Error("Kolom Kavling wajib tersedia.");
+
+      const selectedByKey = new Map<string, any>();
+      selected.forEach((unit: any) => {
+        selectedByKey.set(String(unit.value || "").trim().toLowerCase(), unit);
+        selectedByKey.set(String(unit.label || "").trim().toLowerCase(), unit);
+      });
+
+      const importedDetails: Record<string, any> = {};
+      const skipped: string[] = [];
+      let importedCount = 0;
+
+      rows.slice(headerIndex + 1).forEach((row) => {
+        const kavling = String(row[kavlingIndex] || "").trim();
+        if (!kavling) return;
+        const unit = selectedByKey.get(kavling.toLowerCase());
+        if (!unit) {
+          skipped.push(kavling);
+          return;
+        }
+        const unitValue = unit.value || unit.label;
+        importedDetails[unitValue] = {
+          ...((allocationDetails[item.id] || {})[unitValue] || unit.allocation_detail || {}),
+          ...(strukturAtasIndex >= 0 ? { struktur_atas: normalizeRupiahDigits(row[strukturAtasIndex] || "") } : {}),
+          ...(strukturBawahIndex >= 0 ? { struktur_bawah: normalizeRupiahDigits(row[strukturBawahIndex] || "") } : {}),
+          ...(serialIndex >= 0 ? { production_serial: String(row[serialIndex] || "").trim() } : {}),
+          ...(blockIndex >= 0 ? { production_block: String(row[blockIndex] || "").trim() } : {}),
+          ...(dateIndex >= 0 ? { production_date: normalizeImportDate(row[dateIndex]) } : {}),
+        };
+        importedCount += 1;
+      });
+
+      if (importedCount === 0) {
+        throw new Error("Tidak ada baris yang cocok dengan kavling terpilih.");
+      }
+
+      setAllocationDetails((previous) => ({
+        ...previous,
+        [item.id]: {
+          ...(previous[item.id] || {}),
+          ...importedDetails,
+        },
+      }));
+
+      toast.success(`Import alokasi berhasil: ${importedCount} kavling diperbarui.`, {
+        description: skipped.length > 0 ? `${skipped.length} baris dilewati karena kavling belum dipilih.` : undefined,
+      });
+    } catch (error: any) {
+      toast.error(error.message || "Gagal import template alokasi unit.");
+    }
+  };
+
   const formatDatePickerDisplay = (value: string) => {
     if (!value) return "";
     const date = new Date(value);
@@ -741,7 +1254,8 @@ const handleApprove = async (item: any) => {
     const location = surat.location_snapshot || surat.data_snapshot?.location || {};
     const input = surat.form_input_data && typeof surat.form_input_data === "object" ? surat.form_input_data : {};
     const dataSnapshot = surat.data_snapshot || {};
-    const items = Array.isArray(input.items) ? input.items : Array.isArray(dataSnapshot.detail_barang) ? dataSnapshot.detail_barang : [];
+    const rawItems = Array.isArray(input.items) ? input.items : Array.isArray(dataSnapshot.detail_barang) ? dataSnapshot.detail_barang : [];
+    const items = applyRevisionToItems(rawItems, getActiveRevision(surat));
     const requestedProject = input.requested_project || dataSnapshot.requested_project || {};
     const category = input.request_category || dataSnapshot.request_category;
     const requestDate = surat.request_date
@@ -753,10 +1267,15 @@ const handleApprove = async (item: any) => {
       { icon: MapPin, label: "Lokasi", value: location.office?.name || "-", detail: requestedProject.name || requestedProject.label || location.project?.name || "Tanpa proyek" },
       { icon: ClipboardList, label: "Permohonan", value: formatRequestCategory(category), detail: [surat.request_place, requestDate].filter((value) => value && value !== "-").join(", ") || "-" },
     ];
-    const columns = [
-      ["kode", "Kode"], ["nama_barang", "Nama Barang"], ["sat", "Satuan"],
-      ["jumlah", "Jumlah"], ["status", "Status"], ["keterangan", "Keterangan"],
-    ].filter(([key]) => items.some((row: any) => row?.[key] != null && String(row[key]).trim()));
+    const itemColumns = [
+      { key: "nama_barang", label: "Nama Barang", getValue: (row: any) => row?.nama_barang ?? row?.nama ?? row?.barang },
+      { key: "sat", label: "Satuan", getValue: (row: any) => row?.sat ?? row?.satuan ?? row?.unit },
+      { key: "jumlah", label: "Jumlah", getValue: (row: any) => row?.jumlah },
+      { key: "status", label: "Status", getValue: (row: any) => row?.status },
+      { key: "keterangan", label: "Keterangan", getValue: (row: any) => row?.keterangan },
+    ];
+    const getRowRevision = (row: any) => row?.__revision || null;
+    const visibleItemColumns = itemColumns.filter((column) => column.key !== "keterangan" || items.some((row: any) => formatSummaryValue(column.getValue(row)) !== "-" || getRowRevision(row)));
     const hiddenKeys = new Set([
       "items", "request_mode", "request_category", "unit_config_snapshot", "requested_project",
       "requested_unit_count", "unit_request_sentence", "allocated_at", "allocated_project",
@@ -785,18 +1304,42 @@ const handleApprove = async (item: any) => {
           ))}
         </div>
         {category === "unit" && (
-          <div className="mt-4 grid gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 sm:grid-cols-2">
+          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div><p className="text-xs font-medium text-muted-foreground">Proyek yang diajukan</p><p className="mt-1 text-sm font-semibold">{requestedProject.name || requestedProject.label || "-"}</p></div>
-            <div><p className="text-xs font-medium text-muted-foreground">Jumlah unit</p><p className="mt-1 text-sm font-semibold">{input.requested_unit_count || dataSnapshot.requested_unit_count || 0} Unit</p></div>
           </div>
         )}
-        {items.length > 0 && columns.length > 0 && (
+        {items.length > 0 && visibleItemColumns.length > 0 && (
           <div className="mt-4 overflow-hidden rounded-md border border-border">
             <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold text-muted-foreground">Daftar barang / jasa</div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] text-left text-xs">
-                <thead className="bg-muted/20 text-muted-foreground"><tr><th className="px-3 py-2 text-center">No.</th>{columns.map(([, label]) => <th key={label} className="px-3 py-2">{label}</th>)}</tr></thead>
-                <tbody>{items.map((row: any, index: number) => <tr key={index} className="border-t border-border"><td className="px-3 py-2 text-center">{index + 1}</td>{columns.map(([key]) => <td key={key} className="whitespace-pre-wrap px-3 py-2">{formatSummaryValue(row?.[key])}</td>)}</tr>)}</tbody>
+                <thead className="bg-muted/20 text-muted-foreground"><tr><th className="px-3 py-2 text-center">No.</th>{visibleItemColumns.map((column) => <th key={column.key} className="px-3 py-2">{column.label}</th>)}</tr></thead>
+                <tbody>{items.map((row: any, index: number) => {
+                  const revision = getRowRevision(row);
+                  const rejected = revision?.action === "reject";
+                  return (
+                    <tr key={index} className={cn("border-t border-border", revision && "bg-amber-500/[0.04]")}>
+                      <td className="px-3 py-2 text-center">{index + 1}</td>
+                      {visibleItemColumns.map((column) => (
+                        <td key={column.key} className="whitespace-pre-wrap px-3 py-2 align-top">
+                          <span className={cn(rejected && "text-muted-foreground line-through decoration-2")}>{formatSummaryValue(column.getValue(row))}</span>
+                          {column.key === "keterangan" && revision && (
+                            <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-amber-800 dark:text-amber-200">
+                              {revision.action === "reject" && <p className="font-semibold">Item tidak disetujui.</p>}
+                              {revision.action === "adjust" && (
+                                <p className="font-semibold">
+                                  Nilai disetujui: {formatRevisionValue(revision.nilai_disetujui, revision, row)}
+                                  {revision.nilai_diajukan ? ` dari ${formatRevisionValue(revision.nilai_diajukan, revision, row)}` : ""}
+                                </p>
+                              )}
+                              {revision.alasan && <p className="mt-1">{revision.alasan}</p>}
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}</tbody>
               </table>
             </div>
           </div>
@@ -822,37 +1365,53 @@ const handleApprove = async (item: any) => {
   };
 
   const renderUnitAllocationPanel = (item: any) => {
-    if (!isUnitAllocationRequired(item)) return null;
-    if (!shouldSignerInputStageData(item)) {
-      const input = item.surat_registrasi?.form_input_data || {};
-      const project = input.allocated_project || {};
-      const units = Array.isArray(input.allocated_units) ? input.allocated_units : [];
+    const storedAllocation = getUnitAllocationData(item.surat_registrasi);
+    const hasStoredAllocation = storedAllocation.units.length > 0;
+    const isActiveUnitInputTask = shouldInputUnitAllocation(item);
+    if (hasStoredAllocation && !isActiveUnitInputTask) {
       return (
         <section className="sigap-panel border-emerald-500/30">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <Building2 className="h-5 w-5 text-emerald-600" />
               <div>
-                <p className="text-sm font-semibold">Alokasi unit dari tim pengecek</p>
-                <p className="text-xs text-muted-foreground">{units.length} dari {getRequestedUnitCount(item)} unit permintaan dipilih</p>
+                <p className="text-sm font-semibold">Alokasi unit dari tim pemeriksa</p>
+                <p className="text-xs text-muted-foreground">{storedAllocation.units.length} dari {getRequestedUnitCount(item)} unit permintaan dipilih</p>
               </div>
             </div>
-            <Badge className="bg-emerald-600">Terverifikasi</Badge>
+            <Badge variant="outline" className={approvalBadgeClass("verification_done")}>Sudah diperiksa</Badge>
           </div>
-          <div className="rounded-lg border border-border bg-muted/10 p-3">
-            <p className="text-xs font-medium text-muted-foreground">Proyek</p>
-            <p className="mt-1 text-sm font-semibold">{project.name || project.label || project.code || "-"}</p>
-          </div>
-          <div className="mt-3 overflow-hidden rounded-lg border border-border">
-            <table className="w-full min-w-[520px] text-left text-xs">
-              <thead className="bg-muted/30 text-muted-foreground"><tr><th className="px-3 py-2">No.</th><th className="px-3 py-2">Unit</th><th className="px-3 py-2">Struktur Atas</th><th className="px-3 py-2">Struktur Bawah</th><th className="px-3 py-2">Kode Produksi</th></tr></thead>
-              <tbody>{units.map((unit: any, index: number) => {
-                const detail = unit.allocation_detail || {};
-                const productionCode = [detail.production_serial, "UAI", "PRC", detail.production_block, detail.production_date ? formatDatePickerDisplay(detail.production_date) : null].filter(Boolean).join("/");
-                return <tr key={unit.value || unit.label || index} className="border-t border-border"><td className="px-3 py-2">{index + 1}</td><td className="px-3 py-2 font-semibold">{unit.label || unit.value}</td><td className="px-3 py-2">{detail.struktur_atas || "-"}</td><td className="px-3 py-2">{detail.struktur_bawah || "-"}</td><td className="px-3 py-2 font-mono">{productionCode || "-"}</td></tr>;
-              })}</tbody>
-            </table>
-            {units.length === 0 && <p className="p-4 text-sm text-muted-foreground">Belum ada unit yang disimpan.</p>}
+          <UnitAllocationSummary
+            units={storedAllocation.units}
+            project={storedAllocation.project}
+            requestedCount={getRequestedUnitCount(item)}
+            className="border-0 bg-transparent p-0"
+          />
+        </section>
+      );
+    }
+    if (!isUnitAllocationRequired(item)) {
+      const input = item.surat_registrasi?.form_input_data || {};
+      const category = String(input.request_category || item.surat_registrasi?.data_snapshot?.request_category || "").trim();
+      if (category === "unit") return <UnitAllocationPendingNotice className="sigap-panel" />;
+      return null;
+    }
+    if (!isActiveUnitInputTask) {
+      return (
+        <section className="sigap-panel border-amber-500/30">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 text-amber-600" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold">Alokasi unit dari tim pemeriksa</p>
+                <Badge variant="outline" className={approvalBadgeClass("verification_waiting")}>
+                  Data kavling belum tersedia
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Tahap ini sudah masuk ke penanda tangan. Jika kavling belum tampil, minta tim pemeriksa mengembalikan dan menyimpan pilihan kavling terlebih dahulu.
+              </p>
+            </div>
           </div>
         </section>
       );
@@ -875,7 +1434,12 @@ const handleApprove = async (item: any) => {
         <div className="border-b border-border bg-muted/20 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3"><Building2 className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Alokasi unit perencanaan</p><p className="text-xs text-muted-foreground">{selected.length} dari {requestedCount} unit permintaan dipilih</p></div></div>
-            <Badge className={cn(complete ? "bg-emerald-600" : "bg-primary")}>{complete ? "Lengkap" : "Perlu dilengkapi"}</Badge>
+            <Badge
+              variant="outline"
+              className={approvalBadgeClass(complete ? "verification_done" : "verification_waiting")}
+            >
+              {complete ? "Lengkap" : "Perlu dilengkapi"}
+            </Badge>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className={cn("h-full transition-all", selected.length >= requestedCount ? "bg-emerald-500" : "bg-primary")} style={{ width: Math.max(progress, selected.length ? 10 : 0) + "%" }} /></div>
         </div>
@@ -910,31 +1474,160 @@ const handleApprove = async (item: any) => {
           </div>
 
           <div className="rounded-md border border-border p-3">
-            <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-semibold">Detail kavling dan kode produksi</p><p className="text-xs text-muted-foreground">Geser untuk mengisi setiap unit.</p></div><Badge variant="outline">{selected.length} unit</Badge></div>
+            <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold">Detail kavling dan kode produksi</p>
+                <p className="text-xs text-muted-foreground">Isi data tiap kavling dalam satu tabel. Header tetap terlihat saat daftar discroll.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{selected.length} unit</Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadAllocationTemplate(item)}
+                  disabled={selected.length === 0}
+                  className="gap-2"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Download template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={selected.length === 0}
+                  className="gap-2"
+                  onClick={() => document.getElementById(`allocation-import-${item.id}`)?.click()}
+                >
+                  <FileUp className="h-4 w-4" />
+                  Import data
+                </Button>
+                <input
+                  id={`allocation-import-${item.id}`}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    void importAllocationTemplate(item, file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </div>
+            </div>
             {selected.length === 0 ? (
               <div className="flex h-28 flex-col items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"><Home className="mb-2 h-5 w-5" />Pilih kavling terlebih dahulu.</div>
             ) : (
-              <Carousel opts={{ align: "start", containScroll: "trimSnaps" }} className="w-full">
-                <div className="mb-3 flex justify-end gap-2"><CarouselPrevious className="static h-8 w-8 translate-y-0" /><CarouselNext className="static h-8 w-8 translate-y-0" /></div>
-                <CarouselContent className="-ml-0">
-                  {selected.map((unit: any, index: number) => {
+              <div className="max-h-[520px] overflow-auto rounded-lg border border-border">
+                <table className="w-full min-w-[1120px] border-collapse text-sm">
+                  <thead className="sticky top-0 z-20 bg-muted text-xs text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
+                    <tr>
+                      <th className="sticky left-0 z-30 w-12 border-r border-border bg-muted px-3 py-3 text-center font-semibold">No.</th>
+                      <th className="sticky left-12 z-30 w-28 border-r border-border bg-muted px-3 py-3 text-left font-semibold">Kavling</th>
+                      <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Atas</th>
+                      <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Bawah</th>
+                      <th className="w-36 border-r border-border px-3 py-3 text-left font-semibold">Nomor</th>
+                      <th className="w-32 border-r border-border px-3 py-3 text-left font-semibold">Blok</th>
+                      <th className="w-44 border-r border-border px-3 py-3 text-left font-semibold">Tanggal</th>
+                      <th className="w-64 px-3 py-3 text-left font-semibold">Kode Produksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-background">
+                    {selected.map((unit: any, index: number) => {
                     const detail = details[unit.value] || {};
                     const dateKey = item.id + ":" + unit.value;
                     const ready = !getIncompleteAllocationUnits({ ...item, id: item.id }).some((entry: any) => entry.value === unit.value);
                     return (
-                      <CarouselItem key={unit.value} className="basis-full pl-0">
-                        <div className="rounded-lg border border-border bg-muted/10 p-4">
-                          <div className="mb-4 flex items-center justify-between"><div><p className="text-sm font-semibold">{index + 1}. {unit.label}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{detail.production_serial || "[001]"}/UAI/PRC/{detail.production_block || "[4.1]"}/{detail.production_date ? formatDatePickerDisplay(detail.production_date) : "[14/01/2026]"}</p></div><Badge variant={ready ? "default" : "outline"} className={cn(ready && "bg-emerald-600")}>{ready ? "Lengkap" : "Belum lengkap"}</Badge></div>
-                          <div className="space-y-4">
-                            <div><p className="mb-2 text-xs font-semibold text-muted-foreground">Rekap adendum (opsional)</p><div className="grid gap-3 sm:grid-cols-2"><Input type="number" value={detail.struktur_atas || ""} onChange={(event) => updateAllocationDetail(item.id, unit.value, "struktur_atas", event.target.value)} placeholder="Struktur atas" className="h-11 text-sm" /><Input type="number" value={detail.struktur_bawah || ""} onChange={(event) => updateAllocationDetail(item.id, unit.value, "struktur_bawah", event.target.value)} placeholder="Struktur bawah" className="h-11 text-sm" /></div></div>
-                            <div><p className="mb-2 text-xs font-semibold text-muted-foreground">Kode produksi</p><div className="grid gap-3 sm:grid-cols-3"><Input value={detail.production_serial || ""} onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_serial", event.target.value)} placeholder="Nomor: 001" className="h-11 font-mono text-sm" /><Input value={detail.production_block || ""} onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_block", event.target.value)} placeholder="Blok: 4.1" className="h-11 font-mono text-sm" /><Popover open={Boolean(allocationDateOpen[dateKey])} onOpenChange={(open) => setAllocationDateOpen((previous) => ({ ...previous, [dateKey]: open }))}><PopoverTrigger asChild><Button type="button" variant="outline" className="h-11 justify-start font-mono text-sm"><CalendarIcon className="mr-2 h-4 w-4" />{formatDatePickerDisplay(detail.production_date || "") || "dd/mm/yyyy"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={detail.production_date ? new Date(detail.production_date) : undefined} onSelect={(date) => { if (!date) return; updateAllocationDetail(item.id, unit.value, "production_date", toDateInputValue(date)); setAllocationDateOpen((previous) => ({ ...previous, [dateKey]: false })); }} initialFocus /></PopoverContent></Popover></div></div>
+                      <tr key={unit.value} className="border-t border-border align-middle">
+                        <td className="sticky left-0 z-10 border-r border-border bg-background px-3 py-2 text-center text-xs font-semibold text-muted-foreground">{index + 1}</td>
+                        <td className="sticky left-12 z-10 border-r border-border bg-background px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{unit.label}</span>
+                            <span className={cn("h-2 w-2 rounded-full", ready ? "bg-emerald-500" : "bg-amber-500")} aria-label={ready ? "Lengkap" : "Belum lengkap"} />
                           </div>
-                        </div>
-                      </CarouselItem>
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            value={formatRupiahInput(detail.struktur_atas)}
+                            onChange={(event) => updateAllocationDetail(
+                              item.id,
+                              unit.value,
+                              "struktur_atas",
+                              normalizeRupiahDigits(event.target.value),
+                            )}
+                            placeholder="1.000.000"
+                            aria-label={`Struktur atas ${unit.label}`}
+                            className="h-11 text-right text-sm tabular-nums"
+                          />
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            value={formatRupiahInput(detail.struktur_bawah)}
+                            onChange={(event) => updateAllocationDetail(
+                              item.id,
+                              unit.value,
+                              "struktur_bawah",
+                              normalizeRupiahDigits(event.target.value),
+                            )}
+                            placeholder="1.000.000"
+                            aria-label={`Struktur bawah ${unit.label}`}
+                            className="h-11 text-right text-sm tabular-nums"
+                          />
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <Input
+                            value={detail.production_serial || ""}
+                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_serial", event.target.value)}
+                            placeholder="001"
+                            aria-label={`Nomor kode produksi ${unit.label}`}
+                            className="h-11 font-mono text-sm"
+                          />
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <Input
+                            value={detail.production_block || ""}
+                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_block", event.target.value)}
+                            placeholder="4.1"
+                            aria-label={`Blok kode produksi ${unit.label}`}
+                            className="h-11 font-mono text-sm"
+                          />
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <Popover open={Boolean(allocationDateOpen[dateKey])} onOpenChange={(open) => setAllocationDateOpen((previous) => ({ ...previous, [dateKey]: open }))}>
+                            <PopoverTrigger asChild>
+                              <Button type="button" variant="outline" className="h-11 w-full justify-start font-mono text-sm">
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {formatDatePickerDisplay(detail.production_date || "") || "dd/mm/yyyy"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={detail.production_date ? new Date(detail.production_date) : undefined}
+                                onSelect={(date) => {
+                                  if (!date) return;
+                                  updateAllocationDetail(item.id, unit.value, "production_date", toDateInputValue(date));
+                                  setAllocationDateOpen((previous) => ({ ...previous, [dateKey]: false }));
+                                }}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                          {detail.production_serial || "[001]"}/UAI/PRC/{detail.production_block || "[4.1]"}/{detail.production_date ? formatDatePickerDisplay(detail.production_date) : "[14/01/2026]"}
+                        </td>
+                      </tr>
                     );
                   })}
-                </CarouselContent>
-              </Carousel>
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
@@ -952,7 +1645,7 @@ const handleApprove = async (item: any) => {
             <FileUp className="h-5 w-5 text-emerald-600" />
             <div>
               <p className="text-sm font-semibold">Lampiran tahap sudah disiapkan</p>
-              <p className="text-xs text-muted-foreground">File dari tim pengecek dapat dibuka pada panel Dokumen dan lampiran.</p>
+              <p className="text-xs text-muted-foreground">File dari tim pemeriksa dapat dibuka pada panel Dokumen dan lampiran.</p>
             </div>
           </div>
         </section>
@@ -994,6 +1687,175 @@ const handleApprove = async (item: any) => {
     return hours + " jam " + rest + " menit";
   };
 
+  const safeFilename = (value: string) =>
+    value
+      .trim()
+      .replace(/[^\w\s.-]+/g, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 140) || "Summary_Pengajuan";
+
+  const loadPdfImage = async (src: string) => {
+    const response = await fetch(src);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const addReportSectionTitle = (doc: jsPDF, title: string, y: number) => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(18, 40, 28);
+    doc.text(title, 36, y);
+    doc.setTextColor(0, 0, 0);
+    return y + 8;
+  };
+
+  const exportApprovalSummary = async (item: any) => {
+    setSummaryExportingId(item.id);
+    try {
+      const surat = item.surat_registrasi || {};
+      const input = surat.form_input_data || surat.data_snapshot?.input || {};
+      const requester = surat.requester_snapshot || surat.data_snapshot?.requester || {};
+      const location = surat.location_snapshot || surat.data_snapshot?.location || {};
+      const allocation = getUnitAllocationData(surat);
+      const allocatedProject = allocation.project && typeof allocation.project === "object" && !Array.isArray(allocation.project)
+        ? allocation.project as Record<string, unknown>
+        : {};
+      const title = String(surat.judul_surat || "Pengajuan");
+      const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+      const margin = 36;
+      const logo = await loadPdfImage("/logo-marison-regency-group.png").catch(() => null);
+      let cursorY = 34;
+
+      if (logo) {
+        doc.addImage(logo, "PNG", margin, cursorY, 118, 55, undefined, "FAST");
+      }
+
+      doc.setDrawColor(36, 120, 74);
+      doc.setLineWidth(1);
+      doc.line(margin, 108, 559, 108);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("LAPORAN RINGKASAN PENGAJUAN", 559, 46, { align: "right" });
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Marison Regency Group", 559, 64, { align: "right" });
+      doc.text("SIGAP - Sistem Approval Digital", 559, 80, { align: "right" });
+
+      cursorY = 132;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text(`Summary Pengajuan - ${title}`, margin, cursorY, { maxWidth: 520 });
+      cursorY += 30;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("Dibuat : Selasa, 7 Juli 2026, Pukul 09.29 WIB", margin, cursorY);
+      cursorY += 28;
+
+      cursorY = addReportSectionTitle(doc, "Informasi Pengajuan", cursorY);
+      autoTable(doc, {
+        startY: cursorY,
+        theme: "grid",
+        styles: { fontSize: 8, cellPadding: 5, overflow: "linebreak" },
+        headStyles: { fillColor: [36, 120, 74] },
+        head: [["Informasi", "Nilai"]],
+        body: [
+          ["Nomor surat", surat.no_surat || "Nomor diproses"],
+          ["Judul", title],
+          ["Pengaju", requester.full_name || "-"],
+          ["Departemen", location.department?.name || "-"],
+          ["Kantor", location.office?.name || "-"],
+          ["Proyek", allocatedProject.name || allocatedProject.label || input.requested_project?.name || input.requested_project?.label || location.project?.name || "-"],
+          ["Kategori", formatRequestCategory(input.request_category || input.request_mode)],
+          ["Tempat, tanggal", [surat.request_place, surat.request_date ? new Date(surat.request_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }) : ""].filter(Boolean).join(", ") || "-"],
+        ],
+        columnStyles: { 0: { cellWidth: 120, fontStyle: "bold" }, 1: { cellWidth: 380 } },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 28;
+
+      const rows = Array.isArray(input.items) ? applyRevisionToItems(input.items, getActiveRevision(surat)) : [];
+      if (rows.length > 0) {
+        cursorY = addReportSectionTitle(doc, "Detail Barang atau Jasa", cursorY);
+        autoTable(doc, {
+          startY: cursorY,
+          theme: "grid",
+          styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+          headStyles: { fillColor: [36, 120, 74] },
+          head: [["No.", "Nama Barang", "Satuan", "Jumlah", "Status", "Keterangan"]],
+          body: rows.map((row: any, index: number) => [
+            index + 1,
+            formatSummaryValue(row.nama_barang || row.nama || row.barang),
+            formatSummaryValue(row.sat || row.satuan || row.unit),
+            formatSummaryValue(row.jumlah),
+            formatSummaryValue(row.status),
+            formatSummaryValue(row.keterangan),
+          ]),
+          columnStyles: { 0: { cellWidth: 28, halign: "center" }, 1: { cellWidth: 170 }, 2: { cellWidth: 55 }, 3: { cellWidth: 55 }, 4: { cellWidth: 45 }, 5: { cellWidth: 145 } },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 28;
+      }
+
+      if (allocation.units.length > 0) {
+        cursorY = addReportSectionTitle(doc, "Rekap Unit Dialokasikan", cursorY);
+        let totalAtas = 0;
+        let totalBawah = 0;
+        const allocationRows = allocation.units.map((unit: any, index: number) => {
+          const detail = unit.allocation_detail || {};
+          const atas = Number(String(detail.struktur_atas || "0").replace(/\D/g, "")) || 0;
+          const bawah = Number(String(detail.struktur_bawah || "0").replace(/\D/g, "")) || 0;
+          totalAtas += atas;
+          totalBawah += bawah;
+          const code = detail.production_serial && detail.production_block && detail.production_date
+            ? `${detail.production_serial}/UAI/PRC/${detail.production_block}/${new Date(detail.production_date).toLocaleDateString("id-ID")}`
+            : "-";
+          return [
+            index + 1,
+            formatSummaryValue(unit.label || unit.value || unit.code),
+            code,
+            atas ? atas.toLocaleString("id-ID") : "-",
+            bawah ? bawah.toLocaleString("id-ID") : "-",
+            atas + bawah ? (atas + bawah).toLocaleString("id-ID") : "-",
+          ];
+        });
+        allocationRows.push([
+          "",
+          "TOTAL",
+          "",
+          totalAtas ? totalAtas.toLocaleString("id-ID") : "-",
+          totalBawah ? totalBawah.toLocaleString("id-ID") : "-",
+          totalAtas + totalBawah ? (totalAtas + totalBawah).toLocaleString("id-ID") : "-",
+        ]);
+        autoTable(doc, {
+          startY: cursorY,
+          theme: "grid",
+          styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+          headStyles: { fillColor: [36, 120, 74] },
+          head: [["No.", "Kavling", "Kode Produksi", "Struktur Atas", "Struktur Bawah", "Nominal"]],
+          body: allocationRows,
+          didParseCell: (data) => {
+            if (data.section === "body" && data.row.index === allocationRows.length - 1) {
+              data.cell.styles.fontStyle = "bold";
+              data.cell.styles.fillColor = [235, 247, 239];
+            }
+          },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 28;
+      }
+
+      doc.save(`${safeFilename(`Summary Pengajuan - ${title}`)}.pdf`);
+    } catch (error: any) {
+      toast.error(error?.message || "Gagal membuat Summary Pengajuan.");
+    } finally {
+      setSummaryExportingId(null);
+    }
+  };
+
   const getKpiPresentation = (item: any) => {
     const detail = kpiBySignature.get(item.id);
     if (!detail) return { label: "KPI belum tersedia", tone: "muted", detail: "-" };
@@ -1026,7 +1888,7 @@ const handleApprove = async (item: any) => {
   const getApprovalBlockers = (item: any) => {
     const blockers: string[] = [];
     if (!isVerificationTask(item) && isWaitingVerification(item)) {
-      blockers.push("Menunggu verifikasi tim pengecek");
+      blockers.push(`Menunggu pemeriksaan ${getVerifierDisplayName(item)}`);
     }
     const recommendation = getRecommendationRequirement(item);
     if (
@@ -1036,7 +1898,7 @@ const handleApprove = async (item: any) => {
     ) {
       blockers.push("Dokumen rekomendasi belum selesai");
     }
-    if (shouldSignerInputStageData(item) && isUnitAllocationRequired(item)) {
+    if (shouldInputUnitAllocation(item)) {
       const selected = getSelectedAllocationUnits(item);
       if (!getAllocationProject(item)?.code) blockers.push("Pilih proyek unit");
       if (selected.length < 1) blockers.push("Pilih minimal 1 unit");
@@ -1079,17 +1941,17 @@ const handleApprove = async (item: any) => {
           )} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold">Catatan tim pengecek</p>
-              <Badge variant="outline" className={cn(
-                verified && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                revisionRequested && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              )}>
-                {verified ? "Sudah diverifikasi" : revisionRequested ? "Perlu revisi" : "Menunggu verifikasi"}
+              <p className="text-sm font-semibold">Catatan tim pemeriksa</p>
+              <Badge
+                variant="outline"
+                className={approvalBadgeClass(verified ? "verification_done" : "verification_waiting")}
+              >
+                {verified ? "Sudah diperiksa" : revisionRequested ? "Perlu revisi" : "Menunggu pemeriksaan"}
               </Badge>
             </div>
             {signature.verified_at && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Diverifikasi oleh {verifier?.full_name || "tim pengecek"} pada {new Date(signature.verified_at).toLocaleString("id-ID")}
+                Diperiksa oleh {verifier?.full_name || "tim pemeriksa"} pada {new Date(signature.verified_at).toLocaleString("id-ID")}
               </p>
             )}
             {note && (
@@ -1108,6 +1970,84 @@ const handleApprove = async (item: any) => {
     );
   };
 
+  const handleResolveRevisionWork = async (item: any) => {
+    const revision = getActiveRevision(item?.surat_registrasi);
+    if (!revision?.event_id) {
+      toast.error("Data perbaikan tidak ditemukan.");
+      return;
+    }
+    const note = notes[item.id] || "";
+    setProcessingId(item.id);
+    try {
+      await suratService.resolveProcessRevision(revision.event_id, note);
+      toast.success("Perbaikan selesai", {
+        description: "Pengajuan dikirim ke pemohon untuk persetujuan kelanjutan proses.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
+      ]);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal menyelesaikan perbaikan.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const renderRevisionHistory = () => {
+    const rows = Array.isArray(revisionHistory) ? revisionHistory : [];
+    if (rows.length === 0) return null;
+    const targetLabels: Record<string, string> = {
+      requester: "Pemohon",
+      checker: "Tim pemeriksa",
+      signer: "Signer sebelumnya",
+      recommendation: "Tim IT / rekomendasi",
+    };
+    return (
+      <section className="sigap-panel border-amber-500/30">
+        <div className="mb-3 flex items-center gap-3">
+          <RefreshCw className="h-5 w-5 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold">Riwayat perbaikan</p>
+            <p className="text-xs text-muted-foreground">Mencatat perubahan, alasan, dan pihak yang diminta memperbaiki data.</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {rows.map((event: any) => (
+            <div key={event.id} className="rounded-lg border border-border bg-muted/10 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {event.actor_name || "User"} mengembalikan ke {targetLabels[event.target_type] || event.target_type}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {event.created_at ? new Date(event.created_at).toLocaleString("id-ID") : "-"}
+                    {event.from_step ? ` · Dari tahap ${event.from_step}` : ""}
+                    {event.target_step ? ` · Tujuan tahap ${event.target_step}` : ""}
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    event.status === "open" && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                    event.status === "resolved" && approvalBadgeClass("approved"),
+                    event.status === "cancelled" && approvalBadgeClass("rejected"),
+                  )}
+                >
+                  {event.status === "open" ? "Menunggu Perbaikan" : event.status === "resolved" ? "Selesai" : "Dibatalkan"}
+                </Badge>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap rounded-md border border-border bg-background p-3 text-sm leading-relaxed">
+                {getRevisionDisplayReason(event)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   const renderApprovalHistory = (item: any) => {
     const signatures = item.surat_registrasi?.surat_signatures || [];
     return (
@@ -1116,6 +2056,7 @@ const handleApprove = async (item: any) => {
           <AccordionTrigger className="py-4 hover:no-underline"><div className="flex items-center gap-3 text-left"><FileCheck2 className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Progres persetujuan</p><p className="text-xs font-normal text-muted-foreground">Tahap {item.step_order} dari {signatures.length || item.step_order}</p></div></div></AccordionTrigger>
         <AccordionContent className="pb-4"><div data-testid="approval-history-scroll" className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-2">{signatures.map((signature: any) => {
             const active = Number(signature.step_order) === Number(item.step_order);
+            const rejected = signature.status === "REJECTED";
             const signer = signature.signer_snapshot?.full_name || signature.profiles?.full_name || "Belum ditentukan";
             const label = signature.label_jabatan || signature.signer_snapshot?.job_title || signature.role_name;
             const needsVerification = signature.verification_required === true;
@@ -1123,7 +2064,8 @@ const handleApprove = async (item: any) => {
             const verifier = Array.isArray(signature.verifier_snapshot)
               ? signature.verifier_snapshot.find((item: any) => item.user_id === signature.verified_by)
               : null;
-            return <div key={signature.id} className="flex gap-3"><div className="pt-3">{signature.is_signed ? <CircleCheck className="h-5 w-5 text-emerald-600" /> : active ? <Clock3 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5 text-muted-foreground/50" />}</div><div className="min-w-0 flex-1 rounded-lg bg-muted/20 p-3"><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-semibold">{signature.step_order}. {label}</p><Badge variant={signature.is_signed ? "default" : "outline"} className={cn(signature.is_signed && "bg-emerald-600")}>{signature.is_signed ? "Selesai" : active ? "Tindakan Anda" : "Menunggu"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{signer}</p>{needsVerification && <div className={cn("mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium", verified ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300")}><ShieldCheck className="h-3.5 w-3.5" />{verified ? "Data sudah diverifikasi" : "Menunggu verifikasi data"}</div>}{signature.verified_at && <p className="mt-1 text-xs text-muted-foreground">Diverifikasi oleh {verifier?.full_name || "tim pengecek"} pada {new Date(signature.verified_at).toLocaleString("id-ID")}</p>}{needsVerification && !verified && signature.verification_note && <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">Catatan revisi: {signature.verification_note}</p>}{signature.signed_at && <p className="mt-1 text-xs text-muted-foreground">{new Date(signature.signed_at).toLocaleString("id-ID")}</p>}{signature.catatan && <p className="mt-2 rounded border border-border bg-background p-2 text-xs">{signature.catatan}</p>}</div></div>;
+            const tone = rejected ? "rejected" : signature.is_signed ? "approved" : active ? "active" : "waiting";
+            return <div key={signature.id} className="flex gap-3"><div className="pt-3">{rejected ? <XCircle className="h-5 w-5 text-red-600" /> : signature.is_signed ? <CircleCheck className="h-5 w-5 text-emerald-600" /> : active ? <Clock3 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5 text-muted-foreground/50" />}</div><div className="min-w-0 flex-1 rounded-lg bg-muted/20 p-3"><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-semibold">{signature.step_order}. {label}</p><Badge variant="outline" className={approvalBadgeClass(tone)}>{rejected ? "Ditolak" : signature.is_signed ? "Selesai" : active ? "Tindakan Anda" : "Menunggu"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{signer}</p>{needsVerification && <div className={cn("mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium", approvalBadgeClass(verified ? "verification_done" : "verification_waiting"))}><ShieldCheck className="h-3.5 w-3.5" />{verified ? "Data sudah diperiksa" : "Menunggu pemeriksaan data"}</div>}{signature.verified_at && <p className="mt-1 text-xs text-muted-foreground">Diperiksa oleh {verifier?.full_name || "tim pemeriksa"} pada {new Date(signature.verified_at).toLocaleString("id-ID")}</p>}{needsVerification && !verified && signature.verification_note && <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">Catatan revisi: {signature.verification_note}</p>}{signature.signed_at && <p className="mt-1 text-xs text-muted-foreground">{new Date(signature.signed_at).toLocaleString("id-ID")}</p>}{signature.catatan && <p className="mt-2 rounded border border-border bg-background p-2 text-xs">{signature.catatan}</p>}</div></div>;
           })}</div></AccordionContent>
         </AccordionItem>
       </Accordion>
@@ -1210,11 +2152,12 @@ const handleApprove = async (item: any) => {
   const renderDocumentsPanel = (item: any) => {
     const surat = item.surat_registrasi;
     const attachments = getAttachments(surat);
+    const recommendationFiles = getActiveRecommendationDocuments(linkedDocuments as LinkedSuratDocument[]);
     const documentKey = documentOperationKey.pdf(surat.id, "inbox");
     const documentOpening = isOpening(documentKey);
     return (
       <section className="sigap-panel">
-        <div className="mb-3 flex items-center gap-3"><Paperclip className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Dokumen dan lampiran</p><p className="text-xs text-muted-foreground">PDF digunakan untuk verifikasi visual bila diperlukan.</p></div></div>
+        <div className="mb-3 flex items-center gap-3"><Paperclip className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">Dokumen dan lampiran</p><p className="text-xs text-muted-foreground">PDF digunakan untuk pemeriksaan visual bila diperlukan.</p></div></div>
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
             <div className="min-w-0">
@@ -1238,7 +2181,7 @@ const handleApprove = async (item: any) => {
               <div key={attachment.id || attachment.file_url} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{attachment.file_name || "Lampiran " + (index + 1)}</p>
-                  <p className="text-xs text-muted-foreground">{[attachment.requirement_label || attachment.stage || "Lampiran", attachment.file_size ? (attachment.file_size / 1024 / 1024).toFixed(2) + " MB" : null].filter(Boolean).join(" � ")}</p>
+                  <p className="text-xs text-muted-foreground">{[attachment.requirement_label || attachment.stage || "Lampiran", attachment.file_size ? (attachment.file_size / 1024 / 1024).toFixed(2) + " MB" : null].filter(Boolean).join(" · ")}</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -1248,6 +2191,28 @@ const handleApprove = async (item: any) => {
                 >
                   {attachmentOpening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
                   {attachmentOpening ? "Membuka" : "Buka"}
+                </Button>
+              </div>
+            );
+          })}
+          {recommendationFiles.map((document) => {
+            const recommendationKey = documentOperationKey.pdf(document.suratId, `recommendation-${document.id}`);
+            const recommendationOpening = isOpening(recommendationKey);
+            return (
+              <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{document.label}</p>
+                  <p className="truncate text-xs text-muted-foreground">{document.title}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{document.subtitle}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={recommendationOpening || !document.suratId}
+                  onClick={() => void openPdf(document.suratId, recommendationKey)}
+                >
+                  {recommendationOpening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                  {recommendationOpening ? "Menyiapkan PDF" : "Buka PDF"}
                 </Button>
               </div>
             );
@@ -1294,7 +2259,7 @@ const handleApprove = async (item: any) => {
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{category}</Badge>
-            {verificationTask && <Badge variant="outline" className="h-5 border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] text-sky-700 dark:text-sky-300">Verifikasi</Badge>}
+            {verificationTask && <Badge variant="outline" className="h-5 border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] text-sky-700 dark:text-sky-300">Pemeriksaan</Badge>}
             {item.requires_unit_allocation && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">Unit</Badge>}
             {requirementCount > 0 && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{requirementCount} lampiran</Badge>}
           </div>
@@ -1381,7 +2346,7 @@ const handleApprove = async (item: any) => {
                       <SelectItem value="approval">Persetujuan biasa</SelectItem>
                       <SelectItem value="unit">Alokasi unit</SelectItem>
                       <SelectItem value="attachment">Butuh lampiran</SelectItem>
-                      <SelectItem value="verification">Verifikasi data</SelectItem>
+                      <SelectItem value="verification">Pemeriksaan data</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1408,10 +2373,10 @@ const handleApprove = async (item: any) => {
           <main className="min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden">
           {selectedItem ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <div className="shrink-0 flex items-start gap-3 border-b border-border bg-card p-4 sm:p-5">
-              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{selectedItem.surat_registrasi.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{selectedItem.label_jabatan || selectedItem.role_name}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Verifikasi Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{selectedItem.surat_registrasi.judul_surat}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {new Date(selectedItem.surat_registrasi.created_at).toLocaleString("id-ID")}</p></div>
+              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{selectedItem.surat_registrasi.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{selectedItem.label_jabatan || selectedItem.role_name}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{selectedItem.surat_registrasi.judul_surat}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {new Date(selectedItem.surat_registrasi.created_at).toLocaleString("id-ID")}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-            <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan verifikasi" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status verifikasi." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan verifikasi bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+            <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
@@ -1430,20 +2395,59 @@ const handleApprove = async (item: any) => {
                       <CircleCheck className="h-4 w-4" />Semua persyaratan lengkap
                     </div>
                   )}
+                  {isVerificationTask(selectedItem) && verificationDraftState[selectedItem.id] && (
+                    <p className={cn("mt-1 text-xs text-muted-foreground", verificationDraftState[selectedItem.id] === "error" && "text-destructive")}>
+                      {verificationDraftState[selectedItem.id] === "saving" && "Menyimpan otomatis..."}
+                      {verificationDraftState[selectedItem.id] === "saved" && "Tersimpan otomatis"}
+                      {verificationDraftState[selectedItem.id] === "error" && "Autosave gagal. Periksa koneksi sebelum lanjut."}
+                    </p>
+                  )}
                 </div>
                 {isVerificationTask(selectedItem) ? (
-                  <Button className="shrink-0 bg-sky-600 text-white hover:bg-sky-500 sm:min-w-40" disabled={processingId === selectedItem.id} onClick={() => handleVerify(selectedItem)}>
-                    {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                    Verifikasi Data
-                  </Button>
+                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:justify-end">
+                    <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
+                      {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+                      Export Summary
+                    </Button>
+                    <Button className="shrink-0 bg-sky-600 text-white hover:bg-sky-500 sm:min-w-40" disabled={processingId === selectedItem.id} onClick={() => handleVerify(selectedItem)}>
+                      {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                      Simpan & lanjutkan
+                    </Button>
+                  </div>
+                ) : String(selectedItem.surat_registrasi?.status || "").toUpperCase() === "MENUNGGU_PERBAIKAN" ? (
+                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:justify-end">
+                    <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
+                      {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+                      Export Summary
+                    </Button>
+                    <Button className="shrink-0 bg-amber-600 text-white hover:bg-amber-500 sm:min-w-44" disabled={processingId === selectedItem.id} onClick={() => handleResolveRevisionWork(selectedItem)}>
+                      {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Selesaikan perbaikan
+                    </Button>
+                  </div>
                 ) : (
-                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
-                    {isPreparedByVerifier(selectedItem) && (
-                      <Button variant="outline" className="col-span-2 sm:min-w-40" disabled={processingId === selectedItem.id} onClick={() => handleRequestVerificationRevision(selectedItem)}>
+                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                    <Button variant="outline" className="col-span-2 sm:col-span-1" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
+                      {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+                      Export Summary
+                    </Button>
+                    <div className="col-span-2 flex min-w-[260px] gap-2">
+                      <Select value={revisionTarget} onValueChange={setRevisionTarget}>
+                        <SelectTrigger className="h-10 text-xs">
+                          <SelectValue placeholder="Kembalikan ke..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="requester">Pemohon</SelectItem>
+                          {hasVerifierTargets(selectedItem) && <SelectItem value="checker">Tim pemeriksa</SelectItem>}
+                          {Number(selectedItem.step_order || 1) > 1 && <SelectItem value="signer">Signer sebelumnya</SelectItem>}
+                          {getRecommendationRequirement(selectedItem) && <SelectItem value="recommendation">Tim IT / rekomendasi</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="outline" className="shrink-0" disabled={processingId === selectedItem.id} onClick={() => openRevisionDialog(selectedItem)}>
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Kembalikan ke pengecek
+                        Kembalikan
                       </Button>
-                    )}
+                    </div>
                     <Button variant="destructive" className="sm:min-w-28" disabled={processingId === selectedItem.id} onClick={() => handleReject(selectedItem)}>
                       {processingId === selectedItem.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <><XCircle className="mr-2 h-4 w-4" />Tolak</>}
                     </Button>
@@ -1457,6 +2461,117 @@ const handleApprove = async (item: any) => {
           </div> : <div className="flex h-full min-h-[640px] flex-col items-center justify-center p-8 text-center lg:min-h-0"><ShieldCheck className="mb-4 h-10 w-10 text-muted-foreground" /><h2 className="text-lg font-semibold">Tidak ada pengajuan dipilih</h2><p className="mt-2 text-sm text-muted-foreground">Pilih pengajuan dari antrean.</p></div>}
         </main>
       </div>
+      <Dialog open={Boolean(revisionDialogItem)} onOpenChange={(open) => { if (!open && !processingId) setRevisionDialogItem(null); }}>
+        <DialogContent className="flex max-h-[92dvh] max-w-4xl flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Kembalikan proses untuk perbaikan</DialogTitle>
+            <DialogDescription>
+              Tandai item yang perlu diubah. Pemohon akan melihat ringkasan perubahan sebelum proses dilanjutkan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Perubahan item</p>
+                <p className="text-xs text-muted-foreground">Gunakan jika ada item yang dicoret, dikurangi, atau nilainya disetujui berbeda.</p>
+              </div>
+              {revisionRows.length === 0 ? (
+                <div className="space-y-2 rounded-lg border border-dashed border-border p-4">
+                  <Label>Catatan perbaikan</Label>
+                  <Textarea
+                    value={revisionNote}
+                    onChange={(event) => setRevisionNote(event.target.value)}
+                    placeholder={revisionDialogItem ? getGeneralRevisionPlaceholder(revisionDialogItem) : "Tuliskan data yang perlu diperbaiki."}
+                    className="min-h-24"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Surat ini belum memiliki item terstruktur, jadi catatan ini dipakai sebagai alasan perbaikan.
+                  </p>
+                </div>
+              ) : revisionRows.map((row) => {
+                const isUnitRevision = revisionDialogItem ? getRevisionContext(revisionDialogItem) === "unit" : false;
+                return (
+                <div key={row.index} className="rounded-lg border border-border bg-muted/10 p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-muted-foreground">Item {row.index + 1}</p>
+                      <p className={cn("mt-1 text-sm font-semibold", row.action === "reject" && "line-through text-muted-foreground")}>{row.nama_barang}</p>
+                      {row.action === "keep" && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Item ini akan tetap mengikuti data pengajuan awal.
+                        </p>
+                      )}
+                    </div>
+                    <div className="w-full lg:w-48">
+                      <Label className="text-xs">Keputusan</Label>
+                      {isUnitRevision ? (
+                        <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium">
+                          {getRevisionDecisionLabel(row.action)}
+                        </div>
+                      ) : (
+                        <Select value={row.action} onValueChange={(value: "keep" | "reject" | "adjust") => updateRevisionRow(row.index, { action: value })}>
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="keep">Tidak berubah</SelectItem>
+                            <SelectItem value="adjust">Disetujui sebagian</SelectItem>
+                            <SelectItem value="reject">Tidak disetujui</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
+                  {(isUnitRevision || row.action !== "keep") && (
+                    <div className={cn("mt-3 grid gap-3", row.action === "adjust" ? "md:grid-cols-3" : isUnitRevision ? "md:grid-cols-2" : "md:grid-cols-1")}>
+                      {(row.action === "adjust" || isUnitRevision) && (
+                        <>
+                          <div>
+                            <Label className="text-xs">{revisionDialogItem ? getRevisionRequestedLabel(revisionDialogItem) : "Nilai diajukan"}</Label>
+                            <div className="mt-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                              {row.nilai_diajukan || (isUnitRevision ? "Jumlah unit tidak tercatat" : "Tidak tercatat sebagai nominal")}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs">{revisionDialogItem ? getRevisionApprovedLabel(revisionDialogItem) : "Nilai disetujui"}</Label>
+                            <Input
+                              value={row.nilai_disetujui}
+                              onChange={(event) => revisionDialogItem
+                                ? updateApprovedRevisionValue(revisionDialogItem, row, event.target.value)
+                                : updateRevisionRow(row.index, { nilai_disetujui: formatRupiahInput(event.target.value) })}
+                              placeholder={revisionDialogItem ? getApprovedValuePlaceholder(revisionDialogItem, row) : "Isi nilai yang disetujui"}
+                              className="mt-1"
+                            />
+                          </div>
+                        </>
+                      )}
+                      <div>
+                        <Label className="text-xs">{row.action === "keep" ? "Instruksi perbaikan" : "Alasan perubahan"}</Label>
+                        <Input
+                          value={row.alasan}
+                          onChange={(event) => updateRevisionRow(row.index, { alasan: event.target.value })}
+                          placeholder={row.action === "keep" ? "Contoh: Kirim ulang ke tim pemeriksa untuk memperbarui data/lampiran." : revisionDialogItem ? getRevisionReasonPlaceholder(revisionDialogItem, row) : "Wajib jika item berubah"}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+              })}
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" disabled={processingId === revisionDialogItem?.id} onClick={() => setRevisionDialogItem(null)}>
+              Batal
+            </Button>
+            <Button type="button" disabled={!revisionDialogItem || processingId === revisionDialogItem?.id} onClick={() => revisionDialogItem && handleReturnForRevision(revisionDialogItem)}>
+              {processingId === revisionDialogItem?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Kembalikan proses
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -33,6 +33,10 @@ import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { documentOperationKey, useDocumentOpener } from '@/hooks/useDocumentOpener';
 import { appStorageService } from '@/services/storage.service';
+import { suratService } from '@/services/surat.service';
+import { getActiveRecommendationDocuments } from '@/components/surat/linked-documents';
+import { RegistrationSummaryDocument } from '@/components/surat/RegistrationSummaryDialog';
+import { buildRegistrationSummaryData } from '@/components/surat/registration-summary-data';
 import { toast } from 'react-hot-toast';
 
 type InvolvementKey = 'MEMBUAT' | 'MEMERIKSA' | 'MENYETUJUI';
@@ -59,6 +63,8 @@ interface SuratItem {
   updated_at: string;
   created_by: string;
   current_step: number | null;
+  form_input_data?: Record<string, unknown> | null;
+  data_snapshot?: Record<string, unknown> | null;
   file_path: string | null;
   lampiran_path: string | null;
   surat_attachments?: Array<{
@@ -196,6 +202,7 @@ function resolveStorageUrl(path: string | null | undefined, preferredBucket?: st
 const SELECT_SURAT = `
   id, no_surat, judul_surat, status, created_at, updated_at,
   created_by, current_step,
+  form_input_data, data_snapshot,
   file_path, lampiran_path,
   surat_attachments(id, file_url, file_name, file_type, file_size),
   creator:profiles!surat_registrasi_created_by_fkey(full_name),
@@ -416,6 +423,13 @@ const RiwayatKeterlibatanPage = () => {
     from: parseDateInput(dateFrom),
     to: parseDateInput(dateTo),
   }), [dateFrom, dateTo]);
+
+  const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+    queryKey: ['surat-linked-documents', selected?.id],
+    queryFn: () => suratService.getLinkedDocuments(selected!.id),
+    enabled: Boolean(selected?.id),
+    staleTime: 15_000,
+  });
 
   if (error) {
     return (
@@ -695,7 +709,7 @@ const RiwayatKeterlibatanPage = () => {
       )}
 
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] w-[min(96vw,1120px)] max-w-none overflow-y-auto">
           {selected && (
             <>
               <DialogHeader>
@@ -723,45 +737,86 @@ const RiwayatKeterlibatanPage = () => {
                 </div>
               </div>
 
+              <div className="mt-4">
+                <RegistrationSummaryDocument
+                  data={buildRegistrationSummaryData(selected)}
+                  openingAttachmentId={
+                    getAttachments(selected).find((attachment) => {
+                      const key = documentOperationKey.file(selected.id, String(attachment.id || attachment.path || attachment.label));
+                      return isOpening(key);
+                    })?.id || null
+                  }
+                  onOpenAttachment={(attachment) => {
+                    if (!attachment.fileUrl) return;
+                    const operationKey = documentOperationKey.file(selected.id, String(attachment.id || attachment.fileUrl || attachment.name));
+                    void openFile(selected.id, attachment.fileUrl, operationKey);
+                  }}
+                />
+              </div>
+
               <div className="mt-4 rounded-xl border border-border p-3 bg-card/30">
                 <p className="mb-3 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
                   <FileText size={13} /> Dokumen Terkait
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
+                  {([
                     {
                       id: 'main-document',
                       label: 'Dokumen Permohonan',
                       path: selected.file_path,
                       kind: 'pdf',
+                      title: undefined,
+                      subtitle: undefined,
                     },
-                    ...getAttachments(selected).map((doc) => ({ ...doc, kind: 'file' })),
-                  ].map((doc) => {
-                    const operationKey = doc.kind === 'pdf'
-                      ? documentOperationKey.pdf(selected.id, 'history')
+                    ...getActiveRecommendationDocuments(selectedLinkedDocuments).map((doc) => ({
+                      id: doc.id,
+                      label: doc.label,
+                      path: doc.suratId,
+                      kind: 'recommendation-pdf',
+                      title: doc.title,
+                      subtitle: doc.subtitle,
+                    })),
+                  ] as Array<{
+                    id: string;
+                    label: string;
+                    path: string | null;
+                    kind: 'pdf' | 'file' | 'recommendation-pdf';
+                    title?: string;
+                    subtitle?: string;
+                  }>).map((doc) => {
+                    const operationKey = doc.kind === 'pdf' || doc.kind === 'recommendation-pdf'
+                      ? documentOperationKey.pdf(doc.kind === 'recommendation-pdf' ? doc.path : selected.id, `history-${doc.id}`)
                       : documentOperationKey.file(selected.id, String(doc.id || doc.path || doc.label));
                     const opening = isOpening(operationKey);
 
                     return (
                       <div key={`${doc.kind}-${doc.id || doc.path || doc.label}`} className="rounded-lg border border-border/60 p-2.5 bg-background/40">
                         <p className="text-xs font-semibold mb-2">{doc.label}</p>
+                        {doc.kind === 'recommendation-pdf' && (
+                          <>
+                            <p className="mb-1 truncate text-xs text-muted-foreground">{doc.title}</p>
+                            <p className="mb-2 truncate text-[11px] text-muted-foreground">{doc.subtitle}</p>
+                          </>
+                        )}
                         {doc.path ? (
                           <button
                             type="button"
                             onClick={() => doc.kind === 'pdf'
                               ? void openPdf(selected.id, operationKey)
+                              : doc.kind === 'recommendation-pdf'
+                                ? void openPdf(doc.path, operationKey)
                               : void openFile(selected.id, doc.path, operationKey)}
                             disabled={opening}
                             className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-wait disabled:opacity-70"
                           >
                             {opening ? (
                               <>
-                                <Loader2 size={12} className="animate-spin" /> {doc.kind === 'pdf' ? 'Menyiapkan PDF' : 'Membuka lampiran'}
+                                <Loader2 size={12} className="animate-spin" /> {doc.kind === 'file' ? 'Membuka lampiran' : 'Menyiapkan PDF'}
                               </>
                             ) : (
                               <>
-                                Lihat Dokumen <ExternalLink size={12} />
+                                {doc.kind === 'file' ? 'Lihat Lampiran' : 'Lihat PDF'} <ExternalLink size={12} />
                               </>
                             )}
                           </button>
@@ -771,6 +826,12 @@ const RiwayatKeterlibatanPage = () => {
                       </div>
                     );
                   })}
+                  {linkedDocumentsLoading && (
+                    <div className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-xs text-muted-foreground">
+                      <Loader2 size={12} className="mr-1 inline animate-spin" />
+                      Memuat rekomendasi...
+                    </div>
+                  )}
                 </div>
               </div>
 

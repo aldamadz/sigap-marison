@@ -40,7 +40,10 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('recharts')) return 'vendor-charts';
             if (id.includes('framer-motion')) return 'vendor-motion';
             if (id.includes('date-fns') || id.includes('react-day-picker')) return 'vendor-date';
-            if (id.includes('exceljs') || id.includes('jspdf') || id.includes('pdfmake') || id.includes('file-saver')) return 'vendor-doc-export';
+            if (id.includes('exceljs')) return 'vendor-excel';
+            if (id.includes('jspdf') || id.includes('jspdf-autotable')) return 'vendor-pdf-export';
+            if (id.includes('pdfmake')) return 'vendor-pdfmake';
+            if (id.includes('file-saver')) return 'vendor-file-export';
           }
         },
       },

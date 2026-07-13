@@ -620,18 +620,21 @@ export default function FormUsageManagementPage() {
       }));
       const attachmentsPayload = formData.attachments
         .filter(rule => rule.label.trim() && rule.requirement_key.trim())
-        .map((rule, index) => ({
-          stage_order: rule.stage_order,
-          requirement_key: rule.requirement_key.trim().toLowerCase().replace(/\s+/g, "_"),
-          label: rule.label.trim(),
-          is_required: rule.is_required,
-          allow_multiple: rule.allow_multiple,
-          min_files: rule.is_required ? Math.max(1, rule.min_files) : Math.max(0, rule.min_files),
-          max_files: Math.max(rule.max_files, rule.min_files, 1),
-          allowed_types: rule.allowed_types.split(",").map(item => item.trim()).filter(Boolean),
-          max_size_bytes: rule.max_size_mb > 0 ? rule.max_size_mb * 1048576 : null,
-          sort_order: index,
-        }));
+        .map((rule, index) => {
+          const minFiles = rule.is_required ? Math.max(1, rule.min_files) : 0;
+          return {
+            stage_order: rule.stage_order,
+            requirement_key: rule.requirement_key.trim().toLowerCase().replace(/\s+/g, "_"),
+            label: rule.label.trim(),
+            is_required: rule.is_required,
+            allow_multiple: rule.allow_multiple,
+            min_files: minFiles,
+            max_files: Math.max(rule.max_files, minFiles, 1),
+            allowed_types: rule.allowed_types.split(",").map(item => item.trim()).filter(Boolean),
+            max_size_bytes: rule.max_size_mb > 0 ? rule.max_size_mb * 1048576 : null,
+            sort_order: index,
+          };
+        });
       const { error: saveError } = await supabase.rpc("save_form_usage_config", {
         p_usage_id: selectedUsageId,
         p_payload: payload,
@@ -733,7 +736,7 @@ export default function FormUsageManagementPage() {
                 <span>·</span>
                 <span>{usage.form_usage_steps?.length || 0} signer</span>
                 <span>·</span>
-                <span>{(usage.form_usage_steps || []).reduce((sum, step) => sum + (step.form_usage_step_verifiers?.length || 0), 0)} pengecek</span>
+                <span>{(usage.form_usage_steps || []).reduce((sum, step) => sum + (step.form_usage_step_verifiers?.length || 0), 0)} pemeriksa</span>
                 <span>·</span>
                 <span>{usage.form_usage_attachment_requirements?.length || 0} aturan lampiran</span>
               </div>
@@ -992,10 +995,10 @@ export default function FormUsageManagementPage() {
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <Label className="flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4" /> Tim Pengecek Sebelum Tahap Ini
+                              <ShieldCheck className="h-4 w-4" /> Tim Pemeriksa Sebelum Tahap Ini
                             </Label>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Opsional. Jika aktif, pengecek menyiapkan data sebelum signer tahap {step.step_order} bisa memproses.
+                              Opsional. Jika aktif, pemeriksa menyiapkan data sebelum signer tahap {step.step_order} bisa memproses.
                             </p>
                           </div>
                           <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold">
@@ -1037,7 +1040,7 @@ export default function FormUsageManagementPage() {
                                 })}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Terpilih {step.verifier_user_ids.length} pengecek dari departemen penandatangan tahap ini.
+                                Terpilih {step.verifier_user_ids.length} pemeriksa dari departemen penandatangan tahap ini.
                               </p>
                             </div>
                           );
@@ -1094,7 +1097,7 @@ export default function FormUsageManagementPage() {
                     <Input type="number" min={1} value={rule.max_size_mb} onChange={event => updateAttachment(index, { max_size_mb: Number(event.target.value || 10) })} />
                   </div>
                   <div className="flex items-end gap-3 pb-2 md:col-span-2">
-                    <label className="text-[10px] font-bold"><input type="checkbox" checked={rule.is_required} onChange={event => updateAttachment(index, { is_required: event.target.checked })} /> Wajib</label>
+                    <label className="text-[10px] font-bold"><input type="checkbox" checked={rule.is_required} onChange={event => updateAttachment(index, { is_required: event.target.checked, min_files: event.target.checked ? Math.max(1, rule.min_files) : 0 })} /> Wajib</label>
                     <label className="text-[10px] font-bold"><input type="checkbox" checked={rule.allow_multiple} onChange={event => updateAttachment(index, { allow_multiple: event.target.checked })} /> Multiple</label>
                   </div>
                   <Button type="button" variant="ghost" size="icon" className="self-end text-destructive" onClick={() => setFormData(previous => ({ ...previous, attachments: previous.attachments.filter((_item, itemIndex) => itemIndex !== index) }))}>

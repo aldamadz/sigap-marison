@@ -1,0 +1,450 @@
+import { readFile } from "node:fs/promises";
+import pdfMakeModule from "pdfmake/build/pdfmake.js";
+import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
+import { buildPgdSignatureSlotPlan } from "./document-layout-rules.mjs";
+
+const pdfMake = pdfMakeModule?.default || pdfMakeModule;
+pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
+
+const GREEN = "#e2f0d9";
+const HEADER_TINT = "#f7faf5";
+const BORDER = "#111827";
+const MUTED = "#475569";
+
+const text = (value, fallback = "-") => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const formatDateId = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return text(value, "");
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  }).format(date);
+};
+
+const formatDateTimeId = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  }).format(date).replace(".", ":");
+};
+
+const normalizeRole = (value) => {
+  const role = String(value || "").trim().toLowerCase();
+  if (role.includes("buat")) return "Membuat";
+  if (role.includes("periksa")) return "Memeriksa";
+  if (role.includes("setuju")) return "Menyetujui";
+  return text(value, "Tahap Persetujuan");
+};
+
+const asObject = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
+
+const parseRevisionItemChanges = (source = {}) => {
+  const snapshot = asObject(source?.data_snapshot);
+  const revision = asObject(snapshot.revision);
+  const appliedRevision = asObject(snapshot.applied_revision);
+  const effectiveRevision = Object.keys(revision).length > 0 ? revision : appliedRevision;
+  const changes = asObject(effectiveRevision.changes);
+  const rows = Array.isArray(changes.item_revisions) ? changes.item_revisions : [];
+  return rows
+    .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+    .map((row) => ({
+      index: Number(row.index),
+      action: String(row.action || "keep").trim(),
+      nilaiDiajukan: row.nilai_diajukan ?? "",
+      nilaiDisetujui: row.nilai_disetujui ?? "",
+      alasan: String(row.alasan || row.reason || "").trim(),
+    }))
+    .filter((row) => Number.isFinite(row.index) && row.index >= 0);
+};
+
+const parseRecommendationItemDecisions = (source = {}) => {
+  const snapshot = asObject(source?.data_snapshot);
+  const direct = Array.isArray(snapshot.recommendation_decisions) ? snapshot.recommendation_decisions : [];
+  const recommendation = asObject(snapshot.recommendation);
+  const nested = Array.isArray(recommendation.items) ? recommendation.items : [];
+  return (direct.length > 0 ? direct : nested)
+    .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+    .map((row) => ({
+      index: Number(row.parent_item_index || 0) - 1,
+      parentName: String(row.parent_item_name || "").trim().toLowerCase(),
+      action: String(row.recommendation_action || "").trim(),
+      isRecommended: row.is_recommended !== false && String(row.recommendation_action || "") !== "tidak_direkomendasikan",
+      reason: String(row.keterangan || row.alasan || row.reason || "").trim(),
+    }))
+    .filter((row) => Number.isFinite(row.index) || row.parentName);
+};
+
+const formatMoneyId = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/[^\d-]/g, "");
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount === 0) return raw;
+  return `Rp ${amount.toLocaleString("id-ID")}`;
+};
+
+const formatRevisionValue = (value, item = {}) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^rp\b/i.test(raw)) return raw;
+  const unit = String(item.sat || item.unit || item.satuan || "").trim();
+  if (/^unit$/i.test(unit) && /^\d+([.,]\d+)?$/.test(raw)) return `${raw} unit`;
+  return formatMoneyId(raw);
+};
+
+const buildRevisionNote = (change, item = {}) => {
+  if (!change) return "";
+  const parts = [];
+  if (change.action === "reject") parts.push("Tidak disetujui");
+  if (change.action === "adjust") {
+    const approved = formatRevisionValue(change.nilaiDisetujui, item);
+    const requested = formatRevisionValue(change.nilaiDiajukan, item);
+    parts.push(`Nilai disetujui: ${approved || "-"}${requested ? ` dari ${requested}` : ""}`);
+  }
+  if (change.alasan) parts.push(change.alasan);
+  return parts.join(" - ");
+};
+
+export const isPgdDocument = (source = {}) => {
+  const names = [
+    source.formName,
+    source?.location_snapshot?.form?.nama_form,
+    source?.data_snapshot?.form?.nama_form,
+    source?.data_snapshot?.form?.name,
+  ].map((value) => String(value || "").toUpperCase());
+  return names.some((name) => name.includes("PERMINTAAN BARANG"));
+};
+
+export const normalizePgdDocumentData = (source = {}, options = {}) => {
+  const input = source.form_input_data || source?.data_snapshot?.input || {};
+  const location = source.location_snapshot || {};
+  const items = Array.isArray(input.items) ? input.items : [];
+  const revisionChanges = parseRevisionItemChanges(source);
+  const recommendationDecisions = parseRecommendationItemDecisions(source);
+  const targetStep = Number(options.targetStep || 0);
+  const signatures = (Array.isArray(options.signatures) ? options.signatures : [])
+    .slice()
+    .sort((left, right) => Number(left.step_order || 0) - Number(right.step_order || 0))
+    .map((signature, index) => {
+      const snapshot = signature.signer_snapshot || {};
+      const profile = signature.profile || {};
+      const signed = signature.is_signed === true && (!targetStep || Number(signature.step_order || index + 1) <= targetStep);
+      return {
+        stepOrder: Number(signature.step_order || index + 1),
+        role: normalizeRole(signature.role_name),
+        name: text(snapshot.full_name || profile.full_name || signature.user_name, "Belum ditentukan"),
+        job: text(snapshot.job_title_display || snapshot.job_title || profile.job_title_display || profile.job_title || signature.label_jabatan, "-"),
+        signed,
+        signedAt: signed ? signature.signed_at : null,
+      };
+    });
+  return {
+    formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.PGD-01-00"),
+    noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
+    isAsset: source.is_aset === true || input.request_category === "asset",
+    department: text(location?.department?.name || source.department_name, "-"),
+    project: text(input?.requested_project?.name || location?.project?.name || source.project_name, "-"),
+    placeDate: [text(source.request_place, ""), formatDateId(source.request_date)].filter(Boolean).join(", ") || "Magelang, 1 Juli 2026",
+    items: items.slice(0, 15).map((item, index) => {
+      const change = revisionChanges.find((entry) => entry.index === index);
+      const itemName = String(item.nama_barang || item.name || "").trim().toLowerCase();
+      const recommendationDecision = recommendationDecisions.find((entry) =>
+        entry.index === index || (entry.parentName && entry.parentName === itemName)
+      );
+      const recommendationNote = recommendationDecision && !recommendationDecision.isRecommended
+        ? `Tidak direkomendasikan: ${recommendationDecision.reason || "Tidak direkomendasikan oleh tim rekomendasi."}`
+        : "";
+      const revisionNote = buildRevisionNote(change, item);
+      const baseNote = text(item.keterangan || item.note, "");
+      return {
+        no: index + 1,
+        code: text(item.kode || item.code, ""),
+        name: text(item.nama_barang || item.name, ""),
+        unit: text(item.sat || item.unit, ""),
+        quantity: text(item.jumlah || item.quantity, ""),
+        status: text(item.status, ""),
+        note: [baseNote, recommendationNote, revisionNote].filter(Boolean).join("\n"),
+        revisionAction: recommendationNote ? "reject" : change?.action || "",
+      };
+    }),
+    notes: text(input.catatan || source.notes, ""),
+    signatures,
+  };
+};
+
+export const createPgdPreviewData = (options = {}) => {
+  const total = Math.min(Math.max(Number(options.signature_count || 5), 3), 8);
+  const roles = Array.isArray(options.signature_roles) ? options.signature_roles : [1, Math.max(total - 2, 1), 1];
+  const roleNames = ["Membuat", "Memeriksa", "Menyetujui"];
+  const jobs = {
+    Membuat: ["Staff Departemen", "Supervisor", "Asisten Manager"],
+    Memeriksa: ["Manager Departemen", "Manager Terkait", "Direktur I"],
+    Menyetujui: ["Direktur Utama", "Direktur I", "Manager Keuangan"],
+  };
+  const signatures = roleNames.flatMap((role, roleIndex) =>
+    Array.from({ length: Number(roles[roleIndex] || 0) }, (_item, index) => ({
+      stepOrder: 1,
+      role,
+      name: `${role.toUpperCase()} ${index + 1}`,
+      job: jobs[role][index] || role,
+      signed: false,
+      signedAt: null,
+    }))
+  ).slice(0, total).map((signature, index) => ({ ...signature, stepOrder: index + 1 }));
+  return {
+    formNumber: "FM-UAI.PGD-01-00",
+    noSurat: "001/UAI/PBO.1/VI/2026",
+    isAsset: true,
+    department: "Pengembangan Organisasi",
+    project: "-",
+    placeDate: "Magelang, 1 Juli 2026",
+    items: [
+      { no: 1, code: "IT-001", name: "Laptop kerja", unit: "Unit", quantity: "1", status: "2", note: "Uji template PDF" },
+      { no: 2, code: "IT-002", name: "Monitor kerja", unit: "Unit", quantity: "2", status: "3", note: "Contoh item kedua" },
+      { no: 3, code: "IT-003", name: "Keyboard dan mouse", unit: "Set", quantity: "3", status: "4", note: "Contoh item ketiga" },
+    ],
+    notes: "Catatan pengujian template. Data ini tidak disimpan sebagai surat.",
+    signatures,
+  };
+};
+
+const borderLayout = {
+  hLineWidth: () => 0.7,
+  vLineWidth: () => 0.7,
+  hLineColor: () => BORDER,
+  vLineColor: () => BORDER,
+  paddingLeft: () => 4,
+  paddingRight: () => 4,
+  paddingTop: () => 3,
+  paddingBottom: () => 3,
+};
+
+const compactBorderLayout = {
+  ...borderLayout,
+  paddingLeft: () => 3,
+  paddingRight: () => 3,
+  paddingTop: () => 1,
+  paddingBottom: () => 1,
+};
+
+const signatureRow = (signers, topCount) => {
+  const offset = topCount - signers.length;
+  const blank = () => ({ text: "", border: [false, false, false, false] });
+  const roleCells = Array.from({ length: offset }, blank);
+  for (let index = 0; index < signers.length;) {
+    const role = signers[index].role;
+    let span = 1;
+    while (index + span < signers.length && signers[index + span].role === role) span += 1;
+    roleCells.push({ text: role, colSpan: span, bold: true, alignment: "center", fillColor: GREEN });
+    for (let filler = 1; filler < span; filler += 1) roleCells.push({});
+    index += span;
+  }
+  const makeRow = (mapper) => [
+    ...Array.from({ length: offset }, blank),
+    ...signers.map(mapper),
+  ];
+  return {
+    table: {
+      widths: Array.from({ length: topCount }, () => "*"),
+      heights: [12, 42, 11, 11],
+      body: [
+        roleCells,
+        makeRow((signer) => ({
+          text: signer.signed ? `DISETUJUI SISTEM\n${formatDateTimeId(signer.signedAt)} WIB` : "",
+          alignment: "center",
+          fontSize: 6.5,
+          color: signer.signed ? "#166534" : BORDER,
+          bold: signer.signed,
+          margin: [0, 5, 0, 0],
+        })),
+        makeRow((signer) => ({ text: signer.name.toUpperCase(), alignment: "center", fontSize: 7 })),
+        makeRow((signer) => ({ text: signer.job, alignment: "center", fontSize: 7 })),
+      ],
+    },
+    layout: compactBorderLayout,
+  };
+};
+
+const buildSignatureBlock = (signatures) => {
+  const safeSignatures = signatures.length >= 3 ? signatures.slice(0, 8) : createPgdPreviewData({ signature_count: 3, signature_roles: [1, 1, 1] }).signatures;
+  const plan = buildPgdSignatureSlotPlan(safeSignatures.length);
+  let cursor = 0;
+  const groups = plan.groupSizes.map((size) => {
+    const group = safeSignatures.slice(cursor, cursor + size);
+    cursor += size;
+    return group;
+  });
+  return {
+    stack: [
+      ...groups.map((group, index) => ({
+        stack: [signatureRow(group, groups[0].length)],
+        margin: [0, 0, 0, 0],
+      })),
+    ],
+  };
+};
+
+const selectionMarker = (checked) => ({
+  text: checked ? "V" : "",
+  bold: true,
+  alignment: "center",
+});
+
+export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
+  const items = Array.from({ length: 15 }, (_item, index) => ({
+    no: index + 1,
+    code: "",
+    name: "",
+    unit: "",
+    quantity: "",
+    status: "",
+    note: "",
+    ...(data.items[index] || {}),
+    no: index + 1,
+  }));
+  const headerCell = (value) => ({ text: value, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 2, 0, 2] });
+  const itemCell = (value, alignment = "center", extra = {}) => ({ text: text(value, ""), alignment, fontSize: 7.5, margin: [0, 0, 0, 0], ...extra });
+  return {
+    pageSize: "A4",
+    pageOrientation: "landscape",
+    pageMargins: [16, 12, 16, 12],
+    defaultStyle: { font: "Roboto", fontSize: 8, color: BORDER },
+    content: [
+      {
+        table: {
+          widths: ["18%", "60%", "22%"],
+          body: [[
+            logoDataUrl ? { image: logoDataUrl, fit: [82, 30], alignment: "center", margin: [0, 6, 0, 0], fillColor: HEADER_TINT } : { text: "MARISON\nREGENCY GROUP", bold: true, color: "#087b9c", alignment: "center", margin: [0, 8, 0, 0], fillColor: HEADER_TINT },
+            { text: "PERMINTAAN BARANG & JASA", bold: true, fontSize: 14, alignment: "center", margin: [0, 10, 0, 0], fillColor: HEADER_TINT },
+            {
+              table: {
+                widths: ["48%", "52%"],
+                body: [
+                  [{ text: "No. Formulir", bold: true, fillColor: HEADER_TINT }, { text: data.formNumber, bold: true, alignment: "center", fillColor: HEADER_TINT }],
+                  [{ text: "Halaman", bold: true, fillColor: HEADER_TINT }, { text: "1 Dari 1", bold: true, alignment: "center", fillColor: HEADER_TINT }],
+                  [{ text: "Berlaku Efektif", bold: true, fillColor: HEADER_TINT }, { text: "1 Januari 2024", bold: true, alignment: "center", fillColor: HEADER_TINT }],
+                ],
+              },
+              layout: borderLayout,
+            },
+          ]],
+        },
+        layout: compactBorderLayout,
+      },
+      {
+        table: {
+          widths: ["3%", "4%", "20%", "4%", "21%", "22%", "4%", "22%"],
+          body: [
+            [
+              { text: "" },
+              selectionMarker(data.isAsset),
+              { text: "ASET", bold: true, alignment: "left" },
+              selectionMarker(!data.isAsset),
+              { text: "NON ASET", bold: true, alignment: "left" },
+              { text: "Cabang/Departemen", bold: true, alignment: "right", border: [true, true, false, true] },
+              { text: "", border: [false, true, false, true] },
+              { text: `: ${data.department}`, border: [false, true, true, true] },
+            ],
+            [
+              {
+                colSpan: 5,
+                columns: [
+                  { width: "28%", text: "No. Dokumen", bold: true, margin: [8, 0, 0, 0] },
+                  { width: "72%", text: `: ${data.noSurat}`, bold: true, margin: [4, 0, 0, 0] },
+                ],
+              }, {}, {}, {}, {},
+              { text: "Proyek", bold: true, italics: true, alignment: "right", border: [true, true, false, true] },
+              { text: "", border: [false, true, false, true] },
+              { text: `: ${data.project}`, border: [false, true, true, true] },
+            ],
+          ],
+        },
+        layout: compactBorderLayout,
+      },
+      {
+        table: {
+          widths: ["*"],
+          body: [[{
+            text: "Kepada Yth. Bagian Pengadaan\nMohon Pengadaan Barang / Jasa dengan data sebagai berikut :",
+            margin: [4, 2, 4, 2],
+          }]],
+        },
+        layout: compactBorderLayout,
+      },
+      {
+        table: {
+          headerRows: 1,
+          widths: ["3%", "8%", "57%", "5%", "7%", "7%", "13%"],
+          heights: (row) => row === 0 ? 12 : 9,
+          body: [
+            ["No", "KODE", "NAMA BARANG", "SAT", "JUMLAH", "STATUS", "KETERANGAN"].map(headerCell),
+            ...items.map((item) => [
+              itemCell(item.no), itemCell(item.code), itemCell(item.name, "left", item.revisionAction === "reject" ? { decoration: "lineThrough", color: MUTED } : {}), itemCell(item.unit),
+              itemCell(item.quantity), itemCell(item.status), itemCell(item.note, "left"),
+            ]),
+          ],
+        },
+        layout: compactBorderLayout,
+      },
+      {
+        table: {
+          widths: ["*"],
+          heights: [34],
+          body: [[{
+            text: [{ text: "Catatan :\n", bold: true }, { text: data.notes || "" }],
+            alignment: "left",
+            margin: [4, 2, 4, 2],
+          }]],
+        },
+        layout: compactBorderLayout,
+        margin: [0, 3, 0, 3],
+      },
+      {
+        columns: [
+          { width: "60%", text: "" },
+          {
+            width: "40%",
+            stack: [
+              {
+                table: { widths: ["*"], body: [[{ text: data.placeDate, alignment: "center" }]] },
+                layout: compactBorderLayout,
+              },
+              buildSignatureBlock(data.signatures),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+export const loadLogoDataUrl = async (logoPath) => {
+  if (!logoPath) return null;
+  try {
+    const buffer = await readFile(logoPath);
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+};
+
+export const renderPgdPdf = async (data, options = {}) => {
+  const logoDataUrl = options.logoDataUrl || await loadLogoDataUrl(options.logoPath);
+  const definition = buildPgdDocumentDefinition(data, logoDataUrl);
+  const buffer = await pdfMake.createPdf(definition).getBuffer();
+  return Buffer.from(buffer);
+};

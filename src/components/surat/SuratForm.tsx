@@ -11,16 +11,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Hash, ArrowDown, Loader2, Briefcase, Calendar as DatePickerIcon,
-  Check, ChevronDown, Copy, RefreshCcw,
-  ShieldCheck, AlertTriangle, Archive, Home, X, Plus, Image as ImageIcon,
+  Check, ChevronDown, ChevronLeft, ChevronRight, Copy, RefreshCcw,
+  ShieldCheck, AlertTriangle, Archive, Home, X, Plus, Image as ImageIcon, Lock,
   Link as LinkIcon, UploadCloud, Trash2
 } from "lucide-react";
 import {
   suratService,
   type SuratRegistrationDraft,
   type SuratRegistrationDraftFile,
+  type RecommendationParentSummary as RecommendationParentSummaryData,
 } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +34,7 @@ import {
   type RegistrationSummaryField,
 } from "@/components/surat/RegistrationSummaryDialog";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
+import { RecommendationParentSummary } from "@/components/surat/RecommendationParentSummary";
 
 interface SuratFormProps {
   onSuccess: (noSurat: string, judul: string) => void;
@@ -262,8 +265,9 @@ const RECOMMENDATION_ITEMS_KEY = "recommendation_items";
 const RECOMMENDATION_CHECK_MARK = "✓";
 const RECOMMENDATION_ACTIONS = [
   { value: "service", label: "Service" },
-  { value: "ganti", label: "Ganti" },
+  { value: "ganti", label: "Ganti Komponen" },
   { value: "beli_baru", label: "Beli Baru" },
+  { value: "tidak_direkomendasikan", label: "Tidak Direkomendasikan" },
 ] as const;
 type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]["value"];
 
@@ -326,7 +330,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalProjects, setExternalProjects]   = useState<ProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading]     = useState(false);
   const [projectsError, setProjectsError]         = useState<string | null>(null);
+  const [projectUnitAvailability, setProjectUnitAvailability] = useState<{
+    loading: boolean;
+    count: number | null;
+    error: string | null;
+  }>({ loading: false, count: null, error: null });
   const [currentProfile, setCurrentProfile]       = useState<CurrentProfile | null>(null);
+  const [recommendationParentSummary, setRecommendationParentSummary] = useState<RecommendationParentSummaryData | null>(null);
+  const [recommendationParentLoading, setRecommendationParentLoading] = useState(false);
+  const [recommendationParentError, setRecommendationParentError] = useState<string | null>(null);
+  const [activeRecommendationItem, setActiveRecommendationItem] = useState(0);
   const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
   const [formData, setFormData] = useState({
     entity_id: "", dept_id: "", letter_type_id: "",
@@ -353,6 +366,29 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setLinkedDocumentContext(null);
     }
   }, [searchParams]);
+
+  const loadRecommendationParentSummary = useCallback(async () => {
+    const taskId = linkedDocumentContext?.type === "recommendation" ? linkedDocumentContext.taskId : null;
+    if (!taskId) {
+      setRecommendationParentSummary(null);
+      setRecommendationParentError(null);
+      return;
+    }
+    setRecommendationParentLoading(true);
+    setRecommendationParentError(null);
+    try {
+      setRecommendationParentSummary(await suratService.getRecommendationParentSummary(taskId));
+    } catch (error) {
+      setRecommendationParentSummary(null);
+      setRecommendationParentError(error instanceof Error ? error.message : "Ringkasan pengajuan induk gagal dimuat.");
+    } finally {
+      setRecommendationParentLoading(false);
+    }
+  }, [linkedDocumentContext]);
+
+  useEffect(() => {
+    void loadRecommendationParentSummary();
+  }, [loadRecommendationParentSummary]);
 
   const getFormFieldValue = (key: string) => formData.form_input_data[key];
   const getScalarFieldValue = (value: FormFieldValue) => {
@@ -459,7 +495,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getMissingInitialAttachmentLabels = () =>
     getInitialAttachmentRequirements()
       .filter(rule => {
-        const minimum = rule.is_required ? Math.max(1, Number(rule.min_files || 1)) : Number(rule.min_files || 0);
+        const minimum = rule.is_required ? Math.max(1, Number(rule.min_files || 1)) : 0;
         const localCount = initialAttachmentFiles[rule.requirement_key]?.length || 0;
         const persistedCount = draftAttachments.filter(
           attachment => attachment.requirement_key === rule.requirement_key
@@ -614,6 +650,49 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const getTableRows = (key: string) => normalizeTableRows(formData.form_input_data[key]);
+  const parentRecommendationItems = useMemo(() => {
+    if (!recommendationParentSummary?.form_input_data) return [] as TableRow[];
+    const input = recommendationParentSummary.form_input_data;
+    const toRows = (value: unknown) => Array.isArray(value)
+      ? value.filter((row): row is TableRow => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+      : [];
+    const preferredKeys = ["items", "detail_barang", "barang", "request_items"];
+    const preferred = preferredKeys.map((key) => toRows(input[key])).find((rows) => rows.length > 0);
+    const rows = preferred || Object.values(input)
+      .map(toRows)
+      .find((candidate) => candidate.some((row) =>
+        Boolean(String(row.nama_barang || row.nama || row.barang || row.name || "").trim())
+      )) || [];
+
+    return rows
+      .map((row, index) => ({
+        ...row,
+        parent_item_index: index + 1,
+        parent_item_name: String(row.nama_barang || row.nama || row.barang || row.name || "").trim(),
+      }))
+      .filter((row) => Boolean(row.parent_item_name));
+  }, [recommendationParentSummary]);
+
+  useEffect(() => {
+    if (linkedDocumentContext?.type !== "recommendation" || parentRecommendationItems.length === 0) return;
+    setFormData((previous) => {
+      const currentRows = normalizeTableRows(previous.form_input_data[RECOMMENDATION_ITEMS_KEY]);
+      const nextRows = parentRecommendationItems.map((parentItem, index) => ({
+        ...(currentRows[index] || {}),
+        parent_item_index: index + 1,
+        parent_item_name: String(parentItem.parent_item_name || "").trim(),
+      }));
+      if (JSON.stringify(currentRows) === JSON.stringify(nextRows)) return previous;
+      return {
+        ...previous,
+        form_input_data: {
+          ...previous.form_input_data,
+          [RECOMMENDATION_ITEMS_KEY]: nextRows,
+        },
+      };
+    });
+    setActiveRecommendationItem((current) => Math.min(current, parentRecommendationItems.length - 1));
+  }, [linkedDocumentContext?.type, parentRecommendationItems]);
 
   const setTableRows = (key: string, rows: TableRow[]) => {
     setInputValue(key, rows);
@@ -803,7 +882,30 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (RECOMMENDATION_ACTIONS.some(action => action.value === explicit)) return explicit as RecommendationAction;
     if (String(row.service ?? "").trim()) return "service";
     if (String(row.ganti ?? "").trim()) return "ganti";
+    if (String(row.beli_baru ?? "").trim()) return "beli_baru";
+    if (String(row.tidak_direkomendasikan ?? "").trim()) return "tidak_direkomendasikan";
     return "";
+  };
+
+  const getRecommendationActionLabel = (value: string) =>
+    RECOMMENDATION_ACTIONS.find(action => action.value === value)?.label || "Belum dipilih";
+
+  const getRecommendationReason = (row: TableRow) =>
+    String(row.keterangan ?? row.alasan ?? row.reason ?? "").trim();
+
+  const isRecommendationNotRecommended = (row: TableRow) =>
+    getRecommendationAction(row) === "tidak_direkomendasikan";
+
+  const isRecommendationRowComplete = (row: TableRow) => {
+    const action = getRecommendationAction(row);
+    if (!action) return false;
+    if (action === "tidak_direkomendasikan") return getRecommendationReason(row).length >= 5;
+    return Boolean(
+      String(row.nama_barang ?? "").trim()
+      && String(row.lokasi_pic_user_id ?? row.lokasi_pic ?? "").trim()
+      && String(row.uraian ?? "").trim()
+      && getRecommendationAttachment(row)?.file_url
+    );
   };
 
   const isRecommendationItemsComplete = (field: TemplateField) => {
@@ -811,13 +913,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       hasMeaningfulRecommendationRowValue(row)
     );
     if (field.required !== false && rows.length === 0) return false;
-    return rows.every((row: TableRow) =>
-      String(row.nama_barang ?? "").trim() &&
-      String(row.lokasi_pic ?? "").trim() &&
-      Boolean(getRecommendationAction(row)) &&
-      String(row.uraian ?? "").trim() &&
-      Boolean(getRecommendationAttachment(row)?.file_url)
-    );
+    return rows.every((row: TableRow) => isRecommendationRowComplete(row));
   };
 
   const isTableFieldComplete = (field: TemplateField) => {
@@ -866,12 +962,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const profileOfficeId = currentProfile?.office_id || "";
   const profileDepartmentId = currentProfile?.department_id || requesterDepartmentId;
   const canRequesterUseRecommendation = useMemo(() => {
+    if (linkedDocumentContext?.type === "recommendation") return false;
     const departmentId = formData.dept_id || requesterDepartmentId;
     const department = master.depts.find((dept: MasterRecord) => dept.id === departmentId);
     const code = String(department?.code || "").trim().toUpperCase();
     const name = String(department?.name || "").trim().toLowerCase();
     return code === "PBO" || name === "pengembangan organisasi" || name === "po";
-  }, [formData.dept_id, requesterDepartmentId, master.depts]);
+  }, [formData.dept_id, requesterDepartmentId, master.depts, linkedDocumentContext]);
 
   const filteredUsage = useMemo(() => {
     const category = getRequestCategory();
@@ -881,7 +978,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         linkedDocumentContext?.type === "recommendation" &&
         linkedDocumentContext.usageId === item.id
       ) {
-        return getWorkflowCategories(item).includes(category);
+        // The linked task is the authority for its form/usage pairing.
+        return true;
       }
       if (item.scope_type && item.scope_type !== "all") {
         if (item.scope_type === "pusat" && !isPusatSelected) return false;
@@ -907,6 +1005,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     () => filteredUsage.filter(item => (item.form_id || item.master_forms?.id) === selectedFormId),
     [filteredUsage, selectedFormId]
   );
+  const selectedFormName = useMemo(() => {
+    const selectedForm = availableForms.find(form => form.id === selectedFormId);
+    return selectedForm?.name || selectedUsage?.master_forms?.nama_form || "Form dokumen";
+  }, [availableForms, selectedFormId, selectedUsage?.master_forms?.nama_form]);
+  const isRecommendationFlow =
+    linkedDocumentContext?.type === "recommendation" ||
+    searchParams.get("linked_type") === "recommendation";
 
   const canRequesterChooseUnit = useMemo(
     () => usageDetails.some(item =>
@@ -983,10 +1088,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (kedudukan === "PUSAT" || name.toUpperCase().includes("KANTOR PUSAT")) {
       return [getDepartmentTitlePart(department), "Kantor Pusat"].filter(Boolean).join(" ");
     }
-    if (/^KCP\b|^KCP\./i.test(name)) {
+    if (kedudukan === "KCP" || /^KCP\b|^KCP\./i.test(name)) {
       return `KCP. ${toReadableLocationName(name.replace(/^KCP\.?\s*/i, ""))}`.trim();
     }
-    if (/^KC\b|^KC\./i.test(name)) {
+    if (kedudukan === "KC" || /^KC\b|^KC\./i.test(name)) {
       return `KC. ${toReadableLocationName(name.replace(/^KC\.?\s*/i, ""))}`.trim();
     }
     return name;
@@ -1001,11 +1106,47 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const buildAutoTitle = () => {
     const category = getRequestCategory();
     const officeSuffix = getOfficeTitleSuffix(selectedOffice, selectedDepartment);
+    const isRecommendationDocument = linkedDocumentContext?.type === "recommendation";
     const rows = normalizeTableRows(formData.form_input_data.items);
     const itemNames = rows
       .map((row) => String(row.nama_barang || row.name || "").trim())
       .filter(Boolean);
     const itemText = formatIndonesianList(itemNames);
+    if (isRecommendationDocument) {
+      const recommendationRows = normalizeTableRows(formData.form_input_data[RECOMMENDATION_ITEMS_KEY]);
+      const recommendationItemText = formatIndonesianList(
+        recommendationRows.map((row) => String(row.nama_barang || row.name || "").trim()).filter(Boolean)
+      );
+      const recommendationSegments = RECOMMENDATION_ACTIONS.flatMap((action) => {
+        if (action.value === "tidak_direkomendasikan") return [];
+        const names = recommendationRows
+          .filter((row) => getRecommendationAction(row) === action.value)
+          .map((row) => String(row.nama_barang || row.name || "").trim())
+          .filter(Boolean);
+        if (names.length === 0) return [];
+        const actionTitle = action.value === "ganti" ? "Ganti Komponen" : action.label;
+        return [`${actionTitle} ${formatIndonesianList(names)}`];
+      });
+      const parentOfficeSuffix = recommendationParentSummary
+        ? String(recommendationParentSummary.office_kedudukan || "").toUpperCase() === "PUSAT"
+          ? getDepartmentTitlePart({
+              id: recommendationParentSummary.parent_surat_id,
+              name: recommendationParentSummary.department_name || "",
+              code: recommendationParentSummary.department_code || "",
+            })
+          : getOfficeTitleSuffix({
+              id: recommendationParentSummary.parent_surat_id,
+              name: recommendationParentSummary.office_name || "",
+              kedudukan: recommendationParentSummary.office_kedudukan || "",
+            })
+        : "";
+      const title = recommendationSegments.length > 0
+        ? `Rekomendasi ${formatIndonesianList(recommendationSegments)}`
+        : recommendationItemText
+          ? `Rekomendasi Peremajaan Alat : ${recommendationItemText}`
+          : "Rekomendasi Peremajaan Alat";
+      return [title, parentOfficeSuffix].filter(Boolean).join(" ");
+    }
     if (category === "unit") {
       const count = Number(formData.form_input_data.requested_unit_count || 0);
       const project = formData.form_input_data.requested_project as { name?: string } | undefined;
@@ -1039,9 +1180,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedOffice?.id,
     selectedDepartment?.id,
     selectedUsage?.id,
+    recommendationParentSummary,
+    linkedDocumentContext,
     formData.judul_surat,
     setJudulForDisplay,
   ]);
+
+  useEffect(() => {
+    if (!generatedNoSurat || !manualTitleOverride || formData.judul_surat.trim()) return;
+    setManualTitleOverride(false);
+  }, [generatedNoSurat, manualTitleOverride, formData.judul_surat]);
 
   useEffect(() => {
     if (!generatedNoSurat || manualPlaceOverride) return;
@@ -1049,6 +1197,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!nextPlace || nextPlace === formData.request_place) return;
     setFormData(previous => ({ ...previous, request_place: nextPlace }));
   }, [generatedNoSurat, manualPlaceOverride, selectedOffice?.id, selectedDepartment?.id, formData.request_place]);
+
+  useEffect(() => {
+    if (!generatedNoSurat || !manualPlaceOverride || formData.request_place.trim()) return;
+    setManualPlaceOverride(false);
+  }, [generatedNoSurat, manualPlaceOverride, formData.request_place]);
 
   const departmentLetterTypes = useMemo(() => {
     const selectedDeptId = formData.dept_id || requesterDepartmentId;
@@ -1080,15 +1233,43 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return prefix ? prefix.toUpperCase() : "";
   }, [selectedProject]);
 
+  const isBranchOfficeSelected = Boolean(formData.office_id && !isPusatSelected);
+  const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
+  const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects && getRequestCategory() !== "unit";
+
+  const effectiveFormInputData = useMemo<FormInputData>(() => {
+    const input = { ...formData.form_input_data };
+    if (shouldUseDefaultBranchProject) {
+      return {
+        ...input,
+        project_code: "000",
+        project_name: "Tanpa proyek",
+        project_is_default: true,
+      };
+    }
+    if (input.project_is_default === true) {
+      delete input.project_code;
+      delete input.project_name;
+      delete input.project_is_default;
+    }
+    return input;
+  }, [formData.form_input_data, shouldUseDefaultBranchProject]);
+
+  const effectiveFormData = useMemo(() => ({
+    ...formData,
+    project_id: shouldUseDefaultBranchProject ? "" : formData.project_id,
+    form_input_data: effectiveFormInputData,
+  }), [formData, shouldUseDefaultBranchProject, effectiveFormInputData]);
+
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
-    project_id: formData.project_id,
-    project_code: selectedProjectCode,
-    project_name: selectedProject?.name ?? "",
+    project_id: effectiveFormData.project_id,
+    project_code: shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
+    project_name: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
     office_id: formData.office_id,
     entity_id: formData.entity_id,
     dept_id: formData.dept_id,
-    ...formData.form_input_data,
-  }), [formData.project_id, formData.office_id, formData.entity_id, formData.dept_id, formData.form_input_data, selectedProject, selectedProjectCode]);
+    ...effectiveFormInputData,
+  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject]);
 
   const isDirty = useMemo(
     () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
@@ -1417,7 +1598,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setFormData(previous => ({
       ...previous,
       ...restoredFormData,
-      form_input_data: restoredFormData.form_input_data || {},
+      is_aset: restoredLinkedContext?.type === "recommendation" ? true : restoredFormData.is_aset,
+      form_input_data: restoredLinkedContext?.type === "recommendation"
+        ? {
+            ...(restoredFormData.form_input_data || {}),
+            request_category: "asset",
+            request_mode: "barang",
+          }
+        : restoredFormData.form_input_data || {},
     }));
     setSelectedFormId(String(payload.selectedFormId || usage?.form_id || usage?.master_forms?.id || ""));
     setSelectedUsage(usage);
@@ -1443,7 +1631,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       suratService.saveRegistrationDraft(
         activeDraftId,
         {
-          formData,
+          formData: effectiveFormData,
           selectedFormId,
           selectedUsageId: selectedUsage?.id || "",
           linkedDocumentContext,
@@ -1455,7 +1643,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         .catch(() => setDraftSaveState("error"));
     }, 900);
     return () => window.clearTimeout(timeout);
-  }, [activeDraftId, generatedNoSurat, formData, selectedFormId, selectedUsage?.id, signers, draftToRestore, linkedDocumentContext]);
+  }, [activeDraftId, generatedNoSurat, effectiveFormData, selectedFormId, selectedUsage?.id, signers, draftToRestore, linkedDocumentContext]);
 
   useEffect(() => {
     if (!generatedNoSurat) {
@@ -1468,12 +1656,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   useEffect(() => {
     if (!selectedUsage) return;
+    if (
+      linkedDocumentContext?.type === "recommendation" &&
+      linkedDocumentContext.usageId === selectedUsage.id
+    ) return;
     const category = getRequestCategory();
     if (!category || !getWorkflowCategories(selectedUsage).includes(category)) {
       setSelectedUsage(null);
       setSigners([]);
     }
-  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category]);
+  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext]);
 
   useEffect(() => {
     if (getRequestCategory() !== "asset" || canRequesterUseRecommendation) return;
@@ -1555,6 +1747,42 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return () => { cancelled = true; };
   }, [formData.form_input_data.request_category, externalProjects.length]);
 
+  useEffect(() => {
+    if (getRequestCategory() !== "unit") {
+      setProjectUnitAvailability({ loading: false, count: null, error: null });
+      return;
+    }
+    const requestedProject = formData.form_input_data.requested_project as { code?: string } | undefined;
+    const projectCode = String(requestedProject?.code || "").trim();
+    if (!projectCode) {
+      setProjectUnitAvailability({ loading: false, count: null, error: null });
+      return;
+    }
+
+    let cancelled = false;
+    setProjectUnitAvailability({ loading: true, count: null, error: null });
+    requestExternalOptions("marison_units_by_project", {
+      project_code: projectCode,
+      requested_project: requestedProject,
+    })
+      .then((options) => {
+        if (!cancelled) {
+          setProjectUnitAvailability({ loading: false, count: options.length, error: null });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setProjectUnitAvailability({
+            loading: false,
+            count: null,
+            error: error instanceof Error ? error.message : "Jumlah unit tersedia belum termuat.",
+          });
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [formData.form_input_data.request_category, formData.form_input_data.requested_project]);
+
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
     const proj = master.projects?.find((p: MasterRecord) => p.id === projectId);
@@ -1615,7 +1843,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       letter_type_id: linkedDocumentContext.letterTypeId || previous.letter_type_id,
       form_input_data: {
         ...previous.form_input_data,
-        request_category: "non_asset",
+        request_category: "asset",
         request_mode: "barang",
         linked_document_type: "recommendation",
         linked_parent_surat_id: linkedDocumentContext.parentSuratId,
@@ -1624,6 +1852,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           ? `Rekomendasi untuk ${linkedDocumentContext.parentNoSurat}`
           : "Rekomendasi untuk surat aset induk",
       },
+      is_aset: true,
     }));
 
     if (linkedDocumentContext.formId && selectedFormId !== linkedDocumentContext.formId) {
@@ -1691,8 +1920,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         description: "Belum ada matrix yang mendukung klasifikasi, kantor, dan departemen yang dipilih.",
       });
     }
-    if (!isPusatSelected && !formData.project_id)
-      return toast({ variant: "destructive", title: "Proyek Belum Dipilih" });
     if (requestCategory === "unit") {
       const count = Number(getFormFieldValue("requested_unit_count") || 0);
       const requestedProject = getFormFieldValue("requested_project") as { code?: string } | undefined;
@@ -1702,17 +1929,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       if (!Number.isFinite(count) || count < 1) {
         return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
       }
+    } else if (branchHasRegisteredProjects && !formData.project_id) {
+      return toast({
+        variant: "destructive",
+        title: "Proyek Cabang Belum Dipilih",
+        description: "Kantor cabang ini memiliki proyek, jadi pilih proyek cabang terlebih dahulu.",
+      });
     }
     setIsProcessingNumber(true);
     try {
-      const res = await suratService.generateNoSurat(formData);
+      const res = await suratService.generateNoSurat(effectiveFormData);
       let draft: SuratRegistrationDraft;
       try {
         draft = await suratService.createRegistrationDraft({
           noUrut: res.noUrut,
           noSurat: res.fullNumber,
           payload: {
-            formData,
+            formData: effectiveFormData,
             selectedFormId,
             selectedUsageId: selectedUsage.id,
             linkedDocumentContext,
@@ -1873,9 +2106,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       try {
         setDraftSaveState("saving");
         await suratService.saveRegistrationDraft(
-          activeDraftId,
-          {
-            formData,
+        activeDraftId,
+        {
+            formData: effectiveFormData,
             selectedFormId,
             selectedUsageId: selectedUsage?.id || "",
             linkedDocumentContext,
@@ -1986,7 +2219,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const mappedKeys = new Set(formFields.map((field) => field.key));
     const hiddenKeys = new Set([
       "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
-      "recommendation_template_name", "requires_recommendation",
+      "recommendation_template_name", "requires_recommendation", "project_code", "project_name", "project_is_default",
     ]);
     const fields: RegistrationSummaryField[] = formFields
       .filter((field) => !hiddenKeys.has(field.key))
@@ -1994,11 +2227,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         key: field.key,
         label: field.label || humanizeInputKey(field.key),
         type: field.type,
-        value: formData.form_input_data[field.key],
+        value: effectiveFormInputData[field.key],
       }))
       .filter((field) => Array.isArray(field.value) ? field.value.length > 0 : formatSummaryValue(field.value) !== "-");
 
-    Object.entries(formData.form_input_data).forEach(([key, value]) => {
+    Object.entries(effectiveFormInputData).forEach(([key, value]) => {
       if (mappedKeys.has(key) || hiddenKeys.has(key) || formatSummaryValue(value) === "-") return;
       if (["requested_project", "requested_unit_count", "catatan"].includes(key)) {
         fields.push({ key, label: humanizeInputKey(key), value });
@@ -2035,7 +2268,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       requesterJobTitle: requester?.job_title || undefined,
       departmentName: department?.name || "-",
       officeName: office?.name || "-",
-      projectName: selectedProject?.name || undefined,
+      projectName: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name || undefined,
       requestPlace: formData.request_place,
       requestDate: formData.request_date,
       fields,
@@ -2082,7 +2315,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         )
       );
       const result = await suratService.createRegistrasi(
-        { ...formData, no_surat: generatedNoSurat, initial_attachment_meta: initialAttachmentMeta },
+        { ...effectiveFormData, no_surat: generatedNoSurat, initial_attachment_meta: initialAttachmentMeta },
         signers,
         null,
         lampiranFiles,
@@ -2181,36 +2414,100 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const renderRecommendationItemsField = (field: TemplateField) => {
     const rows = getTableRows(field.key);
+    const isLinkedRecommendation =
+      linkedDocumentContext?.type === "recommendation" && parentRecommendationItems.length > 0;
     const maxRows = Math.max(
       Number(field.table_config?.end_row || 0) - Number(field.table_config?.start_row || 0) + 1,
       1
     );
     const canAddRow = rows.length < maxRows;
+    const recommendationRowIsComplete = (row: TableRow) => isRecommendationRowComplete(row);
+    const completedItems = rows.filter(recommendationRowIsComplete).length;
+    const selectedItemIndex = Math.min(activeRecommendationItem, Math.max(rows.length - 1, 0));
+    const visibleRows = rows
+      .map((row, rowIndex) => ({ row, rowIndex }))
+      .filter(({ rowIndex }) => !isLinkedRecommendation || rowIndex === selectedItemIndex);
 
     return (
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-foreground">Item Rekomendasi</p>
-              <p className="mt-1 text-xs text-muted-foreground">{rows.length}/{maxRows} item</p>
+              <p className="text-sm font-semibold text-foreground">
+                {isLinkedRecommendation ? "Rekomendasi per Item Permohonan" : "Item Rekomendasi"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isLinkedRecommendation
+                  ? `${completedItems} dari ${rows.length} item lengkap`
+                  : `${rows.length}/${maxRows} item`}
+              </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!canAddRow}
-              onClick={() => addTableRow(field.key)}
-              className="h-10 rounded-md text-xs font-semibold"
-            >
-              <Plus className="mr-2 h-4 w-4" /> Tambah Item
-            </Button>
+            {isLinkedRecommendation ? (
+              <span className="inline-flex h-9 items-center self-start rounded-md bg-primary/10 px-3 text-xs font-semibold text-primary sm:self-auto">
+                Item {selectedItemIndex + 1} dari {rows.length}
+              </span>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!canAddRow}
+                onClick={() => addTableRow(field.key)}
+                className="h-10 rounded-md text-xs font-semibold"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Tambah Item
+              </Button>
+            )}
           </div>
+
+          {isLinkedRecommendation && (
+            <div className="mt-4 flex gap-2 overflow-x-auto border-t border-border pt-4 pb-1">
+              {rows.map((row, rowIndex) => {
+                const active = rowIndex === selectedItemIndex;
+                const complete = recommendationRowIsComplete(row);
+                const parentItemName = String(row.parent_item_name || parentRecommendationItems[rowIndex]?.parent_item_name || "").trim();
+                return (
+                  <button
+                    key={`recommendation-item-navigation-${rowIndex}`}
+                    type="button"
+                    onClick={() => setActiveRecommendationItem(rowIndex)}
+                    aria-current={active ? "step" : undefined}
+                    className={cn(
+                      "flex min-w-[150px] max-w-[220px] items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors",
+                      active
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <span className={cn(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      complete
+                        ? "bg-emerald-600 text-white"
+                        : active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                    )}>
+                      {complete ? <Check className="h-3.5 w-3.5" /> : rowIndex + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold">
+                        {parentItemName || `Item ${rowIndex + 1}`}
+                      </span>
+                      <span className="mt-0.5 block text-[11px]">
+                        {complete ? "Lengkap" : "Belum lengkap"}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {rows.map((row: TableRow, rowIndex: number) => {
+        {visibleRows.map(({ row, rowIndex }) => {
           const selectedUserId = String(row.lokasi_pic_user_id ?? "");
           const selectedAction = getRecommendationAction(row);
+          const notRecommended = selectedAction === "tidak_direkomendasikan";
           const selectedUser = selectedUserId ? master.users.find((user) => user.id === selectedUserId) : null;
           const picLabel = String(row.lokasi_pic ?? "") || (selectedUserId ? getRecommendationPicLabel(selectedUserId) : "");
 
@@ -2220,29 +2517,35 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground">No. {rowIndex + 1}</p>
                   <p className="text-sm font-semibold text-foreground">
-                    {String(row.nama_barang ?? "").trim() || "Item rekomendasi"}
+                    {String(row.parent_item_name || parentRecommendationItems[rowIndex]?.parent_item_name || "").trim() || "Item permohonan"}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={rows.length === 1 && !hasMeaningfulRecommendationRowValue(row)}
-                  onClick={() => removeTableRow(field.key, rowIndex)}
-                  className="h-9 px-2 text-destructive hover:text-destructive"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                {!isLinkedRecommendation && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={rows.length === 1 && !hasMeaningfulRecommendationRowValue(row)}
+                    onClick={() => removeTableRow(field.key, rowIndex)}
+                    className="h-9 px-2 text-destructive hover:text-destructive"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground">Nama Barang / Alat Kerja *</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Nama Barang / Alat Kerja {notRecommended ? "" : "*"}
+                  </Label>
                   <Input
                     value={String(row.nama_barang ?? "")}
-                    onChange={(event) => updateTableCell(field.key, rowIndex, "nama_barang", event.target.value)}
+                    onChange={(event) => {
+                      updateTableCell(field.key, rowIndex, "nama_barang", event.target.value);
+                    }}
                     className="h-11 bg-background text-sm"
-                    placeholder="Contoh: Mikrofon kondensor"
+                    placeholder="Contoh: Printer Epson L3250 / HP ProBook 440 G10"
                   />
                 </div>
 
@@ -2257,7 +2560,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground">Lokasi / PIC *</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Lokasi / PIC {notRecommended ? "" : "*"}
+                  </Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -2326,7 +2631,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[260px_1fr]">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-muted-foreground">Hasil Rekomendasi *</Label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
                     {RECOMMENDATION_ACTIONS.map((action) => {
                       const selected = selectedAction === action.value;
                       return (
@@ -2337,6 +2642,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                             recommendation_action: action.value,
                             service: action.value === "service" ? RECOMMENDATION_CHECK_MARK : "",
                             ganti: action.value === "ganti" ? RECOMMENDATION_CHECK_MARK : "",
+                            beli_baru: action.value === "beli_baru" ? RECOMMENDATION_CHECK_MARK : "",
+                            tidak_direkomendasikan: action.value === "tidak_direkomendasikan" ? RECOMMENDATION_CHECK_MARK : "",
                           })}
                           className={cn(
                             "h-10 rounded-md border px-2 text-xs font-semibold transition-colors",
@@ -2353,23 +2660,27 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground">Uraian *</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Uraian {notRecommended ? "" : "*"}
+                  </Label>
                   <Input
                     value={String(row.uraian ?? "")}
                     onChange={(event) => updateTableCell(field.key, rowIndex, "uraian", event.target.value)}
                     className="h-11 bg-background text-sm"
-                    placeholder="Contoh: Pembelian baru / service adaptor / ganti unit"
+                    placeholder={notRecommended ? "Opsional" : "Contoh: Pembelian baru / service adaptor / ganti unit"}
                   />
                 </div>
               </div>
 
               <div className="mt-4 space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground">Keterangan</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">
+                  {notRecommended ? "Alasan tidak direkomendasikan *" : "Keterangan"}
+                </Label>
                 <Textarea
                   value={String(row.keterangan ?? "")}
                   onChange={(event) => updateTableCell(field.key, rowIndex, "keterangan", event.target.value)}
                   className="min-h-20 bg-background text-sm"
-                  placeholder="Opsional"
+                  placeholder={notRecommended ? "Contoh: Item belum prioritas atau spesifikasi belum mendukung kebutuhan." : "Opsional"}
                 />
               </div>
 
@@ -2386,9 +2697,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       inputMode="url"
                     />
                   </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Link disimpan di data rekomendasi. Posisi di template bisa ditentukan nanti jika sudah ada area khusus.
-                  </p>
                 </div>
 
                 {(() => {
@@ -2396,9 +2704,21 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   const uploadKey = `${field.key}-${rowIndex}`;
                   const isUploading = uploadingRecommendationAttachment === uploadKey;
                   const inputId = `${field.key}-${rowIndex}-recommendation-image`;
+                  if (notRecommended && !attachment?.file_url) {
+                    return (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold text-muted-foreground">Lampiran Gambar</Label>
+                        <div className="rounded-lg border border-dashed border-amber-500/35 bg-amber-500/10 p-4 text-xs leading-relaxed text-amber-900 dark:text-amber-100">
+                          Gambar tidak wajib untuk item yang tidak direkomendasikan. Pastikan alasan ditulis jelas agar pemohon memahami item yang dicoret.
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-muted-foreground">Lampiran Gambar *</Label>
+                      <Label className="text-xs font-semibold text-muted-foreground">
+                        Lampiran Gambar {notRecommended ? "" : "*"}
+                      </Label>
                       <div
                         role="button"
                         tabIndex={0}
@@ -2475,6 +2795,39 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   );
                 })()}
               </div>
+
+              {isLinkedRecommendation && rows.length > 1 && (
+                <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={rowIndex === 0}
+                    onClick={() => setActiveRecommendationItem(Math.max(rowIndex - 1, 0))}
+                  >
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Sebelumnya
+                  </Button>
+                  <span className={cn(
+                    "hidden text-xs font-semibold sm:block",
+                    recommendationRowIsComplete(row) ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"
+                  )}>
+                    {recommendationRowIsComplete(row)
+                      ? "Item ini lengkap"
+                      : notRecommended
+                        ? "Pilih aksi dan isi alasan"
+                        : "Lengkapi field wajib dan gambar"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant={rowIndex === rows.length - 1 ? "outline" : "default"}
+                    disabled={rowIndex === rows.length - 1}
+                    onClick={() => setActiveRecommendationItem(Math.min(rowIndex + 1, rows.length - 1))}
+                  >
+                    Berikutnya
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -2714,11 +3067,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 {field.label}
               </Label>
             </div>
-            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-              {isTable
-                ? "Gunakan tombol tambah baris jika item lebih dari satu."
-                : "Data ini akan ditulis otomatis ke template dan PDF."}
-            </p>
+            {!isTable && (
+              <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                Data ini akan ditulis otomatis ke template dan PDF.
+              </p>
+            )}
           </div>
           <span className={cn(
             "inline-flex w-fit rounded-md border px-2.5 py-1 text-[11px] font-semibold",
@@ -2772,6 +3125,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const renderUnitRequestPanel = () => {
     if (!isUnitMode) return null;
     const selectedProject = getFormFieldValue("requested_project") as ProjectRaw | undefined;
+    const requestedCount = Number(getFormFieldValue("requested_unit_count") || 0);
+    const availableCount = Number(projectUnitAvailability.count ?? 0);
+    const exceedsAvailability = selectedProject?.code &&
+      projectUnitAvailability.count != null &&
+      requestedCount > availableCount;
     return (
       <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
         <div className="flex flex-col gap-1">
@@ -2796,6 +3154,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               </SelectContent>
             </Select>
             {projectsError && <p className="text-[10px] font-semibold text-destructive">{projectsError}</p>}
+            {selectedProject?.code ? (
+              <p className={cn(
+                "text-[11px] font-medium",
+                projectUnitAvailability.error ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"
+              )}>
+                {projectUnitAvailability.loading
+                  ? "Memuat jumlah unit tersedia..."
+                  : projectUnitAvailability.error
+                    ? "Jumlah unit tersedia belum termuat."
+                    : `Kapasitas tersedia saat ini: ${projectUnitAvailability.count ?? 0} unit.`}
+              </p>
+            ) : (
+              <p className="text-[11px] font-medium text-muted-foreground">Pilih proyek untuk melihat jumlah unit tersedia.</p>
+            )}
+            {exceedsAvailability && (
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                Jumlah yang diajukan melebihi kapasitas unit yang sedang termuat. Pengajuan tetap bisa dilanjutkan, tetapi tim pemeriksa perlu menyesuaikan alokasi.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground">Jumlah Unit Diajukan</Label>
@@ -3218,22 +3595,55 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </div>
         )}
 
+        {isRecommendationFlow && (
+          <section className="space-y-5">
+            <RecommendationParentSummary
+              data={recommendationParentSummary}
+              loading={recommendationParentLoading}
+              error={recommendationParentError}
+              onRetry={() => void loadRecommendationParentSummary()}
+            />
+
+            {generatedNoSurat && (
+              <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-primary/20 bg-primary/10 p-5 md:flex-row md:items-center">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-primary p-3 text-primary-foreground shadow-lg">
+                    <Hash className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-primary">Nomor Rekomendasi</p>
+                    <p className="mt-1 text-xl font-semibold tracking-tight">{generatedNoSurat}</p>
+                  </div>
+                </div>
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        role="img"
+                        aria-label="Nomor rekomendasi terkunci"
+                        className="inline-flex h-11 w-11 cursor-default items-center justify-center rounded-md border border-primary/20 bg-background text-primary outline-none transition-colors hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[260px] text-center">
+                      Nomor dibuat otomatis dari pengajuan induk dan tidak dapat diubah di sini.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
+        {!isRecommendationFlow && (
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
             <h3 className="text-sm font-semibold text-foreground">Lokasi dan Klasifikasi</h3>
           </div>
-
-          {linkedDocumentContext?.type === "recommendation" && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
-              <p className="font-semibold">Dokumen rekomendasi aset</p>
-              <p className="mt-1 text-xs leading-5">
-                Nomor dan approval dokumen ini berdiri sendiri, lalu hasilnya otomatis ditautkan ke surat induk
-                {linkedDocumentContext.parentNoSurat ? ` ${linkedDocumentContext.parentNoSurat}` : ""}.
-              </p>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5">
             {/* Kantor */}
@@ -3257,19 +3667,26 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             {/* Proyek (cabang saja) */}
             {!isPusatSelected && formData.office_id && (
               <div className="space-y-2 animate-in slide-in-from-top-2">
-              <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
-                  <Briefcase className="w-3 h-3" /> Pilih Proyek Cabang
+                <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
+                  <Briefcase className="w-3 h-3" /> Proyek Cabang
                 </Label>
-                <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
-                  <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
-                    <SelectValue placeholder="Pilih Proyek..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredProjects.map((p: MasterRecord) => (
-                      <SelectItem key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {branchHasRegisteredProjects ? (
+                  <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
+                    <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
+                      <SelectValue placeholder="Pilih Proyek..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredProjects.map((p: MasterRecord) => (
+                        <SelectItem key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5">
+                    <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3327,7 +3744,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           </div>
 
-          {!generatedNoSurat && !!formData.letter_type_id && (
+          {!isRecommendationFlow && !generatedNoSurat && !!formData.letter_type_id && (
             <>
               {renderRequestClassificationStep()}
               {renderRecommendationOptionStep()}
@@ -3336,7 +3753,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           )}
 
           {/* ══ TOGGLE ASET — posisi baru, MENCOLOK, tepat sebelum tombol nomor ══ */}
-          {Boolean(import.meta.env.VITE_SHOW_LEGACY_ASSET_TOGGLE) && !generatedNoSurat && (
+          {Boolean(import.meta.env.VITE_SHOW_LEGACY_ASSET_TOGGLE) && !isRecommendationFlow && !generatedNoSurat && (
             <div
               role="button"
               onClick={() => setFormData(f => ({ ...f, is_aset: !f.is_aset }))}
@@ -3400,7 +3817,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           )}
 
           {/* ── Tombol dapatkan nomor / tampilan nomor ────────────────────── */}
-          {!generatedNoSurat && getRequestCategory() && (
+          {!isRecommendationFlow && !generatedNoSurat && !draftLoading && getRequestCategory() && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Form Dokumen</Label>
@@ -3450,6 +3867,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           )}
 
+          {generatedNoSurat && selectedUsage && !isRecommendationFlow && (
+            <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form Dokumen</Label>
+                <div className="flex min-h-12 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground">
+                  {selectedFormName}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Kegunaan</Label>
+                <div className="flex min-h-12 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground">
+                  {selectedUsage.name || getFullRoles(selectedUsage).join(" - ") || "Kegunaan form"}
+                </div>
+              </div>
+            </div>
+          )}
+
           {!generatedNoSurat ? (
             <Button
               onClick={handleGetNumber}
@@ -3484,87 +3918,95 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </div>
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleResetNumber()}
-                disabled={isResettingNumber}
-                className="border-primary text-primary font-bold hover:bg-primary/5"
-              >
-                {isResettingNumber ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                )}
-                Ubah Identitas
-              </Button>
+              {isRecommendationFlow ? (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        role="img"
+                        aria-label="Nomor rekomendasi terkunci"
+                        className="inline-flex h-11 w-11 cursor-default items-center justify-center rounded-md border border-primary/20 bg-background text-primary outline-none transition-colors hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[260px] text-center">
+                      Nomor dibuat otomatis dari pengajuan induk dan tidak dapat diubah di sini.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleResetNumber()}
+                  disabled={isResettingNumber}
+                  className="border-primary text-primary font-bold hover:bg-primary/5"
+                >
+                  {isResettingNumber ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                  )}
+                  Ubah Identitas
+                </Button>
+              )}
             </div>
           )}
         </section>
+        )}
 
         {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
         {generatedNoSurat && (
           <div id="surat-registration-details" className="scroll-mt-24 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
             <section className="space-y-6">
-              <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">2</span>
-                <h3 className="text-sm font-semibold text-foreground">Persetujuan dan Berkas</h3>
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">2</span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold leading-tight text-foreground">Persetujuan dan Berkas</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Lengkapi perihal, tempat, tanggal, lampiran, dan penandatangan sebelum pengajuan didaftarkan.</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                {/* Kiri: matrix + judul + template */}
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs font-semibold text-muted-foreground">Perihal (Judul Surat)</Label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-[11px]"
-                        onClick={() => {
-                          const nextTitle = buildAutoTitle();
-                          setManualTitleOverride(false);
-                          setFormData({ ...formData, judul_surat: nextTitle });
-                          setJudulForDisplay(nextTitle);
-                        }}
-                      >
-                        Reset otomatis
-                      </Button>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+                <div className="rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
+                  <div className="space-y-3">
+                    <div className="min-w-0">
+                      <Label className="text-sm font-semibold text-foreground">Perihal</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">Judul otomatis mengikuti data dokumen. Kosongkan field jika ingin kembali memakai judul otomatis.</p>
                     </div>
-                    <Input className="h-12 bg-muted/20 border-none ring-1 ring-border focus-visible:ring-primary"
+                    <Textarea
+                      className="min-h-[92px] resize-none bg-background text-sm leading-relaxed"
                       placeholder="Contoh: Permohonan Pembelian Inventaris Kantor"
                       value={formData.judul_surat}
-                      onChange={e => { setManualTitleOverride(true); setFormData({ ...formData, judul_surat: e.target.value }); setJudulForDisplay(e.target.value); }}
+                      onChange={e => {
+                        const nextValue = e.target.value;
+                        setManualTitleOverride(Boolean(nextValue.trim()));
+                        setFormData({ ...formData, judul_surat: nextValue });
+                        setJudulForDisplay(nextValue);
+                      }}
                     />
                   </div>
-
                 </div>
 
-                <div className="space-y-4 rounded-lg border border-border bg-muted/10 p-5">
-                  <p className="text-sm font-semibold text-foreground">Tanggal Dokumen</p>
+                <div className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Tempat dan Tanggal Dokumen</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Tempat otomatis mengikuti kantor penerbit. Kosongkan field jika ingin kembali otomatis.</p>
+                  </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <Label className="text-xs font-semibold text-muted-foreground">Tempat</Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => {
-                            setManualPlaceOverride(false);
-                            setFormData({ ...formData, request_place: getDefaultRequestPlace(selectedOffice) });
-                          }}
-                        >
-                          Reset
-                        </Button>
-                      </div>
+                      <Label className="text-xs font-semibold text-muted-foreground">Tempat</Label>
                       <Input
                         value={formData.request_place}
-                        onChange={e => { setManualPlaceOverride(true); setFormData({ ...formData, request_place: e.target.value }); }}
+                        onChange={e => {
+                          const nextValue = e.target.value;
+                          setManualPlaceOverride(Boolean(nextValue.trim()));
+                          setFormData({ ...formData, request_place: nextValue });
+                        }}
                         placeholder="Contoh: Jakarta"
-                        className="h-12 bg-background/70 text-sm"
+                        className="h-11 bg-background text-sm"
                       />
                     </div>
                     <div className="space-y-2">

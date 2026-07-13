@@ -5,6 +5,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
+import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -93,33 +95,75 @@ const markFailed = async (job, error) => {
     .eq("id", job.id);
 };
 
+const renderDirectPgdJob = async (job) => {
+  const { data: surat, error: suratError } = await supabase
+    .from("surat_registrasi")
+    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
+    .eq("id", job.surat_id)
+    .maybeSingle();
+  if (suratError) throw suratError;
+  if (!surat || !isPgdDocument(surat)) return null;
+
+  const { data: signatures, error: signatureError } = await supabase
+    .from("surat_signatures")
+    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
+    .eq("surat_id", job.surat_id)
+    .order("step_order", { ascending: true });
+  if (signatureError) throw signatureError;
+
+  const userIds = [...new Set((signatures || []).map((item) => item.user_id).filter(Boolean))];
+  let profileMap = new Map();
+  if (userIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, full_name, job_title")
+      .in("id", userIds);
+    if (profileError) throw profileError;
+    profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+  }
+  const enrichedSignatures = (signatures || []).map((signature) => ({
+    ...signature,
+    profile: profileMap.get(signature.user_id) || null,
+  }));
+  const targetSignature = job.signature_id
+    ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
+    : null;
+  const documentData = normalizePgdDocumentData(surat, {
+    signatures: enrichedSignatures,
+    targetStep: targetSignature?.step_order || null,
+  });
+  return await renderPgdPdf(documentData, {
+    logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
+  });
+};
+
 const processJob = async (job) => {
-  const sourceRef = extractStorageRef(job.source_file_path);
-  if (!sourceRef?.path) throw new Error("File Excel dokumen belum tersedia.");
-
-  const { data: fileData, error: downloadError } = await storageClientForOrigin(sourceRef.origin).storage
-    .from("dokumen_surat")
-    .download(sourceRef.path);
-  if (downloadError || !fileData) throw new Error(downloadError?.message || "Gagal mengambil file Excel.");
-
   const workDir = await mkdtemp(join(tmpdir(), "agenda-doc-"));
   try {
-    const sourcePath = join(workDir, "source.xlsx");
-    await writeFile(sourcePath, Buffer.from(await fileData.arrayBuffer()));
+    let pdfBuffer = await renderDirectPgdJob(job);
+    if (!pdfBuffer) {
+      const sourceRef = extractStorageRef(job.source_file_path);
+      if (!sourceRef?.path) throw new Error("File Excel dokumen belum tersedia.");
+      const { data: fileData, error: downloadError } = await storageClientForOrigin(sourceRef.origin).storage
+        .from("dokumen_surat")
+        .download(sourceRef.path);
+      if (downloadError || !fileData) throw new Error(downloadError?.message || "Gagal mengambil file Excel.");
 
-    await execFileAsync("soffice", [
-      "--headless",
-      "--nologo",
-      "--nofirststartwizard",
-      "--convert-to",
-      "pdf",
-      "--outdir",
-      workDir,
-      sourcePath,
-    ], { timeout: convertTimeoutMs });
-
-    const pdfFile = join(workDir, "source.pdf");
-    const pdfBuffer = await readFile(pdfFile);
+      const sourcePath = join(workDir, "source.xlsx");
+      await writeFile(sourcePath, Buffer.from(await fileData.arrayBuffer()));
+      await normalizeWorkbookForPdf(sourcePath);
+      await execFileAsync("soffice", [
+        "--headless",
+        "--nologo",
+        "--nofirststartwizard",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        workDir,
+        sourcePath,
+      ], { timeout: convertTimeoutMs });
+      pdfBuffer = await readFile(join(workDir, "source.pdf"));
+    }
     const pdfPath = `pdf/${job.surat_id}_${Date.now()}.pdf`;
     const uploadOrigin = useExternalStorage() ? "external" : "primary";
     const { error: uploadError } = await uploadStorageClient().storage

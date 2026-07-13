@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from "@/lib/utils";
 import { documentOperationKey, useDocumentOpener } from '@/hooks/useDocumentOpener';
+import { approvalDotClass, type ApprovalBadgeTone } from '@/components/surat/approval-status-style';
 
 export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | null, loading: boolean }) => {
   const { openPdf, isOpening } = useDocumentOpener();
@@ -56,8 +57,10 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
         <div className="space-y-0 relative">
           {steps.map((sig, idx) => {
             const isDone = sig.is_signed;
-            const isCurrent = sig.step_order === data.current_step && !isDone;
+            const isRejected = sig.status === "REJECTED";
+            const isCurrent = sig.step_order === data.current_step && !isDone && !isRejected;
             const isLast = idx === steps.length - 1;
+            const tone: ApprovalBadgeTone = isRejected ? "rejected" : isDone ? "approved" : isCurrent ? "active" : "waiting";
 
             return (
               <div key={sig.id} className="relative flex gap-8 pb-12">
@@ -66,8 +69,8 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
                 )}
                 <div className={cn(
                   "relative z-10 w-9 h-9 rounded-full flex items-center justify-center ring-8 ring-white transition-all shadow-md",
-                  isDone ? 'bg-green-500 text-white shadow-green-100' : 
-                  isCurrent ? 'bg-blue-600 text-white animate-pulse shadow-blue-100' : 'bg-slate-200 text-slate-400'
+                  approvalDotClass(tone),
+                  isCurrent && "animate-pulse shadow-blue-100"
                 )}>
                   {isDone ? <CheckCircle2 size={20} /> : <Clock size={18} />}
                 </div>
@@ -78,6 +81,11 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
                     <p className="text-[10px] text-green-600 font-bold mt-2 uppercase tracking-tight">
                       ✅ Disetujui: {new Date(sig.signed_at!).toLocaleString('id-ID')}
                     </p>
+                  )}
+                  {isRejected && (
+                    <div className="mt-3 px-3 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded-full w-fit border border-red-100 uppercase tracking-wider">
+                      Ditolak
+                    </div>
                   )}
                   {isCurrent && (
                     <div className="mt-3 px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full w-fit border border-blue-100 uppercase tracking-wider">

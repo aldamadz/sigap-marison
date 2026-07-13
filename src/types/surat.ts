@@ -47,6 +47,7 @@ export interface SuratSigner {
 export interface SuratSignerDetail extends SuratSigner {
   id: string;
   is_signed: boolean;
+  status?: string | null;
   signed_at?: string | null;
   
   // Hasil join dari tabel profiles

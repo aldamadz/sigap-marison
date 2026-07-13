@@ -33,7 +33,7 @@ import {
   getRecentActivities,
   getDepartmentActivity,
 } from '@/services/dashboard.service';
-import { getUsers, isParentUser } from '@/services';
+import { isParentUser } from '@/services';
 import { ActivityLog } from '@/types/agenda';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -229,12 +229,6 @@ const Dashboard = () => {
     ...queryBase,
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: getUsers,
-    enabled: !!user,
-  });
-
   if (authLoading || !isReady) {
     return (
       <div className="sigap-page">
@@ -313,7 +307,7 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <RecentActivity logs={recentActivities} users={users} />
+      <RecentActivity logs={recentActivities} />
     </div>
   );
 };

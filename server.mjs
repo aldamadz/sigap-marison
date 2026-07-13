@@ -1,11 +1,21 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
 import webpush from "web-push";
+import sharp from "sharp";
+import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
+import { createPgdPreviewData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
+import { resolveTableHorizontalAlignment } from "./document-layout-rules.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const port = Number(process.env.PORT || 80);
 const distDir = resolve(process.env.DIST_DIR || "dist");
@@ -49,6 +59,10 @@ const externalAccessTokenCache = new Map();
 const ATTENTION_STREAM_TOKEN_TTL_MS = 60 * 1000;
 const ATTENTION_POLL_INTERVAL_MS = Number(process.env.ATTENTION_POLL_INTERVAL_MS || 3000);
 const attentionStreamTokens = new Map();
+const templatePreviewTokens = new Map();
+const templatePreviewRateLimits = new Map();
+const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
+const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -113,6 +127,37 @@ const sanitizeDownloadFilename = (value) => String(value || "file")
   .replace(/[\r\n"]/g, "")
   .replace(/[\\/]+/g, "_")
   .trim() || "file";
+
+const sanitizeFilenameStem = (value, fallback = "dokumen") => {
+  const sanitized = String(value || fallback)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 120);
+  return sanitized || fallback;
+};
+
+const filenameHeaderValue = (filename) => {
+  const safe = sanitizeDownloadFilename(filename);
+  return `inline; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
+};
+
+const contentTypeForFile = (file, filename) => {
+  const type = String(file?.type || "").toLowerCase();
+  const extensionType = contentTypes[extname(filename).toLowerCase()];
+  if (!type || type === "application/octet-stream" || type === "binary/octet-stream") {
+    return extensionType || "application/octet-stream";
+  }
+  return type;
+};
+
+const buildDocumentFilename = (surat, fallbackPath, fallback = "dokumen") => {
+  const originalName = sanitizeDownloadFilename(String(fallbackPath || "").split("/").pop() || fallback);
+  const extension = extname(originalName) || ".pdf";
+  const stemSource = surat?.judul_surat || surat?.no_surat || originalName.replace(extname(originalName), "");
+  return `${sanitizeFilenameStem(stemSource, fallback)}${extension.toLowerCase()}`;
+};
 
 const assertRequestSize = (req, maxBytes = MAX_UPLOAD_BYTES) => {
   const length = Number(req.headers["content-length"] || 0);
@@ -290,6 +335,47 @@ const getBearerToken = (req) => {
   return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
 };
 
+const decodeBase64UrlJson = (value) => {
+  const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const normalized = padded + "=".repeat((4 - padded.length % 4) % 4);
+  return JSON.parse(Buffer.from(normalized, "base64").toString("utf8"));
+};
+
+const decodeJwtUserForLightEndpoint = (token) => {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  let payload;
+  try {
+    payload = decodeBase64UrlJson(parts[1]);
+  } catch {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  const expiresAt = Number(payload?.exp || 0);
+  const userId = String(payload?.sub || "").trim();
+  if (!userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  if (!expiresAt || expiresAt * 1000 <= Date.now()) {
+    const err = new Error("Sesi sudah kedaluwarsa.");
+    err.status = 401;
+    throw err;
+  }
+  return {
+    id: userId,
+    aud: payload?.aud,
+    role: payload?.role,
+    email: payload?.email,
+  };
+};
+
 const getPathValue = (value, path) => {
   if (!path) return value;
   return String(path).split(".").filter(Boolean).reduce((current, key) => {
@@ -331,6 +417,407 @@ const requireSupabaseUser = async (token) => {
   return userRes.user;
 };
 
+const requireAdminUser = async (token) => {
+  const user = await requireSupabaseUser(token);
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!profile || !["admin", "super_admin"].includes(String(profile.role || "").toLowerCase())) {
+    const err = new Error("Akses ditolak: hanya admin");
+    err.status = 403;
+    throw err;
+  }
+  return user;
+};
+
+const formatTemplatePreviewDate = (date = new Date()) => date.toLocaleDateString("id-ID", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Asia/Jakarta",
+});
+
+const setPreviewCell = (worksheet, address, value, options = {}) => {
+  const cell = worksheet.getCell(address);
+  cell.value = value;
+  cell.alignment = {
+    ...(cell.alignment || {}),
+    horizontal: options.horizontal || cell.alignment?.horizontal || "left",
+    vertical: options.vertical || cell.alignment?.vertical || "middle",
+    wrapText: options.wrap ?? true,
+    ...(options.horizontal === "center" ? {} : { indent: Math.max(Number(cell.alignment?.indent || 0), 1) }),
+  };
+};
+
+const columnNameToNumber = (columnName) => {
+  let value = 0;
+  for (const character of String(columnName || "").toUpperCase()) {
+    value = value * 26 + character.charCodeAt(0) - 64;
+  }
+  return value;
+};
+
+const columnNumberToName = (columnNumber) => {
+  let value = columnNumber;
+  let result = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    value = Math.floor((value - 1) / 26);
+  }
+  return result;
+};
+
+const parsePreviewRange = (range) => {
+  const match = String(range || "").trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+  if (!match) return null;
+  return {
+    startCol: columnNameToNumber(match[1]),
+    startRow: Number(match[2]),
+    endCol: columnNameToNumber(match[3]),
+    endRow: Number(match[4]),
+  };
+};
+
+const formatPreviewRange = (startCol, startRow, endCol, endRow) =>
+  `${columnNumberToName(startCol)}${startRow}:${columnNumberToName(endCol)}${endRow}`;
+
+const previewRangesOverlap = (left, right) =>
+  left.startCol <= right.endCol && left.endCol >= right.startCol &&
+  left.startRow <= right.endRow && left.endRow >= right.startRow;
+
+const mergePreviewRange = (worksheet, range) => {
+  const parsed = parsePreviewRange(range);
+  if (!parsed) return;
+  const existingMerges = Array.isArray(worksheet.model?.merges) ? [...worksheet.model.merges] : [];
+  existingMerges.forEach((existingRange) => {
+    const existing = parsePreviewRange(existingRange);
+    if (existing && previewRangesOverlap(existing, parsed)) worksheet.unMergeCells(existingRange);
+  });
+  worksheet.mergeCells(range);
+};
+
+const stylePreviewBox = (worksheet, range, options = {}) => {
+  const parsed = parsePreviewRange(range);
+  if (!parsed) return;
+  const cell = worksheet.getCell(parsed.startRow, parsed.startCol);
+  cell.border = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "thin", color: { argb: "FF000000" } },
+  };
+  cell.alignment = {
+    horizontal: options.horizontal || "center",
+    vertical: options.vertical || "middle",
+    wrapText: true,
+    ...(options.horizontal === "left" ? { indent: 1 } : {}),
+  };
+  if (options.bold) cell.font = { ...(cell.font || {}), bold: true };
+};
+
+const stylePreviewRange = (worksheet, range, options = {}) => {
+  const parsed = parsePreviewRange(range);
+  if (!parsed) return;
+  for (let row = parsed.startRow; row <= parsed.endRow; row += 1) {
+    for (let col = parsed.startCol; col <= parsed.endCol; col += 1) {
+      const cell = worksheet.getCell(row, col);
+      if (options.fill) cell.fill = options.fill;
+      if (options.font) cell.font = { ...(cell.font || {}), ...options.font };
+      if (options.alignment) cell.alignment = { ...(cell.alignment || {}), ...options.alignment };
+      if (options.border) cell.border = { ...(cell.border || {}), ...options.border };
+    }
+  }
+};
+
+const clearPreviewRange = (worksheet, range, options = {}) => {
+  const parsed = parsePreviewRange(range);
+  if (!parsed) return;
+  for (let row = parsed.startRow; row <= parsed.endRow; row += 1) {
+    for (let col = parsed.startCol; col <= parsed.endCol; col += 1) {
+      const cell = worksheet.getCell(row, col);
+      if (options.values) cell.value = null;
+      if (options.fill) cell.fill = { type: "pattern", pattern: "none" };
+    }
+  }
+};
+
+const previewGreenFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7FAF5" } };
+const previewGreenFont = { color: { argb: "FF111827" }, bold: true };
+
+const buildBoundedSignatureRoleCounts = (total) => {
+  for (let membuat = 1; membuat <= Math.min(3, total - 2); membuat += 1) {
+    for (let memeriksa = 1; memeriksa <= Math.min(3, total - membuat - 1); memeriksa += 1) {
+      const menyetujui = total - membuat - memeriksa;
+      if (menyetujui >= 1 && menyetujui <= 3) return [membuat, memeriksa, menyetujui];
+    }
+  }
+  return [1, 1, 1];
+};
+
+const fillRecommendationPreview = (worksheet) => {
+  stylePreviewRange(worksheet, "I18:J18", {
+    fill: previewGreenFill,
+    font: previewGreenFont,
+    alignment: { horizontal: "center", vertical: "middle", wrapText: true },
+  });
+  setPreviewCell(worksheet, "C4", "TEST/UAI/PBO.4/VI/2026");
+  setPreviewCell(worksheet, "A9", 1, { horizontal: "center" });
+  setPreviewCell(worksheet, "B9", "Laptop kerja");
+  setPreviewCell(worksheet, "D9", "REG-001");
+  setPreviewCell(worksheet, "E9", "PO / Pengguna Contoh");
+  setPreviewCell(worksheet, "F9", "Performa menurun");
+  setPreviewCell(worksheet, "G9", "V", { horizontal: "center" });
+  setPreviewCell(worksheet, "I9", "Service dan penggantian komponen");
+  setPreviewCell(worksheet, "J9", "Prioritas operasional");
+  setPreviewCell(worksheet, "B18", "Dokumen uji template rekomendasi. Data ini tidak disimpan sebagai surat.");
+  setPreviewCell(worksheet, "I17", `Magelang, ${formatTemplatePreviewDate()}`);
+  setPreviewCell(worksheet, "I18", "Membuat", { horizontal: "center" });
+  setPreviewCell(worksheet, "J18", "Memeriksa", { horizontal: "center" });
+  setPreviewCell(worksheet, "I19", "Preview Sistem\nTanggal pengujian", { horizontal: "center" });
+  setPreviewCell(worksheet, "I23", "PENGGUNA CONTOH", { horizontal: "center" });
+  setPreviewCell(worksheet, "J23", "MANAGER PO", { horizontal: "center" });
+  setPreviewCell(worksheet, "I24", "Staff IT", { horizontal: "center" });
+  setPreviewCell(worksheet, "J24", "Mgr. PO", { horizontal: "center" });
+};
+
+const getGenericPreviewValue = (field) => {
+  const source = String(field.default_source || field.defaultSource || "manual").toLowerCase();
+  const systemValues = {
+    requester_name: "Pengguna Contoh",
+    requester_nik: "TEST-001",
+    requester_job_title: "Staff",
+    department_name: "Departemen Contoh",
+    office_name: "Kantor Pusat",
+    project_name: "Proyek Contoh",
+    entity_name: "PT Usaha Adi Karya",
+    letter_number: "TEST/UAI/FORM.1/VI/2026",
+    letter_title: "Dokumen Pengujian Template",
+    request_place: "Magelang",
+    request_date: new Date().toISOString().slice(0, 10),
+    request_place_date: `Magelang, ${formatTemplatePreviewDate()}`,
+  };
+  if (systemValues[source] !== undefined) return systemValues[source];
+  if (field.type === "date") return new Date().toISOString().slice(0, 10);
+  if (field.type === "number" || field.type === "currency") return 1;
+  if (field.type === "textarea") return "Catatan pengujian template. Data ini tidak disimpan sebagai surat.";
+  return `Contoh ${String(field.label || field.key || "isian")}`;
+};
+
+const getGenericTableValue = (column) => {
+  const key = String(column.key || "").toLowerCase();
+  if (key.includes("kode")) return "TEST-001";
+  if (key.includes("nama")) return "Barang atau layanan contoh";
+  if (key === "sat" || key.includes("satuan")) return "Unit";
+  if (key.includes("jumlah")) return 1;
+  if (key === "status") return "2";
+  if (key === "service") return "V";
+  if (key === "ganti") return "";
+  if (key.includes("tanggal")) return new Date().toISOString().slice(0, 10);
+  return `Contoh ${String(column.label || column.key || "data")}`;
+};
+
+const fillGenericTemplatePreview = (workbook, inputSchema) => {
+  const fields = Array.isArray(inputSchema) ? inputSchema : [];
+  fields.forEach((field) => {
+    const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
+    const worksheet = workbook.worksheets[sheetIndex] || workbook.worksheets[0];
+    if (!worksheet) return;
+
+    if (field.type === "table") {
+      const config = field.table_config || field.tableConfig;
+      const startRow = Number(config?.start_row || config?.startRow || 0);
+      if (!startRow) return;
+      const noColumn = String(config?.no_column || config?.noColumn || "").toUpperCase();
+      if (noColumn) setPreviewCell(worksheet, `${noColumn}${startRow}`, 1, { horizontal: "center" });
+      (config?.columns || []).forEach((column) => {
+        const columnName = String(column.column || "").trim().toUpperCase();
+        if (!columnName) return;
+        const horizontal = resolveTableHorizontalAlignment(column.key, column.type);
+        setPreviewCell(worksheet, `${columnName}${startRow}`, getGenericTableValue(column), {
+          horizontal,
+        });
+      });
+      return;
+    }
+
+    const range = String(field.merge_range || field.mergeRange || field.cell || "").trim().toUpperCase();
+    const address = range.split(":")[0];
+    if (!address) return;
+    setPreviewCell(worksheet, address, getGenericPreviewValue(field), {
+      horizontal: field.horizontal || "left",
+      vertical: field.vertical || "middle",
+      wrap: field.wrap !== false,
+    });
+  });
+};
+
+const readTemplatePreviewSource = async (templateLink) => {
+  const rawLink = String(templateLink || "").trim();
+  if (!rawLink) {
+    const err = new Error("File template belum tersedia.");
+    err.status = 404;
+    throw err;
+  }
+
+  if (rawLink.startsWith("/")) {
+    const templatePath = resolve(join(distDir, decodeURIComponent(rawLink).replace(/^\/+/, "")));
+    const relativeTemplatePath = relative(distDir, templatePath);
+    if (relativeTemplatePath.startsWith("..") || !existsSync(templatePath)) {
+      const err = new Error("Template uji tidak tersedia.");
+      err.status = 404;
+      throw err;
+    }
+    return await readFile(templatePath);
+  }
+
+  let templateUrl;
+  try {
+    templateUrl = new URL(rawLink);
+  } catch {
+    const err = new Error("Alamat template tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  const allowedHosts = new Set([supabaseUrl, storageSupabaseUrl, storagePublicBaseUrl]
+    .filter(Boolean)
+    .map((value) => new URL(value).host));
+  if (templateUrl.protocol !== "https:" || !allowedHosts.has(templateUrl.host)) {
+    const err = new Error("Host template tidak diizinkan.");
+    err.status = 403;
+    throw err;
+  }
+
+  const response = await fetch(templateUrl, { redirect: "error", signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error("Gagal mengambil file template.");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > 20 * 1024 * 1024) {
+    const err = new Error("Ukuran template melebihi batas 20 MB.");
+    err.status = 413;
+    throw err;
+  }
+  return buffer;
+};
+
+const enforceTemplatePreviewRateLimit = (userId) => {
+  const now = Date.now();
+  const recent = (templatePreviewRateLimits.get(userId) || []).filter((time) => now - time < 60_000);
+  if (recent.length >= TEMPLATE_PREVIEW_MAX_PER_MINUTE) {
+    const err = new Error("Terlalu banyak permintaan PDF uji. Coba lagi satu menit lagi.");
+    err.status = 429;
+    throw err;
+  }
+  recent.push(now);
+  templatePreviewRateLimits.set(userId, recent);
+};
+
+const normalizeTemplatePreviewOptions = (payload = {}) => {
+  const signatureCount = Math.min(Math.max(Number(payload.signature_count || payload.signatureCount || 3), 3), 8);
+  const signatureRoles = Array.isArray(payload.signature_roles || payload.signatureRoles)
+    ? (payload.signature_roles || payload.signatureRoles).slice(0, 3).map((value) => Number(value || 0))
+    : [1, Math.max(signatureCount - 2, 1), 1];
+  const roleTotal = signatureRoles.reduce((total, value) => total + value, 0);
+  return {
+    signature_count: signatureCount,
+    signature_roles: roleTotal === signatureCount && signatureRoles.every((value) => value > 0 && value <= 3)
+      ? signatureRoles
+      : buildBoundedSignatureRoleCounts(signatureCount),
+  };
+};
+
+const generateTemplatePreviewPdf = async (formId, options = {}) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(formId)) {
+    const err = new Error("Form yang dipilih tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { data: form, error: formError } = await supabase
+    .from("master_forms")
+    .select("id, nama_form, nomor_form, link_form, input_schema, signature_layout")
+    .eq("id", formId)
+    .maybeSingle();
+  if (formError) throw formError;
+  if (!form) {
+    const err = new Error("Form tidak ditemukan.");
+    err.status = 404;
+    throw err;
+  }
+
+  const formName = String(form.nama_form || "").toUpperCase();
+  if (formName.includes("PERMINTAAN BARANG")) {
+    const previewData = createPgdPreviewData(options);
+    previewData.formNumber = String(form.nomor_form || previewData.formNumber);
+    return await renderPgdPdf(previewData, {
+      logoPath: join(distDir, "logo-marison-regency-group.png"),
+    });
+  }
+
+  const workDir = await mkdtemp(join(tmpdir(), "agenda-template-preview-"));
+  try {
+    const sourcePath = join(workDir, "preview.xlsx");
+    const sourceBuffer = await readTemplatePreviewSource(form.link_form);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(sourceBuffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new Error("Sheet template tidak tersedia.");
+
+    const formName = String(form.nama_form || "").toUpperCase();
+    fillGenericTemplatePreview(workbook, form.input_schema);
+    if (formName.includes("REKOMENDASI PEREMAJAAN")) fillRecommendationPreview(worksheet);
+    await workbook.xlsx.writeFile(sourcePath);
+    await normalizeWorkbookForPdf(sourcePath);
+
+    await execFileAsync("soffice", [
+      "--headless",
+      "--nologo",
+      "--nofirststartwizard",
+      "--convert-to",
+      "pdf",
+      "--outdir",
+      workDir,
+      sourcePath,
+    ], { timeout: 120_000 });
+    return await readFile(join(workDir, "preview.pdf"));
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+};
+
+const createTemplatePreview = async (token, payload) => {
+  const user = await requireAdminUser(token);
+  enforceTemplatePreviewRateLimit(user.id);
+  const now = Date.now();
+  for (const [previewToken, preview] of templatePreviewTokens.entries()) {
+    if (preview.expiresAt < now) templatePreviewTokens.delete(previewToken);
+  }
+  const formId = String(payload?.form_id || "").trim();
+  const pdf = await generateTemplatePreviewPdf(formId, normalizeTemplatePreviewOptions(payload));
+  const previewToken = randomBytes(32).toString("base64url");
+  templatePreviewTokens.set(previewToken, {
+    pdf,
+    expiresAt: now + TEMPLATE_PREVIEW_TTL_MS,
+  });
+  return {
+    previewUrl: `/api/admin/template-preview/${previewToken}`,
+    expiresIn: Math.floor(TEMPLATE_PREVIEW_TTL_MS / 1000),
+  };
+};
+
+const consumeTemplatePreview = (token) => {
+  const preview = templatePreviewTokens.get(token);
+  templatePreviewTokens.delete(token);
+  if (!preview || preview.expiresAt < Date.now()) {
+    const err = new Error("Pratinjau PDF sudah kedaluwarsa.");
+    err.status = 410;
+    throw err;
+  }
+  return preview.pdf;
+};
+
 const isActiveSuratSignature = (signature) => {
   const surat = Array.isArray(signature?.surat_registrasi)
     ? signature.surat_registrasi[0]
@@ -346,7 +833,7 @@ const getAttentionStateForUser = async (userId) => {
     throw err;
   }
 
-  const [signerRes, verifierRes, recommendationRes, unreadRes, monitoringRes] = await Promise.all([
+  const [signerRes, verifierRes, revisionRes, recommendationRes, unreadRes, monitoringRes] = await Promise.all([
     supabase
       .from("surat_signatures")
       .select("id, step_order, surat_registrasi!inner(id, current_step, status)")
@@ -359,6 +846,11 @@ const getAttentionStateForUser = async (userId) => {
       .eq("verification_required", true)
       .eq("verification_status", "pending")
       .filter("verifier_snapshot", "cs", JSON.stringify([{ user_id: userId }])),
+    supabase
+      .from("surat_revision_events")
+      .select("id, target_type, target_user_ids, status")
+      .in("status", ["open", "awaiting_requester"])
+      .contains("target_user_ids", [userId]),
     supabase
       .from("surat_recommendation_tasks")
       .select("id, status, claimed_by, candidate_snapshot")
@@ -378,32 +870,39 @@ const getAttentionStateForUser = async (userId) => {
 
   if (signerRes.error) throw signerRes.error;
   if (verifierRes.error) throw verifierRes.error;
+  if (revisionRes.error && revisionRes.error.code !== "42P01") throw revisionRes.error;
   if (recommendationRes.error && recommendationRes.error.code !== "42P01") throw recommendationRes.error;
   if (unreadRes.error) throw unreadRes.error;
   if (monitoringRes.error) throw monitoringRes.error;
 
   const approvalCount = (signerRes.data || []).filter(isActiveSuratSignature).length;
   const verificationCount = (verifierRes.data || []).filter(isActiveSuratSignature).length;
+  const revisionRows = revisionRes.data || [];
+  const revisionCount = revisionRows.filter((item) => item.target_type !== "requester").length;
+  const requesterRevisionCount = revisionRows.filter((item) => item.target_type === "requester").length;
   const recommendationCount = (recommendationRes.data || []).filter((task) =>
     task.status === "waiting" || task.claimed_by === userId
   ).length;
-  const monitoringCount = (monitoringRes.data || []).filter((item) =>
+  const completedMonitoringCount = (monitoringRes.data || []).filter((item) =>
     !item.creator_seen_at || new Date(item.updated_at) > new Date(item.creator_seen_at)
   ).length;
+  const monitoringCount = completedMonitoringCount;
 
   return {
     approvalCount,
     verificationCount,
+    revisionCount,
     recommendationCount,
-    inboxCount: approvalCount + verificationCount,
+    inboxCount: approvalCount + verificationCount + revisionCount,
     unreadNotifications: unreadRes.count || 0,
     monitoringCount,
+    followUpCount: requesterRevisionCount,
     generatedAt: new Date().toISOString(),
   };
 };
 
 const getAttentionStateFromRequest = async (token) => {
-  const user = await requireSupabaseUser(token);
+  const user = decodeJwtUserForLightEndpoint(token);
   return getAttentionStateForUser(user.id);
 };
 
@@ -415,7 +914,7 @@ const pruneAttentionStreamTokens = () => {
 };
 
 const createAttentionStreamToken = async (token) => {
-  const user = await requireSupabaseUser(token);
+  const user = decodeJwtUserForLightEndpoint(token);
   pruneAttentionStreamTokens();
   const streamToken = randomBytes(32).toString("base64url");
   attentionStreamTokens.set(sha256Hex(streamToken), {
@@ -490,6 +989,7 @@ const openAttentionStream = async (req, res, token) => {
         recommendationCount: state.recommendationCount,
         unreadNotifications: state.unreadNotifications,
         monitoringCount: state.monitoringCount,
+        followUpCount: state.followUpCount,
       });
       if (signature !== lastSignature) {
         lastSignature = signature;
@@ -542,7 +1042,7 @@ const normalizePushSubscription = (value) => {
 };
 
 const getWebPushPublicKey = async (token) => {
-  await requireSupabaseUser(token);
+  decodeJwtUserForLightEndpoint(token);
   return {
     enabled: Boolean(webPushConfig.publicKey && webPushConfig.privateKey),
     publicKey: webPushConfig.publicKey || null,
@@ -550,7 +1050,7 @@ const getWebPushPublicKey = async (token) => {
 };
 
 const saveWebPushSubscription = async (token, payload, req) => {
-  const user = await requireSupabaseUser(token);
+  const user = decodeJwtUserForLightEndpoint(token);
   if (!webPushConfig.publicKey || !webPushConfig.privateKey) {
     const err = new Error("Web Push belum dikonfigurasi di server.");
     err.status = 503;
@@ -572,7 +1072,7 @@ const saveWebPushSubscription = async (token, payload, req) => {
 };
 
 const removeWebPushSubscription = async (token, payload) => {
-  const user = await requireSupabaseUser(token);
+  const user = decodeJwtUserForLightEndpoint(token);
   const endpoint = String(payload?.endpoint || payload?.subscription?.endpoint || "").trim();
   if (!endpoint) return { ok: true };
   const { error } = await supabase
@@ -810,8 +1310,8 @@ const getEmailUnitCode = (unit) => String(
 ).trim();
 
 const parseEmailMoney = (value) => {
-  const cleaned = String(value ?? "").replace(/[^\d.-]/g, "");
-  const amount = Number(cleaned);
+  const cleaned = String(value ?? "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  const amount = Number(cleaned || 0);
   return Number.isFinite(amount) ? amount : 0;
 };
 
@@ -966,10 +1466,12 @@ const renderEmailInputDetails = (inputValue) => {
                 const actionLabel = item?.recommendation_action === "service"
                   ? "Service"
                   : item?.recommendation_action === "ganti"
-                    ? "Ganti"
+                    ? "Ganti Komponen"
                     : item?.recommendation_action === "beli_baru"
                       ? "Beli Baru"
-                      : "-";
+                      : item?.recommendation_action === "tidak_direkomendasikan" || item?.is_recommended === false
+                        ? "Tidak Direkomendasikan"
+                        : "-";
                 const link = getSafeEmailHttpUrl(item?.reference_link);
                 const attachment = item?.recommendation_attachment || {};
                 return `
@@ -1495,6 +1997,164 @@ const uploadInternalStorageFile = async (token, req) => {
   };
 };
 
+const uploadProfileAvatar = async (token, req) => {
+  const user = await requireSupabaseUser(token);
+  if (!supabase || !storageSupabase) throw new Error("Storage credentials are not configured.");
+  assertRequestSize(req);
+
+  const form = await parseUploadForm(req);
+  const file = form.get("file");
+  const allowedTypes = new Map([
+    ["image/jpeg", "jpg"],
+    ["image/png", "png"],
+    ["image/webp", "webp"],
+  ]);
+  const maxAvatarBytes = 5 * 1024 * 1024;
+
+  if (!file || typeof file.arrayBuffer !== "function") {
+    const err = new Error("Foto profil wajib dikirim.");
+    err.status = 400;
+    throw err;
+  }
+  if (!allowedTypes.has(file.type)) {
+    const err = new Error("Format foto harus JPG, PNG, atau WebP.");
+    err.status = 415;
+    throw err;
+  }
+  if (Number(file.size || 0) > maxAvatarBytes) {
+    const err = new Error("Ukuran foto maksimal 5 MB.");
+    err.status = 413;
+    throw err;
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isPng = buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isWebp = buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  const validSignature = (
+    (file.type === "image/jpeg" && isJpeg) ||
+    (file.type === "image/png" && isPng) ||
+    (file.type === "image/webp" && isWebp)
+  );
+  if (!validSignature) {
+    const err = new Error("Isi file tidak sesuai dengan format gambar.");
+    err.status = 415;
+    throw err;
+  }
+
+  const extension = allowedTypes.get(file.type);
+  const filePath = `${user.id}/avatar_${Date.now()}_${randomUUID()}.${extension}`;
+  const thumbnailPath = filePath.replace(/\.[^.]+$/, "_thumb.webp");
+  const { error: bucketError } = await storageSupabase.storage.getBucket("avatars");
+  if (bucketError) {
+    const { error: createBucketError } = await storageSupabase.storage.createBucket("avatars", {
+      public: false,
+      fileSizeLimit: maxAvatarBytes,
+      allowedMimeTypes: [...allowedTypes.keys()],
+    });
+    if (createBucketError && !/already exists/i.test(createBucketError.message || "")) {
+      throw createBucketError;
+    }
+  }
+
+  const { error: uploadError } = await storageSupabase.storage
+    .from("avatars")
+    .upload(filePath, buffer, {
+      contentType: file.type,
+      cacheControl: "3600",
+      upsert: false,
+    });
+  if (uploadError) throw uploadError;
+
+  const thumbnail = await sharp(buffer)
+    .rotate()
+    .resize(256, 256, { fit: "cover", position: "centre", withoutEnlargement: true })
+    .webp({ quality: 78 })
+    .toBuffer();
+  const { error: thumbnailError } = await storageSupabase.storage
+    .from("avatars")
+    .upload(thumbnailPath, thumbnail, {
+      contentType: "image/webp",
+      cacheControl: "86400",
+      upsert: false,
+    });
+  if (thumbnailError) {
+    await storageSupabase.storage.from("avatars").remove([filePath]).catch(() => undefined);
+    throw thumbnailError;
+  }
+
+  const avatarUrl = `/api/profile/avatar/file?path=${encodeURIComponent(filePath)}`;
+
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", user.id);
+  if (profileError) {
+    await storageSupabase.storage.from("avatars").remove([filePath, thumbnailPath]).catch(() => undefined);
+    throw profileError;
+  }
+
+  return { avatarUrl };
+};
+
+const getDepartmentAgendaActivity = async (token, url) => {
+  await requireSupabaseUser(token);
+  const start = url.searchParams.get("start");
+  const end = url.searchParams.get("end");
+
+  const departmentQuery = supabase
+    .from("master_departments")
+    .select("id, name, code")
+    .order("name");
+  const { data: departments, error: departmentsError } = await departmentQuery;
+  if (departmentsError) throw departmentsError;
+
+  const departmentIds = (departments || []).map((department) => department.id);
+  if (departmentIds.length === 0) return [];
+
+  let profileQuery = supabase
+    .from("profiles")
+    .select("id, department_id")
+    .in("department_id", departmentIds)
+    .is("deleted_at", null);
+  const { data: scopedProfiles, error: scopedProfilesError } = await profileQuery;
+  if (scopedProfilesError) throw scopedProfilesError;
+
+  const profileIds = (scopedProfiles || []).map((item) => item.id);
+  let agendas = [];
+  if (profileIds.length > 0) {
+    let agendaQuery = supabase
+      .from("agendas")
+      .select("created_by, status")
+      .in("created_by", profileIds)
+      .is("deleted_at", null);
+    if (start) agendaQuery = agendaQuery.gte("start_time", start);
+    if (end) agendaQuery = agendaQuery.lte("start_time", end);
+    const { data, error } = await agendaQuery;
+    if (error) throw error;
+    agendas = data || [];
+  }
+
+  const departmentByProfile = new Map(
+    (scopedProfiles || []).map((item) => [item.id, item.department_id])
+  );
+  const grouped = new Map(
+    (departments || []).map((department) => [
+      department.id,
+      { name: department.name, tasks: 0, completed: 0 },
+    ])
+  );
+  for (const agenda of agendas) {
+    const departmentId = departmentByProfile.get(agenda.created_by);
+    const entry = grouped.get(departmentId);
+    if (!entry) continue;
+    entry.tasks += 1;
+    if (agenda.status === "Completed") entry.completed += 1;
+  }
+
+  return [...grouped.values()];
+};
+
 const replaceSignatureAttachmentFiles = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
@@ -1764,13 +2424,17 @@ const canReadSurat = async (surat, userId) => {
   if (!surat || !userId) return false;
   if (surat.created_by === userId) return true;
   if ((surat.surat_signatures || []).some((sig) => sig.user_id === userId)) return true;
+  if ((surat.surat_signatures || []).some((sig) =>
+    Array.isArray(sig.verifier_snapshot) &&
+    sig.verifier_snapshot.some((verifier) => verifier?.user_id === userId)
+  )) return true;
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .maybeSingle();
-  return profile?.role === "admin";
+  return profile?.role === "admin" || profile?.role === "super_admin";
 };
 
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
@@ -1822,7 +2486,7 @@ const getAuthorizedSurat = async (suratId, token) => {
 
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, file_path, pdf_path, lampiran_path, created_by")
+    .select("id, no_surat, judul_surat, file_path, pdf_path, lampiran_path, created_by")
     .eq("id", suratId)
     .maybeSingle();
   if (suratError || !surat) {
@@ -1835,7 +2499,7 @@ const getAuthorizedSurat = async (suratId, token) => {
   const [signaturesRes, attachmentsRes] = await Promise.all([
     supabase
       .from("surat_signatures")
-      .select("id, user_id, file_path_snap, pdf_path_snap")
+      .select("id, user_id, verifier_snapshot, file_path_snap, pdf_path_snap")
       .eq("surat_id", suratId),
     supabase
       .from("surat_attachments")
@@ -1984,7 +2648,7 @@ const getAuthorizedStorageFile = async (suratId, token, rawPath) => {
     throw err;
   }
 
-  return { file: data, ref: requested };
+  return { surat, file: data, ref: requested };
 };
 
 const createFileViewToken = async (suratId, token, rawPath) => {
@@ -2018,12 +2682,18 @@ const createFileViewToken = async (suratId, token, rawPath) => {
 
   return {
     token: viewToken,
-    viewUrl: `/api/files/view/${viewToken}`,
+    viewUrl: `/api/files/view/${viewToken}/${encodeURIComponent(buildDocumentFilename(surat, requested.path))}`,
     expiresIn: Math.floor(FILE_VIEW_TOKEN_TTL_MS / 1000),
   };
 };
 
 const consumeFileViewToken = async (viewToken) => {
+  const { data: tokenMeta } = await supabase
+    .from("file_view_tokens")
+    .select("surat_id, object_path")
+    .eq("token_hash", hashFileViewToken(viewToken))
+    .maybeSingle();
+
   const { data: tokenRows, error: tokenError } = await supabase
     .rpc("consume_file_view_token", { p_token_hash: hashFileViewToken(viewToken) });
   if (tokenError) throw tokenError;
@@ -2042,7 +2712,21 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  return { file: data, ref: { bucket: tokenData.bucket, path: tokenData.object_path, origin: tokenData.storage_origin } };
+  let surat = null;
+  if (tokenMeta?.surat_id) {
+    const { data: suratData } = await supabase
+      .from("surat_registrasi")
+      .select("id, no_surat, judul_surat")
+      .eq("id", tokenMeta.surat_id)
+      .maybeSingle();
+    surat = suratData || null;
+  }
+
+  return {
+    file: data,
+    ref: { bucket: tokenData.bucket, path: tokenData.object_path, origin: tokenData.storage_origin },
+    filename: buildDocumentFilename(surat, tokenData.object_path || tokenMeta?.object_path),
+  };
 };
 
 const serveStatic = async (req, res) => {
@@ -2069,12 +2753,15 @@ const serveStatic = async (req, res) => {
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
   const isHtml = extname(filePath) === ".html";
   const isServiceWorker = requested === "/sigap-sw.js";
+  const isTemplateFile = requested.startsWith("/template excel/");
   res.writeHead(200, withSecurityHeaders({
     "Content-Type": type,
     "Cache-Control": isHtml
       ? "private, no-cache, must-revalidate"
       : isServiceWorker
         ? "no-cache, must-revalidate"
+      : isTemplateFile
+        ? "private, no-cache, must-revalidate"
       : requested.startsWith("/assets/")
         ? "public, max-age=31536000, immutable"
         : "public, max-age=3600",
@@ -2091,6 +2778,49 @@ createServer(async (req, res) => {
   res.setHeader("X-Request-Id", requestId);
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (req.method === "GET" && url.pathname === "/api/profile/avatar/file") {
+      const filePath = sanitizeStoragePath(url.searchParams.get("path"));
+      if (!/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+$/i.test(filePath)) {
+        return sendJson(res, 400, { error: "Path foto profil tidak valid." });
+      }
+      const wantsThumbnail = String(req.headers["sec-fetch-dest"] || "").toLowerCase() === "image";
+      const thumbnailPath = filePath.replace(/\.[^.]+$/, "_thumb.webp");
+      let requestedPath = wantsThumbnail ? thumbnailPath : filePath;
+      let { data: file, error } = await storageSupabase.storage.from("avatars").download(requestedPath);
+
+      if (wantsThumbnail && (error || !file)) {
+        const original = await storageSupabase.storage.from("avatars").download(filePath);
+        if (!original.error && original.data) {
+          const originalBuffer = Buffer.from(await original.data.arrayBuffer());
+          const thumbnail = await sharp(originalBuffer)
+            .rotate()
+            .resize(256, 256, { fit: "cover", position: "centre", withoutEnlargement: true })
+            .webp({ quality: 78 })
+            .toBuffer();
+          await storageSupabase.storage.from("avatars").upload(thumbnailPath, thumbnail, {
+            contentType: "image/webp",
+            cacheControl: "86400",
+            upsert: true,
+          });
+          requestedPath = thumbnailPath;
+          file = new Blob([thumbnail], { type: "image/webp" });
+          error = null;
+        }
+      }
+      if (error || !file) {
+        return sendJson(res, 404, { error: "Foto profil tidak ditemukan." });
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      res.writeHead(200, withSecurityHeaders({
+        "Content-Type": file.type || contentTypes[extname(requestedPath)] || "application/octet-stream",
+        "Content-Length": buffer.length,
+        "Content-Disposition": "inline",
+        "Cache-Control": "public, max-age=86400",
+      }));
+      res.end(buffer);
+      return;
+    }
+
     const match = url.pathname.match(/^\/api\/documents\/([0-9a-f-]+)\/pdf$/i);
     if (req.method === "GET" && match) {
       const token = getBearerToken(req);
@@ -2111,13 +2841,13 @@ createServer(async (req, res) => {
     if (req.method === "GET" && fileMatch) {
       const token = getBearerToken(req);
       const rawPath = url.searchParams.get("path");
-      const { file, ref } = await getAuthorizedStorageFile(fileMatch[1], token, rawPath);
+      const { surat, file, ref } = await getAuthorizedStorageFile(fileMatch[1], token, rawPath);
       const buffer = Buffer.from(await file.arrayBuffer());
-      const filename = sanitizeDownloadFilename(ref.path.split("/").pop() || "file");
+      const filename = buildDocumentFilename(surat, ref.path, "file");
       res.writeHead(200, withSecurityHeaders({
-        "Content-Type": file.type || contentTypes[extname(filename)] || "application/octet-stream",
+        "Content-Type": contentTypeForFile(file, filename),
         "Content-Length": buffer.length,
-        "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
+        "Content-Disposition": filenameHeaderValue(filename),
         "Cache-Control": "private, max-age=60",
       }));
       res.end(buffer);
@@ -2132,22 +2862,42 @@ createServer(async (req, res) => {
       return sendJson(res, 200, result);
     }
 
-    const viewMatch = url.pathname.match(/^\/api\/files\/view\/([A-Za-z0-9_-]+)$/);
+    const viewMatch = url.pathname.match(/^\/api\/files\/view\/([A-Za-z0-9_-]+)(?:\/[^/?#]+)?$/);
     if (req.method === "GET" && viewMatch) {
-      const { file, ref } = await consumeFileViewToken(viewMatch[1]);
+      const { file, ref, filename: tokenFilename } = await consumeFileViewToken(viewMatch[1]);
       const buffer = Buffer.from(await file.arrayBuffer());
-      const filename = sanitizeDownloadFilename(ref.path.split("/").pop() || "file");
+      const filename = tokenFilename || buildDocumentFilename(null, ref.path, "file");
       res.writeHead(200, withSecurityHeaders({
-        "Content-Type": file.type || contentTypes[extname(filename)] || "application/octet-stream",
+        "Content-Type": contentTypeForFile(file, filename),
         "Content-Length": buffer.length,
-        "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
+        "Content-Disposition": filenameHeaderValue(filename),
         "Cache-Control": "no-store",
       }));
       res.end(buffer);
       return;
     }
 
+    const templatePreviewMatch = url.pathname.match(/^\/api\/admin\/template-preview\/([A-Za-z0-9_-]+)$/);
+    if (req.method === "GET" && templatePreviewMatch) {
+      const pdf = consumeTemplatePreview(templatePreviewMatch[1]);
+      res.writeHead(200, withSecurityHeaders({
+        "Content-Type": "application/pdf",
+        "Content-Length": pdf.length,
+        "Content-Disposition": "inline; filename=template-test.pdf",
+        "Cache-Control": "no-store",
+      }));
+      res.end(pdf);
+      return;
+    }
+
     if (url.pathname.startsWith("/api/")) {
+      if (req.method === "POST" && url.pathname === "/api/admin/template-preview") {
+        const token = getBearerToken(req);
+        const payload = await readJsonBody(req, 4096);
+        const result = await createTemplatePreview(token, payload);
+        return sendJson(res, 200, result);
+      }
+
       if (req.method === "GET" && url.pathname === "/api/attention/state") {
         const token = getBearerToken(req);
         const result = await getAttentionStateFromRequest(token);
@@ -2191,6 +2941,18 @@ createServer(async (req, res) => {
         return sendJson(res, 200, result);
       }
 
+      if (req.method === "POST" && url.pathname === "/api/profile/avatar") {
+        const token = getBearerToken(req);
+        const result = await uploadProfileAvatar(token, req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/dashboard/department-activity") {
+        const token = getBearerToken(req);
+        const result = await getDepartmentAgendaActivity(token, url);
+        return sendJson(res, 200, result);
+      }
+
       if (req.method === "POST" && url.pathname === "/api/surat/attachments/replace") {
         const token = getBearerToken(req);
         const result = await replaceSignatureAttachmentFiles(token, req);
@@ -2214,7 +2976,7 @@ createServer(async (req, res) => {
       const dataSourceMatch = url.pathname.match(/^\/api\/data-sources\/([a-zA-Z0-9_-]+)\/query$/);
       if (req.method === "POST" && dataSourceMatch) {
         const token = getBearerToken(req);
-        await requireSupabaseUser(token);
+        decodeJwtUserForLightEndpoint(token);
         const payload = await readJsonBody(req);
         const result = await queryExternalDataSource(dataSourceMatch[1], payload?.variables || {});
         return sendJson(res, 200, result);

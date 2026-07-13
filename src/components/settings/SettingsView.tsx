@@ -18,6 +18,10 @@ import { getCurrentUser } from '@/services/user-ui.service';
 import { getOffices } from '@/services/office.service';
 import { supabase } from '@/lib/supabase';
 
+const AVATAR_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const PROFILE_UPDATED_EVENT = 'sigap:profile-updated';
+
 export const SettingsView = () => {
   const { theme, setTheme } = useTheme();
   const [user, setUser] = useState<any>(null); // Gunakan any untuk fleksibilitas struktur DB
@@ -65,36 +69,49 @@ export const SettingsView = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
-      if (!user?.id || !event.target.files || event.target.files.length === 0) return;
+      if (!event.target.files || event.target.files.length === 0) return;
       
       const file = event.target.files[0];
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${user.id}/avatar_${Date.now()}.${fileExt}`; 
+      if (!AVATAR_ALLOWED_TYPES.has(file.type)) {
+        throw new Error('Format foto harus JPG, PNG, atau WebP.');
+      }
+      if (file.size > AVATAR_MAX_SIZE_BYTES) {
+        throw new Error('Ukuran foto maksimal 5 MB.');
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const authUserId = authData.user?.id;
+      if (authError || !authUserId) {
+        throw new Error('Sesi login tidak valid. Silakan login kembali.');
+      }
+      if (user?.id && user.id !== authUserId) {
+        throw new Error('Profil yang terbuka tidak sesuai dengan akun yang sedang login.');
+      }
 
       setUploading(true);
 
-      // 1. Upload ke Storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Sesi login tidak valid. Silakan login kembali.');
+      }
+      const formData = new FormData();
+      formData.set('file', file);
+      const response = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Foto profil gagal diunggah.');
+      }
+      const publicUrl = String(payload?.avatarUrl || '');
+      if (!publicUrl) throw new Error('URL foto profil tidak tersedia.');
 
-      if (uploadError) throw uploadError;
-
-      // 2. Dapatkan Public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      // 3. Update database sesuai nama kolom: avatar_url
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
-
-      // 4. Update local state
-      setUser((prev: any) => ({ ...prev, avatar_url: publicUrl }));
+      setUser((prev: any) => ({ ...prev, avatar_url: publicUrl, photoUrl: publicUrl }));
+      window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT, {
+        detail: { avatar_url: publicUrl, photoUrl: publicUrl },
+      }));
       
       toast({ title: "Berhasil", description: "Foto profil diperbarui" });
     } catch (error: any) {

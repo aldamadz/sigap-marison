@@ -84,6 +84,9 @@ Request ditolak jika timestamp berbeda lebih dari 5 menit dari waktu server. All
 ## Endpoints
 
 ```http
+GET /api/onboarding/options
+GET /api/master/offices?type=pusat|kc|kcp
+GET /api/master/departments?scope=pusat|cabang|all
 GET /api/surat
 GET /api/surat/:suratId
 GET /api/surat/:suratId/files/document
@@ -91,6 +94,55 @@ GET /api/surat/:suratId/files/pdf
 GET /api/surat/:suratId/files/attachment?attachment_id=<id>
 GET /api/surat/:suratId/files/signature-pdf?signature_id=<id>
 ```
+
+## Master Data Onboarding
+
+Endpoint master data dipakai ketika sistem lain membuat akun baru dan user login pertama kali.
+
+Alur yang disarankan:
+
+1. Ambil opsi gabungan dari `GET /api/onboarding/options`.
+2. User memilih tipe kantor: `pusat`, `kc`, atau `kcp`.
+3. Jika memilih `pusat`, tampilkan `departments`.
+4. Jika memilih `kc`, tampilkan `offices.kc`.
+5. Jika memilih `kcp`, tampilkan `offices.kcp`.
+
+Response `GET /api/onboarding/options`:
+
+```json
+{
+  "data": {
+    "office_types": [
+      { "value": "pusat", "label": "Kantor Pusat" },
+      { "value": "kc", "label": "KC" },
+      { "value": "kcp", "label": "KCP" }
+    ],
+    "offices": {
+      "pusat": [{ "id": "...", "code": "KP", "name": "Kantor Pusat", "type": "pusat" }],
+      "kc": [{ "id": "...", "code": "KC-MGL", "name": "KC Magelang", "type": "kc" }],
+      "kcp": [{ "id": "...", "code": "KCP-SRG", "name": "KCP Sragen", "type": "kcp", "parent_name": "KC Solo" }]
+    },
+    "departments": [
+      { "id": "...", "code": "PBO", "name": "Pengembangan Organisasi", "dept_index": 1, "scope": "pusat" }
+    ]
+  }
+}
+```
+
+Jika ingin mengambil data secara terpisah:
+
+| Endpoint | Keterangan |
+| --- | --- |
+| `GET /api/master/offices` | Semua kantor yang boleh dipilih. |
+| `GET /api/master/offices?type=pusat` | Kantor Pusat. |
+| `GET /api/master/offices?type=kc` | Daftar KC. |
+| `GET /api/master/offices?type=kcp` | Daftar KCP. |
+| `GET /api/master/departments?scope=pusat` | Departemen untuk user Kantor Pusat. |
+| `GET /api/master/departments?scope=cabang` | Departemen cabang jika partner membutuhkannya. |
+
+Field response master data memakai allowlist. Email departemen/kantor dan data user tidak dikirim melalui endpoint ini.
+
+## Surat
 
 Filter daftar surat:
 

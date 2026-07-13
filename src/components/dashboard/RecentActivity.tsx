@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface RecentActivityProps {
   logs: ActivityLog[];
-  users: User[];
+  users?: User[];
 }
 
 // --- Konfigurasi Visual ---
@@ -213,7 +213,7 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
       </div>
 
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden rounded-2xl border shadow-2xl">
+        <DialogContent className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg border p-0 shadow-2xl sm:w-[calc(100vw-2rem)]">
           {selectedLog && (() => {
              const newData = selectedLog.newValues || (selectedLog as any).new_values || {};
              const category = getActivityCategory(selectedLog);
@@ -224,8 +224,8 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
              const logDate = new Date(selectedLog.createdAt || (selectedLog as any).created_at || Date.now());
              
              return (
-              <div className="flex max-h-[82vh] flex-col bg-background">
-                <div className={cn("px-7 py-6 text-white relative transition-colors", modalConfig.header)}>
+              <div className="flex min-h-0 flex-1 flex-col bg-background">
+                <div className={cn("relative shrink-0 px-5 py-5 text-white transition-colors sm:px-7 sm:py-6", modalConfig.header)}>
                   <p className="text-[10px] font-black uppercase tracking-widest opacity-75 mb-2">Detail Aktivitas</p>
                   <DialogTitle className="pr-8 text-xl font-black leading-tight">{actor.name} {getDisplayMessage(selectedLog)}</DialogTitle>
                   <DialogDescription className="mt-2 text-xs font-semibold text-white/85">
@@ -233,7 +233,7 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
                   </DialogDescription>
                 </div>
 
-                <div className="grid gap-3 border-b border-border px-7 py-4 text-xs sm:grid-cols-3">
+                <div className="grid shrink-0 gap-3 border-b border-border px-5 py-4 text-xs sm:grid-cols-3 sm:px-7">
                   <div>
                     <p className="font-black uppercase tracking-widest text-muted-foreground">Jenis</p>
                     <p className="mt-1 font-bold text-foreground">{tableLabel}</p>
@@ -248,13 +248,13 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-7 scrollbar-thin">
+                <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-5 scrollbar-thin sm:p-7">
                   {renderDiff(selectedLog)}
                 </div>
-                <div className="border-t bg-muted/30 p-4 flex justify-end">
+                <div className="flex shrink-0 justify-end border-t bg-muted/30 p-4">
                   <button 
                     onClick={() => setSelectedLog(null)}
-                    className="px-6 py-2 bg-foreground text-background text-[10px] font-bold uppercase rounded-xl hover:bg-foreground/90 transition-colors"
+                    className="min-h-11 rounded-md bg-foreground px-6 py-2 text-xs font-semibold text-background transition-colors hover:bg-foreground/90"
                   >
                     Tutup
                   </button>

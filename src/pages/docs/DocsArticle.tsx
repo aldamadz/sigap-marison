@@ -358,6 +358,17 @@ export const DocsArticle = ({
   const pageTitle = activeSection?.title ?? entry.title;
   const pageSummary = activeSection?.description ?? entry.summary;
   const relatedEntries = getRelatedEntries(entry, activeSection);
+  const activeSectionIndex = activeSection
+    ? sections.findIndex((section) => getDocsSectionSlug(section) === activeSectionSlug)
+    : -1;
+  const isRecommendationGuide = entry.id === "recommendation-tasks";
+  const nextSection = isRecommendationGuide && activeSectionIndex >= 0
+    ? sections[activeSectionIndex + 1] ?? null
+    : null;
+  const recommendationGuideCompleted = isRecommendationGuide && activeSectionIndex === sections.length - 1;
+  const showRelatedEntries = isRecommendationGuide
+    ? recommendationGuideCompleted
+    : relatedEntries.length > 0;
 
   return (
     <article className="min-w-0 rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
@@ -389,7 +400,26 @@ export const DocsArticle = ({
         {isOverview ? <DocsOverview entry={entry} sections={sections} /> : null}
         {!isOverview && activeSection ? <DocsSectionView section={activeSection} hideHeading /> : null}
 
-        {relatedEntries.length ? (
+        {nextSection ? (
+          <nav aria-label="Lanjut ke bagian rekomendasi berikutnya" className="border-t border-border pt-6">
+            <Link
+              to={getDocsEntryPath(entry, getDocsSectionSlug(nextSection))}
+              className="group flex min-h-14 w-full items-center justify-between gap-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-5"
+            >
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-muted-foreground">
+                  Selanjutnya · Bagian {activeSectionIndex + 2} dari {sections.length}
+                </span>
+                <span className="mt-1 block text-sm font-semibold text-foreground sm:text-base">
+                  {nextSection.title}
+                </span>
+              </span>
+              <ArrowRight className="h-5 w-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
+            </Link>
+          </nav>
+        ) : null}
+
+        {showRelatedEntries && relatedEntries.length ? (
           <section className="border-t border-border pt-6">
             <h2 className="text-sm font-semibold text-foreground">Topik terkait</h2>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">

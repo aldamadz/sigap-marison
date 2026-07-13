@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
   History,
@@ -19,6 +19,16 @@ export default function SuratPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const isRecommendationRoute = location.pathname === "/surat/rekomendasi/registrasi";
+  const isLegacyRecommendationUrl =
+    location.pathname === "/surat/registrasi" &&
+    searchParams.get("linked_type") === "recommendation";
+
+  if (isLegacyRecommendationUrl) {
+    return <Navigate to={`/surat/rekomendasi/registrasi${location.search}`} replace />;
+  }
 
   const handleCopyNoSurat = async (text: string) => {
     try {
@@ -42,16 +52,16 @@ export default function SuratPage() {
 
       {/* Header Section with PageHeader */}
       <PageHeader
-        title="Registrasi Surat"
-        subtitle="Buat pengajuan baru dan pilih alur persetujuannya."
+        title={isRecommendationRoute ? "Registrasi Rekomendasi" : "Registrasi Surat"}
+        subtitle={isRecommendationRoute ? "Lengkapi dokumen rekomendasi berdasarkan pengajuan induk." : "Buat pengajuan baru dan pilih alur persetujuannya."}
       >
         <Button
           variant="outline"
-          onClick={() => navigate("/surat/monitoring")}
+          onClick={() => navigate(isRecommendationRoute ? "/surat/rekomendasi" : "/surat/monitoring")}
           className="gap-2"
         >
           <History className="w-4 h-4" />
-          Riwayat Pengajuan
+          {isRecommendationRoute ? "Daftar Rekomendasi" : "Riwayat Pengajuan"}
         </Button>
       </PageHeader>
 

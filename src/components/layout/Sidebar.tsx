@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
   GitMerge, Monitor, Briefcase, History, BarChart3, Network,
-  SlidersHorizontal, BookOpenText, FileCheck2,
+  SlidersHorizontal, BookOpenText, FileCheck2, ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -15,6 +15,8 @@ import { getCurrentUser } from '@/services/user-ui.service'
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 import { useAttention } from '@/providers/AttentionProvider'
+
+const PROFILE_UPDATED_EVENT = 'sigap:profile-updated'
 
 interface SidebarProps {
   collapsed: boolean
@@ -41,7 +43,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   })()
   const recommendationCount = canAccessRecommendation ? attentionState.recommendationCount : 0
   const monitoringBadge = attentionState.monitoringCount
-  const suratAttentionCount = inboxCount + recommendationCount
+  const followUpCount = attentionState.followUpCount || 0
+  const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
   const isUserAdmin = user?.role === 'admin'
 
   useEffect(() => {
@@ -74,6 +77,21 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       }
     }
     initSidebar()
+
+    const handleProfileUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<User> & { avatar_url?: string; photoUrl?: string }>).detail || {}
+      setUser((previous) => previous
+        ? {
+            ...previous,
+            ...detail,
+            photoUrl: detail.photoUrl || detail.avatar_url || previous.photoUrl,
+          }
+        : previous
+      )
+    }
+
+    window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
   }, [])
 
   const handleLogout = async () => {
@@ -123,8 +141,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             <Icon className={cn(isSubItem ? "w-4 h-4" : "w-5 h-5", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
             {!isMobile && collapsed && label === 'Persetujuan' && inboxCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-sidebar"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-sidebar bg-primary"></span>
               </span>
             )}
           </div>
@@ -132,7 +150,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
               <span className={cn("truncate font-medium", isSubItem ? "text-[13px]" : "text-sm")}>{label}</span>
               {label === 'Persetujuan' && inboxCount > 0 && (
-                <span className="ml-2 shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="ml-2 shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                   {inboxCount > 99 ? '99+' : inboxCount}
                 </span>
               )}
@@ -144,6 +162,11 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               {label === 'Status Pengajuan' && monitoringBadge > 0 && (
                 <span className="ml-2 shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                   {monitoringBadge > 99 ? '99+' : monitoringBadge}
+                </span>
+              )}
+              {label === 'Tindak Lanjut' && followUpCount > 0 && (
+                <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {followUpCount > 99 ? '99+' : followUpCount}
                 </span>
               )}
             </div>
@@ -240,8 +263,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                   <Mail className="w-5 h-5" />
                   {!isMobile && collapsed && suratAttentionCount > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
                     </span>
                   )}
                 </div>
@@ -249,7 +272,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               </div>
               {(isMobile || !collapsed) && (
                 <div className="flex items-center gap-2 shrink-0">
-                  {suratAttentionCount > 0 && !isSuratOpen && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+                  {suratAttentionCount > 0 && !isSuratOpen && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />}
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isSuratOpen && "rotate-180")} />
                 </div>
               )}
@@ -265,6 +288,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                   {renderNavLink('/surat/registrasi', 'Buat Baru', FileSignature, true)}
                   {renderNavLink('/surat/inbox', 'Persetujuan', Inbox, true)}
                   {canAccessRecommendation && renderNavLink('/surat/rekomendasi', 'Rekomendasi', FileCheck2, true)}
+                  {renderNavLink('/surat/tindak-lanjut', 'Tindak Lanjut', ClipboardCheck, true)}
                   {renderNavLink('/surat/monitoring', 'Status Pengajuan', SearchCheck, true)}
                   {renderNavLink('/surat/riwayat', 'Riwayat Terlibat', History, true)}
                 </motion.div>

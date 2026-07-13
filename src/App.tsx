@@ -29,6 +29,7 @@ const InboxPage = lazy(() => import("@/pages/surat/InboxPage"));
 const MonitoringPage = lazy(() => import("@/pages/surat/MonitoringPage"));
 const RiwayatKeterlibatanPage = lazy(() => import("@/pages/surat/RiwayatKeterlibatanPage"));
 const RecommendationTasksPage = lazy(() => import("@/pages/surat/RecommendationTasksPage"));
+const TindakLanjutSuratPage = lazy(() => import("@/pages/surat/TindakLanjutSuratPage"));
 
 // LAZY IMPORT - ADMIN MANAGEMENT
 const UserManagementPage = lazy(() => import("@/pages/admin/UserManagementPage"));
@@ -36,6 +37,7 @@ const OrganizationHierarchyPage = lazy(() => import("@/pages/admin/OrganizationH
 const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentManagementPage"));
 const EntityManagementPage = lazy(() => import("./pages/admin/EntityManagementPage"));
 const FormManagementPage = lazy(() => import("./pages/admin/FormManagementPage"));
+const TemplateDesignerPage = lazy(() => import("./pages/admin/TemplateDesignerPage"));
 const LetterTypeManagementPage = lazy(() => import("./pages/admin/LetterTypeManagementPage"));
 const OfficeManagementPage = lazy(() => import("./pages/admin/OfficeManagementPage"));
 const WorkflowDetailManagementPage = lazy(() => import("./pages/admin/WorkflowDetailManagementPage"));
@@ -196,7 +198,9 @@ const App = () => {
           <Route path="/surat/registrasi" element={<SuratPage />} />
           <Route path="/surat/inbox" element={<InboxPage />} />
           <Route path="/surat/rekomendasi" element={<RecommendationTasksPage />} />
+          <Route path="/surat/rekomendasi/registrasi" element={<SuratPage />} />
           <Route path="/surat/monitoring" element={<MonitoringPage />} />
+          <Route path="/surat/tindak-lanjut" element={<TindakLanjutSuratPage />} />
           <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
 
           {/* ADMIN MODULE */}
@@ -214,6 +218,7 @@ const App = () => {
           <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
             <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
             <Route path="forms" element={<FormManagementPage embedded />} />
+            <Route path="template-designer" element={<TemplateDesignerPage />} />
             <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
             <Route path="form-usages" element={<FormUsageManagementPage />} />
             <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />

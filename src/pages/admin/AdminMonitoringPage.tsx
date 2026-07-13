@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/lib/supabase";
 import { 
   Search, AlertCircle, Loader2, 
-  MessageSquare, Info, Filter, History, FileText, Download, Calendar, User, Clock
+  MessageSquare, Info, Filter, History, FileText, Download, Calendar, User, Clock, RefreshCw
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,12 @@ import { cn } from '@/lib/utils';
 // Import Komponen Lokal
 import { SuratSummaryCards } from '@/components/dashboard/SuratSummaryCards';
 import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
+import { suratService } from '@/services/surat.service';
+import { getActiveRecommendationDocuments } from '@/components/surat/linked-documents';
+import { RegistrationSummaryDocument } from '@/components/surat/RegistrationSummaryDialog';
+import { buildRegistrationSummaryData } from '@/components/surat/registration-summary-data';
+import { approvalBadgeClass, approvalDotClass, type ApprovalBadgeTone } from '@/components/surat/approval-status-style';
+import { toast } from 'sonner';
 
 const MonitoringAdminPage = () => {
   // 1. STATES
@@ -21,6 +27,15 @@ const MonitoringAdminPage = () => {
   const [dateFilter, setDateFilter] = useState('all');
   const { openPdf, openFile, isOpening } = useDocumentOpener();
   const [selectedSurat, setSelectedSurat] = useState<any | null>(null);
+  const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
+  const selectedSuratId = selectedSurat?.id || "";
+
+  const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+    queryKey: ['surat-linked-documents', selectedSuratId],
+    queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
+    enabled: Boolean(selectedSuratId),
+    staleTime: 15_000,
+  });
 
   // 2. FETCH DATA
   const { data: allData = [], isLoading: loading, error: queryError } = useQuery({
@@ -286,19 +301,41 @@ const MonitoringAdminPage = () => {
                   </DialogDescription>
                 </div>
               </div>
-              <button 
-                onClick={() => selectedSurat?.id && void openPdf(selectedSurat.id, documentOperationKey.pdf(selectedSurat.id, "admin"))}
-                disabled={!selectedSurat?.id || isOpening(documentOperationKey.pdf(selectedSurat.id, "admin"))}
-                className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary transition-all hover:bg-primary hover:text-white"
-              >
-                {selectedSurat?.id && isOpening(documentOperationKey.pdf(selectedSurat.id, "admin")) ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                <span className="text-xs font-semibold">{selectedSurat?.id && isOpening(documentOperationKey.pdf(selectedSurat.id, "admin")) ? "Menyiapkan PDF" : "Unduh File"}</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  onClick={() => selectedSurat?.id && void openPdf(selectedSurat.id, documentOperationKey.pdf(selectedSurat.id, "admin"))}
+                  disabled={!selectedSurat?.id || isOpening(documentOperationKey.pdf(selectedSurat.id, "admin"))}
+                  className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary transition-all hover:bg-primary hover:text-white"
+                >
+                  {selectedSurat?.id && isOpening(documentOperationKey.pdf(selectedSurat.id, "admin")) ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  <span className="text-xs font-semibold">{selectedSurat?.id && isOpening(documentOperationKey.pdf(selectedSurat.id, "admin")) ? "Menyiapkan PDF" : "Unduh File"}</span>
+                </button>
+                <button
+                  onClick={() => selectedSurat?.id && void (async () => {
+                    const operationKey = documentOperationKey.pdf(selectedSurat.id, "admin-refresh");
+                    if (rebuildingPdfId === selectedSurat.id || isOpening(operationKey)) return;
+                    setRebuildingPdfId(selectedSurat.id);
+                    try {
+                      await suratService.rebuildDocumentSource(selectedSurat.id);
+                      await openPdf(selectedSurat.id, operationKey, { refresh: true });
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Gagal membangun ulang dokumen.");
+                    } finally {
+                      setRebuildingPdfId(null);
+                    }
+                  })()}
+                  disabled={!selectedSurat?.id || rebuildingPdfId === selectedSurat?.id || isOpening(documentOperationKey.pdf(selectedSurat?.id || "", "admin-refresh"))}
+                  className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-amber-700 transition-all hover:bg-amber-500/15 dark:text-amber-300"
+                >
+                  {selectedSurat?.id && (rebuildingPdfId === selectedSurat.id || isOpening(documentOperationKey.pdf(selectedSurat.id, "admin-refresh"))) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  <span className="text-xs font-semibold">{selectedSurat?.id && (rebuildingPdfId === selectedSurat.id || isOpening(documentOperationKey.pdf(selectedSurat.id, "admin-refresh"))) ? "Membangun ulang" : "Buat Ulang PDF"}</span>
+                </button>
+              </div>
             </div>
           </DialogHeader>
 
           <div className="p-6 max-h-[70vh] overflow-y-auto">
-            {getAttachments(selectedSurat).length > 0 && (
+            {(getAttachments(selectedSurat).length > 0 || selectedLinkedDocuments.length > 0 || linkedDocumentsLoading) && (
               <div className="mb-6 rounded-lg border border-border bg-muted/10 p-4">
                 <p className="mb-3 text-sm font-semibold text-foreground">Lampiran</p>
                 <div className="flex flex-wrap gap-2">
@@ -318,7 +355,38 @@ const MonitoringAdminPage = () => {
                       </button>
                     );
                   })}
+                  {linkedDocumentsLoading && (
+                    <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin" />
+                      Memuat rekomendasi
+                    </div>
+                  )}
+                  {getActiveRecommendationDocuments(selectedLinkedDocuments).map((document) => {
+                    const recommendationKey = documentOperationKey.pdf(document.suratId, `admin-recommendation-${document.id}`);
+                    const opening = isOpening(recommendationKey);
+                    return (
+                      <button
+                        key={document.id}
+                        type="button"
+                        disabled={opening || !document.suratId}
+                        onClick={() => void openPdf(document.suratId, recommendationKey)}
+                        className="flex min-w-[220px] items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-xs font-semibold text-primary hover:bg-muted disabled:cursor-wait disabled:opacity-70"
+                      >
+                        {opening ? <Loader2 size={12} className="shrink-0 animate-spin" /> : <Download size={12} className="shrink-0" />}
+                        <span className="min-w-0">
+                          <span className="block">{opening ? "Menyiapkan PDF" : document.label}</span>
+                          <span className="block truncate text-[11px] font-medium text-muted-foreground">{document.title}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+            )}
+
+            {selectedSurat && (
+              <div className="mb-6">
+                <RegistrationSummaryDocument data={buildRegistrationSummaryData(selectedSurat)} />
               </div>
             )}
 
@@ -338,26 +406,36 @@ const MonitoringAdminPage = () => {
                 </div>
               </div>
 
-              {[...(selectedSurat?.surat_signatures || [])].sort((a,b) => a.step_order - b.step_order).map((sig) => (
+              {[...(selectedSurat?.surat_signatures || [])].sort((a,b) => a.step_order - b.step_order).map((sig) => {
+                const isRejected = sig.status === 'REJECTED';
+                const isActive = !isRejected && !sig.is_signed && Number(sig.step_order) === Number(selectedSurat?.current_step);
+                const tone: ApprovalBadgeTone = isRejected ? 'rejected' : sig.is_signed ? 'approved' : isActive ? 'active' : 'waiting';
+                return (
                 <div key={sig.id} className="relative pl-12">
                   <div className={cn(
                     "absolute left-0 w-8 h-8 rounded-full flex items-center justify-center z-10 shadow-sm border-4 border-background transition-colors",
-                    sig.is_signed ? "bg-emerald-500 text-white" : 
-                    sig.status === 'REJECTED' ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
+                    approvalDotClass(tone)
                   )}>
                     {sig.is_signed ? <Clock size={12} /> : <span className="text-[10px] font-bold">{sig.step_order}</span>}
                   </div>
                   
                   <div className={cn(
                     "space-y-3 rounded-lg border p-4 transition-all",
-                    sig.is_signed ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-card"
+                    isRejected ? "border-red-500/30 bg-red-500/5" : sig.is_signed ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-card"
                   )}>
                     <div className="flex justify-between items-start gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm font-semibold">
                           {sig.role_name}
-                          {sig.is_signed && <Badge className="h-5 bg-emerald-600 px-1.5 text-[11px] text-white">Selesai</Badge>}
-                          {sig.status === 'REJECTED' && <Badge variant="destructive" className="h-5 px-1.5 text-[11px]">Ditolak</Badge>}
+                          {isRejected ? (
+                            <Badge variant="outline" className={approvalBadgeClass("rejected", "h-5 px-1.5 text-[11px]")}>Ditolak</Badge>
+                          ) : sig.is_signed ? (
+                            <Badge variant="outline" className={approvalBadgeClass("approved", "h-5 px-1.5 text-[11px]")}>Selesai</Badge>
+                          ) : isActive ? (
+                            <Badge variant="outline" className={approvalBadgeClass("active", "h-5 px-1.5 text-[11px]")}>Tahap aktif</Badge>
+                          ) : (
+                            <Badge variant="outline" className={approvalBadgeClass("waiting", "h-5 px-1.5 text-[11px]")}>Menunggu</Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
                           <span className="flex items-center gap-1"><User size={12} /> {(sig.profiles as any)?.full_name || 'Menunggu antrean'}</span>
@@ -392,7 +470,7 @@ const MonitoringAdminPage = () => {
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         </DialogContent>

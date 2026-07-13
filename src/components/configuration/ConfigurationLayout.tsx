@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BriefcaseBusiness, FileSpreadsheet, GitMerge, Hash, Mail, Route, Timer } from "lucide-react";
+import { BriefcaseBusiness, FileCode2, FileSpreadsheet, GitMerge, Hash, Mail, Route, Timer } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -15,6 +15,12 @@ const configurationOptions = [
     label: "Form & Template",
     description: "Template Excel, mapping input, unit, dan lampiran.",
     icon: FileSpreadsheet,
+  },
+  {
+    value: "/admin/configuration/template-designer",
+    label: "Template Builder",
+    description: "Rancang dokumen native dari nol dengan elemen, binding, dan tabel berulang.",
+    icon: FileCode2,
   },
   {
     value: "/admin/configuration/workflows",

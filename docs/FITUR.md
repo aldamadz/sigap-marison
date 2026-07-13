@@ -1,6 +1,6 @@
 # Fitur SIGAP
 
-Tanggal pembaruan: 2026-06-29
+Tanggal pembaruan: 2026-07-13
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 
 Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besar dan tautan, sedangkan detail fitur fungsional dan non-fungsional dicatat di file ini.
@@ -26,6 +26,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Admin | `/audit-logs` | Audit Log |
 | Surat | `/surat/registrasi` | Buat Surat |
 | Surat | `/surat/inbox` | Inbox Persetujuan |
+| Surat | `/surat/tindak-lanjut` | Tindak Lanjut Pemohon |
 | Surat | `/surat/monitoring` | Status Pengajuan |
 | Surat | `/surat/riwayat` | Riwayat Terlibat |
 | Admin | `/admin/users` | User Organization |
@@ -38,6 +39,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Admin | `/admin/monitoring` | All Status Monitoring |
 | Admin | `/admin/kpi-departments` | SLA Departemen |
 | Admin | `/admin/configuration/forms` | Configuration: Form & Template |
+| Admin | `/admin/configuration/template-designer` | Configuration: Template Builder |
 | Admin | `/admin/configuration/workflows` | Configuration: Dokumentasi Matrix Lama |
 | Admin | `/admin/configuration/form-usages` | Configuration: Kegunaan Form |
 | Admin | `/admin/configuration/kpi` | Configuration: SLA Departemen |
@@ -52,7 +54,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - User yang sudah login dapat membuka dokumentasi dari sidebar di atas menu Pengaturan, tetapi halaman `/docs` tetap tampil sebagai halaman docs mandiri tanpa sidebar aplikasi.
 - Header dokumentasi menampilkan logo, identitas `Marison - SIGAP Docs`, pencarian, tombol Dashboard untuk user login atau Login untuk pengunjung publik, serta menu profil/theme/logout untuk user login.
 - Dokumentasi dipisahkan menjadi panduan Pengguna, Admin, Bantuan, dan Versi.
-- Setiap topik dokumentasi berisi tujuan penggunaan, langkah penggunaan, contoh, troubleshooting, dan detail operasional yang menjelaskan arti kode, field, status, sumber data, dampak ke alur, serta langkah pengecekan.
+- Setiap topik dokumentasi berisi tujuan penggunaan, langkah penggunaan, contoh, troubleshooting, dan detail operasional yang menjelaskan arti kode, field, status, sumber data, dampak ke alur, serta langkah pemeriksaan.
 - Dokumentasi memakai layout full-width, daftar topik aktif, dan pencarian cepat lintas topik.
 - Input pencarian membuka modal dokumentasi; shortcut `Ctrl+K` membuka modal yang sama tanpa animasi dekoratif berlebihan.
 - Dokumentasi memakai route penuh untuk topik dan subtopik, misalnya `/docs/dashboard/overview` dan `/docs/persetujuan/alur-signer`.
@@ -62,12 +64,13 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Topik yang belum memiliki section custom tetap memiliki subtopik otomatis seperti fungsi utama, alur penggunaan, contoh penggunaan, dan kendala umum.
 - Topik yang sudah memiliki section custom tetap dapat ditambah section detail operasional, sehingga halaman tidak berhenti pada ringkasan.
 - Topik yang sudah memiliki detail operasional tidak memakai fallback subtopik generik agar halaman dokumentasi tidak terasa seperti template berulang.
+- Topik Rekomendasi memakai alur baca berurutan antar-subtopik. Setiap bagian menampilkan tombol menuju bagian berikutnya, sedangkan `Topik terkait` baru ditampilkan setelah pembaca mencapai subtopik terakhir `Masalah umum rekomendasi`.
 - Subtopik dapat berbentuk gabungan, misalnya nomor surat, counter, variasi format, reset tahunan, dan draft berada dalam satu subtopik yang sama.
 - Konten dokumentasi mendukung beberapa format sesuai kebutuhan: alur bernomor, tabel keputusan, kartu fitur, callout, dan troubleshooting.
 - Dokumentasi Registrasi Surat menjelaskan nomor draft, kategori pengajuan, data yang otomatis diisi sistem, dan kendala umum saat pembuatan surat.
 - Dokumentasi penomoran surat menjelaskan tiap segmen nomor, misalnya `005/UAI/PBO.1.TRA/VI/2026`: nomor urut, entitas, kode departemen, index jenis surat, kode proyek, bulan Romawi, tahun, scope counter, reset tahunan, start counter produksi, nomor `VOID`, dan siklus draft.
 - Dokumentasi penomoran surat menjelaskan variasi format untuk kantor pusat, pengajuan proyek/unit, KC, dan KCP.
-- Dokumentasi Persetujuan menjelaskan area halaman, alur signer, perbedaan signer dan tim pengecek, aturan pengajuan Unit, serta alasan tombol aksi terkunci.
+- Dokumentasi Persetujuan menjelaskan area halaman, alur signer, perbedaan signer dan tim pemeriksa, aturan pengajuan Unit, serta alasan tombol aksi terkunci.
 - Dokumentasi admin tidak dicampur dengan dokumentasi end user biasa agar instruksi konfigurasi tidak membuat user operasional bingung.
 - Topik terkait pada halaman dokumentasi berupa link yang bisa diklik dan disusun berdasarkan topik atau subtopik yang sedang dibuka.
 - Halaman dokumentasi memiliki versi dan changelog agar pembaruan fitur dapat ditelusuri.
@@ -102,12 +105,15 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Menampilkan ringkasan aktivitas dan status operasional user.
 - Menjadi halaman awal setelah login.
 - Menyediakan pintasan ke modul utama seperti surat, agenda, dan monitoring.
+- Grafik Aktivitas Departemen menampilkan agregat total agenda dan agenda selesai untuk seluruh departemen kepada semua user.
+- Agregasi lintas departemen dihitung endpoint server terautentikasi; browser tidak memperoleh judul, deskripsi, peserta, atau isi agenda departemen lain.
+- Modal Aktivitas Terbaru memakai header dan footer tetap dengan isi yang dapat discroll agar detail panjang tidak terpotong pada desktop maupun mobile.
 
 ### Non-Fungsional
 
 - Data dashboard harus cepat dimuat.
 - Ringkasan harus mengikuti hak akses user.
-- Dashboard tidak boleh menampilkan data departemen/cabang yang tidak boleh dibaca user.
+- Dashboard hanya boleh membuka angka agregat lintas departemen; detail agenda tetap mengikuti RLS dan hirarki user.
 
 ## 3. Agenda
 
@@ -148,21 +154,45 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Pada permohonan aset pusat maupun cabang, user memilih apakah pengajuan membutuhkan rekomendasi. Pilihan ini tersimpan sebagai data terstruktur dan tampil di ringkasan approval/email.
 - Sebelum pengajuan utama atau rekomendasi didaftarkan, sistem menampilkan ringkasan bergaya dokumen yang memuat identitas, detail input, lampiran, dan urutan penandatangan. Surat baru disimpan setelah user menekan konfirmasi final; user dapat kembali memperbaiki data tanpa kehilangan draft.
 - Rekomendasi aset diproses sebagai dokumen surat tertaut, bukan lampiran mentah. Dokumen rekomendasi memiliki nomor surat, template, tanda tangan, status, dan preview sendiri.
+- Rekomendasi aset tetap satu dokumen untuk banyak item, tetapi pengisian UI dibuat fokus per item agar petugas IT/PO tidak kehilangan konteks barang induk.
+- Setiap item rekomendasi dapat diputuskan sebagai Service, Ganti Komponen, Beli Baru, atau Tidak Direkomendasikan.
+- Service, Ganti Komponen, dan Beli Baru mewajibkan lampiran gambar; Tidak Direkomendasikan hanya mewajibkan alasan.
+- Keputusan rekomendasi disalin ke snapshot surat induk saat task rekomendasi selesai, sehingga item yang tidak direkomendasikan dapat tampil tercoret pada detail surat dan PDF PGD tanpa membuka lampiran rekomendasi.
 - Admin dapat memilih preset konfigurasi template saat upload Excel agar mapping input, kode form, departemen, dan area tanda tangan terisi otomatis.
-- Template `Rekomendasi Peremajaan Barang / Alat Kerja` tersedia sebagai form rekomendasi/prasyarat PBO dengan nomor dokumen di `C4`, tabel rekomendasi row `9-15`, catatan `B18:H24`, tempat/tanggal `I17:J17`, dan tanda tangan dinamis `I17:J24`.
+- Template `Rekomendasi Peremajaan Barang / Alat Kerja` memakai file Excel terbaru user `Form Rekomendasi Peremajaan Alat Template 20260629.xlsx` sebagai form rekomendasi/prasyarat PBO dengan nomor dokumen di `C4:J4`, tabel rekomendasi row `9-15`, catatan `B18:H24`, tempat/tanggal `I17:J17`, dan tanda tangan dinamis `I17:J24`.
 - Tabel rekomendasi berisi `No.` otomatis, `Nama Barang / Alat Kerja`, `No Registrasi` opsional, `Lokasi / PIC` dari pilihan user, `Kerusakan` opsional, pilihan `Service`, `Ganti`, atau `Beli Baru`, `Uraian`, dan `Keterangan` opsional.
+- Item rekomendasi dibuat dari konteks permohonan induk, tetapi `Nama Barang / Alat Kerja` diisi manual oleh tim IT/PO agar spesifikasi, tipe, dan pilihan barang dapat ditentukan berdasarkan hasil pemeriksaan.
+- Navigator item rekomendasi menampilkan nama item dari permohonan induk sebagai konteks pekerjaan, sedangkan input `Nama Barang / Alat Kerja` tetap manual dan tidak mengikuti nama item induk.
+- Tabel item pada ringkasan pengajuan selalu memakai urutan `No., Nama Barang, Satuan, Jumlah, Status, Keterangan` walaupun sumber data memakai urutan key berbeda.
+- Judul/perihal dan tempat dokumen tetap otomatis. Jika user pernah mengubah lalu ingin kembali ke nilai sistem, user cukup mengosongkan field sehingga aplikasi mengisi ulang otomatis tanpa tombol reset terpisah.
+- Pengisian rekomendasi menggunakan tampilan fokus per item dengan navigator, indikator kelengkapan, serta tombol Sebelumnya/Berikutnya agar form panjang tidak memenuhi layar.
 - Pilihan `Service` hanya mencentang kolom Service, pilihan `Ganti` hanya mencentang kolom Ganti, sedangkan `Beli Baru` tidak mencentang keduanya dan tetap menyimpan uraian rekomendasi.
-- Setiap item rekomendasi wajib memiliki lampiran gambar. Petugas dapat mengunggah file, drag-drop, atau paste screenshot langsung dengan `Ctrl+V`; file disimpan ke draft rekomendasi dan ikut menjadi lampiran dokumen.
+- Lampiran gambar wajib untuk item rekomendasi dengan keputusan `Service`, `Ganti Komponen`, atau `Beli Baru`. Untuk `Tidak Direkomendasikan`, petugas wajib mengisi alasan dan gambar bersifat opsional.
+- Jika penanda tangan surat induk mengembalikan perbaikan ke tim IT/rekomendasi, tugas rekomendasi dibuka kembali di menu `Rekomendasi` dengan data rekomendasi terakhir sebagai draft awal.
+- Rekomendasi yang direvisi harus dikonfirmasi ulang oleh Staff IT dan ditandatangani ulang oleh Mgr. PO sebelum surat induk kembali ke pemohon untuk memilih lanjut atau batal.
+- Saat rekomendasi revisi selesai, sistem memperbarui snapshot rekomendasi pada surat induk, menonaktifkan tautan rekomendasi lama, dan menampilkan dokumen rekomendasi terbaru sebagai dokumen tertaut aktif.
 - Setiap item rekomendasi memiliki `Link Referensi` opsional. Link tampil di UI dan email sebagai data pendukung, tetapi belum dipetakan ke Excel sampai area template khusus ditentukan.
 - Nomor dokumen rekomendasi dibuat otomatis setelah surat induk dikonfirmasi, memakai counter departemen PBO, dan tidak dibuat ketika pemohon baru memilih opsi rekomendasi.
+- Nomor rekomendasi selalu memakai entitas `UAI` dan melanjutkan counter surat departemen PBO, meskipun surat induk diterbitkan oleh entitas atau kantor cabang lain.
+- Pilihan kebutuhan rekomendasi dinormalisasi setelah identitas departemen pemohon tervalidasi agar pilihan `Butuh rekomendasi` tidak berubah saat surat disimpan.
 - Alur default rekomendasi aset memakai departemen PBO: Staff IT membuat dan Mgr. PO memeriksa. Jika ada dua Staff IT, keduanya melihat tugas yang sama sampai salah satu mengambil tugas.
 - Tugas rekomendasi memakai shared lock: Staff IT pertama yang mengambil tugas menjadi pembuat/signer pertama, sementara kandidat lain hanya melihat status terkunci dan tidak bisa mengedit.
+- Identitas, nomor, form, kegunaan, dan matrix signer rekomendasi dikunci dari konfigurasi task. Petugas tidak dapat membatalkan atau mengganti identitas tersebut dari form rekomendasi.
+- Pengerjaan dokumen rekomendasi memakai path khusus `/surat/rekomendasi/registrasi`, bukan `/surat/registrasi`, agar halaman tidak mewarisi step lokasi/klasifikasi milik registrasi surat biasa.
+- Nomor rekomendasi menampilkan ikon gembok tanpa teks teknis permanen. Hover atau fokus pada ikon menjelaskan bahwa nomor dibuat otomatis dari pengajuan induk dan tidak dapat diubah oleh petugas rekomendasi.
+- Saat mengerjakan rekomendasi, petugas melihat ringkasan pengajuan induk yang memuat nomor, judul, pemohon, departemen, kantor, tempat/tanggal, isi pengajuan, dan daftar lampiran. Data hanya dapat diakses oleh kandidat atau petugas yang mengunci tugas rekomendasi.
+- Kategori dokumen rekomendasi tetap `Aset`, tetapi judulnya dibedakan menjadi `Rekomendasi Peremajaan Alat` dan mengikuti barang serta lokasi pengajuan induk.
+- Judul rekomendasi mengikuti hasil tiap item: `Rekomendasi Service [Barang]`, `Rekomendasi Ganti Komponen [Barang]`, atau `Rekomendasi Beli Baru [Barang]`, kemudian diakhiri konteks `Dept. ...`, `KC. ...`, atau `KCP. ...`. Beberapa item dengan hasil sama digabung dalam satu kelompok judul.
+- Kegunaan rekomendasi dikunci oleh task tertaut dan tetap memuat input `Daftar Rekomendasi` serta `Catatan`; perbedaan metadata kategori lama tidak boleh mengosongkan form.
+- Judul permohonan aset otomatis membedakan lokasi: pusat memakai `Dept. [Departemen] Kantor Pusat`, kantor cabang memakai `KC. [Nama]`, dan kantor cabang pembantu memakai `KCP. [Nama]`.
 - Setelah Staff IT mengonfirmasi rekomendasi, sistem menautkan dokumen ke surat induk dan mencoba menandatangani step pertama otomatis agar proses langsung lanjut ke Mgr. PO.
 - Surat induk dapat mengunci approval pada tahap yang dikonfigurasi sampai dokumen rekomendasi tertaut selesai.
+- Pada daftar dokumen/lampiran surat induk, rekomendasi tampil sebagai item `Rekomendasi` dengan judul dokumen rekomendasi. Saat diklik, sistem membuka PDF dokumen rekomendasi melalui jalur token aman, bukan URL storage langsung.
 - Email rekomendasi menampilkan daftar item dalam tabel rapi, termasuk lokasi/PIC, hasil rekomendasi, uraian, link referensi, dan nama lampiran, bukan JSON mentah.
 - Template Excel rekomendasi dibuat ulang dengan logo Marison, area cetak `A1:J24`, dan used range bersih agar hasil PDF tidak tertarik ke bawah.
 - Lampiran dapat diwajibkan, opsional, atau multiple sesuai aturan form.
 - Preview dokumen menggunakan PDF.
+- Tombol `Detail` pada Status Pengajuan menampilkan ringkasan dokumen yang sama dengan konfirmasi registrasi: identitas, isi input, lampiran, dan penandatangan, kemudian dilanjutkan status serta timeline approval.
 - Surat berjalan mengikuti matrix tanda tangan.
 - Riwayat dan monitoring surat tersedia untuk pembuat, penandatangan, dan admin sesuai akses.
 - Setelah seluruh tanda tangan selesai, proses SIGAP berakhir pada status `DONE`.
@@ -182,8 +212,15 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 
 - User memilih entitas, kantor/cabang, departemen, jenis surat, lalu klasifikasi `Aset`, `Unit`, `Non Aset`, atau `Non Unit`.
 - Sistem menyaring matrix alur berdasarkan klasifikasi, scope kantor, dan departemen.
+- KC/KCP yang belum memiliki proyek tetap dapat membuat pengajuan non-unit. Sistem tidak menampilkan dropdown proyek kosong dan memakai kode proyek virtual `000` pada nomor surat serta snapshot input.
+- KC/KCP yang sudah memiliki proyek tetap wajib memilih proyek cabang sebelum nomor surat diterbitkan.
+- Pengajuan Unit selalu wajib memilih proyek Unit karena kapasitas unit dan alokasi kavling bergantung pada proyek yang dipilih.
 - User mendapatkan nomor surat.
 - Setelah nomor dipesan, sistem membuat draft registrasi dan menyimpan perubahan form otomatis ke database.
+- Setelah draft atau nomor surat dipulihkan, Form Dokumen dan Kegunaan tetap ditampilkan sebagai informasi terkunci agar user memahami konteks form yang sedang dilanjutkan tanpa efek berkedip saat refresh.
+- Pada dokumen rekomendasi tertaut, Form Dokumen dan Kegunaan tidak ditampilkan ulang karena identitas form sudah dikunci oleh tugas rekomendasi dari pengajuan induk.
+- Deteksi dokumen rekomendasi tertaut dilakukan dari parameter URL sejak render pertama, sehingga halaman tidak sempat menampilkan pilihan registrasi biasa saat draft rekomendasi sedang dipulihkan.
+- Jika link rekomendasi lama masih membuka `/surat/registrasi?linked_type=recommendation`, aplikasi mengarahkannya ke `/surat/rekomendasi/registrasi` dengan parameter yang sama.
 - Draft aktif dapat dilanjutkan melalui URL `?draft=<draftId>`; jika hanya ada satu draft, halaman membukanya otomatis, sedangkan beberapa draft ditampilkan sebagai pilihan.
 - Lampiran yang dipilih setelah nomor dipesan langsung diunggah dan dikaitkan ke draft. Saat draft dibuka kembali, file tetap tersedia dan digunakan pada registrasi final tanpa unggah ulang.
 - Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
@@ -231,7 +268,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Status step harus konsisten dengan status surat.
 - Perubahan approval harus tercatat.
 - Dokumen preview harus menampilkan tanda tangan terbaru.
-- PDF berfungsi sebagai verifikasi visual; informasi keputusan utama harus dapat dibaca dari kartu inbox tanpa membuka PDF.
+- PDF berfungsi sebagai pemeriksaan visual; informasi keputusan utama harus dapat dibaca dari kartu inbox tanpa membuka PDF.
 - Pending approval harus bisa dipakai sebagai data SLA.
 - Kegagalan mengambil data harus dibedakan dari antrean kosong dan menyediakan aksi coba lagi.
 - Draft catatan, alokasi unit, kode produksi, dan pilihan file dipertahankan selama halaman masih aktif.
@@ -259,14 +296,19 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ```
 
 - Perencanaan memilih unit spesifik saat approval.
-- Jumlah unit yang dipilih boleh lebih banyak, tetapi tidak boleh kurang dari permintaan.
+- Jumlah unit yang dipilih boleh kurang dari permintaan dengan konfirmasi eksplisit dari tim pemeriksa.
 - Perencanaan mengisi `Struktur Atas`, `Struktur Bawah`, dan komponen kode produksi per unit.
-- Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai carousel agar tinggi form stabil saat banyak kavling dipilih.
+- Input `Struktur Atas` dan `Struktur Bawah` menerima nominal hasil ketik maupun paste dengan pemisah ribuan. Nilai `1.000.000`, `1,000,000`, dan `1000000` dinormalisasi menjadi satu juta serta ditampilkan sebagai `1.000.000`.
+- Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai tabel satu baris per kavling dengan header sticky, sehingga tim pemeriksa tetap melihat kolom `Struktur Atas`, `Struktur Bawah`, `Nomor`, `Blok`, dan `Tanggal` saat daftar discroll.
+- Setelah memilih kavling, tim pemeriksa dapat mengunduh template Excel alokasi unit, mengisi struktur atas/bawah, nomor, blok, dan tanggal produksi secara massal, lalu import kembali ke tabel pemeriksaan.
+- Template Excel alokasi unit memiliki keterangan cell yang memberi contoh input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
+- Import alokasi unit menerima `.xlsx`, `.xls`, dan `.csv`, hanya memperbarui kavling yang sudah dipilih, serta memberi informasi jika ada baris yang dilewati.
 - Format kode produksi otomatis: `[nomor]/UAI/PRC/[blok]/[tanggal]`.
 - Perencanaan mengunggah 3 lampiran manual: `SITEPLAN`, `VOLUME ADENDUM`, dan `HITUNGAN ADENDUM`.
 - Sistem membuat 2 lampiran PDF otomatis:
   - `Rekap Adendum Unit` dengan tabel struktur dan total nominal.
   - `Kode Produksi Unit` dengan tabel `No`, `Proyek`, `Unit`, `Kode Produksi`.
+- Ringkasan `Rekap Adendum Unit` dan `Kode Produksi Unit` juga tampil langsung di detail approval, monitoring, dan riwayat keterlibatan. Penanda tangan dapat memahami pekerjaan tim pemeriksa tanpa wajib membuka lampiran PDF.
 
 ### Non-Fungsional
 
@@ -423,6 +465,18 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin membuat mapping teknis template unit tanpa menentukan kategori registrasi.
 - Admin menyimpan dan menerapkan quick preset.
 - Admin mengatur field manual, field sistem, tabel, textarea, external select, merge range, alignment, font, dan row height.
+- Admin dapat memilih setiap form yang tersimpan lalu menghasilkan PDF uji tanpa membuat surat, nomor dokumen, tanda tangan, maupun data database. Form baru otomatis ikut tersedia pada pilihan uji.
+- Uji PDF Form Permintaan Barang & Jasa mengisi contoh nomor, identitas pengaju, tiga item, catatan, tempat/tanggal, dan kotak tanda tangan berdasarkan jumlah serta distribusi role yang dipilih admin.
+- Kolom nama barang selalu diratakan ke kiri berdasarkan fungsi datanya, termasuk ketika input UI menggunakan pilihan/select. Tipe kontrol tidak boleh mengubahnya menjadi rata tengah.
+- Form Permintaan Barang & Jasa memakai generator PDF-native deklaratif dan tidak memakai Excel atau LibreOffice sebagai sumber tata letak PDF.
+- Uji PDF, surat baru, snapshot approval, dan `Buat Ulang PDF` memakai renderer PGD tunggal. Data diambil dari snapshot transaksi database sehingga tabel, identitas, catatan, tempat/tanggal, dan tanda tangan tidak berbeda antarjalur.
+- Stamp tanda tangan diseragamkan menjadi `DISETUJUI SISTEM` dengan tanggal-jam WIB, tanpa emoji dan tanpa label bahasa Inggris.
+- Excel PGD hanya dipertahankan sebagai sumber historis/kompatibilitas; perubahan merge, border, atau print area Excel tidak memengaruhi PDF PGD baru.
+- Renderer PGD menampilkan header Marison, metadata Cabang/Departemen dan Proyek, pilihan aset/non-aset, maksimal 15 baris barang, catatan, dan kotak tanda tangan dinamis pada satu halaman A4 landscape.
+- Uji PDF dan dokumen transaksi memakai aturan pembagian tanda tangan yang sama: 3 kotak memakai tiga slot kanan dari grid 4, 4 kotak memakai grid 4, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`.
+- Tinggi setiap baris kotak tanda tangan bersifat tetap. Formasi satu baris 3/4 signer memakai tinggi yang sama dengan baris pertama formasi dua baris; area bawah dibiarkan kosong tanpa border.
+- Tempat/tanggal hanya membentang selebar kotak aktif pada baris pertama.
+- Area cetak dokumen dengan tanda tangan dinamis dipaksa satu halaman melalui `fitToWidth = 1` dan `fitToHeight = 1`.
 
 ### Non-Fungsional
 
@@ -433,6 +487,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Mapping teknis biasa dan unit harus terpisah jelas.
 - Template baru harus bisa ditangani tanpa mengubah kode selama formatnya sesuai konfigurasi.
 - Konfirmasi hapus template dan quick preset memakai dialog reusable aplikasi, bukan dialog browser bawaan.
+- PDF uji hanya dapat dibuat oleh admin, mengambil template berdasarkan `form_id` dari database, membatasi host file template, dibatasi enam kali per menit, dan dibuka melalui URL sekali pakai yang kedaluwarsa dalam dua menit.
 
 ## 17. Master Jenis Surat
 
@@ -537,6 +592,10 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Fungsional
 
 - User/admin mengakses pengaturan profil dan keamanan akun.
+- User dapat mengganti foto profil sendiri dengan JPG, PNG, atau WebP berukuran maksimal 5 MB.
+- Upload foto profil diproses endpoint server terautentikasi; path storage dipaksa mengikuti ID Supabase Auth akun aktif.
+- Avatar disimpan pada bucket private di Supabase Storage self-hosted dan disajikan melalui endpoint domain SIGAP.
+- Tampilan aplikasi menggunakan thumbnail WebP maksimal 256 x 256, sedangkan pembukaan URL avatar sebagai tab menampilkan file asli.
 - User dapat memilih tema `System`, `Light`, atau `Dark`.
 - Preferensi tema diterapkan segera dan disimpan per akun pada profil.
 - Mode `System` mengikuti preferensi warna perangkat atau browser.
@@ -547,15 +606,31 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Perubahan setting perlu efek yang jelas dan tidak merusak session user.
 - Tema harus menggunakan token warna bersama agar halaman aktif tetap terbaca pada light dan dark mode.
 - Jika penyimpanan preferensi gagal, tema dikembalikan ke pilihan sebelumnya dan user menerima pesan error.
+- Validasi foto dilakukan di frontend dan server, termasuk MIME type, ukuran, dan signature file.
+- URL dan credential storage internal tidak boleh diekspos sebagai URL avatar publik.
+
+### Sinkronisasi Dokumentasi
+
+- Setiap perbaikan, pengembangan fitur, perubahan alur, perubahan keamanan, atau perubahan operasional harus memperbarui `docs/FITUR.md` dan halaman `/docs` yang relevan.
+- Setiap pembaruan halaman `/docs` harus dicatat pada changelog dan menaikkan versi dokumentasi.
+- Semua perubahan pada tanggal kalender yang sama digabung pada satu entri versi. Perubahan berikutnya pada hari yang sama menambah daftar perubahan pada versi tersebut, bukan membuat versi baru.
+- Versi baru dibuat ketika tanggal pembaruan berubah atau ketika rilis resmi berikutnya dimulai.
 
 ## 24. Configuration
 
 ### Fungsional
 
 - Admin mengakses konfigurasi sistem dari satu menu `Configuration`.
-- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Alur Persetujuan`, `Pengajuan Unit`, `SLA Departemen`, `Penomoran Surat`, dan `Label Jabatan`.
+- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Template Builder`, `Alur Persetujuan`, `Pengajuan Unit`, `SLA Departemen`, `Penomoran Surat`, dan `Label Jabatan`.
 - Dropdown konfigurasi juga menyediakan `Email Notification` untuk penerima email, privasi, dan mode file.
-- Form & Template mengatur template Excel, mapping input, mode unit, dan lampiran.
+- Form & Template mengatur konfigurasi form, mapping input, mode unit, dan lampiran. Untuk form non-PGD seperti rekomendasi, template Excel tetap aktif. Untuk PGD, template Excel dinonaktifkan dari UI karena PDF dibuat oleh renderer sistem.
+- Template Builder mengatur template dokumen native dari nol. Admin dapat membuat canvas A4/F4 portrait atau landscape, menambahkan logo, teks, field data, tabel berulang, catatan, kotak, garis, dan area tanda tangan.
+- Template Builder mendukung data berulang melalui elemen `Tabel Berulang`. Admin memilih sumber data seperti `Daftar Barang`, `Daftar Unit`, `Daftar Rekomendasi`, `Daftar Lampiran`, atau `Penandatangan`, lalu mengatur kolom, binding, format, jumlah baris minimum, jumlah baris maksimum, dan tinggi baris.
+- Untuk template kompleks, AI tetap dipakai sebagai pendamping konfigurasi: membantu menyusun struktur form input, binding field, tabel berulang, dan variasi kotak tanda tangan dinamis 2-8 slot sebelum admin merapikan desain akhir di Template Builder.
+- Area tanda tangan mendukung tinggi otomatis berdasarkan lebar area cetak, jumlah slot, dan jumlah baris. Aksi `Sesuaikan area cetak` memenuhi lebar halaman di dalam margin dan menjaga seluruh kotak tetap berada pada halaman; mode tinggi tetap tersedia untuk kebutuhan khusus.
+- Canvas menampilkan batas area cetak dan mendeteksi elemen yang melewati margin. Tombol `Sesuaikan Semua` menata ulang posisi, memperkecil layout secara proporsional, lalu memusatkan keseluruhan layout secara horizontal dan vertikal di dalam area cetak.
+- Template Builder menyimpan definisi layout sebagai JSON berversi pada tabel `document_template_builders` dan `document_template_builder_versions`. Versioning menjaga dokumen lama tetap dapat dirender dengan layout yang sama walaupun template baru sudah dipublish.
+- Template Builder saat ini menjadi fondasi native renderer dan belum mengganti seluruh alur produksi PGD/rekomendasi yang sudah berjalan. Integrasi berikutnya adalah membuat generator PDF membaca JSON builder yang sama untuk Uji PDF, Buat Ulang PDF, dan surat baru.
 - Alur Persetujuan mengatur urutan penandatangan serta koordinat tanda tangan.
 - Pengajuan Unit mengatur matrix Unit yang diizinkan untuk setiap departemen.
 - SLA Departemen mengatur target SLA, jam kerja, waktu istirahat, hari kerja, dan timezone.
@@ -576,6 +651,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Sistem lain dapat mengambil data surat melalui API external SIGAP.
 - Client menggunakan client credentials untuk mendapatkan access token.
 - API menyediakan data surat, pengirim, tujuan, detail input, status, dan file preview melalui endpoint aman.
+- API menyediakan master data onboarding akun melalui `GET /api/onboarding/options`, `GET /api/master/offices`, dan `GET /api/master/departments`.
+- Sistem lain dapat menampilkan pilihan Kantor Pusat, KC, KCP, dan Departemen tanpa mengambil data user SIGAP.
 - Dokumentasi API tersedia di Swagger UI.
 
 ### Non-Fungsional
@@ -583,6 +660,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - `client_secret` tidak disimpan dalam bentuk plaintext.
 - Access token memiliki masa berlaku.
 - File tidak diberikan sebagai public storage URL langsung.
+- Endpoint master data hanya mengirim field allowlist seperti `id`, `code`, `name`, `type`, `parent`, dan `dept_index`; email/internal field tidak diekspos.
 - API harus bisa diaudit per client.
 - Client yang tidak aktif dapat dinonaktifkan tanpa mengganggu client lain.
 
@@ -612,6 +690,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Pending ikut dihitung sampai `now()` hanya untuk tahap aktif yang sudah masuk ke signer.
 - Step berikutnya yang belum aktif tidak dihitung sebagai pending.
 - Jika surat ditolak, proses SLA berhenti; step setelah penolakan tidak dihitung sebagai pending.
+- Jika surat sedang `MENUNGGU_PERBAIKAN` dan tugas berada di pemohon, SLA signer/departemen berhenti sehingga tidak dihitung sebagai pending atau terlambat.
+- Saat pemohon memilih `Lanjutkan proses`, waktu SLA tahap 1 dimulai dari waktu pengajuan dilanjutkan kembali, bukan dari waktu sebelum surat dikembalikan.
 - Admin dapat melihat antrean yang tepat waktu, telat, pending aman, pending telat, dan rejected.
 - Dashboard dapat difilter berdasarkan periode tanggal, departemen, cabang/kantor, jenis surat, form/template, dan status KPI.
 - Baris departemen dapat dibuka untuk melihat rincian setiap tahap approval, penandatangan, surat, durasi efektif, SLA, status, jenis surat, dan form.
@@ -754,10 +834,34 @@ Fallback data lama:
 - External API berjalan sebagai service terpisah.
 - PDF worker dapat dipisah di server lain.
 - Cloudflare Tunnel dapat dipakai untuk expose service.
+- Deploy aplikasi utama dilakukan dari host/workstation yang memiliki Docker context `ubuntu-server`.
+- Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, LibreOffice/font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
+- PDF worker hanya diredeploy ketika ada perubahan worker, dependency/runtime PDF, atau konfigurasi worker.
+- External API dideploy terpisah melalui `docker-compose.external.yml`.
 
 ### Non-Fungsional
 
 - Production deploy menggunakan `.env.production`.
+- Command deploy production aplikasi utama:
+
+```powershell
+docker --context ubuntu-server compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+- Jangan hilangkan `--env-file .env.production`; file ini dipakai Compose untuk interpolasi variabel environment seperti `STORAGE_SUPABASE_URL` dan `STORAGE_PUBLIC_BASE_URL`.
+- Jika hanya mengubah frontend, halaman dokumentasi, server aplikasi utama, atau `server.mjs`, gunakan command aplikasi utama di atas dan jangan redeploy worker PDF.
+- Jika perlu redeploy PDF worker, gunakan compose worker secara terpisah:
+
+```powershell
+docker --context ubuntu-server compose -f docker-compose.worker.yml --env-file .env.production up -d --build
+```
+
+- Jika hanya mengubah External API, gunakan compose external dan app utama/PDF worker tidak perlu diredeploy:
+
+```powershell
+docker --context ubuntu-server compose -f docker-compose.external.yml --env-file .env.production up -d --build
+```
+
 - Worker PDF memiliki concurrency limit.
 - Docker compose production dan worker tidak boleh menjalankan workload yang sama secara duplikat.
 - Healthcheck container harus tersedia.
@@ -769,6 +873,7 @@ Fallback data lama:
 - Sinkronisasi saat tab kembali aktif memakai cooldown agar tidak memicu refetch berulang.
 - Setiap perpindahan route memvalidasi ulang seluruh query aktif dan menampilkan overlay loading sampai pengambilan data terbaru selesai.
 - Refresh route tidak melakukan browser reload sehingga sesi, koneksi realtime, dan state global aplikasi tetap terjaga.
+- Endpoint ringan untuk attention badge, web push, dan data source unit memakai validasi token JWT lokal yang memeriksa bentuk token, expiry, dan user id. Jalur ini mengurangi ketergantungan ke request network Supabase Auth untuk badge/notifikasi, sedangkan endpoint dokumen dan token file tetap memakai validasi Auth server penuh.
 
 ## 31. Kegunaan Form dan Tanda Tangan Dinamis
 
@@ -785,16 +890,55 @@ Fallback data lama:
 - Marketing pusat diperlakukan sebagai departemen `Marketing`, sedangkan `Marketing (Cabang)` dipakai untuk relasi cabang ke BM/kantor cabang. Import karyawan otomatis memindahkan data Marketing Cabang yang berkantor di Kantor Pusat ke departemen Marketing.
 - Operasional Kost tidak dipaksa mencari manager internal. Kegunaan `Permohonan Operasional Kost` memakai alur `SPV Kost -> Mgr. HRD GA -> Direktur I -> Direktur Utama`.
 - Pada scope kantor pusat, UI registrasi dan trigger database hanya mengizinkan signer yang kantor profilnya berkedudukan `Pusat`.
-- Setiap tahap dapat memiliki tim pengecek/verifikator data sebelum penanda tangan tahap tersebut dapat melakukan aksi.
-- Tim pengecek bersifat opsional per tahap dan hanya aktif jika admin mengaktifkan konfigurasi pengecek pada tahap tersebut.
-- Kandidat pengecek default mengikuti departemen penandatangan tahap yang akan diverifikasi; pada scope cabang, snapshot pengecek transaksi dibatasi ke kantor/cabang surat yang sama.
-- Konfigurasi tim pengecek menyediakan pencarian nama, jabatan, dan kantor agar kandidat mudah ditemukan.
-- Jika tahap membutuhkan verifikasi, penanda tangan tetap dapat melihat pengajuan tetapi tombol `Setujui` dan `Tolak` terkunci sampai tim pengecek memverifikasi data.
-- Tim pengecek melihat task `Verifikasi Data` di Inbox Persetujuan, mengunggah lampiran tahap yang diwajibkan, mengisi alokasi Unit bila tahap tersebut membutuhkan alokasi, lalu menyimpan catatan verifikasi.
-- Pada pengajuan Unit, proyek/kawasan dikunci dari pilihan pemohon dan tidak dapat diubah oleh tim pengecek atau penanda tangan; jika proyek salah, user harus membuat pengajuan baru.
-- Untuk pengajuan Unit, tim pengecek dapat memilih jumlah unit kurang dari permintaan dengan konfirmasi eksplisit sebelum verifikasi dilanjutkan.
-- Setelah data diverifikasi, penanda tangan melihat ringkasan hasil pengecekan dan tidak perlu mengunggah/mengisi data tahap yang sama.
-- Penanda tangan dapat mengembalikan task ke tim pengecek dengan catatan revisi jika data/lampiran perlu diperbaiki.
+- Setiap tahap dapat memiliki tim pemeriksa/verifikator data sebelum penanda tangan tahap tersebut dapat melakukan aksi.
+- Tim pemeriksa bersifat opsional per tahap dan hanya aktif jika admin mengaktifkan konfigurasi pemeriksa pada tahap tersebut.
+- Kandidat pemeriksa default mengikuti departemen penandatangan tahap yang akan diperiksa; pada scope cabang, snapshot pemeriksa transaksi dibatasi ke kantor/cabang surat yang sama.
+- Konfigurasi tim pemeriksa menyediakan pencarian nama, jabatan, dan kantor agar kandidat mudah ditemukan.
+- Jika tahap membutuhkan pemeriksaan, penanda tangan tetap dapat melihat pengajuan tetapi tombol `Setujui` dan `Tolak` terkunci sampai tim pemeriksa memeriksa data.
+- Tim pemeriksa melihat task pemeriksaan di Inbox Persetujuan, mengunggah lampiran tahap yang diwajibkan, mengisi alokasi Unit bila tahap tersebut membutuhkan alokasi, lalu memakai tombol `Simpan & lanjutkan` untuk meneruskan proses ke signer.
+- Tim pemeriksa mendapat autosave halus untuk data pemeriksaan seperti alokasi unit, detail kode produksi, dan catatan. Status autosave hanya tampil sebagai teks kecil agar tidak mengganggu fokus kerja.
+- Detail persetujuan menyediakan tombol `Export Summary` untuk menghasilkan PDF formal `Summary Pengajuan - [Judul Surat]` dengan logo Marison, waktu pembuatan laporan, identitas surat, isi pengajuan, dan kavling/unit. Lampiran, alur penandatangan, serta riwayat revisi tidak disertakan pada summary ini.
+- Panel utama tetap bernama `Ringkasan Pengajuan` agar tidak mengunci konteks ke direksi atau tahap tertentu.
+- Tim pemeriksa dapat membuka dokumen utama dan lampiran surat yang menjadi tugasnya melalui token file aman; akses ini mengikuti `verifier_snapshot` transaksi, bukan URL storage publik.
+- Badge Persetujuan memakai warna primary untuk menandakan jumlah tugas aktif. Warna merah hanya digunakan pada status ditolak atau indikator SLA yang terlambat.
+- Pada pengajuan Unit, proyek/kawasan dikunci dari pilihan pemohon dan tidak dapat diubah oleh tim pemeriksa atau penanda tangan; jika proyek salah, user harus membuat pengajuan baru.
+- Untuk pengajuan Unit, tim pemeriksa dapat memilih jumlah unit kurang dari permintaan dengan konfirmasi eksplisit sebelum pemeriksaan dilanjutkan.
+- Setelah data diperiksa, penanda tangan melihat ringkasan hasil pemeriksaan dan tidak perlu mengunggah/mengisi data tahap yang sama.
+- Pada pengajuan Unit, Mgr. Perencanaan atau signer berikutnya tidak lagi melihat panel `Pilih kavling` jika tim pemeriksa sudah menyimpan alokasi; yang tampil adalah ringkasan kavling, kode produksi, dan rekap adendum.
+- Penanda tangan dapat mengembalikan task ke tim pemeriksa dengan catatan revisi jika data/lampiran perlu diperbaiki.
+- Saat pengajuan dikembalikan ke tim pemeriksa, sistem mempertahankan data pemeriksaan terakhir seperti kavling terpilih, struktur atas/bawah, kode produksi, dan lampiran tahap. Tim pemeriksa dapat memperbaiki dari data lama, bukan menginput ulang dari nol.
+- Jika tugas tim pemeriksa berasal dari revisi dan data sebelumnya sudah pernah diperiksa, tombol `Simpan & lanjutkan` menyelesaikan revisi tersebut setelah menyimpan perubahan, bukan memanggil ulang pemeriksaan normal yang sudah tidak berlaku.
+- Status internal revisi mendukung fase `awaiting_requester`, sehingga hasil perbaikan tim pemeriksa dapat dikirim kembali ke pemohon untuk memilih lanjutkan proses atau batalkan pengajuan.
+- Jika tim pemeriksa menyelesaikan revisi tanpa perubahan item atau nilai, sistem langsung mengembalikan proses ke signer aktif. Persetujuan pemohon ulang hanya diperlukan ketika ada perubahan bermakna pada item/nilai.
+- Jika signer belum bisa menyetujui karena menunggu pemeriksaan, action bar menampilkan nama pemeriksa yang sedang ditunggu, bukan teks generik `tim pemeriksa`.
+- Penanda tangan dapat mengembalikan task ke tim pemeriksa tanpa mengubah jumlah/nilai item. Pada kondisi ini baris item tetap `Tidak berubah`, tetapi `Instruksi perbaikan` tetap dikirim ke tim pemeriksa.
+- Penanda tangan aktif dapat mengembalikan proses secara manual ke pemohon, tim pemeriksa, signer sebelumnya, atau tim IT/rekomendasi sesuai konteks perbaikan.
+- Opsi `Tim pemeriksa` hanya tersedia jika tahap aktif memiliki pemeriksa pada snapshot transaksi; targetnya adalah user pemeriksa pada tahap tanda tangan tersebut.
+- Pada dialog pengembalian, signer hanya mengisi alasan untuk item yang berubah. `Nilai diajukan` ditampilkan sebagai referensi saat keputusan `Disetujui sebagian`, bukan input wajib.
+- Placeholder instruksi, nilai disetujui, dan alasan perubahan pada dialog pengembalian mengikuti konteks pengajuan seperti Unit, Aset, Non Aset, atau Rekomendasi.
+- Pada pengajuan Unit, keputusan item dihitung otomatis dari `Jumlah disetujui`: sama dengan jumlah diajukan berarti tidak berubah, lebih sedikit berarti disetujui sebagian, dan nol berarti tidak disetujui.
+- Dialog pengembalian proses tidak memakai field `Instruksi utama` untuk surat yang memiliki item terstruktur. Alasan utama otomatis diambil dari alasan perubahan item, sedangkan catatan umum hanya muncul jika surat tidak memiliki item terstruktur.
+- Surat yang dikembalikan masuk status `MENUNGGU_PERBAIKAN`, memiliki riwayat perbaikan terstruktur, dan menampilkan badge/notifikasi agar pemohon atau pihak tujuan revisi menyadari tindakan yang diperlukan.
+- Jika perbaikan ditujukan ke pemohon, badge tampil pada `Status Pengajuan`, bukan `Persetujuan`, karena pemohon melanjutkan atau membatalkan pengajuan dari halaman status.
+- Indikator parent `Layanan Surat` ikut menyala jika ada perhatian di `Persetujuan`, `Rekomendasi`, `Tindak Lanjut`, atau `Status Pengajuan`.
+- Detail pengajuan menampilkan `items` sebagai `Daftar Barang` dengan urutan kolom tetap `No., Nama Barang, Satuan, Jumlah, Status, Keterangan` agar tidak mengikuti urutan key mentah dari database.
+- Catatan revisi item ditampilkan pada baris khusus di bawah item terkait. Nilai revisi mengikuti konteks satuan, misalnya `8 unit dari 10 unit`, bukan selalu diformat sebagai rupiah.
+- Catatan revisi dengan keputusan `Tidak berubah` seperti `kirim ulang` tidak ditempelkan ke kolom `Keterangan` barang. Catatan tersebut tetap tersedia pada riwayat perbaikan agar tabel barang hanya berisi data barang yang benar-benar berubah.
+- Riwayat perbaikan menyimpan nomor surat, judul, pengaju, tahap asal, tujuan perbaikan, alasan, perubahan terstruktur, aktor, dan waktu untuk kebutuhan audit.
+- Riwayat perbaikan tidak menampilkan label generik seperti `Instruksi utama` sebagai isi riwayat. Jika catatan utama generik, sistem memakai alasan perubahan item pertama yang valid.
+- Perubahan item dapat disimpan per baris dengan keputusan `Tidak berubah`, `Disetujui sebagian`, atau `Tidak disetujui`.
+- Jika item tidak disetujui, item tetap tampil dengan garis coret dan alasan perubahan pada detail pengajuan serta PDF final agar riwayat keputusan tidak hilang.
+- Jika nilai berubah, riwayat perbaikan menyimpan `nilai diajukan`, `nilai disetujui`, dan `alasan perubahan`.
+- Jika pengajuan aset memakai rekomendasi, perbaikan spesifikasi/harga diarahkan ke tim IT/rekomendasi agar rekomendasi diperbarui lebih dulu sebelum approval induk berlanjut.
+- Jika ada data yang berubah setelah sebagian tanda tangan berjalan dan dikembalikan ke pemohon, semua penandatangan wajib meninjau dan menandatangani ulang dari tahap 1.
+- Setelah pihak tujuan revisi menyelesaikan perbaikan, pemohon harus memilih `Lanjutkan proses` atau `Batalkan pengajuan` dari halaman `Tindak Lanjut`, bukan dari Status Pengajuan.
+- Badge revisi yang menjadi tugas pemohon dipisahkan ke menu `Tindak Lanjut`; Status Pengajuan tetap menjadi halaman baca progres dan detail dokumen.
+- Link notifikasi revisi pemohon dinormalisasi ke `/surat/tindak-lanjut` agar user langsung masuk ke antrean keputusan yang benar.
+- Aksi `Lanjutkan proses` dan `Batalkan pengajuan` pada Status Pengajuan memakai dialog aplikasi dengan textarea, validasi, dan loading state; tidak lagi memakai prompt native browser.
+- Jika pemohon melanjutkan, sistem mengulang approval dari tahap 1 karena data surat sudah berubah.
+- Saat pemohon melanjutkan perbaikan, perubahan item yang disetujui diterapkan ke `form_input_data`, cache PDF lama dibersihkan, dan catatan revisi dipindahkan ke snapshot terapan agar PDF baru memakai data terbaru.
+- Jika pemohon membatalkan, nomor surat ditandai hangus melalui status penolakan/pembatalan revisi.
+- Saat pemohon memilih proyek Unit, sistem menampilkan kapasitas unit tersedia saat ini agar jumlah yang diajukan tidak dibuat tanpa konteks stok proyek.
 - Lampiran dapat diwajibkan pada tahap pemohon maupun tahap signer tertentu, termasuk jumlah minimum/maksimum, multiple file, tipe MIME, dan batas ukuran.
 - Tahap lampiran `stage_order = 0` ditampilkan sebagai `Pemohon (Saat Registrasi)` agar tidak disalahpahami sebagai tahap penanda tangan.
 - Semua lampiran pemohon dan approval hanya dikonfigurasi melalui Kegunaan Form berdasarkan `stage_order`.
@@ -803,17 +947,21 @@ Fallback data lama:
 - Konfigurasi lampiran lama pada Master Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
 - Saat signer memilih lampiran approval, UI menampilkan jumlah file, nama file, ukuran file, status siap unggah, dan status mengunggah ketika approval sedang diproses.
 - Form menyimpan satu `signature_layout` berupa sheet dan area persegi panjang yang dikelola sistem.
-- Konfigurasi layout menyediakan preset `PGD` yang mengikuti struktur border dan merge workbook referensi untuk 3-6 kotak; mode `Adaptif` tetap tersedia untuk form lain.
-- Preset PGD memvalidasi distribusi role: 3 tahap `1-1-1`, 4 tahap salah satu role berjumlah 2, 5 tahap salah satu role berjumlah 1, dan 6 tahap `2-2-2`.
-- Pada preset PGD, urutan tahap wajib `Membuat`, `Memeriksa`, lalu `Menyetujui`; kombinasi yang tidak tersedia pada template ditolak agar dokumen tidak rusak.
+- Konfigurasi layout menyediakan preset `PGD` untuk aturan tanda tangan renderer sistem 3-8 kotak; mode `Adaptif` tetap tersedia untuk form lain.
+- Setiap role `Membuat`, `Memeriksa`, dan `Menyetujui` wajib memiliki 1-3 signer. Jumlah keseluruhan signer yang didukung adalah 3-8.
+- Pembagian baris preset PGD adalah: 3 kotak memakai grid 3, 4 kotak `4`, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`. Jika baris kedua lebih pendek, slotnya diratakan ke kanan terhadap grid baris pertama.
+- Ukuran vertikal satu blok tidak berubah berdasarkan jumlah baris. Formasi 3/4 memakai blok atas saja, sedangkan blok bawah hanya digunakan oleh formasi 5-8.
+- Pada preset PGD, urutan tahap wajib `Membuat`, `Memeriksa`, lalu `Menyetujui`; kombinasi di luar aturan 3-8 signer ditolak agar dokumen tidak rusak.
 - Saat dokumen dibuat, sistem membuka merge hanya di area tanda tangan, lalu membangun kotak 2-8 signer secara otomatis tanpa mengubah matrix tanda tangan lama.
 - Baris pertama area tanda tangan dipakai untuk `Tempat, Tanggal`, misalnya `Magelang, 20 Juli 2026`; nilainya di-merge, diberi border, rata tengah, dan selebar kotak tanda tangan paling kanan tepat di bawahnya.
-- Lebar, merge, border, dan pembagian baris kotak pada preset PGD mengikuti kolom asli template, bukan hasil pembagian lebar secara rata.
+- Lebar, border, dan pembagian baris kotak pada preset PGD mengikuti aturan renderer sistem, bukan merge Excel lama.
 - Label yang sama dan berdampingan dalam satu baris tanda tangan digabung pada area label, sedangkan area tanda tangan, nama, dan jabatan tetap per signer.
 - Baris jabatan pada template/PDF memakai label tahap dari konfigurasi Kegunaan Form, sehingga posisi seperti `Mgr. Marketing` tetap terbaca walaupun signer aktual berganti.
 - Email menampilkan jabatan aktual signer dari `profiles.job_title` atau alias aktif Configuration `Label Jabatan`; label tahap tetap disimpan sebagai konteks alur dan fallback data historis.
 - Posisi tanda tangan, identitas signer, kebijakan lampiran, dan konfigurasi kegunaan disimpan sebagai snapshot transaksi.
-- Approval menggunakan snapshot posisi sehingga perubahan konfigurasi setelah surat dibuat tidak menggeser tanda tangan surat lama.
+- Approval normal menggunakan snapshot posisi sehingga perubahan konfigurasi setelah surat dibuat tidak menggeser tanda tangan surat lama secara otomatis.
+- Tombol admin `Buat Ulang PDF` mengantrekan renderer yang sama dengan surat baru dan Uji PDF. Untuk PGD, renderer membaca snapshot database dan membubuhkan kembali status tanda tangan, nama, jabatan, serta waktu aslinya tanpa membangun workbook. Status dan histori approval tidak diubah.
+- Membuka PDF biasa hanya memakai hasil yang tersedia atau mengantrekan konversi; tindakan tersebut tidak membangun ulang workbook sumber.
 - Matrix lama tetap tersedia sebagai dokumentasi read-only dan dapat diduplikasi menjadi draft Kegunaan Form.
 - Registrasi memakai fallback matrix lama selama belum ada Kegunaan Form aktif, sehingga konfigurasi dapat disiapkan tanpa menghentikan production.
 

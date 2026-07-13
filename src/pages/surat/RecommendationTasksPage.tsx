@@ -29,7 +29,7 @@ const buildDraftUrl = (draft: SuratRegistrationDraft) => {
     letter_type_id: String(context.letterTypeId || ""),
     task_id: String(context.taskId || ""),
   });
-  return `/surat/registrasi?${params.toString()}`;
+  return `/surat/rekomendasi/registrasi?${params.toString()}`;
 };
 
 const getCandidateNames = (task: RecommendationTask) => {
@@ -224,7 +224,12 @@ export default function RecommendationTasksPage() {
   });
 
   const tasks = useMemo(
-    () => [...(tasksQuery.data || [])].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    () => [...(tasksQuery.data || [])].sort((a, b) => {
+      const priorityA = a.status === "revision_requested" ? 0 : 1;
+      const priorityB = b.status === "revision_requested" ? 0 : 1;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }),
     [tasksQuery.data]
   );
 
@@ -296,6 +301,7 @@ export default function RecommendationTasksPage() {
           const lockedByOther = Boolean(task.claimed_by && task.claimed_by !== currentUserId);
           const claimedByMe = Boolean(task.claimed_by && task.claimed_by === currentUserId);
           const candidateNames = getCandidateNames(task);
+          const isRevision = task.status === "revision_requested";
           return (
             <Card key={task.id} className={cn("overflow-hidden", lockedByOther && "bg-muted/30")}>
               <CardContent className="p-4 sm:p-5">
@@ -306,12 +312,19 @@ export default function RecommendationTasksPage() {
                       <Badge
                         variant="outline"
                         className={cn(
-                          !task.claimed_by && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                          isRevision && "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+                          !isRevision && !task.claimed_by && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
                           claimedByMe && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
                           lockedByOther && "border-muted-foreground/30 bg-muted text-muted-foreground"
                         )}
                       >
-                        {!task.claimed_by ? "Menunggu Staff IT" : claimedByMe ? "Sedang Anda kerjakan" : "Terkunci"}
+                        {isRevision
+                          ? "Perlu Revisi"
+                          : !task.claimed_by
+                            ? "Menunggu Staff IT"
+                            : claimedByMe
+                              ? "Sedang Anda kerjakan"
+                              : "Terkunci"}
                       </Badge>
                     </div>
                     <h2 className="mt-2 truncate text-base font-semibold text-foreground">
@@ -331,6 +344,11 @@ export default function RecommendationTasksPage() {
                           : `Sedang dikerjakan oleh ${task.claimed_by_name || "user lain"}.`}
                       </div>
                     )}
+                    {isRevision && !task.claimed_by && (
+                      <div className="mt-3 rounded-md border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs leading-relaxed text-orange-800 dark:text-orange-200">
+                        Rekomendasi sebelumnya dikembalikan oleh penanda tangan. Ambil tugas ini untuk memperbaiki data rekomendasi dari versi terakhir.
+                      </div>
+                    )}
                   </div>
 
                   <Button
@@ -340,7 +358,7 @@ export default function RecommendationTasksPage() {
                     onClick={() => handleClaim(task)}
                   >
                     {claimingId === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {claimedByMe ? "Lanjutkan Draft" : lockedByOther ? "Terkunci" : "Ambil Tugas"}
+                    {claimedByMe ? "Lanjutkan Draft" : lockedByOther ? "Terkunci" : isRevision ? "Ambil Revisi" : "Ambil Tugas"}
                     {!lockedByOther && claimingId !== task.id ? <ArrowRight className="h-4 w-4" /> : null}
                   </Button>
                 </div>

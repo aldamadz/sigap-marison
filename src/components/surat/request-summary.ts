@@ -38,10 +38,15 @@ export const humanizeInputKey = (key: string) => {
     keterangan: "Keterangan",
     kode: "Kode",
     requested_unit_count: "Jumlah Unit Diajukan",
+    requested_project: "Proyek Diajukan",
+    allocated_project: "Proyek Dialokasikan",
+    allocated_units: "Kavling yang dipilih",
+    allocated_unit_count: "Jumlah Kavling Dipilih",
     requires_recommendation: "Perlu Rekomendasi",
     recommendation_template_name: "Template Rekomendasi",
     recommendation_attachment_note: "Catatan Rekomendasi",
     reference_link: "Link Referensi",
+    items: "Daftar Barang",
   };
   return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 };

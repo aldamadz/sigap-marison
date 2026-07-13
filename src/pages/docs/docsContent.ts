@@ -5,6 +5,7 @@ import {
   Briefcase,
   Building2,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   Database,
   FileCheck2,
@@ -12,6 +13,7 @@ import {
   History,
   Inbox,
   KeyRound,
+  LayoutTemplate,
   Mail,
   MapPin,
   Network,
@@ -89,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.5.0";
-export const DOCS_UPDATED_AT = "25 Juni 2026";
+export const DOCS_VERSION = "v1.14.0";
+export const DOCS_UPDATED_AT = "13 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -109,6 +111,7 @@ const DOCS_ENTRY_SLUGS: Record<string, string> = {
   calendar: "kalender",
   "surat-registration": "registrasi-surat",
   "approval-inbox": "persetujuan",
+  "recommendation-tasks": "rekomendasi",
   monitoring: "status-pengajuan",
   "documents-attachments": "dokumen-lampiran",
   history: "riwayat-terlibat",
@@ -121,6 +124,7 @@ const DOCS_ENTRY_SLUGS: Record<string, string> = {
   "admin-offices": "master-kantor-cabang",
   "admin-projects": "master-proyek",
   "admin-forms": "form-template",
+  "admin-template-builder": "template-builder",
   "admin-workflows": "alur-persetujuan",
   "admin-form-usages": "kegunaan-form",
   "admin-numbering": "penomoran-surat",
@@ -132,6 +136,8 @@ const DOCS_ENTRY_SLUGS: Record<string, string> = {
   "login-access": "login-akses",
   "document-file": "dokumen-lampiran-error",
   notification: "notifikasi-realtime",
+  "external-api": "external-api",
+  "deploy-production": "deploy-production",
 };
 
 const DOCS_SECTION_SLUGS: Record<string, string> = {
@@ -149,9 +155,13 @@ const DOCS_SECTION_SLUGS: Record<string, string> = {
   "Masalah umum saat registrasi": "kendala-registrasi",
   "Area utama Persetujuan": "area-persetujuan",
   "Alur signer": "alur-signer",
-  "Perbedaan signer dan tim pengecek": "signer-dan-tim-pengecek",
+  "Perbedaan signer dan tim pemeriksa": "signer-dan-tim-pemeriksa",
   "Jika pengajuan Unit": "pengajuan-unit",
   "Masalah umum saat approval": "kendala-approval",
+  "Alur rekomendasi aset": "alur-rekomendasi-aset",
+  "Mengisi dokumen rekomendasi": "mengisi-dokumen-rekomendasi",
+  "Status dan lock rekomendasi": "status-lock-rekomendasi",
+  "Masalah umum rekomendasi": "kendala-rekomendasi",
   "Membaca nomor surat": "membaca-nomor-surat",
   "Nomor surat, counter, dan draft": "nomor-surat-counter-draft",
   "Variasi format nomor": "variasi-format-nomor",
@@ -235,6 +245,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["Kode departemen", "PBO", "Kode departemen pengaju atau departemen pembuat dokumen.", "Master Departemen pada profil/pilihan registrasi."],
         ["Index jenis surat", "1", "Urutan jenis surat untuk departemen tersebut.", "Mapping Master Jenis Surat per departemen."],
         ["Kode proyek", "TRA", "Kode proyek yang terkait dengan surat.", "Master Proyek atau proyek unit yang dipilih."],
+        ["Kode proyek virtual", "000", "Dipakai untuk KC/KCP yang belum memiliki proyek terdaftar pada pengajuan non-unit.", "Dibuat sistem saat kantor cabang tidak punya proyek; bukan master proyek baru."],
         ["Bulan", "VI", "Bulan penerbitan dalam angka Romawi.", "Bulan saat nomor diterbitkan; VI berarti Juni."],
         ["Tahun", "2026", "Tahun penerbitan sekaligus tahun counter.", "Tahun saat nomor diterbitkan."],
       ],
@@ -265,10 +276,22 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
           "Counter dipisah berdasarkan proyek.",
         ],
         [
+          "KC tanpa proyek",
+          "Nomor/Entitas/KodeKantor-000.IndexDepartemen.IndexJenis/Bulan/Tahun",
+          "001/UAI/KCMLG-000.1.1/VII/2026",
+          "Hanya untuk pengajuan non-unit. Proyek tidak dibuat sebagai data master palsu.",
+        ],
+        [
           "KCP",
           "Nomor/Entitas/KodeKCInduk.KodeKCP-KodeProyek.IndexDepartemen.IndexJenis/Bulan/Tahun",
           "001/UAI/KCSLO.KCPWNG-WNG.1.1/VI/2026",
           "Kode KC induk menjaga relasi KCP tetap terbaca.",
+        ],
+        [
+          "KCP tanpa proyek",
+          "Nomor/Entitas/KodeKCInduk.KodeKCP-000.IndexDepartemen.IndexJenis/Bulan/Tahun",
+          "001/UAI/KCSLO.KCPWNG-000.1.1/VII/2026",
+          "Unit tetap wajib memilih proyek karena butuh data kavling.",
         ],
       ],
     },
@@ -278,7 +301,8 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       columns: ["Kondisi", "Counter dipisah berdasarkan", "Reset"],
       rows: [
         ["Kantor Pusat", "Entitas + Departemen + Tahun.", "Reset ketika tahun berubah, kecuali counter awal tahun itu dikonfigurasi admin."],
-        ["Cabang/KC/KCP", "Entitas + Proyek + Tahun.", "Reset ketika tahun berubah untuk proyek tersebut."],
+        ["Cabang/KC/KCP dengan proyek", "Entitas + Proyek + Tahun.", "Reset ketika tahun berubah untuk proyek tersebut."],
+        ["Cabang/KC/KCP tanpa proyek", "Entitas + Kantor + Departemen + Jenis + Tahun dengan kode virtual 000.", "Reset tahunan tanpa membuat master proyek 000."],
         ["Nomor awal produksi", "Nilai start_from pada Konfigurasi Penomoran.", "Dipakai saat sistem mulai dari nomor lanjutan agar tidak bentrok dengan nomor manual lama."],
         ["Nomor VOID", "Tidak dipakai ulang.", "Dibiarkan sebagai jejak nomor yang batal."],
         ["Nomor CANCELLED legacy", "Dapat dipakai ulang oleh generator jika status masih CANCELLED dan >= start_from.", "Status baru memakai VOID agar tidak membingungkan produksi."],
@@ -303,9 +327,9 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       title: "Kenapa tombol aksi terkunci",
       columns: ["Penyebab", "Contoh", "Yang perlu dilakukan"],
       rows: [
-        ["Tim pengecek belum verifikasi", "Step 3 sudah terlihat signer, tetapi checker step itu belum selesai.", "Tunggu checker atau kembalikan dengan catatan jika perlu revisi."],
-        ["Lampiran wajib belum lengkap", "Siteplan, volume adendum, atau lampiran approval belum tersedia.", "Lengkapi lampiran atau minta checker mengganti lampiran lama."],
-        ["Data unit belum lengkap", "Unit dipilih tetapi struktur/kode produksi belum diisi.", "Lengkapi detail kavling sebelum verifikasi atau approval."],
+        ["Tim pemeriksa belum memeriksa", "Step 3 sudah terlihat signer, tetapi tim pemeriksa step itu belum selesai.", "Tunggu tim pemeriksa atau kembalikan dengan catatan jika perlu revisi."],
+        ["Lampiran wajib belum lengkap", "Siteplan, volume adendum, atau lampiran approval belum tersedia.", "Lengkapi lampiran atau minta tim pemeriksa mengganti lampiran lama."],
+        ["Data unit belum lengkap", "Unit dipilih tetapi struktur/kode produksi belum diisi.", "Lengkapi detail kavling sebelum pemeriksaan atau approval."],
         ["Jumlah unit perlu konfirmasi", "Alokasi unit kurang dari permintaan.", "Konfirmasi eksplisit bahwa sebagian unit memang belum bisa dialokasikan."],
         ["File masih upload", "File sudah dipilih tetapi proses upload belum selesai.", "Tunggu indikator upload selesai sebelum menekan Setujui."],
       ],
@@ -318,8 +342,8 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["Ringkasan", "Pengaju, departemen, kantor, proyek, kategori, dan permohonan.", "Salah menyetujui dokumen yang bukan konteks Anda."],
         ["Progres", "Step sebelumnya, signer, waktu, dan catatan.", "Tidak mengetahui alasan revisi atau status pemeriksaan."],
         ["Dokumen", "PDF utama dan snapshot.", "Tampilan template atau tanda tangan bisa luput dicek."],
-        ["Lampiran", "File pendukung pemohon/checker/approval.", "Approval berjalan tanpa bukti pendukung yang diminta."],
-        ["Catatan", "Alasan pemohon, checker, atau penolakan.", "Keputusan tidak punya konteks cukup."],
+        ["Lampiran", "File pendukung pemohon/tim pemeriksa/approval.", "Approval berjalan tanpa bukti pendukung yang diminta."],
+        ["Catatan", "Alasan pemohon, tim pemeriksa, atau penolakan.", "Keputusan tidak punya konteks cukup."],
       ],
     },
   ],
@@ -330,7 +354,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       columns: ["Status", "Arti", "Langkah berikutnya"],
       rows: [
         ["Draft", "Nomor sudah dipesan tetapi surat belum dikirim.", "Lanjutkan registrasi atau batalkan draft."],
-        ["Proses", "Surat sedang menunggu tanda tangan atau verifikasi.", "Pantau step aktif dan catatan terbaru."],
+        ["Proses", "Surat sedang menunggu tanda tangan atau pemeriksaan.", "Pantau step aktif dan catatan terbaru."],
         ["Selesai", "Seluruh tanda tangan selesai.", "Buka PDF final bila perlu arsip."],
         ["Ditolak", "Salah satu tahap menolak dan alur berhenti.", "Baca alasan, lalu buat pengajuan baru jika perlu."],
       ],
@@ -343,7 +367,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["PDF utama", "Setelah worker PDF selesai membuat preview.", "Berisi nomor, data pemohon, isi dokumen, dan tanda tangan terbaru."],
         ["Snapshot", "Setelah step approval tertentu diproses.", "Dipakai untuk membandingkan kondisi dokumen pada tahap tertentu."],
         ["Lampiran pemohon", "Setelah registrasi dikirim.", "File pendukung awal pengajuan."],
-        ["Lampiran approval/checker", "Setelah checker atau approver mengunggah file.", "Bisa berubah jika file diganti pada revisi."],
+        ["Lampiran approval/tim pemeriksa", "Setelah tim pemeriksa atau approver mengunggah file.", "Bisa berubah jika file diganti pada revisi."],
       ],
     },
   ],
@@ -356,7 +380,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["PDF dokumen", "Dokumen utama hasil template sistem.", "Dibuka melalui endpoint aman aplikasi."],
         ["Snapshot", "Salinan visual dokumen pada momen tertentu.", "Dibuka dari timeline/progress dokumen."],
         ["Lampiran pemohon", "File yang diunggah saat registrasi.", "Dibuka dari panel lampiran."],
-        ["Lampiran checker/approval", "File verifikasi atau pendukung dari tahap approval.", "Dibuka dari detail persetujuan atau monitoring."],
+        ["Lampiran tim pemeriksa/approval", "File pemeriksaan atau pendukung dari tahap approval.", "Dibuka dari detail persetujuan atau monitoring."],
         ["Lampiran otomatis Unit", "Kode produksi dan rekap adendum hasil input sistem.", "Dibuat otomatis dari data alokasi unit."],
       ],
     },
@@ -391,7 +415,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       rows: [
         ["Nomor surat", "Nomor resmi atau nomor draft yang pernah melibatkan user."],
         ["Judul", "Nama permohonan/dokumen."],
-        ["Peran", "User sebagai pembuat, checker, signer, atau pihak yang pernah memproses."],
+        ["Peran", "User sebagai pembuat, tim pemeriksa, signer, atau pihak yang pernah memproses."],
         ["Waktu aksi", "Tanggal ketika user terlibat atau dokumen berubah status."],
       ],
     },
@@ -551,6 +575,33 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       ],
     },
   ],
+  "admin-template-builder": [
+    {
+      type: "table",
+      title: "Bagian Template Builder",
+      columns: ["Bagian", "Fungsi"],
+      rows: [
+        ["Canvas", "Area A4/F4 untuk menyusun tampilan dokumen."],
+        ["Panel elemen", "Tempat menambahkan logo, teks, field data, tabel berulang, catatan, dan tanda tangan."],
+        ["Panel properti", "Mengatur posisi, ukuran, font, warna, border, binding, dan kolom tabel."],
+        ["Schema input", "Menentukan field yang akan diisi user ketika template dipakai pada registrasi."],
+        ["Versioning", "Menyimpan perubahan sebagai draft atau publish agar dokumen lama tetap stabil."],
+      ],
+    },
+    {
+      type: "table",
+      title: "Data berulang",
+      description: "Gunakan Tabel Berulang untuk data yang jumlahnya bisa berubah.",
+      columns: ["Sumber data", "Contoh isi", "Kapan dipakai"],
+      rows: [
+        ["Daftar Barang", "Kode, nama barang, satuan, jumlah, status, keterangan", "Permohonan barang dan jasa."],
+        ["Daftar Unit", "Proyek, kavling, kode produksi", "Permohonan unit atau order bangun."],
+        ["Daftar Rekomendasi", "Nama alat, lokasi/PIC, tindakan, link", "Rekomendasi aset."],
+        ["Daftar Lampiran", "Nama file, tipe, ukuran", "Ringkasan lampiran dalam dokumen."],
+        ["Penandatangan", "Label, nama, jabatan", "Area tanda tangan dinamis."],
+      ],
+    },
+  ],
   "admin-workflows": [
     {
       type: "callout",
@@ -581,8 +632,9 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["Jenis surat", "Menentukan index dan format penomoran."],
         ["Step signer", "Urutan approval dan kandidat signer."],
         ["Scope kandidat", "Manual, kantor pemohon, kantor pusat, departemen pemohon, atau campuran BM/dept."],
-        ["Tim pengecek", "Verifikasi data/lampiran sebelum signer aksi."],
-        ["Lampiran", "Persyaratan file pemohon/checker/signer."],
+        ["Tim pemeriksa", "Pemeriksaan data/lampiran sebelum signer aksi."],
+        ["Lampiran", "Persyaratan file pemohon/tim pemeriksa/signer."],
+        ["Dokumen tertaut", "Syarat dokumen rekomendasi atau prasyarat lain sebelum surat induk lanjut."],
       ],
     },
     {
@@ -595,6 +647,19 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["Kantor pusat", "Kandidat hanya dari kantor pusat."],
         ["Departemen pemohon", "Kandidat mengikuti departemen pengaju."],
         ["BM cabang / dept pusat", "Cabang memakai BM kantor pemohon; pusat memakai pimpinan departemen pemohon."],
+        ["Lintas kantor", "Kandidat dapat berasal dari kantor mana pun jika proses memang tidak terikat lokasi pemohon."],
+      ],
+    },
+    {
+      type: "table",
+      title: "Konfigurasi rekomendasi aset",
+      columns: ["Pengaturan", "Dampak"],
+      rows: [
+        ["Form rekomendasi", "Menentukan template dokumen rekomendasi yang dibuat sebagai surat tertaut."],
+        ["Departemen PBO", "Menjadi pemilik nomor dan antrean tugas rekomendasi aset."],
+        ["Tahap prasyarat", "Surat induk dapat dikunci sampai dokumen rekomendasi tertaut selesai."],
+        ["Kandidat Staff IT/PBO", "Menentukan siapa yang dapat melihat dan mengambil tugas rekomendasi."],
+        ["Shared lock", "Kandidat pertama yang mengambil tugas menjadi pembuat draft; kandidat lain hanya melihat status terkunci."],
       ],
     },
   ],
@@ -646,8 +711,15 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["completed_late", "Sudah diproses dan durasi efektif > target SLA."],
         ["pending_on_time", "Step aktif sudah masuk signer dan masih dalam target SLA."],
         ["pending_late", "Step aktif sudah masuk signer dan sudah melewati SLA."],
+        ["menunggu_perbaikan", "Surat sedang berada di pemohon atau pihak perbaikan; tidak dihitung sebagai pending signer."],
         ["rejected", "Ditolak dan proses berhenti; tidak dihitung pending step berikutnya."],
       ],
+    },
+    {
+      type: "callout",
+      title: "SLA berhenti saat pengajuan dikembalikan",
+      description: "Jika signer mengembalikan pengajuan ke pemohon, waktu SLA signer berhenti. Ketika pemohon memilih Lanjutkan proses, approval dimulai ulang dari tahap 1 dan SLA dihitung dari waktu proses dilanjutkan.",
+      tone: "info",
     },
     {
       type: "table",
@@ -669,7 +741,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       columns: ["Data", "Fungsi"],
       rows: [
         ["Semua surat", "Admin dapat mencari dokumen lintas user sesuai hak admin."],
-        ["Timeline", "Melihat urutan tanda tangan, checker, catatan, dan penolakan."],
+        ["Timeline", "Melihat urutan tanda tangan, tim pemeriksa, catatan, dan penolakan."],
         ["File", "Membuka dokumen, snapshot, dan lampiran via endpoint aman."],
         ["Status", "Mendeteksi dokumen berhenti di step tertentu."],
       ],
@@ -732,7 +804,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
     {
       type: "table",
       title: "Checklist file gagal dibuka",
-      columns: ["Gejala", "Pengecekan"],
+      columns: ["Gejala", "Pemeriksaan"],
       rows: [
         ["Dokumen tidak ditemukan", "Pastikan file sudah dibuat worker PDF dan path tersimpan."],
         ["Lampiran gagal dibuka", "Cek bucket storage self-hosted dan token akses."],
@@ -748,9 +820,22 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       columns: ["Sumber", "Kapan muncul"],
       rows: [
         ["Signer", "Saat step sudah aktif untuk user yang bertanda tangan."],
-        ["Tim pengecek", "Saat verifikasi data/lampiran menjadi tugas user."],
-        ["Realtime", "Saat ada perubahan surat/signature/checker yang relevan."],
+        ["Tim pemeriksa", "Saat pemeriksaan data/lampiran menjadi tugas user."],
+        ["Rekomendasi", "Saat ada dokumen rekomendasi aset yang perlu diambil atau dilanjutkan oleh Staff IT/PBO."],
+        ["Realtime", "Saat ada perubahan surat/signature/tim pemeriksa yang relevan."],
+        ["Web push", "Saat browser sudah mengizinkan notifikasi dan ada task baru dari sistem."],
         ["Tab focus refresh", "Saat tab kembali aktif dan sistem menyinkronkan data."],
+      ],
+    },
+    {
+      type: "table",
+      title: "Pemeriksaan web push",
+      columns: ["Kondisi", "Yang dilakukan"],
+      rows: [
+        ["Notifikasi browser belum muncul", "Pastikan izin notifikasi browser sudah Allow untuk domain SIGAP."],
+        ["Badge ada tetapi push tidak masuk", "Buka aplikasi sekali agar subscription push dibuat ulang, lalu refresh Persetujuan/Rekomendasi."],
+        ["Push masuk ke user lama", "Logout lalu login ulang agar subscription mengikuti akun aktif."],
+        ["Mobile tidak bersuara", "Cek mode senyap perangkat dan izin notifikasi browser/PWA."],
       ],
     },
   ],
@@ -780,7 +865,7 @@ const getDocsEntrySupportSections = (entry: DocsEntry): DocsSection[] => {
   if (entry.examples.length || entry.troubleshooting.length) {
     sections.push({
       type: "group",
-      title: `Contoh dan pengecekan ${entry.title}`,
+      title: `Contoh dan pemeriksaan ${entry.title}`,
       description:
         "Gunakan bagian ini saat ingin mencocokkan kasus nyata atau mencari penyebab ketika hasilnya tidak sesuai.",
       sections: [
@@ -869,7 +954,7 @@ export const USER_DOCS: DocsEntry[] = [
     menu: "Dashboard",
     audience: "user",
     icon: BarChart3,
-    version: "v1.0.0",
+    version: DOCS_VERSION,
     updatedAt: DOCS_UPDATED_AT,
     summary: "Pusat ringkasan pekerjaan, agenda, surat, dan antrean yang perlu dipantau.",
     whenToUse: [
@@ -920,7 +1005,7 @@ export const USER_DOCS: DocsEntry[] = [
           {
             title: "Aktivitas Departemen",
             description:
-              "Perbandingan total agenda dan agenda selesai per departemen yang relevan dengan kantor pengguna.",
+              "Perbandingan agregat total agenda dan agenda selesai untuk seluruh departemen. Grafik hanya menampilkan jumlah tanpa membuka judul atau isi agenda departemen lain.",
           },
           {
             title: "Aktivitas Terbaru",
@@ -955,7 +1040,7 @@ export const USER_DOCS: DocsEntry[] = [
         rows: [
           ["Total Pengajuan", "Semua surat yang Anda buat pada periode terpilih.", "Membuka seluruh Status Pengajuan."],
           ["Selesai", "Seluruh tanda tangan selesai dan surat berstatus selesai.", "Membuka Status Pengajuan dengan filter Selesai."],
-          ["Diproses", "Surat masih menunggu verifikasi atau tanda tangan.", "Membuka Status Pengajuan dengan filter Proses."],
+          ["Diproses", "Surat masih menunggu pemeriksaan atau tanda tangan.", "Membuka Status Pengajuan dengan filter Proses."],
           ["Ditolak", "Salah satu tahap menolak surat sehingga alur berhenti.", "Membuka Status Pengajuan dengan filter Ditolak."],
         ],
       },
@@ -1119,6 +1204,7 @@ export const USER_DOCS: DocsEntry[] = [
               ["Kode departemen", "PBO", "Kode departemen pengaju atau departemen pembuat dokumen.", "Master Departemen pada profil/pilihan registrasi."],
               ["Index jenis surat", "1", "Urutan jenis surat untuk departemen tersebut.", "Mapping Master Jenis Surat per departemen."],
               ["Kode proyek", "TRA", "Kode proyek yang terkait dengan surat.", "Master Proyek atau proyek unit yang dipilih."],
+              ["Kode proyek virtual", "000", "Dipakai untuk KC/KCP yang belum memiliki proyek terdaftar pada pengajuan non-unit.", "Dibuat sistem saat kantor cabang tidak punya proyek; bukan master proyek baru."],
               ["Bulan", "VI", "Bulan penerbitan dalam angka Romawi.", "Bulan saat nomor diterbitkan; VI berarti Juni."],
               ["Tahun", "2026", "Tahun penerbitan sekaligus tahun counter.", "Tahun saat nomor diterbitkan."],
             ],
@@ -1149,10 +1235,22 @@ export const USER_DOCS: DocsEntry[] = [
                 "Counter dipisah berdasarkan proyek.",
               ],
               [
+                "KC tanpa proyek",
+                "Nomor/Entitas/KodeKantor-000.IndexDepartemen.IndexJenis/Bulan/Tahun",
+                "001/UAI/KCMLG-000.1.1/VII/2026",
+                "Hanya untuk pengajuan non-unit. Proyek tidak dibuat sebagai data master palsu.",
+              ],
+              [
                 "KCP",
                 "Nomor/Entitas/KodeKCInduk.KodeKCP-KodeProyek.IndexDepartemen.IndexJenis/Bulan/Tahun",
                 "001/UAI/KCSLO.KCPWNG-WNG.1.1/VI/2026",
                 "Kode KC induk menjaga relasi KCP tetap terbaca.",
+              ],
+              [
+                "KCP tanpa proyek",
+                "Nomor/Entitas/KodeKCInduk.KodeKCP-000.IndexDepartemen.IndexJenis/Bulan/Tahun",
+                "001/UAI/KCSLO.KCPWNG-000.1.1/VII/2026",
+                "Unit tetap wajib memilih proyek karena butuh data kavling.",
               ],
             ],
           },
@@ -1162,7 +1260,8 @@ export const USER_DOCS: DocsEntry[] = [
             columns: ["Kondisi", "Counter dipisah berdasarkan", "Reset"],
             rows: [
               ["Kantor Pusat", "Entitas + Departemen + Tahun.", "Reset ketika tahun berubah, kecuali counter awal tahun itu dikonfigurasi admin."],
-              ["Cabang/KC/KCP", "Entitas + Proyek + Tahun.", "Reset ketika tahun berubah untuk proyek tersebut."],
+              ["Cabang/KC/KCP dengan proyek", "Entitas + Proyek + Tahun.", "Reset ketika tahun berubah untuk proyek tersebut."],
+              ["Cabang/KC/KCP tanpa proyek", "Entitas + Kantor + Departemen + Jenis + Tahun dengan kode virtual 000.", "Reset tahunan tanpa membuat master proyek 000."],
               ["Nomor awal produksi", "Nilai start_from pada Konfigurasi Penomoran.", "Dipakai saat sistem mulai dari nomor lanjutan agar tidak bentrok dengan nomor manual lama."],
               ["Nomor VOID", "Tidak dipakai ulang.", "Dibiarkan sebagai jejak nomor yang batal."],
               ["Nomor CANCELLED legacy", "Dapat dipakai ulang oleh generator jika status masih CANCELLED dan >= start_from.", "Status baru memakai VOID agar tidak membingungkan produksi."],
@@ -1195,6 +1294,35 @@ export const USER_DOCS: DocsEntry[] = [
         ],
       },
       {
+        type: "group",
+        title: "Rekomendasi aset pada registrasi",
+        description:
+          "Rekomendasi aset dipakai ketika permohonan aset perlu dokumen pendukung resmi dari PBO sebelum surat induk dapat lanjut.",
+        sections: [
+          {
+            type: "table",
+            title: "Kapan memilih rekomendasi",
+            columns: ["Pilihan", "Dampak ke proses", "Catatan"],
+            rows: [
+              ["Tidak membutuhkan rekomendasi", "Surat induk berjalan seperti pengajuan biasa.", "Tetap wajib melengkapi lampiran pemohon jika dikonfigurasi."],
+              ["Membutuhkan rekomendasi", "Sistem membuat tugas rekomendasi setelah surat induk dikonfirmasi.", "Nomor rekomendasi dibuat otomatis memakai counter PBO."],
+              ["Surat induk menunggu rekomendasi", "Approval dapat terkunci pada tahap yang dikonfigurasi sampai dokumen rekomendasi selesai.", "Panel rekomendasi tampil di detail persetujuan/monitoring."],
+            ],
+          },
+          {
+            type: "table",
+            title: "Data rekomendasi yang disiapkan",
+            columns: ["Data", "Aturan"],
+            rows: [
+              ["Item rekomendasi", "Berisi nama barang/alat kerja, lokasi/PIC, kerusakan, hasil rekomendasi, uraian, dan keterangan."],
+              ["Hasil rekomendasi", "Service, Ganti Komponen, Beli Baru, atau Tidak Direkomendasikan. Tidak Direkomendasikan wajib alasan dan membuat item induk ditampilkan tercoret."],
+              ["Lampiran gambar", "Setiap item wajib memiliki gambar; petugas bisa unggah, drag-drop, atau paste screenshot dengan Ctrl+V."],
+              ["Link referensi", "Opsional sebagai data pendukung dan tampil di UI/email, tetapi tidak masuk Excel sampai area template khusus tersedia."],
+            ],
+          },
+        ],
+      },
+      {
         type: "table",
         title: "Pilihan kategori",
         columns: ["Kategori", "Dipakai untuk", "Data utama"],
@@ -1215,7 +1343,7 @@ export const USER_DOCS: DocsEntry[] = [
           ["Nama, jabatan, departemen, kantor", "Profil akun pemohon."],
           ["Nomor surat", "Konfigurasi penomoran dan counter yang aktif."],
           ["Tempat, tanggal", "Input user pada registrasi."],
-          ["Detail barang atau unit", "Input user dan/atau input tim pengecek pada tahap yang dikonfigurasi."],
+          ["Detail barang atau unit", "Input user dan/atau input tim pemeriksa pada tahap yang dikonfigurasi."],
           ["Tanda tangan", "Aksi penandatangan sesuai step approval."],
           ["Rekomendasi aset", "Dokumen surat tertaut yang dibuat dari panel rekomendasi pada approval bila permohonan aset membutuhkannya."],
         ],
@@ -1251,10 +1379,10 @@ export const USER_DOCS: DocsEntry[] = [
     icon: Inbox,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Tempat penandatangan dan tim pengecek memproses dokumen yang masuk ke tanggung jawabnya.",
+    summary: "Tempat penandatangan dan tim pemeriksa memproses dokumen yang masuk ke tanggung jawabnya.",
     whenToUse: [
       "Menyetujui atau menolak dokumen yang menunggu keputusan Anda.",
-      "Memverifikasi data sebagai tim pengecek sebelum signer melakukan aksi.",
+      "Memeriksa data sebagai tim pemeriksa sebelum signer melakukan aksi.",
       "Mengunggah lampiran approval atau mengisi alokasi unit jika diminta sistem.",
     ],
     steps: [
@@ -1265,8 +1393,8 @@ export const USER_DOCS: DocsEntry[] = [
       "Isi data yang diwajibkan, lalu pilih Setujui atau Tolak.",
     ],
     examples: [
-      "Jika Anda Mgr. Perencanaan pada pengajuan Unit, tim pengecek dapat mengisi detail unit terlebih dulu sebelum Anda menyetujui.",
-      "Jika data belum benar, gunakan aksi kembalikan ke tim pengecek agar data diperbarui.",
+      "Jika Anda Mgr. Perencanaan pada pengajuan Unit, tim pemeriksa dapat mengisi detail unit terlebih dulu sebelum Anda menyetujui.",
+      "Jika data belum benar, gunakan aksi kembalikan ke tim pemeriksa agar data diperbarui.",
       "Jika menolak dokumen, tulis alasan minimal lima karakter agar pembuat memahami masalahnya.",
     ],
     troubleshooting: [
@@ -1282,7 +1410,7 @@ export const USER_DOCS: DocsEntry[] = [
           {
             title: "Antrean tugas",
             description:
-              "Menampilkan dokumen yang sedang menunggu aksi Anda sebagai signer atau tim pengecek.",
+              "Menampilkan dokumen yang sedang menunggu aksi Anda sebagai signer atau tim pemeriksa.",
           },
           {
             title: "Ringkasan pengajuan",
@@ -1297,12 +1425,17 @@ export const USER_DOCS: DocsEntry[] = [
           {
             title: "Tugas step aktif",
             description:
-              "Menampilkan kewajiban sebelum aksi, seperti lampiran approval, verifikasi checker, atau alokasi unit.",
+              "Menampilkan kewajiban sebelum aksi, seperti lampiran approval, pemeriksaan tim pemeriksa, atau alokasi unit.",
           },
           {
             title: "Dokumen dan lampiran",
             description:
-              "Panel file untuk membuka PDF, snapshot, lampiran pemohon, lampiran checker, dan lampiran approval.",
+              "Panel file untuk membuka PDF, snapshot, lampiran pemohon, lampiran tim pemeriksa, dan lampiran approval.",
+          },
+          {
+            title: "Panel rekomendasi",
+            description:
+              "Muncul pada pengajuan aset yang membutuhkan rekomendasi agar status dokumen tertaut dapat dipantau dari surat induk.",
           },
           {
             title: "Action bar",
@@ -1316,20 +1449,47 @@ export const USER_DOCS: DocsEntry[] = [
         title: "Alur signer",
         items: [
           "Buka dokumen dari antrean dan baca ringkasan pengajuan.",
-          "Periksa progress step sebelumnya dan catatan dari pemohon atau tim pengecek.",
-          "Jika ada tugas wajib, lengkapi dulu atau minta tim pengecek memperbarui data.",
+          "Periksa progress step sebelumnya dan catatan dari pemohon atau tim pemeriksa.",
+          "Jika ada tugas wajib, lengkapi dulu atau minta tim pemeriksa memperbarui data.",
+          "Jika surat aset menunggu rekomendasi, cek panel rekomendasi dan arahkan petugas PBO membuka menu Rekomendasi.",
+          "Jika data perlu diperbaiki, pilih tujuan pengembalian yang tersedia. Tim pemeriksa hanya muncul jika tahap aktif memang memiliki pemeriksa pada snapshot transaksi.",
+          "Isi perubahan item bila ada: tidak berubah, disetujui sebagian, atau tidak disetujui. Nilai diajukan hanya tampil sebagai referensi; signer cukup mengisi nilai disetujui dan alasan jika item berubah.",
           "Gunakan Setujui jika data sudah benar, atau Tolak dengan alasan yang jelas jika pengajuan tidak dapat dilanjutkan.",
           "Setelah aksi berhasil, dokumen keluar dari antrean dan sistem membuka tugas berikutnya bila ada.",
         ],
       },
       {
         type: "table",
-        title: "Perbedaan signer dan tim pengecek",
+        title: "Perbaikan dalam proses approval",
+        columns: ["Kasus", "Tujuan perbaikan", "Dampak"],
+        rows: [
+          ["Nominal disetujui lebih kecil dari pengajuan", "Pemohon atau tim pemeriksa sesuai konteks", "Riwayat menyimpan nilai diajukan, nilai disetujui, dan alasan perubahan."],
+          ["Jumlah aset disetujui lebih sedikit", "Pemohon atau tim pemeriksa", "Item yang tidak disetujui tetap tampil dengan garis coret dan alasan di detail/PDF."],
+          ["Rekomendasi IT perlu revisi spek/harga", "Tim IT / rekomendasi", "Rekomendasi diperbarui dulu, lalu pemohon memilih lanjut atau batal."],
+          ["Data berubah setelah tanda tangan berjalan", "Tahap 1", "Setelah pemohon menyetujui perubahan, semua signer meninjau dan tanda tangan ulang dari awal."],
+          ["Tahap aktif tidak punya tim pemeriksa", "Pemohon atau signer sebelumnya", "Opsi tim pemeriksa tidak ditampilkan agar proses tidak dikirim ke target kosong."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Perbedaan signer dan tim pemeriksa",
         columns: ["Peran", "Bisa melakukan", "Tidak menggantikan"],
         rows: [
-          ["Signer", "Setuju, tolak, membaca dokumen, dan mengembalikan ke checker jika data perlu diperbaiki.", "Verifikasi checker yang diwajibkan konfigurasi."],
-          ["Tim pengecek", "Verifikasi data, mengisi data unit, mengganti lampiran wajib, dan menulis catatan pemeriksaan.", "Keputusan tanda tangan signer."],
+          ["Signer", "Setuju, tolak, membaca dokumen, dan mengembalikan ke tim pemeriksa jika data perlu diperbaiki.", "Pemeriksaan tim pemeriksa yang diwajibkan konfigurasi."],
+          ["Tim pemeriksa", "Pemeriksaan data, mengisi data unit, mengganti lampiran wajib, dan menulis catatan pemeriksaan.", "Keputusan tanda tangan signer."],
           ["Pemohon", "Membuat pengajuan dan memantau status.", "Mengubah proyek unit setelah pengajuan dibuat."],
+          ["Petugas rekomendasi", "Mengambil draft rekomendasi aset, mengisi item rekomendasi, dan mengonfirmasi dokumen tertaut.", "Keputusan approval surat induk."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Rekomendasi pada approval",
+        columns: ["Kondisi", "Yang terjadi", "Yang perlu dicek"],
+        rows: [
+          ["Surat aset tidak butuh rekomendasi", "Approval berjalan tanpa panel rekomendasi.", "Pastikan pilihan rekomendasi saat registrasi memang Tidak."],
+          ["Surat aset butuh rekomendasi", "Panel rekomendasi tampil dan sistem membuat tugas PBO setelah surat induk dikonfirmasi.", "Cek status tugas di menu Rekomendasi."],
+          ["Rekomendasi belum selesai", "Approval induk dapat terkunci pada tahap yang dikonfigurasi.", "Tunggu dokumen rekomendasi selesai atau cek siapa yang mengambil tugas."],
+          ["Rekomendasi selesai", "Dokumen tertaut dapat dibuka sebagai surat sendiri.", "Lanjutkan approval induk sesuai action bar."],
         ],
       },
       {
@@ -1339,7 +1499,8 @@ export const USER_DOCS: DocsEntry[] = [
         rows: [
           ["Proyek", "Mengikuti pilihan pemohon dan tidak diubah di tahap approval."],
           ["Jumlah unit", "Boleh dialokasikan kurang dari jumlah permintaan jika memang hanya tersedia sebagian."],
-          ["Detail unit", "Berisi kavling, struktur atas, struktur bawah, tanggal produksi, blok, dan nomor urut produksi."],
+          ["Detail unit", "Diisi dalam tabel satu baris per kavling dengan header sticky: struktur atas, struktur bawah, nomor, blok, tanggal, dan kode produksi."],
+          ["Template Excel", "Tim pemeriksa dapat mengunduh template setelah memilih kavling, mengisi data di Excel, lalu import kembali untuk memperbarui tabel alokasi. Keterangan cell memberi contoh nominal, nomor kode produksi, blok, dan tanggal."],
           ["Lampiran otomatis", "Kode produksi dan rekap adendum dibuat dari input sistem, bukan dari file manual kode produksi."],
         ],
       },
@@ -1350,7 +1511,7 @@ export const USER_DOCS: DocsEntry[] = [
           {
             problem: "Tombol Setujui terkunci",
             solution:
-              "Baca status kelengkapan pada action bar. Biasanya ada lampiran wajib, verifikasi checker, atau data unit yang belum lengkap.",
+              "Baca status kelengkapan pada action bar. Biasanya ada lampiran wajib, pemeriksaan tim pemeriksa, atau data unit yang belum lengkap.",
           },
           {
             problem: "Diminta upload lampiran padahal sudah ada",
@@ -1358,9 +1519,181 @@ export const USER_DOCS: DocsEntry[] = [
               "Lampiran lama tetap dipakai. Upload ulang hanya diperlukan jika ingin mengganti file lama.",
           },
           {
-            problem: "Catatan checker tidak terlihat",
+            problem: "Catatan tim pemeriksa tidak terlihat",
             solution:
-              "Buka bagian progres persetujuan atau tugas step aktif. Catatan checker tampil sebagai bagian dari pemeriksaan data.",
+              "Buka bagian progres persetujuan atau tugas step aktif. Catatan tim pemeriksa tampil sebagai bagian dari pemeriksaan data.",
+          },
+          {
+            problem: "Surat induk aset tidak bisa disetujui karena rekomendasi",
+            solution:
+              "Buka panel rekomendasi untuk melihat status dokumen tertaut. Pembuatan rekomendasi dilakukan dari menu Rekomendasi oleh petugas PBO/Staff IT.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "follow-up",
+    title: "Tindak Lanjut",
+    menu: "Layanan Surat > Tindak Lanjut",
+    audience: "user",
+    icon: ClipboardCheck,
+    version: "v1.11.0",
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Antrean keputusan pemohon saat pengajuan dikembalikan untuk perbaikan atau perubahan data.",
+    whenToUse: [
+      "Meninjau perubahan yang dibuat signer, tim pemeriksa, atau tim rekomendasi.",
+      "Memutuskan apakah pengajuan dilanjutkan dengan data terbaru atau dibatalkan.",
+      "Membaca perbandingan item yang berubah sebelum tanda tangan dimulai ulang.",
+    ],
+    steps: [
+      "Buka Tindak Lanjut saat badge muncul di Layanan Surat.",
+      "Pilih pengajuan dari antrean keputusan.",
+      "Baca tabel perubahan dan ringkasan dokumen.",
+      "Pilih Lanjutkan jika perubahan disetujui, atau Batalkan jika pengajuan tidak dilanjutkan.",
+      "Jika dilanjutkan, persetujuan dimulai ulang dari tahap pertama agar seluruh pihak menandatangani data terbaru.",
+    ],
+    examples: [
+      "Pengajuan 10 unit hanya disetujui 8 unit. Pemohon membuka Tindak Lanjut, membaca alasan, lalu memilih Lanjutkan atau Batalkan.",
+      "Permohonan aset 3 item hanya direkomendasikan 2 item. Item yang tidak direkomendasikan tampil dicoret dan pemohon mengambil keputusan dari halaman ini.",
+      "Rekomendasi IT direvisi setelah arahan signer. Setelah rekomendasi selesai, pemohon menerima antrean Tindak Lanjut untuk menyetujui perubahan.",
+    ],
+    troubleshooting: [
+      "Jika badge Tindak Lanjut muncul tetapi daftar kosong, tekan Segarkan dan pastikan akun yang dipakai adalah pemohon surat tersebut.",
+      "Jika tombol Lanjutkan gagal, cek apakah event revisi masih aktif atau sudah diproses dari tab lain.",
+      "Jika memilih Batalkan, isi alasan minimal lima karakter agar riwayat audit jelas.",
+    ],
+    related: ["Persetujuan", "Status Pengajuan", "Rekomendasi"],
+    sections: [
+      {
+        type: "table",
+        title: "Perbedaan dengan Status Pengajuan",
+        columns: ["Halaman", "Fungsi", "Aksi pemohon"],
+        rows: [
+          ["Status Pengajuan", "Membaca progres, detail dokumen, lampiran, dan riwayat.", "Tidak memproses keputusan revisi."],
+          ["Tindak Lanjut", "Memproses keputusan setelah pengajuan dikembalikan.", "Lanjutkan proses atau batalkan pengajuan."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Dampak keputusan",
+        columns: ["Keputusan", "Yang terjadi", "Catatan"],
+        rows: [
+          ["Lanjutkan", "Data revisi diterapkan dan tanda tangan dimulai ulang dari tahap 1.", "PDF lama dibersihkan agar preview berikutnya memakai data terbaru."],
+          ["Batalkan", "Pengajuan berhenti dan nomor surat ditandai hangus.", "Alasan pembatalan tersimpan pada riwayat."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Data yang ditampilkan",
+        columns: ["Bagian", "Isi"],
+        rows: [
+          ["Antrean keputusan", "Judul, nomor surat, pihak yang mengembalikan, dan tahap asal."],
+          ["Tabel perubahan", "Item, keputusan, nilai diajukan, nilai disetujui, dan alasan."],
+          ["Ringkasan dokumen", "Identitas pengajuan, isi dokumen, item dicoret jika tidak disetujui, unit/kavling, dan lampiran."],
+        ],
+      },
+    ],
+  },
+  {
+    id: "recommendation-tasks",
+    title: "Rekomendasi",
+    menu: "Layanan Surat > Rekomendasi",
+    audience: "user",
+    icon: FileCheck2,
+    version: "v1.0.0",
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Antrean pembuatan dokumen rekomendasi aset yang tertaut ke surat induk.",
+    whenToUse: [
+      "Mengambil tugas rekomendasi aset yang sudah dibuat sistem.",
+      "Melanjutkan draft rekomendasi yang sudah terkunci untuk akun Anda.",
+      "Melihat apakah tugas rekomendasi sedang dikerjakan oleh Staff IT/PBO lain.",
+    ],
+    steps: [
+      "Buka menu Rekomendasi.",
+      "Pilih tugas rekomendasi yang belum terkunci atau lanjutkan draft yang sudah Anda ambil.",
+      "Lengkapi setiap item permohonan melalui navigator item, termasuk lampiran gambar dan link referensi bila ada.",
+      "Konfirmasi dokumen agar rekomendasi tertaut ke surat induk.",
+      "Pastikan proses lanjut ke pemeriksa atau penandatangan berikutnya sesuai alur.",
+    ],
+    examples: [
+      "Jika ada dua Staff IT, keduanya dapat melihat tugas yang sama sampai salah satu memilih Ambil Tugas.",
+      "Setelah Staff IT mengambil tugas, kandidat lain melihat status Terkunci dan tidak dapat mengedit draft yang sama.",
+      "Dokumen rekomendasi memiliki nomor surat, template, tanda tangan, status, preview, dan lampiran sendiri.",
+    ],
+    troubleshooting: [
+      "Jika menu Rekomendasi tidak muncul, akses dibatasi untuk akun aktif di departemen PBO/Pengembangan Organisasi.",
+      "Jika tugas terkunci oleh user lain, tunggu user tersebut menyelesaikan draft atau hubungi admin untuk pemeriksaan.",
+      "Jika rekomendasi sudah dikonfirmasi tetapi surat induk belum lanjut, refresh data dan cek status dokumen tertaut pada panel rekomendasi.",
+    ],
+    related: ["Registrasi Surat", "Persetujuan", "Dokumen dan Lampiran"],
+    sections: [
+      {
+        type: "steps",
+        title: "Alur rekomendasi aset",
+        items: [
+          "Pemohon membuat surat induk kategori Aset dan memilih membutuhkan rekomendasi.",
+          "Setelah surat induk dikonfirmasi, sistem membuat nomor dan tugas rekomendasi PBO.",
+          "Staff IT/PBO membuka menu Rekomendasi dan mengambil tugas.",
+          "Sistem mengunci draft untuk user pertama yang mengambil tugas.",
+          "Sistem menyalin daftar barang dari permohonan induk ke satu dokumen rekomendasi.",
+          "Petugas mengisi rekomendasi satu per satu melalui navigator item, lalu mengonfirmasi dokumen.",
+          "Dokumen rekomendasi tertaut ke surat induk dan approval induk dapat lanjut setelah syarat rekomendasi terpenuhi.",
+          "Jika penanda tangan meminta revisi rekomendasi, tugas muncul kembali di menu Rekomendasi dengan data terakhir sebagai draft awal.",
+          "Rekomendasi revisi harus dikonfirmasi ulang dan ditandatangani ulang oleh Mgr. PO sebelum surat induk kembali ke pemohon untuk lanjut atau batal.",
+        ],
+      },
+      {
+        type: "table",
+        title: "Mengisi dokumen rekomendasi",
+        columns: ["Bagian", "Aturan operasional"],
+        rows: [
+          ["Nama barang/alat kerja", "Isi sesuai barang yang dinilai untuk service, ganti, atau beli baru."],
+          ["Navigator item", "Setiap item permohonan memiliki satu isian rekomendasi. Nama barang mengikuti permohonan dan tidak dapat diubah."],
+          ["Nomor dokumen", "Dibuat otomatis dari pengajuan induk. Ikon gembok menandakan nomor tidak dapat diubah oleh petugas rekomendasi."],
+          ["No registrasi", "Opsional jika barang sudah memiliki nomor inventaris atau registrasi."],
+          ["Lokasi/PIC", "Diambil dari pilihan user agar barang mudah ditelusuri."],
+          ["Kerusakan", "Opsional, dipakai untuk menjelaskan masalah awal barang."],
+          ["Hasil rekomendasi", "Pilih Service, Ganti Komponen, Beli Baru, atau Tidak Direkomendasikan sesuai hasil pemeriksaan per item."],
+          ["Lampiran gambar", "Wajib untuk Service, Ganti Komponen, dan Beli Baru. Untuk Tidak Direkomendasikan, alasan wajib dan gambar opsional."],
+          ["Link referensi", "Opsional dan tampil di UI/email sebagai pendukung keputusan."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Status dan lock rekomendasi",
+        columns: ["Status", "Arti", "Tindakan"],
+        rows: [
+          ["Menunggu Staff IT", "Tugas belum diambil kandidat mana pun.", "Klik Ambil Tugas jika memang Anda yang akan mengerjakan."],
+          ["Sedang Anda kerjakan", "Draft sudah terkunci untuk akun Anda.", "Klik Lanjutkan Draft dan selesaikan dokumen."],
+          ["Terkunci", "Draft sedang dikerjakan oleh kandidat lain.", "Pantau status atau koordinasikan dengan petugas yang mengambil tugas."],
+          ["Perlu Revisi", "Rekomendasi lama dikembalikan oleh penanda tangan surat induk.", "Ambil revisi untuk memperbaiki data dari versi rekomendasi terakhir."],
+          ["Selesai", "Dokumen rekomendasi sudah dikonfirmasi dan tertaut ke surat induk.", "Surat induk dapat lanjut sesuai aturan tahap yang menunggu rekomendasi."],
+        ],
+      },
+      {
+        type: "troubleshooting",
+        title: "Masalah umum rekomendasi",
+        items: [
+          {
+            problem: "Tugas rekomendasi tidak muncul",
+            solution:
+              "Pastikan akun aktif, berada di PBO/Pengembangan Organisasi, dan surat induk benar-benar memilih membutuhkan rekomendasi.",
+          },
+          {
+            problem: "Tidak bisa mengambil tugas",
+            solution:
+              "Tugas mungkin sudah dikunci oleh user lain. Lihat label status dan nama user yang sedang mengerjakan.",
+          },
+          {
+            problem: "Gambar item belum terbaca",
+            solution:
+              "Pastikan item dengan keputusan Service, Ganti Komponen, atau Beli Baru memiliki lampiran gambar dan proses upload selesai sebelum konfirmasi.",
+          },
+          {
+            problem: "Rekomendasi sudah direvisi tetapi surat induk belum bisa lanjut",
+            solution:
+              "Pastikan dokumen rekomendasi revisi sudah selesai ditandatangani Mgr. PO. Setelah selesai, pemohon surat induk akan menerima tugas untuk melanjutkan atau membatalkan pengajuan.",
           },
         ],
       },
@@ -1384,7 +1717,7 @@ export const USER_DOCS: DocsEntry[] = [
       "Buka Status Pengajuan.",
       "Cari dokumen berdasarkan judul, nomor, atau status.",
       "Buka detail untuk melihat timeline dan dokumen.",
-      "Gunakan tombol dokumen atau lampiran bila perlu verifikasi visual.",
+      "Gunakan tombol dokumen atau lampiran bila perlu pemeriksaan visual.",
     ],
     examples: [
       "Setelah membuat surat, pantau apakah dokumen masih proses, selesai, atau ditolak.",
@@ -1407,7 +1740,7 @@ export const USER_DOCS: DocsEntry[] = [
     summary: "Membuka PDF dokumen, snapshot, dan lampiran yang terkait dengan pengajuan.",
     whenToUse: [
       "Memeriksa tampilan akhir dokumen.",
-      "Membuka lampiran pendukung yang diunggah pemohon, checker, atau approver.",
+      "Membuka lampiran pendukung yang diunggah pemohon, tim pemeriksa, atau approver.",
       "Membandingkan snapshot dokumen pada proses approval.",
     ],
     steps: [
@@ -1460,26 +1793,45 @@ export const USER_DOCS: DocsEntry[] = [
     menu: "Pengaturan",
     audience: "user",
     icon: Settings,
-    version: "v1.0.0",
+    version: DOCS_VERSION,
     updatedAt: DOCS_UPDATED_AT,
     summary: "Mengatur preferensi akun seperti profil, tema, dan pengaturan personal lain.",
     whenToUse: [
       "Mengubah preferensi tampilan light mode atau dark mode.",
+      "Mengganti foto profil akun.",
       "Memeriksa data profil yang dipakai pada dokumen.",
       "Mengelola pengaturan personal yang tersedia untuk akun Anda.",
     ],
     steps: [
       "Buka Pengaturan.",
       "Pilih bagian yang ingin diubah.",
+      "Untuk foto profil, pilih gambar JPG, PNG, atau WebP dengan ukuran maksimal 5 MB.",
       "Simpan perubahan lalu pastikan tampilannya sesuai.",
     ],
     examples: [
       "Gunakan dark mode jika bekerja lama di ruangan redup.",
+      "Unggah foto profil agar identitas lebih mudah dikenali pada hirarki, aktivitas, dan daftar user.",
       "Cek nama, jabatan, departemen, dan kantor karena data ini ikut dipakai dalam dokumen.",
     ],
     troubleshooting: [
       "Jika departemen atau kantor salah, hubungi admin karena beberapa data mengikuti master user.",
+      "Jika foto gagal diunggah, pastikan formatnya JPG, PNG, atau WebP dan ukurannya tidak lebih dari 5 MB.",
+      "Jika foto lama masih terlihat setelah upload berhasil, muat ulang halaman agar profil terbaru dibaca dari server.",
       "Jika tema tidak berubah, refresh halaman setelah menyimpan pengaturan.",
+    ],
+    sections: [
+      {
+        type: "table",
+        title: "Foto profil",
+        columns: ["Bagian", "Perilaku"],
+        rows: [
+          ["Format", "JPG, PNG, atau WebP; maksimal 5 MB."],
+          ["Penyimpanan", "File asli disimpan pada storage private self-hosted dan tidak memakai URL publik Supabase Cloud."],
+          ["Tampilan aplikasi", "SIGAP memakai thumbnail WebP maksimal 256 x 256 agar sidebar, hirarki, dan daftar user lebih ringan."],
+          ["Buka gambar", "Saat URL foto dibuka sebagai halaman atau tab baru, server menampilkan file asli."],
+          ["Keamanan", "Upload diperiksa oleh server dan path file selalu mengikuti ID akun yang sedang login."],
+        ],
+      },
     ],
   },
 ];
@@ -1719,7 +2071,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: FileCheck2,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengelola template Excel, mapping cell, field input, tabel barang, tempat tanggal, dan area tanda tangan.",
+    summary: "Mengelola form lama, template Excel aktif, konfigurasi field input, tabel barang, tempat tanggal, dan area tanda tangan.",
     whenToUse: [
       "Upload template baru.",
       "Mengatur field input yang akan diisi user dari sistem.",
@@ -1729,15 +2081,98 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Buka Form & Template.",
       "Pilih form atau buat form baru.",
       "Atur mapping cell, tabel, catatan, tempat tanggal, dan tanda tangan.",
-      "Simpan lalu uji dengan registrasi dokumen.",
+      "Simpan lalu pilih Uji PDF.",
+      "Pilih jumlah penandatangan dan distribusi Membuat, Memeriksa, serta Menyetujui.",
+      "Periksa hasil PDF sebelum form dipakai pada registrasi dokumen.",
     ],
     examples: [
-      "Satu form PGD dapat dipakai untuk beberapa kegunaan dengan jumlah tanda tangan berbeda.",
+      "Satu form PGD dapat dipakai untuk beberapa kegunaan dengan 3 sampai 8 tanda tangan tanpa menggandakan template.",
       "Untuk catatan panjang, mapping area merge harus disesuaikan agar teks tidak keluar kotak.",
     ],
     troubleshooting: [
       "Jika tulisan tidak masuk ke dokumen, cek mapping cell dan sheet.",
       "Jika tanda tangan tidak rapi, cek konfigurasi area tanda tangan dan jumlah step.",
+    ],
+    sections: [
+      {
+        type: "table",
+        title: "Formasi kotak tanda tangan",
+        description: "Uji PDF dan dokumen yang didaftarkan memakai pembagian yang sama.",
+        columns: ["Jumlah signer", "Susunan", "Catatan"],
+        rows: [
+          ["3", "Tiga slot kanan", "Mengikuti template PGD asli: slot kiri kosong, tiga kotak berada di kanan."],
+          ["4", "4", "Semua kotak berada pada baris pertama dengan tinggi blok tetap."],
+          ["5", "3 + 2", "Dua kotak bawah memakai slot kanan pada grid tiga kolom."],
+          ["6", "3 + 3", "Baris atas dan bawah sejajar."],
+          ["7", "4 + 3", "Tiga kotak bawah memakai tiga slot paling kanan pada grid empat kolom."],
+          ["8", "4 + 4", "Dua baris penuh dan sejajar."],
+        ],
+      },
+      {
+        type: "callout",
+        title: "Uji PDF tidak membuat surat",
+        description: "Uji PDF hanya memeriksa hasil renderer, isi contoh, dan formasi tanda tangan. Nomor surat, transaksi, dan histori approval tidak dibuat.",
+        tone: "info",
+      },
+      {
+        type: "callout",
+        title: "Normalisasi akhir PGD",
+        description: "Form Permintaan Barang & Jasa dibuat langsung sebagai A4 landscape oleh renderer PDF-native. Uji PDF, surat baru, snapshot approval, dan Buat Ulang PDF memakai renderer yang sama sehingga tidak dipengaruhi merge, border, atau print area Excel.",
+        tone: "info",
+      },
+    ],
+  },
+  {
+    id: "admin-template-builder",
+    title: "Template Builder",
+    menu: "Konfigurasi > Template Builder",
+    audience: "admin",
+    icon: LayoutTemplate,
+    version: "v1.0.0",
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Merancang template dokumen native dari nol memakai elemen, binding data, tabel berulang, dan versioning.",
+    whenToUse: [
+      "Membuat bentuk dokumen baru tanpa menyusun file Excel.",
+      "Membutuhkan data berulang seperti item 1, item 2, daftar unit, lampiran, atau signer.",
+      "Menguji layout dokumen native sebelum dihubungkan ke generator PDF produksi.",
+    ],
+    steps: [
+      "Buka Template Builder dari menu Configuration.",
+      "Buat template baru atau pilih template draft.",
+      "Tambahkan elemen dari panel kiri: logo, teks, field data, tabel berulang, catatan, kotak, garis, atau tanda tangan.",
+      "Klik elemen pada canvas untuk mengatur posisi, ukuran, warna, border, font, dan binding dari panel kanan.",
+      "Untuk item berulang, pilih elemen Tabel Berulang lalu tentukan sumber data dan kolomnya.",
+      "Atur schema input agar sistem tahu field apa saja yang perlu diisi user saat registrasi.",
+      "Simpan draft. Publish hanya jika validasi tidak menampilkan error.",
+    ],
+    examples: [
+      "Untuk daftar barang, cukup buat satu Tabel Berulang dengan sumber data Daftar Barang. Sistem akan mengulang baris sesuai jumlah barang user.",
+      "Untuk tanda tangan, gunakan elemen Tanda Tangan agar nama dan jabatan signer diambil dari alur approval, bukan ditulis manual.",
+    ],
+    troubleshooting: [
+      "Jika halaman menampilkan migration belum siap, jalankan migration document_template_builder terlebih dahulu.",
+      "Jika template tidak bisa dipublish, cek apakah sudah ada tabel berulang dan area tanda tangan.",
+      "Jika data tidak muncul di preview, cek binding data pada elemen field atau kolom tabel.",
+    ],
+    sections: [
+      {
+        type: "table",
+        title: "Jenis elemen",
+        columns: ["Elemen", "Dipakai untuk", "Catatan"],
+        rows: [
+          ["Teks", "Judul, label, instruksi pendek", "Untuk teks statis yang tidak berubah per surat."],
+          ["Field Data", "Nomor surat, judul, pengaju, departemen, kantor", "Pilih binding agar nilai diisi otomatis."],
+          ["Tabel Berulang", "Barang, unit, rekomendasi, lampiran", "Satu konfigurasi tabel bisa menghasilkan banyak baris."],
+          ["Catatan", "Area teks panjang", "Gunakan tinggi cukup agar tidak memotong isi."],
+          ["Tanda Tangan", "Kotak signer", "Mengambil data signer dari alur persetujuan."],
+        ],
+      },
+      {
+        type: "callout",
+        title: "Belum mengganti produksi otomatis",
+        description: "Template Builder adalah fondasi native renderer. Sampai generator PDF membaca JSON builder, PGD dan rekomendasi tetap mengikuti jalur produksi yang sudah aktif.",
+        tone: "warning",
+      },
     ],
   },
   {
@@ -1760,7 +2195,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Bandingkan dengan konfigurasi Kegunaan Form yang aktif.",
     ],
     examples: [
-      "Form PGD dapat menggunakan matrix 3 sampai 6 tanda tangan tanpa menggandakan file template.",
+      "Form PGD dapat menggunakan matrix 3 sampai 8 tanda tangan tanpa menggandakan file template.",
     ],
     troubleshooting: [
       "Jika alur yang tampil tidak sesuai registrasi, cek Kegunaan Form karena alur aktif dikendalikan dari sana.",
@@ -1775,26 +2210,30 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: SlidersHorizontal,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pengecek, dan kebutuhan lampiran.",
+    summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, dan kebutuhan lampiran.",
     whenToUse: [
       "Membuat kegunaan dokumen baru untuk departemen tertentu.",
-      "Mengatur alur tanda tangan 3 sampai 6 tahap.",
-      "Menambahkan tim pengecek sebelum penandatangan boleh aksi.",
+      "Mengatur alur tanda tangan 3 sampai 8 tahap.",
+      "Menambahkan tim pemeriksa sebelum penandatangan boleh aksi.",
+      "Mengatur dokumen rekomendasi atau prasyarat yang harus selesai sebelum surat induk lanjut.",
     ],
     steps: [
       "Buka Kegunaan Form.",
       "Pilih form, departemen, kategori, dan jenis surat.",
       "Atur step tanda tangan dan kandidat signer.",
-      "Tambahkan tim pengecek bila step perlu verifikasi data atau lampiran.",
+      "Tambahkan tim pemeriksa bila step perlu pemeriksaan data atau lampiran.",
+      "Atur dokumen tertaut bila form membutuhkan rekomendasi aset atau prasyarat sebelum approval lanjut.",
       "Simpan konfigurasi dan uji pada registrasi surat.",
     ],
     examples: [
       "Untuk pengajuan cabang, kandidat SPV dan BM dapat dibatasi sesuai kantor pemohon.",
-      "Untuk Unit, tim pengecek dapat mengisi detail kavling sebelum Mgr. Perencanaan menyetujui.",
+      "Untuk Unit, tim pemeriksa dapat mengisi detail kavling sebelum Mgr. Perencanaan menyetujui.",
+      "Untuk aset yang perlu rekomendasi, tugas rekomendasi dapat diarahkan ke Staff IT/PBO dan dikunci saat salah satu kandidat mengambil draft.",
     ],
     troubleshooting: [
       "Jika user tidak bisa membuat Unit, cek izin departemen pengaju pada konfigurasi Unit.",
-      "Jika signer tidak bisa setujui, cek apakah tim pengecek belum verifikasi.",
+      "Jika signer tidak bisa setujui, cek apakah tim pemeriksa belum pemeriksaan.",
+      "Jika rekomendasi tidak muncul, cek form rekomendasi, departemen PBO, kandidat Staff IT/PBO, dan tahap prasyarat pada Kegunaan Form.",
     ],
   },
   {
@@ -2005,7 +2444,7 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     icon: BookOpenText,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Langkah pengecekan ketika preview PDF, snapshot, atau lampiran gagal dibuka.",
+    summary: "Langkah pemeriksaan ketika preview PDF, snapshot, atau lampiran gagal dibuka.",
     whenToUse: [
       "Muncul pesan dokumen tidak ditemukan.",
       "PDF masih loading terlalu lama.",
@@ -2019,10 +2458,29 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     examples: [
       "Token akses file dapat berubah setiap klik, tetapi itu bukan berarti PDF selalu dibuat ulang.",
       "Jika file baru diunggah pada approval, tunggu indikator upload selesai sebelum menyetujui.",
+      "Admin memakai Buat Ulang PDF jika surat lama harus mengikuti renderer atau formasi tanda tangan terbaru.",
     ],
     troubleshooting: [
       "Jika masih gagal, admin perlu cek storage bucket, service role, dan log server.",
-      "Jika snapshot lama, cek cache PDF dan generate ulang dokumen.",
+      "Jika PDF lama masih tampil, tutup tab PDF dan buka ulang dokumen.",
+      "Jika bentuk PDF atau kotak tanda tangan surat lama masih memakai versi lama, admin perlu memilih Buat Ulang PDF dari detail Monitoring.",
+    ],
+    sections: [
+      {
+        type: "table",
+        title: "Buka PDF dan Buat Ulang PDF",
+        columns: ["Aksi", "Yang dikerjakan sistem", "Kapan digunakan"],
+        rows: [
+          ["Buka dokumen", "Membuka PDF siap pakai atau mengantrekan konversi dari workbook yang tersimpan.", "Pemeriksaan dokumen sehari-hari."],
+          ["Buat Ulang PDF", "Menjalankan kembali renderer dokumen dari snapshot database dan menerapkan status tanda tangan yang sudah selesai.", "Surat lama perlu mengikuti renderer atau formasi tanda tangan terbaru."],
+        ],
+      },
+      {
+        type: "callout",
+        title: "Khusus admin",
+        description: "Buat Ulang PDF tidak mengulang approval dan tidak mengubah status surat. Sistem mempertahankan identitas serta waktu tanda tangan yang sudah tercatat.",
+        tone: "warning",
+      },
     ],
   },
   {
@@ -2033,24 +2491,150 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     icon: ShieldCheck,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Memahami badge, notifikasi, dan data realtime pada persetujuan atau tim pengecek.",
+    summary: "Memahami badge, notifikasi, dan data realtime pada persetujuan atau tim pemeriksa.",
     whenToUse: [
       "Badge muncul tetapi antrean terlihat kosong.",
-      "Tim pengecek tidak mendapat notifikasi.",
-      "Perubahan checker belum terlihat oleh signer.",
+      "Tim pemeriksa tidak mendapat notifikasi.",
+      "Tugas rekomendasi muncul di badge tetapi belum terlihat di antrean biasa.",
+      "Perubahan tim pemeriksa belum terlihat oleh signer.",
     ],
     steps: [
       "Buka menu Persetujuan dan cek filter yang aktif.",
+      "Jika badge berasal dari rekomendasi, buka menu Rekomendasi.",
       "Pastikan tugas memang sudah masuk ke user tersebut.",
       "Refresh jika koneksi realtime sempat terputus.",
     ],
     examples: [
       "Step 3 belum dihitung pending jika surat masih berada di step 2.",
-      "Tugas tim pengecek ikut dihitung badge karena itu tugas aktif sebelum signer aksi.",
+      "Tugas tim pemeriksa ikut dihitung badge karena itu tugas aktif sebelum signer aksi.",
+      "Tugas rekomendasi dihitung terpisah dari antrean Persetujuan karena petugas perlu mengambil draft terlebih dahulu.",
     ],
     troubleshooting: [
       "Jika badge tidak turun setelah diproses, tunggu realtime update atau refresh halaman.",
       "Jika notifikasi suara berulang di mobile, cek izin browser dan status tab.",
+    ],
+  },
+  {
+    id: "external-api",
+    title: "External API",
+    menu: "Operasional",
+    audience: "troubleshooting",
+    icon: Database,
+    version: DOCS_VERSION,
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Panduan memakai API eksternal SIGAP untuk surat dan master data onboarding akun.",
+    whenToUse: [
+      "Sistem lain perlu membaca data surat yang sudah disetujui atau sedang dipantau.",
+      "Sistem lain perlu menampilkan pilihan Kantor Pusat, KC, KCP, dan Departemen saat user login pertama kali.",
+      "Partner perlu menguji access token, signature, dan endpoint master data tanpa membuka dashboard SIGAP.",
+    ],
+    steps: [
+      "Minta `client_id` dan `client_secret` dari admin SIGAP.",
+      "Generate access token melalui `POST /api/access-token` dari backend partner.",
+      "Buat signature setiap request dengan access token, path, body hash, dan timestamp.",
+      "Untuk onboarding akun, panggil `GET /api/onboarding/options` agar pilihan kantor dan departemen tersedia dalam satu response.",
+      "Gunakan endpoint master terpisah jika aplikasi hanya butuh daftar KC, KCP, atau Departemen tertentu.",
+    ],
+    examples: [
+      "User memilih Kantor Pusat: tampilkan daftar `departments` dari response onboarding.",
+      "User memilih KC: tampilkan daftar `offices.kc`.",
+      "User memilih KCP: tampilkan daftar `offices.kcp`.",
+      "Endpoint master data tidak mengirim email kantor/departemen dan tidak mengirim data user.",
+    ],
+    troubleshooting: [
+      "Jika response `Unauthorized`, cek access token, `X-Timestamp`, dan `X-Signature`.",
+      "Jika daftar kosong, pastikan master kantor/departemen sudah aktif dan tipe kantor terisi benar.",
+      "Jika partner hanya butuh satu daftar, pakai endpoint filter seperti `/api/master/offices?type=kc`.",
+    ],
+    related: ["Deploy production", "Master Kantor Cabang", "Master Departemen"],
+    sections: [
+      {
+        type: "table",
+        title: "Endpoint master data",
+        columns: ["Endpoint", "Dipakai untuk"],
+        rows: [
+          ["GET /api/onboarding/options", "Mengambil tipe kantor, daftar Kantor Pusat/KC/KCP, dan Departemen pusat dalam satu response."],
+          ["GET /api/master/offices?type=pusat", "Mengambil pilihan Kantor Pusat."],
+          ["GET /api/master/offices?type=kc", "Mengambil pilihan KC."],
+          ["GET /api/master/offices?type=kcp", "Mengambil pilihan KCP."],
+          ["GET /api/master/departments?scope=pusat", "Mengambil pilihan Departemen untuk user Kantor Pusat."],
+          ["GET /api/master/departments?scope=cabang", "Mengambil pilihan Departemen cabang jika partner membutuhkannya."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Field yang dikirim",
+        columns: ["Data", "Field"],
+        rows: [
+          ["Kantor", "`id`, `code`, `name`, `type`, `type_label`, `parent_id`, `parent_code`, `parent_name`."],
+          ["Departemen", "`id`, `code`, `name`, `dept_index`, `scope`."],
+          ["Yang tidak dikirim", "Email, data user, secret, dan field internal lain."],
+        ],
+      },
+    ],
+  },
+  {
+    id: "deploy-production",
+    title: "Deploy production",
+    menu: "Operasional",
+    audience: "troubleshooting",
+    icon: Database,
+    version: "v1.0.0",
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Panduan deploy production dari Docker context server tanpa merestart service yang tidak berubah.",
+    whenToUse: [
+      "Mendeploy perubahan frontend, halaman dokumentasi, atau server aplikasi utama.",
+      "Memastikan deploy memakai `.env.production` untuk interpolasi environment Compose.",
+      "Memutuskan apakah PDF worker perlu ikut diredeploy.",
+    ],
+    steps: [
+      "Pastikan perubahan sudah dibuild atau sudah siap dideploy dari workspace.",
+      "Untuk app utama, jalankan command deploy dengan Docker context `ubuntu-server` dan `--env-file .env.production`.",
+      "Cek status container `agenda-flow-prod` sampai healthy.",
+      "Buka domain production atau route yang berubah untuk pemeriksaan.",
+      "Redeploy worker PDF hanya jika memang ada perubahan worker/runtime PDF.",
+    ],
+    examples: [
+      "Perubahan dokumentasi `/docs` cukup deploy app utama, tidak perlu deploy PDF worker.",
+      "Perubahan `server.mjs` deploy app utama karena container app yang menjalankan server HTTP.",
+      "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
+    ],
+    troubleshooting: [
+      "Jika container restart karena storage kosong, pastikan command memakai `--env-file .env.production`.",
+      "Jika route publik masih lama, cek health container, Cloudflare tunnel, dan cache browser.",
+      "Jika PDF baru tidak diproses setelah deploy app utama, cek apakah worker memang perlu redeploy atau cukup worker yang sedang running.",
+    ],
+    sections: [
+      {
+        type: "table",
+        title: "Command deploy",
+        columns: ["Kebutuhan", "Command"],
+        rows: [
+          [
+            "Deploy aplikasi utama",
+            "docker --context ubuntu-server compose -f docker-compose.prod.yml --env-file .env.production up -d --build",
+          ],
+          [
+            "Deploy PDF worker",
+            "docker --context ubuntu-server compose -f docker-compose.worker.yml --env-file .env.production up -d --build",
+          ],
+          [
+            "Deploy External API",
+            "docker --context ubuntu-server compose -f docker-compose.external.yml --env-file .env.production up -d --build",
+          ],
+        ],
+      },
+      {
+        type: "table",
+        title: "Kapan worker PDF ikut deploy",
+        columns: ["Perubahan", "Deploy yang diperlukan"],
+        rows: [
+          ["Frontend, dokumentasi, route aplikasi, atau `server.mjs`", "Deploy aplikasi utama saja."],
+          ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Deploy PDF worker."],
+          ["Folder `external-api/` atau `docker-compose.external.yml`", "Deploy External API saja."],
+          ["Env storage production", "Redeploy service yang membaca env tersebut dengan `--env-file .env.production`."],
+        ],
+      },
     ],
   },
 ];
@@ -2059,9 +2643,184 @@ export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
   {
-    version: "v1.5.0",
-    date: DOCS_UPDATED_AT,
+    version: "v1.14.0",
+    date: "13 Juli 2026",
     changes: [
+      "Memperjelas keterangan cell pada template Excel alokasi Unit untuk Struktur Atas, Struktur Bawah, Nomor Kode Produksi, Blok, dan Tanggal Produksi.",
+      "Menambahkan contoh input nominal `1000000`, `1.000.000`, dan `1,000,000` pada template agar tim pemeriksa tidak bingung saat mengisi nilai struktur.",
+      "Menambahkan contoh input tanggal `01/01/25`, `01/01/2025`, dan `01-01-2025` serta catatan bahwa datepicker mengikuti aplikasi Excel yang digunakan.",
+    ],
+  },
+  {
+    version: "v1.13.0",
+    date: "10 Juli 2026",
+    changes: [
+      "Menambahkan External API master data untuk kebutuhan onboarding akun di sistem lain.",
+      "Menambahkan endpoint `GET /api/onboarding/options` agar partner dapat mengambil tipe kantor, daftar Kantor Pusat/KC/KCP, dan Departemen pusat dalam satu request.",
+      "Menambahkan endpoint `GET /api/master/offices` dengan filter `type=pusat|kc|kcp`.",
+      "Menambahkan endpoint `GET /api/master/departments` dengan filter `scope=pusat|cabang|all`.",
+      "Membatasi response master data ke field allowlist agar email, data user, dan field internal tidak terekspos.",
+      "Menambahkan dokumentasi operasional External API di halaman Docs dan memperbarui dokumen teknis `EXTERNAL_API_SURAT.md`.",
+      "Menambahkan download template dan import Excel/CSV untuk pengisian massal detail kavling pada tugas pemeriksaan Unit.",
+    ],
+  },
+  {
+    version: "v1.12.0",
+    date: "9 Juli 2026",
+    changes: [
+      "Memperbolehkan KC/KCP tanpa master proyek membuat pengajuan non-unit dengan kode proyek virtual `000`.",
+      "Membedakan validasi proyek: Unit tetap wajib memilih proyek Unit, cabang yang punya proyek wajib memilih proyek cabang, sedangkan cabang tanpa proyek memakai `000`.",
+      "Menambahkan state read-only pada Registrasi Surat untuk cabang tanpa proyek agar user tidak melihat dropdown proyek kosong.",
+      "Menyimpan konteks `project_code: 000`, `project_name: Tanpa proyek`, dan `project_is_default: true` pada input/snapshot tanpa membuat master proyek palsu.",
+      "Memperbarui dokumentasi nomor surat agar variasi KC/KCP tanpa proyek dan scope counter virtual `000` dapat dipahami user/admin.",
+    ],
+  },
+  {
+    version: "v1.11.0",
+    date: "8 Juli 2026",
+    changes: [
+      "Menambahkan halaman `Tindak Lanjut` untuk keputusan pemohon setelah pengajuan dikembalikan, terpisah dari Status Pengajuan.",
+      "Memindahkan badge revisi yang menjadi tugas pemohon dari Status Pengajuan ke Tindak Lanjut agar user langsung masuk ke antrean keputusan yang benar.",
+      "Menambahkan dokumentasi Tindak Lanjut yang menjelaskan kapan memilih Lanjutkan proses, kapan membatalkan pengajuan, dan dampaknya ke tanda tangan ulang.",
+      "Menormalisasi link notifikasi revisi pemohon ke `/surat/tindak-lanjut` agar notifikasi tidak lagi membuka halaman monitoring.",
+      "Memperbaiki format nilai revisi berdasarkan konteks, misalnya unit ditampilkan sebagai `8 unit dari 10 unit` dan nominal tetap ditampilkan sebagai rupiah.",
+      "Menguatkan penerapan revisi di database agar perubahan jumlah unit, jumlah barang, nominal, dan rekomendasi tidak saling tertukar saat pemohon melanjutkan proses.",
+      "Membuat item permohonan aset yang tidak memiliki keputusan rekomendasi tampil sebagai item belum direkomendasikan pada detail dan ringkasan.",
+      "Membersihkan instruksi lama di Status Pengajuan yang menyarankan registrasi ulang setelah revisi.",
+    ],
+  },
+  {
+    version: "v1.10.0",
+    date: "7 Juli 2026",
+    changes: [
+      "Menjaga Form Dokumen dan Kegunaan tetap terlihat sebagai informasi terkunci setelah nomor surat atau draft dipulihkan, sehingga konteks registrasi tidak berkedip lalu hilang saat halaman direfresh.",
+      "Menyembunyikan kembali informasi Form Dokumen dan Kegunaan pada dokumen rekomendasi tertaut karena form dan kegunaan sudah dikunci oleh task rekomendasi.",
+      "Mengunci deteksi dokumen rekomendasi tertaut dari parameter URL sejak render pertama agar pilihan registrasi biasa tidak sempat tampil saat refresh.",
+      "Memisahkan pengerjaan dokumen rekomendasi ke path `/surat/rekomendasi/registrasi` dan mengalihkan link rekomendasi lama dari path registrasi biasa.",
+      "Menyeragamkan stamp tanda tangan menjadi `DISETUJUI SISTEM` dengan tanggal-jam WIB pada jalur Excel lama dan renderer PDF native.",
+      "Menstandarkan urutan tabel item pada ringkasan pengajuan menjadi No., Nama Barang, Satuan, Jumlah, Status, dan Keterangan walaupun urutan data dari sumber berbeda.",
+      "Memisahkan konteks item induk dan input Nama Barang / Alat Kerja pada rekomendasi: navigator menampilkan item permohonan, sedangkan nama barang rekomendasi tetap diisi manual oleh tim IT/PO.",
+      "Menghapus tombol reset judul/tempat; field kembali otomatis jika dikosongkan oleh user.",
+      "Menambahkan keputusan Tidak Direkomendasikan pada rekomendasi aset per item; opsi ini wajib alasan tetapi tidak wajib gambar.",
+      "Mewajibkan gambar hanya untuk keputusan Service, Ganti Komponen, dan Beli Baru pada dokumen rekomendasi.",
+      "Menyimpan keputusan rekomendasi ke snapshot surat induk agar item yang tidak direkomendasikan dapat tampil tercoret pada detail pengajuan dan PDF PGD.",
+      "Menampilkan keputusan rekomendasi per item pada summary pendaftaran dan email dengan label yang lebih jelas.",
+      "Membuka kembali tugas rekomendasi ketika penanda tangan mengembalikan perbaikan ke tim IT/PBO.",
+      "Mengisi draft rekomendasi revisi dari data rekomendasi terakhir agar tim IT tidak mengulang input dari awal.",
+      "Mewajibkan rekomendasi revisi ditandatangani ulang oleh Mgr. PO sebelum surat induk kembali ke pemohon untuk lanjut atau batal.",
+      "Menonaktifkan tautan rekomendasi lama saat rekomendasi revisi dikonfirmasi agar dokumen tertaut aktif selalu versi terbaru.",
+    ],
+  },
+  {
+    version: "v1.9.0",
+    date: "6 Juli 2026",
+    changes: [
+      "Memperbaiki detail pengajuan agar field items tampil sebagai Daftar Barang dengan kolom tetap No., Nama Barang, Satuan, Jumlah, Status, dan Keterangan.",
+      "Menormalkan alias data barang seperti sat/satuan dan nama_barang/nama/barang agar tidak muncul kolom dobel pada detail pengajuan.",
+      "Memindahkan catatan revisi item ke baris khusus di bawah item terkait supaya alasan perubahan lebih mudah dibaca.",
+      "Menyesuaikan format nilai revisi berdasarkan konteks satuan, misalnya 8 unit dari 10 unit untuk pengajuan Unit dan rupiah untuk nominal besar.",
+      "Mengganti prompt native browser pada aksi Lanjutkan proses dan Batalkan pengajuan menjadi dialog aplikasi yang konsisten dengan validasi catatan.",
+      "Menerapkan perubahan item setelah pemohon menekan Lanjutkan proses sehingga detail dokumen dan PDF baru memakai nilai hasil revisi.",
+      "Membersihkan cache job PDF lama setelah revisi diterima agar preview berikutnya tidak memakai dokumen sebelum perbaikan.",
+      "Menjaga catatan revisi tetap terbaca sebagai revisi terapan setelah status surat kembali ke Proses.",
+      "Mencegah catatan revisi tanpa perubahan item seperti kirim ulang tampil sebagai Keterangan barang; catatan tetap tersedia pada riwayat perbaikan.",
+      "Menghentikan hitungan SLA signer/departemen ketika surat berada di status Menunggu Perbaikan dan tugas sedang berada di pemohon.",
+      "Memulai ulang waktu SLA dari waktu pemohon memilih Lanjutkan proses agar antrean tidak langsung terlambat karena timestamp sebelum perbaikan.",
+      "Mengganti tampilan catatan riwayat perbaikan generik seperti Instruksi utama dengan alasan perubahan item yang sebenarnya.",
+      "Menghapus field Instruksi utama dari dialog pengembalian proses yang memiliki item terstruktur; alasan utama kini otomatis diambil dari alasan item yang diubah.",
+      "Mengubah kelanjutan setelah perbaikan pemohon agar approval selalu dimulai ulang dari tahap 1 karena data dokumen sudah berubah.",
+      "Menyederhanakan input pemeriksaan Unit menjadi tabel satu baris per kavling dengan header sticky untuk struktur atas, struktur bawah, nomor, blok, tanggal, dan kode produksi.",
+      "Memastikan signer Unit melihat ringkasan alokasi dari tim pemeriksa dan tidak diminta memilih kavling ulang setelah data pemeriksaan tersimpan.",
+      "Mengizinkan pengembalian ke tim pemeriksa dengan instruksi perbaikan walaupun keputusan item tetap Tidak berubah.",
+      "Mempertahankan data pemeriksaan terakhir saat proses dikembalikan ke tim pemeriksa, sehingga kavling, detail kode produksi, dan lampiran tahap tidak perlu diinput ulang dari nol.",
+      "Memperbaiki tombol Pemeriksaan Data pada revisi tim pemeriksa agar menyelesaikan event revisi lama setelah data diperbarui, bukan mencoba verifikasi ulang yang sudah berstatus diperiksa.",
+      "Mengubah label tombol aksi tim pemeriksa menjadi Simpan & lanjutkan agar jelas bahwa pemeriksaan akan diteruskan ke signer berikutnya.",
+      "Menambahkan autosave halus untuk data pemeriksaan agar alokasi unit, detail kode produksi, dan catatan tidak hilang saat pemeriksa berpindah halaman.",
+      "Memperbarui Export Summary menjadi laporan formal berlogo Marison dengan judul bagian yang jelas, jarak antartabel yang lebih lega, waktu dibuat, identitas pengajuan, detail barang/unit, dan total rekap unit tanpa menyertakan lampiran, alur penandatangan, atau riwayat revisi.",
+      "Memperbaiki status internal revisi agar perpindahan dari tim pemeriksa ke pemohon memakai status Menunggu Persetujuan Pemohon tanpa ditolak constraint database.",
+      "Mengembalikan task langsung ke signer aktif setelah tim pemeriksa menyelesaikan revisi tanpa perubahan item atau nilai, sehingga tidak perlu menunggu persetujuan pemohon ulang.",
+      "Menampilkan nama pemeriksa yang sedang ditunggu pada alasan tombol persetujuan terkunci, bukan teks generik tim pemeriksa.",
+      "Mengurangi error badge/push akibat timeout Supabase Auth dengan validasi JWT lokal khusus endpoint attention, web push, dan data source unit.",
+      "Merapikan UI registrasi step Persetujuan dan Berkas agar Perihal, tempat, dan tanggal dokumen lebih mudah dibaca serta tidak terlihat saling menumpuk.",
+      "Menyesuaikan form rekomendasi agar Nama Barang / Alat Kerja dapat diisi manual oleh tim IT/PO, karena spesifikasi barang ditentukan pada tahap rekomendasi.",
+    ],
+  },
+  {
+    version: "v1.8.0",
+    date: "3 Juli 2026",
+    changes: [
+      "Memperbaiki upload foto profil agar identitas file selalu mengikuti akun Supabase Auth yang sedang login.",
+      "Memindahkan avatar dari URL publik Supabase Cloud ke storage private Supabase self-hosted.",
+      "Menyajikan avatar melalui endpoint domain SIGAP agar alamat storage internal tidak diekspos ke browser.",
+      "Menambahkan validasi server untuk format JPG, PNG, WebP, batas 5 MB, serta pemeriksaan isi file.",
+      "Menambahkan thumbnail WebP maksimal 256 x 256 untuk tampilan aplikasi agar penggunaan bandwidth lebih ringan.",
+      "Mempertahankan file asli untuk saat foto dibuka langsung pada tab baru.",
+      "Memigrasikan avatar lama yang masih menunjuk Supabase Cloud ke storage self-hosted.",
+      "Memperbaiki Aktivitas Departemen agar semua akun dapat melihat agregat agenda seluruh departemen, termasuk PO.",
+      "Memindahkan penghitungan Aktivitas Departemen ke endpoint server terautentikasi agar detail agenda lintas departemen tetap terlindungi.",
+      "Memperbaiki modal Aktivitas Terbaru agar konten panjang dapat discroll dan footer tetap terjangkau pada desktop maupun mobile.",
+      "Mengubah badge antrean Persetujuan dari merah menjadi warna primary karena badge menunjukkan jumlah tugas, bukan pelanggaran SLA.",
+      "Mengubah pengisian rekomendasi menjadi fokus per item yang otomatis mengikuti daftar barang pada permohonan induk.",
+      "Menambahkan navigator, progres kelengkapan, dan penguncian nama barang tanpa memecah nomor atau alur dokumen rekomendasi.",
+      "Menyederhanakan penanda nomor rekomendasi menjadi ikon gembok dengan tooltip yang menjelaskan bahwa nomor dibuat otomatis dari pengajuan induk.",
+      "Menormalkan kursor ikon gembok rekomendasi tanpa menghilangkan tooltip dan akses fokus keyboard.",
+      "Menambahkan input nominal Indonesia pada Struktur Atas dan Struktur Bawah sehingga nilai bertitik, berkoma, atau tanpa pemisah dihitung secara konsisten di UI, PDF, dan email.",
+      "Menyamakan istilah menjadi tim pemeriksa dan pemeriksaan data pada UI dan dokumentasi.",
+      "Menambahkan fondasi alur perbaikan approval dengan status Menunggu Perbaikan, target revisi manual, riwayat revisi, serta notifikasi ke pihak yang perlu memperbaiki.",
+      "Menampilkan kapasitas unit tersedia saat pemohon memilih proyek Unit agar jumlah pengajuan punya konteks stok proyek.",
+      "Menambahkan riwayat perbaikan pada detail Persetujuan dan Status Pengajuan.",
+      "Menambahkan perubahan item terstruktur pada pengembalian approval: item dapat dicoret, nilai diajukan/disetujui dicatat, dan alasan perubahan tampil di detail serta PDF PGD.",
+      "Menambahkan persetujuan pemohon setelah perbaikan sebelum proses approval dilanjutkan atau nomor dibatalkan.",
+      "Mengembalikan proses approval untuk ditinjau ulang setelah perubahan diterima pemohon.",
+      "Membatasi opsi pengembalian ke tim pemeriksa hanya untuk tahap yang memang memiliki pemeriksa pada snapshot transaksi.",
+      "Menyederhanakan dialog perbaikan item agar nilai diajukan menjadi referensi, bukan input wajib untuk signer.",
+      "Menyesuaikan placeholder instruksi dan alasan perbaikan berdasarkan konteks pengajuan Unit, Aset, Non Aset, atau Rekomendasi.",
+      "Mengotomatisasi keputusan revisi item Unit berdasarkan jumlah yang disetujui agar signer tidak memilih status manual.",
+      "Memindahkan hitungan revisi yang menjadi tugas pemohon dari badge Persetujuan ke badge Status Pengajuan.",
+      "Menetapkan aturan satu versi per tanggal; perubahan pada tanggal yang sama diperbarui pada entri versi yang sama.",
+    ],
+  },
+  {
+    version: "v1.7.0",
+    date: "1 Juli 2026",
+    changes: [
+      "Menambahkan navigasi berurutan pada subtopik Rekomendasi dan menunda Topik terkait sampai bagian Masalah umum rekomendasi selesai dibaca.",
+      "Menyamakan tinggi kotak tanda tangan satu dan dua baris serta membatasi tempat/tanggal hanya pada lebar kotak aktif.",
+      "Menjaga item Nama Barang tetap rata kiri meskipun field menggunakan kontrol pilihan/select.",
+      "Menyatukan aturan formasi tanda tangan dan alignment tabel antara Uji PDF dan generator dokumen transaksi.",
+      "Mengubah baris kedua yang lebih pendek menjadi rata kanan dan memastikan baris tiga kotak menggunakan grid 3.",
+      "Memperbarui Form dan Template dengan formasi tanda tangan konsisten untuk 3 sampai 8 signer.",
+      "Menjelaskan bahwa Uji PDF dan dokumen transaksi memakai aturan pembagian kotak yang sama.",
+      "Menambahkan panduan perbedaan Buka Dokumen dan Buat Ulang PDF.",
+      "Mendokumentasikan regenerasi surat lama dari template aktif tanpa mengulang atau mengubah histori approval.",
+      "Menambahkan penanganan PDF lama, cache tab browser, dan kondisi ketika admin perlu membangun ulang dokumen.",
+      "Menambahkan dokumentasi menu Rekomendasi untuk tugas pembuatan dokumen rekomendasi aset tertaut.",
+      "Menjelaskan shared lock rekomendasi: kandidat pertama yang mengambil tugas menjadi pemilik draft, kandidat lain melihat status terkunci.",
+      "Memperbarui Registrasi Surat dengan keputusan rekomendasi aset, data item rekomendasi, lampiran gambar wajib, dan link referensi.",
+      "Memperbarui Persetujuan dengan panel rekomendasi, kondisi surat induk terkunci, dan alur lanjut setelah rekomendasi selesai.",
+      "Memperbarui Kegunaan Form dengan konfigurasi dokumen tertaut, prasyarat rekomendasi, scope kandidat lintas kantor, dan antrean PBO.",
+      "Menambahkan pemeriksaan web push, badge rekomendasi, dan notifikasi realtime pada dokumentasi troubleshooting.",
+      "Menambahkan panduan deploy production dengan Docker context ubuntu-server, env production, dan aturan kapan PDF worker perlu ikut redeploy.",
+    ],
+  },
+  {
+    version: "v1.5.0",
+    date: "25 Juni 2026",
+    changes: [
+      "Menambahkan halaman dokumentasi publik untuk end user, admin, dan troubleshooting.",
+      "Memisahkan dokumentasi operasional user dari dokumentasi konfigurasi admin.",
+      "Menambahkan contoh penggunaan pada menu agenda, surat, persetujuan, monitoring, dan konfigurasi.",
+      "Membuat layout dokumentasi lebih lebar agar nyaman dibaca pada desktop.",
+      "Menambahkan pencarian cepat lintas topik dengan shortcut Ctrl+K.",
+      "Mengubah pencarian dokumentasi menjadi modal cepat yang terbuka dari input pencarian atau shortcut Ctrl+K.",
+      "Mengubah cara pakai dan contoh menjadi kartu alur bernomor agar instruksi lebih mudah diikuti.",
+      "Mengubah deep-link dokumentasi dari hash menjadi route penuh seperti /docs/dashboard/overview.",
+      "Menambahkan route subtopik dokumentasi agar topik dan bagian bisa dibuka langsung setelah refresh atau dibagikan.",
+      "Menambahkan navigasi subtopik pada topik aktif di sidebar dokumentasi desktop.",
+      "Menambahkan redirect kompatibilitas dari link hash lama ke route dokumentasi baru.",
+      "Memisahkan isi subhalaman dokumentasi agar setiap route hanya menampilkan section yang dipilih.",
+      "Mengubah Overview menjadi ringkasan topik dan daftar subtopik, bukan duplikasi seluruh isi topik.",
+      "Menambahkan subtopik otomatis untuk topik yang belum memiliki section custom.",
       "Memperdalam isi dokumentasi agar setiap topik berisi detail operasional, bukan hanya ringkasan.",
       "Menambahkan penjelasan struktur nomor surat, scope counter, reset tahunan, nomor VOID, dan siklus draft.",
       "Menambahkan variasi format nomor untuk pusat, proyek/unit, KC, dan KCP.",
@@ -2069,55 +2828,11 @@ export const DOCS_CHANGELOG = [
       "Menggabungkan nomor surat, counter, dan draft ke satu subtopik utuh agar penjelasan tidak terpencar.",
       "Menambahkan dukungan section gabungan untuk dokumentasi yang butuh beberapa tabel dan catatan dalam satu halaman.",
       "Menambahkan tabel detail untuk agenda, kalender, monitoring, file, riwayat, setting, konfigurasi admin, SLA, audit, email, dan troubleshooting.",
-    ],
-  },
-  {
-    version: "v1.4.0",
-    date: DOCS_UPDATED_AT,
-    changes: [
-      "Memisahkan isi subhalaman dokumentasi agar setiap route hanya menampilkan section yang dipilih.",
-      "Mengubah Overview menjadi ringkasan topik dan daftar subtopik, bukan duplikasi seluruh isi topik.",
-      "Menambahkan subtopik otomatis untuk topik yang belum memiliki section custom agar halaman lain tidak hanya memiliki Overview.",
       "Mengubah perilaku scroll subhalaman agar selalu mulai dari judul halaman.",
-    ],
-  },
-  {
-    version: "v1.3.0",
-    date: DOCS_UPDATED_AT,
-    changes: [
-      "Mengubah deep-link dokumentasi dari hash menjadi route penuh seperti /docs/dashboard/overview.",
-      "Menambahkan route subtopik dokumentasi agar topik dan bagian bisa dibuka langsung setelah refresh atau dibagikan.",
-      "Menambahkan navigasi subtopik pada topik aktif di sidebar dokumentasi desktop.",
-      "Menambahkan redirect kompatibilitas dari link hash lama ke route dokumentasi baru.",
-    ],
-  },
-  {
-    version: "v1.2.0",
-    date: DOCS_UPDATED_AT,
-    changes: [
-      "Mengubah pencarian dokumentasi menjadi modal cepat yang terbuka dari input pencarian atau shortcut Ctrl+K.",
       "Memperjelas dokumentasi Registrasi Surat dengan alur nomor draft, kategori pengajuan, data otomatis, dan kendala umum.",
-      "Memperjelas dokumentasi Persetujuan dengan perbedaan signer dan tim pengecek, aturan pengajuan Unit, dan alasan aksi terkunci.",
+      "Memperjelas dokumentasi Persetujuan dengan perbedaan signer dan tim pemeriksa, aturan pengajuan Unit, dan alasan aksi terkunci.",
       "Menyamakan animasi dialog utama agar pop-up terasa konsisten dan lebih tenang.",
-    ],
-  },
-  {
-    version: "v1.1.0",
-    date: DOCS_UPDATED_AT,
-    changes: [
-      "Membuat layout dokumentasi lebih lebar agar nyaman dibaca pada desktop.",
-      "Menambahkan pencarian cepat lintas topik dengan shortcut Ctrl+K.",
-      "Mengubah cara pakai dan contoh menjadi kartu alur bernomor agar instruksi lebih mudah diikuti.",
       "Menambahkan penanda topik aktif saat user membaca dokumentasi di desktop.",
-    ],
-  },
-  {
-    version: "v1.0.0",
-    date: DOCS_UPDATED_AT,
-    changes: [
-      "Menambahkan halaman dokumentasi publik untuk end user, admin, dan troubleshooting.",
-      "Memisahkan dokumentasi operasional user dari dokumentasi konfigurasi admin.",
-      "Menambahkan contoh penggunaan pada menu agenda, surat, persetujuan, monitoring, dan konfigurasi.",
       "Menambahkan standar agar pembaruan fitur juga dicatat pada halaman dokumentasi end user.",
     ],
   },
@@ -2127,5 +2842,6 @@ export const DOCS_PRINCIPLES = [
   "Dokumentasi harus menjawab masalah user, bukan hanya menjelaskan tombol.",
   "Dokumentasi admin dipisahkan dari dokumentasi user biasa agar tidak membingungkan.",
   "Setiap fitur baru harus menambahkan tujuan, cara pakai, contoh, dan troubleshooting.",
+  "Perubahan pada tanggal yang sama harus memperbarui entri versi yang sama, bukan membuat versi baru.",
   "Dokumentasi teknis pengembang tetap berada di markdown, sedangkan panduan operasional user berada di halaman ini.",
 ];

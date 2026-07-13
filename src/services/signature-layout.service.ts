@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { buildPgdSignatureSlotPlan, buildSignatureLayoutPlan, clearGoodsServicesLegacySignatureArea } from "../../document-layout-rules.mjs";
 
 export type SignatureLayoutConfig = {
   enabled: boolean;
@@ -6,6 +7,7 @@ export type SignatureLayoutConfig = {
   sheet: number;
   region: string;
   max_per_row: number;
+  geometry?: "pgd_reference_v2";
   show_role: boolean;
   show_name: boolean;
   show_job_title: boolean;
@@ -157,17 +159,19 @@ const applyMergedRangeStyle = (
   for (let row = range.startRow; row <= range.endRow; row += 1) {
     for (let col = range.startCol; col <= range.endCol; col += 1) {
       const cell = worksheet.getCell(row, col);
-      cell.style = cloneStyle(baseStyle);
-      cell.border = {
-        top: row === range.startRow ? { style: "thin", color: { argb: "FF000000" } } : undefined,
-        bottom: row === range.endRow ? { style: "thin", color: { argb: "FF000000" } } : undefined,
-        left: col === range.startCol ? { style: "thin", color: { argb: "FF000000" } } : undefined,
-        right: col === range.endCol ? { style: "thin", color: { argb: "FF000000" } } : undefined,
-      };
-      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      if (options.bold) cell.font = { ...(cell.font || {}), bold: true };
+      cell.border = {};
     }
   }
+  const master = worksheet.getCell(range.startRow, range.startCol);
+  master.style = cloneStyle(baseStyle);
+  master.border = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "thin", color: { argb: "FF000000" } },
+  };
+  master.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  if (options.bold) master.font = { ...(master.font || {}), bold: true };
 };
 
 const normalizeRoleKey = (value: string) => String(value || "").toLowerCase().trim();
@@ -180,8 +184,8 @@ const buildPgdSignatureLayout = (
   baseStyle: Partial<ExcelJS.Style>,
   options: BuildSignatureLayoutOptions
 ): SignaturePosition[] => {
-  if (steps.length < 3 || steps.length > 6) {
-    throw new Error("Preset PGD hanya mendukung 3 sampai 6 tahap tanda tangan.");
+  if (steps.length < 3 || steps.length > 8) {
+    throw new Error("Preset PGD hanya mendukung 3 sampai 8 tahap tanda tangan.");
   }
   if (region.endCol - region.startCol + 1 !== 11) {
     throw new Error("Preset PGD membutuhkan region selebar 11 kolom, contoh D33:N45.");
@@ -202,16 +206,14 @@ const buildPgdSignatureLayout = (
     throw new Error("Urutan preset PGD harus Membuat, lalu Memeriksa, lalu Menyetujui.");
   }
 
-  const validDistribution =
-    (steps.length === 3 && expectedRoles.every(role => roleCounts[role] === 1)) ||
-    (steps.length === 4 && expectedRoles.filter(role => roleCounts[role] === 2).length === 1 && expectedRoles.every(role => roleCounts[role] >= 1)) ||
-    (steps.length === 5 && expectedRoles.filter(role => roleCounts[role] === 1).length === 1 && expectedRoles.every(role => roleCounts[role] >= 1 && roleCounts[role] <= 2)) ||
-    (steps.length === 6 && expectedRoles.every(role => roleCounts[role] === 2));
+  const validDistribution = expectedRoles.every(role => roleCounts[role] >= 1 && roleCounts[role] <= 3);
   if (!validDistribution) {
     throw new Error(`Distribusi ${steps.length} tahap tidak cocok dengan template PGD.`);
   }
 
-  const requiredRows = steps.length === 6 ? 13 : 7;
+  const layoutPlan = buildPgdSignatureSlotPlan(steps.length);
+  const groupSizes = layoutPlan.groupSizes;
+  const requiredRows = groupSizes.length > 1 ? 13 : 7;
   if (region.endRow - region.startRow + 1 < requiredRows) {
     throw new Error(`Preset PGD ${steps.length} tahap membutuhkan region minimal ${requiredRows} baris.`);
   }
@@ -222,27 +224,30 @@ const buildPgdSignatureLayout = (
     endCol: region.startCol + endOffset,
     endRow: region.startRow + endRowOffset,
   });
-  const rowOneSlots = steps.length === 3
-    ? [[4, 6], [7, 9], [10, 10]]
-    : steps.length === 4 || steps.length === 6
-      ? [[3, 3], [4, 6], [7, 9], [10, 10]]
-      : [[1, 2], [3, 3], [4, 6], [7, 9], [10, 10]];
-  const slotRows = steps.length === 6
-    ? [
-        ...rowOneSlots.map(([start, end]) => ({ start, end, header: 1, ttdStart: 2, ttdEnd: 4, name: 5, job: 6 })),
-        { start: 4, end: 6, header: 7, ttdStart: 8, ttdEnd: 10, name: 11, job: 12 },
-        { start: 7, end: 9, header: 7, ttdStart: 8, ttdEnd: 10, name: 11, job: 12 },
-      ]
-    : rowOneSlots.map(([start, end]) => ({ start, end, header: 1, ttdStart: 2, ttdEnd: 4, name: 5, job: 6 }));
-
-  const dateStart = rowOneSlots[0][0];
-  const dateEnd = rowOneSlots[rowOneSlots.length - 1][1];
+  const slotRows = groupSizes.flatMap((_size, groupIndex) =>
+    layoutPlan.groupSlotRanges[groupIndex].map(([start, end]) => {
+      return ({
+      start,
+      end,
+      header: groupIndex === 0 ? 1 : 7,
+      ttdStart: groupIndex === 0 ? 2 : 8,
+      ttdEnd: groupIndex === 0 ? 4 : 10,
+      name: groupIndex === 0 ? 5 : 11,
+      job: groupIndex === 0 ? 6 : 12,
+      });
+    })
+  );
+  const [dateStart, dateEnd] = layoutPlan.dateRange;
   const dateRange = offsetRange(dateStart, 0, dateEnd, 0);
   worksheet.mergeCells(formatRange(dateRange.startCol, dateRange.startRow, dateRange.endCol, dateRange.endRow));
   applyMergedRangeStyle(worksheet, dateRange, baseStyle);
   const dateCell = worksheet.getCell(dateRange.startRow, dateRange.startCol);
   dateCell.value = String(options.requestPlaceDate || "").trim() || null;
-  dateCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  dateCell.alignment = {
+    horizontal: "center",
+    vertical: "middle",
+    wrapText: true,
+  };
 
   const positions: SignaturePosition[] = [];
   const headerGroups = new Map<string, { role: string; startCol: number; endCol: number; row: number; steps: number[] }>();
@@ -325,6 +330,7 @@ export const normalizeSignatureLayoutConfig = (value: unknown): SignatureLayoutC
     show_role: config.show_role !== false,
     show_name: config.show_name !== false,
     show_job_title: config.show_job_title !== false,
+    geometry: config.geometry === "pgd_reference_v2" ? "pgd_reference_v2" : undefined,
   };
 };
 
@@ -343,19 +349,29 @@ export const buildDynamicSignatureLayout = (
 
   const worksheet = workbook.worksheets[Math.max(config.sheet - 1, 0)];
   if (!worksheet) throw new Error(`Sheet ${config.sheet} tidak ditemukan.`);
-  const region = parseSignatureRegion(config.region);
+  const region = parseSignatureRegion(config.preset === "pgd" ? "D33:N45" : config.region);
   const dateRow = region.startRow;
   const layoutStartRow = region.startRow + 1;
   const totalRows = region.endRow - layoutStartRow + 1;
   const totalColumns = region.endCol - region.startCol + 1;
-  const rowGroups = Math.ceil(steps.length / config.max_per_row);
-  const rowsPerGroup = Math.floor(totalRows / rowGroups);
+  const layoutPlan = buildSignatureLayoutPlan(steps.length, config.max_per_row);
+  const groupSizes = layoutPlan.groupSizes;
+  const slotIndexesByGroup = steps.length === 3 && config.preset === "pgd"
+    ? [[1, 2, 3]]
+    : layoutPlan.groupSlotIndexes;
+  const groupOffsets = groupSizes.reduce<number[]>((offsets, size, index) => {
+    offsets.push(index === 0 ? 0 : offsets[index - 1] + groupSizes[index - 1]);
+    return offsets;
+  }, []);
+  const rowGroups = groupSizes.length;
+  const rowsPerGroup = rowGroups === 1 ? totalRows : Math.floor(totalRows / layoutPlan.rowCapacity);
   if (rowsPerGroup < 5) {
     throw new Error("Signature region terlalu pendek. Setiap baris kotak membutuhkan minimal 5 row Excel.");
   }
 
   const baseCell = worksheet.getCell(region.startRow, region.startCol);
   const baseStyle = cloneStyle(baseCell.style);
+  if (config.preset === "pgd") clearGoodsServicesLegacySignatureArea(worksheet);
   getWorksheetMerges(worksheet).forEach(mergeRange => {
     if (rangesOverlap(parseSignatureRegion(mergeRange), region)) {
       worksheet.unMergeCells(mergeRange);
@@ -367,32 +383,30 @@ export const buildDynamicSignatureLayout = (
       const cell = worksheet.getCell(row, col);
       cell.value = null;
       cell.style = cloneStyle(baseStyle);
+      cell.border = {};
     }
   }
 
   if (config.preset === "pgd") {
     const positions = buildPgdSignatureLayout(worksheet, config, steps, region, baseStyle, options);
-    worksheet.pageSetup.printArea = formatWorksheetPrintArea(worksheet, region);
+    worksheet.pageSetup.printArea = formatRange(1, 1, region.endCol, region.endRow);
+    worksheet.pageSetup.fitToPage = true;
+    worksheet.pageSetup.fitToWidth = 1;
+    worksheet.pageSetup.fitToHeight = 1;
+    delete worksheet.pageSetup.scale;
     return positions;
   }
 
-  const requestPlaceDate = String(options.requestPlaceDate || "").trim();
-  if (requestPlaceDate) {
-    const dateRange = formatRange(region.startCol, dateRow, region.endCol, dateRow);
-    worksheet.mergeCells(dateRange);
-    const dateCell = worksheet.getCell(topLeftCell(dateRange));
-    dateCell.value = requestPlaceDate;
-    dateCell.font = { ...(dateCell.font || {}), bold: false };
-    dateCell.alignment = {
-      ...(dateCell.alignment || {}),
-      horizontal: "right",
-      vertical: "middle",
-      wrapText: false,
-    };
-  }
-
-  const slotCount = steps.length <= config.max_per_row ? steps.length : config.max_per_row;
-  const slotRanges = Array.from({ length: slotCount }, (_item, index) => {
+  const slotCount = layoutPlan.slotCount;
+  const fixedFourBoxSlots = slotCount >= 3 && slotCount <= 4 && region.endCol - region.startCol + 1 === 11
+    ? [
+        { startCol: region.startCol, endCol: region.startCol + 1 },
+        { startCol: region.startCol + 2, endCol: region.startCol + 4 },
+        { startCol: region.startCol + 5, endCol: region.startCol + 8 },
+        { startCol: region.startCol + 9, endCol: region.endCol },
+      ]
+    : null;
+  const slotRanges = fixedFourBoxSlots || Array.from({ length: slotCount }, (_item, index) => {
     const startCol = region.startCol + Math.floor((index * totalColumns) / slotCount);
     const endCol = index === slotCount - 1
       ? region.endCol
@@ -400,17 +414,40 @@ export const buildDynamicSignatureLayout = (
     return { startCol, endCol };
   });
 
+  const firstRowSlotIndex = slotIndexesByGroup[0][0];
+  const firstRowStartCol = slotRanges[firstRowSlotIndex]?.startCol ?? region.startCol;
+  const firstRowEndCol = slotRanges[firstRowSlotIndex + groupSizes[0] - 1]?.endCol ?? region.endCol;
+  const requestPlaceDate = String(options.requestPlaceDate || "").trim();
+  if (requestPlaceDate) {
+    const dateRange = formatRange(firstRowStartCol, dateRow, firstRowEndCol, dateRow);
+    worksheet.mergeCells(dateRange);
+    applyMergedRangeStyle(worksheet, {
+      startCol: firstRowStartCol,
+      startRow: dateRow,
+      endCol: firstRowEndCol,
+      endRow: dateRow,
+    }, baseStyle);
+    const dateCell = worksheet.getCell(topLeftCell(dateRange));
+    dateCell.value = requestPlaceDate;
+    dateCell.font = { ...(dateCell.font || {}), bold: false };
+    dateCell.alignment = {
+      ...(dateCell.alignment || {}),
+      horizontal: "left",
+      vertical: "middle",
+      wrapText: true,
+      indent: 1,
+    };
+  }
+
   const positions: SignaturePosition[] = [];
   for (let groupIndex = 0; groupIndex < rowGroups; groupIndex += 1) {
-    const groupSteps = steps.slice(
-      groupIndex * config.max_per_row,
-      (groupIndex + 1) * config.max_per_row
-    );
+    const groupStartIndex = groupOffsets[groupIndex];
+    const groupSteps = steps.slice(groupStartIndex, groupStartIndex + groupSizes[groupIndex]);
     const groupStartRow = layoutStartRow + groupIndex * rowsPerGroup;
     const groupEndRow = groupIndex === rowGroups - 1
       ? region.endRow
-      : groupStartRow + rowsPerGroup - 1;
-    const firstSlotIndex = Math.floor((slotRanges.length - groupSteps.length) / 2);
+      : Math.min(region.endRow, groupStartRow + rowsPerGroup - 1);
+    const firstSlotIndex = slotIndexesByGroup[groupIndex][0];
     const headerGroups: Array<{ key: string; label: string; startCol: number; endCol: number; range: string }> = [];
 
     groupSteps.forEach((step, itemIndex) => {
@@ -483,5 +520,9 @@ export const buildDynamicSignatureLayout = (
   }
 
   worksheet.pageSetup.printArea = formatWorksheetPrintArea(worksheet, region);
+  worksheet.pageSetup.fitToPage = true;
+  worksheet.pageSetup.fitToWidth = 1;
+  worksheet.pageSetup.fitToHeight = 1;
+  delete worksheet.pageSetup.scale;
   return positions;
 };

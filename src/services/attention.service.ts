@@ -7,6 +7,7 @@ export type AttentionState = {
   inboxCount: number;
   unreadNotifications: number;
   monitoringCount: number;
+  followUpCount: number;
   generatedAt?: string;
 };
 
@@ -17,6 +18,7 @@ const emptyState: AttentionState = {
   inboxCount: 0,
   unreadNotifications: 0,
   monitoringCount: 0,
+  followUpCount: 0,
 };
 
 const getAccessToken = async () => {

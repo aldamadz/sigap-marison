@@ -134,6 +134,94 @@ const sanitizeSurat = (row) => {
   };
 };
 
+const OFFICE_TYPE_LABELS = {
+  pusat: "Kantor Pusat",
+  kc: "KC",
+  kcp: "KCP",
+};
+
+const normalizeText = (value) => String(value || "").trim().toLowerCase();
+const normalizeOfficeType = (value) => {
+  const normalized = normalizeText(value).replace(/[\s._-]+/g, "");
+  if (!normalized) return null;
+  if (["pusat", "kantorpusat", "headquarter", "hq"].includes(normalized)) return "pusat";
+  if (normalized === "kc") return "kc";
+  if (normalized === "kcp") return "kcp";
+  return null;
+};
+
+const getOfficeType = (office) => {
+  const kedudukan = normalizeText(office?.kedudukan);
+  const code = normalizeText(office?.code);
+  const name = normalizeText(office?.name);
+  if (kedudukan.includes("pusat") || name === "kantor pusat") return "pusat";
+  if (kedudukan === "kcp" || code.startsWith("kcp") || name.startsWith("kcp ")) return "kcp";
+  if (kedudukan === "kc" || code.startsWith("kc") || name.startsWith("kc ")) return "kc";
+  return "kc";
+};
+
+const sanitizeOffice = (office, officeById = new Map()) => {
+  const type = getOfficeType(office);
+  const parent = office?.parent_id ? officeById.get(office.parent_id) : null;
+  return {
+    id: office.id,
+    code: office.code || null,
+    name: office.name || null,
+    type,
+    type_label: OFFICE_TYPE_LABELS[type],
+    parent_id: office.parent_id || null,
+    parent_code: parent?.code || null,
+    parent_name: parent?.name || null,
+  };
+};
+
+const isBranchDepartment = (department) => /\(cabang\)/i.test(String(department?.name || ""));
+const normalizeDepartmentScope = (value) => {
+  const normalized = normalizeText(value).replace(/[\s._-]+/g, "");
+  if (!normalized || normalized === "all" || normalized === "semua") return "all";
+  if (["pusat", "kantorpusat"].includes(normalized)) return "pusat";
+  if (["cabang", "kc", "kcp"].includes(normalized)) return "cabang";
+  return null;
+};
+
+const sanitizeDepartment = (department) => ({
+  id: department.id,
+  code: department.code || null,
+  name: department.name || null,
+  dept_index: department.dept_index ?? null,
+  scope: isBranchDepartment(department) ? "cabang" : "pusat",
+});
+
+const loadMasterOffices = async () => {
+  const { data, error } = await supabase
+    .from("master_offices")
+    .select("id, name, code, kedudukan, parent_id")
+    .order("name", { ascending: true });
+  if (error) throw error;
+  const rows = data || [];
+  const officeById = new Map(rows.map((office) => [office.id, office]));
+  return rows
+    .map((office) => sanitizeOffice(office, officeById))
+    .sort((left, right) =>
+      (left.type === right.type ? 0 : ["pusat", "kc", "kcp"].indexOf(left.type) - ["pusat", "kc", "kcp"].indexOf(right.type)) ||
+      String(left.name || "").localeCompare(String(right.name || ""), "id")
+    );
+};
+
+const loadMasterDepartments = async () => {
+  const { data, error } = await supabase
+    .from("master_departments")
+    .select("id, name, code, dept_index")
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return (data || [])
+    .map(sanitizeDepartment)
+    .sort((left, right) =>
+      (Number(left.dept_index ?? 9999) - Number(right.dept_index ?? 9999)) ||
+      String(left.name || "").localeCompare(String(right.name || ""), "id")
+    );
+};
+
 const writeAuditLog = async (request, statusCode, errorMessage = null) => {
   try {
     await supabase.from("external_api_audit_logs").insert({
@@ -301,6 +389,85 @@ const secured = {
     security: [{ bearerAuth: [], timestamp: [], signature: [] }],
   },
 };
+
+app.get("/api/master/offices", {
+  ...secured,
+  schema: {
+    ...secured.schema,
+    summary: "List Kantor",
+    description: "Master kantor untuk onboarding akun. Gunakan `type=pusat`, `type=kc`, atau `type=kcp` untuk memfilter pilihan.",
+    tags: ["Master Data"],
+    querystring: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        type: { type: "string", enum: ["pusat", "kc", "kcp"] },
+      },
+    },
+  },
+}, async (request, reply) => {
+  const requestedType = normalizeOfficeType(request.query.type);
+  if (request.query.type && !requestedType) {
+    return reply.code(400).send({ message: "Tipe kantor tidak valid. Gunakan pusat, kc, atau kcp." });
+  }
+  const offices = await loadMasterOffices();
+  return {
+    data: requestedType ? offices.filter((office) => office.type === requestedType) : offices,
+  };
+});
+
+app.get("/api/master/departments", {
+  ...secured,
+  schema: {
+    ...secured.schema,
+    summary: "List Departemen",
+    description: "Master departemen untuk onboarding akun. Gunakan `scope=pusat` untuk pilihan Kantor Pusat atau `scope=cabang` untuk departemen cabang.",
+    tags: ["Master Data"],
+    querystring: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        scope: { type: "string", enum: ["pusat", "cabang", "all"] },
+      },
+    },
+  },
+}, async (request, reply) => {
+  const scope = normalizeDepartmentScope(request.query.scope);
+  if (request.query.scope && !scope) {
+    return reply.code(400).send({ message: "Scope departemen tidak valid. Gunakan pusat, cabang, atau all." });
+  }
+  const departments = await loadMasterDepartments();
+  return {
+    data: scope === "all" ? departments : departments.filter((department) => department.scope === scope),
+  };
+});
+
+app.get("/api/onboarding/options", {
+  ...secured,
+  schema: {
+    ...secured.schema,
+    summary: "Opsi Onboarding Akun",
+    description: "Mengembalikan pilihan tipe kantor, kantor, dan departemen untuk alur login pertama sistem eksternal.",
+    tags: ["Master Data"],
+  },
+}, async () => {
+  const [offices, departments] = await Promise.all([loadMasterOffices(), loadMasterDepartments()]);
+  return {
+    data: {
+      office_types: [
+        { value: "pusat", label: OFFICE_TYPE_LABELS.pusat },
+        { value: "kc", label: OFFICE_TYPE_LABELS.kc },
+        { value: "kcp", label: OFFICE_TYPE_LABELS.kcp },
+      ],
+      offices: {
+        pusat: offices.filter((office) => office.type === "pusat"),
+        kc: offices.filter((office) => office.type === "kc"),
+        kcp: offices.filter((office) => office.type === "kcp"),
+      },
+      departments: departments.filter((department) => department.scope === "pusat"),
+    },
+  };
+});
 
 app.get("/api/surat", {
   ...secured,

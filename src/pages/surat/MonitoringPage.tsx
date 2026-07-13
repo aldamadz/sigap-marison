@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/lib/supabase";
 import {
   Search, Loader2, Info, Eye,
   Clock, AlertCircle, CheckCircle2, User, ArrowUpRight,
-  FileCheck, XCircle, Inbox
+  FileCheck, XCircle, Inbox, RefreshCw
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -19,10 +20,19 @@ import {
 import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
 import { EmptyState, EmptyList, ErrorState, EmptyGridSkeleton } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/Breadcrumbs';
+import { suratService } from '@/services/surat.service';
+import { getActiveRecommendationDocuments } from '@/components/surat/linked-documents';
+import {
+  RegistrationSummaryDocument,
+  type RegistrationSummaryData,
+} from '@/components/surat/RegistrationSummaryDialog';
+import { buildRegistrationSummaryData } from '@/components/surat/registration-summary-data';
+import { useAuth } from '@/hooks/use-auth';
+import { toast } from 'sonner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-type DocStatus = 'PROSES' | 'SELESAI' | 'DITOLAK';
+type DocStatus = 'PROSES' | 'SELESAI' | 'DITOLAK' | 'MENUNGGU_PERBAIKAN';
 
 interface ResolvedStatus {
   type: DocStatus;
@@ -63,6 +73,18 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
     };
   }
 
+  if (surat.status === 'MENUNGGU_PERBAIKAN') {
+    return {
+      type: 'MENUNGGU_PERBAIKAN',
+      label: 'Menunggu Perbaikan',
+      sublabel: surat.data_snapshot?.revision?.reason || 'Ada perubahan yang perlu ditindaklanjuti',
+      barColor: 'bg-orange-500',
+      badgeClass: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+      accentClass: 'bg-orange-500',
+      icon: <RefreshCw size={14} />,
+    };
+  }
+
   const currentSig = sigs.find(s => !s.is_signed && s.status !== 'REJECTED');
   return {
     type: 'PROSES',
@@ -78,19 +100,79 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
 const FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'all',          label: 'Semua' },
   { value: 'PROSES',       label: 'Proses' },
+  { value: 'MENUNGGU_PERBAIKAN', label: 'Perlu Perbaikan' },
   { value: 'SELESAI',      label: 'Selesai' },
   { value: 'DITOLAK',      label: 'Ditolak' },
 ];
 
+const buildMonitoringSummary = (surat: any): RegistrationSummaryData => {
+  return buildRegistrationSummaryData(surat);
+};
+
+const isGenericRevisionReason = (value: unknown) => {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return !normalized ||
+    normalized === 'instruksi utama' ||
+    normalized === 'catatan revisi' ||
+    normalized === 'tuliskan instruksi perbaikan' ||
+    normalized === 'tulis instruksi perbaikan' ||
+    normalized === 'instruksi perbaikan';
+};
+
+const getRevisionDisplayReason = (event: any) => {
+  const reason = String(event?.reason || '').trim();
+  if (!isGenericRevisionReason(reason)) {
+    return reason;
+  }
+  const itemReason = Array.isArray(event?.changes?.item_revisions)
+    ? event.changes.item_revisions
+        .map((row: any) => String(row?.alasan || row?.reason || '').trim())
+        .find(Boolean)
+    : '';
+  return itemReason || 'Perbaikan sudah tercatat pada detail item.';
+};
+
 // ── Main Component ────────────────────────────────────────────────────────
 
 const MonitoringPage = () => {
+  const { user } = useAuth() as any;
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? 'all');
   const { openPdf, openFile, isOpening } = useDocumentOpener();
+  const isAdminUser = ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
+  const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
+  const selectedSuratId = selectedSurat?.id || "";
+
+  const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+    queryKey: ['surat-linked-documents', selectedSuratId],
+    queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
+    enabled: Boolean(selectedSuratId && isDetailOpen),
+    staleTime: 15_000,
+  });
+
+  const { data: selectedRevisionHistory = [] } = useQuery({
+    queryKey: ['surat-revision-history', selectedSuratId],
+    queryFn: () => suratService.getRevisionHistory(selectedSuratId),
+    enabled: Boolean(selectedSuratId && isDetailOpen),
+    staleTime: 10_000,
+  });
+
+  const activeRevisionEvent = selectedRevisionHistory.find((event: any) =>
+    event.status === 'open' || event.status === 'awaiting_requester'
+  );
+  const canRequesterActOnRevision = Boolean(
+    selectedSurat &&
+    activeRevisionEvent &&
+    selectedSurat.created_by === user?.id &&
+    selectedSurat.status === 'MENUNGGU_PERBAIKAN'
+  );
 
   const { data: allData = [], isLoading, error: queryError } = useQuery({
     queryKey: ['surat-monitoring-list'],
@@ -103,10 +185,10 @@ const MonitoringPage = () => {
         .select(`
           *,
           surat_signatures (
-            id, step_order, is_signed, status, role_name, signed_at, catatan,
-            profiles:user_id ( full_name )
+            id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan, signer_snapshot,
+            profiles:user_id ( full_name, job_title )
           ),
-          surat_attachments ( id, file_url, file_name, file_type, file_size )
+          surat_attachments ( id, file_url, file_name, file_type, file_size, requirement_label )
         `)
         .eq('created_by', session.user.id)
         .order('created_at', { ascending: false });
@@ -329,20 +411,22 @@ const MonitoringPage = () => {
 
       {/* DETAIL MODAL */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden bg-card border-border rounded-3xl shadow-2xl">
-          <DialogHeader className="p-6 border-b border-border bg-muted/20">
+        <DialogContent className="flex max-h-[94dvh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden border-border bg-card p-0 sm:w-[calc(100vw-2rem)]">
+          <DialogHeader className="shrink-0 border-b border-border bg-muted/20 px-5 py-4 pr-12 sm:px-7">
             <div className="flex items-center gap-4">
               <div className="bg-primary/10 p-2 rounded-lg"><Info className="text-primary" size={20} /></div>
               <div>
-                <DialogTitle className="text-sm font-black uppercase tracking-tight">Informasi Progress Dokumen</DialogTitle>
-                <DialogDescription className="text-[10px] font-medium uppercase text-muted-foreground">
-                  Riwayat persetujuan dan dokumen
+                <DialogTitle className="text-base font-semibold">Detail pengajuan</DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                  Ringkasan isi, berkas, dan progres persetujuan
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
-          <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/10 p-3 sm:p-6">
+
+            {selectedSurat && <RegistrationSummaryDocument data={buildMonitoringSummary(selectedSurat)} />}
 
             {/* Status badge */}
             {selectedSurat && (() => {
@@ -354,7 +438,76 @@ const MonitoringPage = () => {
               );
             })()}
 
-            {(selectedSurat?.file_path || getAttachments(selectedSurat).length > 0) && (
+            {selectedRevisionHistory.length > 0 && (
+              <div className="space-y-2 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                <div className="flex items-center gap-2 text-orange-600">
+                  <RefreshCw size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Riwayat Perbaikan</span>
+                </div>
+                <div className="space-y-2">
+                  {selectedRevisionHistory.map((event: any) => (
+                    <div key={event.id} className="rounded-xl border border-border bg-background/80 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">
+                            {event.actor_name || 'User'} mengembalikan proses
+                          </p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {event.created_at ? new Date(event.created_at).toLocaleString('id-ID') : '-'}
+                            {event.from_step ? ` · Tahap ${event.from_step}` : ''}
+                          </p>
+                        </div>
+                        <span className={cn(
+                          "rounded-full border px-2 py-1 text-[9px] font-black uppercase",
+                          event.status === 'open' ? "border-orange-500/30 bg-orange-500/10 text-orange-600" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+                        )}>
+                          {event.status === 'open' ? 'Menunggu Perbaikan' : event.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
+                        </span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{getRevisionDisplayReason(event)}</p>
+                      {event.changes?.item_revisions?.length > 0 && (
+                        <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+                          <table className="w-full min-w-[560px] text-left text-xs">
+                            <thead className="bg-muted/40 text-muted-foreground">
+                              <tr>
+                                <th className="px-3 py-2">Item</th>
+                                <th className="px-3 py-2">Keputusan</th>
+                                <th className="px-3 py-2">Nilai diajukan</th>
+                                <th className="px-3 py-2">Nilai disetujui</th>
+                                <th className="px-3 py-2">Alasan</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {event.changes.item_revisions.map((row: any, index: number) => (
+                                <tr key={`${event.id}-${index}`} className="border-t border-border">
+                                  <td className={cn("px-3 py-2 font-semibold", row.action === 'reject' && "text-muted-foreground line-through")}>{row.nama_barang || `Item ${Number(row.index || index) + 1}`}</td>
+                                  <td className="px-3 py-2">{row.action === 'reject' ? 'Tidak disetujui' : row.action === 'adjust' ? 'Disetujui sebagian' : 'Tidak berubah'}</td>
+                                  <td className="px-3 py-2">{row.nilai_diajukan || '-'}</td>
+                                  <td className="px-3 py-2">{row.nilai_disetujui || '-'}</td>
+                                  <td className="px-3 py-2">{row.alasan || '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {canRequesterActOnRevision && (
+                  <div className="flex flex-col gap-2 border-t border-orange-500/20 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Keputusan pemohon diproses dari halaman Tindak Lanjut agar riwayat dan notifikasinya tidak tercampur dengan monitoring.
+                    </p>
+                    <Button type="button" asChild>
+                      <Link to={`/surat/tindak-lanjut?surat=${selectedSurat.id}`}>Buka Tindak Lanjut</Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(selectedSurat?.file_path || getAttachments(selectedSurat).length > 0 || selectedLinkedDocuments.length > 0 || linkedDocumentsLoading) && (
               <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <FileCheck size={14} />
@@ -362,23 +515,51 @@ const MonitoringPage = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {selectedSurat?.file_path && (
-                    <button
-                      type="button"
-                      onClick={() => void openPdf(selectedSurat.id)}
-                      disabled={isOpening(documentOperationKey.pdf(selectedSurat.id))}
-                      className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        {isOpening(documentOperationKey.pdf(selectedSurat.id)) ? <Loader2 size={16} className="animate-spin text-primary" /> : <FileCheck size={16} className="text-primary" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-black uppercase text-foreground tracking-widest">Dokumen</p>
-                        <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
-                          {isOpening(documentOperationKey.pdf(selectedSurat.id)) ? "Menyiapkan PDF..." : "PDF Preview"}
-                        </p>
-                      </div>
-                      <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => void openPdf(selectedSurat.id)}
+                        disabled={isOpening(documentOperationKey.pdf(selectedSurat.id))}
+                        className="flex w-full items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          {isOpening(documentOperationKey.pdf(selectedSurat.id)) ? <Loader2 size={16} className="animate-spin text-primary" /> : <FileCheck size={16} className="text-primary" />}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-[10px] font-black uppercase text-foreground tracking-widest">Dokumen</p>
+                          <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
+                            {isOpening(documentOperationKey.pdf(selectedSurat.id)) ? "Menyiapkan PDF..." : "PDF Preview"}
+                          </p>
+                        </div>
+                        <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                      </button>
+                      {isAdminUser && (() => {
+                        const refreshKey = documentOperationKey.pdf(selectedSurat.id, "monitoring-refresh");
+                        const refreshing = rebuildingPdfId === selectedSurat.id || isOpening(refreshKey);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => void (async () => {
+                              if (refreshing) return;
+                              setRebuildingPdfId(selectedSurat.id);
+                              try {
+                                await suratService.rebuildDocumentSource(selectedSurat.id);
+                                await openPdf(selectedSurat.id, refreshKey, { refresh: true });
+                              } catch (error) {
+                                toast.error(error instanceof Error ? error.message : "Gagal membangun ulang dokumen.");
+                              } finally {
+                                setRebuildingPdfId(null);
+                              }
+                            })()}
+                            disabled={refreshing}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 transition-all hover:bg-amber-500/15 dark:text-amber-300"
+                          >
+                            {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                            {refreshing ? "Membuat ulang PDF..." : "Buat Ulang PDF"}
+                          </button>
+                        );
+                      })()}
+                    </div>
                   )}
 
                   {getAttachments(selectedSurat).map((attachment: any, index: number) => {
@@ -402,6 +583,37 @@ const MonitoringPage = () => {
                       </div>
                       <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                     </button>
+                    );
+                  })}
+                  {linkedDocumentsLoading && (
+                    <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                      Memuat lampiran rekomendasi...
+                    </div>
+                  )}
+
+                  {getActiveRecommendationDocuments(selectedLinkedDocuments).map((document) => {
+                    const recommendationKey = documentOperationKey.pdf(document.suratId, `monitoring-recommendation-${document.id}`);
+                    const opening = isOpening(recommendationKey);
+                    return (
+                      <button
+                        key={document.id}
+                        type="button"
+                        onClick={() => void openPdf(document.suratId, recommendationKey)}
+                        disabled={opening || !document.suratId}
+                        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-all group disabled:cursor-wait disabled:opacity-70"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          {opening ? <Loader2 size={16} className="animate-spin text-primary" /> : <FileCheck size={16} className="text-primary" />}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-[10px] font-black uppercase text-foreground tracking-widest">{document.label}</p>
+                          <p className="text-[9px] text-muted-foreground truncate font-mono mt-0.5">
+                            {opening ? "Menyiapkan PDF..." : document.title}
+                          </p>
+                        </div>
+                        <ArrowUpRight size={14} className="text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                      </button>
                     );
                   })}
                 </div>
@@ -460,18 +672,6 @@ const MonitoringPage = () => {
               </div>
             </div>
 
-            {/* ADVICE FOOTER */}
-            <div className="pt-4 border-t border-border">
-              <div className="flex gap-3 p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-amber-700">
-                <Info size={16} className="shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-tight">Instruksi Revisi</p>
-                  <p className="text-[10px] font-bold leading-normal opacity-90">
-                    Jika terdapat catatan penolakan atau feedback perbaikan, silakan perbaiki file anda dan lakukan <span className="underline">Registrasi Ulang</span> untuk mendapatkan nomor surat baru atau mengikuti alur kembali.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>

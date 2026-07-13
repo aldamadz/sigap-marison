@@ -38,7 +38,8 @@ describe("dynamic signature layout", () => {
 
     expect(positions).toHaveLength(4);
     expect(worksheet.getCell("B33").value).toBe("Magelang, 20 Juli 2026");
-    expect(worksheet.getCell("B33").alignment.horizontal).toBe("right");
+    expect(worksheet.getCell("B33").alignment.horizontal).toBe("left");
+    expect(worksheet.getCell("B33").alignment.indent).toBe(1);
     expect(positions[0].header_range).toBe("B34:D34");
     expect(positions[0].job_title).toBe("Mgr. PO");
     expect(worksheet.getCell("B45").value).toBe("Mgr. PO");
@@ -88,8 +89,8 @@ describe("dynamic signature layout", () => {
     })));
 
     expect(positions[0].header_range).toBe("B21:N21");
-    expect(positions[4].header_range).toBe("E28:G28");
-    expect(positions[4].ttd_range).toBe("E29:G33");
+    expect(positions[4].header_range).toBe("F28:N28");
+    expect(positions[4].ttd_range).toBe("J29:N33");
   });
 
   it("merges adjacent headers when the approval role is the same", () => {
@@ -138,25 +139,25 @@ describe("dynamic signature layout", () => {
     ], { requestPlaceDate: "Magelang, 10 Juni 2026" });
 
     expect(positions.map(position => position.ttd_range)).toEqual([
-      "E35:F37",
-      "G35:G37",
       "H35:J37",
       "K35:M37",
       "N35:N37",
+      "K41:M43",
+      "N41:N43",
     ]);
     expect(positions.map(position => position.header_range)).toEqual([
-      "E34:F34",
-      "G34:J34",
-      "G34:J34",
+      "H34:J34",
       "K34:N34",
       "K34:N34",
+      "K40:N40",
+      "K40:N40",
     ]);
-    expect(worksheet.getCell("E33").value).toBe("Magelang, 10 Juni 2026");
-    expect(worksheet.getCell("E33").alignment.horizontal).toBe("center");
-    expect(worksheet.getCell("E33").border.bottom?.style).toBe("thin");
+    expect(worksheet.getCell("H33").value).toBe("Magelang, 10 Juni 2026");
+    expect(worksheet.getCell("H33").alignment.horizontal).toBe("center");
+    expect(worksheet.getCell("H33").border.bottom?.style).toBe("thin");
   });
 
-  it("matches the PGD six-step template with a four plus two layout", () => {
+  it("matches the PGD six-step template with a three plus three layout", () => {
     const workbook = new ExcelJS.Workbook();
     workbook.addWorksheet("Form");
     const positions = buildDynamicSignatureLayout(workbook, {
@@ -178,16 +179,16 @@ describe("dynamic signature layout", () => {
     ]);
 
     expect(positions.map(position => position.ttd_range)).toEqual([
-      "G35:G37",
       "H35:J37",
       "K35:M37",
       "N35:N37",
       "H41:J43",
       "K41:M43",
+      "N41:N43",
     ]);
-    expect(positions[0].header_range).toBe("G34:J34");
-    expect(positions[2].header_range).toBe("K34:N34");
-    expect(positions[4].header_range).toBe("H40:M40");
+    expect(positions[0].header_range).toBe("H34:M34");
+    expect(positions[2].header_range).toBe("N34:N34");
+    expect(positions[4].header_range).toBe("K40:N40");
   });
 
   it("rebuilds the real four-box PGD workbook using its reference pattern", async () => {
@@ -230,7 +231,7 @@ describe("dynamic signature layout", () => {
     expect(worksheet.getCell("G33").value).toBe("Magelang, 10 Juni 2026");
     expect(worksheet.getCell("G35").border.left?.style).toBe("thin");
     expect(worksheet.getCell("G35").border.top?.style).toBe("thin");
-    expect(worksheet.getCell("G37").border.bottom?.style).toBe("thin");
+    expect(worksheet.getCell("G35").border.bottom?.style).toBe("thin");
     expect(worksheet.getCell("G38").border.bottom?.style).toBe("thin");
 
     const saved = await workbook.xlsx.writeBuffer();
@@ -239,7 +240,7 @@ describe("dynamic signature layout", () => {
     const reopenedSheet = reopened.worksheets[0];
     expect(reopenedSheet.getCell("G33").value).toBe("Magelang, 10 Juni 2026");
     expect(reopenedSheet.getCell("G35").border.left?.style).toBe("thin");
-    expect(reopenedSheet.getCell("G37").border.bottom?.style).toBe("thin");
+    expect(reopenedSheet.getCell("G35").border.bottom?.style).toBe("thin");
     expect((reopenedSheet.model as { merges?: string[] }).merges).toEqual(expect.arrayContaining([
       "G33:N33",
       "G34:J34",

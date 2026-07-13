@@ -34,6 +34,9 @@ RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY server.mjs ./server.mjs
 COPY pdf-worker.mjs ./pdf-worker.mjs
+COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
+COPY document-layout-rules.mjs ./document-layout-rules.mjs
+COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
 
 EXPOSE 80
 
