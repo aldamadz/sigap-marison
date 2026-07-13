@@ -61,11 +61,10 @@ const ATTENTION_POLL_INTERVAL_MS = Number(process.env.ATTENTION_POLL_INTERVAL_MS
 const attentionStreamTokens = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
-const passwordResetRateLimits = new Map();
+const passwordResetSendCooldowns = new Map();
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
-const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const PASSWORD_RESET_RATE_LIMIT_MAX = 5;
+const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -420,10 +419,12 @@ const handlePasswordResetRequest = async (req) => {
     message: "Jika email terdaftar, link reset kata sandi akan dikirim.",
   };
 
-  if (hitRateLimit(passwordResetRateLimits, requestKey, PASSWORD_RESET_RATE_LIMIT_MAX, PASSWORD_RESET_RATE_LIMIT_WINDOW_MS)) {
+  if (!isEmail(email)) return publicResult;
+
+  const recentSendUntil = passwordResetSendCooldowns.get(requestKey);
+  if (recentSendUntil && recentSendUntil > Date.now()) {
     return publicResult;
   }
-  if (!isEmail(email)) return publicResult;
 
   let linkResult;
   try {
@@ -463,6 +464,7 @@ const handlePasswordResetRequest = async (req) => {
       text: `Kami menerima permintaan reset kata sandi SIGAP.\n\nBuka link berikut untuk membuat kata sandi baru:\n${resetUrl}\n\nAbaikan email ini jika Anda tidak meminta reset kata sandi.`,
       html: buildPasswordResetEmailHtml({ resetUrl, appUrl }),
     });
+    passwordResetSendCooldowns.set(requestKey, Date.now() + PASSWORD_RESET_SEND_COOLDOWN_MS);
   } catch (error) {
     console.error("Password reset email failed:", { code: error?.code, command: error?.command, response: error?.response, message: error?.message });
     const err = new Error("Email reset belum bisa dikirim. Periksa konfigurasi SMTP.");
