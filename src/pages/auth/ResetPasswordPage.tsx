@@ -8,6 +8,23 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
+const normalizeResetError = (message?: string) => {
+  const text = (message || "").trim();
+  const lower = text.toLowerCase();
+
+  if (lower.includes("new password should be different")) {
+    return "Kata sandi baru harus berbeda dari kata sandi yang sedang digunakan.";
+  }
+  if (lower.includes("password should be at least") || lower.includes("weak password")) {
+    return "Kata sandi belum memenuhi syarat keamanan. Gunakan minimal 8 karakter dengan kombinasi yang lebih kuat.";
+  }
+  if (lower.includes("invalid") || lower.includes("expired")) {
+    return "Link reset tidak valid atau sudah kedaluwarsa. Minta link baru dari halaman login.";
+  }
+
+  return text || "Gagal memperbarui kata sandi.";
+};
+
 const getHashError = () => {
   const hash = window.location.hash.replace(/^#/, "");
   if (!hash) return "";
@@ -32,6 +49,8 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const strength = useMemo(() => {
     let score = 0;
@@ -110,11 +129,16 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
+    if (saving || submitted) return;
+    setFormError("");
+
     if (password.length < 8) {
+      setFormError("Kata sandi minimal 8 karakter.");
       toast.error("Kata sandi minimal 8 karakter.");
       return;
     }
     if (password !== confirmPassword) {
+      setFormError("Konfirmasi kata sandi belum sama.");
       toast.error("Konfirmasi kata sandi belum sama.");
       return;
     }
@@ -124,6 +148,7 @@ export default function ResetPasswordPage() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
+      setSubmitted(true);
       try {
         await supabase.rpc("record_auth_audit_event", { p_event: "password_changed" });
       } catch {
@@ -133,7 +158,9 @@ export default function ResetPasswordPage() {
       toast.success("Kata sandi berhasil diperbarui. Silakan masuk kembali.");
       navigate("/", { replace: true });
     } catch (error: any) {
-      toast.error(error?.message || "Gagal memperbarui kata sandi.");
+      const friendlyMessage = normalizeResetError(error?.message);
+      setFormError(friendlyMessage);
+      toast.error(friendlyMessage);
     } finally {
       setSaving(false);
     }
@@ -192,11 +219,13 @@ export default function ResetPasswordPage() {
                   className="h-11 rounded-xl pl-10 pr-10"
                   autoComplete="new-password"
                   minLength={8}
+                  disabled={saving || submitted}
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
+                  disabled={saving || submitted}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
                 >
@@ -226,17 +255,24 @@ export default function ResetPasswordPage() {
                 className="h-11 rounded-xl"
                 autoComplete="new-password"
                 minLength={8}
+                disabled={saving || submitted}
                 required
               />
             </div>
 
             <div className="flex items-start gap-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              Setelah berhasil, sesi reset akan ditutup dan Anda perlu masuk ulang memakai kata sandi baru.
+              Kata sandi baru harus berbeda dari kata sandi yang sedang digunakan. Setelah berhasil, sesi reset akan ditutup dan Anda perlu masuk ulang.
             </div>
 
-            <Button type="submit" disabled={saving} className="h-12 w-full rounded-xl text-sm font-bold">
-              {saving ? (
+            {formError ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+                {formError}
+              </div>
+            ) : null}
+
+            <Button type="submit" disabled={saving || submitted} className="h-12 w-full rounded-xl text-sm font-bold">
+              {saving || submitted ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Menyimpan...
