@@ -11,8 +11,20 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 .env.server
 .env.production
+
+# Local build/cache output
+*.tsbuildinfo
+.vite/
+coverage/
+playwright-report/
+
+# Temporary/generated verification artifacts
+tmp/
+hasilpdf/
+.tmp-*
 
 # Editor directories and files
 .vscode/*
