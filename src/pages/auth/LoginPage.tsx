@@ -137,12 +137,16 @@ export default function LoginPage() {
 
     setResetLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/reset-password`;
-      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo,
+      const response = await fetch('/api/auth/password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail }),
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error || payload?.message || 'Gagal mengirim link reset kata sandi.');
+      }
 
       toast.success('Link reset kata sandi sudah dikirim jika email terdaftar.');
       setResetOpen(false);

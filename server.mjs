@@ -61,8 +61,11 @@ const ATTENTION_POLL_INTERVAL_MS = Number(process.env.ATTENTION_POLL_INTERVAL_MS
 const attentionStreamTokens = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
+const passwordResetRateLimits = new Map();
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
+const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const PASSWORD_RESET_RATE_LIMIT_MAX = 5;
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -197,6 +200,28 @@ const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "")
 
 const uniqueEmails = (values) => [...new Set(values.map((value) => String(value || "").trim().toLowerCase()).filter(isEmail))];
 
+const escapeHtml = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
+
+const clientIp = (req) => String(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "")
+  .split(",")[0]
+  .trim();
+
+const hitRateLimit = (store, key, max, windowMs) => {
+  const now = Date.now();
+  const current = store.get(key);
+  if (!current || current.resetAt <= now) {
+    store.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  current.count += 1;
+  return current.count > max;
+};
+
 const defaultEmailSettings = {
   enabled: true,
   inherit_global: true,
@@ -328,6 +353,124 @@ const readJsonBody = async (req, maxBytes = 1024 * 1024) => {
     err.status = 400;
     throw err;
   }
+};
+
+const buildPasswordResetEmailHtml = ({ resetUrl, appUrl }) => {
+  const safeResetUrl = escapeHtml(resetUrl);
+  const safeLogoUrl = `${appUrl}/logo-marison.png`;
+  return `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#10201a;">
+  <tr>
+    <td align="center" style="padding:32px 16px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #dce8df;border-radius:18px;overflow:hidden;box-shadow:0 18px 45px rgba(16,32,26,0.10);">
+        <tr>
+          <td style="padding:28px 28px 20px 28px;border-bottom:1px solid #e6eee9;background:#fbfdfb;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="width:86px;vertical-align:middle;padding-right:16px;">
+                  <img src="${safeLogoUrl}" width="76" alt="Marison Regency Group" style="display:block;width:76px;max-width:76px;height:auto;border:0;outline:none;text-decoration:none;">
+                </td>
+                <td style="vertical-align:middle;">
+                  <div style="font-size:13px;font-weight:700;color:#2eaf35;letter-spacing:0.02em;">Marison - SIGAP</div>
+                  <div style="font-size:22px;line-height:1.25;font-weight:800;color:#10201a;margin-top:8px;">Reset kata sandi akun</div>
+                  <div style="font-size:12px;line-height:1.5;color:#64756d;margin-top:6px;">Digital approval system Marison Regency Group</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:26px 28px 8px 28px;">
+            <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#33443c;">Kami menerima permintaan untuk mengganti kata sandi akun SIGAP Anda.</p>
+            <p style="margin:0 0 22px 0;font-size:15px;line-height:1.7;color:#33443c;">Klik tombol di bawah untuk membuat kata sandi baru. Link ini bersifat sementara dan akan kedaluwarsa otomatis.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
+              <tr>
+                <td style="border-radius:12px;background:#2eaf35;">
+                  <a href="${safeResetUrl}" style="display:inline-block;padding:13px 20px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">Reset kata sandi</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 8px 0;font-size:13px;line-height:1.6;color:#64756d;">Jika tombol tidak bisa dibuka, salin tautan berikut ke browser:</p>
+            <p style="margin:0 0 20px 0;font-size:12px;line-height:1.6;word-break:break-all;color:#2f6f37;">${safeResetUrl}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 28px 26px 28px;background:#f8fbf9;border-top:1px solid #e6eee9;">
+            <p style="margin:0;font-size:12px;line-height:1.7;color:#65766e;">Abaikan email ini jika Anda tidak meminta reset kata sandi. Tim SIGAP tidak pernah meminta password melalui email, chat, atau telepon.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`;
+};
+
+const handlePasswordResetRequest = async (req) => {
+  if (!supabase) {
+    const err = new Error("Supabase server credentials are not configured.");
+    err.status = 503;
+    throw err;
+  }
+
+  const payload = await readJsonBody(req, 4096);
+  const email = String(payload?.email || "").trim().toLowerCase();
+  const requestKey = `${clientIp(req)}:${sha256Hex(email).slice(0, 16)}`;
+  const publicResult = {
+    ok: true,
+    message: "Jika email terdaftar, link reset kata sandi akan dikirim.",
+  };
+
+  if (hitRateLimit(passwordResetRateLimits, requestKey, PASSWORD_RESET_RATE_LIMIT_MAX, PASSWORD_RESET_RATE_LIMIT_WINDOW_MS)) {
+    return publicResult;
+  }
+  if (!isEmail(email)) return publicResult;
+
+  let linkResult;
+  try {
+    linkResult = await supabase.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: {
+        redirectTo: `${String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || defaultEmailSettings.app_url).replace(/\/+$/, "")}/reset-password`,
+      },
+    });
+  } catch (error) {
+    console.error("Password reset link generation failed:", { message: error?.message });
+    return publicResult;
+  }
+
+  if (linkResult.error || !linkResult.data?.properties) {
+    console.warn("Password reset link not generated:", { message: linkResult.error?.message });
+    return publicResult;
+  }
+
+  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || defaultEmailSettings.app_url).replace(/\/+$/, "");
+  const tokenHash = linkResult.data.properties.hashed_token;
+  const resetUrl = tokenHash
+    ? `${appUrl}/reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`
+    : linkResult.data.properties.action_link;
+
+  if (!resetUrl) {
+    console.warn("Password reset link missing action url.");
+    return publicResult;
+  }
+
+  try {
+    await getMailTransporter().sendMail({
+      from: smtpConfig.from,
+      to: email,
+      subject: "Reset Kata Sandi SIGAP",
+      text: `Kami menerima permintaan reset kata sandi SIGAP.\n\nBuka link berikut untuk membuat kata sandi baru:\n${resetUrl}\n\nAbaikan email ini jika Anda tidak meminta reset kata sandi.`,
+      html: buildPasswordResetEmailHtml({ resetUrl, appUrl }),
+    });
+  } catch (error) {
+    console.error("Password reset email failed:", { code: error?.code, command: error?.command, response: error?.response, message: error?.message });
+    const err = new Error("Email reset belum bisa dikirim. Periksa konfigurasi SMTP.");
+    err.status = 503;
+    throw err;
+  }
+
+  return publicResult;
 };
 
 const getBearerToken = (req) => {
@@ -2891,6 +3034,11 @@ createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith("/api/")) {
+      if (req.method === "POST" && url.pathname === "/api/auth/password-reset") {
+        const result = await handlePasswordResetRequest(req);
+        return sendJson(res, 200, result);
+      }
+
       if (req.method === "POST" && url.pathname === "/api/admin/template-preview") {
         const token = getBearerToken(req);
         const payload = await readJsonBody(req, 4096);

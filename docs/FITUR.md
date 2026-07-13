@@ -103,6 +103,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Reset kata sandi tidak boleh membedakan email terdaftar dan tidak terdaftar pada pesan UI agar daftar akun tidak mudah ditebak.
 - Email template reset password harus mengarah ke domain SIGAP aktif dan disarankan memakai `token_hash` agar tidak kembali ke domain lama.
 - Email reset password harus memakai template HTML branded SIGAP dengan logo Marison dan tidak boleh memuat teks penanda deploy/test.
+- Email reset password dikirim melalui endpoint server SIGAP dan SMTP Hostinger agar tidak bergantung pada mailer bawaan Supabase.
 - Kata sandi baru harus berbeda dari kata sandi yang sedang aktif; pesan teknis dari provider auth harus diterjemahkan menjadi pesan yang mudah dipahami user.
 - Perubahan kata sandi dicatat sebagai audit event tanpa menyimpan nilai password.
 - Multiple client/session warning perlu dijaga agar tidak menyebabkan perilaku auth tidak stabil.

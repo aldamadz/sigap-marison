@@ -2450,6 +2450,7 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         rows: [
           ["Permintaan link", "User menekan Lupa sandi di halaman login dan memasukkan email kerja."],
           ["Keamanan pesan", "SIGAP menampilkan pesan berhasil tanpa membedakan apakah email terdaftar agar tidak membuka daftar akun."],
+          ["Pengiriman email", "Server SIGAP membuat link recovery melalui Supabase Admin dan mengirim email lewat SMTP Hostinger."],
           ["Tautan email", "Link mengarah ke halaman Reset Kata Sandi untuk membuat password baru."],
           ["Template email", "Untuk menghindari redirect lama, template Supabase sebaiknya memakai `/reset-password?token_hash={{ .TokenHash }}&type=recovery`."],
           ["Tampilan email", "Email reset password memakai HTML branded SIGAP dengan logo Marison, tombol utama, fallback link, dan peringatan keamanan singkat."],
@@ -2679,6 +2680,7 @@ export const DOCS_CHANGELOG = [
       "Menambahkan dukungan reset password berbasis `token_hash` agar email auth tidak bergantung pada redirect lama dan lebih aman terhadap link scanner.",
       "Memperjelas pesan reset password ketika kata sandi baru sama dengan yang sedang aktif serta mengunci form saat proses simpan agar tidak terjadi submit ganda.",
       "Mengganti template email reset password menjadi HTML branded SIGAP berlogo Marison dan menghapus teks penanda deploy test dari halaman login.",
+      "Memindahkan pengiriman email reset password ke endpoint server SIGAP dengan SMTP Hostinger agar tidak bergantung pada mailer bawaan Supabase.",
     ],
   },
   {
