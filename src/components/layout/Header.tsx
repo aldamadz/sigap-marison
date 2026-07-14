@@ -129,7 +129,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
   }, [refetchAttention])
 
   return (
-    <header className="safe-area-top sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/92 px-3 backdrop-blur-md sm:px-5 lg:px-6">
+    <header className="safe-area-top sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border/70 bg-background/[0.78] px-3 shadow-[0_1px_0_hsl(0_0%_100%/0.025)] backdrop-blur-xl sm:px-5 lg:px-6">
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}
         {showMenuButton && (

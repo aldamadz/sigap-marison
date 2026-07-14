@@ -1,6 +1,6 @@
 # Fitur SIGAP
 
-Tanggal pembaruan: 2026-07-13
+Tanggal pembaruan: 2026-07-14
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 
 Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besar dan tautan, sedangkan detail fitur fungsional dan non-fungsional dicatat di file ini.
@@ -609,6 +609,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - User dapat memilih tema `System`, `Light`, atau `Dark`.
 - Preferensi tema diterapkan segera dan disimpan per akun pada profil.
 - Mode `System` mengikuti preferensi warna perangkat atau browser.
+- User biasa hanya dapat memperbarui field profil aman miliknya sendiri seperti nama, avatar, nomor HP, dan preferensi tema.
+- Akun baru dari signup selalu dibuat dengan role awal `user`; role admin hanya dapat diberikan melalui admin yang berwenang.
 
 ### Non-Fungsional
 
@@ -618,6 +620,17 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Jika penyimpanan preferensi gagal, tema dikembalikan ke pilihan sebelumnya dan user menerima pesan error.
 - Validasi foto dilakukan di frontend dan server, termasuk MIME type, ukuran, dan signature file.
 - URL dan credential storage internal tidak boleh diekspos sebagai URL avatar publik.
+- Perubahan privilege seperti role, departemen, kantor, status aktif, dan parent user tidak boleh dapat diubah melalui update profil mandiri.
+- Endpoint ringan seperti realtime badge, push notification, data source, upload, dan email internal harus memvalidasi token lewat Supabase Auth, bukan decode JWT manual.
+- Upload dokumen/lampiran harus melewati server, memeriksa bucket/path allowlist, dan memverifikasi kepemilikan draft atau keterlibatan pada surat.
+- Upload dokumen/lampiran juga memeriksa signature file atau magic bytes agar ekstensi/MIME type tidak bisa dipalsukan.
+- Penggantian lampiran tanda tangan hanya boleh dilakukan oleh admin aktif, signer tahap aktif, atau tim pemeriksa tahap aktif yang memang ditugaskan.
+- Saat lampiran diganti, sistem hanya menghapus metadata lampiran lama berdasarkan ID row lama agar file baru tidak ikut terhapus.
+- Email internal hanya boleh dikirim dari event surat yang valid agar endpoint tidak berubah menjadi mail relay umum.
+- Email internal dibatasi per user, surat, dan jenis event agar satu aksi tidak mengirim email berulang.
+- Penomoran surat harus memakai lock transaksi database agar dua request bersamaan tidak mendapat nomor yang sama.
+- Role `admin` dan `super_admin` harus diperlakukan konsisten pada route admin, RLS helper, dan helper server.
+- Route contoh Next.js yang memakai service role tanpa autentikasi tidak boleh ikut dikirim dalam source production.
 
 ### Sinkronisasi Dokumentasi
 
@@ -651,6 +664,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Non-Fungsional
 
 - Seluruh route Configuration hanya dapat diakses admin melalui pemeriksaan route, bukan sekadar disembunyikan dari sidebar.
+- Route admin utama seperti User Organization, Master Data, Monitoring Admin, SLA Departemen, dan Configuration harus memakai guard role admin aktif di route, bukan hanya kontrol tampilan menu.
 - Master data operasional dan konfigurasi aturan sistem dipisahkan agar navigasi dan tanggung jawab halaman jelas.
 - Layout konfigurasi harus responsif dan menggunakan komponen serta token tema yang sama dengan halaman lain.
 

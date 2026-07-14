@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { FileDown, FileSpreadsheet, FileText, Calendar as CalendarIcon, Plus } from 'lucide-react';
 
 import { CalendarView } from '@/components/calendar/CalendarView';
+import { DayAgendaDialog } from '@/components/calendar/DayAgendaDialog';
 import { AgendaModal } from '@/components/agenda/AgendaModal';
 import { AgendaDetailModal } from '@/components/agenda/AgendaDetailModal';
 import { AgendaParentFilter } from '@/components/agenda/AgendaParentFilter';
@@ -28,6 +29,8 @@ export default function CalendarPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAgenda, setSelectedAgenda] = useState<Agenda | null>(null);
   const [prefilledDate, setPrefilledDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [isDayDialogOpen, setIsDayDialogOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   // Diangkat ke sini agar subtitle ikut bulan yang sedang ditampilkan
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -183,6 +186,28 @@ export default function CalendarPage() {
     setIsDetailOpen(true);
   };
 
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(new Date(date.getTime()));
+    setIsDayDialogOpen(true);
+  };
+
+  const handleAddAgendaForDay = () => {
+    if (!selectedDate) return;
+
+    const now = new Date();
+    const dateWithCurrentTime = new Date(selectedDate.getTime());
+    dateWithCurrentTime.setHours(now.getHours(), now.getMinutes());
+    setIsDayDialogOpen(false);
+    setPrefilledDate(dateWithCurrentTime);
+    setSelectedAgenda(null);
+    setIsModalOpen(true);
+  };
+
+  const handleDayAgendaClick = (agenda: Agenda) => {
+    setIsDayDialogOpen(false);
+    handleOpenDetail(agenda);
+  };
+
   const handleOpenEdit = (agenda: Agenda) => {
     setSelectedAgenda(agenda);
     setPrefilledDate(null);
@@ -203,30 +228,30 @@ export default function CalendarPage() {
   }, [agendas, currentMonth, effectiveUserId, isAllTeamSelected]);
 
   if (isLoading) return (
-    <div className="p-8">
-      <Skeleton className="w-full h-[500px] rounded-xl opacity-20" />
+    <div className="py-2 sm:p-6">
+      <Skeleton className="h-[500px] w-full rounded-xl opacity-20" />
     </div>
   );
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="mx-auto max-w-[1600px] space-y-4 py-1 sm:space-y-6 sm:p-6">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20">
-            <CalendarIcon className="w-6 h-6 text-primary" />
+      <div className="flex flex-col justify-between gap-4 border-b border-border pb-4 sm:pb-6 md:flex-row md:items-center">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 sm:h-12 sm:w-12">
+            <CalendarIcon className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Agenda Kerja</h1>
-            <p className="text-sm text-muted-foreground">{userName} — {monthlyCount} Entri Bulan Ini</p>
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Agenda Kerja</h1>
+            <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{userName} — {monthlyCount} Entri Bulan Ini</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="rounded-lg border-border font-medium">
+              <Button variant="outline" className="h-11 w-full rounded-lg border-border font-medium sm:h-10 sm:w-auto">
                 <FileDown className="w-4 h-4 mr-2" /> Ekspor
               </Button>
             </DropdownMenuTrigger>
@@ -248,7 +273,7 @@ export default function CalendarPage() {
 
           <Button
             onClick={() => { setPrefilledDate(new Date()); setIsModalOpen(true); }}
-            className="rounded-lg bg-primary font-semibold shadow-sm"
+            className="h-11 w-full rounded-lg bg-primary font-semibold shadow-sm sm:h-10 sm:w-auto"
           >
             <Plus className="w-4 h-4 mr-1" /> Agenda Baru
           </Button>
@@ -266,13 +291,7 @@ export default function CalendarPage() {
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
         <CalendarView
           agendas={agendas}
-          onDateClick={(date) => {
-            const now = new Date();
-            date.setHours(now.getHours(), now.getMinutes());
-            setPrefilledDate(date);
-            setSelectedAgenda(null);
-            setIsModalOpen(true);
-          }}
+          onDateClick={handleDateClick}
           onAgendaClick={handleOpenDetail}
           currentMonth={currentMonth}
           onMonthChange={setCurrentMonth}
@@ -281,6 +300,15 @@ export default function CalendarPage() {
           }
         />
       </div>
+
+      <DayAgendaDialog
+        open={isDayDialogOpen}
+        onOpenChange={setIsDayDialogOpen}
+        date={selectedDate}
+        agendas={agendas}
+        onAddAgenda={handleAddAgendaForDay}
+        onAgendaClick={handleDayAgendaClick}
+      />
 
       {/* ── Detail modal ─────────────────────────────────────────────────────── */}
       <AgendaDetailModal

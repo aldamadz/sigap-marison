@@ -71,13 +71,10 @@ export function SuratStatusCard({ noSurat, judul, tanggal }: SuratStatusCardProp
           <div className="flex gap-2">
             <button
               onClick={copyToClipboard}
-              /* NORMAL: Background Navy Pekat (#030711 / --card), Border Putih Tipis
-                 HOVER: Background Putih, Teks Navy Pekat
-              */
-              className={`flex-1 flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] py-3.5 rounded-xl border-2 transition-all duration-300 active:scale-95 not-italic shadow-lg ${
-                copied 
-                ? "bg-success border-success text-success-foreground" 
-                : "bg-[#030711] border-white/20 text-white hover:bg-white hover:text-[#030711] hover:border-white shadow-card"
+              className={`flex-1 flex items-center justify-center gap-2 rounded-xl border py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] shadow-[var(--shadow-card)] transition-all duration-300 active:scale-[0.98] not-italic ${
+                copied
+                ? "border-success bg-success text-success-foreground"
+                : "border-primary/35 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[var(--shadow-glow)]"
               }`}
             >
               {copied ? (

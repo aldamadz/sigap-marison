@@ -51,7 +51,7 @@ export function AppLayout() {
   }, [])
 
   return (
-    <div className="flex min-h-dvh overflow-hidden bg-muted/35 text-foreground">
+    <div className="flex min-h-dvh overflow-hidden bg-background text-foreground before:pointer-events-none before:fixed before:inset-0 before:bg-[radial-gradient(circle_at_72%_0%,hsl(var(--primary)/0.055),transparent_32rem)]">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block">
         <Sidebar
@@ -83,7 +83,7 @@ export function AppLayout() {
         />
         
         {/* Kontainer Scrollable */}
-        <div className="safe-area-bottom flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5">
+        <div className="safe-area-bottom relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5">
           {/* Breadcrumbs - Tampilkan di semua ukuran layar */}
           <div className="mb-3">
             <Breadcrumbs showHome={true} />
@@ -91,7 +91,7 @@ export function AppLayout() {
 
           {/* Mobile Breadcrumb/Title when sidebar collapsed */}
           {isMobile && title && (
-            <div className="mb-4 rounded-lg border border-border bg-card p-3 shadow-[var(--shadow-card)] lg:hidden">
+            <div className="glass-card mb-4 rounded-lg p-3 lg:hidden">
               <h1 className="text-base font-semibold text-foreground sm:text-lg">{title}</h1>
               {subtitle && (
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">{subtitle}</p>

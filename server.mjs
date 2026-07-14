@@ -62,6 +62,7 @@ const attentionStreamTokens = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
 const passwordResetSendCooldowns = new Map();
+const internalEmailRateLimits = new Map();
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -480,47 +481,6 @@ const getBearerToken = (req) => {
   return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
 };
 
-const decodeBase64UrlJson = (value) => {
-  const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
-  const normalized = padded + "=".repeat((4 - padded.length % 4) % 4);
-  return JSON.parse(Buffer.from(normalized, "base64").toString("utf8"));
-};
-
-const decodeJwtUserForLightEndpoint = (token) => {
-  const parts = String(token || "").split(".");
-  if (parts.length !== 3) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  let payload;
-  try {
-    payload = decodeBase64UrlJson(parts[1]);
-  } catch {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  const expiresAt = Number(payload?.exp || 0);
-  const userId = String(payload?.sub || "").trim();
-  if (!userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  if (!expiresAt || expiresAt * 1000 <= Date.now()) {
-    const err = new Error("Sesi sudah kedaluwarsa.");
-    err.status = 401;
-    throw err;
-  }
-  return {
-    id: userId,
-    aud: payload?.aud,
-    role: payload?.role,
-    email: payload?.email,
-  };
-};
-
 const getPathValue = (value, path) => {
   if (!path) return value;
   return String(path).split(".").filter(Boolean).reduce((current, key) => {
@@ -559,17 +519,23 @@ const requireSupabaseUser = async (token) => {
     err.status = 401;
     throw err;
   }
-  return userRes.user;
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, role, is_active, deleted_at")
+    .eq("id", userRes.user.id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (!profile || profile.deleted_at || profile.is_active === false) {
+    const err = new Error("Akun tidak aktif.");
+    err.status = 403;
+    throw err;
+  }
+  return { ...userRes.user, app_profile: profile };
 };
 
 const requireAdminUser = async (token) => {
   const user = await requireSupabaseUser(token);
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (error) throw error;
+  const profile = user.app_profile;
   if (!profile || !["admin", "super_admin"].includes(String(profile.role || "").toLowerCase())) {
     const err = new Error("Akses ditolak: hanya admin");
     err.status = 403;
@@ -1047,7 +1013,7 @@ const getAttentionStateForUser = async (userId) => {
 };
 
 const getAttentionStateFromRequest = async (token) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   return getAttentionStateForUser(user.id);
 };
 
@@ -1059,7 +1025,7 @@ const pruneAttentionStreamTokens = () => {
 };
 
 const createAttentionStreamToken = async (token) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   pruneAttentionStreamTokens();
   const streamToken = randomBytes(32).toString("base64url");
   attentionStreamTokens.set(sha256Hex(streamToken), {
@@ -1187,7 +1153,7 @@ const normalizePushSubscription = (value) => {
 };
 
 const getWebPushPublicKey = async (token) => {
-  decodeJwtUserForLightEndpoint(token);
+  await requireSupabaseUser(token);
   return {
     enabled: Boolean(webPushConfig.publicKey && webPushConfig.privateKey),
     publicKey: webPushConfig.publicKey || null,
@@ -1195,7 +1161,7 @@ const getWebPushPublicKey = async (token) => {
 };
 
 const saveWebPushSubscription = async (token, payload, req) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   if (!webPushConfig.publicKey || !webPushConfig.privateKey) {
     const err = new Error("Web Push belum dikonfigurasi di server.");
     err.status = 503;
@@ -1217,7 +1183,7 @@ const saveWebPushSubscription = async (token, payload, req) => {
 };
 
 const removeWebPushSubscription = async (token, payload) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   const endpoint = String(payload?.endpoint || payload?.subscription?.endpoint || "").trim();
   if (!endpoint) return { ok: true };
   const { error } = await supabase
@@ -1774,44 +1740,24 @@ const sendInternalEmailNotification = async (token, payload) => {
   const actor = await requireSupabaseUser(token);
   const suratId = payload?.surat_id || payload?.suratId;
   const eventType = String(payload?.event_type || payload?.eventType || "general");
-  const legacyUserIds = Array.isArray(payload?.user_ids) ? payload.user_ids.filter(Boolean) : [];
+  const allowedEventTypes = new Set(["new_inbox", "signed", "rejected", "next_signer", "verification_done", "general"]);
 
   if (!suratId) {
-    const userIds = legacyUserIds;
-    if (userIds.length === 0) return { sent: 0, recipients: [] };
-    const { data: profiles, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, department_id, office_id")
-      .in("id", userIds);
-    if (profileError) throw profileError;
-    const departmentIds = [...new Set((profiles || []).map((profile) => profile.department_id).filter(Boolean))];
-    const officeIds = [...new Set((profiles || []).map((profile) => profile.office_id).filter(Boolean))];
-    const [{ data: departments }, { data: offices }] = await Promise.all([
-      departmentIds.length ? supabase.from("master_departments").select("id, email").in("id", departmentIds) : Promise.resolve({ data: [] }),
-      officeIds.length ? supabase.from("master_offices").select("id, email").in("id", officeIds) : Promise.resolve({ data: [] }),
-    ]);
-    const recipients = uniqueEmails([
-      ...(profiles || []).map((profile) => profile.email),
-      ...(departments || []).map((department) => department.email),
-      ...(offices || []).map((office) => office.email),
-    ]);
-    if (recipients.length === 0) return { sent: 0, recipients: [] };
-    const title = String(payload?.title || "Notifikasi SIGAP").slice(0, 160);
-    const message = String(payload?.message || "").slice(0, 4000);
-    const link = typeof payload?.link === "string" ? payload.link : "";
-    const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
-    const fullLink = link && appUrl && link.startsWith("/") ? `${appUrl}${link}` : link;
-    const html = `
-      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
-        <h2 style="font-size:18px;margin:0 0 12px">${title}</h2>
-        <p style="font-size:14px;margin:0 0 16px">${message.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[char]))}</p>
-        ${fullLink ? `<p><a href="${fullLink}" style="display:inline-block;background:#111827;color:white;padding:10px 14px;border-radius:6px;text-decoration:none;font-size:13px">Buka SIGAP</a></p>` : ""}
-        <p style="margin-top:24px;font-size:11px;color:#6b7280">Email otomatis dari SIGAP. Dikirim oleh ${actor.email || actor.id}.</p>
-      </div>
-    `;
-    const transporter = getMailTransporter();
-    await transporter.sendMail({ from: smtpConfig.from, to: recipients, subject: title, text: `${message}${fullLink ? `\n\n${fullLink}` : ""}`, html });
-    return { sent: recipients.length, recipients };
+    const err = new Error("Email hanya dapat dikirim dari event surat.");
+    err.status = 400;
+    throw err;
+  }
+  if (!allowedEventTypes.has(eventType)) {
+    const err = new Error("Tipe event email tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  const rateKey = `${actor.id}:${suratId}:${eventType}`;
+  const recentSendUntil = internalEmailRateLimits.get(rateKey);
+  if (recentSendUntil && recentSendUntil > Date.now()) {
+    const err = new Error("Email untuk event ini baru saja dikirim. Coba lagi beberapa saat.");
+    err.status = 429;
+    throw err;
   }
 
   const { data: surat, error: suratError } = await supabase
@@ -1822,7 +1768,7 @@ const sendInternalEmailNotification = async (token, payload) => {
       file_path, pdf_path, lampiran_path, form_input_data, requester_snapshot,
       location_snapshot, data_snapshot,
       surat_signatures (
-        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, available_at, file_path_snap, pdf_path_snap, signer_snapshot,
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, available_at, file_path_snap, pdf_path_snap, signer_snapshot, verifier_snapshot,
         profiles:user_id ( id, full_name, nik, job_title, email, department_id, office_id )
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
@@ -1830,6 +1776,11 @@ const sendInternalEmailNotification = async (token, payload) => {
     .eq("id", suratId)
     .single();
   if (suratError || !surat) throw suratError || new Error("Surat tidak ditemukan");
+  if (!(await canReadSurat(surat, actor.id))) {
+    const err = new Error("Tidak diizinkan mengirim email untuk surat ini.");
+    err.status = 403;
+    throw err;
+  }
 
   const formId = surat?.data_snapshot?.form?.id || surat?.data_snapshot?.form?.form_id || null;
   const emailSettings = await getEmailSettings(formId);
@@ -1925,6 +1876,7 @@ const sendInternalEmailNotification = async (token, payload) => {
     html,
     attachments,
   });
+  internalEmailRateLimits.set(rateKey, Date.now() + 60_000);
 
   return { sent: recipients.length, recipients, attachments: attachments.length, fileLinks: fileLinks.length };
 };
@@ -1969,7 +1921,7 @@ const sendInternalNotification = async (token, payload) => {
   const type = String(payload?.type || "info").trim().slice(0, 40);
   const link = typeof payload?.link === "string" ? payload.link.slice(0, 500) : null;
   const suratId = payload?.surat_id || payload?.suratId || null;
-  const shouldEmail = payload?.email !== false;
+  const shouldEmail = payload?.email !== false && Boolean(suratId);
 
   if (userIds.length === 0) return { inserted: 0, email: shouldEmail ? { sent: 0, recipients: [] } : null };
   if (!message) {
@@ -2067,8 +2019,103 @@ const sanitizeStoragePath = (value) => String(value || "")
   .map((part) => part.replace(/[^\w.-]+/g, "_"))
   .join("/");
 
+const assertAllowedUploadContent = (file, buffer) => {
+  const type = String(file?.type || "application/octet-stream").toLowerCase();
+  const name = String(file?.name || "").toLowerCase();
+  const starts = (...bytes) => bytes.every((byte, index) => buffer[index] === byte);
+  const ascii = (start, length) => buffer.subarray(start, start + length).toString("ascii");
+  const isZip = starts(0x50, 0x4b, 0x03, 0x04) || starts(0x50, 0x4b, 0x05, 0x06) || starts(0x50, 0x4b, 0x07, 0x08);
+  const isLegacyOffice = starts(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1);
+  const isPlainText = buffer.length === 0 || buffer.subarray(0, Math.min(buffer.length, 512)).every((byte) =>
+    byte === 0x09 || byte === 0x0a || byte === 0x0d || (byte >= 0x20 && byte !== 0x7f)
+  );
+  const checks = [
+    { types: ["application/pdf"], extensions: [".pdf"], valid: starts(0x25, 0x50, 0x44, 0x46) },
+    { types: ["image/jpeg"], extensions: [".jpg", ".jpeg"], valid: starts(0xff, 0xd8, 0xff) },
+    { types: ["image/png"], extensions: [".png"], valid: starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) },
+    { types: ["image/webp"], extensions: [".webp"], valid: ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP" },
+    {
+      types: [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip",
+      ],
+      extensions: [".xlsx", ".docx", ".pptx", ".zip"],
+      valid: isZip,
+    },
+    {
+      types: ["application/vnd.ms-excel", "application/msword"],
+      extensions: [".xls", ".doc"],
+      valid: isLegacyOffice,
+    },
+    {
+      types: ["text/plain", "text/csv", "application/csv"],
+      extensions: [".txt", ".csv"],
+      valid: isPlainText,
+    },
+  ];
+  const matched = checks.find((item) =>
+    item.types.includes(type) || item.extensions.some((extension) => name.endsWith(extension))
+  );
+  if (!matched || !matched.valid) {
+    const err = new Error("Tipe atau isi file tidak diizinkan.");
+    err.status = 415;
+    throw err;
+  }
+};
+
+const ensureStorageWriteAccess = async ({ bucket, path, user, isAdmin }) => {
+  if (isAdmin || bucket === "templates") return;
+
+  if (bucket === "lampiran_surat") {
+    const draftMatch = path.match(/^drafts\/([0-9a-f-]{36})\//i);
+    if (draftMatch) {
+      const { data: draft, error } = await supabase
+        .from("surat_registration_drafts")
+        .select("id, created_by, status")
+        .eq("id", draftMatch[1])
+        .maybeSingle();
+      if (error) throw error;
+      if (draft?.created_by === user.id && draft.status === "DRAFT") return;
+      const err = new Error("Tidak diizinkan mengunggah lampiran untuk draft ini.");
+      err.status = 403;
+      throw err;
+    }
+
+    const suratMatch = path.match(/^lampiran_([0-9a-f-]{36})\//i);
+    if (suratMatch) {
+      const { data: surat, error } = await supabase
+        .from("surat_registrasi")
+        .select("id, created_by, surat_signatures(user_id, verifier_snapshot)")
+        .eq("id", suratMatch[1])
+        .maybeSingle();
+      if (error) throw error;
+      if (await canReadSurat(surat, user.id)) return;
+      const err = new Error("Tidak diizinkan mengunggah lampiran untuk surat ini.");
+      err.status = 403;
+      throw err;
+    }
+  }
+
+  if (bucket === "dokumen_surat") {
+    const signedMatch = path.match(/^dokumen\/signed_([0-9a-f-]{36})_/i);
+    if (!signedMatch) return;
+    const { data: surat, error } = await supabase
+      .from("surat_registrasi")
+      .select("id, created_by, surat_signatures(user_id, verifier_snapshot)")
+      .eq("id", signedMatch[1])
+      .maybeSingle();
+    if (error) throw error;
+    if (await canReadSurat(surat, user.id)) return;
+    const err = new Error("Tidak diizinkan memperbarui dokumen surat ini.");
+    err.status = 403;
+    throw err;
+  }
+};
+
 const uploadInternalStorageFile = async (token, req) => {
-  await requireSupabaseUser(token);
+  const user = await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
   assertRequestSize(req);
 
@@ -2077,6 +2124,8 @@ const uploadInternalStorageFile = async (token, req) => {
   const requestedPath = sanitizeStoragePath(form.get("path"));
   const file = form.get("file");
   const upsert = String(form.get("upsert") || "false").toLowerCase() === "true";
+  const role = String(user.app_profile?.role || "").toLowerCase();
+  const isAdmin = role === "admin" || role === "super_admin";
 
   if (!bucket || !/^[a-zA-Z0-9_-]+$/.test(bucket)) {
     const err = new Error("Bucket storage tidak valid.");
@@ -2098,14 +2147,36 @@ const uploadInternalStorageFile = async (token, req) => {
     err.status = 413;
     throw err;
   }
+  const allowed = (() => {
+    if (bucket === "templates") return isAdmin && /^[0-9]{10,}_[\w.-]+$/i.test(requestedPath);
+    if (bucket === "lampiran_surat") {
+      return /^(drafts\/[0-9a-f-]{36}\/[0-9a-f-]{36}_[\w.-]+|lampiran_[0-9a-f-]{36}\/[0-9]{10,}_[\w.-]+)$/i.test(requestedPath);
+    }
+    if (bucket === "dokumen_surat") {
+      return /^dokumen\/(system_|signed_|updated_input_|[0-9]{10,}_)[\w.-]+$/i.test(requestedPath);
+    }
+    return false;
+  })();
+  if (!allowed) {
+    const err = new Error("Upload storage tidak diizinkan untuk bucket/path ini.");
+    err.status = 403;
+    throw err;
+  }
+  if (upsert && !isAdmin) {
+    const err = new Error("Upsert storage hanya diizinkan untuk admin.");
+    err.status = 403;
+    throw err;
+  }
+  await ensureStorageWriteAccess({ bucket, path: requestedPath, user, isAdmin });
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  assertAllowedUploadContent(file, buffer);
   const origin = useExternalStorage() ? "external" : "primary";
   let uploadResult;
   try {
     uploadResult = await uploadStorageClient().storage.from(bucket).upload(requestedPath, buffer, {
       contentType: file.type || "application/octet-stream",
-      upsert,
+      upsert: isAdmin && upsert,
     });
   } catch (error) {
     console.error("Storage upload network error:", {
@@ -2326,7 +2397,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
 
   const { data: signature, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, surat_id, user_id, verifier_snapshot")
+    .select("id, surat_id, user_id, step_order, verification_required, verification_status, verifier_snapshot")
     .eq("id", signatureId)
     .eq("surat_id", suratId)
     .maybeSingle();
@@ -2344,7 +2415,20 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  const allowed = signature.user_id === user.id || verifierIds.includes(user.id) || profile?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(String(profile?.role || "").toLowerCase());
+  const { data: suratState, error: suratStateError } = await supabase
+    .from("surat_registrasi")
+    .select("current_step, status")
+    .eq("id", suratId)
+    .maybeSingle();
+  if (suratStateError) throw suratStateError;
+  const isActiveStep = Number(suratState?.current_step) === Number(signature.step_order) &&
+    !["SELESAI", "DITOLAK", "VOID", "CANCELLED"].includes(String(suratState?.status || "").toUpperCase());
+  const isActiveSigner = signature.user_id === user.id && isActiveStep;
+  const isActiveVerifier = verifierIds.includes(user.id) && isActiveStep &&
+    signature.verification_required === true &&
+    signature.verification_status !== "verified";
+  const allowed = isAdmin || isActiveSigner || isActiveVerifier;
   if (!allowed) {
     const err = new Error("Forbidden");
     err.status = 403;
@@ -2367,24 +2451,6 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     .in("requirement_key", requirementKeys);
   if (oldRowsError) throw oldRowsError;
 
-  if ((oldRows || []).length > 0) {
-    await Promise.all((oldRows || []).map(async (row) => {
-      const ref = parseStorageRef(row.file_url);
-      if (!ref?.bucket || !ref?.path) return;
-      const { error } = await storageClientForRef(ref).storage.from(ref.bucket).remove([ref.path]);
-      if (error) console.error("Storage remove failed:", { path: row.file_url, message: error.message });
-    }));
-
-    const { error: deleteError } = await supabase
-      .from("surat_attachments")
-      .delete()
-      .eq("surat_id", suratId)
-      .eq("signature_id", signatureId)
-      .eq("stage", stage)
-      .in("requirement_key", requirementKeys);
-    if (deleteError) throw deleteError;
-  }
-
   const rows = [];
   for (const [index, file] of files.entries()) {
     const meta = metadata[index] || {};
@@ -2394,6 +2460,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     const safeName = file.name.replace(/[^\w.-]+/g, "_");
     const filePath = `lampiran_${suratId}/${Date.now()}_${randomBytes(4).toString("hex")}_${safeName}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    assertAllowedUploadContent(file, buffer);
     const { error: uploadError } = await uploadStorageClient().storage.from("lampiran_surat").upload(filePath, buffer, {
       contentType: file.type || "application/octet-stream",
       upsert: false,
@@ -2421,6 +2488,22 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     .insert(rows)
     .select("*");
   if (error) throw error;
+
+  if ((oldRows || []).length > 0) {
+    const oldRowIds = (oldRows || []).map((row) => row.id).filter(Boolean);
+    const { error: deleteError } = await supabase
+      .from("surat_attachments")
+      .delete()
+      .in("id", oldRowIds);
+    if (deleteError) throw deleteError;
+
+    await Promise.all((oldRows || []).map(async (row) => {
+      const ref = parseStorageRef(row.file_url);
+      if (!ref?.bucket || !ref?.path) return;
+      const { error: removeError } = await storageClientForRef(ref).storage.from(ref.bucket).remove([ref.path]);
+      if (removeError) console.error("Storage remove failed:", { path: row.file_url, message: removeError.message });
+    }));
+  }
   return data || [];
 };
 
@@ -3126,7 +3209,7 @@ createServer(async (req, res) => {
       const dataSourceMatch = url.pathname.match(/^\/api\/data-sources\/([a-zA-Z0-9_-]+)\/query$/);
       if (req.method === "POST" && dataSourceMatch) {
         const token = getBearerToken(req);
-        decodeJwtUserForLightEndpoint(token);
+        await requireSupabaseUser(token);
         const payload = await readJsonBody(req);
         const result = await queryExternalDataSource(dataSourceMatch[1], payload?.variables || {});
         return sendJson(res, 200, result);

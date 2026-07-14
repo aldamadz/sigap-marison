@@ -14,7 +14,7 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
   );
 
   if (!data) return (
-    <div className="h-full flex flex-col items-center justify-center text-slate-300 italic">
+    <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
       <FileText size={64} className="opacity-10 mb-4" />
       <p>Pilih dokumen untuk melihat progres</p>
     </div>
@@ -24,7 +24,7 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
-      <Card className="p-6 border-slate-200">
+      <Card className="border-border/80 p-6">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-black tracking-tight">{data.judul_surat}</h1>
@@ -48,8 +48,8 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
         </div>
       </Card>
 
-      <div className="bg-white rounded-2xl border p-10 shadow-sm relative overflow-hidden">
-        <div className="flex items-center gap-2 mb-10 text-slate-400">
+      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card/90 p-10 shadow-[var(--shadow-card)] backdrop-blur-sm">
+        <div className="mb-10 flex items-center gap-2 text-muted-foreground">
           <Clock size={16} />
           <h3 className="text-xs font-bold uppercase tracking-widest">Alur Persetujuan Digital</h3>
         </div>
@@ -65,30 +65,30 @@ export const MonitoringTimeline = ({ data, loading }: { data: SuratRegistrasi | 
             return (
               <div key={sig.id} className="relative flex gap-8 pb-12">
                 {!isLast && (
-                  <div className={cn("absolute left-[17.5px] top-10 w-0.5 h-full transition-colors", isDone ? 'bg-green-500' : 'bg-slate-100')} />
+                  <div className={cn("absolute left-[17.5px] top-10 h-full w-0.5 transition-colors", isDone ? 'bg-success' : 'bg-border')} />
                 )}
                 <div className={cn(
-                  "relative z-10 w-9 h-9 rounded-full flex items-center justify-center ring-8 ring-white transition-all shadow-md",
+                  "relative z-10 flex h-9 w-9 items-center justify-center rounded-full shadow-[var(--shadow-card)] ring-8 ring-card transition-all",
                   approvalDotClass(tone),
-                  isCurrent && "animate-pulse shadow-blue-100"
+                  isCurrent && "animate-pulse shadow-[0_0_24px_hsl(var(--primary)/0.22)]"
                 )}>
                   {isDone ? <CheckCircle2 size={20} /> : <Clock size={18} />}
                 </div>
                 <div className="flex-1 pt-1">
-                  <p className={cn("font-bold text-base leading-none", isCurrent ? "text-blue-700" : "text-slate-800")}>{sig.role_name}</p>
-                  <p className="text-sm text-slate-500 mt-2 font-medium">{sig.profiles?.full_name}</p>
+                  <p className={cn("text-base font-bold leading-none", isCurrent ? "text-primary" : "text-foreground")}>{sig.role_name}</p>
+                  <p className="mt-2 text-sm font-medium text-muted-foreground">{sig.profiles?.full_name}</p>
                   {isDone && (
-                    <p className="text-[10px] text-green-600 font-bold mt-2 uppercase tracking-tight">
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-tight text-success">
                       ✅ Disetujui: {new Date(sig.signed_at!).toLocaleString('id-ID')}
                     </p>
                   )}
                   {isRejected && (
-                    <div className="mt-3 px-3 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded-full w-fit border border-red-100 uppercase tracking-wider">
+                    <div className="mt-3 w-fit rounded-full border border-destructive/30 bg-destructive/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-destructive">
                       Ditolak
                     </div>
                   )}
                   {isCurrent && (
-                    <div className="mt-3 px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full w-fit border border-blue-100 uppercase tracking-wider">
+                    <div className="mt-3 w-fit rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">
                       Menunggu Persetujuan
                     </div>
                   )}

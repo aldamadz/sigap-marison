@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.14.0";
-export const DOCS_UPDATED_AT = "13 Juli 2026";
+export const DOCS_VERSION = "v1.15.0";
+export const DOCS_UPDATED_AT = "14 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -2669,6 +2669,26 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.15.0",
+    date: "14 Juli 2026",
+    changes: [
+      "Memperketat akses profil agar user biasa hanya dapat memperbarui data profil aman seperti nama, foto, nomor telepon, dan preferensi tema.",
+      "Mencegah metadata signup mengangkat akun baru menjadi admin; role awal akun baru selalu `user` sampai admin mengubahnya dari User Organization.",
+      "Memperketat upload storage dokumen dan lampiran agar path serta kepemilikan draft/surat diperiksa oleh server sebelum file diterima.",
+      "Menutup pengiriman email internal tanpa konteks surat agar endpoint email tidak dapat dipakai sebagai mail relay umum.",
+      "Memvalidasi token user melalui Supabase Auth pada endpoint realtime, push, upload, data source, dan notifikasi ringan.",
+      "Menstandarkan akses route admin agar halaman master data, monitoring admin, SLA, dan konfigurasi hanya bisa dibuka oleh admin aktif.",
+      "Memisahkan tipe domain, helper storage, dan generator lampiran Unit dari service surat utama agar alur dokumen lebih mudah diaudit dan dirawat.",
+      "Menghapus route contoh Next.js berbasis service role yang tidak memiliki autentikasi agar tidak ikut terkirim ke source production.",
+      "Memperbaiki penggantian lampiran tanda tangan agar sistem hanya menghapus metadata lampiran lama, bukan lampiran baru yang baru selesai diunggah.",
+      "Mengunci penomoran surat dengan advisory transaction lock di database dan mengikat pembuat nomor ke `auth.uid()`.",
+      "Menyamakan perlakuan role `admin` dan `super_admin` pada helper RLS, guard route, dan helper server.",
+      "Menambahkan validasi signature file/magic bytes untuk upload agar ekstensi dan MIME type tidak bisa dipalsukan.",
+      "Membatasi penggantian lampiran tahap approval hanya untuk admin aktif, signer tahap aktif, atau tim pemeriksa tahap aktif yang berwenang.",
+      "Menambahkan pembatasan event dan rate limit singkat pada email internal agar satu aksi tidak memicu pengiriman berulang.",
+    ],
+  },
   {
     version: "v1.14.0",
     date: "13 Juli 2026",

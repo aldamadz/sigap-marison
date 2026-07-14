@@ -3,15 +3,15 @@ import { useState, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths,
-  startOfDay, endOfDay, isWithinInterval
+  eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths
 } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Agenda } from '@/types/agenda';
 import { CalendarAgendaItem } from './CalendarAgendaItem';
-import { cn, getAutomaticStatus } from '@/lib/utils';
+import { getAgendasForDay } from '@/lib/calendar-agenda';
+import { cn } from '@/lib/utils';
 
 interface CalendarViewProps {
   agendas: Agenda[];
@@ -45,10 +45,6 @@ export const CalendarView = ({
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  const processedAgendas = useMemo(() =>
-    agendas.map(agenda => ({ ...agenda, status: getAutomaticStatus(agenda) })),
-  [agendas]);
-
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth));
     const end   = endOfWeek(endOfMonth(currentMonth));
@@ -59,95 +55,110 @@ export const CalendarView = ({
     <div className="flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
 
       {/* ── Header navigasi ─────────────────────────────────────────────────── */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b bg-muted/30 p-4 sm:p-5">
-        <div className="flex items-center gap-4">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <CalendarIcon className="w-7 h-7 text-primary" />
+      <div className="flex flex-shrink-0 flex-col gap-3 border-b bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="shrink-0 rounded-lg bg-primary/10 p-2">
+            <CalendarIcon className="h-6 w-6 text-primary sm:h-7 sm:w-7" />
           </div>
-          <h2 className="text-lg font-semibold sm:text-xl">
+          <h2 className="truncate text-base font-semibold capitalize sm:text-xl">
             {format(currentMonth, 'MMMM yyyy', { locale: localeID })}
           </h2>
         </div>
-        <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl border border-border/50">
-          <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-            <ChevronLeft className="w-5 h-5" />
+        <div className="grid w-full grid-cols-[44px_1fr_44px] items-center gap-1 rounded-xl border border-border/50 bg-muted/50 p-1 sm:flex sm:w-auto sm:gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Bulan sebelumnya"
+            className="h-11 w-11 sm:h-10 sm:w-10"
+            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+          >
+            <ChevronLeft className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
-            className="font-bold px-4 hover:bg-background transition-colors"
+            className="h-11 px-3 font-bold transition-colors hover:bg-background sm:h-10 sm:px-4"
             onClick={() => setCurrentMonth(new Date())}
           >
             Hari Ini
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-            <ChevronRight className="w-5 h-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Bulan berikutnya"
+            className="h-11 w-11 sm:h-10 sm:w-10"
+            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+          >
+            <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
       </div>
 
-      {/* ── Nama hari ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-7 border-b bg-muted/10 flex-shrink-0">
-        {weekDays.map(d => (
-          <div key={d} className="py-3 text-center text-xs font-semibold text-muted-foreground">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Grid kalender ───────────────────────────────────────────────────── */}
       <div
-        className="grid grid-cols-7 bg-border gap-[1px] overflow-hidden"
-        style={{ gridAutoRows: 'minmax(160px, 260px)' }}
+        role="region"
+        aria-label="Kalender bulanan"
+        tabIndex={0}
+        className="outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        {days.map((day) => {
-          const dayAgendas = processedAgendas.filter((a) => {
-            if (!a.startTime) return false;
-            const start = new Date(a.startTime);
-            const end = a.endTime ? new Date(a.endTime) : start;
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+        <div>
+          {/* ── Nama hari ─────────────────────────────────────────────────────── */}
+          <div className="grid flex-shrink-0 grid-cols-7 border-b bg-muted/10">
+            {weekDays.map(d => (
+              <div key={d} className="py-2.5 text-center text-xs font-semibold text-muted-foreground sm:py-3">
+                {d}
+              </div>
+            ))}
+          </div>
 
-            // Tampilkan agenda pada setiap hari yang overlap dengan rentang agenda
-            return isWithinInterval(day, {
-              start: startOfDay(start),
-              end: endOfDay(end),
-            });
-          });
+          {/* ── Grid kalender ─────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-7 gap-[1px] overflow-hidden bg-border md:auto-rows-[minmax(160px,260px)]">
+        {days.map((day) => {
+          const isCurrentMonth = isSameMonth(day, currentMonth);
+          const dayAgendas = getAgendasForDay(agendas, day);
 
           return (
             <div
               key={day.toISOString()}
-              onClick={() => onDateClick(day)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => draggedId && onAgendaDrop(draggedId, day)}
               className={cn(
-                'bg-card p-3 group transition-all flex flex-col min-h-0 relative overflow-hidden hover:bg-muted/5',
-                !isSameMonth(day, currentMonth) && 'opacity-20 bg-muted/20 grayscale pointer-events-none'
+                'group relative flex aspect-square min-h-0 flex-col overflow-hidden bg-card p-1 transition-all hover:bg-muted/5 md:aspect-auto md:p-3',
+                !isCurrentMonth && 'pointer-events-none bg-muted/20 opacity-20 grayscale'
               )}
             >
+              <button
+                type="button"
+                aria-label={`Lihat agenda pada ${format(day, 'd MMMM yyyy', { locale: localeID })}`}
+                disabled={!isCurrentMonth}
+                onClick={() => onDateClick(day)}
+                className="absolute inset-0 z-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              />
+
               {/* Tanggal */}
-              <div className="flex justify-between items-center mb-3 flex-shrink-0">
+              <div className="pointer-events-none relative z-[1] flex flex-shrink-0 items-center justify-between md:mb-3">
                 <span className={cn(
-                  'w-9 h-9 flex items-center justify-center text-lg font-bold rounded-xl transition-all duration-300',
+                  'flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold transition-all duration-300 md:h-9 md:w-9 md:rounded-xl md:text-lg',
                   isToday(day)
-                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/40 scale-110'
-                    : 'text-foreground/70 group-hover:text-primary group-hover:bg-primary/5'
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/40 sm:scale-110'
+                    : 'text-foreground/70 group-hover:bg-primary/5 group-hover:text-primary'
                 )}>
                   {format(day, 'd')}
                 </span>
                 {dayAgendas.length > 3 && (
-                  <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-full animate-in fade-in zoom-in">
+                  <span className="hidden animate-in rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary fade-in zoom-in md:inline">
                     +{dayAgendas.length - 3}
                   </span>
                 )}
               </div>
 
               {/* Agenda items */}
-              <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar min-h-0 pb-1">
+              <div className="custom-scrollbar absolute bottom-1 left-1 right-1 z-[2] flex min-h-0 items-center gap-1 md:relative md:bottom-auto md:left-auto md:right-auto md:block md:flex-1 md:space-y-2 md:overflow-y-auto md:pb-1 md:pr-1">
                 <AnimatePresence mode="popLayout" initial={false}>
-                  {dayAgendas.map(agenda => (
+                  {dayAgendas.map((agenda, index) => (
                     <CalendarAgendaItem
                       key={agenda.id}
                       agenda={agenda}
+                      date={day}
+                      hiddenOnMobile={index >= 3}
                       onClick={() => onAgendaClick(agenda)}
                       onDragStart={() => setDraggedId(String(agenda.id))}
                       onDragEnd={() => setDraggedId(null)}
@@ -155,10 +166,17 @@ export const CalendarView = ({
                     />
                   ))}
                 </AnimatePresence>
+                {dayAgendas.length > 3 && (
+                  <span className="text-[9px] font-bold leading-none text-muted-foreground md:hidden">
+                    +{dayAgendas.length - 3}
+                  </span>
+                )}
               </div>
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -87,7 +87,7 @@ export const AgendaModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-card border-border">
+      <DialogContent className="border-border bg-card p-4 [&>button]:h-11 [&>button]:w-11 sm:max-w-[500px] sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-foreground">
             {agenda ? 'Edit Agenda' : 'Create New Agenda'}
@@ -98,7 +98,7 @@ export const AgendaModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6 mt-4">
+        <form onSubmit={handleSubmit} className="mt-2 space-y-4 sm:mt-4 sm:space-y-6">
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
             <Input
@@ -106,7 +106,7 @@ export const AgendaModal = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter agenda title"
-              className="bg-muted border-none"
+              className="min-h-11 border-none bg-muted sm:min-h-10"
               required
               disabled={isLoading}
             />
@@ -124,7 +124,7 @@ export const AgendaModal = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="startDate">Start Time</Label>
               <Input
@@ -132,7 +132,7 @@ export const AgendaModal = ({
                 type="datetime-local"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="bg-muted border-none"
+                className="min-h-11 border-none bg-muted sm:min-h-10"
                 required
                 disabled={isLoading}
               />
@@ -144,7 +144,7 @@ export const AgendaModal = ({
                 type="datetime-local"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="bg-muted border-none"
+                className="min-h-11 border-none bg-muted sm:min-h-10"
                 required
                 disabled={isLoading}
               />
@@ -158,7 +158,7 @@ export const AgendaModal = ({
               onValueChange={(v) => setStatus(v as AgendaStatus)}
               disabled={isLoading}
             >
-              <SelectTrigger className="bg-muted border-none w-full">
+              <SelectTrigger className="h-11 w-full border-none bg-muted sm:h-10">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
@@ -170,18 +170,19 @@ export const AgendaModal = ({
             </Select>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
+          <div className="flex flex-col-reverse gap-2 border-t border-border/50 pt-4 sm:flex-row sm:justify-end sm:gap-3">
             <Button 
               type="button" 
               variant="ghost" 
               onClick={onClose}
               disabled={isLoading}
+              className="h-11 w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button 
               type="submit" 
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
               disabled={isLoading}
             >
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

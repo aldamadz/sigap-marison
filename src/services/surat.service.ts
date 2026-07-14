@@ -1,8 +1,5 @@
 import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import { parseRupiahInteger } from "@/lib/rupiah";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -14,194 +11,41 @@ import {
   normalizeGoodsServicesWorksheet,
   resolveTableHorizontalAlignment,
 } from "../../document-layout-rules.mjs";
+import { formatSignatureStampDateTime } from "./surat/surat-formatting";
+import {
+  buildProductionCode as buildUnitProductionCode,
+  createProductionCodeAttachment as createUnitProductionCodeAttachment,
+  createUnitRecapAttachment as createUnitRecapPdfAttachment,
+  formatProductionDate as formatUnitProductionDate,
+  formatRupiah as formatUnitRupiah,
+  getUnitCode as getAllocatedUnitCode,
+  parseMoney as parseUnitMoney,
+} from "./surat/surat-unit-documents";
+import {
+  downloadSuratStorageFile,
+  getSuratStorageRelativePath,
+} from "./surat/surat-storage";
+import type {
+  LinkedSuratDocument,
+  RecommendationParentSummary,
+  RecommendationTask,
+  SuratRegistrasi,
+  SuratRegistrationDraft,
+  SuratRegistrationDraftFile,
+  TableInputColumn,
+  TemplateInputField,
+} from "./surat/surat.types";
 
-type TableInputColumn = {
-  key: string;
-  label: string;
-  column: string;
-  required?: boolean;
-  type?: "text" | "number" | "date" | "select";
-  options?: Array<{ label?: string; value: string | number } | string | number>;
-  helper_text?: string;
-};
-
-type TemplateInputField = {
-  key: string;
-  label: string;
-  type?: "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
-  required?: boolean;
-  cell?: string;
-  sheet?: number;
-  defaultSource?: string;
-  default_source?: string;
-  merge_range?: string;
-  mergeRange?: string;
-  horizontal?: "left" | "center" | "right";
-  vertical?: "top" | "middle" | "bottom";
-  wrap?: boolean;
-  shrink?: boolean;
-  font_name?: string;
-  fontName?: string;
-  font_size?: number;
-  fontSize?: number;
-  row_height?: number;
-  rowHeight?: number;
-  prefix?: string;
-  suffix?: string;
-  table_config?: {
-    start_row: number;
-    end_row: number;
-    no_column?: string;
-    columns: TableInputColumn[];
-  };
-  tableConfig?: {
-    startRow: number;
-    endRow: number;
-    noColumn?: string;
-    columns: TableInputColumn[];
-  };
-};
-
-const formatSignatureStampDateTime = (value?: string | null) => {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Jakarta",
-  }).format(date).replace(".", ":");
-};
-
-export interface SuratRegistrasi {
-  id: string;
-  no_surat: string | null;
-  judul_surat: string;
-  file_path: string | null;
-  status: string;
-  current_step: number;
-  created_at: string;
-  updated_at: string;
-  entity_id?: string;
-  office_id?: string;
-  project_id?: string;
-  dept_id?: string;
-  letter_type_id?: string;
-  penggunaan_id?: string;
-  form_usage_id?: string;
-  surat_signatures?: Array<{
-    id: string;
-    role_name: string;
-    step_order: number;
-    is_signed: boolean;
-    signed_at: string | null;
-    profiles?: { full_name: string };
-  }>;
-  surat_attachments?: Array<{
-    id: string;
-    file_url: string;
-    file_name: string | null;
-    file_type: string | null;
-    file_size: number | null;
-    stage?: string | null;
-    requirement_key?: string | null;
-    requirement_label?: string | null;
-    signature_id?: string | null;
-  }>;
-}
-
-export interface SuratRegistrationDraft {
-  id: string;
-  reservation_id: string;
-  created_by: string;
-  no_surat: string;
-  status: "DRAFT" | "SUBMITTED" | "VOID" | "EXPIRED";
-  payload: Record<string, any>;
-  signer_assignments: any[];
-  current_section: string;
-  expires_at: string;
-  created_at: string;
-  updated_at: string;
-  surat_registration_draft_files?: SuratRegistrationDraftFile[];
-}
-
-export interface RecommendationTask {
-  id: string;
-  parent_surat_id: string;
-  submitted_surat_id: string | null;
-  no_surat: string;
-  status: "waiting" | "claimed" | "revision_requested" | "submitted" | "cancelled";
-  required_before_step: number;
-  claimed_by: string | null;
-  claimed_by_name: string | null;
-  claimed_at: string | null;
-  created_at: string;
-  updated_at: string;
-  candidate_snapshot: Array<{ user_id?: string; full_name?: string; job_title?: string }> | unknown;
-  draft_id: string | null;
-  parent_no_surat: string | null;
-  parent_judul_surat: string | null;
-  parent_status: string | null;
-  parent_created_at: string | null;
-  parent_requester_name: string | null;
-}
-
-export interface RecommendationParentSummary {
-  task_id: string;
-  parent_surat_id: string;
-  no_surat: string | null;
-  judul_surat: string | null;
-  requester_name: string | null;
-  requester_job_title: string | null;
-  department_name: string | null;
-  department_code: string | null;
-  office_name: string | null;
-  office_kedudukan: string | null;
-  project_name: string | null;
-  request_place: string | null;
-  request_date: string | null;
-  request_category: string | null;
-  form_input_data: Record<string, unknown>;
-  attachments: Array<{
-    id: string;
-    file_name: string | null;
-    file_type: string | null;
-    file_size: number | null;
-    requirement_label: string | null;
-  }>;
-}
-
-export interface LinkedSuratDocument {
-  id: string;
-  parent_surat_id: string;
-  child_surat_id: string;
-  link_type: "recommendation";
-  status: "active" | "cancelled";
-  required_before_step: number | null;
-  created_at: string;
-  child_no_surat: string | null;
-  child_judul_surat: string | null;
-  child_status: string | null;
-  child_current_step: number | null;
-  child_file_path: string | null;
-  child_pdf_path: string | null;
-  child_created_at: string | null;
-  child_created_by: string | null;
-}
-
-export interface SuratRegistrationDraftFile {
-  id: string;
-  draft_id: string;
-  file_url: string;
-  file_name: string;
-  file_type: string | null;
-  file_size: number | null;
-  requirement_key: string | null;
-  requirement_label: string | null;
-  created_at: string;
-}
+export type {
+  LinkedSuratDocument,
+  RecommendationParentSummary,
+  RecommendationTask,
+  SuratRegistrasi,
+  SuratRegistrationDraft,
+  SuratRegistrationDraftFile,
+  TableInputColumn,
+  TemplateInputField,
+} from "./surat/surat.types";
 
 export const suratService = {
   getUnitConfigFromForm(form: any) {
@@ -301,22 +145,11 @@ export const suratService = {
   },
 
   getRelativePath(url: string): string {
-    if (!url) return "";
-    const parts = url.split("/dokumen_surat/");
-    const path = parts.length < 2 ? url : parts[1];
-    return decodeURIComponent(path.split("?")[0]);
+    return getSuratStorageRelativePath(url);
   },
 
   async downloadStorageFile(pathOrUrl: string, bucket = "dokumen_surat") {
-    if (/^https?:\/\//i.test(pathOrUrl)) {
-      const response = await fetch(pathOrUrl);
-      if (!response.ok) throw new Error("Gagal download file.");
-      return response.blob();
-    }
-    const relativePath = this.getRelativePath(pathOrUrl);
-    const { data, error } = await supabase.storage.from(bucket).download(relativePath);
-    if (error || !data) throw new Error(error?.message || "Gagal download file.");
-    return data;
+    return downloadSuratStorageFile(pathOrUrl, bucket);
   },
 
   resolveStampPositions(usageDetail: any, roleName: string, stepOrder: number): any[] {
@@ -532,44 +365,23 @@ export const suratService = {
   },
 
   getUnitCode(unit: any) {
-    return String(
-      unit?.raw?.code ||
-      unit?.raw?.unit_code ||
-      unit?.raw?.kode ||
-      unit?.code ||
-      unit?.value ||
-      unit?.label ||
-      "-"
-    ).trim();
+    return getAllocatedUnitCode(unit);
   },
 
   parseMoney(value: any) {
-    return parseRupiahInteger(value);
+    return parseUnitMoney(value);
   },
 
   formatRupiah(value: any) {
-    const amount = this.parseMoney(value);
-    if (amount === 0) return "";
-    return new Intl.NumberFormat("id-ID").format(amount);
+    return formatUnitRupiah(value);
   },
 
   buildProductionCode(unit: any) {
-    const detail = unit?.allocation_detail || {};
-    const serial = String(detail.production_serial || detail.kode_produksi_nomor || "").trim();
-    const block = String(detail.production_block || detail.kode_produksi_blok || "").trim();
-    const rawDate = String(detail.production_date || detail.kode_produksi_tanggal || "").trim();
-    const formattedDate = rawDate
-      ? this.formatProductionDate(rawDate)
-      : "";
-    if (!serial && !block && !formattedDate) return "";
-    return `${serial}/UAI/PRC/${block}/${formattedDate}`;
+    return buildUnitProductionCode(unit);
   },
 
   formatProductionDate(value: string) {
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return formatUnitProductionDate(value);
   },
 
   async ensureUnitAllocationPersisted(suratId: string, formInputData: any) {
@@ -608,139 +420,11 @@ export const suratService = {
   },
 
   createUnitRecapAttachment(project: any, units: any[]) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const margin = 15;
-    let totalAtas = 0;
-    let totalBawah = 0;
-    const body = units.map((unit, index) => {
-      const atas = this.parseMoney(unit?.allocation_detail?.struktur_atas);
-      const bawah = this.parseMoney(unit?.allocation_detail?.struktur_bawah);
-      totalAtas += atas;
-      totalBawah += bawah;
-      return [
-        String(index + 1),
-        this.getUnitCode(unit),
-        this.formatRupiah(atas),
-        this.formatRupiah(bawah),
-        this.formatRupiah(atas + bawah),
-      ];
-    });
-
-    const totalNominal = totalAtas + totalBawah;
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.text("REKAP ADENDUM UNIT", margin, 17);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
-    doc.text(`Cabang: ${project?.branch?.name || "-"}`, margin, 29);
-
-    autoTable(doc, {
-      startY: 36,
-      margin: { left: margin, right: margin },
-      head: [["No", "Kavling", "Struktur Atas", "Struktur Bawah", "Nominal"]],
-      body,
-      foot: [["TOTAL", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 9,
-        textColor: [0, 0, 0],
-        lineColor: [0, 0, 0],
-        lineWidth: 0.15,
-        cellPadding: 2,
-      },
-      headStyles: {
-        fillColor: [245, 245, 245],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        halign: "center",
-      },
-      footStyles: {
-        fillColor: [245, 245, 245],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 35, halign: "center" },
-        2: { halign: "right" },
-        3: { halign: "right" },
-        4: { halign: "right" },
-      },
-      didParseCell: (data) => {
-        if (data.section === "foot" && data.column.index === 0) {
-          data.cell.colSpan = 2;
-          data.cell.styles.halign = "center";
-        }
-        if (data.section === "foot" && data.column.index === 1) {
-          data.cell.text = [];
-        }
-      },
-    });
-
-    const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
-    return new File(
-      [doc.output("blob")],
-      `Rekap_Adendum_Unit_${safeProject}_${Date.now()}.pdf`,
-      { type: "application/pdf" }
-    );
+    return createUnitRecapPdfAttachment(project, units);
   },
 
   createProductionCodeAttachment(project: any, units: any[]) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const margin = 15;
-    const body = units.map((unit, index) => [
-      String(index + 1),
-      project?.name || project?.label || "-",
-      this.getUnitCode(unit),
-      this.buildProductionCode(unit) || "-",
-    ]);
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.text("KODE PRODUKSI UNIT", margin, 17);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
-
-    autoTable(doc, {
-      startY: 35,
-      margin: { left: margin, right: margin },
-      head: [["No", "Proyek", "Unit", "Kode Produksi"]],
-      body,
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 9,
-        textColor: [0, 0, 0],
-        lineColor: [0, 0, 0],
-        lineWidth: 0.15,
-        cellPadding: 2,
-        overflow: "linebreak",
-      },
-      headStyles: {
-        fillColor: [245, 245, 245],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        halign: "center",
-      },
-      columnStyles: {
-        0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 58 },
-        2: { cellWidth: 25, halign: "center" },
-        3: { cellWidth: 84 },
-      },
-    });
-
-    const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
-    return new File(
-      [doc.output("blob")],
-      `Kode_Produksi_Unit_${safeProject}_${Date.now()}.pdf`,
-      { type: "application/pdf" }
-    );
+    return createUnitProductionCodeAttachment(project, units);
   },
 
   async getSignerSnapshots(signers: any[]) {
@@ -1307,7 +991,7 @@ export const suratService = {
       bucket: "dokumen_surat",
       path,
       file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      upsert: true,
+      upsert: false,
     });
     return { publicUrl: uploaded.publicUrl, context, signaturePositions };
   },
@@ -1982,7 +1666,7 @@ export const suratService = {
         bucket: "dokumen_surat",
         path: newPath,
         file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-        upsert: true,
+        upsert: false,
       });
       return uploaded.publicUrl;
     }
@@ -2117,7 +1801,7 @@ export const suratService = {
       bucket: "dokumen_surat",
       path,
       file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      upsert: true,
+      upsert: false,
     });
     return uploaded.publicUrl;
   },

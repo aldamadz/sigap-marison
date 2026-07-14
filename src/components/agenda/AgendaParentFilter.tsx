@@ -88,15 +88,15 @@ export function AgendaParentFilter({
             onUserSelect('all'); 
           }}
         >
-          <SelectTrigger className="h-9 bg-background border-border/60 rounded-xl text-[11px] font-bold shadow-sm">
+          <SelectTrigger className="h-11 rounded-xl border-border/60 bg-background text-xs font-bold shadow-sm sm:h-9 sm:text-[11px]">
             <SelectValue>{currentOfficeLabel}</SelectValue>
           </SelectTrigger>
           <SelectContent className="rounded-xl shadow-xl">
-            <SelectItem value="all_offices" className="text-[11px] font-medium text-primary">
+            <SelectItem value="all_offices" className="min-h-11 text-xs font-medium text-primary sm:min-h-9 sm:text-[11px]">
               Seluruh Cabang (Semua Level)
             </SelectItem>
             {offices.map((off: any) => (
-              <SelectItem key={off.id} value={String(off.id)} className="text-[11px]">
+              <SelectItem key={off.id} value={String(off.id)} className="min-h-11 text-xs sm:min-h-9 sm:text-[11px]">
                 {off.name}
               </SelectItem>
             ))}
@@ -121,7 +121,7 @@ export function AgendaParentFilter({
           }}
           disabled={isLoadingUsers}
         >
-          <SelectTrigger className="h-9 bg-background border-border/60 rounded-xl text-[11px] shadow-sm">
+          <SelectTrigger className="h-11 rounded-xl border-border/60 bg-background text-xs shadow-sm sm:h-9 sm:text-[11px]">
             <SelectValue>
               {isMeSelected ? (
                 <span className="font-bold">Agenda Saya</span>
@@ -134,8 +134,8 @@ export function AgendaParentFilter({
           </SelectTrigger>
 
           <SelectContent className="max-h-[400px] rounded-2xl shadow-xl">
-            <SelectItem value={String(user?.id)} className="text-[11px] font-bold">Agenda Saya</SelectItem>
-            <SelectItem value="all" className="text-[11px] font-bold text-primary">Seluruh Anggota Tim</SelectItem>
+            <SelectItem value={String(user?.id)} className="min-h-11 text-xs font-bold sm:min-h-9 sm:text-[11px]">Agenda Saya</SelectItem>
+            <SelectItem value="all" className="min-h-11 text-xs font-bold text-primary sm:min-h-9 sm:text-[11px]">Seluruh Anggota Tim</SelectItem>
             
             <div className="h-px bg-border/50 my-1.5" />
 
@@ -146,7 +146,7 @@ export function AgendaParentFilter({
                 <SelectGroup key={officeName}>
                   <SelectLabel className="px-2 py-1 text-[9px] font-black uppercase bg-muted/30">{officeName}</SelectLabel>
                   {members.map((child: any) => (
-                    <SelectItem key={child.id} value={String(child.id)} className="pl-2">
+                    <SelectItem key={child.id} value={String(child.id)} className="min-h-11 pl-2 sm:min-h-9">
                       <div className="flex items-center gap-1">
                         {/* Garis hirarki agar Admin tahu Yatno di bawah Siti */}
                         {Array.from({ length: child.depth || 0 }).map((_, i) => (

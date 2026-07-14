@@ -86,19 +86,19 @@
 
   .dark {
     color-scheme: dark;
-    --background: 222 38% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 34% 10%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 34% 9%;
+    --background: 224 42% 5%;
+    --foreground: 210 32% 96%;
+    --card: 222 34% 8%;
+    --card-foreground: 210 32% 96%;
+    --popover: 222 36% 7%;
     --popover-foreground: 210 40% 98%;
     --primary: 126 55% 48%;
     --primary-foreground: 222 38% 7%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 28% 14%;
-    --muted-foreground: 215 20% 62%;
-    --accent: 126 22% 17%;
+    --secondary: 218 28% 14%;
+    --secondary-foreground: 210 32% 96%;
+    --muted: 218 24% 12%;
+    --muted-foreground: 215 18% 66%;
+    --accent: 132 25% 14%;
     --accent-foreground: 126 55% 75%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
@@ -112,15 +112,15 @@
     --pending-foreground: 222 47% 6%;
     --ongoing: 158 64% 40%;
     --ongoing-foreground: 210 40% 98%;
-    --border: 217 26% 18%;
-    --input: 217 26% 18%;
+    --border: 216 22% 18%;
+    --input: 216 22% 20%;
     --ring: 126 55% 48%;
     --chart-1: 126 55% 48%;
     --chart-2: 158 64% 40%;
     --chart-3: 43 96% 56%;
     --chart-4: 0 72% 51%;
     --chart-5: 280 65% 60%;
-    --sidebar-background: 222 38% 8%;
+    --sidebar-background: 224 42% 5%;
     --sidebar-foreground: 210 40% 85%;
     --sidebar-primary: 126 62% 48%;
     --sidebar-primary-foreground: 222 47% 6%;
@@ -128,9 +128,9 @@
     --sidebar-accent-foreground: 126 55% 75%;
     --sidebar-border: 217 33% 14%;
     --sidebar-ring: 126 62% 48%;
-    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.03), 0 14px 34px -24px hsl(222 47% 3% / 0.75);
-    --shadow-elevated: 0 18px 44px -24px hsl(222 47% 3% / 0.85);
-    --shadow-glow: 0 0 0 1px hsl(126 55% 48% / 0.1);
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.04), 0 18px 44px -30px hsl(225 80% 1% / 0.92);
+    --shadow-elevated: 0 1px 0 hsl(0 0% 100% / 0.05), 0 28px 70px -32px hsl(225 80% 1% / 0.96);
+    --shadow-glow: 0 0 0 1px hsl(126 55% 48% / 0.14), 0 0 36px -18px hsl(126 55% 48% / 0.42);
     --gradient-primary: linear-gradient(135deg, hsl(126 55% 48%), hsl(145 48% 38%));
     --gradient-success: linear-gradient(135deg, hsl(158 64% 40%), hsl(158 64% 35%));
     --gradient-card: linear-gradient(180deg, hsl(222 47% 10%), hsl(222 47% 8%));
@@ -142,9 +142,24 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100dvh;
+    background-image:
+      radial-gradient(circle at 78% -12%, hsl(var(--primary) / 0.08), transparent 34rem),
+      radial-gradient(circle at 8% 110%, hsl(var(--chart-5) / 0.045), transparent 30rem);
+    background-attachment: fixed;
     font-family: var(--font-sigap, 'Geist Variable', system-ui, sans-serif);
     font-size: 0.875rem;
     line-height: 1.5;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+    color: hsl(var(--foreground));
+  }
+
+  :focus-visible {
+    outline-color: hsl(var(--ring));
+    outline-offset: 2px;
   }
 
   /* =============================================
@@ -237,8 +252,8 @@
 @layer components {
   /* UI Containers */
   .glass-card {
-    @apply bg-card/95 backdrop-blur-sm border border-border/70;
-    box-shadow: var(--shadow-card);
+    @apply border border-border/70 bg-card/[0.85] backdrop-blur-xl;
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.035), var(--shadow-card);
   }
 
   .elevated-card {
@@ -255,8 +270,8 @@
   }
 
   .sigap-panel {
-    @apply rounded-lg border border-border bg-card p-4 text-card-foreground sm:p-5;
-    box-shadow: var(--shadow-card);
+    @apply rounded-lg border border-border/80 bg-card/90 p-4 text-card-foreground backdrop-blur-sm sm:p-5;
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.025), var(--shadow-card);
   }
 
   .sigap-panel-accent {
@@ -375,6 +390,19 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+
     .app-dialog-overlay,
     .app-dialog-content,
     .docs-dialog-overlay,

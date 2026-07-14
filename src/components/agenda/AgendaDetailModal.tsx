@@ -194,9 +194,9 @@ export const AgendaDetailModal = ({
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirmMode(null)}
-            className="flex-1 rounded-xl h-9 text-xs font-bold uppercase">Batal</Button>
+            className="h-11 flex-1 rounded-xl text-xs font-bold uppercase">Batal</Button>
           <Button size="sm" onClick={() => completeMutation.mutate()} disabled={isPending}
-            className="flex-1 rounded-xl h-9 text-xs font-black uppercase bg-emerald-600 hover:bg-emerald-700 text-white">
+            className="h-11 flex-1 rounded-xl bg-emerald-600 text-xs font-black uppercase text-white hover:bg-emerald-700">
             {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Ya, Selesai</>}
           </Button>
@@ -214,9 +214,9 @@ export const AgendaDetailModal = ({
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirmMode(null)}
-            className="flex-1 rounded-xl h-9 text-xs font-bold uppercase">Batal</Button>
+            className="h-11 flex-1 rounded-xl text-xs font-bold uppercase">Batal</Button>
           <Button size="sm" onClick={() => rescheduleNowMutation.mutate()} disabled={isPending}
-            className="flex-1 rounded-xl h-9 text-xs font-black uppercase bg-amber-500 hover:bg-amber-600 text-white">
+            className="h-11 flex-1 rounded-xl bg-amber-500 text-xs font-black uppercase text-white hover:bg-amber-600">
             {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <><FastForward className="w-3.5 h-3.5 mr-1.5" />Pindahkan</>}
           </Button>
@@ -232,9 +232,9 @@ export const AgendaDetailModal = ({
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirmMode(null)}
-            className="flex-1 rounded-xl h-9 text-xs font-bold uppercase">Batal</Button>
+            className="h-11 flex-1 rounded-xl text-xs font-bold uppercase">Batal</Button>
           <Button size="sm" onClick={() => { onDelete?.(agenda.id); setConfirmMode(null); }} disabled={isPending}
-            className="flex-1 rounded-xl h-9 text-xs font-black uppercase bg-rose-600 hover:bg-rose-700 text-white">
+            className="h-11 flex-1 rounded-xl bg-rose-600 text-xs font-black uppercase text-white hover:bg-rose-700">
             {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <><Trash2 className="w-3.5 h-3.5 mr-1.5" />Ya, Hapus</>}
           </Button>
@@ -247,13 +247,13 @@ export const AgendaDetailModal = ({
 
   return (
     <Dialog open={isVisible} onOpenChange={onClose}>
-      <DialogContent className="max-w-md rounded-3xl p-0 overflow-hidden border-border/50">
+      <DialogContent className="max-w-md overflow-y-auto rounded-3xl border-border/50 p-0 [&>button]:h-11 [&>button]:w-11">
 
         {/* Accent bar */}
         <div className={cn("h-1.5 w-full", st.dot)} />
 
         {/* Header */}
-        <div className="px-7 pt-6 pb-4 border-b border-border/40">
+        <div className="border-b border-border/40 px-4 pb-4 pt-5 sm:px-7 sm:pt-6">
           <DialogHeader>
             <div className="flex-1 min-w-0">
               <span className={cn(
@@ -286,12 +286,12 @@ export const AgendaDetailModal = ({
         </div>
 
         {/* Info */}
-        <div className="px-7 py-5 space-y-4">
+        <div className="space-y-4 px-4 py-4 sm:px-7 sm:py-5">
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
               <Calendar className="w-4 h-4 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Mulai</p>
               <p className="text-sm font-semibold text-foreground">{fmtDateTime(agenda.startTime)}</p>
             </div>
@@ -301,7 +301,7 @@ export const AgendaDetailModal = ({
             <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">
               <Clock className="w-4 h-4 text-muted-foreground" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Selesai</p>
               <p className="text-sm font-semibold text-foreground">
                 {fmtTime(agenda.endTime)}
@@ -317,9 +317,9 @@ export const AgendaDetailModal = ({
               <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Lokasi</p>
-                <p className="text-sm font-semibold text-foreground">{agenda.location}</p>
+                <p className="break-words text-sm font-semibold text-foreground">{agenda.location}</p>
               </div>
             </div>
           )}
@@ -329,9 +329,9 @@ export const AgendaDetailModal = ({
               <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">
                 <Tag className="w-4 h-4 text-muted-foreground" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Catatan</p>
-                <p className="text-sm text-foreground/80 leading-relaxed">{agenda.description}</p>
+                <p className="break-words text-sm leading-relaxed text-foreground/80">{agenda.description}</p>
               </div>
             </div>
           )}
@@ -358,7 +358,7 @@ export const AgendaDetailModal = ({
         </div>
 
         {/* Footer */}
-        <div className="px-7 pb-6 pt-2 border-t border-border/40 bg-muted/5">
+        <div className="border-t border-border/40 bg-muted/5 px-4 pb-4 pt-2 sm:px-7 sm:pb-6">
           {confirmMode ? (
             <div className="pt-3"><ConfirmPanel /></div>
           ) : (
@@ -369,7 +369,7 @@ export const AgendaDetailModal = ({
                 {canComplete && isOwner && (
                   <Button variant="outline" size="sm"
                     onClick={() => setConfirmMode('selesai')}
-                    className="flex-1 rounded-xl h-10 gap-2 font-bold text-xs uppercase border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
+                    className="h-11 flex-1 rounded-xl border-emerald-500/30 text-xs font-bold uppercase text-emerald-600 hover:bg-emerald-500/10">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Selesai
                   </Button>
                 )}
@@ -378,7 +378,7 @@ export const AgendaDetailModal = ({
                 {canReschedule && isOwner && (
                   <Button variant="outline" size="sm"
                     onClick={() => setConfirmMode('pindah')}
-                    className="flex-1 rounded-xl h-10 gap-2 font-bold text-xs uppercase border-amber-500/30 text-amber-600 hover:bg-amber-500/10">
+                    className="h-11 flex-1 rounded-xl border-amber-500/30 text-xs font-bold uppercase text-amber-600 hover:bg-amber-500/10">
                     <FastForward className="w-3.5 h-3.5" /> Mulai Sekarang
                   </Button>
                 )}
@@ -387,12 +387,12 @@ export const AgendaDetailModal = ({
                 {canEdit && isOwner ? (
                   <Button size="sm"
                     onClick={() => { onClose(); onEdit(agenda); }}
-                    className="flex-1 rounded-xl h-10 gap-2 font-bold text-xs uppercase">
+                    className="h-11 flex-1 rounded-xl text-xs font-bold uppercase">
                     <Edit2 className="w-3.5 h-3.5" /> Edit Agenda
                   </Button>
                 ) : (isLocked || isOverdue) ? (
                   <Button size="sm" disabled
-                    className="flex-1 rounded-xl h-10 gap-2 font-bold text-xs uppercase opacity-40 cursor-not-allowed">
+                    className="h-11 flex-1 cursor-not-allowed rounded-xl text-xs font-bold uppercase opacity-40">
                     <Lock className="w-3.5 h-3.5" />
                     {isOverdue ? 'Terkunci' : 'Sudah Selesai'}
                   </Button>
@@ -403,7 +403,7 @@ export const AgendaDetailModal = ({
               {canDelete && isOwner && (
                 <Button variant="ghost" size="sm"
                   onClick={() => setConfirmMode('hapus')}
-                  className="w-full rounded-xl h-9 gap-2 font-bold text-xs uppercase text-rose-500 hover:bg-rose-500/10 hover:text-rose-600">
+                  className="h-11 w-full rounded-xl text-xs font-bold uppercase text-rose-500 hover:bg-rose-500/10 hover:text-rose-600">
                   <Trash2 className="w-3.5 h-3.5" /> Hapus Agenda
                 </Button>
               )}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bell, Check, Trash2 } from 'lucide-react'
+import { Bell, Check } from 'lucide-react'
 import { 
   Popover, 
   PopoverContent, 
@@ -78,11 +78,11 @@ export function NotificationBell() {
 
         <ScrollArea className="h-80">
           {loading ? (
-            <div className="p-4 text-center text-sm text-gray-500">
+            <div className="p-4 text-center text-sm text-muted-foreground">
               Memuat...
             </div>
           ) : notifications.length === 0 ? (
-            <div className="p-4 text-center text-sm text-gray-500">
+            <div className="p-4 text-center text-sm text-muted-foreground">
               Tidak ada notifikasi
             </div>
           ) : (
@@ -92,8 +92,8 @@ export function NotificationBell() {
                   key={notification.id}
                   onClick={() => handleNotificationClick(notification)}
                   className={`
-                    p-4 cursor-pointer hover:bg-gray-50 transition-colors
-                    ${!notification.is_read ? 'bg-blue-50/50' : ''}
+                    cursor-pointer p-4 transition-colors hover:bg-accent/60
+                    ${!notification.is_read ? 'bg-primary/[0.06]' : ''}
                   `}
                 >
                   <div className="flex items-start gap-3">
@@ -106,10 +106,10 @@ export function NotificationBell() {
                       <p className="text-sm font-medium line-clamp-1">
                         {notification.title}
                       </p>
-                      <p className="text-sm text-gray-600 line-clamp-2 mt-1">
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                         {notification.message}
                       </p>
-                      <p className="text-xs text-gray-400 mt-2">
+                      <p className="mt-2 text-xs text-muted-foreground/75">
                         {formatDistanceToNow(
                           new Date(notification.created_at), 
                           { addSuffix: true, locale: id }
