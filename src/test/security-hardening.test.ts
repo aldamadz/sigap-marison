@@ -99,4 +99,21 @@ describe("security hardening guardrails", () => {
     expect(migration).toContain("reserved_by");
     expect(migration).toContain("v_actor");
   });
+
+  it("protects private avatar downloads with authentication and owner-or-admin authorization", () => {
+    const server = read("server.mjs");
+    const routeStart = server.indexOf('url.pathname === "/api/profile/avatar/file"');
+    const routeEnd = server.indexOf("const match = url.pathname.match", routeStart);
+    const route = server.slice(routeStart, routeEnd);
+    const avatarComponent = read("src/components/ui/avatar.tsx");
+
+    expect(routeStart).toBeGreaterThan(-1);
+    expect(route).toContain("await requireSupabaseUser(token)");
+    expect(route).toContain("ownerId");
+    expect(route).toContain("isAdmin");
+    expect(route).toContain('"Cache-Control": "private, no-store"');
+    expect(route).not.toContain('"Cache-Control": "public');
+    expect(avatarComponent).toContain("Authorization: `Bearer ${session.access_token}`");
+    expect(avatarComponent).toContain("URL.revokeObjectURL");
+  });
 });
