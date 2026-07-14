@@ -2670,6 +2670,21 @@ export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
   {
+    version: "v1.15.0",
+    date: "14 Juli 2026",
+    changes: [
+      "Membersihkan dead code, notification subtree lama, wrapper UI orphan, dependency tidak terpakai, dan artefak temporary tanpa mengubah alur production utama.",
+      "Menstandarkan role aktif aplikasi menjadi `admin` dan `user` serta menambahkan migration normalisasi role yang idempotent.",
+      "Menstandarkan toast aplikasi ke Sonner agar feedback UI lebih konsisten.",
+      "Menghapus source, deployment, dan dokumentasi layanan inbound read-only karena arah integrasi SIGAP menjadi outbound ke sistem departemen.",
+      "Mempertahankan integrasi outbound MARISON agar SIGAP tetap dapat mengirim data ke sistem lain saat endpoint tujuan sudah tersedia.",
+      "Mematikan source map production agar source aplikasi tidak ikut terbuka pada hasil deploy publik.",
+      "Memperketat upload, Docker context, deterministic install, dan guard keamanan setelah cleanup.",
+      "Memperbaiki tampilan avatar private agar foto user tetap muncul di halaman organisasi, agenda, aktivitas, sidebar, dan profil selama user sudah login.",
+      "Menyamakan pemuatan avatar di sidebar dan pengaturan melalui komponen authenticated avatar agar foto tidak hilang dan tidak berubah rasio.",
+    ],
+  },
+  {
     version: "v1.14.0",
     date: "13 Juli 2026",
     changes: [

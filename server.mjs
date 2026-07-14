@@ -2924,6 +2924,8 @@ createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && url.pathname === "/api/profile/avatar/file") {
+      const token = getBearerToken(req);
+      await requireSupabaseUser(token);
       const filePath = sanitizeStoragePath(url.searchParams.get("path"));
       if (!/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+$/i.test(filePath)) {
         return sendJson(res, 400, { error: "Path foto profil tidak valid." });
@@ -2960,7 +2962,7 @@ createServer(async (req, res) => {
         "Content-Type": file.type || contentTypes[extname(requestedPath)] || "application/octet-stream",
         "Content-Length": buffer.length,
         "Content-Disposition": "inline",
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "private, no-store",
       }));
       res.end(buffer);
       return;

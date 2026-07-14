@@ -15,6 +15,7 @@ import { getCurrentUser } from '@/services/user-ui.service'
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 import { useAttention } from '@/providers/AttentionProvider'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated'
 
@@ -358,11 +359,12 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       <div className="mt-auto shrink-0 border-t border-sidebar-border bg-sidebar-accent/10 p-3">
         {(isMobile || !collapsed) && user && (
           <div className="mb-3 flex min-w-0 items-center gap-3 rounded-lg border border-border/60 bg-background/70 p-3">
-            <img 
-              src={user.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || 'U')}&background=0D9488&color=fff`} 
-              className="h-10 w-10 shrink-0 rounded-md object-cover shadow-sm ring-1 ring-border" 
-              alt="Profile" 
-            />
+            <Avatar className="h-10 w-10 shrink-0 rounded-md shadow-sm ring-1 ring-border">
+              <AvatarImage src={user.photoUrl || undefined} alt="Profile" />
+              <AvatarFallback className="rounded-md bg-primary/10 text-sm font-semibold text-primary">
+                {(user.fullName || 'U').slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
             <div className="flex-1 overflow-hidden min-w-0">
               <p className="truncate text-sm font-semibold text-foreground">{user.fullName}</p>
               <div className="flex items-center gap-1">

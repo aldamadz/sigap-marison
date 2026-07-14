@@ -10,6 +10,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "typecheck": "tsc -b --pretty false",
+    "quality": "npm run lint && npm run typecheck && npm test && npm run test:document-layout && npm run test:pgd-pdf && npm run build",
     "preview": "vite preview",
     "start": "node server.mjs",
     "test": "vitest run",

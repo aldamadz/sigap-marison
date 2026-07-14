@@ -12,6 +12,7 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // Services & Libs
 import { getCurrentUser } from '@/services/user-ui.service';
@@ -180,7 +181,7 @@ export const SettingsView = () => {
 
   // Mapping data dari JSON: full_name dan avatar_url
   const displayName = user?.full_name || user?.fullName || 'User';
-  const avatarSrc = user?.avatar_url || user?.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`;
+  const avatarSrc = user?.avatar_url || user?.photoUrl || undefined;
 
   const tenureText = (() => {
     if (!user?.join_date) return '-';
@@ -217,17 +218,12 @@ export const SettingsView = () => {
             {/* AVATAR SECTION */}
             <div className="relative group self-center md:self-start">
               <div className="relative h-36 w-36 overflow-hidden rounded-lg border-4 border-background bg-muted shadow-lg">
-                <img 
-                  src={avatarSrc} 
-                  alt="Profile"
-                  className={`w-full h-full object-cover ${uploading ? 'opacity-30' : 'opacity-100'}`}
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.src.includes('ui-avatars.com')) {
-                      target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}`;
-                    }
-                  }}
-                />
+                <Avatar className={`h-full w-full rounded-lg transition-opacity ${uploading ? 'opacity-30' : 'opacity-100'}`}>
+                  <AvatarImage src={avatarSrc} alt="Profile" />
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-3xl font-semibold text-primary">
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 {uploading && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />

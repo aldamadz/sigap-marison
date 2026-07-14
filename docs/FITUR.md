@@ -605,7 +605,9 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - User dapat mengganti foto profil sendiri dengan JPG, PNG, atau WebP berukuran maksimal 5 MB.
 - Upload foto profil diproses endpoint server terautentikasi; path storage dipaksa mengikuti ID Supabase Auth akun aktif.
 - Avatar disimpan pada bucket private di Supabase Storage self-hosted dan disajikan melalui endpoint domain SIGAP.
+- Sidebar, pengaturan, dan komponen avatar lain memakai loader terautentikasi yang sama agar foto private tetap muncul dan proporsi gambar tidak berubah.
 - Tampilan aplikasi menggunakan thumbnail WebP maksimal 256 x 256, sedangkan pembukaan URL avatar sebagai tab menampilkan file asli.
+- Avatar dapat dilihat oleh user yang sudah login pada halaman organisasi, agenda, aktivitas, dan profil tanpa membuka URL storage publik.
 - User dapat memilih tema `System`, `Light`, atau `Dark`.
 - Preferensi tema diterapkan segera dan disimpan per akun pada profil.
 - Mode `System` mengikuti preferensi warna perangkat atau browser.

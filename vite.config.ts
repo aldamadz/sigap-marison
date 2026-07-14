@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1100,
       cssMinify: true,
       minify: "esbuild",
-      sourcemap: true,
+      sourcemap: mode !== "production",
       rollupOptions: {
         output: {
           manualChunks(id) {
