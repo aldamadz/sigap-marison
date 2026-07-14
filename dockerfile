@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Copy package.json dan install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy seluruh kode aplikasi
 COPY . .
@@ -29,7 +29,7 @@ RUN apk add --no-cache \
     ttf-dejavu
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY server.mjs ./server.mjs
