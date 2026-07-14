@@ -92,12 +92,27 @@ describe("security hardening guardrails", () => {
     expect(deleteBlock).not.toContain(".in(\"requirement_key\", requirementKeys)");
   });
 
-  it("keeps letter number generation bound to auth.uid and an advisory transaction lock", () => {
+  it("keeps letter number generation bound to the active actor and authorized scope", () => {
     const migration = read("supabase/migrations/20260714152000_close_remaining_security_blockers.sql");
-    expect(migration).toContain("v_actor uuid := auth.uid()");
-    expect(migration).toContain("pg_advisory_xact_lock");
-    expect(migration).toContain("reserved_by");
-    expect(migration).toContain("v_actor");
+    const functionStart = migration.indexOf("create or replace function public.generate_new_letter_number(");
+    const functionEnd = migration.indexOf("revoke all on function public.generate_new_letter_number", functionStart);
+    const generator = migration.slice(functionStart, functionEnd);
+
+    expect(functionStart).toBeGreaterThan(-1);
+    expect(functionEnd).toBeGreaterThan(functionStart);
+    expect(generator).toContain("v_actor uuid := auth.uid()");
+    expect(generator).toContain("p_user_id is distinct from v_actor");
+    expect(generator).toContain("select profile.office_id, profile.department_id, profile.role::text");
+    expect(generator).toContain("from public.profiles as profile");
+    expect(generator).toContain("profile.id = v_actor");
+    expect(generator).toContain("coalesce(profile.is_active, true) = true");
+    expect(generator).toContain("profile.deleted_at is null");
+    expect(generator).toContain("v_is_admin := coalesce(v_actor_role = 'admin', false)");
+    expect(generator).toContain("not v_is_admin and p_office_id is distinct from v_actor_office_id");
+    expect(generator).toMatch(/if not v_is_admin\s+and v_is_pusat\s+and p_dept_id is distinct from v_actor_department_id/);
+    expect(generator).toContain("pg_advisory_xact_lock");
+    expect(generator).toMatch(/reserved_by,[\s\S]*?'PENDING',\s*v_actor,/);
+    expect(migration).toContain("create unique index if not exists surat_reservations_cabang_no_project_unique");
   });
 
   it("protects private avatar downloads with authentication and owner-or-admin authorization", () => {

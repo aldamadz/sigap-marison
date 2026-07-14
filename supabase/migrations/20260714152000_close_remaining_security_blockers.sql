@@ -83,6 +83,10 @@ declare
   v_now timestamptz := now();
   v_year integer := extract(year from v_now)::integer;
   v_actor uuid := auth.uid();
+  v_actor_office_id uuid;
+  v_actor_department_id uuid;
+  v_actor_role text;
+  v_is_admin boolean;
   v_is_pusat boolean;
   v_start_from integer := 1;
   v_lock_key text;
@@ -91,12 +95,39 @@ begin
     raise exception 'Sesi login tidak tersedia.';
   end if;
 
+  if p_user_id is distinct from v_actor then
+    raise exception 'User reservasi tidak sesuai dengan sesi login.';
+  end if;
+
+  select profile.office_id, profile.department_id, profile.role::text
+  into v_actor_office_id, v_actor_department_id, v_actor_role
+  from public.profiles as profile
+  where profile.id = v_actor
+    and coalesce(profile.is_active, true) = true
+    and profile.deleted_at is null;
+
+  if not found then
+    raise exception 'Profil aktif tidak ditemukan.';
+  end if;
+
+  v_is_admin := coalesce(v_actor_role = 'admin', false);
+
+  if not v_is_admin and p_office_id is distinct from v_actor_office_id then
+    raise exception 'Kantor penerbit tidak sesuai dengan profil user.';
+  end if;
+
   select (kedudukan = 'Pusat') into v_is_pusat
   from public.master_offices
   where id = p_office_id;
 
   if v_is_pusat is null then
     raise exception 'Kantor penerbit tidak ditemukan.';
+  end if;
+
+  if not v_is_admin
+     and v_is_pusat
+     and p_dept_id is distinct from v_actor_department_id then
+    raise exception 'Departemen penerbit tidak sesuai dengan profil user.';
   end if;
 
   v_lock_key := concat_ws(
