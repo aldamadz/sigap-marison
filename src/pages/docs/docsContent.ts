@@ -136,7 +136,6 @@ const DOCS_ENTRY_SLUGS: Record<string, string> = {
   "login-access": "login-akses",
   "document-file": "dokumen-lampiran-error",
   notification: "notifikasi-realtime",
-  "external-api": "external-api",
   "deploy-production": "deploy-production",
 };
 
@@ -2542,65 +2541,6 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     ],
   },
   {
-    id: "external-api",
-    title: "External API",
-    menu: "Operasional",
-    audience: "troubleshooting",
-    icon: Database,
-    version: DOCS_VERSION,
-    updatedAt: DOCS_UPDATED_AT,
-    summary: "Panduan memakai API eksternal SIGAP untuk surat dan master data onboarding akun.",
-    whenToUse: [
-      "Sistem lain perlu membaca data surat yang sudah disetujui atau sedang dipantau.",
-      "Sistem lain perlu menampilkan pilihan Kantor Pusat, KC, KCP, dan Departemen saat user login pertama kali.",
-      "Partner perlu menguji access token, signature, dan endpoint master data tanpa membuka dashboard SIGAP.",
-    ],
-    steps: [
-      "Minta `client_id` dan `client_secret` dari admin SIGAP.",
-      "Generate access token melalui `POST /api/access-token` dari backend partner.",
-      "Buat signature setiap request dengan access token, path, body hash, dan timestamp.",
-      "Untuk onboarding akun, panggil `GET /api/onboarding/options` agar pilihan kantor dan departemen tersedia dalam satu response.",
-      "Gunakan endpoint master terpisah jika aplikasi hanya butuh daftar KC, KCP, atau Departemen tertentu.",
-    ],
-    examples: [
-      "User memilih Kantor Pusat: tampilkan daftar `departments` dari response onboarding.",
-      "User memilih KC: tampilkan daftar `offices.kc`.",
-      "User memilih KCP: tampilkan daftar `offices.kcp`.",
-      "Endpoint master data tidak mengirim email kantor/departemen dan tidak mengirim data user.",
-    ],
-    troubleshooting: [
-      "Jika response `Unauthorized`, cek access token, `X-Timestamp`, dan `X-Signature`.",
-      "Jika daftar kosong, pastikan master kantor/departemen sudah aktif dan tipe kantor terisi benar.",
-      "Jika partner hanya butuh satu daftar, pakai endpoint filter seperti `/api/master/offices?type=kc`.",
-    ],
-    related: ["Deploy production", "Master Kantor Cabang", "Master Departemen"],
-    sections: [
-      {
-        type: "table",
-        title: "Endpoint master data",
-        columns: ["Endpoint", "Dipakai untuk"],
-        rows: [
-          ["GET /api/onboarding/options", "Mengambil tipe kantor, daftar Kantor Pusat/KC/KCP, dan Departemen pusat dalam satu response."],
-          ["GET /api/master/offices?type=pusat", "Mengambil pilihan Kantor Pusat."],
-          ["GET /api/master/offices?type=kc", "Mengambil pilihan KC."],
-          ["GET /api/master/offices?type=kcp", "Mengambil pilihan KCP."],
-          ["GET /api/master/departments?scope=pusat", "Mengambil pilihan Departemen untuk user Kantor Pusat."],
-          ["GET /api/master/departments?scope=cabang", "Mengambil pilihan Departemen cabang jika partner membutuhkannya."],
-        ],
-      },
-      {
-        type: "table",
-        title: "Field yang dikirim",
-        columns: ["Data", "Field"],
-        rows: [
-          ["Kantor", "`id`, `code`, `name`, `type`, `type_label`, `parent_id`, `parent_code`, `parent_name`."],
-          ["Departemen", "`id`, `code`, `name`, `dept_index`, `scope`."],
-          ["Yang tidak dikirim", "Email, data user, secret, dan field internal lain."],
-        ],
-      },
-    ],
-  },
-  {
     id: "deploy-production",
     title: "Deploy production",
     menu: "Operasional",
@@ -2645,10 +2585,6 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
             "Deploy PDF worker",
             "docker --context ubuntu-server compose -f docker-compose.worker.yml --env-file .env.production up -d --build",
           ],
-          [
-            "Deploy External API",
-            "docker --context ubuntu-server compose -f docker-compose.external.yml --env-file .env.production up -d --build",
-          ],
         ],
       },
       {
@@ -2658,7 +2594,6 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         rows: [
           ["Frontend, dokumentasi, route aplikasi, atau `server.mjs`", "Deploy aplikasi utama saja."],
           ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Deploy PDF worker."],
-          ["Folder `external-api/` atau `docker-compose.external.yml`", "Deploy External API saja."],
           ["Env storage production", "Redeploy service yang membaca env tersebut dengan `--env-file .env.production`."],
         ],
       },
@@ -2683,7 +2618,7 @@ export const DOCS_CHANGELOG = [
       "Menghapus route contoh Next.js berbasis service role yang tidak memiliki autentikasi agar tidak ikut terkirim ke source production.",
       "Memperbaiki penggantian lampiran tanda tangan agar sistem hanya menghapus metadata lampiran lama, bukan lampiran baru yang baru selesai diunggah.",
       "Mengunci penomoran surat dengan advisory transaction lock di database dan mengikat pembuat nomor ke `auth.uid()`.",
-      "Menyamakan perlakuan role `admin` dan `super_admin` pada helper RLS, guard route, dan helper server.",
+      "Menormalkan otorisasi aplikasi ke dua role resmi, yaitu `admin` dan `user`.",
       "Menambahkan validasi signature file/magic bytes untuk upload agar ekstensi dan MIME type tidak bisa dipalsukan.",
       "Membatasi penggantian lampiran tahap approval hanya untuk admin aktif, signer tahap aktif, atau tim pemeriksa tahap aktif yang berwenang.",
       "Menambahkan pembatasan event dan rate limit singkat pada email internal agar satu aksi tidak memicu pengiriman berulang.",
@@ -2707,12 +2642,6 @@ export const DOCS_CHANGELOG = [
     version: "v1.13.0",
     date: "10 Juli 2026",
     changes: [
-      "Menambahkan External API master data untuk kebutuhan onboarding akun di sistem lain.",
-      "Menambahkan endpoint `GET /api/onboarding/options` agar partner dapat mengambil tipe kantor, daftar Kantor Pusat/KC/KCP, dan Departemen pusat dalam satu request.",
-      "Menambahkan endpoint `GET /api/master/offices` dengan filter `type=pusat|kc|kcp`.",
-      "Menambahkan endpoint `GET /api/master/departments` dengan filter `scope=pusat|cabang|all`.",
-      "Membatasi response master data ke field allowlist agar email, data user, dan field internal tidak terekspos.",
-      "Menambahkan dokumentasi operasional External API di halaman Docs dan memperbarui dokumen teknis `EXTERNAL_API_SURAT.md`.",
       "Menambahkan download template dan import Excel/CSV untuk pengisian massal detail kavling pada tugas pemeriksaan Unit.",
     ],
   },

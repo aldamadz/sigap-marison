@@ -144,7 +144,7 @@ const MonitoringPage = () => {
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? 'all');
   const { openPdf, openFile, isOpening } = useDocumentOpener();
-  const isAdminUser = ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
+  const isAdminUser = String(user?.role || '').toLowerCase() === 'admin';
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);

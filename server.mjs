@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { Transform } from "node:stream";
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -55,6 +56,7 @@ let mailTransporter = null;
 
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
+const MAX_UPLOAD_REQUEST_BYTES = Number(process.env.MAX_UPLOAD_REQUEST_BYTES || MAX_UPLOAD_BYTES + 1024 * 1024);
 const externalAccessTokenCache = new Map();
 const ATTENTION_STREAM_TOKEN_TTL_MS = 60 * 1000;
 const ATTENTION_POLL_INTERVAL_MS = Number(process.env.ATTENTION_POLL_INTERVAL_MS || 3000);
@@ -536,7 +538,7 @@ const requireSupabaseUser = async (token) => {
 const requireAdminUser = async (token) => {
   const user = await requireSupabaseUser(token);
   const profile = user.app_profile;
-  if (!profile || !["admin", "super_admin"].includes(String(profile.role || "").toLowerCase())) {
+  if (!profile || String(profile.role || "").toLowerCase() !== "admin") {
     const err = new Error("Akses ditolak: hanya admin");
     err.status = 403;
     throw err;
@@ -2002,11 +2004,26 @@ const sendInternalNotification = async (token, payload) => {
   return { inserted: data?.length || 0, email, push };
 };
 
-const parseUploadForm = async (req) => {
+const parseUploadForm = async (req, maxBytes = MAX_UPLOAD_REQUEST_BYTES) => {
+  let receivedBytes = 0;
+  const limitedBody = new Transform({
+    transform(chunk, encoding, callback) {
+      receivedBytes += chunk.length;
+      if (receivedBytes > maxBytes) {
+        const err = new Error(`Ukuran request upload terlalu besar. Maksimal ${Math.floor(maxBytes / 1024 / 1024)} MB.`);
+        err.status = 413;
+        callback(err);
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+  req.pipe(limitedBody);
+
   const request = new Request(`http://localhost${req.url}`, {
     method: req.method,
     headers: req.headers,
-    body: req,
+    body: limitedBody,
     duplex: "half",
   });
   return request.formData();
@@ -2066,6 +2083,11 @@ const assertAllowedUploadContent = (file, buffer) => {
 };
 
 const ensureStorageWriteAccess = async ({ bucket, path, user, isAdmin }) => {
+  if (bucket === "dokumen_surat" && /^dokumen\/system_/i.test(path) && !isAdmin) {
+    const err = new Error("Dokumen sistem hanya dapat diunggah oleh admin.");
+    err.status = 403;
+    throw err;
+  }
   if (isAdmin || bucket === "templates") return;
 
   if (bucket === "lampiran_surat") {
@@ -2099,16 +2121,32 @@ const ensureStorageWriteAccess = async ({ bucket, path, user, isAdmin }) => {
   }
 
   if (bucket === "dokumen_surat") {
-    const signedMatch = path.match(/^dokumen\/signed_([0-9a-f-]{36})_/i);
-    if (!signedMatch) return;
-    const { data: surat, error } = await supabase
-      .from("surat_registrasi")
-      .select("id, created_by, surat_signatures(user_id, verifier_snapshot)")
-      .eq("id", signedMatch[1])
-      .maybeSingle();
-    if (error) throw error;
-    if (await canReadSurat(surat, user.id)) return;
-    const err = new Error("Tidak diizinkan memperbarui dokumen surat ini.");
+    const draftMatch = path.match(/^dokumen\/drafts\/([0-9a-f-]{36})\//i);
+    if (draftMatch) {
+      const { data: draft, error } = await supabase
+        .from("surat_registration_drafts")
+        .select("id, created_by, status")
+        .eq("id", draftMatch[1])
+        .maybeSingle();
+      if (error) throw error;
+      if (draft?.created_by === user.id && draft.status === "DRAFT") return;
+    }
+
+    const suratMatch = path.match(/^dokumen\/(?:signed|updated_input)_([0-9a-f-]{36})_/i);
+    if (suratMatch) {
+      const { data: surat, error } = await supabase
+        .from("surat_registrasi")
+        .select("id, created_by, surat_signatures(user_id, verifier_snapshot)")
+        .eq("id", suratMatch[1])
+        .maybeSingle();
+      if (error) throw error;
+      if (await canReadSurat(surat, user.id)) return;
+    }
+
+    const actorMatch = path.match(/^dokumen\/actor_([0-9a-f-]{36})_/i);
+    if (actorMatch?.[1].toLowerCase() === user.id.toLowerCase()) return;
+
+    const err = new Error("Dokumen harus terkait dengan draft/surat yang dapat diakses atau actor saat ini.");
     err.status = 403;
     throw err;
   }
@@ -2117,7 +2155,7 @@ const ensureStorageWriteAccess = async ({ bucket, path, user, isAdmin }) => {
 const uploadInternalStorageFile = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
-  assertRequestSize(req);
+  assertRequestSize(req, MAX_UPLOAD_REQUEST_BYTES);
 
   const form = await parseUploadForm(req);
   const bucket = String(form.get("bucket") || "").trim();
@@ -2125,7 +2163,7 @@ const uploadInternalStorageFile = async (token, req) => {
   const file = form.get("file");
   const upsert = String(form.get("upsert") || "false").toLowerCase() === "true";
   const role = String(user.app_profile?.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "super_admin";
+  const isAdmin = role === "admin";
 
   if (!bucket || !/^[a-zA-Z0-9_-]+$/.test(bucket)) {
     const err = new Error("Bucket storage tidak valid.");
@@ -2153,7 +2191,9 @@ const uploadInternalStorageFile = async (token, req) => {
       return /^(drafts\/[0-9a-f-]{36}\/[0-9a-f-]{36}_[\w.-]+|lampiran_[0-9a-f-]{36}\/[0-9]{10,}_[\w.-]+)$/i.test(requestedPath);
     }
     if (bucket === "dokumen_surat") {
-      return /^dokumen\/(system_|signed_|updated_input_|[0-9]{10,}_)[\w.-]+$/i.test(requestedPath);
+      if (/^dokumen\/system_[\w.-]+$/i.test(requestedPath)) return isAdmin;
+      return /^dokumen\/(?:signed|updated_input|actor)_[0-9a-f-]{36}_[\w.-]+$/i.test(requestedPath) ||
+        /^dokumen\/drafts\/[0-9a-f-]{36}\/[\w.-]+$/i.test(requestedPath);
     }
     return false;
   })();
@@ -2216,7 +2256,7 @@ const uploadInternalStorageFile = async (token, req) => {
 const uploadProfileAvatar = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!supabase || !storageSupabase) throw new Error("Storage credentials are not configured.");
-  assertRequestSize(req);
+  assertRequestSize(req, MAX_UPLOAD_REQUEST_BYTES);
 
   const form = await parseUploadForm(req);
   const file = form.get("file");
@@ -2374,7 +2414,7 @@ const getDepartmentAgendaActivity = async (token, url) => {
 const replaceSignatureAttachmentFiles = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
-  assertRequestSize(req);
+  assertRequestSize(req, MAX_UPLOAD_REQUEST_BYTES);
 
   const form = await parseUploadForm(req);
   const suratId = String(form.get("suratId") || "").trim();
@@ -2415,7 +2455,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  const isAdmin = ["admin", "super_admin"].includes(String(profile?.role || "").toLowerCase());
+  const isAdmin = String(profile?.role || "").toLowerCase() === "admin";
   const { data: suratState, error: suratStateError } = await supabase
     .from("surat_registrasi")
     .select("current_step, status")
@@ -2662,7 +2702,7 @@ const canReadSurat = async (surat, userId) => {
     .select("role")
     .eq("id", userId)
     .maybeSingle();
-  return profile?.role === "admin" || profile?.role === "super_admin";
+  return String(profile?.role || "").toLowerCase() === "admin";
 };
 
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";

@@ -845,7 +845,7 @@ export const suratService = {
     if (profileResult.error) throw profileResult.error;
 
     const profile = profileResult.data;
-    const isAdmin = ["admin", "super_admin"].includes(String(profile?.role || "").toLowerCase());
+    const isAdmin = String(profile?.role || "").toLowerCase() === "admin";
     const requesterProfile = isAdmin && payload?._requester_profile_override
       ? { ...profile, ...payload._requester_profile_override }
       : profile;
@@ -1682,7 +1682,7 @@ export const suratService = {
       .eq("id", actor.user.id)
       .single();
     if (actorError) throw actorError;
-    if (!["admin", "super_admin"].includes(String(actorProfile?.role || "").toLowerCase())) {
+    if (String(actorProfile?.role || "").toLowerCase() !== "admin") {
       throw new Error("Hanya admin yang dapat membangun ulang sumber dokumen.");
     }
 
