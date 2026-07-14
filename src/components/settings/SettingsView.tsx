@@ -11,7 +11,7 @@ import { useTheme } from 'next-themes';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/use-toast';
+import { toast as sonnerToast } from 'sonner';
 
 // Services & Libs
 import { getCurrentUser } from '@/services/user-ui.service';
@@ -21,6 +21,8 @@ import { supabase } from '@/lib/supabase';
 const AVATAR_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated';
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 export const SettingsView = () => {
   const { theme, setTheme } = useTheme();
@@ -32,7 +34,6 @@ export const SettingsView = () => {
   const [passwords, setPasswords] = useState({ newPassword: '', confirmPassword: '' });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     loadData();

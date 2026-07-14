@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Copy, CheckCircle2, FileText, Calendar, Check } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface SuratStatusCardProps {
   noSurat: string;
@@ -17,8 +17,7 @@ export function SuratStatusCard({ noSurat, judul, tanggal }: SuratStatusCardProp
     navigator.clipboard.writeText(noSurat);
     setCopied(true);
     
-    toast({
-      title: "Berhasil disalin",
+    toast("Berhasil disalin", {
       description: "Nomor surat telah disalin ke papan klip.",
     });
 

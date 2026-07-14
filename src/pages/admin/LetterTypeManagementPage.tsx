@@ -14,12 +14,14 @@ import {
   Tag, Plus, Pencil, Trash2, Loader2, 
   Search, RefreshCw, Building2
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
+
 export default function LetterTypeManagementPage() {
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const [types, setTypes] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);

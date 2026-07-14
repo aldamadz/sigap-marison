@@ -37,7 +37,6 @@ import { suratService } from '@/services/surat.service';
 import { getActiveRecommendationDocuments } from '@/components/surat/linked-documents';
 import { RegistrationSummaryDocument } from '@/components/surat/RegistrationSummaryDialog';
 import { buildRegistrationSummaryData } from '@/components/surat/registration-summary-data';
-import { toast } from 'react-hot-toast';
 
 type InvolvementKey = 'MEMBUAT' | 'MEMERIKSA' | 'MENYETUJUI';
 

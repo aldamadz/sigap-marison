@@ -6,13 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { defaultEmailSettings, emailSettingsService, normalizeEmailSettings, type EmailSettingsConfig } from "@/services/email-settings.service";
+
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 type Props = { embedded?: boolean };
 
 export default function EmailNotificationSettingsPage({ embedded = false }: Props) {
-  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<EmailSettingsConfig>(defaultEmailSettings);

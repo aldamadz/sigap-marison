@@ -17,7 +17,7 @@ import {
   FileText, Plus, Pencil, Trash2, Loader2,
   ExternalLink, Search, FileSpreadsheet, Upload, CheckCircle2, X, Save, FileCheck2, FlaskConical
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { cn } from "@/lib/utils";
 import { appStorageService } from "@/services/storage.service";
 import { defaultEmailSettings, normalizeEmailSettings, type EmailFileMode, type EmailSettingsConfig } from "@/services/email-settings.service";
@@ -26,6 +26,9 @@ import {
   type SignatureLayoutConfig,
 } from "@/services/signature-layout.service";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 type TemplateInputType = "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
 type TemplateHorizontalAlign = "left" | "center" | "right";
@@ -255,7 +258,6 @@ const getFormGenerationMode = (formOrName: any) =>
   isGoodsServicesForm(formOrName) ? "pdf_native" : "excel_template";
 
 export default function FormManagementPage({ embedded = false }: { embedded?: boolean }) {
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [forms, setForms] = useState<any[]>([]);

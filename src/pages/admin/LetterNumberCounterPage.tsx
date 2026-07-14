@@ -8,9 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 type ScopeType = "pusat" | "cabang";
 
@@ -28,7 +31,6 @@ const emptyForm = {
 };
 
 export default function LetterNumberCounterPage() {
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

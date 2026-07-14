@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Copy, FileText, Loader2, Plus, Save, Search, ShieldCheck, Trash2, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type UsageStatus = "draft" | "active" | "archived";
@@ -139,7 +142,6 @@ const candidateScopeLabel = (value?: string | null) => {
 const isDynamicCandidateScope = (value?: CandidateScope | null) => Boolean(value && value !== "manual");
 
 export default function FormUsageManagementPage() {
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const importedMatrixRef = useRef<string | null>(null);

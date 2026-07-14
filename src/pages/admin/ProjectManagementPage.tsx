@@ -16,12 +16,14 @@ import {
   Briefcase, Plus, Pencil, Trash2, Loader2, 
   Search, RefreshCw, Building2, Fingerprint, Calendar, MapPin
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
+
 export default function MasterProjectManagementPage() {
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const [projects, setProjects] = useState<any[]>([]);
   const [offices, setOffices] = useState<any[]>([]);

@@ -25,7 +25,7 @@ import {
   type RecommendationParentSummary as RecommendationParentSummaryData,
 } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import {
@@ -35,6 +35,9 @@ import {
 } from "@/components/surat/RegistrationSummaryDialog";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { RecommendationParentSummary } from "@/components/surat/RecommendationParentSummary";
+
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 interface SuratFormProps {
   onSuccess: (noSurat: string, judul: string) => void;
@@ -293,7 +296,6 @@ const linkedDocumentContextEquals = (left: LinkedDocumentContext | null, right: 
   JSON.stringify(left || null) === JSON.stringify(right || null);
 
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [linkedDocumentContext, setLinkedDocumentContext] = useState<LinkedDocumentContext | null>(() =>
@@ -947,7 +949,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const officePusat     = useMemo(() => master.offices?.find((o: MasterRecord) => o.kedudukan === "Pusat"), [master.offices]);
   const isPusatSelected = useMemo(() => formData.office_id === officePusat?.id, [formData.office_id, officePusat]);
   const isCurrentUserAdmin = useMemo(
-    () => ["admin", "super_admin"].includes(String(currentProfile?.role || "").toLowerCase()),
+    () => String(currentProfile?.role || "").toLowerCase() === "admin",
     [currentProfile?.role]
   );
   const myDrafts = useMemo(
@@ -1427,7 +1429,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         if (!cancelled) {
           const departmentId = data?.department_id || "";
           const officeId = data?.office_id || "";
-          const isAdmin = ["admin", "super_admin"].includes(String(data?.role || "").toLowerCase());
+          const isAdmin = String(data?.role || "").toLowerCase() === "admin";
           setCurrentProfile(data as CurrentProfile);
           setRequesterDepartmentId(departmentId);
           setFormData(prev => ({

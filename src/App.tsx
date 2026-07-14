@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -129,7 +128,7 @@ const AdminOnlyRoute = ({ children }: { children: ReactNode }) => {
 
       if (active) {
         const role = String(data?.role || "").toLowerCase();
-        setAllowed(!error && ["admin", "super_admin"].includes(role) && data?.is_active !== false);
+        setAllowed(!error && role === "admin" && data?.is_active !== false);
       }
     };
 
@@ -173,7 +172,6 @@ const App = () => {
       {isAuth && <UserThemeSync />}
       {isAuth && <RouteDataRefresh />}
 
-      <Toaster />
       <Sonner position="top-right" closeButton />
 
       <Suspense fallback={<PageLoader />}>

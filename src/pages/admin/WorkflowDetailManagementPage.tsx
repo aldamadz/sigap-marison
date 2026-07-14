@@ -29,10 +29,13 @@ import {
   Plus, Pencil, Loader2, Settings2, X, Database, 
   Trash2, ChevronRight, Layers, Building2, Globe, Search, GripVertical
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+
+const toast = ({ title, description, variant }: { title: string; description?: string; variant?: string }) =>
+  variant === "destructive" ? sonnerToast.error(title, { description }) : sonnerToast(title, { description });
 
 interface TTDConfig {
   roleName: string; 
@@ -287,7 +290,6 @@ export default function WorkflowDetailManagementPage({
   documentationOnly?: boolean;
 }) {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const appDialog = useAppDialog();
   const [details, setDetails] = useState<any[]>([]);
   const [masterForms, setMasterForms] = useState<any[]>([]);
