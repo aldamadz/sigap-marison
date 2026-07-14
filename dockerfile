@@ -12,8 +12,12 @@ RUN npm ci
 # Copy seluruh kode aplikasi
 COPY . .
 
-# Build aplikasi dengan Vite (menghasilkan folder 'dist')
-RUN npm run build
+# Public frontend configuration is scoped to the Vite build only.
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY
+RUN VITE_SUPABASE_URL="$VITE_SUPABASE_URL" \
+    VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY="$VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY" \
+    npm run build
 
 # ==========================================
 # Tahap 2: Serve static app + PDF converter
