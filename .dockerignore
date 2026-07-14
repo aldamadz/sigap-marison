@@ -10,3 +10,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+employeeList*.xlsx
+hierarchy-mapping-preview.csv
+hierarchy-parent-update.sql
+.tmp-hierarchy/

@@ -2,7 +2,13 @@ import fs from "node:fs";
 import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 
-const previewFile = process.argv[2] || "hierarchy-mapping-preview.csv";
+const [previewFile] = process.argv.slice(2);
+
+if (!previewFile) {
+  console.error("Usage: node scripts/apply-hierarchy-parent-from-preview.mjs <preview.csv|preview.xlsx>");
+  console.error("Use an explicit path, preferably under .tmp-hierarchy/.");
+  process.exit(1);
+}
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -126,7 +132,7 @@ for (const mapping of mappings) {
     .eq("id", child.id);
 
   if (error) {
-    console.error(`${mapping.nik}: ${error.message}`);
+    console.error(`Profile update failed: ${error.message}`);
     skipped++;
     continue;
   }
@@ -139,10 +145,3 @@ console.log(`Updated: ${updated}`);
 console.log(`Skipped/no change: ${skipped}`);
 console.log(`Missing children: ${missingChildren.length}`);
 console.log(`Missing parents: ${missingParents.length}`);
-
-if (missingChildren.length > 0) {
-  console.log(`Missing child NIK: ${missingChildren.slice(0, 20).join(", ")}`);
-}
-if (missingParents.length > 0) {
-  console.log(`Missing parent NIK: ${missingParents.slice(0, 20).join(", ")}`);
-}

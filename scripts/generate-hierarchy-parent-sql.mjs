@@ -1,9 +1,13 @@
 import fs from "node:fs";
 import ExcelJS from "exceljs";
 
-const inputFile = process.argv[2] || "employeeList (2).xlsx";
-const outputFile = process.argv[3] || "hierarchy-parent-update.sql";
-const previewFile = process.argv[4] || "hierarchy-mapping-preview.csv";
+const [inputFile, outputFile, previewFile] = process.argv.slice(2);
+
+if (!inputFile || !outputFile || !previewFile) {
+  console.error("Usage: node scripts/generate-hierarchy-parent-sql.mjs <input.xlsx> <output.sql> <preview.csv>");
+  console.error("Use explicit paths, preferably under .tmp-hierarchy/ for generated files.");
+  process.exit(1);
+}
 
 const normalize = (value) => String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 const includes = (value, keyword) => normalize(value).includes(normalize(keyword));

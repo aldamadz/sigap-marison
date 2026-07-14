@@ -25,6 +25,12 @@ playwright-report/
 tmp/
 hasilpdf/
 .tmp-*
+/.tmp-hierarchy/
+
+# Local hierarchy source and generated artifacts
+/employeeList (2).xlsx
+/hierarchy-mapping-preview.csv
+/hierarchy-parent-update.sql
 
 # Editor directories and files
 .vscode/*
