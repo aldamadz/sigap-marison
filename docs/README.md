@@ -24,7 +24,7 @@ SIGAP dibangun di atas infrastruktur **Event-Driven Architecture (EDA)** untuk m
 | Layer | Teknologi | Peran |
 | :--- | :--- | :--- |
 | **Frontend** | React.js + Tailwind CSS | Antarmuka pengguna yang responsif dan interaktif. |
-| **Backend** | Supabase Edge Functions (Deno) | Logika serverless untuk routing dokumen otomatis. |
+| **Backend** | Node.js server + Supabase | API terautentikasi, integrasi server-side, dan routing dokumen. |
 | **Database** | PostgreSQL | Penyimpanan data relasional dengan integritas tinggi. |
 | **Realtime** | Supabase Broadcast/Presence | Pengiriman notifikasi instan via WebSocket. |
 | **Storage** | Supabase Storage self-hosted | Penyimpanan privat file PDF dan lampiran transaksi. |
@@ -55,12 +55,9 @@ Garis besar dokumentasi:
 
 - [FITUR.md](./FITUR.md) menjadi pusat fitur fungsional dan non-fungsional.
 - Dokumen KPI project dan server tetap terpisah karena berisi target manajemen proyek dan operasional infrastruktur.
-- Dokumentasi API external tetap terpisah karena dikonsumsi oleh sistem/client lain.
-
 | File | Deskripsi |
 |------|-----------|
 | [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, termasuk Hirarki Organisasi, dan rencana fitur berjalan |
-| [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |
 
@@ -80,11 +77,6 @@ Jika perubahan tidak menyentuh PDF worker, jangan redeploy `docker-compose.worke
 
 ## 🔗 Quick Links
 
-### API Documentation
-- Base URL: `https://external.marison-testing.biz.id`
-- Interaktif: `https://external.marison-testing.biz.id/docs`
-- OpenAPI: `https://external.marison-testing.biz.id/openapi.json`
-
 ### Supabase
 - [Dashboard](https://supabase.com/dashboard/project/xuhyodtmgwteyslhrkfx)
 - Project: `agenda`
@@ -92,4 +84,4 @@ Jika perubahan tidak menyentuh PDF worker, jangan redeploy `docker-compose.worke
 
 ---
 
-*Last updated: 2026-07-02*
+*Last updated: 2026-07-14*

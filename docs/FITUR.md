@@ -378,7 +378,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Non-Fungsional
 
 - Tidak ada akses PIC implisit atau bypass admin pada proses approval.
-- Data hanya dapat dibaca oleh pembuat, penandatangan terkait, admin, atau external client resmi.
+- Data hanya dapat dibaca oleh pembuat, penandatangan, pemeriksa yang ditugaskan, atau admin aktif sesuai authorization aplikasi.
 - Integrasi downstream harus idempoten dan dapat diaudit ketika diaktifkan.
 
 ## 12. Notifikasi dan Realtime
@@ -629,7 +629,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Email internal hanya boleh dikirim dari event surat yang valid agar endpoint tidak berubah menjadi mail relay umum.
 - Email internal dibatasi per user, surat, dan jenis event agar satu aksi tidak mengirim email berulang.
 - Penomoran surat harus memakai lock transaksi database agar dua request bersamaan tidak mendapat nomor yang sama.
-- Role `admin` dan `super_admin` harus diperlakukan konsisten pada route admin, RLS helper, dan helper server.
+- Role resmi hanya `admin` dan `user`; seluruh route admin, RLS helper, dan helper server hanya memberikan hak administratif kepada admin aktif.
 - Route contoh Next.js yang memakai service role tanpa autentikasi tidak boleh ikut dikirim dalam source production.
 
 ### Sinkronisasi Dokumentasi
@@ -668,27 +668,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Master data operasional dan konfigurasi aturan sistem dipisahkan agar navigasi dan tanggung jawab halaman jelas.
 - Layout konfigurasi harus responsif dan menggunakan komponen serta token tema yang sama dengan halaman lain.
 
-## 25. External API Read-Only Surat
-
-### Fungsional
-
-- Sistem lain dapat mengambil data surat melalui API external SIGAP.
-- Client menggunakan client credentials untuk mendapatkan access token.
-- API menyediakan data surat, pengirim, tujuan, detail input, status, dan file preview melalui endpoint aman.
-- API menyediakan master data onboarding akun melalui `GET /api/onboarding/options`, `GET /api/master/offices`, dan `GET /api/master/departments`.
-- Sistem lain dapat menampilkan pilihan Kantor Pusat, KC, KCP, dan Departemen tanpa mengambil data user SIGAP.
-- Dokumentasi API tersedia di Swagger UI.
-
-### Non-Fungsional
-
-- `client_secret` tidak disimpan dalam bentuk plaintext.
-- Access token memiliki masa berlaku.
-- File tidak diberikan sebagai public storage URL langsung.
-- Endpoint master data hanya mengirim field allowlist seperti `id`, `code`, `name`, `type`, `parent`, dan `dept_index`; email/internal field tidak diekspos.
-- API harus bisa diaudit per client.
-- Client yang tidak aktif dapat dinonaktifkan tanpa mengganggu client lain.
-
-## 26. Integrasi Data External
+## 25. Integrasi Data External
 
 ### Fungsional
 
@@ -703,7 +683,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kegagalan API external harus tampil sebagai feedback yang jelas.
 - UI utama tidak perlu dirombak saat provider external berubah.
 
-## 27. SLA Departemen untuk Approval
+## 26. SLA Departemen untuk Approval
 
 ### Fungsional
 
@@ -808,7 +788,7 @@ Fallback data lama:
 2. Export KPI untuk laporan manajemen.
 3. Indikator telat langsung pada antrean approval jika diperlukan.
 
-## 28. Email Notifikasi Profesional
+## 27. Email Notifikasi Profesional
 
 ### Fungsional
 
@@ -832,11 +812,11 @@ Fallback data lama:
 - Ukuran attachment harus dibatasi agar tidak melampaui batas SMTP.
 - Mode attachment tidak boleh berubah diam-diam menjadi link. Jika file belum tersedia atau melewati batas, email tetap terkirim tanpa file tersebut.
 
-## 29. Keamanan dan Hak Akses
+## 28. Keamanan dan Hak Akses
 
 ### Fungsional
 
-- Role admin, user, penandatangan, dan external client memiliki akses berbeda.
+- Role resmi aplikasi adalah admin dan user; penandatangan mendapat kewenangan berdasarkan penugasan workflow.
 - Admin mengatur master data, form, matrix, dan konfigurasi.
 - User hanya melihat surat dan file yang menjadi haknya.
 
@@ -844,24 +824,21 @@ Fallback data lama:
 
 - Service-role key hanya boleh berada di server/env production.
 - File sensitif tidak boleh dibuka tanpa token sesi yang valid.
-- API external memakai token dan secret yang bisa dicabut.
 - RLS/RPC harus membatasi aksi sesuai peran yang konsisten.
 - Error akses harus tampil di UI.
 - Storage transaksi surat wajib menggunakan Supabase Storage self-hosted.
 - Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
 
-## 30. Operasional, Deployment, dan Worker
+## 29. Operasional, Deployment, dan Worker
 
 ### Fungsional
 
 - Aplikasi utama berjalan di Docker production.
-- External API berjalan sebagai service terpisah.
 - PDF worker dapat dipisah di server lain.
 - Cloudflare Tunnel dapat dipakai untuk expose service.
 - Deploy aplikasi utama dilakukan dari host/workstation yang memiliki Docker context `ubuntu-server`.
 - Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, LibreOffice/font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
 - PDF worker hanya diredeploy ketika ada perubahan worker, dependency/runtime PDF, atau konfigurasi worker.
-- External API dideploy terpisah melalui `docker-compose.external.yml`.
 
 ### Non-Fungsional
 
@@ -880,12 +857,6 @@ docker --context ubuntu-server compose -f docker-compose.prod.yml --env-file .en
 docker --context ubuntu-server compose -f docker-compose.worker.yml --env-file .env.production up -d --build
 ```
 
-- Jika hanya mengubah External API, gunakan compose external dan app utama/PDF worker tidak perlu diredeploy:
-
-```powershell
-docker --context ubuntu-server compose -f docker-compose.external.yml --env-file .env.production up -d --build
-```
-
 - Worker PDF memiliki concurrency limit.
 - Docker compose production dan worker tidak boleh menjalankan workload yang sama secara duplikat.
 - Healthcheck container harus tersedia.
@@ -897,9 +868,9 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Sinkronisasi saat tab kembali aktif memakai cooldown agar tidak memicu refetch berulang.
 - Setiap perpindahan route memvalidasi ulang seluruh query aktif dan menampilkan overlay loading sampai pengambilan data terbaru selesai.
 - Refresh route tidak melakukan browser reload sehingga sesi, koneksi realtime, dan state global aplikasi tetap terjaga.
-- Endpoint ringan untuk attention badge, web push, dan data source unit memakai validasi token JWT lokal yang memeriksa bentuk token, expiry, dan user id. Jalur ini mengurangi ketergantungan ke request network Supabase Auth untuk badge/notifikasi, sedangkan endpoint dokumen dan token file tetap memakai validasi Auth server penuh.
+- Seluruh endpoint terautentikasi memvalidasi access token melalui Supabase Auth dan memeriksa profil aplikasi aktif serta tidak dihapus. Endpoint dokumen dan token file juga menerapkan authorization resource sebelum menggunakan service-role.
 
-## 31. Kegunaan Form dan Tanda Tangan Dinamis
+## 30. Kegunaan Form dan Tanda Tangan Dinamis
 
 ### Fungsional
 
