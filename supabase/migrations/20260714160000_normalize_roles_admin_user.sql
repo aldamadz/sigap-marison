@@ -8,13 +8,24 @@ where role::text = 'super_admin';
 -- A profile-level check is safer than replacing the deployed enum: it closes
 -- future writes while preserving unknown enum dependencies in functions,
 -- policies, views, defaults, and historical data structures.
-alter table public.profiles
-  add constraint profiles_role_admin_user_check
-  check (
-    role is not null
-    and role::text = any (array['admin'::text, 'user'::text])
-  )
-  not valid;
+do $constraint$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'profiles_role_admin_user_check'
+      and conrelid = 'public.profiles'::regclass
+  ) then
+    alter table public.profiles
+      add constraint profiles_role_admin_user_check
+      check (
+        role is not null
+        and role::text = any (array['admin'::text, 'user'::text])
+      )
+      not valid;
+  end if;
+end;
+$constraint$;
 
 alter table public.profiles
   validate constraint profiles_role_admin_user_check;
