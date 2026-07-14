@@ -38,7 +38,8 @@ hasilpdf/
 *.sw?
 CLAUDE.md
 
-# Local agent/Codex skills
+# Local agent/Codex state and skills
+.crew/
 .agents/
 .codex/skills/
 skills-lock.json
