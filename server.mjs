@@ -2689,11 +2689,11 @@ const getMarisonAccessToken = async (source) => {
     throw err;
   }
 
-  const cacheKey = `${source.source_key}:${clientId}`;
+  const baseUrl = String(process.env.MARISON_EXTERNAL_BASE_URL || source.base_url || "").replace(/\/+$/, "");
+  const cacheKey = `${baseUrl}:${source.source_key}:${clientId}`;
   const cached = externalAccessTokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
 
-  const baseUrl = String(source.base_url || "").replace(/\/+$/, "");
   const response = await fetch(`${baseUrl}/access-token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2744,7 +2744,7 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
     throw err;
   }
 
-  const baseUrl = String(source.base_url || "").replace(/\/+$/, "");
+  const baseUrl = String(process.env.MARISON_EXTERNAL_BASE_URL || source.base_url || "").replace(/\/+$/, "");
   const endpointPath = fillEndpointTemplate(source.endpoint_template, variables);
   const url = new URL(`${baseUrl}${endpointPath}`);
   Object.entries(variables?.query || {}).forEach(([key, value]) => {

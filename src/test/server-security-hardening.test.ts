@@ -30,4 +30,13 @@ describe("server security hardening", () => {
     expect(server).toContain('hmacSha512Hex(token, canonical)');
     expect(server).not.toContain("configuredSigningSecret");
   });
+
+  it("allows development and production to use separate Marison API hosts", () => {
+    const localCompose = readFileSync(join(process.cwd(), "docker-compose.yml"), "utf8");
+    const productionCompose = readFileSync(join(process.cwd(), "docker-compose.prod.yml"), "utf8");
+
+    expect(server).toContain("process.env.MARISON_EXTERNAL_BASE_URL || source.base_url");
+    expect(localCompose).toContain("https://marison-external.digivasi.com/api");
+    expect(productionCompose).toContain("https://external.marisonregency.id/api");
+  });
 });

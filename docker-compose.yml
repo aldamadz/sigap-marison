@@ -12,6 +12,7 @@ services:
       PORT: "80"
       SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
+      MARISON_EXTERNAL_BASE_URL: "${MARISON_EXTERNAL_BASE_URL:-https://marison-external.digivasi.com/api}"
     env_file:
       - path: .env.server
         required: false
