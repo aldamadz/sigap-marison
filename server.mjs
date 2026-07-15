@@ -65,9 +65,16 @@ const externalAccessTokenCache = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
 const passwordResetSendCooldowns = new Map();
+const passwordResetIpRateLimits = new Map();
+const loginIdentityRateLimits = new Map();
+const loginIpRateLimits = new Map();
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
+const PASSWORD_RESET_MAX_PER_WINDOW = 6;
+const LOGIN_MAX_FAILURES_PER_IDENTITY = 8;
+const LOGIN_MAX_FAILURES_PER_IP = 30;
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -213,15 +220,36 @@ const clientIp = (req) => String(req.headers["cf-connecting-ip"] || req.headers[
   .split(",")[0]
   .trim();
 
-const hitRateLimit = (store, key, max, windowMs) => {
+const activeRateLimit = (store, key) => {
   const now = Date.now();
   const current = store.get(key);
-  if (!current || current.resetAt <= now) {
-    store.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
+  if (current?.resetAt > now) return current;
+  if (current) store.delete(key);
+  return null;
+};
+
+const enforceRateLimit = (store, key, max) => {
+  const current = activeRateLimit(store, key);
+  if (!current || current.count < max) return;
+  const err = new Error("Terlalu banyak percobaan. Coba lagi nanti.");
+  err.status = 429;
+  err.retryAfter = Math.max(1, Math.ceil((current.resetAt - Date.now()) / 1000));
+  throw err;
+};
+
+const recordRateLimit = (store, key, windowMs) => {
+  const current = activeRateLimit(store, key);
+  if (current) {
+    current.count += 1;
+  } else {
+    store.set(key, { count: 1, resetAt: Date.now() + windowMs });
   }
-  current.count += 1;
-  return current.count > max;
+  if (store.size > 5000) {
+    const now = Date.now();
+    for (const [entryKey, entry] of store) {
+      if (entry.resetAt <= now) store.delete(entryKey);
+    }
+  }
 };
 
 const defaultEmailSettings = {
@@ -494,13 +522,21 @@ const refreshCookieSession = async (req, res) => {
 const handleAuthLogin = async (req, res) => {
   assertSameOrigin(req);
   const { email, password } = await readJsonBody(req, 16 * 1024);
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const ipKey = clientIp(req) || "unknown";
+  const identityKey = sha256Hex(normalizedEmail).slice(0, 24);
+  enforceRateLimit(loginIdentityRateLimits, identityKey, LOGIN_MAX_FAILURES_PER_IDENTITY);
+  enforceRateLimit(loginIpRateLimits, ipKey, LOGIN_MAX_FAILURES_PER_IP);
   const client = createPublicSupabaseClient();
-  const { data, error } = await client.auth.signInWithPassword({ email: String(email || ""), password: String(password || "") });
+  const { data, error } = await client.auth.signInWithPassword({ email: normalizedEmail, password: String(password || "") });
   if (error || !data.session) {
-    const err = new Error(error?.message || "Email atau password salah.");
-    err.status = error?.status || 401;
+    recordRateLimit(loginIdentityRateLimits, identityKey, AUTH_RATE_LIMIT_WINDOW_MS);
+    recordRateLimit(loginIpRateLimits, ipKey, AUTH_RATE_LIMIT_WINDOW_MS);
+    const err = new Error("Email atau password salah.");
+    err.status = 401;
     throw err;
   }
+  loginIdentityRateLimits.delete(identityKey);
   setSessionCookie(res, data.session);
   return { user: data.user, session: publicSession(data.session) };
 };
@@ -769,13 +805,17 @@ const handlePasswordResetRequest = async (req) => {
 
   const payload = await readJsonBody(req, 4096);
   const email = String(payload?.email || "").trim().toLowerCase();
-  const requestKey = `${clientIp(req)}:${sha256Hex(email).slice(0, 16)}`;
+  const ipKey = clientIp(req) || "unknown";
+  const requestKey = `${ipKey}:${sha256Hex(email).slice(0, 16)}`;
   const publicResult = {
     ok: true,
     message: "Jika email terdaftar, link reset kata sandi akan dikirim.",
   };
 
   if (!isEmail(email)) return publicResult;
+
+  enforceRateLimit(passwordResetIpRateLimits, ipKey, PASSWORD_RESET_MAX_PER_WINDOW);
+  recordRateLimit(passwordResetIpRateLimits, ipKey, AUTH_RATE_LIMIT_WINDOW_MS);
 
   const recentSendUntil = passwordResetSendCooldowns.get(requestKey);
   if (recentSendUntil && recentSendUntil > Date.now()) {
@@ -836,47 +876,6 @@ const getBearerToken = (req) => {
   const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
   if (bearer && bearer !== "cookie-session") return bearer;
   return readCookieSession(req)?.access_token || "";
-};
-
-const decodeBase64UrlJson = (value) => {
-  const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
-  const normalized = padded + "=".repeat((4 - padded.length % 4) % 4);
-  return JSON.parse(Buffer.from(normalized, "base64").toString("utf8"));
-};
-
-const decodeJwtUserForLightEndpoint = (token) => {
-  const parts = String(token || "").split(".");
-  if (parts.length !== 3) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  let payload;
-  try {
-    payload = decodeBase64UrlJson(parts[1]);
-  } catch {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  const expiresAt = Number(payload?.exp || 0);
-  const userId = String(payload?.sub || "").trim();
-  if (!userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  if (!expiresAt || expiresAt * 1000 <= Date.now()) {
-    const err = new Error("Sesi sudah kedaluwarsa.");
-    err.status = 401;
-    throw err;
-  }
-  return {
-    id: userId,
-    aud: payload?.aud,
-    role: payload?.role,
-    email: payload?.email,
-  };
 };
 
 const getPathValue = (value, path) => {
@@ -1405,7 +1404,7 @@ const getAttentionStateForUser = async (userId) => {
 };
 
 const getAttentionStateFromRequest = async (token) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   return getAttentionStateForUser(user.id);
 };
 
@@ -1426,7 +1425,7 @@ const normalizePushSubscription = (value) => {
 };
 
 const getWebPushPublicKey = async (token) => {
-  decodeJwtUserForLightEndpoint(token);
+  await requireSupabaseUser(token);
   return {
     enabled: Boolean(webPushConfig.publicKey && webPushConfig.privateKey),
     publicKey: webPushConfig.publicKey || null,
@@ -1434,7 +1433,7 @@ const getWebPushPublicKey = async (token) => {
 };
 
 const saveWebPushSubscription = async (token, payload, req) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   if (!webPushConfig.publicKey || !webPushConfig.privateKey) {
     const err = new Error("Web Push belum dikonfigurasi di server.");
     err.status = 503;
@@ -1456,7 +1455,7 @@ const saveWebPushSubscription = async (token, payload, req) => {
 };
 
 const removeWebPushSubscription = async (token, payload) => {
-  const user = decodeJwtUserForLightEndpoint(token);
+  const user = await requireSupabaseUser(token);
   const endpoint = String(payload?.endpoint || payload?.subscription?.endpoint || "").trim();
   if (!endpoint) return { ok: true };
   const { error } = await supabase
@@ -2685,7 +2684,7 @@ const getMarisonAccessToken = async (source) => {
   const clientId = process.env[authConfig.client_id_env || "MARISON_EXTERNAL_CLIENT_ID"];
   const clientSecret = process.env[authConfig.client_secret_env || "MARISON_EXTERNAL_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
-    const err = new Error("Credential API unit belum dikonfigurasi di server.");
+    const err = new Error("Credential API eksternal Marison belum dikonfigurasi di server.");
     err.status = 500;
     throw err;
   }
@@ -2702,14 +2701,14 @@ const getMarisonAccessToken = async (source) => {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const err = new Error(payload?.message || "Gagal membuat access token API unit.");
+    const err = new Error(payload?.message || "Gagal membuat access token API eksternal Marison.");
     err.status = response.status;
     throw err;
   }
 
   const token = payload?.data?.access_token;
   if (!token) {
-    const err = new Error("Response access token API unit tidak valid.");
+    const err = new Error("Response access token API eksternal Marison tidak valid.");
     err.status = 502;
     throw err;
   }
@@ -2757,21 +2756,12 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
   const headers = {};
   if (source.auth_type === "marison_token_hmac_sha512") {
     const token = await getMarisonAccessToken(source);
-    const authConfig = source.auth_config || {};
-    const configuredSigningSecret = process.env[authConfig.signing_secret_env || "MARISON_EXTERNAL_SIGNING_SECRET"];
-    const signingSecret = configuredSigningSecret || token;
-    if (!signingSecret) {
-      const err = new Error("Signing secret API unit belum dikonfigurasi di server.");
-      err.status = 500;
-      throw err;
-    }
-
     const timestamp = new Date().toISOString();
     const bodyHash = sha256Hex(Buffer.alloc(0));
     const canonical = [method, url.pathname, token, bodyHash, timestamp].join(":");
     headers.Authorization = `Bearer ${token}`;
     headers["X-Timestamp"] = timestamp;
-    headers["X-Signature"] = hmacSha512Hex(signingSecret, canonical);
+    headers["X-Signature"] = hmacSha512Hex(token, canonical);
   }
 
   const response = await fetch(url, { method, headers });
@@ -3111,6 +3101,15 @@ const consumeFileViewToken = async (viewToken) => {
 };
 
 const serveStatic = async (req, res) => {
+  if (!["GET", "HEAD"].includes(req.method || "")) {
+    res.writeHead(405, withSecurityHeaders({
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Allow": "GET, HEAD",
+    }));
+    res.end("Method not allowed");
+    return;
+  }
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requested = decodeURIComponent(url.pathname);
   const candidate = normalize(requested === "/" ? "/index.html" : requested);
@@ -3147,6 +3146,10 @@ const serveStatic = async (req, res) => {
         ? "public, max-age=31536000, immutable"
         : "public, max-age=3600",
   }));
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
   createReadStream(filePath).pipe(res);
 };
 
@@ -3404,7 +3407,7 @@ createServer(async (req, res) => {
       const dataSourceMatch = url.pathname.match(/^\/api\/data-sources\/([a-zA-Z0-9_-]+)\/query$/);
       if (req.method === "POST" && dataSourceMatch) {
         const token = getBearerToken(req);
-        decodeJwtUserForLightEndpoint(token);
+        await requireSupabaseUser(token);
         const payload = await readJsonBody(req);
         const result = await queryExternalDataSource(dataSourceMatch[1], payload?.variables || {});
         return sendJson(res, 200, result);
@@ -3416,7 +3419,10 @@ createServer(async (req, res) => {
     await serveStatic(req, res);
   } catch (error) {
     const status = error.status || 500;
-    console.error(`[api:${requestId}] ${req.method || "UNKNOWN"} ${requestPath} -> ${status}: ${error.message || "Internal server error"}`);
+    const logMessage = `[api:${requestId}] ${req.method || "UNKNOWN"} ${requestPath} -> ${status}: ${error.message || "Internal server error"}`;
+    if (status >= 500) console.error(logMessage);
+    else if (status === 429) console.warn(logMessage);
+    if (error.retryAfter) res.setHeader("Retry-After", String(error.retryAfter));
     sendJson(res, status, { error: error.message || "Internal server error", requestId });
   }
 }).listen(port, () => {

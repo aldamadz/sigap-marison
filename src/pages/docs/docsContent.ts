@@ -2670,6 +2670,17 @@ export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
   {
+    version: "v1.16.0",
+    date: "15 Juli 2026",
+    changes: [
+      "Memindahkan sesi browser ke cookie HttpOnly terenkripsi dan menjalankan query Supabase melalui BFF SIGAP.",
+      "Mengganti polling state aplikasi dengan koneksi realtime SSE melalui BFF.",
+      "Memverifikasi tanda tangan token melalui Supabase Auth pada endpoint attention, web push, dan datasource eksternal.",
+      "Membatasi percobaan login gagal dan permintaan reset password untuk mengurangi brute force dan abuse email.",
+      "Menambahkan datasource Marison Non Unit berdasarkan endpoint terbaru `GET /non-unit`.",
+    ],
+  },
+  {
     version: "v1.15.0",
     date: "14 Juli 2026",
     changes: [
