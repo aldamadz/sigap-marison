@@ -196,7 +196,6 @@ const MonitoringPage = () => {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 10_000,
   });
 
   const getAttachments = (surat: any) => {

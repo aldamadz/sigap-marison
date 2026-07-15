@@ -49,14 +49,6 @@ export const attentionService = {
     return readJsonResponse<AttentionState>(response);
   },
 
-  async createStreamToken(): Promise<{ token: string; expires_at: string; ttl_ms: number }> {
-    const response = await fetch("/api/attention/stream-token", {
-      method: "POST",
-      headers: await authHeaders(),
-    });
-    return readJsonResponse(response);
-  },
-
   async getPushPublicKey(): Promise<{ enabled: boolean; publicKey: string | null }> {
     const response = await fetch("/api/push/public-key", {
       headers: await authHeaders(),

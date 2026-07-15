@@ -283,8 +283,6 @@ const RiwayatKeterlibatanPage = () => {
         items: Array.from(map.values()),
       };
     },
-    // Polling fallback (jika websocket terputus)
-    refetchInterval: 20_000,
   });
 
   // Realtime invalidation untuk timeline/list

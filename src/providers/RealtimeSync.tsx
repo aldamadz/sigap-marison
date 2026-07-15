@@ -24,7 +24,11 @@ export const RealtimeSync = () => {
     };
 
     const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
-    const suratKeys = ["recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail"];
+    const suratKeys = [
+      "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
+      "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",
+      "surat-riwayat-keterlibatan", "surat-revision-history", "surat-linked-documents",
+    ];
     const userKeys = ["users", "activity-logs", "recent-logs"];
 
     const channel = supabase

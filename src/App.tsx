@@ -10,6 +10,7 @@ import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 
 import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
+import { RealtimeSync } from "@/providers/RealtimeSync";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
@@ -240,7 +241,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppDialogProvider>
-          {isAuth ? <AttentionProvider>{appShell}</AttentionProvider> : appShell}
+          {isAuth ? <AttentionProvider><RealtimeSync />{appShell}</AttentionProvider> : appShell}
         </AppDialogProvider>
       </TooltipProvider>
     </QueryClientProvider>

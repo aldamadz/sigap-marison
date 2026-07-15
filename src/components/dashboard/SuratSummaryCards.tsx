@@ -100,7 +100,6 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
 
       return { total: (data ?? []).length, selesai, proses, ditolak };
     },
-    refetchInterval: 30_000,
   });
 
   if (isLoading) return (

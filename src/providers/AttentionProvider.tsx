@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { attentionService, type AttentionState } from "@/services/attention.service";
 import { pushService } from "@/services/push.service";
+import { supabase } from "@/lib/supabase";
 
 type AttentionContextValue = {
   state: AttentionState;
@@ -23,9 +24,7 @@ const queryKey = ["attention-state"];
 
 export const AttentionProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
-  const sourceRef = useRef<EventSource | null>(null);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const connectingRef = useRef(false);
+  const refreshTimerRef = useRef<number | null>(null);
   const pushPermissionRequestedRef = useRef(false);
   const [eventVersion, setEventVersion] = useState(0);
 
@@ -33,20 +32,9 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
     queryKey,
     queryFn: attentionService.getState,
     staleTime: 5_000,
-    refetchInterval: () => document.visibilityState === "visible" ? 15_000 : false,
     refetchOnWindowFocus: true,
   });
   const refetchAttention = attentionQuery.refetch;
-
-  const closeStream = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    sourceRef.current?.close();
-    sourceRef.current = null;
-    connectingRef.current = false;
-  }, []);
 
   const applyAttentionState = useCallback((nextState: AttentionState) => {
     queryClient.setQueryData(queryKey, nextState);
@@ -56,66 +44,31 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
     queryClient.invalidateQueries({ queryKey: ["surat-detail"] });
   }, [queryClient]);
 
-  const openStream = useCallback(async () => {
-    if (document.visibilityState !== "visible" || sourceRef.current || connectingRef.current) return;
-    connectingRef.current = true;
-    try {
-      const { token } = await attentionService.createStreamToken();
-      const source = new EventSource(`/api/attention/stream?token=${encodeURIComponent(token)}`);
-      sourceRef.current = source;
-
-      source.addEventListener("attention_changed", (event) => {
-        const data = JSON.parse((event as MessageEvent).data || "{}") as AttentionState;
-        applyAttentionState(data);
-      });
-
-      source.addEventListener("attention_error", () => {
-        refetchAttention();
-      });
-
-      source.onerror = () => {
-        closeStream();
-        if (document.visibilityState === "visible") {
-          reconnectTimerRef.current = window.setTimeout(() => {
-            openStream();
-          }, 3000);
-        }
-      };
-    } catch (error) {
-      console.error("Attention stream failed:", error);
-      closeStream();
-      if (document.visibilityState === "visible") {
-        reconnectTimerRef.current = window.setTimeout(() => {
-          openStream();
-        }, 5000);
-      }
-    } finally {
-      connectingRef.current = false;
-    }
-  }, [applyAttentionState, closeStream, refetchAttention]);
-
   useEffect(() => {
-    openStream();
     pushService.ensureSubscription({ requestPermission: false }).catch(() => {});
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        closeStream();
-        return;
-      }
-      refetchAttention();
-      openStream();
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = window.setTimeout(async () => {
+        refreshTimerRef.current = null;
+        const result = await refetchAttention();
+        if (result.data) applyAttentionState(result.data);
+      }, 350);
     };
 
-    const handlePageHide = () => closeStream();
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("pagehide", handlePageHide);
+    const channel = supabase
+      .channel("attention-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_revision_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_recommendation_tasks" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRefresh)
+      .subscribe();
+
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("pagehide", handlePageHide);
-      closeStream();
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+      supabase.removeChannel(channel);
     };
-  }, [closeStream, openStream, refetchAttention]);
+  }, [applyAttentionState, refetchAttention]);
 
   const value = useMemo<AttentionContextValue>(() => ({
     state: attentionQuery.data || attentionService.emptyState,

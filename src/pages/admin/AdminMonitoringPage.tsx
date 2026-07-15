@@ -57,7 +57,6 @@ const MonitoringAdminPage = () => {
       if (error) throw error;
       return data as any[];
     },
-    refetchInterval: 10000, 
   });
 
   // 3. HELPER FORMAT TANGGAL & WAKTU

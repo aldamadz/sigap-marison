@@ -62,9 +62,6 @@ let mailTransporter = null;
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
 const externalAccessTokenCache = new Map();
-const ATTENTION_STREAM_TOKEN_TTL_MS = 60 * 1000;
-const ATTENTION_POLL_INTERVAL_MS = Number(process.env.ATTENTION_POLL_INTERVAL_MS || 3000);
-const attentionStreamTokens = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
 const passwordResetSendCooldowns = new Map();
@@ -635,6 +632,82 @@ const handleBffStorageFile = async (req, res, url) => {
     "Cache-Control": "private, max-age=60",
   }));
   res.end(buffer);
+};
+
+const openBffRealtimeStream = async (req, res, url) => {
+  const session = requireCookieSession(req);
+  const tables = [...new Set(String(url.searchParams.get("tables") || "")
+    .split(",")
+    .map((table) => table.trim())
+    .filter(Boolean)
+    .map((table) => assertBffIdentifier(table, "Nama tabel")))];
+  if (!tables.length || tables.length > 32) {
+    const err = new Error("Daftar tabel realtime harus berisi 1 sampai 32 tabel.");
+    err.status = 400;
+    throw err;
+  }
+
+  const client = createUserSupabaseClient(session.access_token);
+  await client.realtime.setAuth(session.access_token);
+
+  res.writeHead(200, withSecurityHeaders({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  }));
+  res.write("retry: 3000\n");
+  res.write(": connected\n\n");
+
+  let closed = false;
+  let eventSequence = 0;
+  const channel = client.channel(`sigap-bff:${session.user.id}:${randomUUID()}`);
+  for (const table of tables) {
+    channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
+      if (closed || res.destroyed) return;
+      eventSequence += 1;
+      res.write(`id: ${Date.now()}-${eventSequence}\n`);
+      res.write("event: postgres_change\n");
+      res.write(`data: ${JSON.stringify({
+        schema: payload.schema,
+        table: payload.table,
+        eventType: payload.eventType,
+        commit_timestamp: payload.commit_timestamp,
+        new: payload.new || {},
+        old: payload.old || {},
+      })}\n\n`);
+    });
+  }
+
+  const heartbeatTimer = setInterval(() => {
+    if (!closed && !res.destroyed) res.write(`: heartbeat ${Date.now()}\n\n`);
+  }, 25_000);
+  const remainingTokenMs = Math.max(60_000, Number(session.expires_at || 0) * 1000 - Date.now() - 5 * 60_000);
+  const reconnectTimer = setTimeout(() => {
+    if (!closed && !res.destroyed) res.end();
+  }, Math.min(45 * 60_000, remainingTokenMs));
+
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeatTimer);
+    clearTimeout(reconnectTimer);
+    client.removeChannel(channel).catch(() => {});
+  };
+
+  channel.subscribe((status) => {
+    if (closed || res.destroyed) return;
+    if (status === "SUBSCRIBED") {
+      res.write("event: ready\ndata: {}\n\n");
+    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      res.write(`event: stream_error\ndata: ${JSON.stringify({ status })}\n\n`);
+      res.end();
+    }
+  });
+
+  req.on("close", cleanup);
+  req.on("error", cleanup);
+  res.on("close", cleanup);
 };
 
 const buildPasswordResetEmailHtml = ({ resetUrl, appUrl }) => {
@@ -1334,125 +1407,6 @@ const getAttentionStateForUser = async (userId) => {
 const getAttentionStateFromRequest = async (token) => {
   const user = decodeJwtUserForLightEndpoint(token);
   return getAttentionStateForUser(user.id);
-};
-
-const pruneAttentionStreamTokens = () => {
-  const now = Date.now();
-  for (const [hash, value] of attentionStreamTokens.entries()) {
-    if (!value?.expiresAt || value.expiresAt <= now) attentionStreamTokens.delete(hash);
-  }
-};
-
-const createAttentionStreamToken = async (token) => {
-  const user = decodeJwtUserForLightEndpoint(token);
-  pruneAttentionStreamTokens();
-  const streamToken = randomBytes(32).toString("base64url");
-  attentionStreamTokens.set(sha256Hex(streamToken), {
-    userId: user.id,
-    expiresAt: Date.now() + ATTENTION_STREAM_TOKEN_TTL_MS,
-  });
-  return {
-    token: streamToken,
-    expires_at: new Date(Date.now() + ATTENTION_STREAM_TOKEN_TTL_MS).toISOString(),
-    ttl_ms: ATTENTION_STREAM_TOKEN_TTL_MS,
-  };
-};
-
-const consumeAttentionStreamToken = (token) => {
-  pruneAttentionStreamTokens();
-  const hash = sha256Hex(String(token || ""));
-  const value = attentionStreamTokens.get(hash);
-  attentionStreamTokens.delete(hash);
-  if (!value || value.expiresAt <= Date.now()) {
-    const err = new Error("Token stream tidak valid atau sudah kedaluwarsa.");
-    err.status = 401;
-    throw err;
-  }
-  return value.userId;
-};
-
-const writeSseEvent = (res, event, data) => {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-};
-
-const attentionClients = new Map();
-
-const notifyAttentionUsers = async (userIds) => {
-  for (const userId of [...new Set((userIds || []).filter(Boolean))]) {
-    const clients = attentionClients.get(userId);
-    if (!clients?.size) continue;
-    let state = null;
-    try {
-      state = await getAttentionStateForUser(userId);
-    } catch (error) {
-      console.error("Attention state refresh failed:", error);
-    }
-    for (const client of clients) {
-      client.push(state);
-    }
-  }
-};
-
-const openAttentionStream = async (req, res, token) => {
-  const userId = consumeAttentionStreamToken(token);
-  res.writeHead(200, withSecurityHeaders({
-    "Content-Type": "text/event-stream; charset=utf-8",
-    "Cache-Control": "no-store",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-  }));
-  res.write(": connected\n\n");
-
-  let lastSignature = "";
-  let closed = false;
-  let pollTimer = null;
-  let heartbeatTimer = null;
-
-  const sendState = async (explicitState = null) => {
-    if (closed || res.destroyed) return;
-    try {
-      const state = explicitState || await getAttentionStateForUser(userId);
-      const signature = JSON.stringify({
-        approvalCount: state.approvalCount,
-        verificationCount: state.verificationCount,
-        recommendationCount: state.recommendationCount,
-        unreadNotifications: state.unreadNotifications,
-        monitoringCount: state.monitoringCount,
-        followUpCount: state.followUpCount,
-      });
-      if (signature !== lastSignature) {
-        lastSignature = signature;
-        writeSseEvent(res, "attention_changed", state);
-      }
-    } catch (error) {
-      writeSseEvent(res, "attention_error", { message: "Gagal menyinkronkan badge." });
-    }
-  };
-
-  const client = { push: sendState };
-  if (!attentionClients.has(userId)) attentionClients.set(userId, new Set());
-  attentionClients.get(userId).add(client);
-
-  await sendState();
-  pollTimer = setInterval(sendState, Math.max(ATTENTION_POLL_INTERVAL_MS, 1500));
-  heartbeatTimer = setInterval(() => {
-    if (!closed && !res.destroyed) res.write(": heartbeat\n\n");
-  }, 25000);
-
-  const cleanup = () => {
-    closed = true;
-    if (pollTimer) clearInterval(pollTimer);
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    const clients = attentionClients.get(userId);
-    if (clients) {
-      clients.delete(client);
-      if (clients.size === 0) attentionClients.delete(userId);
-    }
-  };
-
-  req.on("close", cleanup);
-  req.on("error", cleanup);
 };
 
 const normalizePushSubscription = (value) => {
@@ -2314,9 +2268,6 @@ const sendInternalNotification = async (token, payload) => {
     .insert(rows)
     .select("id");
   if (error) throw error;
-  notifyAttentionUsers(userIds).catch((attentionError) => {
-    console.error("Attention SSE notify failed:", attentionError);
-  });
   const push = await sendWebPushToUsers(userIds, { link }).catch((pushError) => {
     console.error("Web Push notify failed:", pushError);
     return { sent: 0, error: pushError.message };
@@ -3214,6 +3165,10 @@ createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/") && parseCookies(req)[SESSION_COOKIE]) {
       await refreshCookieSession(req, res);
     }
+    if (req.method === "GET" && url.pathname === "/api/events") {
+      await openBffRealtimeStream(req, res, url);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/profile/avatar/file") {
       const token = getBearerToken(req);
       await requireSupabaseUser(token);
@@ -3386,17 +3341,6 @@ createServer(async (req, res) => {
         const token = getBearerToken(req);
         const result = await getAttentionStateFromRequest(token);
         return sendJson(res, 200, result);
-      }
-
-      if (req.method === "POST" && url.pathname === "/api/attention/stream-token") {
-        const token = getBearerToken(req);
-        const result = await createAttentionStreamToken(token);
-        return sendJson(res, 200, result);
-      }
-
-      if (req.method === "GET" && url.pathname === "/api/attention/stream") {
-        await openAttentionStream(req, res, url.searchParams.get("token"));
-        return;
       }
 
       if (req.method === "GET" && url.pathname === "/api/push/public-key") {

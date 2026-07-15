@@ -28,7 +28,7 @@ const clearLegacySupabaseSessions = () => {
 clearLegacySupabaseSessions();
 
 const authListeners = new Set<AuthListener>();
-const activeChannels = new Set<PollingChannel>();
+const activeChannels = new Set<RealtimeChannel>();
 let cachedSession: any | null = null;
 let sessionRequest: Promise<any | null> | null = null;
 let sessionCheckedAt = 0;
@@ -160,31 +160,101 @@ class BffQueryBuilder implements PromiseLike<BffResult> {
   }
 }
 
-class PollingChannel {
-  private callbacks = new Set<(payload: any) => void>();
-  private timer: number | null = null;
+type RealtimeBinding = {
+  event: string;
+  table: string;
+  callback: (payload: any) => void;
+};
+
+let realtimeSource: EventSource | null = null;
+let realtimeReconnectTimer: number | null = null;
+
+const subscribedTables = () => [...new Set(
+  Array.from(activeChannels).flatMap((channel) => channel.tables()),
+)].sort();
+
+const closeRealtimeSource = () => {
+  realtimeSource?.close();
+  realtimeSource = null;
+};
+
+const openRealtimeSource = () => {
+  closeRealtimeSource();
+  const tables = subscribedTables();
+  if (!tables.length || document.visibilityState !== 'visible') return;
+
+  const source = new EventSource(`/api/events?tables=${encodeURIComponent(tables.join(','))}`);
+  realtimeSource = source;
+  source.addEventListener('ready', () => {
+    activeChannels.forEach((channel) => channel.notifyStatus('SUBSCRIBED'));
+  });
+  source.addEventListener('postgres_change', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent).data || '{}');
+      activeChannels.forEach((channel) => channel.dispatch(payload));
+    } catch {
+      // A malformed event is ignored; the stream remains usable for later events.
+    }
+  });
+  source.addEventListener('stream_error', () => {
+    activeChannels.forEach((channel) => channel.notifyStatus('CHANNEL_ERROR'));
+  });
+  source.onerror = () => {
+    if (realtimeSource !== source) return;
+    closeRealtimeSource();
+    if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = window.setTimeout(openRealtimeSource, 3_000);
+  };
+};
+
+const scheduleRealtimeReconnect = (delay = 50) => {
+  if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);
+  realtimeReconnectTimer = window.setTimeout(() => {
+    realtimeReconnectTimer = null;
+    openRealtimeSource();
+  }, delay);
+};
+
+class RealtimeChannel {
+  private bindings: RealtimeBinding[] = [];
+  private statusCallback?: (status: string) => void;
 
   constructor(readonly name: string) {}
 
-  on(_type: string, _filter: any, callback: (payload: any) => void) {
-    this.callbacks.add(callback);
+  on(_type: string, filter: { event?: string; table?: string }, callback: (payload: any) => void) {
+    const table = String(filter?.table || '');
+    if (table && !this.bindings.some((binding) => binding.table === table && binding.callback === callback)) {
+      this.bindings.push({ event: String(filter?.event || '*'), table, callback });
+    }
     return this;
   }
 
   subscribe(callback?: (status: string) => void) {
+    this.statusCallback = callback;
     activeChannels.add(this);
-    callback?.('SUBSCRIBED');
-    this.timer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      this.callbacks.forEach((handler) => handler({ eventType: 'POLL', new: {}, old: {} }));
-    }, 15_000);
+    scheduleRealtimeReconnect();
     return this;
   }
 
+  tables() {
+    return this.bindings.map((binding) => binding.table);
+  }
+
+  dispatch(payload: any) {
+    this.bindings.forEach((binding) => {
+      if (binding.table !== payload.table) return;
+      if (binding.event !== '*' && binding.event !== payload.eventType) return;
+      binding.callback(payload);
+    });
+  }
+
+  notifyStatus(status: string) {
+    this.statusCallback?.(status);
+  }
+
   unsubscribe() {
-    if (this.timer !== null) window.clearInterval(this.timer);
-    this.timer = null;
     activeChannels.delete(this);
+    scheduleRealtimeReconnect();
     return Promise.resolve('ok');
   }
 }
@@ -251,8 +321,8 @@ export const supabase: any = {
   auth,
   from: (name: string) => new BffQueryBuilder('table', name),
   rpc: (name: string, args?: any, options?: any) => new BffQueryBuilder('rpc', name, args, options),
-  channel: (name: string) => new PollingChannel(name),
-  removeChannel: (channel: PollingChannel) => channel.unsubscribe(),
+  channel: (name: string) => new RealtimeChannel(name),
+  removeChannel: (channel: RealtimeChannel) => channel.unsubscribe(),
   removeAllChannels: async () => {
     await Promise.all(Array.from(activeChannels).map((channel) => channel.unsubscribe()));
     return 'ok';
@@ -294,5 +364,12 @@ export const supabase: any = {
 
 window.setInterval(() => { void loadSession(true); }, 5 * 60_000);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') void loadSession(true);
+  if (document.visibilityState === 'visible') {
+    void loadSession(true);
+    scheduleRealtimeReconnect(0);
+  } else {
+    if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = null;
+    closeRealtimeSource();
+  }
 });
