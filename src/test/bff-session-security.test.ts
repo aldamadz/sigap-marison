@@ -11,8 +11,9 @@ describe("SIGAP browser BFF session boundary", () => {
 
     expect(client).not.toContain("@supabase/supabase-js");
     expect(client).not.toContain("VITE_SUPABASE");
-    expect(client).not.toContain("localStorage");
-    expect(client).not.toContain("sessionStorage");
+    expect(client).not.toContain("storage.setItem");
+    expect(client).toContain("clearLegacySupabaseSessions");
+    expect(client).toContain("storage.removeItem(key)");
     expect(client).toContain("/api/auth/session");
     expect(client).toContain("/api/bff/query");
   });

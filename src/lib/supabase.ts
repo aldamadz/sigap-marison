@@ -17,6 +17,16 @@ type BffResult<T = any> = {
 type QueryOperation = { method: string; args: any[] };
 type AuthListener = (event: string, session: any | null) => void;
 
+const clearLegacySupabaseSessions = () => {
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    Object.keys(storage)
+      .filter((key) => /^sb-[a-z0-9]+-auth-token/i.test(key) || key === 'sb-registration-temp')
+      .forEach((key) => storage.removeItem(key));
+  }
+};
+
+clearLegacySupabaseSessions();
+
 const authListeners = new Set<AuthListener>();
 const activeChannels = new Set<PollingChannel>();
 let cachedSession: any | null = null;
