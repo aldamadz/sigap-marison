@@ -1,20 +1,7 @@
 // frontend/src/services/user.service.ts
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/types/agenda';
 import { toUIUser } from '@/adapters/user.adapter';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-
-const createRegistrationClient = () => createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-    storageKey: 'sb-registration-temp',
-  },
-});
 
 const getJoinData = (data: any) => Array.isArray(data) ? data[0] : data;
 
@@ -145,29 +132,27 @@ export async function getSubordinates(parentId: string): Promise<User[]> {
  */
 export const registerNewUser = async (userData: any) => {
   try {
-    const registrationClient = createRegistrationClient();
-    const { data, error } = await registrationClient.auth.signUp({
-      email:    userData.email,
-      password: userData.password,
-      options: {
-        data: {
-          full_name:     userData.fullName,
-          nik:           userData.nik,
-          job_title:     userData.jobTitle,
-          role:          userData.role || 'user',
-          // department_id & office_id keduanya uuid string
-          department_id: (userData.departmentId && String(userData.departmentId) !== 'none')
-            ? String(userData.departmentId) : null,
-          office_id:     (userData.officeId && String(userData.officeId) !== 'none')
-            ? String(userData.officeId) : null,
-          parent_id:     (userData.parentId && userData.parentId !== 'none')
-            ? userData.parentId : null,
-        },
+    const { data, error } = await supabase.functions.invoke('admin-create-user', {
+      body: {
+        action: 'create',
+        email: userData.email,
+        password: userData.password,
+        full_name: userData.fullName,
+        nik: userData.nik,
+        job_title: userData.jobTitle,
+        role: userData.role || 'user',
+        department_id: (userData.departmentId && String(userData.departmentId) !== 'none')
+          ? String(userData.departmentId) : null,
+        office_id: (userData.officeId && String(userData.officeId) !== 'none')
+          ? String(userData.officeId) : null,
+        parent_id: (userData.parentId && userData.parentId !== 'none')
+          ? userData.parentId : null,
       },
     });
 
     if (error) throw error;
-    return data.user;
+    if (data?.error) throw new Error(data.error);
+    return data?.user;
   } catch (error) {
     console.error('Error in registerNewUser service:', error);
     throw error;

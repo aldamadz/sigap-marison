@@ -18,8 +18,9 @@ import {
   Wrench,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
+
+type Session = { user: { id: string; email?: string | null } };
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

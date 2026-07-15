@@ -1752,9 +1752,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setProjectUnitAvailability({ loading: false, count: null, error: null });
       return;
     }
-    const requestedProject = formData.form_input_data.requested_project as { code?: string } | undefined;
-    const projectCode = String(requestedProject?.code || "").trim();
-    if (!projectCode) {
+    const requestedProject = formData.form_input_data.requested_project as { id?: string; code?: string } | undefined;
+    const projectId = String(requestedProject?.id || "").trim();
+    if (!projectId) {
       setProjectUnitAvailability({ loading: false, count: null, error: null });
       return;
     }
@@ -1762,7 +1762,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     let cancelled = false;
     setProjectUnitAvailability({ loading: true, count: null, error: null });
     requestExternalOptions("marison_units_by_project", {
-      project_code: projectCode,
+      project_id: projectId,
       requested_project: requestedProject,
     })
       .then((options) => {
@@ -3698,9 +3698,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 <SelectTrigger className="h-11">
                   <SelectValue placeholder="Pilih PT..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent
+                  align="start"
+                  collisionPadding={16}
+                  className="max-w-[calc(100vw-2rem)]"
+                >
                   {master.entities?.map((e: MasterRecord) => (
-                    <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>
+                    <SelectItem
+                      key={e.id}
+                      value={e.id}
+                      className="[&>span:last-child]:whitespace-normal [&>span:last-child]:break-words"
+                    >
+                      {e.code} - {e.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

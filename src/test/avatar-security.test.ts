@@ -14,7 +14,7 @@ describe("private avatar delivery", () => {
 
     expect(routeStart).toBeGreaterThan(-1);
     expect(route).toContain("await requireSupabaseUser(token)");
-    expect(route).toContain('"Cache-Control": "private, no-store"');
+    expect(route).toContain('"Cache-Control": "private, max-age=31536000, immutable"');
     expect(route).not.toContain('"Cache-Control": "public');
     expect(route).not.toContain("Akses foto profil ditolak");
     expect(route).not.toContain("ownerId");
@@ -25,6 +25,7 @@ describe("private avatar delivery", () => {
 
     expect(avatarComponent).toContain("supabase.auth.getSession()");
     expect(avatarComponent).toContain("Authorization: `Bearer ${session.access_token}`");
+    expect(avatarComponent).toContain('cache: "force-cache"');
     expect(avatarComponent).toContain("URL.revokeObjectURL");
   });
 });

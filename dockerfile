@@ -5,6 +5,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_APP_PUBLIC_URL
+ENV VITE_APP_PUBLIC_URL=$VITE_APP_PUBLIC_URL
+
 # Copy package.json dan install dependencies
 COPY package*.json ./
 RUN npm install

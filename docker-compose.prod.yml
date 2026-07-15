@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: dockerfile
+      args:
+        VITE_APP_PUBLIC_URL: "${VITE_APP_PUBLIC_URL}"
     image: agenda-flow:production
     container_name: agenda-flow-prod
     restart: always

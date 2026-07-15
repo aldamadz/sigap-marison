@@ -1,41 +1,288 @@
-import { createClient } from '@supabase/supabase-js'
+type BffError = {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+  name?: string;
+};
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY
+type BffResult<T = any> = {
+  data: T | null;
+  error: BffError | null;
+  count?: number | null;
+  status?: number;
+  statusText?: string;
+};
 
-// Helper untuk menentukan storage mana yang digunakan
-const customStorage = {
-  getItem: (key: string) => {
-    const localValue = localStorage.getItem(key);
-    if (localValue) return localValue;
+type QueryOperation = { method: string; args: any[] };
+type AuthListener = (event: string, session: any | null) => void;
 
-    // Migrasi session lama: sebelumnya token bisa tersimpan di sessionStorage,
-    // sehingga tab baru tidak punya session. Salin ke localStorage saat masih ada.
-    const sessionValue = sessionStorage.getItem(key);
-    if (sessionValue) localStorage.setItem(key, sessionValue);
-    return sessionValue;
+const authListeners = new Set<AuthListener>();
+const activeChannels = new Set<PollingChannel>();
+let cachedSession: any | null = null;
+let sessionRequest: Promise<any | null> | null = null;
+let sessionCheckedAt = 0;
+let authBroadcast: BroadcastChannel | null = null;
+
+const normalizeError = (value: any, fallback: string): BffError => ({
+  message: String(value?.message || value?.error || fallback),
+  ...(value?.details ? { details: String(value.details) } : {}),
+  ...(value?.hint ? { hint: String(value.hint) } : {}),
+  ...(value?.code ? { code: String(value.code) } : {}),
+  ...(value?.name ? { name: String(value.name) } : {}),
+});
+
+const requestJson = async (url: string, init?: RequestInit) => {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...init,
+    headers: {
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      'X-SIGAP-Client': 'web',
+      ...init?.headers,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw normalizeError(payload, `Request gagal (${response.status})`);
+  return payload;
+};
+
+const notifyAuth = (event: string, session: any | null, broadcast = true) => {
+  cachedSession = session;
+  sessionCheckedAt = Date.now();
+  authListeners.forEach((listener) => listener(event, session));
+  if (broadcast) authBroadcast?.postMessage({ event });
+};
+
+const loadSession = async (force = false) => {
+  if (!force && Date.now() - sessionCheckedAt < 5_000) return cachedSession;
+  if (sessionRequest) return sessionRequest;
+  sessionRequest = requestJson('/api/auth/session')
+    .then((payload) => {
+      cachedSession = payload.session || null;
+      sessionCheckedAt = Date.now();
+      return cachedSession;
+    })
+    .catch(() => {
+      cachedSession = null;
+      sessionCheckedAt = Date.now();
+      return null;
+    })
+    .finally(() => { sessionRequest = null; });
+  return sessionRequest;
+};
+
+if (typeof BroadcastChannel !== 'undefined') {
+  authBroadcast = new BroadcastChannel('sigap-auth');
+  authBroadcast.onmessage = async (message) => {
+    const session = await loadSession(true);
+    notifyAuth(String(message.data?.event || 'TOKEN_REFRESHED'), session, false);
+  };
+}
+
+class BffQueryBuilder implements PromiseLike<BffResult> {
+  private readonly operations: QueryOperation[] = [];
+
+  constructor(
+    private readonly kind: 'table' | 'rpc',
+    private readonly name: string,
+    private readonly args?: any,
+    private readonly options?: any,
+  ) {}
+
+  private add(method: string, args: any[]) {
+    this.operations.push({ method, args });
+    return this;
+  }
+
+  select(...args: any[]) { return this.add('select', args); }
+  insert(...args: any[]) { return this.add('insert', args); }
+  update(...args: any[]) { return this.add('update', args); }
+  upsert(...args: any[]) { return this.add('upsert', args); }
+  delete(...args: any[]) { return this.add('delete', args); }
+  eq(...args: any[]) { return this.add('eq', args); }
+  neq(...args: any[]) { return this.add('neq', args); }
+  gt(...args: any[]) { return this.add('gt', args); }
+  gte(...args: any[]) { return this.add('gte', args); }
+  lt(...args: any[]) { return this.add('lt', args); }
+  lte(...args: any[]) { return this.add('lte', args); }
+  like(...args: any[]) { return this.add('like', args); }
+  ilike(...args: any[]) { return this.add('ilike', args); }
+  is(...args: any[]) { return this.add('is', args); }
+  in(...args: any[]) { return this.add('in', args); }
+  contains(...args: any[]) { return this.add('contains', args); }
+  containedBy(...args: any[]) { return this.add('containedBy', args); }
+  overlaps(...args: any[]) { return this.add('overlaps', args); }
+  match(...args: any[]) { return this.add('match', args); }
+  not(...args: any[]) { return this.add('not', args); }
+  or(...args: any[]) { return this.add('or', args); }
+  filter(...args: any[]) { return this.add('filter', args); }
+  order(...args: any[]) { return this.add('order', args); }
+  limit(...args: any[]) { return this.add('limit', args); }
+  range(...args: any[]) { return this.add('range', args); }
+  single(...args: any[]) { return this.add('single', args); }
+  maybeSingle(...args: any[]) { return this.add('maybeSingle', args); }
+  csv(...args: any[]) { return this.add('csv', args); }
+  throwOnError(...args: any[]) { return this.add('throwOnError', args); }
+
+  private async execute(): Promise<BffResult> {
+    try {
+      return await requestJson('/api/bff/query', {
+        method: 'POST',
+        body: JSON.stringify({
+          kind: this.kind,
+          name: this.name,
+          args: this.args,
+          options: this.options,
+          operations: this.operations,
+        }),
+      });
+    } catch (error) {
+      return { data: null, error: normalizeError(error, 'Query gagal') };
+    }
+  }
+
+  then<TResult1 = BffResult, TResult2 = never>(
+    onfulfilled?: ((value: BffResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+}
+
+class PollingChannel {
+  private callbacks = new Set<(payload: any) => void>();
+  private timer: number | null = null;
+
+  constructor(readonly name: string) {}
+
+  on(_type: string, _filter: any, callback: (payload: any) => void) {
+    this.callbacks.add(callback);
+    return this;
+  }
+
+  subscribe(callback?: (status: string) => void) {
+    activeChannels.add(this);
+    callback?.('SUBSCRIBED');
+    this.timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      this.callbacks.forEach((handler) => handler({ eventType: 'POLL', new: {}, old: {} }));
+    }, 15_000);
+    return this;
+  }
+
+  unsubscribe() {
+    if (this.timer !== null) window.clearInterval(this.timer);
+    this.timer = null;
+    activeChannels.delete(this);
+    return Promise.resolve('ok');
+  }
+}
+
+const auth = {
+  async getSession() {
+    const session = await loadSession();
+    return { data: { session }, error: null };
   },
-  setItem: (key: string, value: string) => {
-    // Auth session harus lintas tab. Preferensi "remember me" hanya untuk email,
-    // bukan untuk token Supabase, karena sessionStorage memaksa tab baru login ulang.
-    localStorage.setItem(key, value);
-    sessionStorage.removeItem(key);
+
+  async getUser() {
+    const session = await loadSession();
+    return { data: { user: session?.user || null }, error: null };
   },
-  removeItem: (key: string) => {
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
+
+  async signInWithPassword(credentials: { email: string; password: string }) {
+    try {
+      const payload = await requestJson('/api/auth/login', { method: 'POST', body: JSON.stringify(credentials) });
+      notifyAuth('SIGNED_IN', payload.session || null);
+      return { data: { user: payload.user || null, session: payload.session || null }, error: null };
+    } catch (error) {
+      return { data: { user: null, session: null }, error: normalizeError(error, 'Login gagal') };
+    }
+  },
+
+  async signOut() {
+    try {
+      await requestJson('/api/auth/logout', { method: 'POST', body: '{}' });
+      notifyAuth('SIGNED_OUT', null);
+      return { error: null };
+    } catch (error) {
+      return { error: normalizeError(error, 'Logout gagal') };
+    }
+  },
+
+  async updateUser(attributes: any) {
+    try {
+      const payload = await requestJson('/api/auth/update-user', { method: 'POST', body: JSON.stringify(attributes) });
+      const session = await loadSession(true);
+      notifyAuth('USER_UPDATED', session);
+      return { data: { user: payload.user || null }, error: null };
+    } catch (error) {
+      return { data: { user: null }, error: normalizeError(error, 'Pembaruan pengguna gagal') };
+    }
+  },
+
+  async verifyOtp(attributes: any) {
+    try {
+      const payload = await requestJson('/api/auth/verify-otp', { method: 'POST', body: JSON.stringify(attributes) });
+      notifyAuth('PASSWORD_RECOVERY', payload.session || null);
+      return { data: { user: payload.user || null, session: payload.session || null }, error: null };
+    } catch (error) {
+      return { data: { user: null, session: null }, error: normalizeError(error, 'Verifikasi token gagal') };
+    }
+  },
+
+  onAuthStateChange(callback: AuthListener) {
+    authListeners.add(callback);
+    return { data: { subscription: { unsubscribe: () => authListeners.delete(callback) } } };
   },
 };
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    storage: customStorage, // Menggunakan proxy storage buatan kita
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
+export const supabase: any = {
+  auth,
+  from: (name: string) => new BffQueryBuilder('table', name),
+  rpc: (name: string, args?: any, options?: any) => new BffQueryBuilder('rpc', name, args, options),
+  channel: (name: string) => new PollingChannel(name),
+  removeChannel: (channel: PollingChannel) => channel.unsubscribe(),
+  removeAllChannels: async () => {
+    await Promise.all(Array.from(activeChannels).map((channel) => channel.unsubscribe()));
+    return 'ok';
   },
-  realtime: {
-    params: { eventsPerSecond: 10 },
-    heartbeatIntervalMs: 15000,
-  }
-})
+  storage: {
+    from: (bucket: string) => ({
+      download: async (path: string) => {
+        try {
+          const response = await fetch(`/api/bff/storage/file?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`, {
+            credentials: 'same-origin',
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw normalizeError(payload, 'Gagal download file');
+          }
+          return { data: await response.blob(), error: null };
+        } catch (error) {
+          return { data: null, error: normalizeError(error, 'Gagal download file') };
+        }
+      },
+      getPublicUrl: (path: string) => ({
+        data: { publicUrl: `/api/bff/storage/file?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}` },
+      }),
+    }),
+  },
+  functions: {
+    invoke: async (name: string, options?: any) => {
+      try {
+        return await requestJson(`/api/bff/functions/${encodeURIComponent(name)}`, {
+          method: 'POST',
+          body: JSON.stringify({ options }),
+        });
+      } catch (error) {
+        return { data: null, error: normalizeError(error, 'Function gagal') };
+      }
+    },
+  },
+};
+
+window.setInterval(() => { void loadSession(true); }, 5 * 60_000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void loadSession(true);
+});

@@ -5,7 +5,7 @@ import { extname, isAbsolute, join, normalize, relative, resolve } from "node:pa
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -21,6 +21,12 @@ const port = Number(process.env.PORT || 80);
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const sessionSecret = process.env.SESSION_SECRET;
+
+if (!supabaseUrl || !supabasePublishableKey || !sessionSecret || sessionSecret.length < 32) {
+  throw new Error("SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and SESSION_SECRET (minimum 32 characters) are required.");
+}
 
 const supabase = supabaseUrl && serviceRoleKey
   ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
@@ -354,6 +360,283 @@ const readJsonBody = async (req, maxBytes = 1024 * 1024) => {
   }
 };
 
+const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-sigap_session" : "sigap_session";
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const sessionEncryptionKey = createHash("sha256").update(sessionSecret).digest();
+
+const parseCookies = (req) => Object.fromEntries(
+  String(req.headers.cookie || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const separator = part.indexOf("=");
+      return separator < 0
+        ? [part, ""]
+        : [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))];
+    })
+);
+
+const encryptSession = (session) => {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", sessionEncryptionKey, iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(session), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, ciphertext]).toString("base64url");
+};
+
+const decryptSession = (value) => {
+  try {
+    const payload = Buffer.from(String(value || ""), "base64url");
+    if (payload.length < 29) return null;
+    const decipher = createDecipheriv("aes-256-gcm", sessionEncryptionKey, payload.subarray(0, 12));
+    decipher.setAuthTag(payload.subarray(12, 28));
+    return JSON.parse(Buffer.concat([decipher.update(payload.subarray(28)), decipher.final()]).toString("utf8"));
+  } catch {
+    return null;
+  }
+};
+
+const readCookieSession = (req) => req.sigapSession || decryptSession(parseCookies(req)[SESSION_COOKIE]);
+
+const sessionCookie = (session) => [
+  `${SESSION_COOKIE}=${encodeURIComponent(encryptSession(session))}`,
+  "Path=/",
+  "HttpOnly",
+  "SameSite=Lax",
+  process.env.NODE_ENV === "production" ? "Secure" : "",
+  `Max-Age=${SESSION_MAX_AGE_SECONDS}`,
+].filter(Boolean).join("; ");
+
+const clearedSessionCookie = () => [
+  `${SESSION_COOKIE}=`,
+  "Path=/",
+  "HttpOnly",
+  "SameSite=Lax",
+  process.env.NODE_ENV === "production" ? "Secure" : "",
+  "Max-Age=0",
+].filter(Boolean).join("; ");
+
+const setSessionCookie = (res, session) => res.setHeader("Set-Cookie", sessionCookie({
+  access_token: session.access_token,
+  refresh_token: session.refresh_token,
+  expires_at: session.expires_at,
+  user: session.user,
+}));
+
+const publicSession = (session) => session ? {
+  access_token: "cookie-session",
+  refresh_token: "",
+  token_type: "bearer",
+  expires_in: Math.max(0, Number(session.expires_at || 0) - Math.floor(Date.now() / 1000)),
+  expires_at: session.expires_at,
+  user: session.user,
+} : null;
+
+const assertSameOrigin = (req) => {
+  const origin = String(req.headers.origin || "");
+  const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
+  if (fetchSite === "cross-site") {
+    const err = new Error("Cross-site request ditolak.");
+    err.status = 403;
+    throw err;
+  }
+  if (!origin) return;
+  let originHost;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    const err = new Error("Origin request tidak valid.");
+    err.status = 403;
+    throw err;
+  }
+  if (originHost !== String(req.headers.host || "")) {
+    const err = new Error("Origin request tidak diizinkan.");
+    err.status = 403;
+    throw err;
+  }
+};
+
+const createPublicSupabaseClient = () => createClient(supabaseUrl, supabasePublishableKey, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
+
+const createUserSupabaseClient = (accessToken) => createClient(supabaseUrl, supabasePublishableKey, {
+  global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
+
+const requireCookieSession = (req) => {
+  const session = readCookieSession(req);
+  if (!session?.access_token || !session?.user?.id) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  return session;
+};
+
+const refreshCookieSession = async (req, res) => {
+  const session = readCookieSession(req);
+  if (!session?.refresh_token) return null;
+  if (Number(session.expires_at || 0) * 1000 > Date.now() + 10 * 60_000) {
+    req.sigapSession = session;
+    return session;
+  }
+  const client = createPublicSupabaseClient();
+  const { data, error } = await client.auth.refreshSession({ refresh_token: session.refresh_token });
+  if (error || !data.session) {
+    res.setHeader("Set-Cookie", clearedSessionCookie());
+    return null;
+  }
+  req.sigapSession = data.session;
+  setSessionCookie(res, data.session);
+  return data.session;
+};
+
+const handleAuthLogin = async (req, res) => {
+  assertSameOrigin(req);
+  const { email, password } = await readJsonBody(req, 16 * 1024);
+  const client = createPublicSupabaseClient();
+  const { data, error } = await client.auth.signInWithPassword({ email: String(email || ""), password: String(password || "") });
+  if (error || !data.session) {
+    const err = new Error(error?.message || "Email atau password salah.");
+    err.status = error?.status || 401;
+    throw err;
+  }
+  setSessionCookie(res, data.session);
+  return { user: data.user, session: publicSession(data.session) };
+};
+
+const handleAuthVerifyOtp = async (req, res) => {
+  assertSameOrigin(req);
+  const payload = await readJsonBody(req, 16 * 1024);
+  const client = createPublicSupabaseClient();
+  const { data, error } = await client.auth.verifyOtp(payload);
+  if (error || !data.session) {
+    const err = new Error(error?.message || "Token pemulihan tidak valid.");
+    err.status = error?.status || 401;
+    throw err;
+  }
+  setSessionCookie(res, data.session);
+  return { user: data.user, session: publicSession(data.session) };
+};
+
+const handleAuthUpdateUser = async (req, res) => {
+  assertSameOrigin(req);
+  const session = requireCookieSession(req);
+  const payload = await readJsonBody(req, 32 * 1024);
+  const client = createPublicSupabaseClient();
+  const { error: setError } = await client.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+  if (setError) throw setError;
+  const { data, error } = await client.auth.updateUser(payload);
+  if (error) throw error;
+  const { data: current } = await client.auth.getSession();
+  if (current.session) setSessionCookie(res, current.session);
+  return { user: data.user };
+};
+
+const handleAuthLogout = async (req, res) => {
+  assertSameOrigin(req);
+  const session = readCookieSession(req);
+  if (session?.access_token) {
+    const client = createPublicSupabaseClient();
+    await client.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    await client.auth.signOut({ scope: "local" });
+  }
+  res.setHeader("Set-Cookie", clearedSessionCookie());
+  return { ok: true };
+};
+
+const BFF_QUERY_METHODS = new Set([
+  "select", "insert", "update", "upsert", "delete",
+  "eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "is", "in",
+  "contains", "containedBy", "overlaps", "match", "not", "or", "filter",
+  "order", "limit", "range", "single", "maybeSingle", "csv", "throwOnError",
+]);
+
+const assertBffIdentifier = (value, label) => {
+  const normalized = String(value || "");
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(normalized)) {
+    const err = new Error(`${label} tidak valid.`);
+    err.status = 400;
+    throw err;
+  }
+  return normalized;
+};
+
+const handleBffQuery = async (req) => {
+  assertSameOrigin(req);
+  const session = requireCookieSession(req);
+  const payload = await readJsonBody(req, 2 * 1024 * 1024);
+  const client = createUserSupabaseClient(session.access_token);
+  const kind = payload?.kind === "rpc" ? "rpc" : "table";
+  const name = assertBffIdentifier(payload?.name, kind === "rpc" ? "Nama RPC" : "Nama tabel");
+  let query = kind === "rpc"
+    ? client.rpc(name, payload?.args || {}, payload?.options)
+    : client.from(name);
+  const operations = Array.isArray(payload?.operations) ? payload.operations : [];
+  if (!operations.length && kind === "table") {
+    const err = new Error("Operasi query tidak boleh kosong.");
+    err.status = 400;
+    throw err;
+  }
+  for (const operation of operations) {
+    const method = String(operation?.method || "");
+    if (!BFF_QUERY_METHODS.has(method) || typeof query?.[method] !== "function") {
+      const err = new Error(`Operasi query ${method || "(kosong)"} tidak diizinkan.`);
+      err.status = 400;
+      throw err;
+    }
+    query = query[method](...(Array.isArray(operation.args) ? operation.args : []));
+  }
+  const result = await query;
+  return {
+    data: result.data ?? null,
+    error: result.error ? {
+      message: result.error.message,
+      details: result.error.details,
+      hint: result.error.hint,
+      code: result.error.code,
+    } : null,
+    count: result.count ?? null,
+    status: result.status,
+    statusText: result.statusText,
+  };
+};
+
+const handleBffFunction = async (req, functionName) => {
+  assertSameOrigin(req);
+  const session = requireCookieSession(req);
+  const name = assertBffIdentifier(functionName, "Nama function");
+  const payload = await readJsonBody(req, 2 * 1024 * 1024);
+  const result = await createUserSupabaseClient(session.access_token).functions.invoke(name, payload?.options || {});
+  return {
+    data: result.data ?? null,
+    error: result.error ? { message: result.error.message, name: result.error.name } : null,
+  };
+};
+
+const handleBffStorageFile = async (req, res, url) => {
+  requireCookieSession(req);
+  const bucket = assertBffIdentifier(url.searchParams.get("bucket"), "Nama bucket");
+  const path = sanitizeStoragePath(url.searchParams.get("path"));
+  const { data, error } = await storageSupabase.storage.from(bucket).download(path);
+  if (error || !data) {
+    const err = new Error(error?.message || "File tidak ditemukan.");
+    err.status = 404;
+    throw err;
+  }
+  const buffer = Buffer.from(await data.arrayBuffer());
+  res.writeHead(200, withSecurityHeaders({
+    "Content-Type": data.type || contentTypes[extname(path)] || "application/octet-stream",
+    "Content-Length": buffer.length,
+    "Content-Disposition": filenameHeaderValue(path.split("/").pop() || "file"),
+    "Cache-Control": "private, max-age=60",
+  }));
+  res.end(buffer);
+};
+
 const buildPasswordResetEmailHtml = ({ resetUrl, appUrl }) => {
   const safeResetUrl = escapeHtml(resetUrl);
   const safeLogoUrl = `${appUrl}/logo-marison.png`;
@@ -477,7 +760,9 @@ const handlePasswordResetRequest = async (req) => {
 
 const getBearerToken = (req) => {
   const auth = req.headers.authorization || "";
-  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
+  if (bearer && bearer !== "cookie-session") return bearer;
+  return readCookieSession(req)?.access_token || "";
 };
 
 const decodeBase64UrlJson = (value) => {
@@ -2923,6 +3208,12 @@ createServer(async (req, res) => {
   res.setHeader("X-Request-Id", requestId);
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname.startsWith("/api/") && ["POST", "PUT", "PATCH", "DELETE"].includes(req.method || "")) {
+      assertSameOrigin(req);
+    }
+    if (url.pathname.startsWith("/api/") && parseCookies(req)[SESSION_COOKIE]) {
+      await refreshCookieSession(req, res);
+    }
     if (req.method === "GET" && url.pathname === "/api/profile/avatar/file") {
       const token = getBearerToken(req);
       await requireSupabaseUser(token);
@@ -2962,7 +3253,7 @@ createServer(async (req, res) => {
         "Content-Type": file.type || contentTypes[extname(requestedPath)] || "application/octet-stream",
         "Content-Length": buffer.length,
         "Content-Disposition": "inline",
-        "Cache-Control": "private, no-store",
+        "Cache-Control": "private, max-age=31536000, immutable",
       }));
       res.end(buffer);
       return;
@@ -3038,8 +3329,49 @@ createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith("/api/")) {
+      if (req.method === "POST" && url.pathname === "/api/auth/login") {
+        const result = await handleAuthLogin(req, res);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/auth/session") {
+        const session = await refreshCookieSession(req, res);
+        return sendJson(res, 200, { session: publicSession(session), user: session?.user || null });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/auth/logout") {
+        const result = await handleAuthLogout(req, res);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/auth/update-user") {
+        const result = await handleAuthUpdateUser(req, res);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/auth/verify-otp") {
+        const result = await handleAuthVerifyOtp(req, res);
+        return sendJson(res, 200, result);
+      }
+
       if (req.method === "POST" && url.pathname === "/api/auth/password-reset") {
         const result = await handlePasswordResetRequest(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/bff/query") {
+        const result = await handleBffQuery(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/bff/storage/file") {
+        await handleBffStorageFile(req, res, url);
+        return;
+      }
+
+      const bffFunctionMatch = url.pathname.match(/^\/api\/bff\/functions\/([A-Za-z_][A-Za-z0-9_]*)$/);
+      if (req.method === "POST" && bffFunctionMatch) {
+        const result = await handleBffFunction(req, bffFunctionMatch[1]);
         return sendJson(res, 200, result);
       }
 

@@ -34,6 +34,13 @@ import { excelSerialToDateInput, exportRowsToXlsx, readSpreadsheetRows } from '@
 
 type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
+const invokeAdminUser = async (body: Record<string, unknown>) => {
+  const { data, error } = await supabase.functions.invoke('admin-create-user', { body });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return data;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getMasaKerja(joinDate?: string | null, resignDate?: string | null): string {
@@ -105,17 +112,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
     if (!confirmed) return;
     setResetting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ action: 'reset_password', user_id: user.id }),
-        }
-      );
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      await invokeAdminUser({ action: 'reset_password', user_id: user.id });
       toast.success(`Password ${user.fullName} berhasil direset ke "marison123"`);
     } catch (err: any) {
       toast.error(err.message);
@@ -474,11 +471,6 @@ export default function UserManagementPage() {
   const clearSelection = () => setSelectedIds(new Set());
   const selectedUsers  = useMemo(() => users.filter(u => selectedIds.has(u.id)), [users, selectedIds]);
 
-  const getToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ?? '';
-  };
-
   const bulkToggle = async (activate: boolean) => {
     const confirmed = await appDialog.confirm({
       title: activate ? "Aktifkan Akun Terpilih?" : "Nonaktifkan Akun Terpilih?",
@@ -488,16 +480,11 @@ export default function UserManagementPage() {
     });
     if (!confirmed) return;
     setBulkLoading(true);
-    const token = await getToken();
     let ok = 0, fail = 0;
     for (const u of selectedUsers) {
       try {
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: 'toggle_active', user_id: u.id, is_active: activate }),
-        });
-        if (res.ok) ok++; else fail++;
+        await invokeAdminUser({ action: 'toggle_active', user_id: u.id, is_active: activate });
+        ok++;
       } catch { fail++; }
     }
     toast.success(`${activate ? 'Aktivasi' : 'Nonaktifkan'}: ${ok} berhasil${fail ? `, ${fail} gagal` : ''}`);
@@ -515,16 +502,11 @@ export default function UserManagementPage() {
     });
     if (!confirmed) return;
     setBulkLoading(true);
-    const token = await getToken();
     let ok = 0, fail = 0;
     for (const u of selectedUsers) {
       try {
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: 'reset_password', user_id: u.id }),
-        });
-        if (res.ok) ok++; else fail++;
+        await invokeAdminUser({ action: 'reset_password', user_id: u.id });
+        ok++;
       } catch { fail++; }
     }
     toast.success(`Reset password: ${ok} berhasil${fail ? `, ${fail} gagal` : ''}`);
@@ -536,14 +518,7 @@ export default function UserManagementPage() {
     const newVal = !(user as any).is_active;
     setTogglingId(user.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ action: 'toggle_active', user_id: user.id, is_active: newVal }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      await invokeAdminUser({ action: 'toggle_active', user_id: user.id, is_active: newVal });
       toast.success(`Akun ${user.fullName} ${newVal ? 'diaktifkan' : 'dinonaktifkan'}`);
       fetchUsers();
     } catch (err: any) { toast.error(err.message); }
@@ -728,7 +703,6 @@ export default function UserManagementPage() {
     const importErrors: string[] = [];
     const unmatchedDepartments = new Set<string>();
     const unmatchedOffices = new Set<string>();
-    const { data: { session } } = await supabase.auth.getSession();
     const departmentResolver = await buildDepartmentResolver();
     const officeResolver = await buildOfficeResolver();
     const importedNiks = dataRows.map((row) => row.nik).filter(Boolean);
@@ -757,10 +731,7 @@ export default function UserManagementPage() {
         const normalizedRole = (row.role || '').trim().toLowerCase();
         if (row.department_name && !departmentId) unmatchedDepartments.add(row.department_name);
         if (row.office_name && !officeId) unmatchedOffices.add(row.office_name);
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-          body: JSON.stringify({
+        await invokeAdminUser({
             action:      'create',
             email:       row.email,
             full_name:   row.full_name,
@@ -772,15 +743,8 @@ export default function UserManagementPage() {
             resign_date: row.resign_date || null,
             department_id: departmentId,
             office_id: officeId,
-          }),
         });
-        const json = await res.json().catch(() => ({}));
-        if (res.ok) {
-          ok++;
-        } else {
-          fail++;
-          importErrors.push(`${row.nik || '-'} - ${row.full_name || row.email || 'Tanpa nama'}: ${json.error || `HTTP ${res.status}`}`);
-        }
+        ok++;
       } catch (error: any) {
         fail++;
         importErrors.push(`${row.nik || '-'} - ${row.full_name || row.email || 'Tanpa nama'}: ${error?.message || 'Gagal mengirim request'}`);
@@ -805,13 +769,7 @@ export default function UserManagementPage() {
           phase: 'syncing',
           message: 'Menyinkronkan status akun aktif...',
         } : null);
-        const syncRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ action: 'sync_active_import', active_niks: importedNiks }),
-        });
-        const syncJson = await syncRes.json().catch(() => ({}));
-        if (!syncRes.ok) throw new Error(syncJson.error || 'Gagal sinkron status aktif.');
+        const syncJson = await invokeAdminUser({ action: 'sync_active_import', active_niks: importedNiks });
         deactivated = Number(syncJson.deactivated || 0);
         setImportProgress((prev) => prev ? { ...prev, deactivated } : null);
       } catch (error: any) {

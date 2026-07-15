@@ -105,13 +105,8 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-          body: JSON.stringify({
+      const { data: json, error } = await supabase.functions.invoke('admin-create-user', {
+        body: {
             action:        'create',
             email:         formData.email,
             full_name:     formData.fullName,
@@ -122,11 +117,10 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
             resign_date:   formData.resign_date || null,
             department_id: formData.departmentId === 'none' ? null : String(formData.departmentId),
             office_id:     formData.officeId     === 'none' ? null : String(formData.officeId),
-          }),
-        }
-      );
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (json?.error) throw new Error(json.error);
       toast.success(`Akun ${formData.fullName} berhasil dibuat. Password: marison123`);
       onSuccess();
       onClose();

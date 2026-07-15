@@ -468,12 +468,13 @@ export default function InboxPage() {
       const signatureId = item.id;
       if (allocationUnits[signatureId] || allocationLoading[signatureId]) return;
 
-      const projectCode = String(getAllocationProject(item)?.code || "").trim();
-      if (!projectCode) return;
+      const project = getAllocationProject(item);
+      const projectId = String(project?.id || project?.value || "").trim();
+      if (!projectId) return;
 
       setAllocationLoading(prev => ({ ...prev, [signatureId]: true }));
       setAllocationErrors(prev => ({ ...prev, [signatureId]: null }));
-      requestExternalOptions("marison_units_by_project", { project_code: projectCode })
+      requestExternalOptions("marison_units_by_project", { project_id: projectId })
         .then((options) => {
           setAllocationUnits(prev => ({ ...prev, [signatureId]: options }));
         })

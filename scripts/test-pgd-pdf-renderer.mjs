@@ -27,12 +27,13 @@ test("normalizes database snapshots without depending on Excel", () => {
   }, {
     targetStep: 1,
     signatures: [
-      { step_order: 1, role_name: "membuat", is_signed: true, signed_at: "2026-07-01T01:00:00Z", signer_snapshot: { full_name: "A", job_title: "Staff" } },
+      { step_order: 1, role_name: "membuat", label_jabatan: "Pembuat", is_signed: true, signed_at: "2026-07-01T01:00:00Z", signer_snapshot: { full_name: "A", job_title: "Manager Pengembangan Organisasi", job_title_display: "Mgr. PO" } },
       { step_order: 2, role_name: "menyetujui", is_signed: true, signed_at: "2026-07-01T02:00:00Z", signer_snapshot: { full_name: "B", job_title: "Manager" } },
     ],
   });
   assert.equal(data.items[0].name, "Laptop");
   assert.equal(data.signatures[0].signed, true);
+  assert.equal(data.signatures[0].job, "Mgr. PO");
   assert.equal(data.signatures[1].signed, false);
 });
 

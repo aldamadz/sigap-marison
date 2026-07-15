@@ -52,7 +52,7 @@ export default function JobTitleDisplayOverridesPage() {
       if (overrideRes.error) throw overrideRes.error;
       if (profileRes.error) throw profileRes.error;
       setRows((overrideRes.data || []) as OverrideRow[]);
-      setJobTitles([...new Set((profileRes.data || [])
+      setJobTitles([...new Set<string>(((profileRes.data || []) as Array<{ job_title?: string | null }>)
         .map((row: { job_title?: string | null }) => String(row.job_title || "").trim())
         .filter(Boolean))]);
     } catch (error: unknown) {

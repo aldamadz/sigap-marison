@@ -2031,7 +2031,7 @@ export const suratService = {
       step_order: Number(signature.step_order),
       role_name: signature.role_name,
       label: signature.label_jabatan || signature.signer_snapshot?.job_title || signature.profiles?.job_title || "",
-      job_title: signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
+      job_title: signature.signer_snapshot?.job_title_display || signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
       user_name: signature.signer_snapshot?.full_name || signature.profiles?.full_name || "",
     }));
     const generated = await this.buildFilledTemplateFile({
@@ -2063,7 +2063,7 @@ export const suratService = {
         surat.penggunaan_id,
         Number(signature.step_order),
         position,
-        signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
+        signature.signer_snapshot?.job_title_display || signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
         signature.signed_at
       );
     }

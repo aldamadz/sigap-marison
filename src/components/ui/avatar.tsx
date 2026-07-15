@@ -39,6 +39,7 @@ const AvatarImage = React.forwardRef<
 
       const response = await fetch(src, {
         headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "force-cache",
       });
       if (!response.ok || cancelled) return;
 
