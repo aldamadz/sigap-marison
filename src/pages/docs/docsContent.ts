@@ -2678,6 +2678,9 @@ export const DOCS_CHANGELOG = [
       "Memverifikasi tanda tangan token melalui Supabase Auth pada endpoint attention, web push, dan datasource eksternal.",
       "Membatasi percobaan login gagal dan permintaan reset password untuk mengurangi brute force dan abuse email.",
       "Menambahkan datasource Marison Non Unit berdasarkan endpoint terbaru `GET /non-unit`.",
+      "Menambahkan pengaturan global environment Marison agar seluruh user dapat memakai staging atau production tanpa deploy ulang.",
+      "Membatasi perubahan environment berdasarkan email terverifikasi serta konfirmasi OTP yang dikirim melalui SMTP.",
+      "Menampilkan indikator staging kepada seluruh user dan menyediakan tes koneksi Projects, Unit, dan Non Unit untuk pengelola.",
     ],
   },
   {

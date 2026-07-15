@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { useState, useEffect } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { MarisonEnvironmentBanner } from '@/components/layout/MarisonEnvironmentBanner'
 
 const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Ringkasan pekerjaan, antrean, dan performa persetujuan' },
@@ -21,6 +22,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/surat/riwayat': { title: 'Riwayat Keterlibatan', subtitle: 'Riwayat pengajuan untuk pihak yang terlibat' },
   '/admin/users/hierarchy': { title: 'Hirarki Organisasi', subtitle: 'Tree list dan chart node struktur karyawan' },
   '/admin/kpi-departments': { title: 'SLA Departemen', subtitle: 'Evaluasi approval berdasarkan jam kerja efektif' },
+  '/admin/marison-integration': { title: 'Integrasi Marison', subtitle: 'Kelola sumber data staging dan production' },
   '/admin/configuration/forms': { title: 'Form & Template', subtitle: 'Konfigurasi template dan input dokumen' },
   '/admin/configuration/template-designer': { title: 'Template Builder', subtitle: 'Rancang dokumen native dengan elemen dan data berulang' },
   '/admin/configuration/workflows': { title: 'Alur Persetujuan', subtitle: 'Konfigurasi urutan dan posisi tanda tangan' },
@@ -81,6 +83,7 @@ export function AppLayout() {
           onMenuClick={() => setMobileMenuOpen(true)}
           showMenuButton={isMobile}
         />
+        <MarisonEnvironmentBanner />
         
         {/* Kontainer Scrollable */}
         <div className="safe-area-bottom flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5">

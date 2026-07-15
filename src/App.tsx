@@ -11,6 +11,7 @@ import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
 import { RealtimeSync } from "@/providers/RealtimeSync";
+import { MarisonEnvironmentProvider } from "@/providers/MarisonEnvironmentProvider";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
@@ -50,6 +51,7 @@ const DepartmentKPIPage = lazy(() => import("./pages/admin/DepartmentKPIPage"));
 const LetterNumberCounterPage = lazy(() => import("./pages/admin/LetterNumberCounterPage"));
 const JobTitleDisplayOverridesPage = lazy(() => import("./pages/admin/JobTitleDisplayOverridesPage"));
 const EmailNotificationSettingsPage = lazy(() => import("./pages/admin/EmailNotificationSettingsPage"));
+const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrationPage"));
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 
 // Konfigurasi Query Client
@@ -218,6 +220,7 @@ const App = () => {
           <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
           <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
           <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
+          <Route path="/admin/marison-integration" element={<MarisonIntegrationPage />} />
           <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
             <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
             <Route path="forms" element={<FormManagementPage embedded />} />
@@ -241,7 +244,9 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppDialogProvider>
-          {isAuth ? <AttentionProvider><RealtimeSync />{appShell}</AttentionProvider> : appShell}
+          {isAuth
+            ? <MarisonEnvironmentProvider><AttentionProvider><RealtimeSync />{appShell}</AttentionProvider></MarisonEnvironmentProvider>
+            : appShell}
         </AppDialogProvider>
       </TooltipProvider>
     </QueryClientProvider>

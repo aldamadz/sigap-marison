@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
   GitMerge, Monitor, Briefcase, History, BarChart3, Network,
-  SlidersHorizontal, BookOpenText, FileCheck2, ClipboardCheck,
+  SlidersHorizontal, BookOpenText, FileCheck2, ClipboardCheck, ServerCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 import { useAttention } from '@/providers/AttentionProvider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useMarisonEnvironment } from '@/providers/MarisonEnvironmentProvider'
 
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated'
 
@@ -30,6 +31,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const location = useLocation()
   const queryClient = useQueryClient()
   const { state: attentionState, refetch: refetchAttention } = useAttention()
+  const { status: marisonEnvironment } = useMarisonEnvironment()
   
   const [user, setUser] = useState<User | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -344,7 +346,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             {renderNavLink('/admin/configuration', 'Konfigurasi', SlidersHorizontal)}
             {renderNavLink('/admin/monitoring', 'Monitoring Admin', Monitor)}
             {renderNavLink('/admin/kpi-departments', 'SLA Departemen', BarChart3)}
+            {marisonEnvironment?.canManage && renderNavLink('/admin/marison-integration', 'Integrasi Marison', ServerCog)}
             {renderNavLink('/audit-logs', 'Audit Log', Activity)}
+          </div>
+        )}
+
+        {!isUserAdmin && marisonEnvironment?.canManage && (
+          <div className="space-y-1 pt-2">
+            {renderNavLink('/admin/marison-integration', 'Integrasi Marison', ServerCog)}
           </div>
         )}
 

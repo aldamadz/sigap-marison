@@ -33,6 +33,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/configuration/template-designer': 'Template Builder',
   '/admin/configuration/workflows': 'Alur Persetujuan',
   '/admin/configuration/kpi': 'SLA Departemen',
+  '/admin/marison-integration': 'Integrasi Marison',
   '/admin/settings': 'Pengaturan',
   '/audit-logs': 'Audit Log',
   '/settings': 'Pengaturan',

@@ -5,7 +5,7 @@ import { extname, isAbsolute, join, normalize, relative, resolve } from "node:pa
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -68,6 +68,9 @@ const passwordResetSendCooldowns = new Map();
 const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
+const marisonSwitchOtpRateLimits = new Map();
+const marisonSwitchChallenges = new Map();
+const marisonRealtimeClients = new Set();
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -75,6 +78,20 @@ const PASSWORD_RESET_MAX_PER_WINDOW = 6;
 const LOGIN_MAX_FAILURES_PER_IDENTITY = 8;
 const LOGIN_MAX_FAILURES_PER_IP = 30;
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const MARISON_SWITCH_OTP_TTL_MS = 5 * 60 * 1000;
+const MARISON_SWITCH_OTP_MAX_ATTEMPTS = 5;
+const MARISON_SWITCH_OTP_MAX_SENDS = 3;
+const MARISON_ENVIRONMENT_CACHE_MS = 5_000;
+
+const MARISON_ENVIRONMENTS = new Set(["staging", "production"]);
+const marisonDefaultEnvironment = MARISON_ENVIRONMENTS.has(process.env.MARISON_DEFAULT_ENVIRONMENT)
+  ? process.env.MARISON_DEFAULT_ENVIRONMENT
+  : process.env.NODE_ENV === "production" ? "production" : "staging";
+const marisonSwitchAdminEmails = new Set(String(process.env.MARISON_ENV_SWITCH_ADMIN_EMAILS || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean));
+let marisonEnvironmentCache = null;
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -694,6 +711,7 @@ const openBffRealtimeStream = async (req, res, url) => {
   }));
   res.write("retry: 3000\n");
   res.write(": connected\n\n");
+  marisonRealtimeClients.add(res);
 
   let closed = false;
   let eventSequence = 0;
@@ -728,6 +746,7 @@ const openBffRealtimeStream = async (req, res, url) => {
     closed = true;
     clearInterval(heartbeatTimer);
     clearTimeout(reconnectTimer);
+    marisonRealtimeClients.delete(res);
     client.removeChannel(channel).catch(() => {});
   };
 
@@ -2679,17 +2698,59 @@ const fillEndpointTemplate = (template, variables = {}) => {
   return path.startsWith("/") ? path : `/${path}`;
 };
 
-const getMarisonAccessToken = async (source) => {
-  const authConfig = source.auth_config || {};
-  const clientId = process.env[authConfig.client_id_env || "MARISON_EXTERNAL_CLIENT_ID"];
-  const clientSecret = process.env[authConfig.client_secret_env || "MARISON_EXTERNAL_CLIENT_SECRET"];
+const normalizeMarisonEnvironment = (value) => {
+  const environment = String(value || "").trim().toLowerCase();
+  if (!MARISON_ENVIRONMENTS.has(environment)) {
+    const err = new Error("Environment Marison tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  return environment;
+};
+
+const getMarisonEnvironmentState = async ({ fresh = false } = {}) => {
+  if (!fresh && marisonEnvironmentCache?.expiresAt > Date.now()) return marisonEnvironmentCache;
+  const { data, error } = await supabase
+    .from("system_email_settings")
+    .select("config, updated_at, updated_by")
+    .eq("id", "marison_integration")
+    .maybeSingle();
+  if (error) throw error;
+  const environment = MARISON_ENVIRONMENTS.has(data?.config?.active_environment)
+    ? data.config.active_environment
+    : marisonDefaultEnvironment;
+  marisonEnvironmentCache = {
+    environment,
+    updatedAt: data?.updated_at || null,
+    updatedBy: data?.updated_by || null,
+    expiresAt: Date.now() + MARISON_ENVIRONMENT_CACHE_MS,
+  };
+  return marisonEnvironmentCache;
+};
+
+const getMarisonApiConfig = (environment, source = {}) => {
+  const normalized = normalizeMarisonEnvironment(environment);
+  const prefix = normalized === "staging" ? "MARISON_STAGING" : "MARISON_PRODUCTION";
+  const defaultBaseUrl = normalized === "staging"
+    ? "https://marison-external.digivasi.com/api"
+    : "https://external.marisonregency.id/api";
+  return {
+    environment: normalized,
+    baseUrl: String(process.env[`${prefix}_BASE_URL`] || process.env.MARISON_EXTERNAL_BASE_URL || source.base_url || defaultBaseUrl).replace(/\/+$/, ""),
+    clientId: process.env[`${prefix}_CLIENT_ID`] || process.env.MARISON_EXTERNAL_CLIENT_ID || "",
+    clientSecret: process.env[`${prefix}_CLIENT_SECRET`] || process.env.MARISON_EXTERNAL_CLIENT_SECRET || "",
+  };
+};
+
+const getMarisonAccessToken = async (source, environment) => {
+  const config = getMarisonApiConfig(environment, source);
+  const { baseUrl, clientId, clientSecret } = config;
   if (!clientId || !clientSecret) {
-    const err = new Error("Credential API eksternal Marison belum dikonfigurasi di server.");
+    const err = new Error(`Credential API Marison ${config.environment} belum dikonfigurasi di server.`);
     err.status = 500;
     throw err;
   }
 
-  const baseUrl = String(process.env.MARISON_EXTERNAL_BASE_URL || source.base_url || "").replace(/\/+$/, "");
   const cacheKey = `${baseUrl}:${source.source_key}:${clientId}`;
   const cached = externalAccessTokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
@@ -2722,7 +2783,7 @@ const getMarisonAccessToken = async (source) => {
   return token;
 };
 
-const queryExternalDataSource = async (sourceKey, variables = {}) => {
+const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
 
   const { data: source, error } = await supabase
@@ -2744,7 +2805,11 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
     throw err;
   }
 
-  const baseUrl = String(process.env.MARISON_EXTERNAL_BASE_URL || source.base_url || "").replace(/\/+$/, "");
+  const state = options.environment
+    ? { environment: normalizeMarisonEnvironment(options.environment) }
+    : await getMarisonEnvironmentState();
+  const config = getMarisonApiConfig(state.environment, source);
+  const baseUrl = config.baseUrl;
   const endpointPath = fillEndpointTemplate(source.endpoint_template, variables);
   const url = new URL(`${baseUrl}${endpointPath}`);
   Object.entries(variables?.query || {}).forEach(([key, value]) => {
@@ -2755,7 +2820,7 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
 
   const headers = {};
   if (source.auth_type === "marison_token_hmac_sha512") {
-    const token = await getMarisonAccessToken(source);
+    const token = await getMarisonAccessToken(source, state.environment);
     const timestamp = new Date().toISOString();
     const bodyHash = sha256Hex(Buffer.alloc(0));
     const canonical = [method, url.pathname, token, bodyHash, timestamp].join(":");
@@ -2783,12 +2848,199 @@ const queryExternalDataSource = async (sourceKey, variables = {}) => {
     source: {
       key: source.source_key,
       name: source.name,
+      environment: state.environment,
     },
     options: items
       .map((item) => normalizeExternalOption(item, source))
       .filter((item) => item.value && item.label),
     raw_count: items.length,
   };
+};
+
+const canManageMarisonEnvironment = (user) => {
+  const email = String(user?.email || "").trim().toLowerCase();
+  return Boolean(email && user?.email_confirmed_at && marisonSwitchAdminEmails.has(email));
+};
+
+const requireMarisonEnvironmentManager = async (req) => {
+  const user = await requireSupabaseUser(getBearerToken(req));
+  if (!canManageMarisonEnvironment(user)) {
+    const err = new Error("Akses pengaturan integrasi Marison ditolak.");
+    err.status = 403;
+    throw err;
+  }
+  return user;
+};
+
+const getMarisonEnvironmentStatus = async (req) => {
+  const user = await requireSupabaseUser(getBearerToken(req));
+  const state = await getMarisonEnvironmentState();
+  const canManage = canManageMarisonEnvironment(user);
+  const result = {
+    environment: state.environment,
+    isStaging: state.environment === "staging",
+    canManage,
+    updatedAt: state.updatedAt,
+  };
+  if (canManage) {
+    result.environments = Object.fromEntries([...MARISON_ENVIRONMENTS].map((environment) => {
+      const config = getMarisonApiConfig(environment);
+      return [environment, {
+        configured: Boolean(config.clientId && config.clientSecret),
+        host: new URL(config.baseUrl).host,
+      }];
+    }));
+  }
+  return result;
+};
+
+const probeMarisonDataSource = async (sourceKey, variables, environment) => {
+  const startedAt = Date.now();
+  try {
+    const result = await queryExternalDataSource(sourceKey, variables, { environment });
+    return {
+      ok: true,
+      count: result.raw_count,
+      durationMs: Date.now() - startedAt,
+      sample: result.options.slice(0, 3).map((option) => ({
+        value: option.value,
+        label: option.label,
+        raw: option.raw,
+      })),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: Number(error?.status || 500),
+      message: error?.message || "Tes koneksi gagal.",
+      durationMs: Date.now() - startedAt,
+    };
+  }
+};
+
+const testMarisonEnvironment = async (req) => {
+  await requireMarisonEnvironmentManager(req);
+  const payload = await readJsonBody(req, 4096);
+  const environment = normalizeMarisonEnvironment(payload?.environment);
+  const projects = await probeMarisonDataSource("marison_projects", {}, environment);
+  const projectId = projects.ok ? projects.sample.find((item) => item.raw?.id)?.raw?.id : null;
+  const variables = projectId ? { project_id: projectId } : {};
+  const units = projectId
+    ? await probeMarisonDataSource("marison_units_by_project", variables, environment)
+    : { ok: false, status: 424, message: "Proyek uji tidak tersedia.", durationMs: 0 };
+  const nonUnits = projectId
+    ? await probeMarisonDataSource("marison_non_units_by_project", variables, environment)
+    : { ok: false, status: 424, message: "Proyek uji tidak tersedia.", durationMs: 0 };
+  return {
+    environment,
+    testedAt: new Date().toISOString(),
+    projectId,
+    allHealthy: Boolean(projects.ok && units.ok && nonUnits.ok),
+    checks: { projects, units, nonUnits },
+  };
+};
+
+const maskEmail = (email) => {
+  const [local, domain] = String(email || "").split("@");
+  if (!local || !domain) return "email terdaftar";
+  return `${local.slice(0, 2)}${"*".repeat(Math.max(2, local.length - 2))}@${domain}`;
+};
+
+const requestMarisonEnvironmentSwitch = async (req) => {
+  const user = await requireMarisonEnvironmentManager(req);
+  const payload = await readJsonBody(req, 4096);
+  const environment = normalizeMarisonEnvironment(payload?.environment);
+  const state = await getMarisonEnvironmentState({ fresh: true });
+  if (state.environment === environment) {
+    const err = new Error(`Environment ${environment} sudah aktif.`);
+    err.status = 409;
+    throw err;
+  }
+  const rateLimitKey = user.id;
+  enforceRateLimit(marisonSwitchOtpRateLimits, rateLimitKey, MARISON_SWITCH_OTP_MAX_SENDS);
+  recordRateLimit(marisonSwitchOtpRateLimits, rateLimitKey, AUTH_RATE_LIMIT_WINDOW_MS);
+
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const codeHash = sha256Hex(`${user.id}:${environment}:${code}:${sessionSecret}`);
+  await getMailTransporter().sendMail({
+    from: smtpConfig.from,
+    to: user.email,
+    subject: `Konfirmasi environment Marison: ${environment}`,
+    text: `Kode konfirmasi SIGAP Anda: ${code}\n\nKode berlaku 5 menit dan hanya dapat digunakan sekali. Environment tujuan: ${environment}.`,
+    html: `<div style="font-family:Arial,sans-serif;color:#17221c;line-height:1.6"><h2>Konfirmasi Integrasi Marison</h2><p>Gunakan kode berikut untuk mengubah sumber data global ke <strong>${escapeHtml(environment)}</strong>.</p><p style="font-size:28px;font-weight:700">${code}</p><p>Kode berlaku 5 menit dan hanya dapat digunakan sekali.</p></div>`,
+  });
+  marisonSwitchChallenges.set(user.id, {
+    environment,
+    codeHash,
+    attempts: 0,
+    expiresAt: Date.now() + MARISON_SWITCH_OTP_TTL_MS,
+  });
+  return { ok: true, environment, sentTo: maskEmail(user.email), expiresInSeconds: MARISON_SWITCH_OTP_TTL_MS / 1000 };
+};
+
+const confirmMarisonEnvironmentSwitch = async (req) => {
+  const user = await requireMarisonEnvironmentManager(req);
+  const payload = await readJsonBody(req, 4096);
+  const environment = normalizeMarisonEnvironment(payload?.environment);
+  const code = String(payload?.code || "").trim();
+  const challenge = marisonSwitchChallenges.get(user.id);
+  if (!challenge || challenge.environment !== environment || challenge.expiresAt <= Date.now()) {
+    marisonSwitchChallenges.delete(user.id);
+    const err = new Error("Kode konfirmasi sudah kedaluwarsa. Kirim kode baru.");
+    err.status = 400;
+    throw err;
+  }
+  challenge.attempts += 1;
+  if (challenge.attempts > MARISON_SWITCH_OTP_MAX_ATTEMPTS) {
+    marisonSwitchChallenges.delete(user.id);
+    const err = new Error("Batas percobaan kode konfirmasi terlampaui.");
+    err.status = 429;
+    throw err;
+  }
+  const actualHash = Buffer.from(sha256Hex(`${user.id}:${environment}:${code}:${sessionSecret}`), "hex");
+  const expectedHash = Buffer.from(challenge.codeHash, "hex");
+  if (actualHash.length !== expectedHash.length || !timingSafeEqual(actualHash, expectedHash)) {
+    const err = new Error("Kode konfirmasi tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+
+  const previous = await getMarisonEnvironmentState({ fresh: true });
+  const changedAt = new Date().toISOString();
+  const { error } = await supabase.from("system_email_settings").upsert({
+    id: "marison_integration",
+    config: { active_environment: environment },
+    updated_at: changedAt,
+    updated_by: user.id,
+  }, { onConflict: "id" });
+  if (error) throw error;
+  await supabase.from("activity_logs").insert({
+    user_id: user.id,
+    action: "UPDATE",
+    table_name: "marison_integration_settings",
+    record_id: "marison_integration",
+    old_values: { active_environment: previous.environment },
+    new_values: { active_environment: environment, confirmed_by_email: user.email },
+  });
+  marisonSwitchChallenges.delete(user.id);
+  marisonEnvironmentCache = {
+    environment,
+    updatedAt: changedAt,
+    updatedBy: user.id,
+    expiresAt: Date.now() + MARISON_ENVIRONMENT_CACHE_MS,
+  };
+  for (const client of marisonRealtimeClients) {
+    if (client.destroyed) continue;
+    client.write(`event: postgres_change\ndata: ${JSON.stringify({
+      schema: "public",
+      table: "system_email_settings",
+      eventType: "UPDATE",
+      commit_timestamp: changedAt,
+      new: { id: "marison_integration", active_environment: environment, updated_at: changedAt },
+      old: { id: "marison_integration", active_environment: previous.environment },
+    })}\n\n`);
+  }
+  return { ok: true, environment, updatedAt: changedAt };
 };
 
 const canReadSurat = async (surat, userId) => {
@@ -3314,6 +3566,26 @@ createServer(async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/auth/password-reset") {
         const result = await handlePasswordResetRequest(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/integrations/marison/status") {
+        const result = await getMarisonEnvironmentStatus(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/test") {
+        const result = await testMarisonEnvironment(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/switch/request") {
+        const result = await requestMarisonEnvironmentSwitch(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/switch/confirm") {
+        const result = await confirmMarisonEnvironmentSwitch(req);
         return sendJson(res, 200, result);
       }
 
