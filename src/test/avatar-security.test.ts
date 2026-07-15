@@ -20,12 +20,12 @@ describe("private avatar delivery", () => {
     expect(route).not.toContain("ownerId");
   });
 
-  it("loads private avatar images with the current session bearer token", () => {
+  it("loads private avatars directly through the cookie-authenticated cacheable URL", () => {
     const avatarComponent = read("src/components/ui/avatar.tsx");
 
-    expect(avatarComponent).toContain("supabase.auth.getSession()");
-    expect(avatarComponent).toContain("Authorization: `Bearer ${session.access_token}`");
-    expect(avatarComponent).toContain('cache: "force-cache"');
-    expect(avatarComponent).toContain("URL.revokeObjectURL");
+    expect(avatarComponent).toContain("src={src}");
+    expect(avatarComponent).not.toContain("supabase.auth.getSession()");
+    expect(avatarComponent).not.toContain("URL.createObjectURL");
+    expect(avatarComponent).not.toContain("blob()");
   });
 });
