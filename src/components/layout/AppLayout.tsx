@@ -4,7 +4,6 @@ import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { useState, useEffect } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { MarisonEnvironmentBanner } from '@/components/layout/MarisonEnvironmentBanner'
 
 const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Ringkasan pekerjaan, antrean, dan performa persetujuan' },
@@ -83,8 +82,6 @@ export function AppLayout() {
           onMenuClick={() => setMobileMenuOpen(true)}
           showMenuButton={isMobile}
         />
-        <MarisonEnvironmentBanner />
-        
         {/* Kontainer Scrollable */}
         <div className="safe-area-bottom flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5">
           {/* Breadcrumbs - Tampilkan di semua ukuran layar */}

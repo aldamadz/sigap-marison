@@ -27,13 +27,14 @@ describe("Marison environment switch", () => {
     expect(server).toContain('"/api/integrations/marison/switch/confirm"');
   });
 
-  it("shows staging globally and refreshes status over the shared realtime boundary", () => {
+  it("refreshes status over the shared realtime boundary without a global staging banner", () => {
     const provider = read("src/providers/MarisonEnvironmentProvider.tsx");
-    const banner = read("src/components/layout/MarisonEnvironmentBanner.tsx");
+    const layout = read("src/components/layout/AppLayout.tsx");
     const server = read("server.mjs");
 
     expect(provider).toContain('table: "system_email_settings"');
-    expect(banner).toContain("environment staging");
+    expect(layout).not.toContain("MarisonEnvironmentBanner");
+    expect(layout).not.toContain("environment staging");
     expect(server).toContain("marisonRealtimeClients");
     expect(server).toContain('table: "system_email_settings"');
   });
