@@ -5,10 +5,11 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMarisonEnvironment } from "@/providers/MarisonEnvironmentProvider";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 import {
   marisonIntegrationService,
   type MarisonEnvironment,
@@ -180,17 +181,29 @@ export default function MarisonIntegrationPage() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="marison-switch-code">Kode dari {sentTo}</Label>
-                  <Input
+                  <Label className="block text-center" htmlFor="marison-switch-code">Kode dari {sentTo}</Label>
+                  <InputOTP
                     id="marison-switch-code"
                     value={code}
-                    onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onChange={setCode}
+                    pattern={REGEXP_ONLY_DIGITS}
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     maxLength={6}
-                    className="h-12 text-center text-lg"
-                    placeholder="000000"
-                  />
+                    autoFocus
+                    aria-label="Kode OTP enam digit"
+                    containerClassName="justify-center"
+                  >
+                    <InputOTPGroup className="gap-1.5 sm:gap-2">
+                      {Array.from({ length: 6 }, (_, index) => (
+                        <InputOTPSlot
+                          key={index}
+                          index={index}
+                          className="h-12 w-9 rounded-md border border-input text-lg tabular-nums sm:w-11"
+                        />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
                 </div>
                 <Button onClick={confirmSwitch} disabled={confirming || code.length !== 6} className="w-full gap-2">
                   {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}

@@ -20,11 +20,15 @@ describe("Marison environment switch", () => {
 
   it("provides status, health test, OTP request, and OTP confirmation endpoints", () => {
     const server = read("server.mjs");
+    const page = read("src/pages/admin/MarisonIntegrationPage.tsx");
 
     expect(server).toContain('"/api/integrations/marison/status"');
     expect(server).toContain('"/api/integrations/marison/test"');
     expect(server).toContain('"/api/integrations/marison/switch/request"');
     expect(server).toContain('"/api/integrations/marison/switch/confirm"');
+    expect(page).toContain("<InputOTP");
+    expect(page).toContain("REGEXP_ONLY_DIGITS");
+    expect(page).toContain("maxLength={6}");
   });
 
   it("refreshes status over the shared realtime boundary without a global staging banner", () => {
