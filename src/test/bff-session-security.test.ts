@@ -29,4 +29,16 @@ describe("SIGAP browser BFF session boundary", () => {
     expect(server).toContain("createUserSupabaseClient(session.access_token)");
     expect(server).toContain("assertSameOrigin(req)");
   });
+
+  it("does not expose arbitrary private storage through the generic BFF facade", () => {
+    const server = read("server.mjs");
+    const handlerStart = server.indexOf("const handleBffStorageFile");
+    const handlerEnd = server.indexOf("const openBffRealtimeStream", handlerStart);
+    const handler = server.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handler).toContain('bucket !== "avatars"');
+    expect(handler).toContain("Akses file harus melalui endpoint dokumen yang terotorisasi.");
+    expect(handler).toContain("path.startsWith(`${session.user.id}/`)");
+  });
 });

@@ -668,9 +668,19 @@ const handleBffFunction = async (req, functionName) => {
 };
 
 const handleBffStorageFile = async (req, res, url) => {
-  requireCookieSession(req);
+  const session = requireCookieSession(req);
   const bucket = assertBffIdentifier(url.searchParams.get("bucket"), "Nama bucket");
   const path = sanitizeStoragePath(url.searchParams.get("path"));
+  if (bucket !== "avatars" || !/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+(?:_thumb\.webp)?$/i.test(path)) {
+    const err = new Error("Akses file harus melalui endpoint dokumen yang terotorisasi.");
+    err.status = 403;
+    throw err;
+  }
+  if (!path.startsWith(`${session.user.id}/`)) {
+    const err = new Error("Akses avatar ditolak.");
+    err.status = 403;
+    throw err;
+  }
   const { data, error } = await storageSupabase.storage.from(bucket).download(path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan.");
