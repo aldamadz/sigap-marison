@@ -42,6 +42,8 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('["SELESAI", "DONE"]');
     expect(server).toContain('dispatchInput.linked_parent_surat_id');
     expect(server).toContain("Dokumen rekomendasi mengikuti pengajuan induk");
+    expect(server).toContain("signed_at, catatan, signer_snapshot");
+    expect(server).toContain("firstString(signature.catatan, signature.note, signature.notes)");
   });
 
   it("uses persistent application-domain links without exposing storage URLs", () => {

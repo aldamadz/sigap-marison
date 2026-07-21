@@ -3103,7 +3103,7 @@ const buildMarisonApprovals = (surat) => {
         nik,
         action: "approved",
         actioned_at: new Date(signature.signed_at).toISOString(),
-        notes: firstString(signature.note, signature.notes),
+        notes: firstString(signature.catatan, signature.note, signature.notes),
       };
     })
     .filter((approval) => approval.nik);
@@ -3301,7 +3301,7 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
       id, no_surat, judul_surat, status, current_step, created_at, created_by,
       office_id, project_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
       surat_signatures (
-        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, note, signer_snapshot,
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
         profiles:user_id ( id, full_name, nik, job_title )
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
