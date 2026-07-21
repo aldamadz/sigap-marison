@@ -35,4 +35,24 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('previous.status === "success"');
     expect(server).toContain('status: "failed"');
   });
+
+  it("accepts the database final status and skips recommendation child documents", () => {
+    const server = read("server.mjs");
+
+    expect(server).toContain('["SELESAI", "DONE"]');
+    expect(server).toContain('dispatchInput.linked_parent_surat_id');
+    expect(server).toContain("Dokumen rekomendasi mengikuti pengajuan induk");
+  });
+
+  it("uses persistent application-domain links without exposing storage URLs", () => {
+    const server = read("server.mjs");
+    const migration = read("supabase/migrations/20260721223000_persistent_marison_external_file_links.sql");
+
+    expect(server).toContain('purpose: "external_marison"');
+    expect(server).toContain('expires_at: null');
+    expect(server).toContain('`${appUrl}/api/files/view/${rawToken}/${filename}`');
+    expect(server).toContain("buildPersistentMarisonFileLink(surat, attachment.file_url, actorId)");
+    expect(migration).toContain("fvt.expires_at is null or fvt.expires_at > now()");
+    expect(migration).toContain("v_token.purpose not in ('email', 'external_marison')");
+  });
 });
