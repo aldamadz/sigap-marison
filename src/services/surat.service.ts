@@ -2388,7 +2388,7 @@ export const suratService = {
         );
       }
 
-      if (updatedSurat.status === 'SELESAI') {
+      if (['SELESAI', 'DONE'].includes(updatedSurat.status)) {
         await this.finalizeRecommendationRevisionIfNeeded(suratId);
       }
     }

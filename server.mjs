@@ -1611,6 +1611,30 @@ const buildEmailFileLink = async (suratId, rawPath, config, requestedBy = null) 
   });
 };
 
+const buildPersistentMarisonFileLink = async (surat, rawPath, requestedBy = null) => {
+  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
+  const requested = parseStorageRef(rawPath);
+  if (!appUrl || !requested) return null;
+
+  const rawToken = randomBytes(32).toString("base64url");
+  const { error } = await supabase
+    .from("file_view_tokens")
+    .insert({
+      token_hash: hashFileViewToken(rawToken),
+      bucket: requested.bucket,
+      object_path: requested.path,
+      storage_origin: requested.origin || "primary",
+      surat_id: surat.id,
+      requested_by: requestedBy,
+      purpose: "external_marison",
+      expires_at: null,
+    });
+  if (error) throw error;
+
+  const filename = encodeURIComponent(buildDocumentFilename(surat, requested.path, "lampiran"));
+  return `${appUrl}/api/files/view/${rawToken}/${filename}`;
+};
+
 const downloadStorageAttachment = async (rawPath) => {
   const requested = parseStorageRef(rawPath);
   if (!requested) return null;
@@ -3093,22 +3117,23 @@ const buildMarisonApprovals = (surat) => {
 };
 
 const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
-  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
-  if (!appUrl) return [];
-  const rows = asArrayValue(surat?.surat_attachments);
+  const rows = [
+    ...(surat?.file_path ? [{ file_url: surat.file_path, file_name: "Dokumen pengajuan" }] : []),
+    ...asArrayValue(surat?.surat_attachments),
+  ];
   const links = [];
+  const seen = new Set();
   for (const [index, attachment] of rows.entries()) {
     if (!attachment?.file_url) continue;
-    const tokenPath = await buildEmailFileLink(
-      surat.id,
-      attachment.file_url,
-      { link_ttl_hours: Number(process.env.MARISON_FILE_LINK_TTL_HOURS || 168) },
-      actorId
-    );
-    if (tokenPath) {
+    const ref = parseStorageRef(attachment.file_url);
+    const key = storageRefKey(ref);
+    if (!ref || seen.has(key)) continue;
+    seen.add(key);
+    const link = await buildPersistentMarisonFileLink(surat, attachment.file_url, actorId);
+    if (link) {
       links.push({
         name: firstString(attachment.file_name, attachment.requirement_label, `Lampiran ${index + 1}`),
-        link: `${appUrl}${tokenPath}`,
+        link,
       });
     }
   }
@@ -3294,11 +3319,18 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
     err.status = 403;
     throw err;
   }
-  if (String(surat.status || "").toUpperCase() !== "SELESAI") {
+  if (!["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
     return { skipped: true, reason: "Surat belum selesai ditandatangani." };
   }
 
   const snapshot = asPlainRecord(surat.data_snapshot);
+  const dispatchInput = getMarisonDispatchInput(surat);
+  if (
+    String(dispatchInput.linked_document_type || "").toLowerCase() === "recommendation" ||
+    dispatchInput.linked_parent_surat_id
+  ) {
+    return { skipped: true, reason: "Dokumen rekomendasi mengikuti pengajuan induk dan tidak dikirim sebagai pengajuan aset." };
+  }
   const previous = asPlainRecord(snapshot.marison_dispatch);
   if (previous.status === "success" && previous.environment === marisonDeploymentEnvironment) {
     return { skipped: true, alreadySent: true, dispatch: previous };
