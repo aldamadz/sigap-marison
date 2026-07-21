@@ -60,6 +60,8 @@ Garis besar dokumentasi:
 | File | Deskripsi |
 |------|-----------|
 | [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, termasuk Hirarki Organisasi, dan rencana fitur berjalan |
+| [WORKFLOW_ASET_UNIT.md](./WORKFLOW_ASET_UNIT.md) | Flowchart lengkap Permohonan Aset dan Unit, termasuk pemeriksaan, rekomendasi, revisi, dan tanda tangan ulang |
+| [FEATURE_RELEASE_MAP.md](./FEATURE_RELEASE_MAP.md) | Status fitur per environment, dependensi, selective release, dan prosedur penarikan production |
 | [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |

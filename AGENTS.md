@@ -3,6 +3,8 @@
 Dokumen ini adalah instruksi wajib untuk seluruh AI coding agent yang bekerja di
 repository SIGAP. Baca dokumen ini sebelum membuat branch, mengubah kode,
 menjalankan migration, melakukan commit, membuka PR, atau melakukan deployment.
+Setelah itu baca `docs/FEATURE_RELEASE_MAP.md` untuk mengetahui status fitur,
+dependensi, drift environment, dan prosedur penarikan fitur dari production.
 
 ## Aturan Utama
 
@@ -47,15 +49,17 @@ Kalimat seperti "kerjakan", "perbaiki", "buatkan", "commit", "push", atau
 
 1. Pastikan worktree dan branch aktif sebelum mulai. Jangan menghapus perubahan
    pengguna yang sudah ada.
-2. Untuk pekerjaan independen, buat branch `feature/*` atau `fix/*` dari `main`.
-3. Satu branch dan satu PR hanya untuk satu fitur atau satu kelompok perubahan
+2. Temukan Feature ID pekerjaan pada `docs/FEATURE_RELEASE_MAP.md`. Tambahkan ID
+   baru pada peta tersebut jika fitur belum terdaftar.
+3. Untuk pekerjaan independen, buat branch `feature/*` atau `fix/*` dari `main`.
+4. Satu branch dan satu PR hanya untuk satu fitur atau satu kelompok perubahan
    yang tidak dapat dipisahkan.
-4. Push branch pekerjaan ke GitHub dan buka PR menuju `staging` untuk pengujian.
-5. Jangan hapus branch setelah masuk staging. Commit perbaikan hasil pengujian ke
+5. Push branch pekerjaan ke GitHub dan buka PR menuju `staging` untuk pengujian.
+6. Jangan hapus branch setelah masuk staging. Commit perbaikan hasil pengujian ke
    branch yang sama, lalu sinkronkan lagi ke staging.
-6. Ketika pengguna menyatakan fitur itu siap dirilis, buka PR dari branch fitur
+7. Ketika pengguna menyatakan fitur itu siap dirilis, buka PR dari branch fitur
    yang sama menuju `main`. Dengan cara ini fitur lain di staging tidak ikut rilis.
-7. Setelah rilis production berhasil, sinkronkan `main` kembali ke `staging` agar
+8. Setelah rilis production berhasil, sinkronkan `main` kembali ke `staging` agar
    kedua branch tidak menyimpang.
 
 Jika suatu fitur bergantung pada fitur lain yang belum ada di production, agent
