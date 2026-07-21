@@ -6,7 +6,11 @@
   "scripts": {
     "test:document-layout": "node --test scripts/test-document-layout-rules.mjs",
     "test:pgd-pdf": "node --test scripts/test-pgd-pdf-renderer.mjs",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:server": "node --env-file=.env.local server.mjs",
+    "staging:normalize-emails": "node --env-file=.env.local scripts/normalize-staging-emails.mjs",
+    "staging:prepare-users": "node --env-file=.env.local scripts/prepare-staging-users.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -62,7 +66,6 @@
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.27.5",
-    "input-otp": "^1.4.2",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.462.0",
@@ -110,6 +113,9 @@
     "vitest": "^3.2.4"
   },
   "overrides": {
+    "brace-expansion@1": "1.1.16",
+    "brace-expansion@2": "2.1.2",
+    "js-yaml": "4.3.0",
     "exceljs": {
       "uuid": "^11.1.1"
     }

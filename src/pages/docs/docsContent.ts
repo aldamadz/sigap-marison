@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.14.0";
-export const DOCS_UPDATED_AT = "13 Juli 2026";
+export const DOCS_VERSION = "v1.18.0";
+export const DOCS_UPDATED_AT = "21 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -110,6 +110,7 @@ const DOCS_ENTRY_SLUGS: Record<string, string> = {
   agenda: "agenda",
   calendar: "kalender",
   "surat-registration": "registrasi-surat",
+  "request-categories": "kategori-pengajuan",
   "approval-inbox": "persetujuan",
   "recommendation-tasks": "rekomendasi",
   monitoring: "status-pengajuan",
@@ -1273,7 +1274,7 @@ export const USER_DOCS: DocsEntry[] = [
             columns: ["Status", "Arti", "Dampak ke nomor"],
             rows: [
               ["DRAFT", "Nomor sudah dipesan dan form disimpan otomatis.", "Nomor tetap menempel ke draft dan tidak diberikan ke user lain."],
-              ["SUBMITTED", "Draft sudah dikirim menjadi surat berjalan.", "Nomor dipakai sebagai nomor resmi dokumen."],
+              ["SUBMITTED", "Draft sudah dikirim menjadi surat berjalan.", "Nomor dipakai sebagai nomor resmi dokumen setelah reservasi draft divalidasi terhadap sesi login."],
               ["VOID", "Draft dibatalkan.", "Nomor tidak dipakai ulang agar audit tetap aman."],
               ["EXPIRED", "Draft melewati masa aktif.", "Perlu dibuat ulang sesuai aturan yang aktif."],
               ["Masa aktif", "Draft aktif selama 7 hari dari penyimpanan terakhir.", "User diarahkan melanjutkan draft jika kembali ke registrasi."],
@@ -1366,6 +1367,213 @@ export const USER_DOCS: DocsEntry[] = [
             problem: "Draft lama muncul saat kembali ke registrasi",
             solution:
               "Itu berarti ada nomor yang sudah dipesan dan belum dikirim. Lanjutkan draft atau batalkan sesuai prosedur yang tersedia.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "request-categories",
+    title: "Kategori Pengajuan",
+    menu: "Layanan Surat > Kategori Pengajuan",
+    audience: "user",
+    icon: Tag,
+    version: DOCS_VERSION,
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Panduan memilih Aset, Non Aset, Unit, atau Non Unit sebelum membuat pengajuan.",
+    whenToUse: [
+      "Menentukan kategori sebelum memilih form dan kegunaan dokumen.",
+      "Membedakan pengadaan aset, kebutuhan operasional, order bangun unit, dan dokumen tanpa alokasi kavling.",
+      "Memahami data dan proses lanjutan yang akan diminta oleh sistem.",
+    ],
+    steps: [
+      "Tentukan apakah permohonan berkaitan dengan unit/kavling properti.",
+      "Jika berkaitan dengan unit/kavling, pilih Unit; jika tidak, lanjutkan menilai jenis barang atau prosesnya.",
+      "Pilih Aset untuk barang yang dicatat sebagai aset, Non Aset untuk kebutuhan operasional, atau Non Unit untuk proses yang memang dikonfigurasi tanpa alokasi unit.",
+      "Periksa form dan kegunaan yang muncul. Sistem hanya menampilkan konfigurasi yang sesuai kategori dan departemen Anda.",
+    ],
+    examples: [
+      "Komputer inventaris kantor menggunakan Aset.",
+      "ATK, jasa sewa, biaya promosi, atau bahan habis pakai menggunakan Non Aset.",
+      "Order bangun rumah pada kavling proyek menggunakan Unit.",
+      "Dokumen pekerjaan proyek yang tidak memilih kavling menggunakan Non Unit jika kegunaannya dikonfigurasi demikian.",
+    ],
+    troubleshooting: [
+      "Jika form atau kegunaan tidak muncul, pastikan kategori yang dipilih sesuai dan minta admin memeriksa konfigurasi departemen.",
+      "Jika pilihan Unit tidak tersedia, departemen Anda belum diizinkan mengajukan Unit.",
+      "Jika kategori atau proyek salah setelah surat dikirim, buat pengajuan baru sesuai prosedur karena identitas utama dokumen sudah terkunci.",
+    ],
+    related: ["Registrasi Surat", "Persetujuan", "Rekomendasi"],
+    sections: [
+      {
+        type: "callout",
+        title: "Kategori menentukan alur, bukan sekadar nama dokumen",
+        description:
+          "Kategori menyaring form, kegunaan, penandatangan, lampiran, dan tugas tim pemeriksa. Satu form dapat dipakai oleh beberapa kategori, tetapi proses yang berjalan mengikuti kategori dan kegunaan yang dipilih.",
+        tone: "info",
+      },
+      {
+        type: "table",
+        title: "Cara menentukan kategori",
+        columns: ["Pertanyaan", "Jika ya", "Jika tidak"],
+        rows: [
+          ["Apakah permohonan membutuhkan proyek, pemilihan kavling, dan alokasi unit?", "Pilih Unit.", "Lanjutkan ke klasifikasi barang atau proses."],
+          ["Apakah barang akan menjadi inventaris/aset perusahaan?", "Pilih Aset.", "Pertimbangkan Non Aset atau Non Unit."],
+          ["Apakah kebutuhan berupa biaya operasional, jasa, sewa, promosi, atau barang habis pakai?", "Pilih Non Aset.", "Periksa apakah kegunaannya merupakan proses Non Unit."],
+          ["Apakah kegunaan dokumen memang disiapkan tanpa alokasi kavling/unit?", "Pilih Non Unit.", "Hubungi admin jika tidak ada kategori yang sesuai."],
+        ],
+      },
+      {
+        type: "group",
+        title: "Aset",
+        description: "Untuk pengadaan barang yang menjadi inventaris atau aset perusahaan.",
+        sections: [
+          {
+            type: "table",
+            title: "Kegunaan Aset",
+            columns: ["Kegunaan", "Contoh", "Hasil proses"],
+            rows: [
+              ["Pengadaan inventaris kantor", "Komputer, printer, meja, kursi, alat kerja, atau perangkat operasional berumur panjang.", "Barang diajukan sebagai aset dan mengikuti matrix Aset."],
+              ["Penggantian atau peremajaan aset", "Mengganti perangkat lama, rusak, atau tidak lagi memadai.", "Dapat membutuhkan dokumen rekomendasi sesuai konfigurasi."],
+              ["Aset kantor pusat atau cabang", "Aset untuk departemen pusat, KC, atau KCP.", "Kantor dan kandidat penandatangan mengikuti profil serta matrix aktif."],
+            ],
+          },
+          {
+            type: "table",
+            title: "Data dan alur Aset",
+            columns: ["Bagian", "Aturan"],
+            rows: [
+              ["Data utama", "Nama barang, satuan, jumlah, status prioritas, keterangan, catatan, dan lampiran yang dikonfigurasi."],
+              ["Rekomendasi", "Opsi rekomendasi hanya tersedia pada departemen yang diizinkan. Dokumen rekomendasi menjadi child dari pengajuan induk dan memiliki nomor serta approval sendiri."],
+              ["Proyek cabang", "KC/KCP yang memiliki proyek wajib memilih proyek. Cabang tanpa proyek memakai kode virtual 000 untuk pengajuan non-unit."],
+              ["Setelah dikirim", "Barang dapat disetujui seluruhnya, disetujui sebagian, dikembalikan untuk perbaikan, atau ditolak sesuai keputusan signer."],
+            ],
+          },
+          {
+            type: "callout",
+            title: "Jangan gunakan Aset untuk biaya operasional",
+            description: "Jasa, sewa, konsumsi, promosi, bahan habis pakai, dan biaya operasional biasanya masuk Non Aset, kecuali kebijakan internal dan konfigurasi admin menentukan lain.",
+            tone: "warning",
+          },
+        ],
+      },
+      {
+        type: "group",
+        title: "Non Aset",
+        description: "Untuk kebutuhan barang/jasa dan biaya operasional yang tidak dicatat sebagai aset perusahaan.",
+        sections: [
+          {
+            type: "table",
+            title: "Kegunaan Non Aset",
+            columns: ["Kegunaan", "Contoh"],
+            rows: [
+              ["Barang habis pakai", "ATK, bahan kebersihan, konsumsi, bahan pendukung, atau kebutuhan rutin."],
+              ["Jasa dan sewa", "Sewa peralatan, dokumentasi, tenaga pemasangan, jasa perbaikan, atau layanan pihak ketiga."],
+              ["Promosi dan kegiatan", "Banner, baliho, brosur, paid promote, sponsorship, pameran, atau customer gathering."],
+              ["Biaya operasional", "Perpanjangan iklan, perawatan, biaya pemasangan, dan kebutuhan operasional lain."],
+            ],
+          },
+          {
+            type: "table",
+            title: "Data dan alur Non Aset",
+            columns: ["Bagian", "Aturan"],
+            rows: [
+              ["Data utama", "Nama kebutuhan, satuan, jumlah, status prioritas, keterangan, catatan, dan lampiran pendukung."],
+              ["Alokasi kavling", "Tidak menggunakan pemilihan kavling, kode produksi, atau rekap adendum Unit."],
+              ["Persetujuan", "Mengikuti kegunaan dan matrix Non Aset yang tersedia untuk departemen/kantor pemohon."],
+              ["Pencatatan", "Kategori menunjukkan kebutuhan bukan aset; keputusan akuntansi akhir tetap mengikuti kebijakan perusahaan."],
+            ],
+          },
+        ],
+      },
+      {
+        type: "group",
+        title: "Unit",
+        description: "Untuk permohonan/order bangun yang membutuhkan proyek, jumlah unit, dan alokasi kavling.",
+        sections: [
+          {
+            type: "table",
+            title: "Kegunaan Unit",
+            columns: ["Kegunaan", "Contoh", "Kebutuhan khusus"],
+            rows: [
+              ["Order bangun rumah", "Permohonan pembangunan satu atau beberapa unit pada proyek.", "Proyek dan jumlah unit wajib diisi."],
+              ["Alokasi kavling", "Tim pemeriksa menentukan kavling yang memenuhi permintaan.", "Kavling dapat dialokasikan lebih sedikit dengan konfirmasi dan alasan."],
+              ["Rekap struktur/adendum", "Pencatatan struktur atas, struktur bawah, dan nominal per kavling.", "Sistem membuat rekap dan total otomatis."],
+              ["Kode produksi", "Nomor, blok, dan tanggal produksi setiap unit.", "Sistem membentuk lampiran kode produksi dari data terstruktur."],
+            ],
+          },
+          {
+            type: "steps",
+            title: "Alur Unit",
+            items: [
+              "Pemohon memilih proyek dan melihat kapasitas unit yang tersedia.",
+              "Pemohon mengisi jumlah unit yang diminta dan mengirim pengajuan.",
+              "Pada tahap yang dikonfigurasi, tim pemeriksa memilih kavling, mengisi struktur, kode produksi, dan lampiran.",
+              "Signer membaca kavling serta rekap langsung dari detail pengajuan tanpa wajib membuka PDF.",
+              "Setelah seluruh approval selesai, PDF final memuat data Unit yang telah disetujui.",
+            ],
+          },
+          {
+            type: "callout",
+            title: "Proyek Unit tidak dapat diganti",
+            description: "Proyek dikunci dari pilihan pemohon. Jika proyek salah, pengajuan harus dibatalkan atau dibuat ulang; tim pemeriksa hanya mengalokasikan kavling di proyek tersebut.",
+            tone: "warning",
+          },
+        ],
+      },
+      {
+        type: "group",
+        title: "Non Unit",
+        description: "Untuk dokumen yang tidak membutuhkan pemilihan kavling atau alokasi unit, tetapi kegunaannya dikonfigurasi sebagai Non Unit.",
+        sections: [
+          {
+            type: "table",
+            title: "Kegunaan Non Unit",
+            columns: ["Kegunaan", "Contoh", "Catatan"],
+            rows: [
+              ["Pekerjaan proyek tanpa kavling", "Pekerjaan kawasan, infrastruktur, fasilitas umum, atau pekerjaan proyek lain yang tidak menunjuk unit tertentu.", "Pilih sesuai kegunaan yang tersedia untuk departemen."],
+              ["Dokumen umum selain unit", "Permohonan atau proses administrasi yang memakai alur khusus tanpa data kavling.", "Tidak menghasilkan rekap adendum atau kode produksi Unit."],
+              ["Cabang tanpa proyek", "Pengajuan non-unit dari KC/KCP yang belum memiliki master proyek.", "Nomor surat memakai kode proyek virtual 000."],
+            ],
+          },
+          {
+            type: "callout",
+            title: "Non Unit berbeda dari Non Aset",
+            description: "Non Unit menjelaskan bahwa proses tidak memakai kavling/alokasi unit. Non Aset menjelaskan bahwa kebutuhan tidak dicatat sebagai aset. Jika keduanya terasa cocok, ikuti kegunaan form yang ditetapkan admin atau konfirmasikan klasifikasinya sebelum memesan nomor.",
+            tone: "info",
+          },
+        ],
+      },
+      {
+        type: "table",
+        title: "Perbandingan empat kategori",
+        columns: ["Kategori", "Fokus", "Proyek", "Kavling", "Rekomendasi aset", "Contoh singkat"],
+        rows: [
+          ["Aset", "Inventaris/aset perusahaan", "Mengikuti konteks kantor", "Tidak", "Dapat tersedia", "Komputer inventaris"],
+          ["Non Aset", "Barang/jasa dan biaya operasional", "Mengikuti konteks kantor", "Tidak", "Tidak", "Sewa alat atau banner"],
+          ["Unit", "Order bangun dan unit properti", "Wajib", "Wajib dialokasikan", "Tidak", "Pembangunan 3 unit"],
+          ["Non Unit", "Proses tanpa alokasi unit", "Sesuai kegunaan; dapat memakai 000", "Tidak", "Tidak", "Pekerjaan kawasan tanpa kavling"],
+        ],
+      },
+      {
+        type: "troubleshooting",
+        title: "Jika kategori tidak sesuai",
+        items: [
+          {
+            problem: "Form atau kegunaan yang dicari tidak muncul",
+            solution: "Kembali ke klasifikasi dokumen dan pilih kategori yang benar. Jika tetap tidak tersedia, admin perlu memeriksa kategori, departemen pengaju, dan status aktif kegunaan form.",
+          },
+          {
+            problem: "Unit tidak dapat dipilih",
+            solution: "Kategori Unit hanya tersedia untuk departemen yang diizinkan dan tetap membutuhkan proyek dengan data unit yang dapat dimuat.",
+          },
+          {
+            problem: "Sudah mendapatkan nomor tetapi kategori salah",
+            solution: "Batalkan draft agar nomor tercatat VOID, lalu buat pengajuan baru dengan kategori yang benar. Jangan memaksakan form dari kategori lain.",
+          },
+          {
+            problem: "Bingung memilih Non Aset atau Non Unit",
+            solution: "Gunakan Non Aset untuk kebutuhan operasional/barang-jasa non aset. Gunakan Non Unit hanya ketika kegunaan proses tersebut memang disiapkan tanpa alokasi unit.",
           },
         ],
       },
@@ -2602,33 +2810,46 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
   },
   {
     id: "deploy-production",
-    title: "Deploy production",
+    title: "Deploy staging dan production",
     menu: "Operasional",
     audience: "troubleshooting",
     icon: Database,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Panduan deploy production dari Docker context server tanpa merestart service yang tidak berubah.",
+    summary: "Panduan deploy SIGAP dengan aplikasi, database, storage, dan datasource yang terpisah per environment.",
     whenToUse: [
       "Mendeploy perubahan frontend, halaman dokumentasi, atau server aplikasi utama.",
-      "Memastikan deploy memakai `.env.production` untuk interpolasi environment Compose.",
+      "Memastikan deployment staging tidak membaca database, storage, atau datasource production dan sebaliknya.",
+      "Memastikan deploy memakai file env dan nama project Compose yang sesuai.",
       "Memutuskan apakah PDF worker perlu ikut diredeploy.",
     ],
     steps: [
       "Pastikan perubahan sudah dibuild atau sudah siap dideploy dari workspace.",
-      "Untuk app utama, jalankan command deploy dengan Docker context `ubuntu-server` dan `--env-file .env.production`.",
+      "Pilih compose staging untuk domain testing atau compose production untuk domain production.",
+      "Jalankan command dengan Docker context `ubuntu-server`, nama project `-p`, dan file env yang sesuai.",
       "Cek status container `agenda-flow-prod` sampai healthy.",
       "Buka domain production atau route yang berubah untuk pemeriksaan.",
       "Redeploy worker PDF hanya jika memang ada perubahan worker/runtime PDF.",
     ],
     examples: [
       "Perubahan dokumentasi `/docs` cukup deploy app utama, tidak perlu deploy PDF worker.",
+      "Domain testing memakai `docker-compose.staging.yml`; environment Marison terkunci ke staging.",
+      "Domain production memakai `docker-compose.prod.yml`; environment Marison terkunci ke production.",
+      "Production dibuka melalui `https://sigap.marisoncloud.com`, sedangkan staging melalui `https://sigap.marison-testing.biz.id`.",
+      "Staging memiliki project Supabase, storage, dan worker PDF sendiri tanpa data transaksi production.",
+      "Production memakai origin publik melalui Caddy; staging tetap melalui Cloudflare Tunnel.",
+      "Pengembangan lokal dengan `npm run dev` menjalankan Vite dan BFF lokal bersama-sama, memakai `.env.local`, serta tetap menggunakan Supabase dan datasource Marison staging.",
       "Perubahan `server.mjs` deploy app utama karena container app yang menjalankan server HTTP.",
       "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
     ],
     troubleshooting: [
-      "Jika container restart karena storage kosong, pastikan command memakai `--env-file .env.production`.",
-      "Jika route publik masih lama, cek health container, Cloudflare tunnel, dan cache browser.",
+      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dan production memakai `.env.production`.",
+      "Jika datasource salah environment, periksa compose yang dipakai dan nilai `MARISON_DEPLOYMENT_ENVIRONMENT` di container.",
+      "Jika login lokal menampilkan 502 atau 403, restart `npm run dev` dan pastikan port 3010 tidak dipakai proses lain. Endpoint `/api` development harus menuju BFF lokal, bukan domain staging publik.",
+      "Jika tautan email membuka domain yang salah, periksa `APP_PUBLIC_URL` pada container aktif; nilai ini dikunci oleh file Compose.",
+      "Jika route production gagal, cek proxied A record, port forward 80/443, sertifikat Caddy, dan upstream `10.10.10.246:3010`.",
+      "Jika route staging gagal, cek health container, Cloudflare Tunnel, dan cache browser.",
+      "Pada jaringan multi-WAN, DDNS harus mengambil alamat WAN inbound dari router; IP keluar server tidak boleh dipakai sebagai sumber DDNS.",
       "Jika PDF baru tidak diproses setelah deploy app utama, cek apakah worker memang perlu redeploy atau cukup worker yang sedang running.",
     ],
     sections: [
@@ -2638,12 +2859,16 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         columns: ["Kebutuhan", "Command"],
         rows: [
           [
-            "Deploy aplikasi utama",
-            "docker --context ubuntu-server compose -f docker-compose.prod.yml --env-file .env.production up -d --build",
+            "Deploy aplikasi staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build",
+          ],
+          [
+            "Deploy aplikasi production",
+            "docker --context ubuntu-server compose -p agenda-flow-production -f docker-compose.prod.yml --env-file .env.production up -d --build",
           ],
           [
             "Deploy PDF worker",
-            "docker --context ubuntu-server compose -f docker-compose.worker.yml --env-file .env.production up -d --build",
+            "docker --context ubuntu-server compose -p agenda-flow-production-worker -f docker-compose.worker.yml --env-file .env.production up -d --build",
           ],
           [
             "Deploy External API",
@@ -2669,6 +2894,52 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.18.0",
+    date: "21 Juli 2026",
+    changes: [
+      "Mengurangi penggunaan PostgREST dengan memisahkan daftar monitoring yang ringan dari detail dokumen yang dimuat saat dibuka.",
+      "Menambahkan pagination server-side pada Status Pengajuan dan Monitoring Admin agar browser tidak mengambil seluruh histori surat.",
+      "Memindahkan perhitungan ringkasan pengajuan ke agregasi database sehingga dashboard hanya menerima empat angka.",
+      "Menggabungkan enam query badge menjadi satu RPC attention yang ringkas.",
+      "Membatasi data kalender ke bulan yang sedang dilihat dan menghapus subscription realtime halaman yang tumpang tindih.",
+      "Menambahkan idle backoff pada worker PDF agar antrean kosong tidak memanggil database setiap dua detik terus-menerus.",
+      "Memperbarui dependency brace-expansion dan js-yaml ke patch aman pada seluruh jalur tooling dan generator Excel/PDF.",
+      "Menambahkan panduan terpadu kategori Aset, Non Aset, Unit, dan Non Unit beserta kegunaan, contoh, alur, dan cara memilih kategori yang tepat.",
+      "Memperbaiki login development dengan menjalankan Vite dan BFF lokal bersama-sama serta mempertahankan validasi same-origin pada proxy localhost.",
+      "Menyematkan logo Marison langsung pada email reset kata sandi agar gambar tetap tampil saat email dikirim dari lokal, staging, maupun production.",
+      "Menyiapkan akun uji staging dengan nama riil, email berbasis nama pada domain staging.test, password default staging, dan sinkronisasi identitas Auth dengan profil.",
+      "Menyinkronkan badge sidebar secara langsung saat tugas approval atau pemeriksaan berubah melalui stream SSE yang sama.",
+      "Menormalkan nomor kode produksi Unit menjadi minimal tiga digit pada template Excel, import, autosave, detail, PDF, dan email.",
+      "Memperbaiki finalisasi pemeriksaan Unit agar alokasi kavling tersimpan atomik di database, termasuk backfill data lama yang sebelumnya hanya tersimpan di draft pemeriksa.",
+      "Mengaktifkan pengiriman outbound ke API Marison staging setelah surat selesai ditandatangani untuk kategori Aset, Unit, dan Non Unit.",
+      "Menambahkan pencatatan hasil pengiriman Marison pada snapshot surat agar pengiriman sukses tidak dikirim ulang dan kegagalan punya alasan yang bisa diaudit.",
+      "Menjaga credential dan HMAC API Marison tetap di server; browser hanya memanggil endpoint internal SIGAP setelah approval final.",
+      "Memperbaiki submit draft registrasi melalui validasi server dan ID reservasi nomor milik draft, sehingga draft milik user sendiri tidak gagal karena pencarian nomor yang ambigu.",
+      "Memperbaiki sesi registrasi dengan cookie HttpOnly yang lebih ringkas dan penerusan JWT user yang konsisten, sehingga validasi kegunaan serta konfirmasi akhir draft tidak lagi gagal karena sesi kosong.",
+      "Memperbaiki pendaftaran Aset dengan rekomendasi agar reservasi nomor rekomendasi dibuat atas sesi pemohon lalu dipindahkan saat petugas IT mengklaim tugas, tanpa melonggarkan validasi kepemilikan nomor.",
+      "Memperbaiki modal detail Status Pengajuan agar status dihitung dari data signature lengkap dan halaman tidak menjadi kosong ketika data ringkas digantikan respons detail.",
+    ],
+  },
+  {
+    version: "v1.17.0",
+    date: "20 Juli 2026",
+    changes: [
+      "Memisahkan datasource Marison berdasarkan deployment: staging selalu memakai API staging dan production selalu memakai API production.",
+      "Mengunci environment melalui Docker Compose agar tidak dapat berubah karena konfigurasi database atau tindakan dari UI.",
+      "Mengubah halaman Integrasi Marison menjadi status endpoint dan tes koneksi environment aktif khusus admin.",
+      "Menghapus switch environment berbasis OTP, subscription realtime pengaturan environment, serta fallback credential `MARISON_EXTERNAL_*`.",
+      "Menambahkan `docker-compose.staging.yml` untuk deployment domain testing yang terpisah dari container production.",
+      "Menetapkan `sigap.marisoncloud.com` sebagai domain production dan mempertahankan `sigap.marison-testing.biz.id` sebagai domain staging.",
+      "Mengunci URL publik pada masing-masing deployment agar tautan email, reset password, dan request API tidak silang environment.",
+      "Menetapkan pengembangan lokal melalui `npm run dev` ke datasource staging dan domain staging.",
+      "Membuat project Supabase staging terpisah dengan schema production, master/config terkontrol, kandidat user dimasking, dan tanpa data transaksi production.",
+      "Memisahkan storage serta PDF worker staging agar file pengujian tidak masuk ke storage production.",
+      "Mengubah production dari Cloudflare Tunnel menjadi proxied A record menuju origin publik dan reverse proxy Caddy.",
+      "Mempertahankan Cloudflare Tunnel hanya untuk staging serta menghapus hostname production dari ingress Tunnel.",
+      "Menambahkan nama project Compose yang eksplisit agar deploy staging dan production tidak saling menghapus sebagai orphan.",
+    ],
+  },
   {
     version: "v1.16.0",
     date: "15 Juli 2026",

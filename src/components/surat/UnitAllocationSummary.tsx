@@ -3,6 +3,7 @@ import { formatSummaryValue } from "@/components/surat/request-summary";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { cn } from "@/lib/utils";
 import { parseRupiahInteger } from "@/lib/rupiah";
+import { buildProductionCode } from "@/lib/production-code";
 
 type UnitAllocationSummaryProps = {
   units: unknown;
@@ -59,10 +60,9 @@ const getProjectLabel = (project: unknown) => {
 };
 
 const getProductionCode = (detail: Record<string, unknown>) => {
-  const serial = String(detail.production_serial || "").trim();
   const block = String(detail.production_block || "").trim();
   const date = formatDate(detail.production_date);
-  return [serial, "UAI", "PRC", block, date].filter(Boolean).join("/");
+  return buildProductionCode({ serial: detail.production_serial, block, date });
 };
 
 export function UnitAllocationSummary({ units, project, requestedCount, compact, className }: UnitAllocationSummaryProps) {

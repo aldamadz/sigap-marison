@@ -23,10 +23,12 @@ export type EmailSettingsConfig = {
   link_ttl_hours: number;
 };
 
+const runtimeAppUrl = typeof window !== "undefined" ? window.location.origin : "http://localhost:8080";
+
 export const defaultEmailSettings: EmailSettingsConfig = {
   enabled: true,
   inherit_global: true,
-  app_url: "https://sigap.marison-testing.biz.id",
+  app_url: runtimeAppUrl,
   recipients: {
     user: true,
     department: true,
@@ -55,7 +57,7 @@ export const normalizeEmailSettings = (value: any): EmailSettingsConfig => {
   return {
     enabled: raw.enabled !== false,
     inherit_global: raw.inherit_global !== false,
-    app_url: String(raw.app_url || defaultEmailSettings.app_url).trim().replace(/\/+$/, ""),
+    app_url: String(runtimeAppUrl || raw.app_url || defaultEmailSettings.app_url).trim().replace(/\/+$/, ""),
     recipients: {
       user: raw.recipients?.user !== false,
       department: raw.recipients?.department !== false,

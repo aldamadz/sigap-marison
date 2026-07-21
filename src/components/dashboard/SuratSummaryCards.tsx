@@ -1,22 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from "@/lib/supabase";
 import { CheckCircle2, Clock, XCircle, Inbox, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { suratMonitoringService } from '@/services/surat-monitoring.service';
 
 // ── Status resolver — identik dengan MonitoringPage ───────────────────────────
-type DocStatusType = 'PROSES' | 'SELESAI' | 'DITOLAK';
-
-const resolveStatusType = (surat: any, sigs: any[]): DocStatusType => {
-  const hasRejectedSig = sigs.some((s: any) => s.status === 'REJECTED');
-  const allSigned = sigs.length > 0 && sigs.every((s: any) => s.is_signed);
-
-  if (hasRejectedSig || surat.status === 'REJECTED') return 'DITOLAK';
-  if (allSigned || surat.status === 'DONE') return 'SELESAI';
-  return 'PROSES';
-};
-
 const CARDS = [
   {
     key: 'total',
@@ -74,32 +63,8 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['surat-stats-dashboard', dateFrom?.toISOString(), dateTo?.toISOString()],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return null;
-
-      let q = supabase
-        .from('surat_registrasi')
-        .select('id, status, surat_signatures ( is_signed, status )')
-        .eq('created_by', session.user.id);
-
-      if (dateFrom) q = q.gte('created_at', dateFrom.toISOString());
-      if (dateTo)   q = q.lte('created_at', dateTo.toISOString());
-
-      const { data, error } = await q;
-      if (error) throw error;
-
-      let selesai = 0, proses = 0, ditolak = 0;
-      for (const s of data ?? []) {
-        const sigs = (s.surat_signatures ?? []) as any[];
-        const type = resolveStatusType(s, sigs);
-        if      (type === 'SELESAI') selesai++;
-        else if (type === 'DITOLAK') ditolak++;
-        else                         proses++;
-      }
-
-      return { total: (data ?? []).length, selesai, proses, ditolak };
-    },
+    queryFn: () => suratMonitoringService.getMyStats(dateFrom, dateTo),
+    staleTime: 30_000,
   });
 
   if (isLoading) return (

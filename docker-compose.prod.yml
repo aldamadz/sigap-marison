@@ -1,10 +1,14 @@
+name: agenda-flow-production
+
 services:
   agenda-flow:
     build:
       context: .
       dockerfile: dockerfile
       args:
-        VITE_APP_PUBLIC_URL: "${VITE_APP_PUBLIC_URL}"
+        VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
+        VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
+        VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
     image: agenda-flow:production
     container_name: agenda-flow-prod
     restart: always
@@ -16,13 +20,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: "80"
-      SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
-      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
-      MARISON_EXTERNAL_BASE_URL: "${MARISON_EXTERNAL_BASE_URL:-https://external.marisonregency.id/api}"
-      MARISON_EXTERNAL_CLIENT_ID: "${MARISON_EXTERNAL_CLIENT_ID:-}"
-      MARISON_EXTERNAL_CLIENT_SECRET: "${MARISON_EXTERNAL_CLIENT_SECRET:-}"
-      MARISON_DEFAULT_ENVIRONMENT: "${MARISON_DEFAULT_ENVIRONMENT:-staging}"
-      MARISON_ENV_SWITCH_ADMIN_EMAILS: "${MARISON_ENV_SWITCH_ADMIN_EMAILS:-}"
+      APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
+      VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
+      SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.production}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in .env.production}"
+      MARISON_DEPLOYMENT_ENVIRONMENT: "production"
       MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
       MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
       MARISON_STAGING_CLIENT_SECRET: "${MARISON_STAGING_CLIENT_SECRET:-}"

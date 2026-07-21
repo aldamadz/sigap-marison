@@ -16,6 +16,8 @@ describe("SIGAP browser BFF session boundary", () => {
     expect(client).toContain("storage.removeItem(key)");
     expect(client).toContain("/api/auth/session");
     expect(client).toContain("/api/bff/query");
+    expect(client).toContain("sessionLoadError = normalizeError(error, 'Gagal memeriksa sesi login')");
+    expect(client).toContain("return { data: { session }, error: sessionLoadError }");
   });
 
   it("stores the real Supabase session in an encrypted HttpOnly same-site cookie", () => {
@@ -27,7 +29,12 @@ describe("SIGAP browser BFF session boundary", () => {
     expect(server).toContain('"SameSite=Lax"');
     expect(server).toContain('"__Host-sigap_session"');
     expect(server).toContain("createUserSupabaseClient(session.access_token)");
+    expect(server).toContain("accessToken: async () => accessToken");
+    expect(server).not.toContain('supabase.rpc("create_surat_registrasi_for_actor"');
     expect(server).toContain("assertSameOrigin(req)");
+    expect(server).toContain("compactSessionUser(session.user)");
+    expect(server).toContain('Buffer.byteLength(cookie, "utf8") > 3800');
+    expect(server).not.toContain("user: session.user,\n}" );
   });
 
   it("does not expose arbitrary private storage through the generic BFF facade", () => {

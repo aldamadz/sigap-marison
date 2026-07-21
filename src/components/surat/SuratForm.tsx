@@ -310,6 +310,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
   const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);
+  const [activeDraftReservationId, setActiveDraftReservationId] = useState<string | null>(null);
   const [activeDrafts, setActiveDrafts]           = useState<SuratRegistrationDraft[]>([]);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [draftToRestore, setDraftToRestore]       = useState<SuratRegistrationDraft | null>(null);
@@ -1615,6 +1616,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
     setActiveDraftId(draftToRestore.id);
+    setActiveDraftReservationId(draftToRestore.reservation_id);
     setJudulForDisplay(String(restoredFormData.judul_surat || ""));
     setDraftSaveState("saved");
     setDraftToRestore(null);
@@ -1958,6 +1960,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       }
       setGeneratedNoSurat(res.fullNumber);
       setActiveDraftId(draft.id);
+      setActiveDraftReservationId(draft.reservation_id);
       setDraftSaveState("saved");
       setSearchParams({
         draft: draft.id,
@@ -1996,6 +1999,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       else await suratService.cancelRegistration(generatedNoSurat);
       setGeneratedNoSurat(null);
       setActiveDraftId(null);
+      setActiveDraftReservationId(null);
       setManualTitleOverride(false);
       setManualPlaceOverride(false);
       setDraftAttachments([]);
@@ -2094,6 +2098,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setRegistrationSummaryOpen(false);
     setDatePickerOpen({});
     setActiveDraftId(null);
+    setActiveDraftReservationId(null);
     setDraftModalOpen(false);
     setDraftSaveState("idle");
     setLinkedDocumentContext(null);
@@ -2315,7 +2320,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         )
       );
       const result = await suratService.createRegistrasi(
-        { ...effectiveFormData, no_surat: generatedNoSurat, initial_attachment_meta: initialAttachmentMeta },
+        {
+          ...effectiveFormData,
+          no_surat: generatedNoSurat,
+          reservation_id: activeDraftReservationId,
+          draft_id: activeDraftId,
+          initial_attachment_meta: initialAttachmentMeta,
+        },
         signers,
         null,
         lampiranFiles,
@@ -2353,6 +2364,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         });
         onSuccess(result.no_surat, formData.judul_surat);
         resetForm();
+        setActiveDraftReservationId(null);
       }
     } catch (error: unknown) {
       toast({ variant: "destructive", title: "Gagal Menyimpan", description: error instanceof Error ? error.message : "Gagal menyimpan surat." });

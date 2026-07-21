@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { createContext, useContext, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { marisonIntegrationService, type MarisonEnvironmentStatus } from "@/services/marison-integration.service";
 
 type ContextValue = {
@@ -16,24 +15,11 @@ const MarisonEnvironmentContext = createContext<ContextValue>({
 });
 
 export function MarisonEnvironmentProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["marison-environment"],
     queryFn: marisonIntegrationService.getStatus,
-    staleTime: 60_000,
+    staleTime: Number.POSITIVE_INFINITY,
   });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel("marison-environment-realtime")
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "system_email_settings" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["marison-environment"] });
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   return (
     <MarisonEnvironmentContext.Provider value={{

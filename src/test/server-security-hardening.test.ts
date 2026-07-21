@@ -19,6 +19,13 @@ describe("server security hardening", () => {
     expect(server).toContain('res.setHeader("Retry-After"');
   });
 
+  it("embeds the password reset logo instead of loading it from the app URL", () => {
+    expect(server).toContain('src="cid:${PASSWORD_RESET_LOGO_CID}"');
+    expect(server).toContain('cid: PASSWORD_RESET_LOGO_CID');
+    expect(server).toContain('contentDisposition: "inline"');
+    expect(server).not.toContain('`${appUrl}/logo-marison.png`');
+  });
+
   it("only serves static application files over GET and HEAD", () => {
     expect(server).toContain('if (!["GET", "HEAD"].includes(req.method || ""))');
     expect(server).toContain("res.writeHead(405");
@@ -31,11 +38,16 @@ describe("server security hardening", () => {
     expect(server).not.toContain("configuredSigningSecret");
   });
 
-  it("allows development and production to use separate Marison API hosts", () => {
+  it("locks staging and production to separate Marison API environments", () => {
     const localCompose = readFileSync(join(process.cwd(), "docker-compose.yml"), "utf8");
+    const stagingCompose = readFileSync(join(process.cwd(), "docker-compose.staging.yml"), "utf8");
     const productionCompose = readFileSync(join(process.cwd(), "docker-compose.prod.yml"), "utf8");
 
-    expect(server).toContain("process.env.MARISON_EXTERNAL_BASE_URL || source.base_url");
+    expect(server).not.toContain("MARISON_EXTERNAL_BASE_URL");
+    expect(server).toContain("MARISON_DEPLOYMENT_ENVIRONMENT");
+    expect(localCompose).toContain('MARISON_DEPLOYMENT_ENVIRONMENT: "staging"');
+    expect(stagingCompose).toContain('MARISON_DEPLOYMENT_ENVIRONMENT: "staging"');
+    expect(productionCompose).toContain('MARISON_DEPLOYMENT_ENVIRONMENT: "production"');
     expect(localCompose).toContain("https://marison-external.digivasi.com/api");
     expect(productionCompose).toContain("https://external.marisonregency.id/api");
   });

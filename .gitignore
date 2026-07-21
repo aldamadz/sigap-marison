@@ -14,12 +14,15 @@ dist-ssr
 .env
 .env.server
 .env.production
+.env.staging
+.env.staging.bootstrap
 
 # Local build/cache output
 *.tsbuildinfo
 .vite/
 coverage/
 playwright-report/
+outputs/
 
 # Temporary/generated verification artifacts
 tmp/

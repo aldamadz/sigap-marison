@@ -58,9 +58,17 @@ import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { formatRupiahInput, normalizeRupiahDigits } from "@/lib/rupiah";
 import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/components/surat/revision-utils";
 import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
+import { normalizeProductionSerial } from "@/lib/production-code";
+import { useAttention } from "@/providers/AttentionProvider";
+
+const normalizeAllocationDetailForPersistence = (detail: Record<string, any> = {}) => ({
+  ...detail,
+  production_serial: normalizeProductionSerial(detail.production_serial),
+});
 
 export default function InboxPage() {
   const queryClient = useQueryClient();
+  const { refetch: refetchAttention } = useAttention();
   const appDialog = useAppDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
@@ -404,7 +412,9 @@ export default function InboxPage() {
         allocated_project: selectedProject || null,
         allocated_units: selectedUnits.map((unit: any) => ({
           ...unit,
-          allocation_detail: getAllocationDetailMap(item)?.[unit.value] || unit.allocation_detail || {},
+          allocation_detail: normalizeAllocationDetailForPersistence(
+            getAllocationDetailMap(item)?.[unit.value] || unit.allocation_detail || {},
+          ),
         })),
         allocated_unit_count: selectedUnits.length,
       } : {}),
@@ -601,7 +611,9 @@ const handleApprove = async (item: any) => {
           project: selectedProject,
           units: selectedUnits.map((unit: any) => ({
             ...unit,
-            allocation_detail: getAllocationDetailMap(item)?.[unit.value] || {},
+            allocation_detail: normalizeAllocationDetailForPersistence(
+              getAllocationDetailMap(item)?.[unit.value] || {},
+            ),
           })),
         }} : {}),
       }
@@ -647,6 +659,7 @@ const handleApprove = async (item: any) => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
       queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+      refetchAttention(),
     ]);
   } catch (error: any) {
     console.error("Approve Error:", error);
@@ -687,6 +700,7 @@ const handleApprove = async (item: any) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+        refetchAttention(),
       ]);
     } catch (error: any) {
       console.error("Reject Error:", error);
@@ -754,7 +768,9 @@ const handleApprove = async (item: any) => {
             project: getAllocationProject(item),
           units: getSelectedAllocationUnits(item).map((unit: any) => ({
               ...unit,
-              allocation_detail: getAllocationDetailMap(item)?.[unit.value] || {},
+              allocation_detail: normalizeAllocationDetailForPersistence(
+                getAllocationDetailMap(item)?.[unit.value] || {},
+              ),
             })),
           },
         } : {}),
@@ -785,6 +801,7 @@ const handleApprove = async (item: any) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+        refetchAttention(),
       ]);
     } catch (error: any) {
       toast.error(error.message || "Gagal menyimpan pemeriksaan data.");
@@ -1070,6 +1087,7 @@ const handleApprove = async (item: any) => {
         queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
+        refetchAttention(),
       ]);
       setRevisionDialogItem(null);
     } catch (error: any) {
@@ -1153,7 +1171,7 @@ const handleApprove = async (item: any) => {
         Kavling: unit.label || unit.value,
         "Struktur Atas": detail.struktur_atas ? formatRupiahInput(detail.struktur_atas) : "",
         "Struktur Bawah": detail.struktur_bawah ? formatRupiahInput(detail.struktur_bawah) : "",
-        "Nomor Kode Produksi": detail.production_serial || "",
+        "Nomor Kode Produksi": normalizeProductionSerial(detail.production_serial),
         "Blok": detail.production_block || "",
         "Tanggal Produksi": detail.production_date ? formatDatePickerDisplay(detail.production_date) : "",
       };
@@ -1208,7 +1226,7 @@ const handleApprove = async (item: any) => {
           ...((allocationDetails[item.id] || {})[unitValue] || unit.allocation_detail || {}),
           ...(strukturAtasIndex >= 0 ? { struktur_atas: normalizeRupiahDigits(row[strukturAtasIndex] || "") } : {}),
           ...(strukturBawahIndex >= 0 ? { struktur_bawah: normalizeRupiahDigits(row[strukturBawahIndex] || "") } : {}),
-          ...(serialIndex >= 0 ? { production_serial: String(row[serialIndex] || "").trim() } : {}),
+          ...(serialIndex >= 0 ? { production_serial: normalizeProductionSerial(row[serialIndex]) } : {}),
           ...(blockIndex >= 0 ? { production_block: String(row[blockIndex] || "").trim() } : {}),
           ...(dateIndex >= 0 ? { production_date: normalizeImportDate(row[dateIndex]) } : {}),
         };
@@ -1583,7 +1601,18 @@ const handleApprove = async (item: any) => {
                         <td className="border-r border-border px-2 py-2">
                           <Input
                             value={detail.production_serial || ""}
-                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_serial", event.target.value)}
+                            onChange={(event) => updateAllocationDetail(
+                              item.id,
+                              unit.value,
+                              "production_serial",
+                              event.target.value.replace(/\D/g, ""),
+                            )}
+                            onBlur={(event) => updateAllocationDetail(
+                              item.id,
+                              unit.value,
+                              "production_serial",
+                              normalizeProductionSerial(event.target.value),
+                            )}
                             placeholder="001"
                             aria-label={`Nomor kode produksi ${unit.label}`}
                             className="h-11 font-mono text-sm"
@@ -1621,7 +1650,7 @@ const handleApprove = async (item: any) => {
                           </Popover>
                         </td>
                         <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                          {detail.production_serial || "[001]"}/UAI/PRC/{detail.production_block || "[4.1]"}/{detail.production_date ? formatDatePickerDisplay(detail.production_date) : "[14/01/2026]"}
+                          {normalizeProductionSerial(detail.production_serial) || "[001]"}/UAI/PRC/{detail.production_block || "[4.1]"}/{detail.production_date ? formatDatePickerDisplay(detail.production_date) : "[14/01/2026]"}
                         </td>
                       </tr>
                     );
@@ -1813,7 +1842,7 @@ const handleApprove = async (item: any) => {
           totalAtas += atas;
           totalBawah += bawah;
           const code = detail.production_serial && detail.production_block && detail.production_date
-            ? `${detail.production_serial}/UAI/PRC/${detail.production_block}/${new Date(detail.production_date).toLocaleDateString("id-ID")}`
+            ? `${normalizeProductionSerial(detail.production_serial)}/UAI/PRC/${detail.production_block}/${new Date(detail.production_date).toLocaleDateString("id-ID")}`
             : "-";
           return [
             index + 1,
@@ -1988,6 +2017,7 @@ const handleApprove = async (item: any) => {
         queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
+        refetchAttention(),
       ]);
     } catch (error: any) {
       toast.error(error.message || "Gagal menyelesaikan perbaikan.");

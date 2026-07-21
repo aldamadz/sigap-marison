@@ -16,7 +16,7 @@ type UploadResult = {
 
 export const appStorageService = {
   async upload({ bucket, path, file, upsert = false }: UploadInput): Promise<UploadResult> {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession({ force: true });
     if (!session) throw new Error("Tidak terautentikasi");
 
     const formData = new FormData();

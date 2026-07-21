@@ -3,8 +3,12 @@ dist
 dist-ssr
 .git
 .vscode
-.env.server
-.env.production
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.staging.example
+!.env.staging.bootstrap.example
 *.log
 npm-debug.log*
 yarn-debug.log*

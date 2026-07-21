@@ -35,12 +35,20 @@ export default function CalendarPage() {
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
   const isAllTeamSelected = selectedUserId === 'all';
   const effectiveUserId = selectedUserId && selectedUserId !== 'all' ? selectedUserId : user?.id;
+  const calendarRange = useMemo(() => {
+    const from = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    from.setDate(from.getDate() - 7);
+    const to = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+    to.setDate(to.getDate() + 7);
+    return { from, to };
+  }, [currentMonth]);
 
   // ── Fetch agendas ─────────────────────────────────────────────────────────
   const { data: agendas = [], isLoading } = useQuery({
-    queryKey: ['agendas', user?.id, selectedUserId || user?.id, selectedOfficeId || 'all_offices'],
-    queryFn: () => getAgendasForParent(user.id, selectedUserId || user.id, selectedOfficeId),
+    queryKey: ['agendas', user?.id, selectedUserId || user?.id, selectedOfficeId || 'all_offices', currentMonth.getFullYear(), currentMonth.getMonth()],
+    queryFn: () => getAgendasForParent(user.id, selectedUserId || user.id, selectedOfficeId, calendarRange),
     enabled: !!user?.id,
+    staleTime: 30_000,
   });
 
   const { data: activeProfile } = useQuery({
@@ -58,16 +66,6 @@ export default function CalendarPage() {
   });
 
   // ── Realtime sync ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const channel = supabase
-      .channel('agendas-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['agendas'] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [queryClient]);
-
   // ── Save / update mutation ────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async (data: Partial<Agenda>) => {

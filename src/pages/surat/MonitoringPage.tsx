@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useDeferredValue, useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from "@/lib/supabase";
 import {
   Search, Loader2, Info, Eye,
   Clock, AlertCircle, CheckCircle2, User, ArrowUpRight,
@@ -29,6 +28,7 @@ import {
 import { buildRegistrationSummaryData } from '@/components/surat/registration-summary-data';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+import { suratMonitoringService } from '@/services/surat-monitoring.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -147,6 +147,8 @@ const MonitoringPage = () => {
   const isAdminUser = ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
+  const [page, setPage] = useState(1);
+  const deferredSearch = useDeferredValue(search);
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
   const selectedSuratId = selectedSurat?.id || "";
 
@@ -174,29 +176,45 @@ const MonitoringPage = () => {
     selectedSurat.status === 'MENUNGGU_PERBAIKAN'
   );
 
-  const { data: allData = [], isLoading, error: queryError } = useQuery({
-    queryKey: ['surat-monitoring-list'],
+  const { data: pageData, isLoading, error: queryError } = useQuery({
+    queryKey: ['surat-monitoring-list', page, deferredSearch, statusFilter, user?.id],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("No active session");
-
-      const { data, error } = await supabase
-        .from('surat_registrasi')
-        .select(`
-          *,
-          surat_signatures (
-            id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan, signer_snapshot,
-            profiles:user_id ( full_name, job_title )
-          ),
-          surat_attachments ( id, file_url, file_name, file_type, file_size, requirement_label )
-        `)
-        .eq('created_by', session.user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data ?? [];
+      if (!user?.id) throw new Error("Sesi pengguna belum tersedia.");
+      return suratMonitoringService.getPage({
+        page,
+        search: deferredSearch,
+        status: statusFilter,
+        createdBy: user.id,
+      });
     },
+    enabled: Boolean(user?.id),
+    placeholderData: (previous) => previous,
+    staleTime: 20_000,
   });
+
+  const allData = pageData?.rows || [];
+  const totalPages = Math.max(1, Math.ceil((pageData?.count || 0) / (pageData?.pageSize || 24)));
+
+  const { data: monitoringStats } = useQuery({
+    queryKey: ['surat-stats-dashboard'],
+    queryFn: () => suratMonitoringService.getMyStats(),
+    staleTime: 30_000,
+  });
+
+  const { data: selectedDetail } = useQuery({
+    queryKey: ['surat-detail', selectedSuratId],
+    queryFn: () => suratMonitoringService.getDetail(selectedSuratId),
+    enabled: Boolean(selectedSuratId && isDetailOpen),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (selectedDetail) setSelectedSurat(selectedDetail);
+  }, [selectedDetail]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, statusFilter]);
 
   const getAttachments = (surat: any) => {
     const attachments = Array.isArray(surat?.surat_attachments) ? surat.surat_attachments : [];
@@ -249,16 +267,16 @@ const MonitoringPage = () => {
       {!isLoading && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
-            { label: 'Total Pengajuan', value: enriched.length, icon: <Inbox size={16} />, cls: 'text-foreground', bg: 'bg-muted/30' },
-            { label: 'Selesai',  value: enriched.filter(s => s._status.type === 'SELESAI').length,  icon: <CheckCircle2 size={16} />, cls: 'text-emerald-400', bg: 'bg-emerald-500/5' },
-            { label: 'Proses',   value: enriched.filter(s => s._status.type === 'PROSES').length, icon: <Clock size={16} />, cls: 'text-amber-400', bg: 'bg-amber-500/5' },
-            { label: 'Ditolak',  value: enriched.filter(s => s._status.type === 'DITOLAK').length,  icon: <XCircle size={16} />, cls: 'text-red-400', bg: 'bg-red-500/5' },
+            { label: 'Total Pengajuan', value: monitoringStats?.total ?? pageData?.count ?? 0, icon: <Inbox size={16} />, cls: 'text-foreground', bg: 'bg-muted/30' },
+            { label: 'Selesai', value: monitoringStats?.selesai ?? 0, icon: <CheckCircle2 size={16} />, cls: 'text-emerald-400', bg: 'bg-emerald-500/5' },
+            { label: 'Proses', value: monitoringStats?.proses ?? 0, icon: <Clock size={16} />, cls: 'text-amber-400', bg: 'bg-amber-500/5' },
+            { label: 'Ditolak', value: monitoringStats?.ditolak ?? 0, icon: <XCircle size={16} />, cls: 'text-red-400', bg: 'bg-red-500/5' },
           ].map(card => (
             <div key={card.label} className={cn("flex min-h-[124px] flex-col rounded-lg border border-border p-5", card.bg)}>
               <div className={cn("mb-3", card.cls)}>{card.icon}</div>
               <p className="text-xs font-semibold text-muted-foreground">{card.label}</p>
               <p className={cn("mt-1 text-3xl font-semibold tabular-nums", card.cls)}>{card.value}</p>
-              <p className="mt-0.5 text-xs font-medium text-muted-foreground">dari {enriched.length} pengajuan</p>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">dari {monitoringStats?.total ?? pageData?.count ?? 0} pengajuan</p>
             </div>
           ))}
         </div>
@@ -408,6 +426,32 @@ const MonitoringPage = () => {
         </div>
       )}
 
+      {!isLoading && (pageData?.count || 0) > (pageData?.pageSize || 24) && (
+        <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            Halaman {page} dari {totalPages} · {pageData?.count || 0} dokumen
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+              className="rounded-md border border-border px-3 py-2 text-xs font-semibold disabled:opacity-40"
+            >
+              Sebelumnya
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+              className="rounded-md border border-border px-3 py-2 text-xs font-semibold disabled:opacity-40"
+            >
+              Berikutnya
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* DETAIL MODAL */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="flex max-h-[94dvh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden border-border bg-card p-0 sm:w-[calc(100vw-2rem)]">
@@ -429,7 +473,9 @@ const MonitoringPage = () => {
 
             {/* Status badge */}
             {selectedSurat && (() => {
-              const st = selectedSurat._status as ResolvedStatus;
+              const detailSignatures = [...(selectedSurat.surat_signatures || [])]
+                .sort((a, b) => a.step_order - b.step_order);
+              const st = resolveStatus(selectedSurat, detailSignatures);
               return (
                 <div className={cn("flex items-center gap-2 px-4 py-3 rounded-xl border text-[10px] font-black uppercase", st.badgeClass)}>
                   {st.icon} {st.label} — {st.sublabel}

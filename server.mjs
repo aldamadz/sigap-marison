@@ -5,7 +5,7 @@ import { extname, isAbsolute, join, normalize, relative, resolve } from "node:pa
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -14,10 +14,11 @@ import sharp from "sharp";
 import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
 import { createPgdPreviewData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
 import { resolveTableHorizontalAlignment } from "./document-layout-rules.mjs";
+import { buildProductionCode } from "./production-code.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const port = Number(process.env.PORT || 80);
+const port = Number(process.env.PORT || process.env.APP_PORT || 80);
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -68,8 +69,6 @@ const passwordResetSendCooldowns = new Map();
 const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
-const marisonSwitchOtpRateLimits = new Map();
-const marisonSwitchChallenges = new Map();
 const marisonRealtimeClients = new Set();
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
@@ -78,20 +77,14 @@ const PASSWORD_RESET_MAX_PER_WINDOW = 6;
 const LOGIN_MAX_FAILURES_PER_IDENTITY = 8;
 const LOGIN_MAX_FAILURES_PER_IP = 30;
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const MARISON_SWITCH_OTP_TTL_MS = 5 * 60 * 1000;
-const MARISON_SWITCH_OTP_MAX_ATTEMPTS = 5;
-const MARISON_SWITCH_OTP_MAX_SENDS = 3;
-const MARISON_ENVIRONMENT_CACHE_MS = 5_000;
-
 const MARISON_ENVIRONMENTS = new Set(["staging", "production"]);
-const marisonDefaultEnvironment = MARISON_ENVIRONMENTS.has(process.env.MARISON_DEFAULT_ENVIRONMENT)
-  ? process.env.MARISON_DEFAULT_ENVIRONMENT
-  : process.env.NODE_ENV === "production" ? "production" : "staging";
-const marisonSwitchAdminEmails = new Set(String(process.env.MARISON_ENV_SWITCH_ADMIN_EMAILS || "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean));
-let marisonEnvironmentCache = null;
+const marisonDeploymentEnvironment = String(process.env.MARISON_DEPLOYMENT_ENVIRONMENT || "").trim().toLowerCase();
+if (!MARISON_ENVIRONMENTS.has(marisonDeploymentEnvironment)) {
+  throw new Error("MARISON_DEPLOYMENT_ENVIRONMENT must be staging or production.");
+}
+const marisonSubmissionDispatchEnabled = String(
+  process.env.MARISON_SUBMISSION_DISPATCH_ENABLED ?? (marisonDeploymentEnvironment === "staging" ? "true" : "false")
+).toLowerCase() === "true";
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -272,7 +265,7 @@ const recordRateLimit = (store, key, windowMs) => {
 const defaultEmailSettings = {
   enabled: true,
   inherit_global: true,
-  app_url: "https://sigap.marison-testing.biz.id",
+  app_url: process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "http://localhost:8080",
   recipients: {
     user: true,
     department: true,
@@ -298,7 +291,7 @@ const normalizeEmailSettings = (value) => {
   return {
     enabled: raw.enabled !== false,
     inherit_global: raw.inherit_global !== false,
-    app_url: String(raw.app_url || process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || defaultEmailSettings.app_url)
+    app_url: String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || raw.app_url || defaultEmailSettings.app_url)
       .trim()
       .replace(/\/+$/, ""),
     recipients: {
@@ -459,12 +452,26 @@ const clearedSessionCookie = () => [
   "Max-Age=0",
 ].filter(Boolean).join("; ");
 
-const setSessionCookie = (res, session) => res.setHeader("Set-Cookie", sessionCookie({
-  access_token: session.access_token,
-  refresh_token: session.refresh_token,
-  expires_at: session.expires_at,
-  user: session.user,
-}));
+const compactSessionUser = (user) => ({
+  id: user?.id,
+  email: user?.email || null,
+});
+
+const setSessionCookie = (res, session) => {
+  const cookie = sessionCookie({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_at: session.expires_at,
+    user: compactSessionUser(session.user),
+  });
+  // Browsers commonly reject cookies above 4096 bytes without exposing a useful error.
+  if (Buffer.byteLength(cookie, "utf8") > 3800) {
+    const err = new Error("Sesi login terlalu besar untuk disimpan dengan aman.");
+    err.status = 500;
+    throw err;
+  }
+  res.setHeader("Set-Cookie", cookie);
+};
 
 const publicSession = (session) => session ? {
   access_token: "cookie-session",
@@ -504,7 +511,7 @@ const createPublicSupabaseClient = () => createClient(supabaseUrl, supabasePubli
 });
 
 const createUserSupabaseClient = (accessToken) => createClient(supabaseUrl, supabasePublishableKey, {
-  global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  accessToken: async () => accessToken,
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
@@ -619,9 +626,10 @@ const handleBffQuery = async (req) => {
   assertSameOrigin(req);
   const session = requireCookieSession(req);
   const payload = await readJsonBody(req, 2 * 1024 * 1024);
-  const client = createUserSupabaseClient(session.access_token);
   const kind = payload?.kind === "rpc" ? "rpc" : "table";
   const name = assertBffIdentifier(payload?.name, kind === "rpc" ? "Nama RPC" : "Nama tabel");
+
+  const client = createUserSupabaseClient(session.access_token);
   let query = kind === "rpc"
     ? client.rpc(name, payload?.args || {}, payload?.options)
     : client.from(name);
@@ -775,9 +783,17 @@ const openBffRealtimeStream = async (req, res, url) => {
   res.on("close", cleanup);
 };
 
-const buildPasswordResetEmailHtml = ({ resetUrl, appUrl }) => {
+const PASSWORD_RESET_LOGO_CID = "marison-logo@sigap";
+const passwordResetLogoPath = [
+  join(distDir, "logo-marison.png"),
+  resolve("public", "logo-marison.png"),
+].find((candidate) => existsSync(candidate));
+
+const buildPasswordResetEmailHtml = ({ resetUrl }) => {
   const safeResetUrl = escapeHtml(resetUrl);
-  const safeLogoUrl = `${appUrl}/logo-marison.png`;
+  const logoHtml = passwordResetLogoPath
+    ? `<img src="cid:${PASSWORD_RESET_LOGO_CID}" width="76" alt="Marison Regency Group" style="display:block;width:76px;max-width:76px;height:auto;border:0;outline:none;text-decoration:none;">`
+    : `<div style="font-size:14px;font-weight:800;line-height:1.3;color:#2eaf35;">MARISON<br>REGENCY GROUP</div>`;
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#10201a;">
   <tr>
@@ -788,7 +804,7 @@ const buildPasswordResetEmailHtml = ({ resetUrl, appUrl }) => {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="width:86px;vertical-align:middle;padding-right:16px;">
-                  <img src="${safeLogoUrl}" width="76" alt="Marison Regency Group" style="display:block;width:76px;max-width:76px;height:auto;border:0;outline:none;text-decoration:none;">
+                  ${logoHtml}
                 </td>
                 <td style="vertical-align:middle;">
                   <div style="font-size:13px;font-weight:700;color:#2eaf35;letter-spacing:0.02em;">Marison - SIGAP</div>
@@ -887,7 +903,15 @@ const handlePasswordResetRequest = async (req) => {
       to: email,
       subject: "Reset Kata Sandi SIGAP",
       text: `Kami menerima permintaan reset kata sandi SIGAP.\n\nBuka link berikut untuk membuat kata sandi baru:\n${resetUrl}\n\nAbaikan email ini jika Anda tidak meminta reset kata sandi.`,
-      html: buildPasswordResetEmailHtml({ resetUrl, appUrl }),
+      html: buildPasswordResetEmailHtml({ resetUrl }),
+      attachments: passwordResetLogoPath
+        ? [{
+            filename: "logo-marison.png",
+            path: passwordResetLogoPath,
+            cid: PASSWORD_RESET_LOGO_CID,
+            contentDisposition: "inline",
+          }]
+        : [],
     });
     passwordResetSendCooldowns.set(requestKey, Date.now() + PASSWORD_RESET_SEND_COOLDOWN_MS);
   } catch (error) {
@@ -1349,13 +1373,6 @@ const consumeTemplatePreview = (token) => {
   return preview.pdf;
 };
 
-const isActiveSuratSignature = (signature) => {
-  const surat = Array.isArray(signature?.surat_registrasi)
-    ? signature.surat_registrasi[0]
-    : signature?.surat_registrasi;
-  return surat?.status === "PROSES" && Number(signature?.step_order) === Number(surat?.current_step);
-};
-
 const getAttentionStateForUser = async (userId) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
   if (!userId) {
@@ -1364,60 +1381,17 @@ const getAttentionStateForUser = async (userId) => {
     throw err;
   }
 
-  const [signerRes, verifierRes, revisionRes, recommendationRes, unreadRes, monitoringRes] = await Promise.all([
-    supabase
-      .from("surat_signatures")
-      .select("id, step_order, surat_registrasi!inner(id, current_step, status)")
-      .eq("user_id", userId)
-      .eq("is_signed", false),
-    supabase
-      .from("surat_signatures")
-      .select("id, step_order, verifier_snapshot, surat_registrasi!inner(id, current_step, status)")
-      .eq("is_signed", false)
-      .eq("verification_required", true)
-      .eq("verification_status", "pending")
-      .filter("verifier_snapshot", "cs", JSON.stringify([{ user_id: userId }])),
-    supabase
-      .from("surat_revision_events")
-      .select("id, target_type, target_user_ids, status")
-      .in("status", ["open", "awaiting_requester"])
-      .contains("target_user_ids", [userId]),
-    supabase
-      .from("surat_recommendation_tasks")
-      .select("id, status, claimed_by, candidate_snapshot")
-      .in("status", ["waiting", "claimed"])
-      .filter("candidate_snapshot", "cs", JSON.stringify([{ user_id: userId }])),
-    supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_read", false),
-    supabase
-      .from("surat_registrasi")
-      .select("id, updated_at, creator_seen_at")
-      .eq("created_by", userId)
-      .eq("status", "DONE"),
-  ]);
-
-  if (signerRes.error) throw signerRes.error;
-  if (verifierRes.error) throw verifierRes.error;
-  if (revisionRes.error && revisionRes.error.code !== "42P01") throw revisionRes.error;
-  if (recommendationRes.error && recommendationRes.error.code !== "42P01") throw recommendationRes.error;
-  if (unreadRes.error) throw unreadRes.error;
-  if (monitoringRes.error) throw monitoringRes.error;
-
-  const approvalCount = (signerRes.data || []).filter(isActiveSuratSignature).length;
-  const verificationCount = (verifierRes.data || []).filter(isActiveSuratSignature).length;
-  const revisionRows = revisionRes.data || [];
-  const revisionCount = revisionRows.filter((item) => item.target_type !== "requester").length;
-  const requesterRevisionCount = revisionRows.filter((item) => item.target_type === "requester").length;
-  const recommendationCount = (recommendationRes.data || []).filter((task) =>
-    task.status === "waiting" || task.claimed_by === userId
-  ).length;
-  const completedMonitoringCount = (monitoringRes.data || []).filter((item) =>
-    !item.creator_seen_at || new Date(item.updated_at) > new Date(item.creator_seen_at)
-  ).length;
-  const monitoringCount = completedMonitoringCount;
+  const { data, error } = await supabase.rpc("get_attention_state_for_user", {
+    p_user_id: userId,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  const approvalCount = Number(row?.approval_count || 0);
+  const verificationCount = Number(row?.verification_count || 0);
+  const revisionCount = Number(row?.revision_count || 0);
+  const requesterRevisionCount = Number(row?.follow_up_count || 0);
+  const recommendationCount = Number(row?.recommendation_count || 0);
+  const monitoringCount = Number(row?.monitoring_count || 0);
 
   return {
     approvalCount,
@@ -1425,7 +1399,7 @@ const getAttentionStateForUser = async (userId) => {
     revisionCount,
     recommendationCount,
     inboxCount: approvalCount + verificationCount + revisionCount,
-    unreadNotifications: unreadRes.count || 0,
+    unreadNotifications: Number(row?.unread_notifications || 0),
     monitoringCount,
     followUpCount: requesterRevisionCount,
     generatedAt: new Date().toISOString(),
@@ -1744,11 +1718,13 @@ const formatEmailProductionDate = (value) => {
 
 const buildEmailProductionCode = (unit) => {
   const detail = unit?.allocation_detail || {};
-  const serial = String(detail.production_serial || detail.kode_produksi_nomor || "").trim();
   const block = String(detail.production_block || detail.kode_produksi_blok || "").trim();
   const formattedDate = formatEmailProductionDate(detail.production_date || detail.kode_produksi_tanggal || "");
-  if (!serial && !block && !formattedDate) return unit?.raw?.production_code || "-";
-  return `${serial}/UAI/PRC/${block}/${formattedDate}`;
+  return buildProductionCode({
+    serial: detail.production_serial || detail.kode_produksi_nomor,
+    block,
+    date: formattedDate,
+  }) || unit?.raw?.production_code || "-";
 };
 
 const renderAllocatedUnitsEmailTable = (units, project) => {
@@ -2718,27 +2694,14 @@ const normalizeMarisonEnvironment = (value) => {
   return environment;
 };
 
-const getMarisonEnvironmentState = async ({ fresh = false } = {}) => {
-  if (!fresh && marisonEnvironmentCache?.expiresAt > Date.now()) return marisonEnvironmentCache;
-  const { data, error } = await supabase
-    .from("system_email_settings")
-    .select("config, updated_at, updated_by")
-    .eq("id", "marison_integration")
-    .maybeSingle();
-  if (error) throw error;
-  const environment = MARISON_ENVIRONMENTS.has(data?.config?.active_environment)
-    ? data.config.active_environment
-    : marisonDefaultEnvironment;
-  marisonEnvironmentCache = {
-    environment,
-    updatedAt: data?.updated_at || null,
-    updatedBy: data?.updated_by || null,
-    expiresAt: Date.now() + MARISON_ENVIRONMENT_CACHE_MS,
-  };
-  return marisonEnvironmentCache;
-};
+const getMarisonEnvironmentState = async () => ({
+  environment: marisonDeploymentEnvironment,
+  updatedAt: null,
+  updatedBy: null,
+  locked: true,
+});
 
-const getMarisonApiConfig = (environment, source = {}) => {
+const getMarisonApiConfig = (environment) => {
   const normalized = normalizeMarisonEnvironment(environment);
   const prefix = normalized === "staging" ? "MARISON_STAGING" : "MARISON_PRODUCTION";
   const defaultBaseUrl = normalized === "staging"
@@ -2746,14 +2709,14 @@ const getMarisonApiConfig = (environment, source = {}) => {
     : "https://external.marisonregency.id/api";
   return {
     environment: normalized,
-    baseUrl: String(process.env[`${prefix}_BASE_URL`] || process.env.MARISON_EXTERNAL_BASE_URL || source.base_url || defaultBaseUrl).replace(/\/+$/, ""),
-    clientId: process.env[`${prefix}_CLIENT_ID`] || process.env.MARISON_EXTERNAL_CLIENT_ID || "",
-    clientSecret: process.env[`${prefix}_CLIENT_SECRET`] || process.env.MARISON_EXTERNAL_CLIENT_SECRET || "",
+    baseUrl: String(process.env[`${prefix}_BASE_URL`] || defaultBaseUrl).replace(/\/+$/, ""),
+    clientId: process.env[`${prefix}_CLIENT_ID`] || "",
+    clientSecret: process.env[`${prefix}_CLIENT_SECRET`] || "",
   };
 };
 
 const getMarisonAccessToken = async (source, environment) => {
-  const config = getMarisonApiConfig(environment, source);
+  const config = getMarisonApiConfig(environment);
   const { baseUrl, clientId, clientSecret } = config;
   if (!clientId || !clientSecret) {
     const err = new Error(`Credential API Marison ${config.environment} belum dikonfigurasi di server.`);
@@ -2818,7 +2781,7 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
   const state = options.environment
     ? { environment: normalizeMarisonEnvironment(options.environment) }
     : await getMarisonEnvironmentState();
-  const config = getMarisonApiConfig(state.environment, source);
+  const config = getMarisonApiConfig(state.environment);
   const baseUrl = config.baseUrl;
   const endpointPath = fillEndpointTemplate(source.endpoint_template, variables);
   const url = new URL(`${baseUrl}${endpointPath}`);
@@ -2867,39 +2830,32 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
   };
 };
 
-const canManageMarisonEnvironment = (user) => {
-  const email = String(user?.email || "").trim().toLowerCase();
-  return Boolean(email && user?.email_confirmed_at && marisonSwitchAdminEmails.has(email));
-};
-
-const requireMarisonEnvironmentManager = async (req) => {
-  const user = await requireSupabaseUser(getBearerToken(req));
-  if (!canManageMarisonEnvironment(user)) {
-    const err = new Error("Akses pengaturan integrasi Marison ditolak.");
-    err.status = 403;
-    throw err;
-  }
-  return user;
-};
-
 const getMarisonEnvironmentStatus = async (req) => {
   const user = await requireSupabaseUser(getBearerToken(req));
   const state = await getMarisonEnvironmentState();
-  const canManage = canManageMarisonEnvironment(user);
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role, is_active")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  const canManage = profile?.role === "admin" && profile?.is_active !== false;
+  const config = getMarisonApiConfig(state.environment);
   const result = {
     environment: state.environment,
     isStaging: state.environment === "staging",
     canManage,
+    locked: true,
+    source: "deployment",
     updatedAt: state.updatedAt,
   };
   if (canManage) {
-    result.environments = Object.fromEntries([...MARISON_ENVIRONMENTS].map((environment) => {
-      const config = getMarisonApiConfig(environment);
-      return [environment, {
+    result.environments = {
+      [state.environment]: {
         configured: Boolean(config.clientId && config.clientSecret),
         host: new URL(config.baseUrl).host,
-      }];
-    }));
+      },
+    };
   }
   return result;
 };
@@ -2929,9 +2885,8 @@ const probeMarisonDataSource = async (sourceKey, variables, environment) => {
 };
 
 const testMarisonEnvironment = async (req) => {
-  await requireMarisonEnvironmentManager(req);
-  const payload = await readJsonBody(req, 4096);
-  const environment = normalizeMarisonEnvironment(payload?.environment);
+  await requireAdminUser(getBearerToken(req));
+  const environment = marisonDeploymentEnvironment;
   const projects = await probeMarisonDataSource("marison_projects", {}, environment);
   const projectId = projects.ok ? projects.sample.find((item) => item.raw?.id)?.raw?.id : null;
   const variables = projectId ? { project_id: projectId } : {};
@@ -2948,109 +2903,6 @@ const testMarisonEnvironment = async (req) => {
     allHealthy: Boolean(projects.ok && units.ok && nonUnits.ok),
     checks: { projects, units, nonUnits },
   };
-};
-
-const maskEmail = (email) => {
-  const [local, domain] = String(email || "").split("@");
-  if (!local || !domain) return "email terdaftar";
-  return `${local.slice(0, 2)}${"*".repeat(Math.max(2, local.length - 2))}@${domain}`;
-};
-
-const requestMarisonEnvironmentSwitch = async (req) => {
-  const user = await requireMarisonEnvironmentManager(req);
-  const payload = await readJsonBody(req, 4096);
-  const environment = normalizeMarisonEnvironment(payload?.environment);
-  const state = await getMarisonEnvironmentState({ fresh: true });
-  if (state.environment === environment) {
-    const err = new Error(`Environment ${environment} sudah aktif.`);
-    err.status = 409;
-    throw err;
-  }
-  const rateLimitKey = user.id;
-  enforceRateLimit(marisonSwitchOtpRateLimits, rateLimitKey, MARISON_SWITCH_OTP_MAX_SENDS);
-  recordRateLimit(marisonSwitchOtpRateLimits, rateLimitKey, AUTH_RATE_LIMIT_WINDOW_MS);
-
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  const codeHash = sha256Hex(`${user.id}:${environment}:${code}:${sessionSecret}`);
-  await getMailTransporter().sendMail({
-    from: smtpConfig.from,
-    to: user.email,
-    subject: `Konfirmasi environment Marison: ${environment}`,
-    text: `Kode konfirmasi SIGAP Anda: ${code}\n\nKode berlaku 5 menit dan hanya dapat digunakan sekali. Environment tujuan: ${environment}.`,
-    html: `<div style="font-family:Arial,sans-serif;color:#17221c;line-height:1.6"><h2>Konfirmasi Integrasi Marison</h2><p>Gunakan kode berikut untuk mengubah sumber data global ke <strong>${escapeHtml(environment)}</strong>.</p><p style="font-size:28px;font-weight:700">${code}</p><p>Kode berlaku 5 menit dan hanya dapat digunakan sekali.</p></div>`,
-  });
-  marisonSwitchChallenges.set(user.id, {
-    environment,
-    codeHash,
-    attempts: 0,
-    expiresAt: Date.now() + MARISON_SWITCH_OTP_TTL_MS,
-  });
-  return { ok: true, environment, sentTo: maskEmail(user.email), expiresInSeconds: MARISON_SWITCH_OTP_TTL_MS / 1000 };
-};
-
-const confirmMarisonEnvironmentSwitch = async (req) => {
-  const user = await requireMarisonEnvironmentManager(req);
-  const payload = await readJsonBody(req, 4096);
-  const environment = normalizeMarisonEnvironment(payload?.environment);
-  const code = String(payload?.code || "").trim();
-  const challenge = marisonSwitchChallenges.get(user.id);
-  if (!challenge || challenge.environment !== environment || challenge.expiresAt <= Date.now()) {
-    marisonSwitchChallenges.delete(user.id);
-    const err = new Error("Kode konfirmasi sudah kedaluwarsa. Kirim kode baru.");
-    err.status = 400;
-    throw err;
-  }
-  challenge.attempts += 1;
-  if (challenge.attempts > MARISON_SWITCH_OTP_MAX_ATTEMPTS) {
-    marisonSwitchChallenges.delete(user.id);
-    const err = new Error("Batas percobaan kode konfirmasi terlampaui.");
-    err.status = 429;
-    throw err;
-  }
-  const actualHash = Buffer.from(sha256Hex(`${user.id}:${environment}:${code}:${sessionSecret}`), "hex");
-  const expectedHash = Buffer.from(challenge.codeHash, "hex");
-  if (actualHash.length !== expectedHash.length || !timingSafeEqual(actualHash, expectedHash)) {
-    const err = new Error("Kode konfirmasi tidak valid.");
-    err.status = 400;
-    throw err;
-  }
-
-  const previous = await getMarisonEnvironmentState({ fresh: true });
-  const changedAt = new Date().toISOString();
-  const { error } = await supabase.from("system_email_settings").upsert({
-    id: "marison_integration",
-    config: { active_environment: environment },
-    updated_at: changedAt,
-    updated_by: user.id,
-  }, { onConflict: "id" });
-  if (error) throw error;
-  await supabase.from("activity_logs").insert({
-    user_id: user.id,
-    action: "UPDATE",
-    table_name: "marison_integration_settings",
-    record_id: "marison_integration",
-    old_values: { active_environment: previous.environment },
-    new_values: { active_environment: environment, confirmed_by_email: user.email },
-  });
-  marisonSwitchChallenges.delete(user.id);
-  marisonEnvironmentCache = {
-    environment,
-    updatedAt: changedAt,
-    updatedBy: user.id,
-    expiresAt: Date.now() + MARISON_ENVIRONMENT_CACHE_MS,
-  };
-  for (const client of marisonRealtimeClients) {
-    if (client.destroyed) continue;
-    client.write(`event: postgres_change\ndata: ${JSON.stringify({
-      schema: "public",
-      table: "system_email_settings",
-      eventType: "UPDATE",
-      commit_timestamp: changedAt,
-      new: { id: "marison_integration", active_environment: environment, updated_at: changedAt },
-      old: { id: "marison_integration", active_environment: previous.environment },
-    })}\n\n`);
-  }
-  return { ok: true, environment, updatedAt: changedAt };
 };
 
 const canReadSurat = async (surat, userId) => {
@@ -3105,6 +2957,386 @@ const isStorageRefAllowedForSurat = async (surat, requested) => {
     const jobRef = parseStorageRef(job.pdf_url);
     return jobRef && storageRefKey(jobRef) === storageRefKey(requested);
   });
+};
+
+const asPlainRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
+const asArrayValue = (value) => Array.isArray(value) ? value : [];
+
+const firstString = (...values) => {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+};
+
+const parseExternalInteger = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isInteger(value)) return value;
+  const text = String(value).trim();
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number.parseInt(text, 10);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+};
+
+const parseExternalMoney = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const normalized = text.replace(/[^\d,.-]/g, "");
+  const digitsOnly = normalized.replace(/\D/g, "");
+  const parsed = Number.parseInt(digitsOnly || "0", 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const requireExternalInteger = (value, label) => {
+  const parsed = parseExternalInteger(value);
+  if (parsed !== null) return parsed;
+  const err = new Error(`${label} eksternal belum tersedia atau bukan angka.`);
+  err.status = 422;
+  throw err;
+};
+
+const getExternalRaw = (value) => {
+  const record = asPlainRecord(value);
+  return asPlainRecord(record.raw);
+};
+
+const externalIdFrom = (...values) => {
+  for (const value of values) {
+    const record = asPlainRecord(value);
+    const raw = getExternalRaw(record);
+    const parsed = parseExternalInteger(
+      raw.id ?? raw.project_id ?? raw.unit_id ?? raw.non_unit_id ??
+      record.id ?? record.value ?? record.project_id ?? record.unit_id ?? record.non_unit_id
+    );
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const externalBranchIdFrom = (...values) => {
+  for (const value of values) {
+    const record = asPlainRecord(value);
+    const raw = getExternalRaw(record);
+    const branch = asPlainRecord(raw.branch || record.branch);
+    const parsed = parseExternalInteger(
+      raw.branch_id ?? raw.branchId ?? branch.id ??
+      record.branch_id ?? record.branchId ?? record.external_branch_id
+    );
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const getMarisonDispatchInput = (surat) => {
+  const formInput = asPlainRecord(surat?.form_input_data);
+  const snapshot = asPlainRecord(surat?.data_snapshot);
+  const snapshotInput = asPlainRecord(snapshot.input);
+  const verificationInputs = asPlainRecord(snapshot.verification_inputs);
+  const latestVerificationInput = asPlainRecord(verificationInputs.latest);
+  return { ...snapshotInput, ...latestVerificationInput, ...formInput };
+};
+
+const getMarisonAllocatedUnits = (surat, input) => {
+  const snapshot = asPlainRecord(surat?.data_snapshot);
+  const verificationDrafts = asPlainRecord(snapshot.verification_drafts);
+  const latestDraftInput = Object.values(verificationDrafts)
+    .map((value) => asPlainRecord(value))
+    .filter((draft) => asArrayValue(asPlainRecord(draft.input).allocated_units).length > 0)
+    .sort((left, right) => String(right.saved_at || "").localeCompare(String(left.saved_at || "")))
+    .map((draft) => asPlainRecord(draft.input))[0] || {};
+  return (
+    asArrayValue(input.allocated_units).length > 0 ? asArrayValue(input.allocated_units) :
+    asArrayValue(latestDraftInput.allocated_units).length > 0 ? asArrayValue(latestDraftInput.allocated_units) :
+    asArrayValue(snapshot.allocated_units)
+  );
+};
+
+const getMarisonRequestedProject = (surat, input) => {
+  const snapshot = asPlainRecord(surat?.data_snapshot);
+  return (
+    input.allocated_project ||
+    input.requested_project ||
+    asPlainRecord(snapshot.input).allocated_project ||
+    asPlainRecord(snapshot.input).requested_project ||
+    snapshot.allocated_project ||
+    snapshot.requested_project ||
+    null
+  );
+};
+
+const buildMarisonApprovals = (surat) => {
+  const approvals = asArrayValue(surat?.surat_signatures)
+    .filter((signature) => signature?.is_signed && signature?.signed_at)
+    .sort((left, right) => Number(left.step_order || 0) - Number(right.step_order || 0))
+    .map((signature) => {
+      const profile = asPlainRecord(signature.profiles);
+      const signerSnapshot = asPlainRecord(signature.signer_snapshot);
+      const nik = firstString(profile.nik, signerSnapshot.nik, signature.nik);
+      return {
+        role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
+        nik,
+        action: "approved",
+        actioned_at: new Date(signature.signed_at).toISOString(),
+        notes: firstString(signature.note, signature.notes),
+      };
+    })
+    .filter((approval) => approval.nik);
+
+  if (approvals.length === 0) {
+    const err = new Error("Approval eksternal tidak bisa dikirim karena NIK penandatangan belum tersedia.");
+    err.status = 422;
+    throw err;
+  }
+  return approvals;
+};
+
+const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
+  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
+  if (!appUrl) return [];
+  const rows = asArrayValue(surat?.surat_attachments);
+  const links = [];
+  for (const [index, attachment] of rows.entries()) {
+    if (!attachment?.file_url) continue;
+    const tokenPath = await buildEmailFileLink(
+      surat.id,
+      attachment.file_url,
+      { link_ttl_hours: Number(process.env.MARISON_FILE_LINK_TTL_HOURS || 168) },
+      actorId
+    );
+    if (tokenPath) {
+      links.push({
+        name: firstString(attachment.file_name, attachment.requirement_label, `Lampiran ${index + 1}`),
+        link: `${appUrl}${tokenPath}`,
+      });
+    }
+  }
+  return links;
+};
+
+const buildMarisonUnitPayload = async (surat, input, actorId) => {
+  const requestedProject = getMarisonRequestedProject(surat, input);
+  const projectId = requireExternalInteger(externalIdFrom(requestedProject), "Project ID");
+  const branchId = requireExternalInteger(externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
+  const units = getMarisonAllocatedUnits(surat, input).map((unit, index) => {
+    const record = asPlainRecord(unit);
+    const raw = getExternalRaw(record);
+    const detail = asPlainRecord(record.allocation_detail);
+    const productionCode = buildProductionCode({
+      serial: detail.production_serial || detail.kode_produksi_nomor,
+      block: detail.production_block || detail.kode_produksi_blok,
+      date: detail.production_date || detail.kode_produksi_tanggal,
+    }) || firstString(raw.production_code, record.production_code);
+    return {
+      unit_id: requireExternalInteger(externalIdFrom(record), `Unit ID baris ${index + 1}`),
+      production_code: productionCode,
+      addendum_atas_label: "Struktur Atas",
+      addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
+      addendum_bawah_label: "Struktur Bawah",
+      addendum_bawah_nominal: parseExternalMoney(detail.struktur_bawah),
+      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan),
+    };
+  });
+  if (units.length === 0) {
+    const err = new Error("Unit belum dialokasikan, pengiriman ke Marison dibatalkan.");
+    err.status = 422;
+    throw err;
+  }
+  return {
+    endpoint: "/unit-submissions",
+    kind: "unit",
+    payload: {
+      submission_number: surat.no_surat,
+      project_id: projectId,
+      branch_id: branchId,
+      submitted_by: firstString(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+      submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
+      type: firstString(input.submission_type, "planning"),
+      units,
+      attachments: await buildMarisonAttachmentLinks(surat, actorId),
+      approvals: buildMarisonApprovals(surat),
+    },
+  };
+};
+
+const normalizeMarisonItems = (input) => asArrayValue(input.items).filter((item) => item && typeof item === "object");
+
+const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
+  const requestedProject = getMarisonRequestedProject(surat, input);
+  const projectId = requireExternalInteger(externalIdFrom(requestedProject), "Project ID");
+  const branchId = requireExternalInteger(externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
+  const items = normalizeMarisonItems(input).map((item, index) => {
+    const record = asPlainRecord(item);
+    const raw = getExternalRaw(record);
+    return {
+      non_unit_id: requireExternalInteger(
+        raw.non_unit_id ?? raw.id ?? record.non_unit_id ?? record.external_id ?? record.value,
+        `Non Unit ID baris ${index + 1}`
+      ),
+      item_name: firstString(record.item_name, record.nama_barang, record.nama, record.barang, raw.name),
+      subtotal: parseExternalMoney(record.subtotal ?? record.keterangan ?? record.nilai ?? record.nominal),
+      planning_notes: firstString(record.planning_notes, record.catatan, record.keterangan, input.catatan),
+    };
+  });
+  if (items.length === 0) {
+    const err = new Error("Item non unit belum tersedia untuk dikirim.");
+    err.status = 422;
+    throw err;
+  }
+  return {
+    endpoint: "/non-unit-submissions",
+    kind: "non_unit",
+    payload: {
+      submission_number: surat.no_surat,
+      project_id: projectId,
+      branch_id: branchId,
+      submitted_by: firstString(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+      submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
+      notes: firstString(input.catatan, surat.judul_surat),
+      items,
+      attachments: await buildMarisonAttachmentLinks(surat, actorId),
+      approvals: buildMarisonApprovals(surat),
+    },
+  };
+};
+
+const buildMarisonAssetPayload = async (surat, input) => {
+  const requestedProject = getMarisonRequestedProject(surat, input);
+  const branchId = requireExternalInteger(
+    externalBranchIdFrom(requestedProject, input, surat.location_snapshot),
+    "Branch ID"
+  );
+  const items = normalizeMarisonItems(input);
+  const assetName = firstString(
+    items.map((item) => firstString(item.nama_barang, item.item_name, item.nama, item.barang)).filter(Boolean).join(", "),
+    surat.judul_surat
+  );
+  return {
+    endpoint: "/asset-purchase-requests",
+    kind: "asset",
+    payload: {
+      request_number: surat.no_surat,
+      branch_id: branchId,
+      category: surat.location_snapshot?.office?.kedudukan === "Pusat" ? "Pengajuan Pusat" : "Pengajuan Cabang",
+      asset_name: assetName,
+      description: firstString(input.catatan, surat.judul_surat),
+      approvals: buildMarisonApprovals(surat),
+    },
+  };
+};
+
+const buildMarisonDispatchPayload = async (surat, actorId) => {
+  const input = getMarisonDispatchInput(surat);
+  const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
+  if (category === "unit") return buildMarisonUnitPayload(surat, input, actorId);
+  if (category === "non_unit" || category === "nonunit") return buildMarisonNonUnitPayload(surat, input, actorId);
+  if (category === "asset") return buildMarisonAssetPayload(surat, input);
+  const err = new Error(`Kategori ${category || "-"} belum memiliki endpoint outbound Marison.`);
+  err.status = 422;
+  throw err;
+};
+
+const postMarisonProtectedJson = async (environment, endpointPath, payload) => {
+  const config = getMarisonApiConfig(environment);
+  const token = await getMarisonAccessToken({ source_key: "submission_dispatch" }, environment);
+  const body = JSON.stringify(payload);
+  const url = new URL(`${config.baseUrl}${endpointPath}`);
+  const timestamp = new Date().toISOString();
+  const bodyHash = sha256Hex(Buffer.from(body));
+  const canonical = ["POST", url.pathname, token, bodyHash, timestamp].join(":");
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      "X-Timestamp": timestamp,
+      "X-Signature": hmacSha512Hex(token, canonical),
+    },
+    body,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(result?.message || "Gagal mengirim data ke API Marison.");
+    err.status = response.status;
+    err.details = result?.errors || null;
+    throw err;
+  }
+  return result;
+};
+
+const dispatchCompletedSuratToMarison = async (req, suratId) => {
+  if (!marisonSubmissionDispatchEnabled) {
+    return { skipped: true, reason: "Outbound Marison tidak aktif pada environment ini." };
+  }
+  const actor = await requireSupabaseUser(getBearerToken(req));
+  const { data: surat, error } = await supabase
+    .from("surat_registrasi")
+    .select(`
+      id, no_surat, judul_surat, status, current_step, created_at, created_by,
+      office_id, project_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
+      surat_signatures (
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, note, signer_snapshot,
+        profiles:user_id ( id, full_name, nik, job_title )
+      ),
+      surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
+    `)
+    .eq("id", suratId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!surat) {
+    const err = new Error("Surat tidak ditemukan.");
+    err.status = 404;
+    throw err;
+  }
+  if (!(await canReadSurat(surat, actor.id))) {
+    const err = new Error("Akses ditolak.");
+    err.status = 403;
+    throw err;
+  }
+  if (String(surat.status || "").toUpperCase() !== "SELESAI") {
+    return { skipped: true, reason: "Surat belum selesai ditandatangani." };
+  }
+
+  const snapshot = asPlainRecord(surat.data_snapshot);
+  const previous = asPlainRecord(snapshot.marison_dispatch);
+  if (previous.status === "success" && previous.environment === marisonDeploymentEnvironment) {
+    return { skipped: true, alreadySent: true, dispatch: previous };
+  }
+
+  const startedAt = new Date().toISOString();
+  try {
+    const dispatch = await buildMarisonDispatchPayload(surat, actor.id);
+    const response = await postMarisonProtectedJson(marisonDeploymentEnvironment, dispatch.endpoint, dispatch.payload);
+    const nextDispatch = {
+      status: "success",
+      environment: marisonDeploymentEnvironment,
+      kind: dispatch.kind,
+      endpoint: dispatch.endpoint,
+      sent_at: new Date().toISOString(),
+      requested_at: startedAt,
+      response: response?.data || response,
+    };
+    await supabase
+      .from("surat_registrasi")
+      .update({ data_snapshot: { ...snapshot, marison_dispatch: nextDispatch } })
+      .eq("id", surat.id);
+    return { success: true, dispatch: nextDispatch };
+  } catch (error) {
+    const nextDispatch = {
+      status: "failed",
+      environment: marisonDeploymentEnvironment,
+      requested_at: startedAt,
+      failed_at: new Date().toISOString(),
+      error: error?.message || "Gagal mengirim data ke Marison.",
+      details: error?.details || null,
+    };
+    await supabase
+      .from("surat_registrasi")
+      .update({ data_snapshot: { ...snapshot, marison_dispatch: nextDispatch } })
+      .eq("id", surat.id);
+    throw error;
+  }
 };
 
 const getAuthorizedSurat = async (suratId, token) => {
@@ -3589,13 +3821,9 @@ createServer(async (req, res) => {
         return sendJson(res, 200, result);
       }
 
-      if (req.method === "POST" && url.pathname === "/api/integrations/marison/switch/request") {
-        const result = await requestMarisonEnvironmentSwitch(req);
-        return sendJson(res, 200, result);
-      }
-
-      if (req.method === "POST" && url.pathname === "/api/integrations/marison/switch/confirm") {
-        const result = await confirmMarisonEnvironmentSwitch(req);
+      const marisonDispatchMatch = url.pathname.match(/^\/api\/integrations\/marison\/surat\/([0-9a-f-]+)\/dispatch$/i);
+      if (req.method === "POST" && marisonDispatchMatch) {
+        const result = await dispatchCompletedSuratToMarison(req, marisonDispatchMatch[1]);
         return sendJson(res, 200, result);
       }
 

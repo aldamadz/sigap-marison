@@ -39,9 +39,6 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
   const applyAttentionState = useCallback((nextState: AttentionState) => {
     queryClient.setQueryData(queryKey, nextState);
     setEventVersion((value) => value + 1);
-    queryClient.invalidateQueries({ queryKey: ["surat-inbox"] });
-    queryClient.invalidateQueries({ queryKey: ["surat-list"] });
-    queryClient.invalidateQueries({ queryKey: ["surat-detail"] });
   }, [queryClient]);
 
   useEffect(() => {
@@ -57,8 +54,8 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
 
     const channel = supabase
       .channel("attention-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_revision_events" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_recommendation_tasks" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRefresh)

@@ -7,9 +7,11 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const appPublicUrl = env.VITE_APP_PUBLIC_URL || env.APP_PUBLIC_URL;
-  const apiProxyTarget = appPublicUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(appPublicUrl)
-    ? appPublicUrl.replace(/\/+$/, "")
-    : undefined;
+  const apiProxyTarget = mode === "development"
+    ? env.DEV_API_PROXY_TARGET || `http://127.0.0.1:${env.APP_PORT || "3010"}`
+    : appPublicUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(appPublicUrl)
+      ? appPublicUrl.replace(/\/+$/, "")
+      : undefined;
 
   return {
     server: {
@@ -22,8 +24,9 @@ export default defineConfig(({ mode }) => {
         ? {
             "/api": {
               target: apiProxyTarget,
-              changeOrigin: true,
-              secure: true,
+              // Preserve localhost:8080 so the BFF same-origin guard remains effective.
+              changeOrigin: mode !== "development",
+              secure: mode !== "development",
             },
           }
         : undefined,

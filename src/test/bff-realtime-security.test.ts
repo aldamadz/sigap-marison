@@ -16,6 +16,8 @@ describe("user-scoped BFF realtime stream", () => {
     expect(client).not.toContain("15_000");
     expect(attention).not.toContain("refetchInterval");
     expect(attention).not.toContain("/api/attention/stream");
+    expect(attention).toContain('table: "surat_registrasi"');
+    expect(attention).toContain('table: "surat_signatures"');
   });
 
   it("subscribes upstream with the user's JWT and cleans up every connection", () => {

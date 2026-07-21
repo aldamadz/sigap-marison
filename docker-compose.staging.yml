@@ -1,0 +1,88 @@
+name: agenda-flow-staging
+
+services:
+  agenda-flow-staging:
+    build:
+      context: .
+      dockerfile: dockerfile
+      args:
+        VITE_APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
+        VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
+        VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
+    image: agenda-flow:staging
+    container_name: agenda-flow-staging
+    restart: always
+    ports:
+      - "${STAGING_APP_PORT:-3011}:80"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      NODE_ENV: production
+      PORT: "80"
+      APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
+      VITE_APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
+      SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.staging}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in .env.staging}"
+      MARISON_DEPLOYMENT_ENVIRONMENT: "staging"
+      MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
+      MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
+      MARISON_STAGING_CLIENT_SECRET: "${MARISON_STAGING_CLIENT_SECRET:-}"
+      MARISON_PRODUCTION_BASE_URL: "${MARISON_PRODUCTION_BASE_URL:-https://external.marisonregency.id/api}"
+      MARISON_PRODUCTION_CLIENT_ID: "${MARISON_PRODUCTION_CLIENT_ID:-}"
+      MARISON_PRODUCTION_CLIENT_SECRET: "${MARISON_PRODUCTION_CLIENT_SECRET:-}"
+      STORAGE_MODE: "${STORAGE_MODE:-self_hosted_supabase}"
+      STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:-}"
+      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-}"
+    env_file:
+      - path: .env.staging
+        required: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  agenda-pdf-worker-staging:
+    image: agenda-flow:staging
+    container_name: agenda-pdf-worker-staging
+    restart: always
+    command: ["node", "pdf-worker.mjs"]
+    depends_on:
+      agenda-flow-staging:
+        condition: service_healthy
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      NODE_ENV: production
+      SUPABASE_URL: "${SUPABASE_URL}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
+      PDF_WORKER_CONCURRENCY: "${PDF_WORKER_CONCURRENCY:-1}"
+      PDF_WORKER_POLL_INTERVAL_MS: "${PDF_WORKER_POLL_INTERVAL_MS:-2000}"
+      PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS: "${PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS:-30000}"
+      PDF_WORKER_MAX_ATTEMPTS: "${PDF_WORKER_MAX_ATTEMPTS:-3}"
+      PDF_WORKER_CONVERT_TIMEOUT_MS: "${PDF_WORKER_CONVERT_TIMEOUT_MS:-120000}"
+      STORAGE_MODE: "${STORAGE_MODE}"
+      STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL}"
+      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL}"
+    env_file:
+      - path: .env.staging
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

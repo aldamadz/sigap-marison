@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { parseRupiahInteger } from "@/lib/rupiah";
+import { buildProductionCode } from "@/lib/production-code";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -218,7 +219,7 @@ export const suratService = {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (ids.length === 0) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession({ force: true });
       if (!session?.access_token) return;
       const response = await fetch("/api/notifications/send", {
         method: "POST",
@@ -555,14 +556,16 @@ export const suratService = {
 
   buildProductionCode(unit: any) {
     const detail = unit?.allocation_detail || {};
-    const serial = String(detail.production_serial || detail.kode_produksi_nomor || "").trim();
     const block = String(detail.production_block || detail.kode_produksi_blok || "").trim();
     const rawDate = String(detail.production_date || detail.kode_produksi_tanggal || "").trim();
     const formattedDate = rawDate
       ? this.formatProductionDate(rawDate)
       : "";
-    if (!serial && !block && !formattedDate) return "";
-    return `${serial}/UAI/PRC/${block}/${formattedDate}`;
+    return buildProductionCode({
+      serial: detail.production_serial || detail.kode_produksi_nomor,
+      block,
+      date: formattedDate,
+    });
   },
 
   formatProductionDate(value: string) {
@@ -605,6 +608,22 @@ export const suratService = {
       .eq("id", suratId);
 
     if (error) throw error;
+  },
+
+  async dispatchCompletedSuratToMarison(suratId: string) {
+    const { data: { session } } = await supabase.auth.getSession({ force: true });
+    if (!session?.access_token) return null;
+
+    const response = await fetch(`/api/integrations/marison/surat/${suratId}/dispatch`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || "Gagal mengirim data ke API Marison."));
+    }
+    return payload;
   },
 
   createUnitRecapAttachment(project: any, units: any[]) {
@@ -1149,7 +1168,7 @@ export const suratService = {
   },
 
   async getTemplateContext(payload: any) {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Tidak terautentikasi");
 
     const profileResult = await supabase
@@ -1431,7 +1450,7 @@ export const suratService = {
   },
 
   async autoApproveRecommendationFirstStep(suratId: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Sesi login tidak tersedia.");
 
     const { data: signature, error: signatureError } = await supabase
@@ -1466,7 +1485,7 @@ export const suratService = {
     files: File[],
     requirement?: { key?: string; label?: string }
   ): Promise<SuratRegistrationDraftFile[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Sesi login tidak tersedia.");
     const rows = [];
     for (const file of files) {
@@ -1500,7 +1519,7 @@ export const suratService = {
 
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser({ force: true });
       const officeIdClean  = this.cleanUuid(payload.office_id);
       const projectIdClean = this.cleanUuid(payload.project_id);
       const deptIdClean    = this.cleanUuid(payload.dept_id); // ← BARU: untuk partisi nomor per dept
@@ -1616,9 +1635,12 @@ export const suratService = {
     draftAttachments: SuratRegistrationDraftFile[] = []
   ) {
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session?.user) {
-        throw new Error("Sesi login tidak tersedia. Silakan login ulang.");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession({ force: true });
+      if (sessionError) {
+        throw new Error(`Gagal memeriksa sesi login: ${sessionError.message}`);
+      }
+      if (!session?.user) {
+        throw new Error("Sesi login tidak tersedia saat submit. Silakan login ulang di alamat aplikasi yang sedang dipakai.");
       }
       const user = session.user;
       const attachmentFiles = Array.isArray(lampiranFiles)
@@ -1724,6 +1746,18 @@ export const suratService = {
       }));
       payload = { ...payload, signature_steps: signatureSteps };
 
+      let payloadReservationId = this.cleanUuid(payload.reservation_id);
+      const payloadDraftId = this.cleanUuid(payload.draft_id);
+      if (!payloadReservationId && payloadDraftId) {
+        const { data: draftReservation, error: draftReservationError } = await supabase
+          .from("surat_registration_drafts")
+          .select("reservation_id")
+          .eq("id", payloadDraftId)
+          .maybeSingle();
+        if (draftReservationError) throw draftReservationError;
+        payloadReservationId = this.cleanUuid(draftReservation?.reservation_id);
+      }
+
       if (payload.form_usage_id) {
         const { data: validation, error: validationError } = await supabase.rpc(
           "validate_form_usage_for_actor",
@@ -1754,6 +1788,8 @@ export const suratService = {
 
       const cleanPayload = {
         ...payload,
+        reservation_id: payloadReservationId,
+        draft_id: payloadDraftId,
         entity_id:      this.cleanUuid(payload.entity_id),
         office_id:      this.cleanUuid(payload.office_id),
         project_id:     this.cleanUuid(payload.project_id),
@@ -1849,15 +1885,17 @@ export const suratService = {
         .eq("id", surat.id);
       surat.data_snapshot = dataSnapshot;
 
-      await supabase.from("surat_reservations")
-        .update({ status: "USED" })
-        .match({
-          no_urut:     noUrut,
-          entity_id:   cleanPayload.entity_id,
-          year:        currentYear,
-          reserved_by: user?.id,
-          status:      "PENDING",
-        });
+      if (!cleanPayload.reservation_id) {
+        await supabase.from("surat_reservations")
+          .update({ status: "USED" })
+          .match({
+            no_urut:     noUrut,
+            entity_id:   cleanPayload.entity_id,
+            year:        currentYear,
+            reserved_by: user?.id,
+            status:      "PENDING",
+          });
+      }
 
       const firstStepOrder = Math.min(...activeSigners.map((s: any, idx: number) => Number(s.step_order || idx + 1)));
       const firstAvailableAt = new Date().toISOString();
@@ -1901,13 +1939,19 @@ export const suratService = {
 
       return surat;
     } catch (error: any) {
-      console.error("Error in createRegistrasi:", error);
-      throw new Error(error.message);
+      const message = String(error?.message || error?.error || "Gagal menyimpan surat.");
+      console.error("Error in createRegistrasi:", {
+        message,
+        code: error?.code || null,
+        details: error?.details || null,
+        hint: error?.hint || null,
+      });
+      throw new Error(message);
     }
   },
 
   async cancelRegistration(noSurat: string) {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!noSurat) return false;
     const noUrut      = parseInt(noSurat.split("/")[0]);
     const currentYear = new Date().getFullYear();
@@ -1990,7 +2034,7 @@ export const suratService = {
   },
 
   async rebuildDocumentSource(suratId: string): Promise<string> {
-    const { data: actor } = await supabase.auth.getUser();
+    const { data: actor } = await supabase.auth.getUser({ force: true });
     if (!actor.user) throw new Error("Tidak terautentikasi.");
     const { data: actorProfile, error: actorError } = await supabase
       .from("profiles")
@@ -2133,7 +2177,7 @@ export const suratService = {
       approvalAttachments?: Array<{ key: string; label: string; file: File }>;
     } = {}
   ): Promise<{ success: boolean }> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser({ force: true });
     const { data: suratFresh, error: suratErr } = await supabase
       .from("surat_registrasi")
       .select("current_step, file_path, penggunaan_id, form_usage_id, form_input_data, data_snapshot")
@@ -2349,6 +2393,12 @@ export const suratService = {
       }
     }
 
+    if (rpcResult?.isDone) {
+      this.dispatchCompletedSuratToMarison(suratId).catch((dispatchError) => {
+        console.error("Gagal mengirim surat selesai ke API Marison:", dispatchError);
+      });
+    }
+
     return { success: true };
   },
 
@@ -2385,7 +2435,7 @@ export const suratService = {
       approvalAttachments?: Array<{ key: string; label: string; file: File }>;
     } = {}
   ) {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser({ force: true });
     const { data: sigInfo, error: sigError } = await supabase
       .from("surat_signatures")
       .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, attachment_requirements_snapshot, verification_status")
@@ -2403,6 +2453,8 @@ export const suratService = {
 
     let formInputData = suratFresh.form_input_data ?? {};
     let workingFilePath = suratFresh.file_path;
+    const persistedVerificationDraft =
+      (suratFresh.data_snapshot as any)?.verification_drafts?.[signatureId]?.input || {};
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
       : [];
@@ -2446,9 +2498,16 @@ export const suratService = {
     }
 
     if (sigInfo.requires_unit_allocation || sigInfo.action_type === "unit_allocation") {
-      const units = options.unitAllocation?.units ?? [];
+      const incomingUnits = options.unitAllocation?.units ?? [];
+      const units = incomingUnits.length > 0
+        ? incomingUnits
+        : Array.isArray(persistedVerificationDraft?.allocated_units)
+          ? persistedVerificationDraft.allocated_units
+          : [];
       const requestedProject = formInputData?.requested_project || {};
-      const project = requestedProject?.code ? requestedProject : options.unitAllocation?.project;
+      const project = requestedProject?.code
+        ? requestedProject
+        : options.unitAllocation?.project || persistedVerificationDraft?.allocated_project;
       if (formInputData?.request_mode !== "unit") throw new Error("Dokumen ini bukan pengajuan unit.");
       if (!project?.code) throw new Error("Project unit wajib dipilih.");
       if (options.unitAllocation?.project?.code && requestedProject?.code && options.unitAllocation.project.code !== requestedProject.code) {
@@ -2482,63 +2541,22 @@ export const suratService = {
       }
     }
 
-    const { data: allAttachments } = await supabase
-      .from("surat_attachments")
-      .select("*")
-      .eq("surat_id", suratId)
-      .order("created_at", { ascending: true });
+    const rpcPayload =
+      sigInfo.requires_unit_allocation || sigInfo.action_type === "unit_allocation"
+        ? {
+            allocated_project: formInputData?.allocated_project,
+            allocated_units: formInputData?.allocated_units ?? [],
+            allocated_unit_count: formInputData?.allocated_unit_count,
+          }
+        : {};
 
-    const { error: updateError } = await supabase
-      .from("surat_registrasi")
-      .update({
-        file_path: workingFilePath,
-        form_input_data: formInputData,
-        data_snapshot: {
-          ...(suratFresh.data_snapshot || {}),
-          input: formInputData,
-          verification_inputs: {
-            ...((suratFresh.data_snapshot as any)?.verification_inputs || {}),
-            latest: {
-              ...formInputData,
-              signature_id: signatureId,
-              verified_at: new Date().toISOString(),
-            },
-            [signatureId]: {
-              ...formInputData,
-              signature_id: signatureId,
-              verified_at: new Date().toISOString(),
-            },
-          },
-          requested_project: formInputData?.requested_project ?? null,
-          allocated_project: formInputData?.allocated_project ?? null,
-          requested_unit_count: formInputData?.requested_unit_count ?? null,
-          allocated_units: formInputData?.allocated_units ?? [],
-          allocated_unit_count: formInputData?.allocated_unit_count ?? null,
-          attachments: allAttachments || [],
-        },
-      })
-      .eq("id", suratId);
-    if (updateError) throw updateError;
-
-    const activeRevision = suratFresh.data_snapshot?.revision || {};
-    const revisionTargetIds = Array.isArray(activeRevision.target_user_ids) ? activeRevision.target_user_ids : [];
-    const isRevisionCheckerTask =
-      String(suratFresh.status || "").toUpperCase() === "MENUNGGU_PERBAIKAN" &&
-      activeRevision.target_type === "checker" &&
-      revisionTargetIds.includes(user?.id) &&
-      Number(activeRevision.target_step || sigInfo.step_order) === Number(sigInfo.step_order);
-
-    if (isRevisionCheckerTask && sigInfo.verification_status === "verified" && activeRevision.event_id) {
-      await this.resolveProcessRevision(activeRevision.event_id, note);
-    } else {
-      const { data, error } = await supabase.rpc("verify_surat_signature", {
-        p_sig_id: signatureId,
-        p_note: note,
-      });
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error("Gagal menyimpan pemeriksaan data.");
-    }
-    await this.ensureUnitAllocationPersisted(suratId, formInputData);
+    const { data, error } = await supabase.rpc("verify_surat_signature_v2", {
+      p_sig_id: signatureId,
+      p_note: note,
+      p_payload: rpcPayload,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Gagal menyimpan pemeriksaan data.");
     if (sigInfo.user_id) {
       const link = `/surat/inbox?task=${signatureId}`;
       const message = `Surat "${suratFresh.judul_surat}" sudah diperiksa dan siap ditindaklanjuti`;
@@ -2740,7 +2758,7 @@ export const suratService = {
   ) {
     if (attachments.length === 0) return [];
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession({ force: true });
     if (!session) throw new Error("Tidak terautentikasi");
 
     const formData = new FormData();

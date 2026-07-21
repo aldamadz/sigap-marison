@@ -4,8 +4,10 @@ export type MarisonEnvironmentStatus = {
   environment: MarisonEnvironment;
   isStaging: boolean;
   canManage: boolean;
+  locked: boolean;
+  source: "deployment";
   updatedAt: string | null;
-  environments?: Record<MarisonEnvironment, { configured: boolean; host: string }>;
+  environments?: Partial<Record<MarisonEnvironment, { configured: boolean; host: string }>>;
 };
 
 export type MarisonProbeResult = {
@@ -44,16 +46,8 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
 export const marisonIntegrationService = {
   getStatus: () => request<MarisonEnvironmentStatus>("/api/integrations/marison/status"),
-  test: (environment: MarisonEnvironment) => request<MarisonEnvironmentTest>("/api/integrations/marison/test", {
+  test: () => request<MarisonEnvironmentTest>("/api/integrations/marison/test", {
     method: "POST",
-    body: JSON.stringify({ environment }),
+    body: JSON.stringify({}),
   }),
-  requestSwitch: (environment: MarisonEnvironment) => request<{ sentTo: string; expiresInSeconds: number }>(
-    "/api/integrations/marison/switch/request",
-    { method: "POST", body: JSON.stringify({ environment }) },
-  ),
-  confirmSwitch: (environment: MarisonEnvironment, code: string) => request<{ environment: MarisonEnvironment; updatedAt: string }>(
-    "/api/integrations/marison/switch/confirm",
-    { method: "POST", body: JSON.stringify({ environment, code }) },
-  ),
 };

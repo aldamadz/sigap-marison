@@ -63,7 +63,8 @@ async function getAllSubordinateIds(parentId: string): Promise<string[]> {
 export async function getAgendasForParent(
   parentId: string,
   selectedUserId?: string | null,
-  officeId?: string | null
+  officeId?: string | null,
+  dateRange?: { from: Date; to: Date } | null,
 ) {
   try {
     let targetIds: string[];
@@ -88,7 +89,8 @@ export async function getAgendasForParent(
     let query = supabase
       .from('agendas')
       .select(`
-        *,
+        id, title, description, location, status, start_time, end_time,
+        created_by, created_at, completed_at, deleted_at,
         ${profileRelation} (
           id, 
           full_name, 
@@ -106,6 +108,9 @@ export async function getAgendasForParent(
       query = query.eq('profiles.office_id', officeId);
     }
 
+    if (dateRange?.from) query = query.gte('start_time', dateRange.from.toISOString());
+    if (dateRange?.to) query = query.lt('start_time', dateRange.to.toISOString());
+
     const { data, error } = await query.order('start_time', { ascending: false });
     
     if (error) throw error;
@@ -122,7 +127,7 @@ export async function getAgendasForParent(
 export const getAgendas = async (): Promise<Agenda[]> => {
   const { data, error } = await supabase
     .from('agendas')
-    .select(`*, profiles:created_by(id, full_name, avatar_url, offices:office_id(name))`)
+    .select(`id, title, description, location, status, start_time, end_time, created_by, created_at, completed_at, deleted_at, profiles:created_by(id, full_name, avatar_url, offices:office_id(name))`)
     .is('deleted_at', null)
     .order('start_time', { ascending: true });
 

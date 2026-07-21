@@ -22,6 +22,10 @@ const storagePublicBaseUrl = String(
 const workerId = process.env.PDF_WORKER_ID || `pdf-worker-${randomUUID()}`;
 const concurrency = Math.max(Number(process.env.PDF_WORKER_CONCURRENCY || 3), 1);
 const pollIntervalMs = Math.max(Number(process.env.PDF_WORKER_POLL_INTERVAL_MS || 2000), 500);
+const maxIdlePollIntervalMs = Math.max(
+  Number(process.env.PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS || 30000),
+  pollIntervalMs,
+);
 const maxAttempts = Math.max(Number(process.env.PDF_WORKER_MAX_ATTEMPTS || 3), 1);
 const convertTimeoutMs = Math.max(Number(process.env.PDF_WORKER_CONVERT_TIMEOUT_MS || 120000), 10000);
 
@@ -206,13 +210,17 @@ const processJob = async (job) => {
 
 console.log(`[${workerId}] PDF worker started. concurrency=${concurrency}`);
 
+let idlePollIntervalMs = pollIntervalMs;
 while (true) {
   try {
     const jobs = await claimJobs();
     if (jobs.length === 0) {
-      await sleep(pollIntervalMs);
+      await sleep(idlePollIntervalMs);
+      idlePollIntervalMs = Math.min(maxIdlePollIntervalMs, idlePollIntervalMs * 2);
       continue;
     }
+
+    idlePollIntervalMs = pollIntervalMs;
 
     await Promise.all(jobs.map(async (job) => {
       try {
@@ -225,6 +233,7 @@ while (true) {
     }));
   } catch (error) {
     console.error(`[${workerId}] polling error:`, error);
-    await sleep(pollIntervalMs);
+    await sleep(idlePollIntervalMs);
+    idlePollIntervalMs = Math.min(maxIdlePollIntervalMs, idlePollIntervalMs * 2);
   }
 }

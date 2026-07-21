@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from "@/lib/supabase";
 import { 
   Search, AlertCircle, Loader2, 
   MessageSquare, Info, Filter, History, FileText, Download, Calendar, User, Clock, RefreshCw
@@ -19,6 +18,7 @@ import { RegistrationSummaryDocument } from '@/components/surat/RegistrationSumm
 import { buildRegistrationSummaryData } from '@/components/surat/registration-summary-data';
 import { approvalBadgeClass, approvalDotClass, type ApprovalBadgeTone } from '@/components/surat/approval-status-style';
 import { toast } from 'sonner';
+import { suratMonitoringService } from '@/services/surat-monitoring.service';
 
 const MonitoringAdminPage = () => {
   // 1. STATES
@@ -27,6 +27,8 @@ const MonitoringAdminPage = () => {
   const [dateFilter, setDateFilter] = useState('all');
   const { openPdf, openFile, isOpening } = useDocumentOpener();
   const [selectedSurat, setSelectedSurat] = useState<any | null>(null);
+  const [page, setPage] = useState(1);
+  const deferredSearch = useDeferredValue(search);
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
   const selectedSuratId = selectedSurat?.id || "";
 
@@ -38,26 +40,35 @@ const MonitoringAdminPage = () => {
   });
 
   // 2. FETCH DATA
-  const { data: allData = [], isLoading: loading, error: queryError } = useQuery({
-    queryKey: ['admin-monitoring-list'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('surat_registrasi')
-        .select(`
-          *,
-          surat_signatures (
-            id, step_order, is_signed, role_name, 
-            status, catatan, signed_at, file_path_snap, pdf_path_snap,
-            profiles:user_id ( full_name )
-          ),
-          surat_attachments ( id, file_url, file_name, file_type, file_size )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data as any[];
-    },
+  const { data: pageData, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-monitoring-list', page, deferredSearch, statusFilter, dateFilter],
+    queryFn: () => suratMonitoringService.getPage({
+      page,
+      search: deferredSearch,
+      status: statusFilter,
+      dateRange: dateFilter as 'all' | 'today' | 'week' | 'month',
+    }),
+    placeholderData: (previous) => previous,
+    staleTime: 20_000,
   });
+
+  const allData = pageData?.rows || [];
+  const totalPages = Math.max(1, Math.ceil((pageData?.count || 0) / (pageData?.pageSize || 24)));
+
+  const { data: selectedDetail } = useQuery({
+    queryKey: ['surat-detail', selectedSuratId],
+    queryFn: () => suratMonitoringService.getDetail(selectedSuratId),
+    enabled: Boolean(selectedSuratId),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (selectedDetail) setSelectedSurat(selectedDetail);
+  }, [selectedDetail]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, statusFilter, dateFilter]);
 
   // 3. HELPER FORMAT TANGGAL & WAKTU
   const formatFullDate = (dateString: string) => {
@@ -81,26 +92,8 @@ const MonitoringAdminPage = () => {
       : [];
   };
 
-  // 5. LOGIKA FILTERING
-  const filtered = allData.filter(s => {
-    const matchSearch = (s.judul_surat?.toLowerCase() || "").includes(search.toLowerCase()) ||
-                        (s.no_surat?.toLowerCase() || "").includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || s.status === statusFilter;
-
-    let matchDate = true;
-    if (dateFilter !== 'all') {
-      const createdDate = new Date(s.created_at);
-      const now = new Date();
-      if (dateFilter === 'today') matchDate = createdDate.toDateString() === now.toDateString();
-      else if (dateFilter === 'week') {
-        const weekAgo = new Date(); weekAgo.setDate(now.getDate() - 7);
-        matchDate = createdDate >= weekAgo;
-      } else if (dateFilter === 'month') {
-        matchDate = createdDate.getMonth() === now.getMonth() && createdDate.getFullYear() === now.getFullYear();
-      }
-    }
-    return matchSearch && matchStatus && matchDate;
-  });
+  // Filter dijalankan oleh PostgREST agar browser hanya menerima halaman yang sedang dilihat.
+  const filtered = allData;
 
   if (queryError) return (
     <div className="flex h-screen items-center justify-center p-10 text-center">
@@ -283,6 +276,32 @@ const MonitoringAdminPage = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && (pageData?.count || 0) > (pageData?.pageSize || 24) && (
+        <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            Halaman {page} dari {totalPages} · {pageData?.count || 0} dokumen
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+              className="rounded-md border border-border px-3 py-2 text-xs font-semibold disabled:opacity-40"
+            >
+              Sebelumnya
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+              className="rounded-md border border-border px-3 py-2 text-xs font-semibold disabled:opacity-40"
+            >
+              Berikutnya
+            </button>
+          </div>
         </div>
       )}
 

@@ -32,6 +32,7 @@ const activeChannels = new Set<RealtimeChannel>();
 let cachedSession: any | null = null;
 let sessionRequest: Promise<any | null> | null = null;
 let sessionCheckedAt = 0;
+let sessionLoadError: BffError | null = null;
 let authBroadcast: BroadcastChannel | null = null;
 
 const normalizeError = (value: any, fallback: string): BffError => ({
@@ -60,6 +61,7 @@ const requestJson = async (url: string, init?: RequestInit) => {
 const notifyAuth = (event: string, session: any | null, broadcast = true) => {
   cachedSession = session;
   sessionCheckedAt = Date.now();
+  sessionLoadError = null;
   authListeners.forEach((listener) => listener(event, session));
   if (broadcast) authBroadcast?.postMessage({ event });
 };
@@ -71,11 +73,13 @@ const loadSession = async (force = false) => {
     .then((payload) => {
       cachedSession = payload.session || null;
       sessionCheckedAt = Date.now();
+      sessionLoadError = null;
       return cachedSession;
     })
-    .catch(() => {
+    .catch((error) => {
       cachedSession = null;
       sessionCheckedAt = Date.now();
+      sessionLoadError = normalizeError(error, 'Gagal memeriksa sesi login');
       return null;
     })
     .finally(() => { sessionRequest = null; });
@@ -260,14 +264,16 @@ class RealtimeChannel {
 }
 
 const auth = {
-  async getSession() {
-    const session = await loadSession();
-    return { data: { session }, error: null };
+  async getSession(options?: { force?: boolean } | boolean) {
+    const force = typeof options === 'boolean' ? options : Boolean(options?.force);
+    const session = await loadSession(force);
+    return { data: { session }, error: sessionLoadError };
   },
 
-  async getUser() {
-    const session = await loadSession();
-    return { data: { user: session?.user || null }, error: null };
+  async getUser(options?: { force?: boolean } | boolean) {
+    const force = typeof options === 'boolean' ? options : Boolean(options?.force);
+    const session = await loadSession(force);
+    return { data: { user: session?.user || null }, error: sessionLoadError };
   },
 
   async signInWithPassword(credentials: { email: string; password: string }) {

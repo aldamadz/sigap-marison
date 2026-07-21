@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -213,7 +213,6 @@ const SELECT_SURAT = `
 `;
 
 const RiwayatKeterlibatanPage = () => {
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | InvolvementKey>('ALL');
   const initialRange = useMemo(() => currentMonthRange(), []);
@@ -284,33 +283,6 @@ const RiwayatKeterlibatanPage = () => {
       };
     },
   });
-
-  // Realtime invalidation untuk timeline/list
-  useEffect(() => {
-    let channel: any;
-
-    const initRealtime = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-      const userId = session.user.id;
-
-      channel = supabase
-        .channel(`riwayat-keterlibatan:${userId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_registrasi' }, () => {
-          queryClient.invalidateQueries({ queryKey: ['surat-riwayat-keterlibatan'] });
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'surat_signatures' }, () => {
-          queryClient.invalidateQueries({ queryKey: ['surat-riwayat-keterlibatan'] });
-        })
-        .subscribe();
-    };
-
-    initRealtime();
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   const prepared: PreparedSurat[] = useMemo(() => {
     if (!data) return [];

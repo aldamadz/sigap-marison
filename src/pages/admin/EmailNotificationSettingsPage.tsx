@@ -78,11 +78,10 @@ export default function EmailNotificationSettingsPage({ embedded = false }: Prop
             <Input
               type="url"
               value={config.app_url}
-              onChange={(e) => patch({ app_url: e.target.value })}
-              placeholder="https://sigap.marison-testing.biz.id"
+              readOnly
             />
             <p className="text-xs text-muted-foreground">
-              Tombol pada email akan membuka alamat ini. Ubah saat domain production berpindah.
+              Mengikuti domain deployment yang sedang aktif.
             </p>
           </CardContent>
         </Card>

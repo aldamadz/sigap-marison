@@ -1,6 +1,6 @@
 # Fitur SIGAP
 
-Tanggal pembaruan: 2026-07-13
+Tanggal pembaruan: 2026-07-21
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 
 Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besar dan tautan, sedangkan detail fitur fungsional dan non-fungsional dicatat di file ini.
@@ -102,7 +102,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Error akses harus tampil jelas ke user, bukan hanya di console.
 - Reset kata sandi tidak boleh membedakan email terdaftar dan tidak terdaftar pada pesan UI agar daftar akun tidak mudah ditebak.
 - Email template reset password harus mengarah ke domain SIGAP aktif dan disarankan memakai `token_hash` agar tidak kembali ke domain lama.
-- Email reset password harus memakai template HTML branded SIGAP dengan logo Marison dan tidak boleh memuat teks penanda deploy/test.
+- Email reset password harus memakai template HTML branded SIGAP dengan logo Marison yang disematkan sebagai gambar inline, sehingga tidak bergantung pada URL localhost, staging, atau production.
 - Email reset password dikirim melalui endpoint server SIGAP dan SMTP Hostinger agar tidak bergantung pada mailer bawaan Supabase.
 - Kata sandi baru harus berbeda dari kata sandi yang sedang aktif; pesan teknis dari provider auth harus diterjemahkan menjadi pesan yang mudah dipahami user.
 - Perubahan kata sandi dicatat sebagai audit event tanpa menyimpan nilai password.
@@ -227,6 +227,8 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Pengajuan Unit selalu wajib memilih proyek Unit karena kapasitas unit dan alokasi kavling bergantung pada proyek yang dipilih.
 - User mendapatkan nomor surat.
 - Setelah nomor dipesan, sistem membuat draft registrasi dan menyimpan perubahan form otomatis ke database.
+- Saat draft dikirim menjadi surat aktif, server SIGAP memvalidasi session login, lalu database memakai `reservation_id` draft sebagai kunci reservasi nomor. Reservasi ditandai `USED` secara atomik agar draft milik user sendiri tidak gagal karena pencarian nomor yang ambigu.
+- Jika pengajuan Aset membutuhkan rekomendasi, nomor rekomendasi dipesan dalam transaksi pendaftaran yang sama atas identitas pemohon. Kepemilikan reservasi baru dipindahkan kepada petugas IT saat tugas rekomendasi diklaim, sehingga pendaftaran induk tetap aman dan tidak gagal karena perbedaan user.
 - Setelah draft atau nomor surat dipulihkan, Form Dokumen dan Kegunaan tetap ditampilkan sebagai informasi terkunci agar user memahami konteks form yang sedang dilanjutkan tanpa efek berkedip saat refresh.
 - Pada dokumen rekomendasi tertaut, Form Dokumen dan Kegunaan tidak ditampilkan ulang karena identitas form sudah dikunci oleh tugas rekomendasi dari pengajuan induk.
 - Deteksi dokumen rekomendasi tertaut dilakukan dari parameter URL sejak render pertama, sehingga halaman tidak sempat menampilkan pilihan registrasi biasa saat draft rekomendasi sedang dipulihkan.
@@ -239,6 +241,16 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - User memilih pejabat penandatangan berdasarkan matrix.
 - Jika tahap dikonfigurasi mengikuti kantor pemohon, daftar pejabat otomatis dibatasi ke kandidat pada kantor/cabang surat yang sama.
 - User mengunggah lampiran awal jika diwajibkan.
+
+### Kategori Pengajuan
+
+- Dokumentasi user menyediakan satu panduan terpadu untuk memilih `Aset`, `Non Aset`, `Unit`, dan `Non Unit`.
+- `Aset` digunakan untuk barang yang menjadi inventaris/aset perusahaan, termasuk pengadaan atau peremajaan perangkat. Dokumen rekomendasi dapat tersedia sesuai departemen dan konfigurasi.
+- `Non Aset` digunakan untuk barang habis pakai, jasa, sewa, promosi, kegiatan, dan biaya operasional yang tidak dicatat sebagai aset.
+- `Unit` digunakan untuk order bangun yang wajib memiliki proyek, jumlah unit, alokasi kavling, struktur atas/bawah, dan kode produksi.
+- `Non Unit` digunakan untuk kegunaan dokumen yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk proses proyek atau dokumen umum yang dikonfigurasi demikian.
+- `Non Aset` dan `Non Unit` tidak dianggap istilah yang sama: Non Aset menjelaskan klasifikasi kebutuhan, sedangkan Non Unit menjelaskan tidak adanya proses alokasi kavling.
+- Panduan menampilkan kegunaan, contoh, data yang diminta, alur, perbandingan kategori, dan solusi ketika form/kegunaan tidak muncul.
 
 ### Non-Fungsional
 
@@ -312,6 +324,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai tabel satu baris per kavling dengan header sticky, sehingga tim pemeriksa tetap melihat kolom `Struktur Atas`, `Struktur Bawah`, `Nomor`, `Blok`, dan `Tanggal` saat daftar discroll.
 - Setelah memilih kavling, tim pemeriksa dapat mengunduh template Excel alokasi unit, mengisi struktur atas/bawah, nomor, blok, dan tanggal produksi secara massal, lalu import kembali ke tabel pemeriksaan.
 - Template Excel alokasi unit memiliki keterangan cell yang memberi contoh input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
+- Nomor kode produksi pada template Excel memakai format tiga digit. Input `1` maupun `001` ditampilkan, diimport, disimpan, dan diekspor sebagai `001`.
 - Import alokasi unit menerima `.xlsx`, `.xls`, dan `.csv`, hanya memperbarui kavling yang sudah dipilih, serta memberi informasi jika ada baris yang dilewati.
 - Format kode produksi otomatis: `[nomor]/UAI/PRC/[blok]/[tanggal]`.
 - Perencanaan mengunggah 3 lampiran manual: `SITEPLAN`, `VOLUME ADENDUM`, dan `HITUNGAN ADENDUM`.
@@ -331,9 +344,12 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - `unit_config` pada Master Form hanya menyimpan mapping teknis template, aturan lampiran, dan cell unit.
 - Unit terpilih, proyek alokasi, detail struktur, kode produksi, lampiran, waktu, dan signature harus terekam di database.
 - Lampiran otomatis Unit harus tersimpan sebagai `stage = unit_allocation`.
+- Saat tim pemeriksa menekan `Simpan & lanjutkan`, alokasi Unit disimpan lewat RPC database atomik agar data kavling tidak hanya tersimpan di draft/autosave. Jika ada data lama yang sudah diverifikasi tetapi alokasi masih hanya ada di draft, migration melakukan backfill ke `form_input_data` dan snapshot detail.
 - Jika integrasi API external berubah, UI utama tidak perlu dirombak.
 
 ## 9. Monitoring Surat
+
+- Detail Status Pengajuan menghitung ulang status dari signature pada respons detail. Modal tidak bergantung pada field turunan milik daftar, sehingga pergantian dari data ringkas ke data lengkap tidak membuat halaman kosong.
 
 ### Fungsional
 
@@ -372,14 +388,17 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - SIGAP menangani pembuatan, routing, tanda tangan, monitoring, dan penyelesaian approval.
 - Setelah approval selesai, dokumen berstatus `DONE`.
-- Pengiriman dokumen ke sistem departemen akan menggunakan endpoint integrasi ketika endpoint tersebut tersedia.
+- Pada deployment staging, surat yang sudah selesai ditandatangani dikirim otomatis dari server SIGAP ke API Marison staging untuk kategori `Aset`, `Unit`, dan `Non Unit`.
+- Payload outbound memakai nomor surat, data pengajuan, item/unit yang dipilih, lampiran bertautan token, serta riwayat approval berisi role, NIK, waktu, dan catatan.
+- Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
 - Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
 ### Non-Fungsional
 
 - Tidak ada akses PIC implisit atau bypass admin pada proses approval.
 - Data hanya dapat dibaca oleh pembuat, penandatangan terkait, admin, atau external client resmi.
-- Integrasi downstream harus idempoten dan dapat diaudit ketika diaktifkan.
+- Integrasi downstream berjalan dari server, memakai access token dan HMAC API Marison, serta tidak pernah mengirim `client_secret` ke browser.
+- Integrasi downstream bersifat idempoten melalui `data_snapshot.marison_dispatch`; surat yang sudah sukses dikirim tidak dikirim ulang otomatis.
 
 ## 12. Notifikasi dan Realtime
 
@@ -388,6 +407,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - User mendapat notifikasi saat ada surat yang perlu diproses.
 - Badge sidebar menunjukkan antrean approval yang relevan.
 - Data aktif disinkronkan saat realtime event masuk atau tab kembali fokus.
+- Badge sidebar langsung disinkronkan ketika `surat_signatures` atau `surat_registrasi` berubah dan langsung direfresh setelah aksi approval/pemeriksaan berhasil.
 - Bunyi notifikasi diputar untuk event penting.
 
 ### Non-Fungsional
@@ -396,6 +416,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Badge harus sesuai hak akses.
 - Error akses ditolak harus terlihat oleh user, bukan hanya di console.
 - Realtime harus punya fallback refresh query.
+- Sinkronisasi badge memakai stream SSE bersama dengan debounce singkat, bukan polling atau koneksi realtime tambahan per badge.
 - Konfirmasi dan input pop-up aplikasi memakai dialog reusable SIGAP, bukan dialog browser bawaan, agar pengalaman user konsisten di semua halaman.
 
 ## 13. Master User Organization
@@ -843,9 +864,18 @@ Fallback data lama:
 ### Fungsional
 
 - Aplikasi utama berjalan di Docker production.
+- Deployment staging selalu memakai datasource Marison staging, sedangkan deployment production selalu memakai datasource Marison production.
+- Domain production adalah `https://sigap.marisoncloud.com`; DNS Cloudflare berupa proxied `A` record ke origin publik, lalu Caddy meneruskan request ke container production pada `10.10.10.246:3010`.
+- Domain staging adalah `https://sigap.marison-testing.biz.id` dan tetap melalui Cloudflare Tunnel ke container staging pada port host `3011`.
+- Staging memakai project Supabase, Auth, database, bucket storage, dan PDF worker tersendiri; data transaksi production tidak disalin.
+- Master/config staging disalin dari production, sedangkan kandidat user dimasking agar matrix dapat diuji tanpa menyalin PII production.
+- `npm run dev` membaca `.env.local`, menjalankan Vite pada port `8080` dan BFF lokal pada port `3010`, serta tetap memakai Supabase dan datasource Marison staging.
+- Request `/api` dari Vite diproxy ke BFF lokal tanpa mengubah Host header agar validasi same-origin dan cookie HttpOnly bekerja sama seperti deployment.
+- Environment Marison dikunci melalui `MARISON_DEPLOYMENT_ENVIRONMENT` pada Docker Compose dan tidak dapat diganti dari UI atau nilai database.
+- Halaman Integrasi Marison hanya menampilkan status endpoint aktif dan tes koneksi Projects, Unit, serta Non Unit untuk admin.
 - External API berjalan sebagai service terpisah.
 - PDF worker dapat dipisah di server lain.
-- Cloudflare Tunnel dapat dipakai untuk expose service.
+- Cloudflare Tunnel hanya dipakai oleh staging dan layanan testing lain; hostname production SIGAP tidak terdaftar pada ingress Tunnel.
 - Deploy aplikasi utama dilakukan dari host/workstation yang memiliki Docker context `ubuntu-server`.
 - Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, LibreOffice/font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
 - PDF worker hanya diredeploy ketika ada perubahan worker, dependency/runtime PDF, atau konfigurasi worker.
@@ -854,18 +884,31 @@ Fallback data lama:
 ### Non-Fungsional
 
 - Production deploy menggunakan `.env.production`.
+- Staging menggunakan `.env.staging` dan `docker-compose.staging.yml` dengan `MARISON_DEPLOYMENT_ENVIRONMENT=staging`.
+- Akun hasil salinan data staging mempertahankan nama riil dan memakai email non-deliverable berbasis nama (`nama.user@staging.test`); nama yang sama mendapat akhiran `.02`, `.03`, dan seterusnya. Password default akun uji hanya berlaku di staging, sementara akun admin staging dengan email asli dikelola terpisah.
+- Production menggunakan `docker-compose.prod.yml` dengan `MARISON_DEPLOYMENT_ENVIRONMENT=production`.
+- `APP_PUBLIC_URL` dan `VITE_APP_PUBLIC_URL` dikunci oleh masing-masing Compose agar tautan email, reset password, dan API browser tidak silang domain.
+- Credential `MARISON_STAGING_*` dan `MARISON_PRODUCTION_*` hanya tersedia di server dan tidak dikirim ke browser.
+- Fallback lama `MARISON_EXTERNAL_*`, pemilihan environment global dari database, dan switch OTP tidak digunakan lagi.
+- Command deploy staging aplikasi utama:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build
+```
+
 - Command deploy production aplikasi utama:
 
 ```powershell
-docker --context ubuntu-server compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker --context ubuntu-server compose -p agenda-flow-production -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-- Jangan hilangkan `--env-file .env.production`; file ini dipakai Compose untuk interpolasi variabel environment seperti `STORAGE_SUPABASE_URL` dan `STORAGE_PUBLIC_BASE_URL`.
+- Jangan hilangkan `-p`; nama project Compose yang berbeda mencegah deploy staging menganggap container production sebagai orphan.
+- Jangan hilangkan `--env-file`; staging wajib memakai `.env.staging` dan production wajib memakai `.env.production`.
 - Jika hanya mengubah frontend, halaman dokumentasi, server aplikasi utama, atau `server.mjs`, gunakan command aplikasi utama di atas dan jangan redeploy worker PDF.
 - Jika perlu redeploy PDF worker, gunakan compose worker secara terpisah:
 
 ```powershell
-docker --context ubuntu-server compose -f docker-compose.worker.yml --env-file .env.production up -d --build
+docker --context ubuntu-server compose -p agenda-flow-production-worker -f docker-compose.worker.yml --env-file .env.production up -d --build
 ```
 
 - Jika hanya mengubah External API, gunakan compose external dan app utama/PDF worker tidak perlu diredeploy:
@@ -885,6 +928,8 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Sinkronisasi saat tab kembali aktif memakai cooldown agar tidak memicu refetch berulang.
 - Setiap perpindahan route memvalidasi ulang seluruh query aktif dan menampilkan overlay loading sampai pengambilan data terbaru selesai.
 - Refresh route tidak melakukan browser reload sehingga sesi, koneksi realtime, dan state global aplikasi tetap terjaga.
+- Cookie sesi HttpOnly hanya menyimpan token dan identitas minimum user agar ukurannya tetap di bawah batas cookie browser; profil lengkap tetap dibaca dari database.
+- BFF meneruskan JWT user melalui konfigurasi `accessToken` resmi Supabase SDK sehingga `auth.uid()` konsisten pada query, validasi kegunaan, dan submit registrasi.
 - Endpoint ringan untuk attention badge, web push, dan data source unit memakai validasi token JWT lokal yang memeriksa bentuk token, expiry, dan user id. Jalur ini mengurangi ketergantungan ke request network Supabase Auth untuk badge/notifikasi, sedangkan endpoint dokumen dan token file tetap memakai validasi Auth server penuh.
 
 ## 31. Kegunaan Form dan Tanda Tangan Dinamis
@@ -985,3 +1030,21 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Draft konfigurasi tidak dapat dibaca user biasa; user hanya membaca kegunaan aktif untuk departemen profilnya.
 - Data transaksi lama belum dihapus sampai konfigurasi baru aktif dan cutover produksi dikonfirmasi.
 - RLS diaktifkan untuk tabel konfigurasi baru serta master inti yang sebelumnya belum dilindungi.
+
+## 32. Efisiensi PostgREST dan Skalabilitas
+
+### Fungsional
+
+- Status Pengajuan dan Monitoring Admin memakai pagination server-side dengan maksimal 24 dokumen per halaman.
+- Daftar monitoring hanya memuat identitas surat dan progres approval. Data form, snapshot, lampiran, serta snapshot signer dimuat ketika detail dibuka.
+- Pencarian nomor/judul, status, dan periode monitoring diproses di database agar browser tidak perlu menerima seluruh histori.
+- Statistik pengajuan dihitung oleh RPC agregasi dan hanya mengembalikan total, selesai, proses, serta ditolak.
+- Kalender hanya mengambil agenda untuk bulan yang sedang ditampilkan dengan buffer tujuh hari untuk grid kalender.
+
+### Non-Fungsional
+
+- Attention badge memakai satu RPC agregasi, menggantikan enam query PostgREST terpisah pada setiap sinkronisasi.
+- Subscription realtime global menjadi sumber invalidasi agenda dan riwayat; subscription halaman yang menduplikasi query yang sama dihapus.
+- Worker PDF memakai backoff dari 2 detik sampai 30 detik saat antrean kosong dan kembali responsif setelah menemukan pekerjaan.
+- Index parsial disediakan untuk signature pending, notifikasi belum dibaca, revision aktif, status surat, dan urutan histori.
+- Dependency transitif `brace-expansion` dikunci ke patch aman `1.1.16` dan `2.1.2` tanpa mengubah major version yang dipakai tooling maupun ExcelJS; `js-yaml` milik tooling juga diperbarui ke patch aman `4.3.0`.
