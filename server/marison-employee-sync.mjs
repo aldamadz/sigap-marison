@@ -295,6 +295,7 @@ const buildEmployeePlan = (employees, state, officeMappings) => {
   }
   const authByEmail = new Map(state.authUsers.map((user) => [String(user.email || "").toLowerCase(), user]));
   const authById = new Map(state.authUsers.map((user) => [user.id, user]));
+  const profileIds = new Set(state.profiles.map((profile) => profile.id));
   const departmentsByName = new Map(state.departments.map((department) => [normalizeMarisonName(department.name), department]));
   const plan = [];
 
@@ -306,8 +307,11 @@ const buildEmployeePlan = (employees, state, officeMappings) => {
     }
     const duplicateName = (nameCounts.get(normalizeMarisonName(employee.name)) || 0) > 1;
     let email = buildMarisonStagingEmail(employee, duplicateName);
-    const currentAuth = resolved.profile ? authById.get(resolved.profile.id) : null;
+    let currentAuth = resolved.profile ? authById.get(resolved.profile.id) : null;
     const occupied = authByEmail.get(email);
+    if (!resolved.profile && occupied && !profileIds.has(occupied.id)) {
+      currentAuth = occupied;
+    }
     if (occupied && occupied.id !== currentAuth?.id) {
       email = `${emailSlug(employee.name)}.${marisonNikKey(employee.nik).toLowerCase()}.${employee.id}@staging.test`;
     }
@@ -414,7 +418,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
     }
     const employee = item.employee;
     try {
-      let userId = item.profile?.id || null;
+      let userId = item.profile?.id || item.currentAuth?.id || null;
       if (userId && !item.currentAuth) {
         throw new Error("Profil ada tetapi akun Auth tidak ditemukan");
       }
@@ -445,7 +449,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
         email: item.email,
         phone: String(employee.phone || "").trim() || existing.phone || null,
         role: existing.role || "user",
-        job_title: existing.job_title || item.derivedJobTitle,
+        job_title: existing.job_title || item.derivedJobTitle || "Karyawan",
         department_id: existing.department_id || item.department?.id || null,
         office_id: existing.office_id || item.office?.id || null,
         is_active: true,
