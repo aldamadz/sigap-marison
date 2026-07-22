@@ -95,10 +95,11 @@ membawa seluruh isi staging ke production.
 7. Setelah deployment, lakukan smoke test terhadap domain dan environment yang
    benar. Jangan menyimpulkan deployment berhasil hanya dari status container.
 
-## Kondisi Repository Saat Dokumen Dibuat
+## Kondisi Repository Saat Ini
 
-Saat kebijakan ini ditambahkan, branch remote `staging` dan workflow deployment
-berbasis branch belum tersedia. Agent yang mendapat tugas menyiapkan strategi
-staging harus membuat infrastruktur tersebut sebelum mengandalkan deployment
-otomatis. Sampai itu selesai, aturan target environment di atas tetap berlaku dan
-deployment manual harus mengikuti pemetaan yang sama.
+Branch remote `staging` sudah tersedia dan menjadi target integrasi PR untuk
+pengujian. Workflow CI/deployment berbasis branch belum tersedia. Sampai workflow
+tersebut dibuat dan diverifikasi, deployment tetap dilakukan secara manual dengan
+pemetaan environment di atas. Keberadaan commit pada `staging` tidak membuktikan
+bahwa runtime staging sudah menggunakan commit tersebut; selalu verifikasi image,
+container, domain, dan smoke test setelah deployment.

@@ -1,6 +1,6 @@
 # SIGAP Feature and Release Map
 
-Snapshot audit: 2026-07-21 (Asia/Jakarta)
+Snapshot audit: 2026-07-22 (Asia/Jakarta)
 
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
@@ -34,7 +34,7 @@ Arti status:
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
 | App container | `agenda-flow-prod` | `agenda-flow-staging` | Keduanya sehat saat audit |
-| App source | Sama dengan source `main` saat deploy 2026-07-21 | Sama dengan production | Belum ada perbedaan fitur berbasis branch |
+| Git source | `main` | `staging`, enam commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
 | RPC | 51 RPC | 51 RPC | Tidak ada perbedaan RPC |
@@ -54,7 +54,7 @@ bukan hanya waktu pembuatan image.
 | Komponen | Status saat audit | Tindakan yang diperlukan |
 | --- | --- | --- |
 | `main` | Ada; saat ini menjadi source seluruh runtime | Pertahankan sebagai production |
-| `staging` | Belum ada di remote | Buat dari baseline production |
+| `staging` | Sudah ada; enam commit di depan `main` saat snapshot | Gunakan hanya sebagai target PR pengujian staging |
 | `feature/*` | Belum menjadi alur baku historis | Wajib untuk fitur baru |
 | `fix/*` | Belum menjadi alur baku historis | Wajib untuk perbaikan rutin |
 | GitHub Actions | Tidak ada workflow di `.github/workflows` | Buat CI dan deploy terpisah |
@@ -225,8 +225,8 @@ bila diperlukan, rencana rollback, dan smoke test production.
 
 | Prioritas | Temuan | Dampak | Tindakan |
 | --- | --- | --- | --- |
-| P0 | Tidak ada branch remote `staging` | Tidak ada pembeda source GitHub | Buat branch dan protection |
 | P0 | Tidak ada workflow CI/deploy GitHub | Deployment tidak terikat branch | Buat workflow staging dan production |
+| P1 | Branch protection dan required checks belum diverifikasi | PR dapat masuk tanpa quality gate yang konsisten | Aktifkan protection setelah CI tersedia |
 | P0 | Outbound Marison belum memiliki lock/idempotency lokal | Potensi POST ganda | Tambah claim/lock atomik dan idempotency key bila upstream mendukung |
 | P1 | Production PDF worker berada pada source `8918d34` | App dan worker dapat menghasilkan perilaku berbeda | Promosikan worker hanya lewat rilis production terverifikasi |
 | P1 | Dua migration lokal memakai versi `20260707113000` | `db push` meminta `--include-all` dan berisiko salah apply | Audit lalu beri versi unik dengan prosedur repair terkontrol |
@@ -239,7 +239,7 @@ bila diperlukan, rencana rollback, dan smoke test production.
 
 Sebelum fitur baru pertama dimulai, siapkan:
 
-1. branch remote `staging` dari baseline `main` yang sedang berjalan;
+1. verifikasi branch protection pada branch remote `staging` yang sudah tersedia;
 2. CI pada `feature/*`, `fix/*`, `staging`, dan `main`;
 3. auto-deploy `staging` hanya ke `sigap.marison-testing.biz.id`;
 4. production deploy dari `main` dengan approval manual;
