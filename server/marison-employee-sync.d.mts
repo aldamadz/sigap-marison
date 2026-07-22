@@ -8,6 +8,10 @@ export type MarisonEmployee = Record<string, unknown> & {
 export function normalizeMarisonName(value: unknown): string;
 export function normalizeMarisonNik(value: unknown): string;
 export function marisonNikKey(value: unknown): string;
+export function canUseMarisonNameFallback(
+  employee: { name?: unknown; nik?: unknown },
+  profile: { full_name?: unknown; nik?: unknown },
+): boolean;
 export function buildMarisonStagingEmail(employee: MarisonEmployee, duplicateName?: boolean): string;
 export function deduplicateMarisonEmployees(rows: MarisonEmployee[], options?: { knownNames?: string[] }): {
   employees: MarisonEmployee[];
