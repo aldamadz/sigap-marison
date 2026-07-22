@@ -10,7 +10,8 @@ Kategori Non Aset dan Non Unit tidak dibahas karena masih dalam pengembangan.
 
 Diagram berikut disediakan dalam format PNG transparan untuk presentasi,
 dokumentasi, dan komunikasi lintas departemen. File sumber Mermaid berada pada
-folder yang sama agar diagram dapat diperbarui bersama perubahan workflow.
+folder yang sama agar diagram dapat diperbarui bersama perubahan workflow. PNG
+sudah dioptimalkan untuk disisipkan sebagai gambar pada Excel atau Google Sheets.
 
 | Workflow | PNG transparan | Sumber |
 | --- | --- | --- |
