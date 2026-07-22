@@ -15,6 +15,12 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("/non-unit-submissions");
     expect(server).toContain('["POST", url.pathname, token, bodyHash, timestamp].join(":")');
     expect(server).toContain("dispatchCompletedSuratToMarison");
+    expect(server).toContain('assertMarisonOutboundContract("unit", payload)');
+    expect(server).toContain('assertMarisonOutboundContract("asset", payload)');
+    expect(server).toContain("total_units: units.length");
+    expect(server).toContain("total_items: payloadItems.length");
+    expect(server).toContain("contract_version: dispatch.contractVersion");
+    expect(server).toContain("payload_hash: sha256Hex");
     expect(client).not.toContain("MARISON_STAGING_CLIENT_SECRET");
     expect(client).not.toContain("MARISON_PRODUCTION_CLIENT_SECRET");
     expect(client).not.toContain("client_secret");

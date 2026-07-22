@@ -1,0 +1,158 @@
+{
+  "submission_number": "041/UAI/MKT.1.WSVJ9/VII/2026",
+  "title": "Permohonan Order Bangun SPK Pembangunan Rumah 3 Unit Arkana Estate",
+  "submitted_at": "2026-07-21T09:32:14+07:00",
+  "submitted_by": {
+    "nik": "EMP-MKT-001",
+    "name": "Budi Santoso",
+    "job_title": "Staff Admin Marketing"
+  },
+  "company": {
+    "code": "UAI",
+    "name": "PT. UNILOA ARDIYANTO INVESTAMA"
+  },
+  "office": {
+    "code": "PST",
+    "name": "Kantor Pusat",
+    "position": "Pusat"
+  },
+  "department": {
+    "code": "MKT",
+    "name": "Marketing"
+  },
+  "project": {
+    "id": 13,
+    "code": "WSVJ9",
+    "name": "Arkana Estate"
+  },
+  "branch": {
+    "id": 8,
+    "name": "Papua"
+  },
+  "total_units": 3,
+  "units": [
+    {
+      "item_number": 1,
+      "unit_id": 718,
+      "unit_code": "B01",
+      "production_code": "001/UAI/PRC/5.2/31/12/2024",
+      "production_serial": "001",
+      "production_block": "5.2",
+      "production_date": "2024-12-31",
+      "addendum_atas": {
+        "label": "Struktur Atas",
+        "nominal": 1000000
+      },
+      "addendum_bawah": {
+        "label": "Struktur Bawah",
+        "nominal": 1500000
+      },
+      "notes": "Pembangunan mengikuti siteplan dan spesifikasi terlampir"
+    },
+    {
+      "item_number": 2,
+      "unit_id": 719,
+      "unit_code": "B02",
+      "production_code": "002/UAI/PRC/5.3/01/01/2025",
+      "production_serial": "002",
+      "production_block": "5.3",
+      "production_date": "2025-01-01",
+      "addendum_atas": {
+        "label": "Struktur Atas",
+        "nominal": 2000000
+      },
+      "addendum_bawah": {
+        "label": "Struktur Bawah",
+        "nominal": 1000000
+      },
+      "notes": "Terdapat penyesuaian pekerjaan struktur atas"
+    },
+    {
+      "item_number": 3,
+      "unit_id": 720,
+      "unit_code": "B03",
+      "production_code": "003/UAI/PRC/5.4/02/01/2025",
+      "production_serial": "003",
+      "production_block": "5.4",
+      "production_date": "2025-01-02",
+      "addendum_atas": {
+        "label": "Struktur Atas",
+        "nominal": 1000000
+      },
+      "addendum_bawah": {
+        "label": "Struktur Bawah",
+        "nominal": 0
+      },
+      "notes": ""
+    }
+  ],
+  "attachments": [
+    {
+      "title": "Dokumen Pengajuan Final",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-unit-final-001"
+    },
+    {
+      "title": "Siteplan",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-siteplan-001"
+    },
+    {
+      "title": "Volume Adendum",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-volume-adendum-001"
+    },
+    {
+      "title": "Nilai Adendum",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-nilai-adendum-001"
+    },
+    {
+      "title": "Rekap Adendum Unit",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-rekap-unit-001"
+    },
+    {
+      "title": "Kode Produksi Unit",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-kode-produksi-001"
+    }
+  ],
+  "approvals": [
+    {
+      "step": 1,
+      "role": "Ass. Mgr. Marketing",
+      "nik": "EMP-MKT-002",
+      "action": "approved",
+      "actioned_at": "2026-07-21T09:40:15+07:00",
+      "notes": "Data unit telah diperiksa"
+    },
+    {
+      "step": 2,
+      "role": "Mgr. Marketing",
+      "nik": "EMP-MKT-003",
+      "action": "approved",
+      "actioned_at": "2026-07-21T10:15:30+07:00",
+      "notes": ""
+    },
+    {
+      "step": 3,
+      "role": "Mgr. Perencanaan",
+      "nik": "EMP-PRC-001",
+      "action": "approved",
+      "actioned_at": "2026-07-21T11:05:45+07:00",
+      "notes": "Siteplan dan nilai adendum telah sesuai"
+    },
+    {
+      "step": 4,
+      "role": "Direktur I",
+      "nik": "EMP-DIR-001",
+      "action": "approved",
+      "actioned_at": "2026-07-21T13:10:20+07:00",
+      "notes": ""
+    },
+    {
+      "step": 5,
+      "role": "Direktur Utama",
+      "nik": "EMP-DIR-002",
+      "action": "approved",
+      "actioned_at": "2026-07-21T14:25:10+07:00",
+      "notes": "Disetujui untuk diproses"
+    }
+  ]
+}
+
