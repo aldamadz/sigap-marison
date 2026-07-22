@@ -13,10 +13,10 @@ dokumentasi, dan komunikasi lintas departemen. File sumber Mermaid berada pada
 folder yang sama agar diagram dapat diperbarui bersama perubahan workflow. PNG
 sudah dioptimalkan untuk disisipkan sebagai gambar pada Excel atau Google Sheets.
 
-| Workflow | PNG transparan | Sumber |
-| --- | --- | --- |
-| Permohonan Aset | [Buka PNG](./diagrams/workflow-permohonan-aset.png) | [Mermaid](./diagrams/workflow-permohonan-aset.mmd) |
-| Permohonan Unit | [Buka PNG](./diagrams/workflow-permohonan-unit.png) | [Mermaid](./diagrams/workflow-permohonan-unit.mmd) |
+| Workflow | PNG transparan | SVG untuk Excel | PNG resolusi tinggi untuk spreadsheet | Sumber |
+| --- | --- | --- | --- | --- |
+| Permohonan Aset | [Buka PNG](./diagrams/workflow-permohonan-aset.png) | [Buka SVG](./diagrams/workflow-permohonan-aset.svg) | [Bagian 1](./diagrams/spreadsheet/workflow-permohonan-aset-01.png), [Bagian 2](./diagrams/spreadsheet/workflow-permohonan-aset-02.png), [Bagian 3](./diagrams/spreadsheet/workflow-permohonan-aset-03.png) | [Mermaid](./diagrams/workflow-permohonan-aset.mmd) |
+| Permohonan Unit | [Buka PNG](./diagrams/workflow-permohonan-unit.png) | [Buka SVG](./diagrams/workflow-permohonan-unit.svg) | [Bagian 1](./diagrams/spreadsheet/workflow-permohonan-unit-01.png), [Bagian 2](./diagrams/spreadsheet/workflow-permohonan-unit-02.png), [Bagian 3](./diagrams/spreadsheet/workflow-permohonan-unit-03.png) | [Mermaid](./diagrams/workflow-permohonan-unit.mmd) |
 
 ## 1. Istilah yang Digunakan
 
