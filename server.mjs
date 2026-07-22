@@ -26,6 +26,10 @@ import {
   assertMarisonOutboundContract,
   MARISON_OUTBOUND_CONTRACT_VERSION,
 } from "./server/marison-outbound-contract.mjs";
+import {
+  executeMarisonEmployeeSync,
+  previewMarisonEmployeeSync,
+} from "./server/marison-employee-sync.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -82,6 +86,7 @@ const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
 const marisonRealtimeClients = new Set();
+let marisonEmployeeSyncInFlight = false;
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -2794,6 +2799,108 @@ const getMarisonAccessToken = async (source, environment) => {
   return token;
 };
 
+const getMarisonProtectedJson = async (environment, endpointPath) => {
+  const config = getMarisonApiConfig(environment);
+  const token = await getMarisonAccessToken({ source_key: "employee_sync" }, environment);
+  const url = new URL(`${config.baseUrl}${endpointPath}`);
+  const timestamp = new Date().toISOString();
+  const bodyHash = sha256Hex(Buffer.alloc(0));
+  const canonical = ["GET", url.pathname, token, bodyHash, timestamp].join(":");
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Timestamp": timestamp,
+      "X-Signature": hmacSha512Hex(token, canonical),
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(payload?.message || `Gagal mengambil ${url.pathname} dari API Marison.`);
+    err.status = response.status;
+    throw err;
+  }
+  return payload;
+};
+
+const getAllMarisonCollection = async (environment, pathname) => {
+  const rows = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const payload = await getMarisonProtectedJson(
+      environment,
+      `${pathname}?per_page=100&page=${page}`
+    );
+    const pageRows = Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.data?.data)
+        ? payload.data.data
+        : [];
+    rows.push(...pageRows);
+    const totalPages = Number(payload?.meta?.total_pages || 1);
+    if (page >= totalPages || pageRows.length === 0) return rows;
+  }
+  const err = new Error(`Pagination ${pathname} melebihi batas aman.`);
+  err.status = 502;
+  throw err;
+};
+
+const getMarisonEmployeeSyncSource = async () => {
+  const [employees, branches] = await Promise.all([
+    getAllMarisonCollection("staging", "/employees"),
+    getAllMarisonCollection("staging", "/branches"),
+  ]);
+  return { employees, branches };
+};
+
+const assertMarisonEmployeeSyncAvailable = () => {
+  if (marisonDeploymentEnvironment !== "staging") {
+    const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
+    err.status = 403;
+    throw err;
+  }
+  if (!supabase || !serviceRoleKey) {
+    const err = new Error("Service role staging belum dikonfigurasi.");
+    err.status = 500;
+    throw err;
+  }
+};
+
+const previewMarisonEmployees = async (req) => {
+  await requireAdminUser(getBearerToken(req));
+  assertMarisonEmployeeSyncAvailable();
+  const source = await getMarisonEmployeeSyncSource();
+  return previewMarisonEmployeeSync({ supabase, ...source });
+};
+
+const syncMarisonEmployees = async (req) => {
+  assertSameOrigin(req);
+  await requireAdminUser(getBearerToken(req));
+  assertMarisonEmployeeSyncAvailable();
+  const payload = await readJsonBody(req, 4096);
+  if (payload?.confirm !== true) {
+    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
+    err.status = 400;
+    throw err;
+  }
+  if (marisonEmployeeSyncInFlight) {
+    const err = new Error("Sinkronisasi karyawan sedang berjalan.");
+    err.status = 409;
+    throw err;
+  }
+  marisonEmployeeSyncInFlight = true;
+  try {
+    const source = await getMarisonEmployeeSyncSource();
+    return await executeMarisonEmployeeSync({
+      supabase,
+      ...source,
+      defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+    });
+  } finally {
+    marisonEmployeeSyncInFlight = false;
+  }
+};
+
 const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
 
@@ -3159,6 +3266,21 @@ const buildMarisonDepartment = (surat) => {
   };
 };
 
+const resolveMarisonBranchId = async (surat, ...values) => {
+  const snapshotBranchId = externalBranchIdFrom(...values);
+  if (snapshotBranchId !== null) return snapshotBranchId;
+
+  const officeId = firstString(surat?.office_id, surat?.location_snapshot?.office?.id);
+  if (!officeId) return null;
+  const { data, error } = await supabaseAdmin
+    .from("master_offices")
+    .select("marison_branch_id")
+    .eq("id", officeId)
+    .maybeSingle();
+  if (error) throw error;
+  return parseExternalInteger(data?.marison_branch_id);
+};
+
 const getMarisonDispatchInput = (surat) => {
   const formInput = asPlainRecord(surat?.form_input_data);
   const snapshot = asPlainRecord(surat?.data_snapshot);
@@ -3449,7 +3571,10 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
 
 const buildMarisonAssetPayload = async (surat, input, actorId) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
-  const branchId = externalBranchIdFrom(requestedProject, input, surat.location_snapshot);
+  const branchId = requireExternalInteger(
+    await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot),
+    "Branch ID"
+  );
   const items = normalizeMarisonItems(input);
   if (items.length === 0) {
     const err = new Error("Item aset belum tersedia untuk dikirim.");
@@ -4148,6 +4273,16 @@ createServer(async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/test") {
         const result = await testMarisonEnvironment(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/integrations/marison/employees/preview") {
+        const result = await previewMarisonEmployees(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/employees/sync") {
+        const result = await syncMarisonEmployees(req);
         return sendJson(res, 200, result);
       }
 
