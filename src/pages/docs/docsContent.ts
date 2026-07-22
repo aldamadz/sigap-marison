@@ -2911,6 +2911,7 @@ export const DOCS_CHANGELOG = [
       "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
       "Menetapkan kontrak payload outbound Aset dan Unit v1 agar nama field, tipe data, struktur item, lampiran, rekomendasi, dan approval konsisten dengan integrasi vendor.",
       "Menambahkan validasi payload sebelum request dikirim serta contract test berbasis contoh JSON kanonis.",
+      "Menambahkan NIK uji tunggal untuk seluruh pemohon dan penandatangan pada payload outbound staging tanpa mengubah NIK profil atau payload production.",
       "Menandai kontrak baru belum boleh diaktifkan sampai endpoint staging vendor selesai disesuaikan dan pengujian bersama dinyatakan lulus.",
       "Menambahkan sinkronisasi branch dan employee API Marison khusus staging melalui halaman Integrasi Marison.",
       "Menggunakan external employee ID dan NIK sebagai identitas sinkronisasi tanpa mengganti UUID internal SIGAP.",
