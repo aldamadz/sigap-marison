@@ -1368,6 +1368,11 @@ export const USER_DOCS: DocsEntry[] = [
             solution:
               "Itu berarti ada nomor yang sudah dipesan dan belum dikirim. Lanjutkan draft atau batalkan sesuai prosedur yang tersedia.",
           },
+          {
+            problem: "Admin menambah tahap penandatangan setelah draft dibuat",
+            solution:
+              "Buka ulang draft. Sistem memakai alur Kegunaan Form terbaru, mempertahankan signer pada tahap yang sama, lalu meminta Anda memilih signer untuk tahap baru sebelum mendaftarkan surat.",
+          },
         ],
       },
     ],
@@ -2910,6 +2915,8 @@ export const DOCS_CHANGELOG = [
       "Membuat email login staging berbasis nama lengkap, mempertahankan role akun lama, dan memakai role user untuk akun baru.",
       "Memblokir employee tanpa NIK atau NIK konflik serta menampilkan hasil pemeriksaan sebelum admin menjalankan sinkronisasi.",
       "Mempertahankan jabatan, departemen, dan kantor profil lama agar data uji external yang tidak valid tidak merusak workflow approval.",
+      "Memperbarui draft registrasi agar mengikuti tahap penandatangan terbaru dari konfigurasi Kegunaan Form saat dibuka ulang.",
+      "Mempertahankan pilihan signer pada tahap yang masih sama, menambahkan tahap baru, dan membuang tahap yang sudah dihapus tanpa mengubah surat yang telah didaftarkan.",
     ],
   },
   {
