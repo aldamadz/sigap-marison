@@ -275,13 +275,21 @@ const buildProfileIndexes = (profiles) => {
   return { byExternalId, byNik, byName };
 };
 
+export const canUseMarisonNameFallback = (employee, profile) => {
+  if (normalizeMarisonName(employee?.name) !== normalizeMarisonName(profile?.full_name)) return false;
+  const profileNik = marisonNikKey(profile?.nik);
+  return !profileNik || profileNik === marisonNikKey(employee?.nik);
+};
+
 const resolveExistingProfile = (employee, indexes) => {
   const external = indexes.byExternalId.get(Number(employee.id));
   if (external) return { profile: external, match: "external_id" };
   const nik = indexes.byNik.get(marisonNikKey(employee.nik));
   if (nik) return { profile: nik, match: "nik" };
   const names = indexes.byName.get(normalizeMarisonName(employee.name)) || [];
-  if (names.length === 1) return { profile: names[0], match: "name" };
+  if (names.length === 1 && canUseMarisonNameFallback(employee, names[0])) {
+    return { profile: names[0], match: "name" };
+  }
   if (names.length > 1) return { profile: null, match: "ambiguous_name" };
   return { profile: null, match: "new" };
 };

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildMarisonStagingEmail,
+  canUseMarisonNameFallback,
   deduplicateMarisonEmployees,
   marisonNikKey,
   normalizeMarisonNik,
@@ -21,6 +22,17 @@ describe("Marison employee sync", () => {
     const employee = { name: "Bima Arya Kurniawan", nik: "B 005" };
     expect(buildMarisonStagingEmail(employee)).toBe("bima.arya.kurniawan@staging.test");
     expect(buildMarisonStagingEmail(employee, true)).toBe("bima.arya.kurniawan.b005@staging.test");
+  });
+
+  it("does not merge employees who share a name but have different NIK", () => {
+    expect(canUseMarisonNameFallback(
+      { name: "Bima Arya Kurniawan", nik: "B 010" },
+      { full_name: "Bima Arya Kurniawan", nik: "B 009" }
+    )).toBe(false);
+    expect(canUseMarisonNameFallback(
+      { name: "Bima Arya Kurniawan", nik: "B 010" },
+      { full_name: "Bima Arya Kurniawan", nik: null }
+    )).toBe(true);
   });
 
   it("merges duplicate rows for the same person by choosing the richer record", () => {
