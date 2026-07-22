@@ -15,6 +15,13 @@ import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
 import { createPgdPreviewData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
 import { resolveTableHorizontalAlignment } from "./document-layout-rules.mjs";
 import { buildProductionCode } from "./production-code.mjs";
+import {
+  applyStoragePathPrefix,
+  isStoragePathWithinPrefix,
+  normalizeStoragePath,
+  normalizeStoragePathPrefix,
+  removeStoragePathPrefix,
+} from "./storage-path-policy.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +47,7 @@ const storagePublicBaseUrl = String(
   process.env.STORAGE_PUBLIC_BASE_URL ||
   (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
 ).replace(/\/+$/, "");
+const storagePathPrefix = normalizeStoragePathPrefix(process.env.STORAGE_PATH_PREFIX || "");
 
 const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
@@ -679,12 +687,18 @@ const handleBffStorageFile = async (req, res, url) => {
   const session = requireCookieSession(req);
   const bucket = assertBffIdentifier(url.searchParams.get("bucket"), "Nama bucket");
   const path = sanitizeStoragePath(url.searchParams.get("path"));
-  if (bucket !== "avatars" || !/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+(?:_thumb\.webp)?$/i.test(path)) {
+  let relativePath;
+  try {
+    relativePath = removeStoragePathPrefix(path, storagePathPrefix);
+  } catch {
+    relativePath = "";
+  }
+  if (bucket !== "avatars" || !/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+(?:_thumb\.webp)?$/i.test(relativePath)) {
     const err = new Error("Akses file harus melalui endpoint dokumen yang terotorisasi.");
     err.status = 403;
     throw err;
   }
-  if (!path.startsWith(`${session.user.id}/`)) {
+  if (!relativePath.startsWith(`${session.user.id}/`)) {
     const err = new Error("Akses avatar ditolak.");
     err.status = 403;
     throw err;
@@ -2324,12 +2338,8 @@ const parseUploadForm = async (req) => {
   return request.formData();
 };
 
-const sanitizeStoragePath = (value) => String(value || "")
-  .replace(/\\/g, "/")
-  .split("/")
-  .filter(Boolean)
-  .map((part) => part.replace(/[^\w.-]+/g, "_"))
-  .join("/");
+const sanitizeStoragePath = normalizeStoragePath;
+const writableStoragePath = (value) => applyStoragePathPrefix(value, storagePathPrefix);
 
 const uploadInternalStorageFile = async (token, req) => {
   await requireSupabaseUser(token);
@@ -2338,7 +2348,7 @@ const uploadInternalStorageFile = async (token, req) => {
 
   const form = await parseUploadForm(req);
   const bucket = String(form.get("bucket") || "").trim();
-  const requestedPath = sanitizeStoragePath(form.get("path"));
+  const requestedPath = writableStoragePath(form.get("path"));
   const file = form.get("file");
   const upsert = String(form.get("upsert") || "false").toLowerCase() === "true";
 
@@ -2452,7 +2462,7 @@ const uploadProfileAvatar = async (token, req) => {
   }
 
   const extension = allowedTypes.get(file.type);
-  const filePath = `${user.id}/avatar_${Date.now()}_${randomUUID()}.${extension}`;
+  const filePath = writableStoragePath(`${user.id}/avatar_${Date.now()}_${randomUUID()}.${extension}`);
   const thumbnailPath = filePath.replace(/\.[^.]+$/, "_thumb.webp");
   const { error: bucketError } = await storageSupabase.storage.getBucket("avatars");
   if (bucketError) {
@@ -2656,7 +2666,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     if (!key) continue;
 
     const safeName = file.name.replace(/[^\w.-]+/g, "_");
-    const filePath = `lampiran_${suratId}/${Date.now()}_${randomBytes(4).toString("hex")}_${safeName}`;
+    const filePath = writableStoragePath(`lampiran_${suratId}/${Date.now()}_${randomBytes(4).toString("hex")}_${safeName}`);
     const buffer = Buffer.from(await file.arrayBuffer());
     const { error: uploadError } = await uploadStorageClient().storage.from("lampiran_surat").upload(filePath, buffer, {
       contentType: file.type || "application/octet-stream",
@@ -2949,7 +2959,14 @@ const canReadSurat = async (surat, userId) => {
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
 
 const storageClientForRef = (ref) => {
-  if (ref?.origin === "external" && storageSupabase) return storageSupabase;
+  if (ref?.origin === "external" && storageSupabase) {
+    if (!isStoragePathWithinPrefix(ref.path, storagePathPrefix)) {
+      const err = new Error("Akses file lintas environment ditolak.");
+      err.status = 403;
+      throw err;
+    }
+    return storageSupabase;
+  }
   return supabase;
 };
 
@@ -3702,7 +3719,13 @@ createServer(async (req, res) => {
       const token = getBearerToken(req);
       await requireSupabaseUser(token);
       const filePath = sanitizeStoragePath(url.searchParams.get("path"));
-      if (!/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+$/i.test(filePath)) {
+      let relativePath;
+      try {
+        relativePath = removeStoragePathPrefix(filePath, storagePathPrefix);
+      } catch {
+        relativePath = "";
+      }
+      if (!/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+$/i.test(relativePath)) {
         return sendJson(res, 400, { error: "Path foto profil tidak valid." });
       }
       const wantsThumbnail = String(req.headers["sec-fetch-dest"] || "").toLowerCase() === "image";

@@ -46,6 +46,7 @@ describe("SIGAP browser BFF session boundary", () => {
     expect(handlerStart).toBeGreaterThan(-1);
     expect(handler).toContain('bucket !== "avatars"');
     expect(handler).toContain("Akses file harus melalui endpoint dokumen yang terotorisasi.");
-    expect(handler).toContain("path.startsWith(`${session.user.id}/`)");
+    expect(handler).toContain("removeStoragePathPrefix(path, storagePathPrefix)");
+    expect(handler).toContain("relativePath.startsWith(`${session.user.id}/`)");
   });
 });
