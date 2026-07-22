@@ -131,7 +131,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-08 | Status dan test koneksi Integrasi Marison | Production + Staging | Admin integration page/BFF | Environment deployment | Environment switch via UI sudah removed |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
-| MRN-11 | Sinkronisasi branch dan karyawan external ke akun staging | Staging candidate | BFF admin, mapping external ID, Supabase Auth/profile | `/branches`, `/employees`, Auth admin, ADM-01, ADM-06 | Staging-only; jangan promosikan eksekusi ke production sebelum data HRD dan aturan mapping disetujui |
+| MRN-11 | Sinkronisasi branch dan karyawan external ke akun staging | Staging available | BFF admin, mapping external ID, Supabase Auth/profile | `/branches`, `/employees`, Auth admin, ADM-01, ADM-06 | 65 profil dan 9 kantor tersinkron pada 22 Juli 2026; tetap staging-only sampai data HRD dan aturan mapping disetujui untuk production |
 
 Temuan keamanan outbound:
 
