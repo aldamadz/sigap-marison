@@ -264,6 +264,9 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 
 ## 7. Workflow Approval
 
+- Flowchart operasional lengkap untuk Permohonan Aset dan Unit tersedia di `docs/WORKFLOW_ASET_UNIT.md`. Dokumen tersebut menjadi acuan bersama untuk alur Aset Pusat, Aset Cabang, rekomendasi PBO, pemeriksaan Unit, revisi, keputusan pemohon, dan tanda tangan ulang.
+- Flowchart belum menetapkan workflow Non Aset atau Non Unit karena kedua kategori tersebut masih dalam pengembangan.
+
 ### Fungsional
 
 - Approver melihat antrean di Inbox Persetujuan.
