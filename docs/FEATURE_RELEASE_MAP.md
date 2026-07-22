@@ -125,9 +125,9 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-02 | Lookup unit berdasarkan project | Production + Staging | `/unit?project_id=...` | MRN-01 | Dapat dinonaktifkan per form/data source |
 | MRN-03 | Lookup non-unit berdasarkan project | Production + Staging | `/non-unit?project_id=...` | MRN-01 | Dapat dinonaktifkan per form/data source |
 | MRN-04 | Alokasi unit, kode produksi, dan rekap | Production + Staging | Surat form/service, production-code | Unit source, PDF attachments | Tinggi; snapshot lama harus tetap terbaca |
-| MRN-05 | Outbound submission unit | Staging enabled; production disabled by default | `/unit-submissions` POST | Surat selesai, project/unit/branch, approvals | Matikan dispatch flag; jangan hapus snapshot response |
-| MRN-06 | Outbound submission non-unit | Staging enabled; production disabled by default | `/non-unit-submissions` POST | Surat selesai, non-unit items, approvals | Sama dengan MRN-05 |
-| MRN-07 | Outbound asset purchase request | Staging enabled; production disabled by default | `/asset-purchase-requests` POST | Surat selesai, branch, approvals | Sama dengan MRN-05 |
+| MRN-05 | Outbound submission unit | Staging enabled; production disabled by default | `/unit-submissions` POST | Surat selesai, project/unit/branch, approvals | Staging dapat memakai NIK uji tunggal tanpa mengubah profil; matikan dispatch flag untuk menonaktifkan |
+| MRN-06 | Outbound submission non-unit | Staging enabled; production disabled by default | `/non-unit-submissions` POST | Surat selesai, non-unit items, approvals | Mengikuti kebijakan NIK staging MRN-05 |
+| MRN-07 | Outbound asset purchase request | Staging enabled; production disabled by default | `/asset-purchase-requests` POST | Surat selesai, branch, approvals | Mengikuti kebijakan NIK staging MRN-05 |
 | MRN-08 | Status dan test koneksi Integrasi Marison | Production + Staging | Admin integration page/BFF | Environment deployment | Environment switch via UI sudah removed |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
@@ -138,6 +138,7 @@ Temuan keamanan outbound:
 - staging telah terverifikasi memperoleh token dan mengakses protected GET dengan
   status `200` menggunakan format signature sesuai OpenAPI terbaru;
 - secret tidak dikirim ke browser dan host dipilih dari environment deployment;
+- NIK uji staging diterapkan hanya saat membangun payload outbound; NIK profil, snapshot audit, dan payload production tidak ditimpa;
 - business POST tidak dijalankan saat audit agar tidak membuat data palsu;
 - belum ada lock/idempotency key lokal saat dispatch. Request bersamaan atau
   timeout setelah upstream menerima payload masih dapat menyebabkan duplikasi;

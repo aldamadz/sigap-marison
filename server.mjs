@@ -26,6 +26,7 @@ import {
   assertMarisonOutboundContract,
   MARISON_OUTBOUND_CONTRACT_VERSION,
 } from "./server/marison-outbound-contract.mjs";
+import { resolveMarisonOutboundNik } from "./server/marison-outbound-identity.mjs";
 import {
   executeMarisonEmployeeSync,
   previewMarisonEmployeeSync,
@@ -102,6 +103,11 @@ if (!MARISON_ENVIRONMENTS.has(marisonDeploymentEnvironment)) {
 const marisonSubmissionDispatchEnabled = String(
   process.env.MARISON_SUBMISSION_DISPATCH_ENABLED ?? (marisonDeploymentEnvironment === "staging" ? "true" : "false")
 ).toLowerCase() === "true";
+const marisonOutboundNik = (...candidates) => resolveMarisonOutboundNik({
+  environment: marisonDeploymentEnvironment,
+  stagingOverride: process.env.MARISON_STAGING_OUTBOUND_NIK_OVERRIDE,
+  candidates,
+});
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -3231,7 +3237,7 @@ const getMarisonRequester = (surat) => {
 const buildMarisonSubmittedBy = (surat) => {
   const requester = getMarisonRequester(surat);
   return {
-    nik: firstString(requester.nik),
+    nik: marisonOutboundNik(requester.nik),
     name: firstString(requester.full_name, requester.name),
     job_title: firstString(requester.job_title, requester.job_title_display),
   };
@@ -3325,7 +3331,7 @@ const buildMarisonApprovals = (surat) => {
     .map((signature) => {
       const profile = asPlainRecord(signature.profiles);
       const signerSnapshot = asPlainRecord(signature.signer_snapshot);
-      const nik = firstString(profile.nik, signerSnapshot.nik, signature.nik);
+      const nik = marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik);
       return {
         step: Number(signature.step_order || 0),
         role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
@@ -3559,7 +3565,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
-      submitted_by: firstString(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+      submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),
       items,

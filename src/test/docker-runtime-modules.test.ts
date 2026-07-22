@@ -11,6 +11,7 @@ describe("Docker runtime modules", () => {
     for (const runtimeModule of [
       "storage-path-policy.mjs",
       "server/marison-outbound-contract.mjs",
+      "server/marison-outbound-identity.mjs",
     ]) {
       expect(dockerfile).toContain(
         `COPY ${runtimeModule} ./${runtimeModule}`,

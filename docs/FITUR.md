@@ -392,6 +392,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Setelah approval selesai, dokumen berstatus `DONE`.
 - Pada deployment staging, surat yang sudah selesai ditandatangani dikirim otomatis dari server SIGAP ke API Marison staging untuk kategori `Aset`, `Unit`, dan `Non Unit`.
 - Payload outbound memakai nomor surat, data pengajuan, item/unit yang dipilih, lampiran bertautan token, serta riwayat approval berisi role, NIK, waktu, dan catatan.
+- Selama pengujian integrasi staging, seluruh NIK pemohon dan penandatangan pada payload outbound dapat diganti dengan satu NIK karyawan external yang valid melalui konfigurasi server. Override ini tidak mengubah NIK profil SIGAP dan selalu diabaikan pada production.
 - Kontrak outbound Aset dan Unit v1 memakai fixture kanonis di `docs/contracts/marison/v1` dan divalidasi secara strict sebelum request dikirim.
 - Perubahan nama field, tipe data, atau struktur payload harus melalui versi kontrak baru dan koordinasi vendor; server tidak menyediakan dua bentuk payload untuk endpoint yang sama.
 - Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
