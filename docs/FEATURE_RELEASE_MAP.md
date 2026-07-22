@@ -27,6 +27,7 @@ Arti status:
 | Dormant | Source atau schema masih ada, tetapi runtime/entry point tidak aktif |
 | Removed | Sudah sengaja dikeluarkan dari alur aktif |
 | Drift | Versi runtime tidak sama dengan source/worker yang seharusnya |
+| Development branch | Sedang dibangun dan belum boleh dianggap tersedia di staging atau production |
 
 ## 2. Snapshot Environment
 
@@ -129,6 +130,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-07 | Outbound asset purchase request | Staging enabled; production disabled by default | `/asset-purchase-requests` POST | Surat selesai, branch, approvals | Sama dengan MRN-05 |
 | MRN-08 | Status dan test koneksi Integrasi Marison | Production + Staging | Admin integration page/BFF | Environment deployment | Environment switch via UI sudah removed |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
+| MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
 
 Temuan keamanan outbound:
 
@@ -140,6 +142,9 @@ Temuan keamanan outbound:
   timeout setelah upstream menerima payload masih dapat menyebabkan duplikasi;
 - status `success` pada snapshot hanya mencegah pengiriman ulang setelah response
   sukses sudah tersimpan.
+- payload kaya Aset dan Unit sudah dikunci pada `docs/contracts/marison/v1`, tetapi
+  OpenAPI vendor staging masih menunjukkan kontrak lama. Perubahan ini belum boleh
+  dipromosikan sampai vendor menyatakan endpoint siap.
 
 ### 4.6 Dokumen, Template, dan PDF
 

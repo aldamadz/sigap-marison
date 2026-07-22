@@ -2902,6 +2902,9 @@ export const DOCS_CHANGELOG = [
       "Mengisolasi seluruh upload staging, avatar, lampiran pemeriksa, dan hasil PDF worker di bawah namespace staging/.",
       "Menolak akses file lintas environment pada BFF dan worker ketika path tidak sesuai namespace deployment.",
       "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
+      "Menetapkan kontrak payload outbound Aset dan Unit v1 agar nama field, tipe data, struktur item, lampiran, rekomendasi, dan approval konsisten dengan integrasi vendor.",
+      "Menambahkan validasi payload sebelum request dikirim serta contract test berbasis contoh JSON kanonis.",
+      "Menandai kontrak baru belum boleh diaktifkan sampai endpoint staging vendor selesai disesuaikan dan pengujian bersama dinyatakan lulus.",
     ],
   },
   {

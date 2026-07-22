@@ -68,6 +68,7 @@ Garis besar dokumentasi:
 | [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |
+| [Kontrak Outbound Marison v1](./contracts/marison/v1/README.md) | Payload kanonis Aset dan Unit yang disepakati bersama vendor |
 
 ---
 

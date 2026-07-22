@@ -390,6 +390,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Setelah approval selesai, dokumen berstatus `DONE`.
 - Pada deployment staging, surat yang sudah selesai ditandatangani dikirim otomatis dari server SIGAP ke API Marison staging untuk kategori `Aset`, `Unit`, dan `Non Unit`.
 - Payload outbound memakai nomor surat, data pengajuan, item/unit yang dipilih, lampiran bertautan token, serta riwayat approval berisi role, NIK, waktu, dan catatan.
+- Kontrak outbound Aset dan Unit v1 memakai fixture kanonis di `docs/contracts/marison/v1` dan divalidasi secara strict sebelum request dikirim.
+- Perubahan nama field, tipe data, atau struktur payload harus melalui versi kontrak baru dan koordinasi vendor; server tidak menyediakan dua bentuk payload untuk endpoint yang sama.
 - Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
 - Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
@@ -399,6 +401,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Data hanya dapat dibaca oleh pembuat, penandatangan terkait, admin, atau external client resmi.
 - Integrasi downstream berjalan dari server, memakai access token dan HMAC API Marison, serta tidak pernah mengirim `client_secret` ke browser.
 - Integrasi downstream bersifat idempoten melalui `data_snapshot.marison_dispatch`; surat yang sudah sukses dikirim tidak dikirim ulang otomatis.
+- Kontrak baru tidak boleh diaktifkan pada staging sebelum OpenAPI vendor dan contract test bersama menyatakan struktur payload yang sama.
 
 ## 12. Notifikasi dan Realtime
 
