@@ -45,6 +45,7 @@ COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
 COPY production-code.mjs ./production-code.mjs
+COPY server/marison-employee-sync.mjs ./server/marison-employee-sync.mjs
 
 EXPOSE 80
 

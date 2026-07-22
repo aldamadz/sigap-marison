@@ -91,7 +91,7 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.18.0";
+export const DOCS_VERSION = "v1.19.0";
 export const DOCS_UPDATED_AT = "21 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
@@ -2894,6 +2894,17 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.19.0",
+    date: "22 Juli 2026",
+    changes: [
+      "Menambahkan sinkronisasi branch dan employee API Marison khusus staging melalui halaman Integrasi Marison.",
+      "Menggunakan external employee ID dan NIK sebagai identitas sinkronisasi tanpa mengganti UUID internal SIGAP.",
+      "Membuat email login staging berbasis nama lengkap, mempertahankan role akun lama, dan memakai role user untuk akun baru.",
+      "Memblokir employee tanpa NIK atau NIK konflik serta menampilkan hasil pemeriksaan sebelum admin menjalankan sinkronisasi.",
+      "Mempertahankan jabatan, departemen, dan kantor profil lama agar data uji external yang tidak valid tidak merusak workflow approval.",
+    ],
+  },
   {
     version: "v1.18.0",
     date: "21 Juli 2026",
