@@ -1,0 +1,67 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Geist, Arial, sans-serif","primaryColor":"#ecfdf3","primaryTextColor":"#10231a","primaryBorderColor":"#28a745","lineColor":"#53645a","secondaryColor":"#f4f7f5","tertiaryColor":"#ffffff","clusterBkg":"#ffffff","clusterBorder":"#9aaba1"},"flowchart":{"curve":"basis","nodeSpacing":36,"rankSpacing":48,"htmlLabels":true}}}%%
+flowchart TB
+    START([Pemohon membuka Registrasi Surat]) --> PROFILE["Kantor dan departemen<br/>mengikuti profil akun"]
+    PROFILE --> OFFICE{"Lokasi pemohon"}
+
+    OFFICE -->|Kantor Pusat| CENTRAL["Pilih Permohonan Aset Pusat"]
+    OFFICE -->|KC atau KCP| BRANCH["Pilih Permohonan Aset Cabang"]
+    CENTRAL --> FORM["Isi daftar barang<br/>nama, satuan, jumlah, status, keterangan"]
+    BRANCH --> FORM
+    FORM --> FILES["Lengkapi catatan dan lampiran<br/>sesuai konfigurasi kegunaan"]
+    FILES --> SUMMARY["Periksa summary dan nomor surat"]
+    SUMMARY --> VALID{"Data sudah benar?"}
+    VALID -->|Belum| FORM
+    VALID -->|Ya| REGISTER["Data Sudah Benar, Daftarkan"]
+
+    REGISTER --> RECOMMEND{"Membutuhkan rekomendasi PBO?"}
+    RECOMMEND -->|Ya| REC_TASK["Sistem membuat dokumen anak<br/>dan tugas rekomendasi"]
+    REC_TASK --> IT_LOCK["Salah satu Staff IT mengambil tugas<br/>tugas terkunci untuk petugas tersebut"]
+    IT_LOCK --> REC_ITEM["Isi rekomendasi per item<br/>Service, Ganti Komponen, Beli Baru,<br/>atau Tidak Direkomendasikan"]
+    REC_ITEM --> REC_RULE{"Keputusan item"}
+    REC_RULE -->|Service / Ganti / Beli Baru| REC_IMAGE["Uraian dan gambar wajib"]
+    REC_RULE -->|Tidak Direkomendasikan| REC_REASON["Alasan wajib; gambar opsional"]
+    REC_IMAGE --> IT_SIGN["Staff IT mengonfirmasi<br/>dan menandatangani"]
+    REC_REASON --> IT_SIGN
+    IT_SIGN --> PO_SIGN["Manager PO memeriksa<br/>dan menandatangani"]
+    PO_SIGN --> ATTACH["Rekomendasi selesai dan<br/>terlampir ke surat induk"]
+    ATTACH --> ROUTE
+    RECOMMEND -->|Tidak| ROUTE{"Rute berdasarkan kantor"}
+
+    ROUTE -->|Pusat| C1["1. Staff Departemen<br/>Membuat"]
+    C1 --> C2["2. Pimpinan Departemen<br/>Memeriksa"]
+    C2 --> C3["3. Manager HRD dan GA<br/>Memeriksa"]
+    C3 --> C4["4. Direktur I<br/>Menyetujui"]
+    C4 --> C5["5. Direktur Utama<br/>Menyetujui"]
+
+    ROUTE -->|KC / KCP| B1["1. Staff Admin kantor yang sama<br/>Membuat"]
+    B1 --> B2["2. Branch Manager kantor yang sama<br/>Memeriksa"]
+    B2 --> B3["3. Manager HRD dan GA pusat<br/>Memeriksa"]
+    B3 --> B4["4. Direktur I<br/>Menyetujui"]
+    B4 --> B5["5. Direktur Utama<br/>Menyetujui"]
+
+    C5 --> DONE["SELESAI<br/>PDF final, histori, dan audit tersedia"]
+    B5 --> DONE
+    DONE --> SEND["Data Aset dikirim ke sistem Marison<br/>sesuai environment dan konfigurasi"]
+
+    C1 -.-> DECISION
+    B1 -.-> DECISION
+    DECISION{"Keputusan pada tahap aktif"}
+    DECISION -->|Setujui| NEXT["Lanjut ke tahap berikutnya"]
+    DECISION -->|Tolak| REJECT["Isi alasan<br/>proses berhenti sebagai Ditolak"]
+    DECISION -->|Perlu perbaikan| RETURN["Pilih tujuan dan tulis instruksi<br/>status Menunggu Perbaikan"]
+    RETURN --> TARGET{"Tujuan perbaikan"}
+    TARGET -->|Data awal| APPLICANT["Pemohon menerima Tindak Lanjut"]
+    TARGET -->|Rekomendasi| IT_REVISE["Staff IT memperbaiki<br/>Manager PO menandatangani ulang"]
+    IT_REVISE --> APPLICANT
+    APPLICANT --> APPLICANT_DECISION{"Keputusan pemohon"}
+    APPLICANT_DECISION -->|Batalkan| VOID["Proses dihentikan<br/>nomor menjadi hangus"]
+    APPLICANT_DECISION -->|Lanjutkan| RESTART["Data dan PDF diperbarui<br/>tanda tangan dimulai ulang"]
+
+    classDef action fill:#ecfdf3,stroke:#28a745,color:#10231a,stroke-width:2px;
+    classDef decision fill:#fff7df,stroke:#d89a1d,color:#3d2b00,stroke-width:2px;
+    classDef danger fill:#fff0f0,stroke:#dc3545,color:#4a1116,stroke-width:2px;
+    classDef complete fill:#dff7e8,stroke:#138a48,color:#0d4828,stroke-width:3px;
+    class START,PROFILE,CENTRAL,BRANCH,FORM,FILES,SUMMARY,REGISTER,REC_TASK,IT_LOCK,REC_ITEM,REC_IMAGE,REC_REASON,IT_SIGN,PO_SIGN,ATTACH,C1,C2,C3,C4,C5,B1,B2,B3,B4,B5,NEXT,RETURN,APPLICANT,IT_REVISE,RESTART,SEND action;
+    class OFFICE,VALID,RECOMMEND,REC_RULE,ROUTE,DECISION,TARGET,APPLICANT_DECISION decision;
+    class REJECT,VOID danger;
+    class DONE complete;

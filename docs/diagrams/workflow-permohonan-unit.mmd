@@ -1,0 +1,54 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Geist, Arial, sans-serif","primaryColor":"#ecfdf3","primaryTextColor":"#10231a","primaryBorderColor":"#28a745","lineColor":"#53645a","secondaryColor":"#f4f7f5","tertiaryColor":"#ffffff","clusterBkg":"#ffffff","clusterBorder":"#9aaba1"},"flowchart":{"curve":"basis","nodeSpacing":38,"rankSpacing":50,"htmlLabels":true}}}%%
+flowchart TB
+    START([Pemohon Marketing membuka Registrasi Surat]) --> PROJECT["Pilih proyek<br/>proyek dikunci setelah didaftarkan"]
+    PROJECT --> CAPACITY["Sistem menampilkan kapasitas unit<br/>yang tersedia pada proyek"]
+    CAPACITY --> REQUEST["Isi jumlah unit yang diminta<br/>belum memilih kavling tertentu"]
+    REQUEST --> SUMMARY["Periksa summary, nomor surat,<br/>catatan, dan lampiran awal"]
+    SUMMARY --> VALID{"Data sudah benar?"}
+    VALID -->|Belum| REQUEST
+    VALID -->|Ya| REGISTER["Data Sudah Benar, Daftarkan"]
+
+    REGISTER --> S1["1. Assistant Manager Marketing<br/>Membuat"]
+    S1 --> S2["2. Manager Marketing<br/>Memeriksa"]
+    S2 --> CHECKER1["Tim Pemeriksa Perencanaan<br/>Lili Pratiwi"]
+    CHECKER1 --> ALLOCATE["Pilih kavling pada proyek yang dikunci"]
+    ALLOCATE --> UNIT_DATA["Isi Struktur Atas, Struktur Bawah,<br/>nomor, blok, dan tanggal kode produksi"]
+    UNIT_DATA --> REQUIRED["Unggah Siteplan, Volume Adendum,<br/>dan Nilai Adendum"]
+    REQUIRED --> COUNT{"Kavling terpilih dibanding permintaan"}
+    COUNT -->|Sama| SAVE["Simpan dan lanjutkan"]
+    COUNT -->|Lebih sedikit| REDUCE["Konfirmasi pengurangan<br/>dan simpan alasan"]
+    REDUCE --> SAVE
+    SAVE --> GENERATED["Sistem membuat Rekap Adendum<br/>dan Kode Produksi Unit"]
+    GENERATED --> S3["3. Manager Perencanaan<br/>memeriksa hasil alokasi"]
+    S3 --> CHECKER2["Tim Pemeriksa sebelum Direksi<br/>Tri Widyawati"]
+    CHECKER2 --> REVIEW["Periksa kelengkapan alokasi,<br/>lampiran, dan Summary Pengajuan"]
+    REVIEW --> READY{"Data lengkap dan sesuai?"}
+    READY -->|Belum| RETURN_CHECKER["Kembalikan dengan instruksi<br/>data terakhir tetap dipertahankan"]
+    RETURN_CHECKER --> CHECKER1
+    READY -->|Ya| S4["4. Direktur I<br/>Menyetujui"]
+    S4 --> S5["5. Direktur Utama<br/>Menyetujui"]
+    S5 --> DONE["SELESAI<br/>PDF final, histori, dan audit tersedia"]
+    DONE --> SEND["Data Unit dikirim ke sistem Marison<br/>sesuai environment dan konfigurasi"]
+
+    S1 -.-> DECISION
+    DECISION{"Keputusan pada tahap aktif"}
+    DECISION -->|Setujui| NEXT["Lanjut ke tahap atau pemeriksa berikutnya"]
+    DECISION -->|Tolak| REJECT["Isi alasan<br/>proses berhenti sebagai Ditolak"]
+    DECISION -->|Perlu perbaikan| RETURN["Pilih pemohon, tim pemeriksa,<br/>atau signer sebelumnya"]
+    RETURN --> TECH_CHANGE{"Item, jumlah, atau nilai berubah?"}
+    TECH_CHANGE -->|Tidak| ACTIVE_SIGNER["Kembali ke signer aktif"]
+    TECH_CHANGE -->|Ya| APPLICANT["Pemohon menerima tugas Tindak Lanjut"]
+    APPLICANT --> APPLICANT_DECISION{"Keputusan pemohon"}
+    APPLICANT_DECISION -->|Batalkan| VOID["Proses dihentikan<br/>nomor menjadi hangus"]
+    APPLICANT_DECISION -->|Lanjutkan| RESTART["Data dan PDF diperbarui<br/>tanda tangan dimulai ulang"]
+
+    classDef action fill:#ecfdf3,stroke:#28a745,color:#10231a,stroke-width:2px;
+    classDef decision fill:#fff7df,stroke:#d89a1d,color:#3d2b00,stroke-width:2px;
+    classDef checker fill:#eaf4ff,stroke:#2779bd,color:#102c45,stroke-width:2px;
+    classDef danger fill:#fff0f0,stroke:#dc3545,color:#4a1116,stroke-width:2px;
+    classDef complete fill:#dff7e8,stroke:#138a48,color:#0d4828,stroke-width:3px;
+    class START,PROJECT,CAPACITY,REQUEST,SUMMARY,REGISTER,S1,S2,ALLOCATE,UNIT_DATA,REQUIRED,SAVE,REDUCE,GENERATED,S3,REVIEW,RETURN_CHECKER,S4,S5,SEND,NEXT,RETURN,ACTIVE_SIGNER,APPLICANT,RESTART action;
+    class VALID,COUNT,READY,DECISION,TECH_CHANGE,APPLICANT_DECISION decision;
+    class CHECKER1,CHECKER2 checker;
+    class REJECT,VOID danger;
+    class DONE complete;

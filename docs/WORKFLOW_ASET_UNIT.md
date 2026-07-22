@@ -6,6 +6,17 @@ penandatangan, admin, dan pihak yang melakukan audit.
 
 Kategori Non Aset dan Non Unit tidak dibahas karena masih dalam pengembangan.
 
+## Diagram PNG Transparan
+
+Diagram berikut disediakan dalam format PNG transparan untuk presentasi,
+dokumentasi, dan komunikasi lintas departemen. File sumber Mermaid berada pada
+folder yang sama agar diagram dapat diperbarui bersama perubahan workflow.
+
+| Workflow | PNG transparan | Sumber |
+| --- | --- | --- |
+| Permohonan Aset | [Buka PNG](./diagrams/workflow-permohonan-aset.png) | [Mermaid](./diagrams/workflow-permohonan-aset.mmd) |
+| Permohonan Unit | [Buka PNG](./diagrams/workflow-permohonan-unit.png) | [Mermaid](./diagrams/workflow-permohonan-unit.mmd) |
+
 ## 1. Istilah yang Digunakan
 
 | Istilah | Arti |
