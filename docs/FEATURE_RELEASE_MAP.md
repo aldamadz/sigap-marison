@@ -93,7 +93,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | SUR-01 | Registrasi surat dinamis | Production + Staging | Surat form/service, registration RPC | Form usage, numbering, workflow, storage | Sangat tinggi; gunakan feature flag, jangan revert migration |
-| SUR-02 | Draft registrasi dan reservasi nomor | Production + Staging | Draft/reservation RPC dan tables | SUR-01, numbering | Harus menyelesaikan/void draft sebelum nonaktif |
+| SUR-02 | Draft registrasi, reservasi nomor, dan sinkronisasi matrix aktif | Production + Staging; rekonsiliasi matrix kandidat staging | Draft/reservation RPC, tables, signer reconciliation | SUR-01, numbering, DOC-02 | Harus menyelesaikan/void draft sebelum nonaktif; surat terdaftar tetap memakai snapshot lama |
 | SUR-03 | Nomor surat atomik dan konfigurasi counter | Production + Staging | Numbering admin, RPC | Letter type, office/entity | Tidak boleh ditarik tanpa mekanisme nomor pengganti |
 | SUR-04 | Lampiran awal dan lampiran approval | Production + Staging | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik |
 | SUR-05 | Preview detail dan file viewer bertoken | Production + Staging | Preview modal, file token BFF | Storage, surat authorization | Jangan membuka public URL sebagai pengganti |
