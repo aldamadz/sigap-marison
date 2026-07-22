@@ -6,6 +6,7 @@
   "scripts": {
     "test:document-layout": "node --test scripts/test-document-layout-rules.mjs",
     "test:pgd-pdf": "node --test scripts/test-pgd-pdf-renderer.mjs",
+    "test:storage-policy": "node --test scripts/test-storage-path-policy.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",
     "dev:server": "node --env-file=.env.local server.mjs",
@@ -15,7 +16,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
-    "quality": "npm run lint && npm run typecheck && npm test && npm run test:document-layout && npm run test:pgd-pdf && npm run build",
+    "quality": "npm run lint && npm run typecheck && npm test && npm run test:document-layout && npm run test:pgd-pdf && npm run test:storage-policy && npm run build",
     "preview": "vite preview",
     "start": "node server.mjs",
     "test": "vitest run",

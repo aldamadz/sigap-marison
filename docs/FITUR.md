@@ -858,6 +858,8 @@ Fallback data lama:
 - Error akses harus tampil di UI.
 - Storage transaksi surat wajib menggunakan Supabase Storage self-hosted.
 - Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
+- Production dan staging memakai layanan storage self-hosted yang sama agar pengelolaan bucket terpusat. Production mempertahankan path utama, sedangkan seluruh write staging dipaksa masuk ke namespace `staging/`.
+- BFF dan PDF worker menolak akses storage staging ke object path di luar namespace `staging/`. Service-role bersama tetap harus diperlakukan sebagai credential sensitif karena namespace aplikasi bukan pengganti pembatasan credential di tingkat storage.
 
 ## 30. Operasional, Deployment, dan Worker
 
@@ -867,7 +869,7 @@ Fallback data lama:
 - Deployment staging selalu memakai datasource Marison staging, sedangkan deployment production selalu memakai datasource Marison production.
 - Domain production adalah `https://sigap.marisoncloud.com`; DNS Cloudflare berupa proxied `A` record ke origin publik, lalu Caddy meneruskan request ke container production pada `10.10.10.246:3010`.
 - Domain staging adalah `https://sigap.marison-testing.biz.id` dan tetap melalui Cloudflare Tunnel ke container staging pada port host `3011`.
-- Staging memakai project Supabase, Auth, database, bucket storage, dan PDF worker tersendiri; data transaksi production tidak disalin.
+- Staging memakai project Supabase, Auth, database, dan PDF worker tersendiri. Layanan storage fisiknya dipakai bersama production, tetapi object path staging dipisahkan dengan prefix `staging/`; data transaksi production tidak disalin ke database staging.
 - Master/config staging disalin dari production, sedangkan kandidat user dimasking agar matrix dapat diuji tanpa menyalin PII production.
 - `npm run dev` membaca `.env.local`, menjalankan Vite pada port `8080` dan BFF lokal pada port `3010`, serta tetap memakai Supabase dan datasource Marison staging.
 - Request `/api` dari Vite diproxy ke BFF lokal tanpa mengubah Host header agar validasi same-origin dan cookie HttpOnly bekerja sama seperti deployment.

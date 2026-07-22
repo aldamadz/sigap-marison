@@ -34,6 +34,7 @@ services:
       STORAGE_MODE: "${STORAGE_MODE:-self_hosted_supabase}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:-}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-}"
+      STORAGE_PATH_PREFIX: "staging"
     env_file:
       - path: .env.staging
         required: false
@@ -78,6 +79,7 @@ services:
       STORAGE_MODE: "${STORAGE_MODE}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL}"
+      STORAGE_PATH_PREFIX: "staging"
     env_file:
       - path: .env.staging
         required: false

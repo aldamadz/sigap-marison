@@ -7,6 +7,11 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
 import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
+import {
+  applyStoragePathPrefix,
+  isStoragePathWithinPrefix,
+  normalizeStoragePathPrefix,
+} from "./storage-path-policy.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,6 +24,7 @@ const storagePublicBaseUrl = String(
   process.env.STORAGE_PUBLIC_BASE_URL ||
   (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
 ).replace(/\/+$/, "");
+const storagePathPrefix = normalizeStoragePathPrefix(process.env.STORAGE_PATH_PREFIX || "");
 const workerId = process.env.PDF_WORKER_ID || `pdf-worker-${randomUUID()}`;
 const concurrency = Math.max(Number(process.env.PDF_WORKER_CONCURRENCY || 3), 1);
 const pollIntervalMs = Math.max(Number(process.env.PDF_WORKER_POLL_INTERVAL_MS || 2000), 500);
@@ -148,6 +154,9 @@ const processJob = async (job) => {
     if (!pdfBuffer) {
       const sourceRef = extractStorageRef(job.source_file_path);
       if (!sourceRef?.path) throw new Error("File Excel dokumen belum tersedia.");
+      if (sourceRef.origin === "external" && !isStoragePathWithinPrefix(sourceRef.path, storagePathPrefix)) {
+        throw new Error("File sumber berada di luar namespace environment worker.");
+      }
       const { data: fileData, error: downloadError } = await storageClientForOrigin(sourceRef.origin).storage
         .from("dokumen_surat")
         .download(sourceRef.path);
@@ -168,7 +177,7 @@ const processJob = async (job) => {
       ], { timeout: convertTimeoutMs });
       pdfBuffer = await readFile(join(workDir, "source.pdf"));
     }
-    const pdfPath = `pdf/${job.surat_id}_${Date.now()}.pdf`;
+    const pdfPath = applyStoragePathPrefix(`pdf/${job.surat_id}_${Date.now()}.pdf`, storagePathPrefix);
     const uploadOrigin = useExternalStorage() ? "external" : "primary";
     const { error: uploadError } = await uploadStorageClient().storage
       .from("dokumen_surat")

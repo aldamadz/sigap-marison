@@ -27,7 +27,7 @@ SIGAP memakai frontend React dengan BFF Node.js dan PostgreSQL/Supabase sebagai 
 | **Backend** | Node.js BFF (`server.mjs`) | Session HttpOnly, API aplikasi, integrasi eksternal, email, dan akses file privat. |
 | **Database** | PostgreSQL | Penyimpanan data relasional dengan integritas tinggi. |
 | **Realtime** | SSE attention + Supabase Realtime terbatas | Badge dan sinyal perubahan tanpa mengirim isi dokumen sensitif. |
-| **Storage** | Supabase Storage self-hosted | Penyimpanan privat file PDF dan lampiran transaksi. |
+| **Storage** | Supabase Storage self-hosted | Penyimpanan privat terpusat; path production tetap utama dan staging diisolasi dalam namespace `staging/`. |
 | **Workflow** | PostgreSQL RPC + RLS | Reservasi nomor, routing approval, pemeriksaan, revisi, dan audit secara server-side. |
 | **PDF Worker** | Node.js worker + LibreOffice/pdfmake | Membuat PDF, snapshot persetujuan, dan dokumen dinamis. |
 | **Generator PGD** | PDF-native (pdfmake) | Satu renderer untuk Uji PDF, surat baru, snapshot approval, dan Buat Ulang PDF. |

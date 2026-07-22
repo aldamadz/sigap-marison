@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.18.0";
-export const DOCS_UPDATED_AT = "21 Juli 2026";
+export const DOCS_VERSION = "v1.19.0";
+export const DOCS_UPDATED_AT = "22 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -2816,10 +2816,10 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     icon: Database,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Panduan deploy SIGAP dengan aplikasi, database, storage, dan datasource yang terpisah per environment.",
+    summary: "Panduan deploy SIGAP dengan aplikasi, database, dan datasource terpisah serta storage bersama yang dipisahkan berdasarkan namespace.",
     whenToUse: [
       "Mendeploy perubahan frontend, halaman dokumentasi, atau server aplikasi utama.",
-      "Memastikan deployment staging tidak membaca database, storage, atau datasource production dan sebaliknya.",
+      "Memastikan staging tidak membaca database atau datasource production dan hanya mengakses object storage dalam namespace staging/.",
       "Memastikan deploy memakai file env dan nama project Compose yang sesuai.",
       "Memutuskan apakah PDF worker perlu ikut diredeploy.",
     ],
@@ -2836,14 +2836,14 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Domain testing memakai `docker-compose.staging.yml`; environment Marison terkunci ke staging.",
       "Domain production memakai `docker-compose.prod.yml`; environment Marison terkunci ke production.",
       "Production dibuka melalui `https://sigap.marisoncloud.com`, sedangkan staging melalui `https://sigap.marison-testing.biz.id`.",
-      "Staging memiliki project Supabase, storage, dan worker PDF sendiri tanpa data transaksi production.",
+      "Staging memiliki project Supabase dan worker PDF sendiri, tetapi memakai storage self-hosted yang sama melalui namespace staging/.",
       "Production memakai origin publik melalui Caddy; staging tetap melalui Cloudflare Tunnel.",
       "Pengembangan lokal dengan `npm run dev` menjalankan Vite dan BFF lokal bersama-sama, memakai `.env.local`, serta tetap menggunakan Supabase dan datasource Marison staging.",
       "Perubahan `server.mjs` deploy app utama karena container app yang menjalankan server HTTP.",
       "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
     ],
     troubleshooting: [
-      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dan production memakai `.env.production`.",
+      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dengan `STORAGE_PATH_PREFIX=staging`, sedangkan production memakai `.env.production` tanpa prefix.",
       "Jika datasource salah environment, periksa compose yang dipakai dan nilai `MARISON_DEPLOYMENT_ENVIRONMENT` di container.",
       "Jika login lokal menampilkan 502 atau 403, restart `npm run dev` dan pastikan port 3010 tidak dipakai proses lain. Endpoint `/api` development harus menuju BFF lokal, bukan domain staging publik.",
       "Jika tautan email membuka domain yang salah, periksa `APP_PUBLIC_URL` pada container aktif; nilai ini dikunci oleh file Compose.",
@@ -2894,6 +2894,16 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.19.0",
+    date: "22 Juli 2026",
+    changes: [
+      "Menyatukan layanan storage staging dan production agar bucket dapat dikelola dari satu storage self-hosted.",
+      "Mengisolasi seluruh upload staging, avatar, lampiran pemeriksa, dan hasil PDF worker di bawah namespace staging/.",
+      "Menolak akses file lintas environment pada BFF dan worker ketika path tidak sesuai namespace deployment.",
+      "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
+    ],
+  },
   {
     version: "v1.18.0",
     date: "21 Juli 2026",

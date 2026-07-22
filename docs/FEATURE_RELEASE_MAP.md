@@ -152,6 +152,7 @@ Temuan keamanan outbound:
 | DOC-05 | PDF job queue dan worker | Production + Staging, production drift | PDF API, jobs, worker | Storage, LibreOffice/pdf renderer | Sinkronkan worker sebelum perubahan renderer |
 | DOC-06 | Renderer PGD dan buat ulang PDF | Production + Staging, production drift risk | PGD renderer, rebuild action | DOC-05, snapshots | Jangan rilis renderer tanpa worker seversi |
 | DOC-07 | Private storage dan authorized download | Production + Staging | BFF storage/file token | Self-hosted Supabase storage | Kontrol keamanan; jangan tarik parsial |
+| DOC-08 | Shared storage dengan namespace environment | Staging candidate | Storage path policy, BFF upload, PDF worker | DOC-05, DOC-07, env deployment | Production tetap tanpa prefix; staging wajib memakai `staging/` dan tidak boleh mengakses path di luar namespace |
 
 ### 4.7 Notification, Realtime, Email, dan Audit
 
