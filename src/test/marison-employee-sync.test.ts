@@ -84,4 +84,12 @@ describe("Marison employee sync", () => {
       "await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot)"
     );
   });
+
+  it("recovers an orphan Auth user and always supplies a required job title", () => {
+    const syncService = read("server/marison-employee-sync.mjs");
+
+    expect(syncService).toContain("!profileIds.has(occupied.id)");
+    expect(syncService).toContain("item.profile?.id || item.currentAuth?.id || null");
+    expect(syncService).toContain('item.derivedJobTitle || "Karyawan"');
+  });
 });
