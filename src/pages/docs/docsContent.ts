@@ -2906,6 +2906,8 @@ export const DOCS_CHANGELOG = [
       "Menyatukan layanan storage staging dan production agar bucket dapat dikelola dari satu storage self-hosted.",
       "Mengisolasi seluruh upload staging, avatar, lampiran pemeriksa, dan hasil PDF worker di bawah namespace staging/.",
       "Menolak akses file lintas environment pada BFF dan worker ketika path tidak sesuai namespace deployment.",
+      "Memperbaiki pembukaan dokumen dan lampiran staging agar validasi namespace membaca object path aktual dari token file.",
+      "Memigrasikan referensi file staging lama ke namespace staging/ tanpa menghapus object sumber.",
       "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
       "Menetapkan kontrak payload outbound Aset dan Unit v1 agar nama field, tipe data, struktur item, lampiran, rekomendasi, dan approval konsisten dengan integrasi vendor.",
       "Menambahkan validasi payload sebelum request dikirim serta contract test berbasis contoh JSON kanonis.",

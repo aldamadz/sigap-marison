@@ -12,6 +12,7 @@
     "dev:server": "node --env-file=.env.local server.mjs",
     "staging:normalize-emails": "node --env-file=.env.local scripts/normalize-staging-emails.mjs",
     "staging:prepare-users": "node --env-file=.env.local scripts/prepare-staging-users.mjs",
+    "staging:migrate-storage": "node scripts/migrate-staging-storage-namespace.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

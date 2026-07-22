@@ -866,6 +866,8 @@ Fallback data lama:
 - Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
 - Production dan staging memakai layanan storage self-hosted yang sama agar pengelolaan bucket terpusat. Production mempertahankan path utama, sedangkan seluruh write staging dipaksa masuk ke namespace `staging/`.
 - BFF dan PDF worker menolak akses storage staging ke object path di luar namespace `staging/`. Service-role bersama tetap harus diperlakukan sebagai credential sensitif karena namespace aplikasi bukan pengganti pembatasan credential di tingkat storage.
+- Validasi namespace saat membuka dokumen atau lampiran memakai `bucket` dan object path aktual dari token file. Token yang sah tidak boleh ditolak hanya karena pemeriksaan origin tidak membawa path objek.
+- Referensi file staging yang dibuat sebelum namespace `staging/` diterapkan dimigrasikan secara idempotent ke path baru. Migrasi menyalin objek terlebih dahulu, memperbarui referensi database setelah salinan tersedia, dan tidak menghapus objek sumber.
 
 ## 30. Operasional, Deployment, dan Worker
 

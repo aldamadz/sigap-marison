@@ -4019,7 +4019,12 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  const { data, error } = await storageClientForRef({ origin: tokenData.storage_origin }).storage.from(tokenData.bucket).download(tokenData.object_path);
+  const tokenStorageRef = {
+    origin: tokenData.storage_origin,
+    bucket: tokenData.bucket,
+    path: tokenData.object_path,
+  };
+  const { data, error } = await storageClientForRef(tokenStorageRef).storage.from(tokenData.bucket).download(tokenData.object_path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan");
     err.status = 404;
