@@ -220,18 +220,22 @@ const App = () => {
           <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
           <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
           <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
-          <Route path="/admin/marison-integration" element={<MarisonIntegrationPage />} />
-          <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
-            <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
-            <Route path="forms" element={<FormManagementPage embedded />} />
-            <Route path="template-designer" element={<TemplateDesignerPage />} />
-            <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
-            <Route path="form-usages" element={<FormUsageManagementPage />} />
-            <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
-            <Route path="numbering" element={<LetterNumberCounterPage />} />
-            <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
-            <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
-          </Route>
+<Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
+  <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
+
+  <Route path="forms" element={<FormManagementPage embedded />} />
+  <Route path="template-designer" element={<TemplateDesignerPage />} />
+  <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
+  <Route path="form-usages" element={<FormUsageManagementPage />} />
+
+  {/* Halaman baru */}
+  <Route path="integration" element={<MarisonIntegrationPage />} />
+
+  <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
+  <Route path="numbering" element={<LetterNumberCounterPage />} />
+  <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
+  <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
+</Route>
         </Route>
 
         <Route path="*" element={<NotFound />} />
