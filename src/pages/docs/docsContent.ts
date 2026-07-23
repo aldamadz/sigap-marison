@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.19.0";
-export const DOCS_UPDATED_AT = "22 Juli 2026";
+export const DOCS_VERSION = "v1.20.0";
+export const DOCS_UPDATED_AT = "23 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -2423,12 +2423,13 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: SlidersHorizontal,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, dan kebutuhan lampiran.",
+    summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, kebutuhan lampiran, dan sinkronisasi data Marison.",
     whenToUse: [
       "Membuat kegunaan dokumen baru untuk departemen tertentu.",
       "Mengatur alur tanda tangan 3 sampai 8 tahap.",
       "Menambahkan tim pemeriksa sebelum penandatangan boleh aksi.",
       "Mengatur dokumen rekomendasi atau prasyarat yang harus selesai sebelum surat induk lanjut.",
+      "Mengecek koneksi Marison dan menyinkronkan kantor serta karyawan staging dari satu tempat konfigurasi.",
     ],
     steps: [
       "Buka Kegunaan Form.",
@@ -2436,17 +2437,20 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Atur step tanda tangan dan kandidat signer.",
       "Tambahkan tim pemeriksa bila step perlu pemeriksaan data atau lampiran.",
       "Atur dokumen tertaut bila form membutuhkan rekomendasi aset atau prasyarat sebelum approval lanjut.",
+      "Gunakan panel Integrasi Marison untuk cek koneksi, periksa data, dan menjalankan sinkronisasi manual bila diperlukan.",
       "Simpan konfigurasi dan uji pada registrasi surat.",
     ],
     examples: [
       "Untuk pengajuan cabang, kandidat SPV dan BM dapat dibatasi sesuai kantor pemohon.",
       "Untuk Unit, tim pemeriksa dapat mengisi detail kavling sebelum Mgr. Perencanaan menyetujui.",
       "Untuk aset yang perlu rekomendasi, tugas rekomendasi dapat diarahkan ke Staff IT/PBO dan dikunci saat salah satu kandidat mengambil draft.",
+      "Sebelum cronjob diaktifkan, admin dapat menjalankan sinkron manual untuk memastikan data kantor dan karyawan staging sudah sesuai.",
     ],
     troubleshooting: [
       "Jika user tidak bisa membuat Unit, cek izin departemen pengaju pada konfigurasi Unit.",
       "Jika signer tidak bisa setujui, cek apakah tim pemeriksa belum pemeriksaan.",
       "Jika rekomendasi tidak muncul, cek form rekomendasi, departemen PBO, kandidat Staff IT/PBO, dan tahap prasyarat pada Kegunaan Form.",
+      "Jika data karyawan staging tidak sesuai, jalankan Periksa Data di panel Integrasi Marison lalu cek issue yang muncul sebelum menekan Sinkronkan.",
     ],
   },
   {
@@ -2899,6 +2903,16 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.20.0",
+    date: "23 Juli 2026",
+    changes: [
+      "Memindahkan kontrol Integrasi Marison ke Konfigurasi > Kegunaan Form agar cek koneksi serta sinkronisasi kantor dan karyawan berada dekat dengan konfigurasi alur dokumen.",
+      "Menghapus entry sidebar Integrasi Marison agar admin hanya memakai satu jalur operasional.",
+      "Menjaga route Integrasi Marison lama sebagai redirect ke panel baru supaya link lama tetap aman.",
+      "Menambahkan penanda kesiapan cronjob sinkronisasi sebagai rencana otomasi berikutnya tanpa mengaktifkan scheduler diam-diam.",
+    ],
+  },
   {
     version: "v1.19.0",
     date: "22 Juli 2026",

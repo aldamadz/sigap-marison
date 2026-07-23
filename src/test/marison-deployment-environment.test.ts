@@ -41,13 +41,24 @@ describe("Marison deployment environment", () => {
 
   it("keeps credentials server-side and exposes only status and health tests", () => {
     const client = read("src/services/marison-integration.service.ts");
-    const page = read("src/pages/admin/MarisonIntegrationPage.tsx");
+    const panel = read("src/components/admin/MarisonIntegrationPanel.tsx");
 
     expect(client).not.toContain("CLIENT_SECRET");
     expect(client).not.toContain("CLIENT_ID");
     expect(client).not.toContain("requestSwitch");
     expect(client).not.toContain("confirmSwitch");
-    expect(page).toContain("Environment ditetapkan saat deployment");
-    expect(page).not.toContain("InputOTP");
+    expect(panel).toContain("Credential server");
+    expect(panel).toContain("Cek koneksi");
+    expect(panel).not.toContain("InputOTP");
+  });
+
+  it("moves Marison integration controls into form usages configuration", () => {
+    const formUsages = read("src/pages/admin/FormUsageManagementPage.tsx");
+    const redirectPage = read("src/pages/admin/MarisonIntegrationPage.tsx");
+    const sidebar = read("src/components/layout/Sidebar.tsx");
+
+    expect(formUsages).toContain("MarisonIntegrationPanel");
+    expect(redirectPage).toContain("/admin/configuration/form-usages?section=marison");
+    expect(sidebar).not.toContain("Integrasi Marison");
   });
 });
