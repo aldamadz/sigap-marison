@@ -122,12 +122,14 @@ const deriveJobTitle = (employee) => meaningfulText(employee?.department) || mea
 
 const isHeadOfficeBranch = (branch) => normalizeMarisonName(branch?.name) === "kantor pusat";
 
+const normalizeBranchCode = (value) => String(value ?? "")
+  .trim()
+  .toUpperCase()
+  .replace(/[^A-Z0-9-]/g, "")
+  .slice(0, 20);
+
 const chooseOfficeCode = (branch, usedCodes) => {
-  const preferred = String(branch?.code ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9-]/g, "")
-    .slice(0, 20);
+  const preferred = normalizeBranchCode(branch?.code);
   if (preferred && !usedCodes.has(preferred)) return preferred;
   let candidate = `EXT${String(branch?.id ?? "").replace(/\D/g, "") || "BR"}`;
   let index = 2;
@@ -200,11 +202,29 @@ const syncBranches = async (supabase, branches, dryRun) => {
     if (existing) {
       result.matched += 1;
       result.mappings.set(externalId, existing);
-      const changed = Number(existing.marison_branch_id) !== externalId || String(existing.marison_branch_code || "") !== String(branch.code || "");
+      const externalName = String(branch?.name || "").trim();
+      const externalCode = normalizeBranchCode(branch?.code);
+      const nextCode = externalCode && !offices.some((office) => (
+        office.id !== existing.id && String(office.code || "").toUpperCase() === externalCode
+      ))
+        ? externalCode
+        : existing.code;
+      const nextName = externalName || existing.name;
+      const nextPosition = isHeadOfficeBranch(branch) ? "Pusat" : "KC";
+      const changed = (
+        Number(existing.marison_branch_id) !== externalId
+        || String(existing.marison_branch_code || "") !== String(branch.code || "")
+        || existing.code !== nextCode
+        || existing.name !== nextName
+        || existing.kedudukan !== nextPosition
+      );
       if (changed && !dryRun) {
         const { data, error: updateError } = await supabase
           .from("master_offices")
           .update({
+            code: nextCode,
+            name: nextName,
+            kedudukan: nextPosition,
             marison_branch_id: externalId,
             marison_branch_code: String(branch.code || "").trim() || null,
             marison_synced_at: new Date().toISOString(),
@@ -216,6 +236,8 @@ const syncBranches = async (supabase, branches, dryRun) => {
           result.errors.push({ externalId, name: branch.name, reason: updateError.message });
           continue;
         }
+        usedCodes.delete(String(existing.code || "").toUpperCase());
+        usedCodes.add(String(data.code || "").toUpperCase());
         Object.assign(existing, data);
         result.updated += 1;
         result.updatedApplied += 1;
@@ -255,6 +277,34 @@ const syncBranches = async (supabase, branches, dryRun) => {
     if (office) result.mappings.set(Number(branch.id), office);
   }
   return result;
+};
+
+export const previewMarisonBranchSync = async ({ supabase, branches, environment = "staging" }) => {
+  const branchResult = await syncBranches(supabase, branches, true);
+  return {
+    environment,
+    generatedAt: new Date().toISOString(),
+    source: Array.isArray(branches) ? branches.length : 0,
+    matched: branchResult.matched,
+    toCreate: branchResult.created,
+    toUpdate: branchResult.updated,
+    blocked: branchResult.errors.length,
+    issues: branchResult.errors,
+  };
+};
+
+export const executeMarisonBranchSync = async ({ supabase, branches, environment = "staging" }) => {
+  const branchResult = await syncBranches(supabase, branches, false);
+  return {
+    environment,
+    completedAt: new Date().toISOString(),
+    source: Array.isArray(branches) ? branches.length : 0,
+    created: branchResult.createdApplied,
+    updated: branchResult.updatedApplied,
+    matched: branchResult.matched,
+    failed: branchResult.errors.length,
+    errors: branchResult.errors,
+  };
 };
 
 const buildProfileIndexes = (profiles) => {

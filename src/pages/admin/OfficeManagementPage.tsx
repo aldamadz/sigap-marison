@@ -3,50 +3,44 @@ import { supabase } from "@/lib/supabase";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter 
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { 
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
-} from "@/components/ui/select";
-import { 
-  MapPin, Plus, Pencil, Trash2, Loader2, 
-  Search, RefreshCw, Building2 
+import {
+  CloudDownload, Loader2, Search, RefreshCw, Building2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import { marisonIntegrationService } from "@/services/marison-integration.service";
+
+type MasterOfficeRow = {
+  id: string;
+  code: string;
+  name: string;
+  kedudukan: string | null;
+  marison_branch_id: number | null;
+  marison_branch_code: string | null;
+  marison_synced_at: string | null;
+};
 
 export default function OfficeManagementPage() {
   const { toast } = useToast();
   const appDialog = useAppDialog();
-  const [offices, setOffices] = useState<any[]>([]);
+  const [offices, setOffices] = useState<MasterOfficeRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedOffice, setSelectedOffice] = useState<any>(null);
+  const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Update state sesuai struktur database terbaru
-  const [formData, setFormData] = useState({
-    name: "",
-    code: "",
-    kedudukan: "KC", // KC atau KCP
-    email: "",
-  });
 
   const loadData = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from("master_offices")
-        .select("*")
+        .select("id,code,name,kedudukan,marison_branch_id,marison_branch_code,marison_synced_at")
         .order("name", { ascending: true });
 
       if (error) throw error;
-      setOffices(data || []);
+      setOffices((data || []) as MasterOfficeRow[]);
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
@@ -59,82 +53,41 @@ export default function OfficeManagementPage() {
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
-  const handleOpenModal = (office: any = null) => {
-    if (office) {
-      setSelectedOffice(office);
-      setFormData({ 
-        name: office.name, 
-        code: office.code, 
-        kedudukan: office.kedudukan || "KC",
-        email: office.email || "",
+  const handleSync = async () => {
+    try {
+      setSyncing(true);
+      const preview = await marisonIntegrationService.previewBranches();
+      const confirmed = await appDialog.confirm({
+        title: "Sinkronkan Kantor Cabang?",
+        description: `${preview.source} branch ditemukan di API external. ${preview.toCreate} kantor akan dibuat dan ${preview.toUpdate} kantor akan diperbarui di mirror SIGAP.`,
+        confirmText: "Sinkronkan",
       });
-    } else {
-      setSelectedOffice(null);
-      setFormData({ name: "", code: "", kedudukan: "KC", email: "" });
-    }
-    setIsModalOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!formData.name || !formData.code || !formData.kedudukan) {
-      toast({ variant: "destructive", title: "Peringatan", description: "Semua kolom wajib diisi" });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const payload = {
-        name: formData.name,
-        code: formData.code.toUpperCase(),
-        kedudukan: formData.kedudukan,
-        email: formData.email.trim() || null,
-      };
-
-      if (selectedOffice) {
-        const { error } = await supabase
-          .from("master_offices")
-          .update(payload)
-          .eq("id", selectedOffice.id);
-        if (error) throw error;
+      if (!confirmed) return;
+      const result = await marisonIntegrationService.syncBranches();
+      await loadData();
+      if (result.failed > 0) {
+        toast({
+          variant: "destructive",
+          title: "Sinkronisasi belum lengkap",
+          description: `${result.created} dibuat, ${result.updated} diperbarui, ${result.failed} gagal.`,
+        });
       } else {
-        const { error } = await supabase
-          .from("master_offices")
-          .insert([payload]);
-        if (error) throw error;
+        toast({
+          title: "Sinkronisasi berhasil",
+          description: `${result.source} kantor cabang telah diselaraskan dari API external.`,
+        });
       }
-
-      toast({ title: "Berhasil", description: `Kantor ${formData.name} telah disimpan` });
-      setIsModalOpen(false);
-      loadData();
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Gagal", description: error.message });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Sinkronisasi gagal",
+        description: error instanceof Error ? error.message : "Gagal mengambil kantor cabang dari API external.",
+      });
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    const office = offices.find((item) => item.id === id);
-    const confirmed = await appDialog.confirm({
-      title: "Hapus Kantor?",
-      description: `Kantor ${office?.name || "ini"} akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
-      confirmText: "Hapus",
-      variant: "destructive",
-    });
-    if (!confirmed) return;
-    try {
-      setLoading(true);
-      const { error } = await supabase.from("master_offices").delete().eq("id", id);
-      if (error) throw error;
-      toast({ title: "Terhapus", description: "Data kantor berhasil dihapus" });
-      loadData();
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
-    } finally {
-      setLoading(false);
+      setSyncing(false);
     }
   };
 
@@ -151,7 +104,9 @@ export default function OfficeManagementPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Building2 className="w-6 h-6 text-primary" /> Master Kantor Cabang
           </h1>
-          <p className="text-sm text-muted-foreground">Manajemen lokasi kantor, kode area, dan kedudukan (KC/KCP)</p>
+          <p className="text-sm text-muted-foreground">
+            Data read-only dari endpoint Get All Branches API external
+          </p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -166,8 +121,9 @@ export default function OfficeManagementPage() {
           <Button variant="outline" onClick={loadData} size="icon">
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           </Button>
-          <Button onClick={() => handleOpenModal()} className="gap-2 font-bold text-xs uppercase">
-            <Plus className="w-4 h-4" /> Tambah Kantor
+          <Button onClick={handleSync} disabled={syncing} className="gap-2 font-bold text-xs uppercase">
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
+            Sinkronkan External
           </Button>
         </div>
       </div>
@@ -178,9 +134,9 @@ export default function OfficeManagementPage() {
             <TableRow>
               <TableHead className="w-[120px] font-bold">KODE</TableHead>
               <TableHead className="font-bold">NAMA KANTOR / CABANG</TableHead>
-              <TableHead className="font-bold">EMAIL</TableHead>
+              <TableHead className="font-bold">ID / KODE EXTERNAL</TableHead>
               <TableHead className="w-[120px] font-bold">KEDUDUKAN</TableHead>
-              <TableHead className="text-right font-bold">AKSI</TableHead>
+              <TableHead className="text-right font-bold">TERAKHIR BERUBAH</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -205,17 +161,19 @@ export default function OfficeManagementPage() {
                     </code>
                   </TableCell>
                   <TableCell className="font-medium">{office.name}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{office.email || "-"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {office.marison_branch_id ?? "-"} / {office.marison_branch_code || "-"}
+                  </TableCell>
                   <TableCell>
                     <BadgeKedudukan status={office.kedudukan} />
                   </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(office)}>
-                      <Pencil className="w-4 h-4 text-amber-600" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(office.id)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                  <TableCell className="text-right text-xs text-muted-foreground">
+                    {office.marison_synced_at
+                      ? new Intl.DateTimeFormat("id-ID", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(office.marison_synced_at))
+                      : "Belum tersinkron"}
                   </TableCell>
                 </TableRow>
               ))
@@ -223,71 +181,12 @@ export default function OfficeManagementPage() {
           </TableBody>
         </Table>
       </div>
-
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{selectedOffice ? "Edit" : "Tambah"} Kantor Cabang</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Nama Kota/Kantor</Label>
-              <Input 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                placeholder="E.g. Magelang"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Kode Kantor</Label>
-                <Input 
-                  value={formData.code} 
-                  onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} 
-                  placeholder="E.g. MGG"
-                  maxLength={4}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Kedudukan</Label>
-                <Select 
-                  value={formData.kedudukan} 
-                  onValueChange={(val) => setFormData({...formData, kedudukan: val})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="KC">KC (Cabang)</SelectItem>
-                    <SelectItem value="KCP">KCP (Pembantu)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Email Kantor/Cabang</Label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                placeholder="cabang@marison.id"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Batal</Button>
-            <Button onClick={handleSave} disabled={loading}>
-              Simpan Kantor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
 // Komponen Badge Kecil untuk Kedudukan
-function BadgeKedudukan({ status }: { status: string }) {
+function BadgeKedudukan({ status }: { status: string | null }) {
   const isKC = status === "KC";
   return (
     <span className={cn(
@@ -296,7 +195,7 @@ function BadgeKedudukan({ status }: { status: string }) {
         ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300" 
         : "border-border bg-muted text-muted-foreground"
     )}>
-      {status}
+      {status || "-"}
     </span>
   );
 }

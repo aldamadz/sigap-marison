@@ -406,6 +406,8 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Integrasi downstream bersifat idempoten melalui `data_snapshot.marison_dispatch`; surat yang sudah sukses dikirim tidak dikirim ulang otomatis.
 - Kontrak baru tidak boleh diaktifkan pada staging sebelum OpenAPI vendor dan contract test bersama menyatakan struktur payload yang sama.
 - Branch eksternal dipetakan ke `master_offices.marison_branch_id`; payload Aset memakai mapping ini ketika snapshot surat belum membawa ID branch numerik.
+- Master Kantor Cabang adalah mirror read-only dari endpoint `GET /branches` Marison External API. Admin dapat memeriksa dan menjalankan sinkronisasi dari halaman master, tetapi tidak dapat membuat, mengubah, atau menghapus kantor langsung dari SIGAP.
+- Sinkronisasi mempertahankan UUID `master_offices` agar seluruh relasi SIGAP tetap valid, lalu memperbarui nama, kode, kedudukan, ID branch, kode branch, dan waktu sinkron berdasarkan data external.
 
 ## 12. Notifikasi dan Realtime
 
