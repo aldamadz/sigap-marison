@@ -34,7 +34,7 @@ Arti status:
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
-| App container | `agenda-flow-prod` | `agenda-flow-staging` | Keduanya sehat saat audit |
+| App container | `agenda-flow-prod` | Web, PDF worker, dan cron sync staging | Ketiga service staging sehat; production tidak diubah |
 | Git source | `main` | `staging`, enam commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
@@ -131,7 +131,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-08 | Status, test koneksi, dan sinkron Integrasi Marison | Production + Staging | `Konfigurasi > Kegunaan Form`/BFF | Environment deployment, admin role | Environment switch via UI sudah removed; route lama hanya redirect |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
-| MRN-11 | Hybrid master branch dan karyawan external | Development branch, target staging | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Bergantung pada sinkron employee dan branch yang sudah ada di staging; production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
+| MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Smoke sync 25 Juli 2026: 9 kantor dan 67 profil terpetakan, 0 konflik; 9 kantor dan 35 profil masuk antrean review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
 
 Catatan cronjob:
 
