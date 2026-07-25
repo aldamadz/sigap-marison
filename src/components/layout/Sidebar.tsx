@@ -45,6 +45,9 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const recommendationCount = canAccessRecommendation ? attentionState.recommendationCount : 0
   const monitoringBadge = attentionState.monitoringCount
   const followUpCount = attentionState.followUpCount || 0
+  const officeReviewCount = attentionState.masterOfficeReviewCount || 0
+  const profileReviewCount = attentionState.profileReviewCount || 0
+  const masterReviewCount = officeReviewCount + profileReviewCount
   const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
   const isUserAdmin = user?.role === 'admin'
 
@@ -168,6 +171,16 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               {label === 'Tindak Lanjut' && followUpCount > 0 && (
                 <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
                   {followUpCount > 99 ? '99+' : followUpCount}
+                </span>
+              )}
+              {label === 'User Organization' && profileReviewCount > 0 && (
+                <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {profileReviewCount > 99 ? '99+' : profileReviewCount}
+                </span>
+              )}
+              {label === 'Master Kantor Cabang' && officeReviewCount > 0 && (
+                <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {officeReviewCount > 99 ? '99+' : officeReviewCount}
                 </span>
               )}
             </div>
@@ -315,11 +328,23 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <Database className="w-5 h-5 shrink-0" />
+                  <div className="relative shrink-0">
+                    <Database className="w-5 h-5" />
+                    {!isMobile && collapsed && masterReviewCount > 0 && (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-500" />
+                    )}
+                  </div>
                   {(isMobile || !collapsed) && <span className="truncate text-sm font-medium">Master Data</span>}
                 </div>
                 {(isMobile || !collapsed) && (
-                  <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isMasterOpen && "rotate-180")} />
+                  <div className="flex items-center gap-2">
+                    {masterReviewCount > 0 && (
+                      <span className="rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                        {masterReviewCount > 99 ? '99+' : masterReviewCount}
+                      </span>
+                    )}
+                    <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isMasterOpen && "rotate-180")} />
+                  </div>
                 )}
               </button>
               <AnimatePresence>

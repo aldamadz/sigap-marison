@@ -384,11 +384,23 @@ export default function UserManagementPage() {
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState<number | 'all'>(10);
+  const [syncIssueCount, setSyncIssueCount] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
 
   const fetchUsers = async () => {
     setLoading(true);
-    try { setUsers(await getUsers()); }
+    try {
+      const [nextUsers, issueResult] = await Promise.all([
+        getUsers(),
+        supabase
+          .from('marison_sync_issues')
+          .select('id', { count: 'exact', head: true })
+          .eq('entity_type', 'employee')
+          .eq('status', 'open'),
+      ]);
+      setUsers(nextUsers);
+      setSyncIssueCount(issueResult.count || 0);
+    }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -425,6 +437,9 @@ export default function UserManagementPage() {
         && (statusFilter === 'all' || (statusFilter === 'active' ? isActive : !isActive));
     })
     .sort((a, b) => {
+      const reviewA = (a as any).marison_review_required ? 0 : 1;
+      const reviewB = (b as any).marison_review_required ? 0 : 1;
+      if (reviewA !== reviewB) return reviewA - reviewB;
       if (sortBy === 'job_asc') return `${a.jobTitle || ''} ${a.fullName}`.localeCompare(`${b.jobTitle || ''} ${b.fullName}`, 'id');
       if (sortBy === 'department_asc') return `${a.departmentName || ''} ${a.fullName}`.localeCompare(`${b.departmentName || ''} ${b.fullName}`, 'id');
       if (sortBy === 'office_asc') return `${a.officeName || ''} ${a.fullName}`.localeCompare(`${b.officeName || ''} ${b.fullName}`, 'id');
@@ -1002,6 +1017,12 @@ export default function UserManagementPage() {
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
+      {syncIssueCount > 0 && (
+        <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+          <AlertCircle className="h-4 w-4" />
+          {syncIssueCount} karyawan external mengalami konflik mapping. Cocokkan NIK/email atau isi ID Employee External pada user yang benar.
+        </div>
+      )}
       <div className="relative bg-card shadow-sm">
         <Table className="min-w-[980px]" containerClassName="max-h-[calc(100dvh-24rem)] min-h-[380px]">
           <TableHeader className="sticky top-0 z-20 bg-card/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -1083,7 +1104,17 @@ export default function UserManagementPage() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-bold text-sm text-foreground truncate">{user.fullName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm text-foreground truncate">{user.fullName}</p>
+                          {(user as any).marison_review_required && (
+                            <span
+                              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600"
+                              title={((user as any).marison_review_reasons || []).join(', ')}
+                            >
+                              <AlertCircle className="h-3 w-3" /> Lengkapi
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-primary/70 font-medium truncate">{user.email}</p>
                         <p className="text-[10px] text-muted-foreground font-mono mt-0.5">NIK: {user.nik || '—'}</p>
                       </div>

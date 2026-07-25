@@ -1,6 +1,6 @@
 # SIGAP Feature and Release Map
 
-Snapshot audit: 2026-07-22 (Asia/Jakarta)
+Snapshot audit: 2026-07-25 (Asia/Jakarta)
 
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
@@ -131,12 +131,14 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-08 | Status, test koneksi, dan sinkron Integrasi Marison | Production + Staging | `Konfigurasi > Kegunaan Form`/BFF | Environment deployment, admin role | Environment switch via UI sudah removed; route lama hanya redirect |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
-| MRN-11 | Sinkronisasi branch dan karyawan external ke akun staging | Staging available | Panel Integrasi Marison di Kegunaan Form, BFF admin, mapping external ID, Supabase Auth/profile | `/branches`, `/employees`, Auth admin, ADM-01, ADM-06 | 65 profil dan 9 kantor tersinkron pada 22 Juli 2026; tetap staging-only sampai data HRD dan aturan mapping disetujui untuk production |
+| MRN-11 | Hybrid master branch dan karyawan external | Development branch, target staging | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Bergantung pada sinkron employee dan branch yang sudah ada di staging; production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
 
 Catatan cronjob:
 
-- Sinkronisasi branch/karyawan saat ini tetap manual dari panel admin agar hasil staging bisa diverifikasi.
-- Endpoint manual menjadi jalur yang sama untuk scheduler harian malam atau mingguan setelah aturan mapping disetujui.
+- Sinkronisasi branch/karyawan menggunakan master UUID SIGAP; ID external hanya menjadi mapping.
+- Branch selalu diproses sebelum employee agar `branch.id` dapat dipetakan ke `office_id` lokal.
+- Sinkron manual dan worker harian pukul 00:00 Asia/Jakarta memakai jalur orkestrasi, lock, dan audit run yang sama.
+- Data external yang kosong tidak menghapus isian manual; hirarki kantor, role, atasan, dan tanggal kerja tetap dikelola SIGAP.
 - Cronjob production tidak boleh diaktifkan sebelum data HRD, mapping kantor, dan dampak role/login diuji di staging.
 
 Temuan keamanan outbound:
