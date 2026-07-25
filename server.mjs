@@ -1790,6 +1790,21 @@ const buildEmailProductionCode = (unit) => {
   }) || unit?.raw?.production_code || "-";
 };
 
+const getEmailUnitType = (unit) => {
+  const detail = unit?.allocation_detail || {};
+  return String(
+    detail.unit_type ||
+    detail.type ||
+    detail.tipe ||
+    unit?.unit_type ||
+    unit?.raw?.unit_type ||
+    unit?.raw?.type ||
+    unit?.raw?.tipe ||
+    unit?.raw?.house_type ||
+    "-"
+  ).trim();
+};
+
 const renderAllocatedUnitsEmailTable = (units, project) => {
   if (!Array.isArray(units) || units.length === 0) return "";
 
@@ -1803,6 +1818,7 @@ const renderAllocatedUnitsEmailTable = (units, project) => {
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;color:#334155">No.</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Proyek</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;color:#334155">Unit</th>
+              <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Tipe</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;color:#334155">Struktur Atas</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;color:#334155">Struktur Bawah</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Kode Produksi</th>
@@ -1816,6 +1832,7 @@ const renderAllocatedUnitsEmailTable = (units, project) => {
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px">${index + 1}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${escapeEmailHtml(project?.name || project?.label || "-")}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;font-weight:700">${escapeEmailHtml(getEmailUnitCode(unit))}</td>
+                  <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${escapeEmailHtml(getEmailUnitType(unit))}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px">${escapeEmailHtml(formatEmailRupiah(detail.struktur_atas))}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px">${escapeEmailHtml(formatEmailRupiah(detail.struktur_bawah))}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;font-family:Consolas,monospace">${escapeEmailHtml(buildEmailProductionCode(unit))}</td>

@@ -61,6 +61,19 @@ import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreads
 import { normalizeProductionSerial } from "@/lib/production-code";
 import { useAttention } from "@/providers/AttentionProvider";
 
+const getAllocationUnitType = (unit: any, detail: Record<string, any> = unit?.allocation_detail || {}) =>
+  String(
+    detail.unit_type ||
+    detail.type ||
+    detail.tipe ||
+    unit?.unit_type ||
+    unit?.raw?.unit_type ||
+    unit?.raw?.type ||
+    unit?.raw?.tipe ||
+    unit?.raw?.house_type ||
+    "",
+  ).trim();
+
 const normalizeAllocationDetailForPersistence = (detail: Record<string, any> = {}) => ({
   ...detail,
   production_serial: normalizeProductionSerial(detail.production_serial),
@@ -1171,7 +1184,7 @@ const handleApprove = async (item: any) => {
         Kavling: unit.label || unit.value,
         "Struktur Atas": detail.struktur_atas ? formatRupiahInput(detail.struktur_atas) : "",
         "Struktur Bawah": detail.struktur_bawah ? formatRupiahInput(detail.struktur_bawah) : "",
-        "Tipe Unit": detail.unit_type || unit.raw?.type || unit.raw?.unit_type || "",
+        "Tipe Unit": getAllocationUnitType(unit, detail),
         "Nomor Kode Produksi": normalizeProductionSerial(detail.production_serial),
         "Blok": detail.production_block || "",
         "Tanggal Produksi": detail.production_date ? formatDatePickerDisplay(detail.production_date) : "",
@@ -1380,7 +1393,7 @@ const handleApprove = async (item: any) => {
     const details = getAllocationDetailMap(item);
     return getSelectedAllocationUnits(item).filter((unit: any) => {
       const detail = details[unit.value] || {};
-      return !String(detail.unit_type || unit.raw?.type || unit.raw?.unit_type || "").trim() ||
+      return !getAllocationUnitType(unit, detail) ||
         !String(detail.production_serial || "").trim() ||
         !String(detail.production_block || "").trim() ||
         !String(detail.production_date || "").trim();
@@ -1573,7 +1586,7 @@ const handleApprove = async (item: any) => {
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
-                            value={detail.unit_type || unit.raw?.type || unit.raw?.unit_type || ""}
+                            value={getAllocationUnitType(unit, detail)}
                             onChange={(event) => updateAllocationDetail(item.id, unit.value, "unit_type", event.target.value)}
                             placeholder="4.0"
                             aria-label={`Tipe unit ${unit.label}`}
@@ -1861,6 +1874,7 @@ const handleApprove = async (item: any) => {
           return [
             index + 1,
             formatSummaryValue(unit.label || unit.value || unit.code),
+            formatSummaryValue(getAllocationUnitType(unit, detail)),
             code,
             atas ? atas.toLocaleString("id-ID") : "-",
             bawah ? bawah.toLocaleString("id-ID") : "-",
@@ -1871,6 +1885,7 @@ const handleApprove = async (item: any) => {
           "",
           "TOTAL",
           "",
+          "",
           totalAtas ? totalAtas.toLocaleString("id-ID") : "-",
           totalBawah ? totalBawah.toLocaleString("id-ID") : "-",
           totalAtas + totalBawah ? (totalAtas + totalBawah).toLocaleString("id-ID") : "-",
@@ -1880,7 +1895,7 @@ const handleApprove = async (item: any) => {
           theme: "grid",
           styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
           headStyles: { fillColor: [36, 120, 74] },
-          head: [["No.", "Kavling", "Kode Produksi", "Struktur Atas", "Struktur Bawah", "Nominal"]],
+          head: [["No.", "Kavling", "Tipe", "Kode Produksi", "Struktur Atas", "Struktur Bawah", "Nominal"]],
           body: allocationRows,
           didParseCell: (data) => {
             if (data.section === "body" && data.row.index === allocationRows.length - 1) {
