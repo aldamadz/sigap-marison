@@ -5,6 +5,7 @@ import {
   buildMarisonStagingEmail,
   canUseMarisonNameFallback,
   deduplicateMarisonEmployees,
+  deriveMarisonOfficeType,
   executeMarisonBranchSync,
   marisonNikKey,
   normalizeMarisonNik,
@@ -48,17 +49,24 @@ describe("Marison employee sync", () => {
     expect(result.conflictingNik).toHaveLength(0);
   });
 
-  it("blocks missing and conflicting NIK instead of creating ambiguous accounts", () => {
+  it("keeps missing NIK for admin completion but blocks conflicting NIK", () => {
     const result = deduplicateMarisonEmployees([
       { id: 1, nik: null, name: "Tanpa NIK" },
       { id: 2, nik: "T 020", name: "Tengku" },
       { id: 3, nik: "T020", name: "Tokotest" },
     ]);
-    expect(result.employees).toHaveLength(0);
+    expect(result.employees).toEqual([expect.objectContaining({ id: 1, name: "Tanpa NIK" })]);
     expect(result.missingNik).toHaveLength(1);
     expect(result.conflictingNik).toEqual([
       expect.objectContaining({ nik: "T 020", names: ["tengku", "tokotest"] }),
     ]);
+  });
+
+  it("derives office hierarchy conservatively from branch names", () => {
+    expect(deriveMarisonOfficeType({ name: "Kantor Pusat" })).toBe("Pusat");
+    expect(deriveMarisonOfficeType({ name: "KCP Magelang Selatan" })).toBe("KCP");
+    expect(deriveMarisonOfficeType({ name: "Kantor Site Cibubur" })).toBe("Kost");
+    expect(deriveMarisonOfficeType({ name: "Magelang" })).toBe("KC");
   });
 
   it("resolves a conflicting staging row only when one name matches an existing profile", () => {
@@ -147,27 +155,27 @@ describe("Marison employee sync", () => {
     expect(applied).toEqual(expect.objectContaining({
       code: "EXT",
       name: "Cabang External",
-      kedudukan: "KC",
       marison_branch_id: 10,
       marison_branch_code: "EXT",
     }));
+    expect(applied).not.toHaveProperty("kedudukan");
     expect(applied).not.toHaveProperty("id");
   });
 
-  it("makes Master Kantor Cabang read-only and syncs it through the server", () => {
+  it("keeps Master Kantor editable while syncing mapping through the server", () => {
     const server = read("server.mjs");
     const page = read("src/pages/admin/OfficeManagementPage.tsx");
-    const migration = read("supabase/migrations/20260725163000_external_branch_master_read_only.sql");
+    const migration = read("supabase/migrations/20260725190000_hybrid_marison_master_sync.sql");
 
     expect(server).toContain("/api/integrations/marison/branches/preview");
     expect(server).toContain("/api/integrations/marison/branches/sync");
     expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")');
     expect(page).toContain("Sinkronkan External");
-    expect(page).not.toContain("Tambah Kantor");
-    expect(page).not.toContain('.from("master_offices").insert');
-    expect(migration).toContain("drop policy if exists master_offices_admin_insert");
-    expect(migration).toContain("drop policy if exists master_offices_admin_update");
-    expect(migration).toContain("drop policy if exists master_offices_admin_delete");
+    expect(page).toContain("Tambah Kantor");
+    expect(page).toContain('.from("master_offices").insert');
+    expect(migration).toContain("create policy master_offices_admin_insert");
+    expect(migration).toContain("create policy master_offices_admin_update");
+    expect(migration).not.toContain("create policy master_offices_admin_delete");
   });
 
   it("keeps execution staging-only, admin-only, and server-side", () => {
@@ -202,6 +210,11 @@ describe("Marison employee sync", () => {
 
     expect(syncService).toContain("!profileIds.has(occupied.id)");
     expect(syncService).toContain("item.profile?.id || item.currentAuth?.id || null");
-    expect(syncService).toContain('item.derivedJobTitle || "Karyawan"');
+    expect(syncService).toContain('item.derivedJobTitle || existing.job_title || "Karyawan"');
+    const existingAuthUpdate = syncService.slice(
+      syncService.indexOf("const authUpdates = {"),
+      syncService.indexOf("} else {", syncService.indexOf("const authUpdates = {")),
+    );
+    expect(existingAuthUpdate).not.toContain("password:");
   });
 });

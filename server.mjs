@@ -32,6 +32,7 @@ import {
   executeMarisonEmployeeSync,
   previewMarisonBranchSync,
   previewMarisonEmployeeSync,
+  runTrackedMarisonSync,
 } from "./server/marison-employee-sync.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -106,6 +107,10 @@ if (!MARISON_ENVIRONMENTS.has(marisonDeploymentEnvironment)) {
 const marisonSubmissionDispatchEnabled = String(
   process.env.MARISON_SUBMISSION_DISPATCH_ENABLED ?? (marisonDeploymentEnvironment === "staging" ? "true" : "false")
 ).toLowerCase() === "true";
+const marisonSyncCronToken = String(
+  process.env.MARISON_SYNC_CRON_TOKEN
+  || createHash("sha256").update(`marison-directory-sync:${sessionSecret}`).digest("hex")
+);
 const marisonOutboundNik = (...candidates) => resolveMarisonOutboundNik({
   environment: marisonDeploymentEnvironment,
   stagingOverride: process.env.MARISON_STAGING_OUTBOUND_NIK_OVERRIDE,
@@ -1434,6 +1439,8 @@ const getAttentionStateForUser = async (userId) => {
     unreadNotifications: Number(row?.unread_notifications || 0),
     monitoringCount,
     followUpCount: requesterRevisionCount,
+    masterOfficeReviewCount: Number(row?.master_office_review_count || 0),
+    profileReviewCount: Number(row?.profile_review_count || 0),
     generatedAt: new Date().toISOString(),
   };
 };
@@ -2855,10 +2862,8 @@ const getAllMarisonCollection = async (environment, pathname) => {
 };
 
 const getMarisonEmployeeSyncSource = async () => {
-  const [employees, branches] = await Promise.all([
-    getAllMarisonCollection("staging", "/employees"),
-    getAllMarisonCollection("staging", "/branches"),
-  ]);
+  const branches = await getAllMarisonCollection("staging", "/branches");
+  const employees = await getAllMarisonCollection("staging", "/employees");
   return { employees, branches };
 };
 
@@ -2887,7 +2892,7 @@ const previewMarisonBranches = async (req) => {
 
 const syncMarisonBranches = async (req) => {
   assertSameOrigin(req);
-  await requireAdminUser(getBearerToken(req));
+  const user = await requireAdminUser(getBearerToken(req));
   assertMarisonBranchSyncAvailable();
   const payload = await readJsonBody(req, 4096);
   if (payload?.confirm !== true) {
@@ -2903,10 +2908,17 @@ const syncMarisonBranches = async (req) => {
   marisonBranchSyncInFlight = true;
   try {
     const branches = await getMarisonBranchSyncSource();
-    return await executeMarisonBranchSync({
+    return await runTrackedMarisonSync({
       supabase,
-      branches,
       environment: marisonDeploymentEnvironment,
+      triggerType: "manual",
+      scope: "branches",
+      initiatedBy: user.id,
+      operation: () => executeMarisonBranchSync({
+        supabase,
+        branches,
+        environment: marisonDeploymentEnvironment,
+      }),
     });
   } finally {
     marisonBranchSyncInFlight = false;
@@ -2935,7 +2947,7 @@ const previewMarisonEmployees = async (req) => {
 
 const syncMarisonEmployees = async (req) => {
   assertSameOrigin(req);
-  await requireAdminUser(getBearerToken(req));
+  const user = await requireAdminUser(getBearerToken(req));
   assertMarisonEmployeeSyncAvailable();
   const payload = await readJsonBody(req, 4096);
   if (payload?.confirm !== true) {
@@ -2951,10 +2963,54 @@ const syncMarisonEmployees = async (req) => {
   marisonEmployeeSyncInFlight = true;
   try {
     const source = await getMarisonEmployeeSyncSource();
-    return await executeMarisonEmployeeSync({
+    return await runTrackedMarisonSync({
       supabase,
-      ...source,
-      defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+      environment: marisonDeploymentEnvironment,
+      triggerType: "manual",
+      scope: "directory",
+      initiatedBy: user.id,
+      operation: () => executeMarisonEmployeeSync({
+        supabase,
+        ...source,
+        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+      }),
+    });
+  } finally {
+    marisonEmployeeSyncInFlight = false;
+  }
+};
+
+const syncMarisonDirectoryFromCron = async (req) => {
+  assertMarisonEmployeeSyncAvailable();
+  if (marisonSyncCronToken.length < 32) {
+    const err = new Error("Token cron sinkronisasi belum dikonfigurasi.");
+    err.status = 503;
+    throw err;
+  }
+  const suppliedToken = String(req.headers["x-internal-sync-token"] || "");
+  if (!suppliedToken || sha256Hex(suppliedToken) !== sha256Hex(marisonSyncCronToken)) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight) {
+    const err = new Error("Sinkronisasi data external sedang berjalan.");
+    err.status = 409;
+    throw err;
+  }
+  marisonEmployeeSyncInFlight = true;
+  try {
+    const source = await getMarisonEmployeeSyncSource();
+    return await runTrackedMarisonSync({
+      supabase,
+      environment: marisonDeploymentEnvironment,
+      triggerType: "cron",
+      scope: "directory",
+      operation: () => executeMarisonEmployeeSync({
+        supabase,
+        ...source,
+        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+      }),
     });
   } finally {
     marisonEmployeeSyncInFlight = false;
@@ -4263,6 +4319,11 @@ createServer(async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/employees/sync") {
         const result = await syncMarisonEmployees(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/internal/marison/directory-sync") {
+        const result = await syncMarisonDirectoryFromCron(req);
         return sendJson(res, 200, result);
       }
 

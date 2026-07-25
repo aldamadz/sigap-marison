@@ -13,6 +13,8 @@ export function canUseMarisonNameFallback(
   profile: { full_name?: unknown; nik?: unknown },
 ): boolean;
 export function buildMarisonStagingEmail(employee: MarisonEmployee, duplicateName?: boolean): string;
+export function deriveMarisonOfficeType(branch: Record<string, unknown>): "Pusat" | "KC" | "KCP" | "Kost";
+export function resolveMarisonEmployeeActive(status: unknown, fallback?: boolean): boolean;
 export function deduplicateMarisonEmployees(rows: MarisonEmployee[], options?: { knownNames?: string[] }): {
   employees: MarisonEmployee[];
   missingNik: MarisonEmployee[];
@@ -40,4 +42,18 @@ export function executeMarisonEmployeeSync(options: {
   employees: MarisonEmployee[];
   branches: Array<Record<string, unknown>>;
   defaultPassword: string;
+}): Promise<Record<string, unknown>>;
+export function replaceMarisonSyncIssues(options: {
+  supabase: unknown;
+  environment: "staging" | "production";
+  issues: Array<Record<string, unknown>>;
+  entityTypes: Array<"branch" | "employee">;
+}): Promise<void>;
+export function runTrackedMarisonSync(options: {
+  supabase: unknown;
+  environment: "staging" | "production";
+  triggerType: "manual" | "cron";
+  scope: "branches" | "directory";
+  initiatedBy?: string | null;
+  operation: () => Promise<Record<string, unknown>>;
 }): Promise<Record<string, unknown>>;
