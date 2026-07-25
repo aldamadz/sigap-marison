@@ -3197,23 +3197,6 @@ const externalBranchIdFrom = (...values) => {
   return null;
 };
 
-const externalBranchNameFrom = (...values) => {
-  for (const value of values) {
-    const record = asPlainRecord(value);
-    const raw = getExternalRaw(record);
-    const branch = asPlainRecord(raw.branch || record.branch);
-    const name = firstString(
-      branch.name,
-      branch.label,
-      raw.branch_name,
-      record.branch_name,
-      record.external_branch_name
-    );
-    if (name) return name;
-  }
-  return "";
-};
-
 const getMarisonLocation = (surat) => {
   const snapshot = asPlainRecord(surat?.data_snapshot);
   const snapshotLocation = asPlainRecord(snapshot.location);
@@ -3223,52 +3206,6 @@ const getMarisonLocation = (surat) => {
     office: asPlainRecord(location.office || snapshotLocation.office),
     project: asPlainRecord(location.project || snapshotLocation.project),
     department: asPlainRecord(location.department || snapshotLocation.department),
-  };
-};
-
-const getMarisonRequester = (surat) => {
-  const snapshot = asPlainRecord(surat?.data_snapshot);
-  return {
-    ...asPlainRecord(snapshot.requester),
-    ...asPlainRecord(surat?.requester_snapshot),
-  };
-};
-
-const buildMarisonSubmittedBy = (surat) => {
-  const requester = getMarisonRequester(surat);
-  return {
-    nik: marisonOutboundNik(requester.nik),
-    name: firstString(requester.full_name, requester.name),
-    job_title: firstString(requester.job_title, requester.job_title_display),
-  };
-};
-
-const buildMarisonCompany = (surat) => {
-  const { entity } = getMarisonLocation(surat);
-  return {
-    code: firstString(entity.code),
-    name: firstString(entity.name),
-  };
-};
-
-const buildMarisonOffice = (surat, includeId = false, fallbackId = null) => {
-  const { office } = getMarisonLocation(surat);
-  const result = {
-    code: firstString(office.code),
-    name: firstString(office.name),
-    position: firstString(office.kedudukan, office.position),
-  };
-  if (includeId) {
-    result.id = externalIdFrom(office) ?? fallbackId ?? null;
-  }
-  return result;
-};
-
-const buildMarisonDepartment = (surat) => {
-  const { department } = getMarisonLocation(surat);
-  return {
-    code: firstString(department.code),
-    name: firstString(department.name),
   };
 };
 
@@ -3333,7 +3270,6 @@ const buildMarisonApprovals = (surat) => {
       const signerSnapshot = asPlainRecord(signature.signer_snapshot);
       const nik = marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik);
       return {
-        step: Number(signature.step_order || 0),
         role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
         nik,
         action: "approved",
@@ -3369,7 +3305,7 @@ const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
     const link = await buildPersistentMarisonFileLink(surat, attachment.file_url, actorId);
     if (link) {
       links.push({
-        title: firstString(attachment.requirement_label, attachment.file_name, `Lampiran ${index + 1}`),
+        name: firstString(attachment.requirement_label, attachment.file_name, `Lampiran ${index + 1}`),
         link,
       });
     }
@@ -3381,9 +3317,6 @@ const buildMarisonUnitPayload = async (surat, input, actorId) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
   const projectId = requireExternalInteger(externalIdFrom(requestedProject), "Project ID");
   const branchId = requireExternalInteger(externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
-  const requestedProjectRecord = asPlainRecord(requestedProject);
-  const requestedProjectRaw = getExternalRaw(requestedProjectRecord);
-  const branchName = externalBranchNameFrom(requestedProject, input, surat.location_snapshot);
   const units = getMarisonAllocatedUnits(surat, input).map((unit, index) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
@@ -3397,22 +3330,23 @@ const buildMarisonUnitPayload = async (surat, input, actorId) => {
       date: productionDate,
     }) || firstString(raw.production_code, record.production_code);
     return {
-      item_number: index + 1,
       unit_id: requireExternalInteger(externalIdFrom(record), `Unit ID baris ${index + 1}`),
-      unit_code: firstString(raw.code, raw.unit_code, record.code, record.value, record.label),
       production_code: productionCode,
-      production_serial: productionSerial,
-      production_block: productionBlock,
-      production_date: productionDate,
-      addendum_atas: {
-        label: "Struktur Atas",
-        nominal: parseExternalMoney(detail.struktur_atas),
-      },
-      addendum_bawah: {
-        label: "Struktur Bawah",
-        nominal: parseExternalMoney(detail.struktur_bawah),
-      },
-      notes: firstString(detail.planning_notes, detail.catatan, input.catatan),
+      type: firstString(
+        raw.type,
+        raw.unit_type,
+        raw.tipe,
+        record.type,
+        record.unit_type,
+        detail.unit_type,
+        detail.type,
+        detail.tipe
+      ),
+      addendum_atas_label: "Struktur Atas",
+      addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
+      addendum_bawah_label: "Struktur Bawah",
+      addendum_bawah_nominal: parseExternalMoney(detail.struktur_bawah),
+      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan),
     };
   });
   if (units.length === 0) {
@@ -3422,22 +3356,10 @@ const buildMarisonUnitPayload = async (surat, input, actorId) => {
   }
   const payload = {
     submission_number: surat.no_surat,
-    title: surat.judul_surat,
+    project_id: projectId,
+    branch_id: branchId,
+    submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
-    submitted_by: buildMarisonSubmittedBy(surat),
-    company: buildMarisonCompany(surat),
-    office: buildMarisonOffice(surat),
-    department: buildMarisonDepartment(surat),
-    project: {
-      id: projectId,
-      code: firstString(requestedProjectRaw.code, requestedProjectRaw.project_code, requestedProjectRecord.code),
-      name: firstString(requestedProjectRaw.name, requestedProjectRaw.project_name, requestedProjectRecord.name, requestedProjectRecord.label),
-    },
-    branch: {
-      id: branchId,
-      name: branchName,
-    },
-    total_units: units.length,
     units,
     attachments: await buildMarisonAttachmentLinks(surat, actorId),
     approvals: buildMarisonApprovals(surat),
@@ -3502,13 +3424,6 @@ const getMarisonRecommendationDocument = async (parentSuratId) => {
   return child || null;
 };
 
-const recommendationActionDescription = (action) => ({
-  service: "Service",
-  ganti: "Ganti Komponen",
-  beli_baru: "Pembelian baru",
-  tidak_direkomendasikan: "Tidak direkomendasikan",
-}[action] || "");
-
 const buildMarisonRecommendationItemAttachment = async (document, recommendation, actorId) => {
   const attachment = asPlainRecord(recommendation?.recommendation_attachment);
   const rawPath = firstString(
@@ -3519,7 +3434,7 @@ const buildMarisonRecommendationItemAttachment = async (document, recommendation
   const link = await buildPersistentMarisonFileLink(document, rawPath, actorId);
   if (!link) return [];
   return [{
-    title: firstString(attachment.file_name, recommendation?.recommendation_attachment_file_name, "Lampiran rekomendasi"),
+    name: firstString(attachment.file_name, recommendation?.recommendation_attachment_file_name, "Lampiran rekomendasi"),
     link,
   }];
 };
@@ -3530,7 +3445,7 @@ const normalizeMarisonEmbeddedLinks = (value) => asArrayValue(value)
     const link = firstString(record.link, record.url);
     if (!/^https:\/\//i.test(link)) return null;
     return {
-      title: firstString(record.title, record.name, record.file_name, `Lampiran item ${index + 1}`),
+      name: firstString(record.name, record.title, record.file_name, `Lampiran item ${index + 1}`),
       link,
     };
   })
@@ -3561,7 +3476,8 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
   return {
     endpoint: "/non-unit-submissions",
     kind: "non_unit",
-    payload: {
+    contractVersion: MARISON_OUTBOUND_CONTRACT_VERSION,
+    payload: assertMarisonOutboundContract("non_unit", {
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
@@ -3571,7 +3487,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
       items,
       attachments: await buildMarisonAttachmentLinks(surat, actorId),
       approvals: buildMarisonApprovals(surat),
-    },
+    }),
   };
 };
 
@@ -3593,71 +3509,60 @@ const buildMarisonAssetPayload = async (surat, input, actorId) => {
   const payloadItems = await Promise.all(items.map(async (item, index) => {
     const record = asPlainRecord(item);
     const recommendation = asPlainRecord(findMarisonRecommendationRow(recommendationRows, record, index));
-    const action = firstString(recommendation.recommendation_action) ||
-      (recommendation.is_recommended === false ? "tidak_direkomendasikan" : "");
     const embeddedAttachments = normalizeMarisonEmbeddedLinks(record.attachments);
     const recommendationAttachments = await buildMarisonRecommendationItemAttachment(
       recommendationDocument,
       recommendation,
       actorId
     );
+    const quantity = requireExternalInteger(
+      record.jumlah ?? record.quantity,
+      `Jumlah aset baris ${index + 1}`
+    );
+    const estimatedPrice = parseExternalMoney(
+      record.estimated_price ??
+      record.harga_perkiraan ??
+      record.perkiraan_harga ??
+      record.harga ??
+      record.nominal ??
+      record.nilai
+    );
     return {
-      item_number: index + 1,
+      request_number: firstString(
+        record.request_number,
+        record.no_pengajuan,
+        record.nomor_pengajuan,
+        items.length === 1 ? surat.no_surat : `${surat.no_surat}-${String(index + 1).padStart(2, "0")}`
+      ),
       asset_name: firstString(record.nama_barang, record.item_name, record.nama, record.barang),
-      quantity: Number(record.jumlah ?? record.quantity ?? 0),
-      unit: firstString(record.sat, record.satuan, record.unit),
-      status_code: firstString(record.status, record.status_code),
+      quantity,
+      ...(estimatedPrice > 0 ? { estimated_price: estimatedPrice } : {}),
       description: firstString(record.keterangan, record.description),
       attachments: [...embeddedAttachments, ...recommendationAttachments],
-      recommendation: action ? {
-        is_recommended: action !== "tidak_direkomendasikan",
-        action,
-        description: firstString(recommendation.description, recommendationActionDescription(action)),
-        location_pic: firstString(recommendation.lokasi_pic, recommendation.location_pic),
-        notes: firstString(recommendation.keterangan, recommendation.uraian, recommendation.kerusakan),
-        reference_link: firstString(recommendation.reference_link, recommendation.link),
-      } : null,
     };
   }));
 
-  const attachments = await buildMarisonAttachmentLinks(surat, actorId);
-  let recommendationDocumentPayload = null;
   if (recommendationDocument) {
     const recommendationLinks = await buildMarisonAttachmentLinks(recommendationDocument, actorId);
-    const documentLink = recommendationLinks.find((item) => item.title === "Dokumen pengajuan")?.link ||
+    const documentLink = recommendationLinks.find((item) => item.name === "Dokumen pengajuan")?.link ||
       recommendationLinks[0]?.link || "";
     if (documentLink) {
-      recommendationDocumentPayload = {
-        document_number: recommendationDocument.no_surat,
-        title: recommendationDocument.judul_surat,
-        link: documentLink,
-        approvals: buildMarisonApprovals(recommendationDocument),
-      };
-      attachments.push({ title: "Dokumen Rekomendasi Aset", link: documentLink });
+      payloadItems.forEach((item) => {
+        if (!item.attachments.some((attachment) => attachment.link === documentLink)) {
+          item.attachments.push({ name: "Dokumen Rekomendasi Aset", link: documentLink });
+        }
+      });
     }
   }
 
   const location = getMarisonLocation(surat);
-  const officeId = requireExternalInteger(
-    externalIdFrom(location.office) ?? branchId,
-    "Office ID"
-  );
   const payload = {
-    request_number: surat.no_surat,
-    title: surat.judul_surat,
+    branch_id: branchId,
     category: firstString(location.office.kedudukan, location.office.position).toLowerCase() === "pusat"
       ? "Pengajuan Pusat"
       : "Pengajuan Cabang",
-    submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
-    submitted_by: buildMarisonSubmittedBy(surat),
-    company: buildMarisonCompany(surat),
-    office: buildMarisonOffice(surat, true, officeId),
-    department: buildMarisonDepartment(surat),
     description: firstString(input.catatan, surat.judul_surat),
-    total_items: payloadItems.length,
     items: payloadItems,
-    attachments,
-    recommendation_document: recommendationDocumentPayload,
     approvals: buildMarisonApprovals(surat),
   };
   return {

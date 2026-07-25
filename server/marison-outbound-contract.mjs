@@ -1,145 +1,81 @@
 import { z } from "zod";
 
-export const MARISON_OUTBOUND_CONTRACT_VERSION = "v1";
+export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
-const externalId = z.union([z.number().int().positive(), z.string().trim().min(1)]);
+const positiveInteger = z.number().int().positive();
+const nonNegativeInteger = z.number().int().nonnegative();
 const dateTime = z.string().datetime({ offset: true });
-const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 const externalLink = z.object({
-  title: nonEmptyText,
+  name: nonEmptyText,
   link: z.string().url(),
 }).strict();
 
 const approval = z.object({
-  step: z.number().int().positive(),
   role: nonEmptyText,
   nik: nonEmptyText,
-  action: z.enum(["approved", "rejected"]),
+  action: nonEmptyText,
   actioned_at: dateTime,
-  notes: requiredText,
-}).strict();
-
-const submittedBy = z.object({
-  nik: nonEmptyText,
-  name: nonEmptyText,
-  job_title: nonEmptyText,
-}).strict();
-
-const company = z.object({
-  code: nonEmptyText,
-  name: nonEmptyText,
-}).strict();
-
-const officeBase = {
-  code: nonEmptyText,
-  name: nonEmptyText,
-  position: nonEmptyText,
-};
-
-const department = z.object({
-  code: nonEmptyText,
-  name: nonEmptyText,
-}).strict();
-
-const addendum = z.object({
-  label: nonEmptyText,
-  nominal: z.number().int().nonnegative(),
+  notes: requiredText.optional(),
 }).strict();
 
 export const marisonUnitSubmissionSchema = z.object({
   submission_number: nonEmptyText,
-  title: nonEmptyText,
-  submitted_at: dateTime,
-  submitted_by: submittedBy,
-  company,
-  office: z.object(officeBase).strict(),
-  department,
-  project: z.object({
-    id: externalId,
-    code: nonEmptyText,
-    name: nonEmptyText,
-  }).strict(),
-  branch: z.object({
-    id: externalId,
-    name: nonEmptyText,
-  }).strict(),
-  total_units: z.number().int().positive(),
+  project_id: positiveInteger,
+  branch_id: positiveInteger,
+  submitted_by: nonEmptyText.optional(),
+  submitted_at: dateTime.optional(),
   units: z.array(z.object({
-    item_number: z.number().int().positive(),
-    unit_id: externalId,
-    unit_code: nonEmptyText,
+    unit_id: positiveInteger,
     production_code: nonEmptyText,
-    production_serial: nonEmptyText,
-    production_block: nonEmptyText,
-    production_date: dateOnly,
-    addendum_atas: addendum,
-    addendum_bawah: addendum,
-    notes: requiredText,
+    type: nonEmptyText,
+    addendum_atas_label: requiredText.optional(),
+    addendum_atas_nominal: nonNegativeInteger.optional(),
+    addendum_bawah_label: requiredText.optional(),
+    addendum_bawah_nominal: nonNegativeInteger.optional(),
+    planning_notes: requiredText.optional(),
   }).strict()).min(1),
-  attachments: z.array(externalLink),
+  attachments: z.array(externalLink).optional(),
   approvals: z.array(approval).min(1),
-}).strict().superRefine((payload, ctx) => {
-  if (payload.total_units !== payload.units.length) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["total_units"],
-      message: "total_units harus sama dengan jumlah baris units.",
-    });
-  }
-});
+}).strict();
 
-const recommendation = z.object({
-  is_recommended: z.boolean(),
-  action: z.enum(["service", "ganti", "beli_baru", "tidak_direkomendasikan"]),
-  description: requiredText,
-  location_pic: requiredText,
-  notes: requiredText,
-  reference_link: z.union([z.literal(""), z.string().url()]),
+export const marisonNonUnitSubmissionSchema = z.object({
+  submission_number: nonEmptyText,
+  project_id: positiveInteger,
+  branch_id: positiveInteger,
+  submitted_by: nonEmptyText.optional(),
+  submitted_at: dateTime.optional(),
+  notes: requiredText.optional(),
+  items: z.array(z.object({
+    non_unit_id: positiveInteger,
+    item_name: nonEmptyText,
+    subtotal: nonNegativeInteger,
+    planning_notes: requiredText.optional(),
+  }).strict()).min(1),
+  attachments: z.array(externalLink).optional(),
+  approvals: z.array(approval).min(1),
 }).strict();
 
 export const marisonAssetPurchaseRequestSchema = z.object({
-  request_number: nonEmptyText,
-  title: nonEmptyText,
-  category: z.enum(["Pengajuan Pusat", "Pengajuan Cabang"]),
-  submitted_at: dateTime,
-  submitted_by: submittedBy,
-  company,
-  office: z.object({ id: externalId, ...officeBase }).strict(),
-  department,
-  description: requiredText,
-  total_items: z.number().int().positive(),
+  branch_id: positiveInteger,
+  category: nonEmptyText,
+  description: requiredText.optional(),
   items: z.array(z.object({
-    item_number: z.number().int().positive(),
+    request_number: nonEmptyText,
     asset_name: nonEmptyText,
-    quantity: z.number().positive(),
-    unit: nonEmptyText,
-    status_code: nonEmptyText,
-    description: requiredText,
-    attachments: z.array(externalLink),
-    recommendation: recommendation.nullable(),
+    quantity: positiveInteger.optional(),
+    estimated_price: nonNegativeInteger.optional(),
+    description: requiredText.optional(),
+    attachments: z.array(externalLink).optional(),
   }).strict()).min(1),
-  attachments: z.array(externalLink),
-  recommendation_document: z.object({
-    document_number: nonEmptyText,
-    title: nonEmptyText,
-    link: z.string().url(),
-    approvals: z.array(approval).min(1),
-  }).strict().nullable(),
   approvals: z.array(approval).min(1),
-}).strict().superRefine((payload, ctx) => {
-  if (payload.total_items !== payload.items.length) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["total_items"],
-      message: "total_items harus sama dengan jumlah baris items.",
-    });
-  }
-});
+}).strict();
 
 const schemas = {
   unit: marisonUnitSubmissionSchema,
+  non_unit: marisonNonUnitSubmissionSchema,
   asset: marisonAssetPurchaseRequestSchema,
 };
 

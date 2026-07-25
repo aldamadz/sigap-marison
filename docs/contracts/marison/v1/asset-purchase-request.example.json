@@ -1,165 +1,29 @@
 {
-  "request_number": "001/UAI/PBO.1/VII/2026",
-  "title": "Permohonan Aset Komputer dan Printer Departemen Pengembangan Organisasi",
+  "branch_id": 1,
   "category": "Pengajuan Pusat",
-  "submitted_at": "2026-07-21T09:14:43+07:00",
-  "submitted_by": {
-    "nik": "EMP-IT-001",
-    "name": "Andi Saputra",
-    "job_title": "Staff IT"
-  },
-  "company": {
-    "code": "UAI",
-    "name": "PT. UNILOA ARDIYANTO INVESTAMA"
-  },
-  "office": {
-    "id": 1,
-    "code": "PST",
-    "name": "Kantor Pusat",
-    "position": "Pusat"
-  },
-  "department": {
-    "code": "PBO",
-    "name": "Pengembangan Organisasi"
-  },
-  "description": "Perangkat digunakan untuk kebutuhan pengembangan aplikasi dan administrasi.",
-  "total_items": 2,
+  "description": "Pengajuan pembelian aset untuk tim operasional",
   "items": [
     {
-      "item_number": 1,
+      "request_number": "001/UAI/PBO.1/VII/2026",
       "asset_name": "Komputer SET",
       "quantity": 1,
-      "unit": "Unit",
-      "status_code": "3",
+      "estimated_price": 15000000,
       "description": "Kebutuhan pengembangan dan pengujian aplikasi",
       "attachments": [
         {
-          "title": "Foto Referensi Komputer SET",
-          "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-komputer-foto-001"
-        },
-        {
-          "title": "Spesifikasi Komputer SET",
+          "name": "Spesifikasi Komputer SET",
           "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-komputer-spesifikasi-001"
-        },
-        {
-          "title": "Penawaran Harga Komputer SET",
-          "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-komputer-penawaran-001"
         }
-      ],
-      "recommendation": {
-        "is_recommended": true,
-        "action": "beli_baru",
-        "description": "Pembelian baru",
-        "location_pic": "PO / Staff IT",
-        "notes": "Perangkat lama tidak memenuhi kebutuhan pengembangan aplikasi",
-        "reference_link": "https://example.com/products/komputer-set"
-      }
-    },
-    {
-      "item_number": 2,
-      "asset_name": "Printer Laser",
-      "quantity": 2,
-      "unit": "Unit",
-      "status_code": "3",
-      "description": "Kebutuhan pencetakan dokumen departemen",
-      "attachments": [
-        {
-          "title": "Foto Referensi Printer Laser",
-          "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-printer-foto-001"
-        },
-        {
-          "title": "Spesifikasi Printer Laser",
-          "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-printer-spesifikasi-001"
-        },
-        {
-          "title": "Penawaran Harga Printer Laser",
-          "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-printer-penawaran-001"
-        }
-      ],
-      "recommendation": {
-        "is_recommended": true,
-        "action": "beli_baru",
-        "description": "Pembelian baru",
-        "location_pic": "PO / Staff IT",
-        "notes": "Printer lama rusak dan biaya perbaikan tidak ekonomis",
-        "reference_link": "https://example.com/products/printer-laser"
-      }
+      ]
     }
   ],
-  "attachments": [
-    {
-      "title": "Dokumen Pengajuan Aset Final",
-      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-aset-final-001"
-    },
-    {
-      "title": "Dokumen Rekomendasi Aset",
-      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-rekomendasi-final-001"
-    }
-  ],
-  "recommendation_document": {
-    "document_number": "003/UAI/PBO.4/VII/2026",
-    "title": "Rekomendasi Pembelian Komputer SET dan Printer Laser",
-    "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-rekomendasi-final-001",
-    "approvals": [
-      {
-        "step": 1,
-        "role": "Staff IT",
-        "nik": "EMP-IT-001",
-        "action": "approved",
-        "actioned_at": "2026-07-21T10:18:32+07:00",
-        "notes": "Dikonfirmasi oleh pembuat rekomendasi"
-      },
-      {
-        "step": 2,
-        "role": "Mgr. PO",
-        "nik": "EMP-PO-001",
-        "action": "approved",
-        "actioned_at": "2026-07-21T10:30:40+07:00",
-        "notes": "Rekomendasi telah diperiksa"
-      }
-    ]
-  },
   "approvals": [
     {
-      "step": 1,
-      "role": "Staff Departemen",
-      "nik": "EMP-IT-001",
-      "action": "approved",
-      "actioned_at": "2026-07-21T11:20:16+07:00",
-      "notes": ""
-    },
-    {
-      "step": 2,
       "role": "Pimpinan Departemen",
       "nik": "EMP-PBO-001",
       "action": "approved",
       "actioned_at": "2026-07-21T14:53:33+07:00",
       "notes": "Kebutuhan departemen telah sesuai"
-    },
-    {
-      "step": 3,
-      "role": "Mgr. HRD GA",
-      "nik": "EMP-HRD-001",
-      "action": "approved",
-      "actioned_at": "2026-07-21T14:54:36+07:00",
-      "notes": ""
-    },
-    {
-      "step": 4,
-      "role": "Direktur I",
-      "nik": "EMP-DIR-001",
-      "action": "approved",
-      "actioned_at": "2026-07-21T14:55:09+07:00",
-      "notes": ""
-    },
-    {
-      "step": 5,
-      "role": "Direktur Utama",
-      "nik": "EMP-DIR-002",
-      "action": "approved",
-      "actioned_at": "2026-07-21T14:55:40+07:00",
-      "notes": "Disetujui untuk proses pembelian"
     }
   ]
 }
-
