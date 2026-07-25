@@ -132,6 +132,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
 | MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Smoke sync 25 Juli 2026: 9 kantor dan 67 profil terpetakan, 0 konflik; 9 kantor dan 35 profil masuk antrean review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
+| MRN-12 | Tipe unit pada alokasi dan seluruh output | Staging only | Input alokasi, template Excel, ringkasan layar, PDF adendum, PDF kode produksi, PDF summary, email, payload `units[].type` | MRN-04, MRN-05, kontrak OpenAPI unit | Bergantung pada kontrak POST Marison yang masih staging-only; promosikan bersama MRN-05 setelah pengujian dokumen dan payload disetujui |
 
 Catatan cronjob:
 
