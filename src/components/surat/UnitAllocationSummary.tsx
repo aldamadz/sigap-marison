@@ -117,12 +117,13 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
             Kode Produksi Unit
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-xs">
+            <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="bg-muted/20 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-center">No.</th>
                   <th className="px-3 py-2">Proyek</th>
                   <th className="px-3 py-2">Unit</th>
+                  <th className="px-3 py-2">Tipe</th>
                   <th className="px-3 py-2">Kode Produksi</th>
                 </tr>
               </thead>
@@ -134,6 +135,7 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
                       <td className="px-3 py-2 text-center tabular-nums">{index + 1}</td>
                       <td className="px-3 py-2">{projectLabel}</td>
                       <td className="px-3 py-2 font-semibold">{getUnitLabel(unit)}</td>
+                      <td className="px-3 py-2">{formatSummaryValue(detail.unit_type || asRecord(unit.raw).type)}</td>
                       <td className="px-3 py-2 font-mono">{getProductionCode(detail) || "-"}</td>
                     </tr>
                   );

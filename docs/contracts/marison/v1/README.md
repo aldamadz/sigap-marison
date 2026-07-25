@@ -1,4 +1,4 @@
-# Kontrak Outbound Marison v1
+# Kontrak Outbound Marison OpenAPI 1.0.0
 
 Folder ini adalah sumber kebenaran payload yang dikirim SIGAP ke sistem Marison.
 Tim SIGAP dan vendor harus memakai contoh JSON di folder ini sebagai kontrak yang
@@ -7,6 +7,7 @@ sama selama integrasi v1 berlangsung.
 ## Payload Kanonis
 
 - `unit-submission.example.json` untuk `POST /unit-submissions`.
+- `non-unit-submission.example.json` untuk `POST /non-unit-submissions`.
 - `asset-purchase-request.example.json` untuk `POST /asset-purchase-requests`.
 
 Nama field, struktur object/array, dan tipe data tidak boleh diubah diam-diam.
@@ -25,11 +26,10 @@ akan dikirim jika data wajib belum lengkap atau bentuknya menyimpang dari kontra
 
 ## Status Integrasi
 
-Pada 22 Juli 2026, OpenAPI vendor staging masih mendokumentasikan payload lama
-yang memakai field ringkas seperti `project_id`, `branch_id`, dan `asset_name`.
-Kontrak v1 pada folder ini adalah kontrak baru yang sedang disesuaikan oleh vendor.
-Jangan deploy pengiriman kontrak baru sebelum endpoint vendor menyatakan siap dan
-lulus contract test bersama.
+Pada 25 Juli 2026, dokumentasi OpenAPI staging dan production sama-sama memakai
+versi `1.0.0`. Fixture di folder ini mengikuti schema yang dipublikasikan oleh
+masing-masing endpoint `/docs`, termasuk nama field lampiran `name` dan bentuk
+ringkas identifier `project_id` serta `branch_id`.
 
 ## Aturan Perubahan
 
@@ -39,6 +39,6 @@ lulus contract test bersama.
 4. Jangan menambahkan fallback payload kedua pada endpoint yang sama.
 5. Credential, access token, HMAC, dan storage URL asli tidak boleh masuk fixture.
 
-`office.id`, `project.id`, `branch.id`, `unit_id`, dan NIK adalah identifier
-integrasi wajib. SIGAP menghentikan dispatch dengan error terukur jika mapping
-identifier tersebut belum tersedia; server tidak membuat ID dummy.
+`project_id`, `branch_id`, `unit_id`, `non_unit_id`, dan NIK adalah identifier
+integrasi. SIGAP menghentikan dispatch dengan error terukur jika identifier wajib
+belum tersedia; server tidak membuat ID dummy.

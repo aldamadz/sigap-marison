@@ -16,12 +16,15 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('["POST", url.pathname, token, bodyHash, timestamp].join(":")');
     expect(server).toContain("dispatchCompletedSuratToMarison");
     expect(server).toContain('assertMarisonOutboundContract("unit", payload)');
+    expect(server).toContain('assertMarisonOutboundContract("non_unit", {');
     expect(server).toContain('assertMarisonOutboundContract("asset", payload)');
-    expect(server).toContain("total_units: units.length");
-    expect(server).toContain("total_items: payloadItems.length");
+    expect(server).toContain("project_id: projectId");
+    expect(server).toContain("branch_id: branchId");
+    expect(server).toContain("addendum_atas_label");
+    expect(server).toContain("request_number: firstString(");
+    expect(server).toContain('name: "Dokumen Rekomendasi Aset"');
     expect(server).toContain("contract_version: dispatch.contractVersion");
     expect(server).toContain("payload_hash: sha256Hex");
-    expect(server).toContain("marisonOutboundNik(requester.nik)");
     expect(server).toContain("marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik)");
     expect(server).toContain("marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
     expect(client).not.toContain("MARISON_STAGING_CLIENT_SECRET");
