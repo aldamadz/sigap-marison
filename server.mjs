@@ -3215,7 +3215,7 @@ const resolveMarisonBranchId = async (surat, ...values) => {
 
   const officeId = firstString(surat?.office_id, surat?.location_snapshot?.office?.id);
   if (!officeId) return null;
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("master_offices")
     .select("marison_branch_id")
     .eq("id", officeId)

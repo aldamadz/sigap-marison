@@ -91,6 +91,7 @@ describe("Marison employee sync", () => {
     const server = read("server.mjs");
 
     expect(server).toContain("const resolveMarisonBranchId = async");
+    expect(server).not.toContain("supabaseAdmin");
     expect(server).toContain('.select("marison_branch_id")');
     expect(server).toContain(
       "await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot)"
