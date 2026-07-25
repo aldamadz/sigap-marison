@@ -20,6 +20,16 @@ export function deduplicateMarisonEmployees(rows: MarisonEmployee[], options?: {
   mergedDuplicates: Array<{ nik: string; name: string; merged: number }>;
   resolvedConflicts: Array<{ nik: string; selectedName: string; ignoredNames: string[] }>;
 };
+export function previewMarisonBranchSync(options: {
+  supabase: unknown;
+  branches: Array<Record<string, unknown>>;
+  environment?: "staging" | "production";
+}): Promise<Record<string, unknown>>;
+export function executeMarisonBranchSync(options: {
+  supabase: unknown;
+  branches: Array<Record<string, unknown>>;
+  environment?: "staging" | "production";
+}): Promise<Record<string, unknown>>;
 export function previewMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];

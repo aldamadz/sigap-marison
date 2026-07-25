@@ -39,6 +39,28 @@ export type MarisonEmployeeSyncIssue = {
   reason: string;
 };
 
+export type MarisonBranchSyncPreview = {
+  environment: MarisonEnvironment;
+  generatedAt: string;
+  source: number;
+  matched: number;
+  toCreate: number;
+  toUpdate: number;
+  blocked: number;
+  issues: MarisonEmployeeSyncIssue[];
+};
+
+export type MarisonBranchSyncResult = {
+  environment: MarisonEnvironment;
+  completedAt: string;
+  source: number;
+  created: number;
+  updated: number;
+  matched: number;
+  failed: number;
+  errors: MarisonEmployeeSyncIssue[];
+};
+
 export type MarisonEmployeeSyncPreview = {
   environment: "staging";
   generatedAt: string;
@@ -93,6 +115,16 @@ export const marisonIntegrationService = {
   ),
   syncEmployees: () => request<MarisonEmployeeSyncResult>(
     "/api/integrations/marison/employees/sync",
+    {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }
+  ),
+  previewBranches: () => request<MarisonBranchSyncPreview>(
+    "/api/integrations/marison/branches/preview"
+  ),
+  syncBranches: () => request<MarisonBranchSyncResult>(
+    "/api/integrations/marison/branches/sync",
     {
       method: "POST",
       body: JSON.stringify({ confirm: true }),

@@ -5,8 +5,10 @@ import {
   buildMarisonStagingEmail,
   canUseMarisonNameFallback,
   deduplicateMarisonEmployees,
+  executeMarisonBranchSync,
   marisonNikKey,
   normalizeMarisonNik,
+  previewMarisonBranchSync,
 } from "../../server/marison-employee-sync.mjs";
 
 describe("Marison employee sync", () => {
@@ -69,6 +71,103 @@ describe("Marison employee sync", () => {
     ]);
     expect(result.conflictingNik).toHaveLength(0);
     expect(result.resolvedConflicts).toHaveLength(1);
+  });
+
+  it("previews external branches as the canonical office source", async () => {
+    const supabase = {
+      from: (table: string) => {
+        expect(table).toBe("master_offices");
+        return {
+          select: async () => ({
+            data: [{
+              id: "office-1",
+              code: "LAMA",
+              name: "Nama Lama",
+              kedudukan: "KC",
+              marison_branch_id: 10,
+              marison_branch_code: "LAMA",
+            }],
+            error: null,
+          }),
+        };
+      },
+    };
+    const result = await previewMarisonBranchSync({
+      supabase,
+      environment: "staging",
+      branches: [
+        { id: 10, code: "BARU", name: "Nama External" },
+        { id: 11, code: "CBG", name: "Cabang Baru" },
+      ],
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      environment: "staging",
+      source: 2,
+      matched: 1,
+      toCreate: 1,
+      toUpdate: 1,
+      blocked: 0,
+    }));
+  });
+
+  it("applies external branch identity while preserving the SIGAP office UUID", async () => {
+    const existing = {
+      id: "office-1",
+      code: "LAMA",
+      name: "Nama Lama",
+      kedudukan: "KCP",
+      marison_branch_id: 10,
+      marison_branch_code: "LAMA",
+    };
+    let applied: Record<string, unknown> | null = null;
+    const supabase = {
+      from: () => ({
+        select: async () => ({ data: [existing], error: null }),
+        update: (payload: Record<string, unknown>) => ({
+          eq: () => ({
+            select: () => ({
+              single: async () => {
+                applied = payload;
+                return { data: { ...existing, ...payload }, error: null };
+              },
+            }),
+          }),
+        }),
+      }),
+    };
+
+    const result = await executeMarisonBranchSync({
+      supabase,
+      environment: "staging",
+      branches: [{ id: 10, code: "EXT", name: "Cabang External" }],
+    });
+
+    expect(result).toEqual(expect.objectContaining({ updated: 1, failed: 0 }));
+    expect(applied).toEqual(expect.objectContaining({
+      code: "EXT",
+      name: "Cabang External",
+      kedudukan: "KC",
+      marison_branch_id: 10,
+      marison_branch_code: "EXT",
+    }));
+    expect(applied).not.toHaveProperty("id");
+  });
+
+  it("makes Master Kantor Cabang read-only and syncs it through the server", () => {
+    const server = read("server.mjs");
+    const page = read("src/pages/admin/OfficeManagementPage.tsx");
+    const migration = read("supabase/migrations/20260725163000_external_branch_master_read_only.sql");
+
+    expect(server).toContain("/api/integrations/marison/branches/preview");
+    expect(server).toContain("/api/integrations/marison/branches/sync");
+    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")');
+    expect(page).toContain("Sinkronkan External");
+    expect(page).not.toContain("Tambah Kantor");
+    expect(page).not.toContain('.from("master_offices").insert');
+    expect(migration).toContain("drop policy if exists master_offices_admin_insert");
+    expect(migration).toContain("drop policy if exists master_offices_admin_update");
+    expect(migration).toContain("drop policy if exists master_offices_admin_delete");
   });
 
   it("keeps execution staging-only, admin-only, and server-side", () => {
