@@ -24,6 +24,7 @@ describe("Fastify backend architecture", () => {
     expect(auth).toContain('app.post("/api/auth/login"');
     expect(bff).toContain('app.post("/api/bff/query"');
     expect(read("backend/src/routes/domain.routes.ts")).not.toContain('url: "/api/*"');
+    expect(app).toContain('reply.header("X-Request-Id", request.id)');
     expect(read("backend/src/index.ts")).toContain("graceful shutdown started");
   });
 

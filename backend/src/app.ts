@@ -46,7 +46,8 @@ export const buildApp = async () => {
   await app.register(compress, { global: true, threshold: 1024 });
   await app.register(rateLimit, { global: false, hook: "preHandler" });
 
-  app.addHook("onSend", async (_request, reply, payload) => {
+  app.addHook("onSend", async (request, reply, payload) => {
+    reply.header("X-Request-Id", request.id);
     for (const [name, value] of Object.entries(securityHeaders)) reply.header(name, value);
     if (env.NODE_ENV === "production") {
       reply.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
