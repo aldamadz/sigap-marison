@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -3649,7 +3650,7 @@ const serveStatic = async (req, res) => {
 
 await mkdir(distDir, { recursive: true });
 
-createServer(async (req, res) => {
+export const handleRequest = async (req, res) => {
   const requestIdHeader = String(req.headers["x-request-id"] || "").trim();
   const requestId = /^[A-Za-z0-9_-]{8,80}$/.test(requestIdHeader) ? requestIdHeader : randomUUID();
   const requestPath = String(req.url || "").split("?")[0];
@@ -3935,6 +3936,11 @@ createServer(async (req, res) => {
     if (error.retryAfter) res.setHeader("Retry-After", String(error.retryAfter));
     sendJson(res, status, { error: error.message || "Internal server error", requestId });
   }
-}).listen(port, () => {
-  console.log(`Agenda Flow server listening on ${port}`);
+};
+
+export const startLegacyServer = () => createServer(handleRequest).listen(port, () => {
+  console.log(`Agenda Flow legacy server listening on ${port}`);
 });
+
+const entryPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
+if (import.meta.url === entryPath) startLegacyServer();

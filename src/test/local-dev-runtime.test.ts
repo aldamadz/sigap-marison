@@ -10,7 +10,7 @@ describe("local development runtime", () => {
     const runner = read("scripts/dev.mjs");
 
     expect(packageJson.scripts.dev).toBe("node scripts/dev.mjs");
-    expect(runner).toContain('"--env-file=.env.local", "server.mjs"');
+    expect(runner).toContain('"--env-file=.env.local", backendEntry, "backend/src/index.ts"');
     expect(runner).toContain('node_modules", "vite", "bin", "vite.js"');
   });
 
@@ -28,5 +28,6 @@ describe("local development runtime", () => {
     expect(envExample).toContain("APP_PUBLIC_URL=http://localhost:8080");
     expect(envExample).toContain("DEV_API_PROXY_TARGET=http://127.0.0.1:3010");
     expect(server).toContain("process.env.PORT || process.env.APP_PORT || 80");
+    expect(read("backend/src/config/env.ts")).toContain("process.env.PORT || process.env.APP_PORT");
   });
 });
