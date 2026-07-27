@@ -15,14 +15,16 @@ describe("sidebar attention indicators", () => {
       "'Status Pengajuan': { count:",
       "'User Organization': { count:",
       "'Master Kantor Cabang': { count:",
+      "'Master Proyek': { count:",
     ].forEach((mapping) => expect(sidebar).toContain(mapping));
     expect(sidebar).toContain("<SidebarCountBadge count={attention.count} tone={attention.tone} />");
   });
 
-  it("highlights both leaf rows and aggregate parent rows when attention exists", () => {
+  it("highlights operational rows but keeps master review rows as blinking count badges", () => {
     const sidebar = read("src/components/layout/Sidebar.tsx");
 
-    expect(sidebar).toContain("attention && 'sidebar-attention-row'");
+    expect(sidebar).toContain("badgeOnlyAttentionLabels");
+    expect(sidebar).toContain("attention && !badgeOnlyAttention && 'sidebar-attention-row'");
     expect(sidebar).toContain("suratAttentionCount > 0 && 'sidebar-attention-row'");
     expect(sidebar).toContain("masterReviewCount > 0 && 'sidebar-attention-row'");
     expect(sidebar).toContain("collapsed && attention");

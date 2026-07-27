@@ -87,6 +87,11 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const masterReviewCount = officeReviewCount + profileReviewCount + projectReviewCount
   const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
   const isUserAdmin = user?.role === 'admin'
+  const badgeOnlyAttentionLabels = new Set([
+    'User Organization',
+    'Master Kantor Cabang',
+    'Master Proyek',
+  ])
 
   const getNavAttention = (label: string): { count: number; tone: SidebarAttentionTone } | null => {
     const attentionByLabel: Record<string, { count: number; tone: SidebarAttentionTone }> = {
@@ -177,6 +182,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
   const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => {
     const attention = getNavAttention(label)
+    const badgeOnlyAttention = attention && badgeOnlyAttentionLabels.has(label)
     return (
     <NavLink to={path} end={path === '/dashboard' || path === '/admin/users' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
       {({ isActive }) => (
@@ -191,8 +197,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             isActive
               ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            attention && 'sidebar-attention-row',
-            attention && attentionToneClasses[attention.tone].row,
+            attention && !badgeOnlyAttention && 'sidebar-attention-row',
+            attention && !badgeOnlyAttention && attentionToneClasses[attention.tone].row,
           )}
           whileTap={{ scale: 0.98 }}
         >
