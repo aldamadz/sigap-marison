@@ -26,6 +26,7 @@ describe("Hybrid Marison master sync", () => {
     expect(worker).toContain('parts.hour === "00" && parts.minute === "00"');
     expect(server).toContain("/api/internal/marison/directory-sync");
     expect(server).toContain('triggerType: "cron"');
+    expect(server).toContain('scope: "projects"');
     expect(compose).toContain("agenda-marison-sync-staging:");
     expect(compose).toContain('MARISON_SYNC_ENABLED: "true"');
   });
@@ -63,5 +64,7 @@ describe("Hybrid Marison master sync", () => {
     expect(sync).toContain("export const previewMarisonProjectSync");
     expect(sync).toContain("export const executeMarisonProjectSync");
     expect(sync).toContain("Branch proyek external belum tersedia");
+    expect(sync).toContain("fallbackOffice");
+    expect(server).toContain("masterProjectReviewCount");
   });
 });

@@ -10,6 +10,7 @@ export type AttentionState = {
   followUpCount: number;
   masterOfficeReviewCount: number;
   profileReviewCount: number;
+  masterProjectReviewCount: number;
   generatedAt?: string;
 };
 
@@ -23,6 +24,7 @@ const emptyState: AttentionState = {
   followUpCount: 0,
   masterOfficeReviewCount: 0,
   profileReviewCount: 0,
+  masterProjectReviewCount: 0,
 };
 
 const getAccessToken = async () => {

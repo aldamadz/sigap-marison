@@ -72,6 +72,10 @@ begin
     return new;
   end if;
 
+  if 'Branch proyek external belum tersedia' = any(coalesce(new.marison_review_reasons, '{}'::text[])) then
+    v_reasons := array_append(v_reasons, 'Branch proyek external belum tersedia');
+  end if;
+
   if nullif(btrim(coalesce(new.code, '')), '') is null then
     v_reasons := array_append(v_reasons, 'Kode proyek belum diisi');
   end if;

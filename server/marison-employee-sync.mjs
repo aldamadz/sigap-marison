@@ -393,6 +393,10 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
   for (const office of offices) {
     if (office.marison_branch_id != null) branchMappings.set(Number(office.marison_branch_id), office);
   }
+  const fallbackOffice = offices.find((office) => normalizeMarisonName(office.kedudukan) === "pusat")
+    || offices.find((office) => normalizeMarisonName(office.name).includes("kantor pusat"))
+    || offices[0]
+    || null;
   const defaultEntityId = entitiesResult.data?.[0]?.id || null;
   const result = {
     matched: 0,
@@ -420,15 +424,20 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
       result.errors.push({ entityType: "project", externalId, name: "-", reason: "Nama proyek external belum tersedia" });
       continue;
     }
-    if (!Number.isSafeInteger(branchId)) {
-      result.errors.push({ entityType: "project", externalId, name: externalName, reason: "Branch proyek external belum tersedia" });
-      continue;
-    }
-    const office = branchMappings.get(branchId);
+    const hasBranch = Number.isSafeInteger(branchId);
+    const office = hasBranch ? branchMappings.get(branchId) : fallbackOffice;
     if (!office?.id) {
-      result.errors.push({ entityType: "project", externalId, name: externalName, reason: `Branch external ${branchId} belum termapping ke kantor SIGAP` });
+      result.errors.push({
+        entityType: "project",
+        externalId,
+        name: externalName,
+        reason: hasBranch
+          ? `Branch external ${branchId} belum termapping ke kantor SIGAP`
+          : "Branch proyek external belum tersedia dan kantor pusat penampung belum tersedia",
+      });
       continue;
     }
+    const reviewReasons = hasBranch ? [] : ["Branch proyek external belum tersedia"];
 
     const resolved = findProjectForExternal(rawProject, office, localProjects);
     if (resolved.match === "conflict") {
@@ -448,6 +457,8 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
         marison_project_code: externalCode,
         marison_synced_at: new Date().toISOString(),
         marison_last_seen_at: new Date().toISOString(),
+        marison_review_required: reviewReasons.length > 0,
+        marison_review_reasons: reviewReasons,
       };
       const changed = (
         Number(existing.marison_project_id) !== externalId
@@ -492,6 +503,8 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
         marison_project_code: externalCode,
         marison_synced_at: new Date().toISOString(),
         marison_last_seen_at: new Date().toISOString(),
+        marison_review_required: reviewReasons.length > 0,
+        marison_review_reasons: reviewReasons,
       })
       .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons")
       .single();

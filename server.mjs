@@ -1444,6 +1444,7 @@ const getAttentionStateForUser = async (userId) => {
     followUpCount: requesterRevisionCount,
     masterOfficeReviewCount: Number(row?.master_office_review_count || 0),
     profileReviewCount: Number(row?.profile_review_count || 0),
+    masterProjectReviewCount: Number(row?.master_project_review_count || 0),
     generatedAt: new Date().toISOString(),
   };
 };
@@ -3072,9 +3073,10 @@ const syncMarisonDirectoryFromCron = async (req) => {
     throw err;
   }
   marisonEmployeeSyncInFlight = true;
+  marisonProjectSyncInFlight = true;
   try {
     const source = await getMarisonEmployeeSyncSource();
-    return await runTrackedMarisonSync({
+    const directory = await runTrackedMarisonSync({
       supabase,
       environment: marisonDeploymentEnvironment,
       triggerType: "cron",
@@ -3085,8 +3087,26 @@ const syncMarisonDirectoryFromCron = async (req) => {
         defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
       }),
     });
+    const projectSource = await getMarisonProjectSyncSource();
+    const projects = await runTrackedMarisonSync({
+      supabase,
+      environment: marisonDeploymentEnvironment,
+      triggerType: "cron",
+      scope: "projects",
+      operation: () => executeMarisonProjectSync({
+        supabase,
+        ...projectSource,
+        environment: marisonDeploymentEnvironment,
+      }),
+    });
+    return {
+      status: directory.status === "success" && projects.status === "success" ? "success" : "partial",
+      directory,
+      projects,
+    };
   } finally {
     marisonEmployeeSyncInFlight = false;
+    marisonProjectSyncInFlight = false;
   }
 };
 

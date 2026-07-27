@@ -83,7 +83,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const followUpCount = attentionState.followUpCount || 0
   const officeReviewCount = attentionState.masterOfficeReviewCount || 0
   const profileReviewCount = attentionState.profileReviewCount || 0
-  const masterReviewCount = officeReviewCount + profileReviewCount
+  const projectReviewCount = attentionState.masterProjectReviewCount || 0
+  const masterReviewCount = officeReviewCount + profileReviewCount + projectReviewCount
   const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
   const isUserAdmin = user?.role === 'admin'
 
@@ -95,6 +96,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       'Status Pengajuan': { count: monitoringBadge, tone: 'update' },
       'User Organization': { count: profileReviewCount, tone: 'review' },
       'Master Kantor Cabang': { count: officeReviewCount, tone: 'review' },
+      'Master Proyek': { count: projectReviewCount, tone: 'review' },
     }
     const attention = attentionByLabel[label]
     return attention?.count > 0 ? attention : null
