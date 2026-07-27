@@ -361,8 +361,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 className={cn(
                   "group flex w-full items-center justify-between rounded-md border border-transparent px-3 py-2.5 transition-colors",
                   isMasterOpen ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]" : "text-muted-foreground hover:bg-accent",
-                  masterReviewCount > 0 && 'sidebar-attention-row',
-                  masterReviewCount > 0 && attentionToneClasses.review.row,
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0">

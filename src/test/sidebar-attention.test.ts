@@ -27,7 +27,7 @@ describe("sidebar attention indicators", () => {
     expect(sidebar).toContain("badgeOnlyAttentionLabels");
     expect(sidebar).toContain("attention && !badgeOnlyAttention && 'sidebar-attention-row'");
     expect(sidebar).toContain("suratAttentionCount > 0 && 'sidebar-attention-row'");
-    expect(sidebar).toContain("masterReviewCount > 0 && 'sidebar-attention-row'");
+    expect(sidebar).not.toContain("masterReviewCount > 0 && 'sidebar-attention-row'");
     expect(sidebar).toContain("collapsed && attention");
   });
 
