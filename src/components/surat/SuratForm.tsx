@@ -2177,7 +2177,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setDraftModalOpen(true);
   };
 
-  const validateRegistration = () => {
+  const getLatestConfiguredSignerAssignments = () => {
+    if (!selectedUsage?.id) return signers;
+    const latestUsage = usageDetails.find((usage) => usage.id === selectedUsage.id) || selectedUsage;
+    const configuredSigners = buildSignerAssignments(latestUsage);
+    if (configuredSigners.length === 0) return signers;
+
+    return reconcileSignerAssignments(configuredSigners, signers).map((signer) => {
+      const eligibleUsers = getEligibleSignerUsersForSigner(signer);
+      if (signer.user_id && eligibleUsers.some((user) => user.id === signer.user_id)) return signer;
+      return {
+        ...signer,
+        user_id: eligibleUsers.length === 1 ? eligibleUsers[0].id : "",
+      };
+    });
+  };
+
+  const validateRegistration = (signerAssignments: SignerAssignment[] = signers) => {
     if (uploadingRequirement || uploadingRecommendationAttachment) {
       toast({
         variant: "destructive",
@@ -2248,7 +2264,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
       return false;
     }
-    if (signers.some(s => !s.user_id)) {
+    if (signerAssignments.some(s => !s.user_id)) {
       toast({ variant: "destructive", title: "Pejabat Belum Lengkap" });
       return false;
     }
@@ -2340,13 +2356,32 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const handleOpenRegistrationSummary = () => {
-    if (!validateRegistration()) return;
+    const latestSigners = getLatestConfiguredSignerAssignments();
+    const signerConfigurationChanged = JSON.stringify(latestSigners) !== JSON.stringify(signers);
+    if (signerConfigurationChanged) {
+      setSigners(latestSigners);
+      toast({
+        title: "Alur penandatangan diperbarui",
+        description: "Draft mengikuti konfigurasi Kegunaan Form terbaru.",
+      });
+    }
+    if (!validateRegistration(latestSigners)) return;
     setRegistrationSummaryOpen(true);
   };
 
   const handleSubmit = async () => {
     if (submitLockRef.current || isLoading) return;
-    if (!validateRegistration()) return;
+    const latestSigners = getLatestConfiguredSignerAssignments();
+    if (JSON.stringify(latestSigners) !== JSON.stringify(signers)) {
+      setSigners(latestSigners);
+      setRegistrationSummaryOpen(false);
+      toast({
+        title: "Alur penandatangan berubah",
+        description: "Konfigurasi admin telah diperbarui. Periksa ringkasan sekali lagi sebelum mendaftarkan.",
+      });
+      return;
+    }
+    if (!validateRegistration(latestSigners)) return;
     submitLockRef.current = true;
     setIsLoading(true);
     try {
@@ -2366,7 +2401,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           draft_id: activeDraftId,
           initial_attachment_meta: initialAttachmentMeta,
         },
-        signers,
+        latestSigners,
         null,
         lampiranFiles,
         draftAttachments

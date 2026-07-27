@@ -31,6 +31,11 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppDialog } from '@/components/app/AppDialogProvider';
 import { excelSerialToDateInput, exportRowsToXlsx, readSpreadsheetRows } from '@/lib/excel';
+import {
+  getMasterReviewDescription,
+  MasterReviewStatus,
+  masterReviewRowClass,
+} from '@/components/admin/MasterReviewStatus';
 
 type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
@@ -428,7 +433,11 @@ export default function UserManagementPage() {
         || (u.email?.toLowerCase() || '').includes(s)
         || (u.jobTitle?.toLowerCase() || '').includes(s)
         || (u.nik?.toLowerCase() || '').includes(s)
-        || ((u as any).phone?.toLowerCase() || '').includes(s);
+        || ((u as any).phone?.toLowerCase() || '').includes(s)
+        || getMasterReviewDescription(
+          (u as any).marison_review_required,
+          (u as any).marison_review_reasons,
+        ).toLowerCase().includes(s);
       const isActive = (u as any).is_active !== false;
       return ok
         && (officeFilter === 'all' || u.officeName === officeFilter)
@@ -1041,6 +1050,7 @@ export default function UserManagementPage() {
                 { label: "Role", className: "min-w-[120px]" },
                 { label: "Jabatan & Unit", className: "min-w-[260px]" },
                 { label: "Masa Kerja", className: "min-w-[170px]" },
+                { label: "Keterangan", className: "min-w-[280px]" },
               ].map(h => (
                 <TableHead key={h.label} className={cn("sticky top-0 z-20 bg-card/95 py-4 text-xs font-semibold text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-card/80", h.className)}>
                   {h.label}
@@ -1050,14 +1060,14 @@ export default function UserManagementPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={6} className="py-32">
+              <TableRow><TableCell colSpan={7} className="py-32">
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                   <p className="text-muted-foreground font-medium animate-pulse text-sm">Memuat data karyawan...</p>
                 </div>
               </TableCell></TableRow>
             ) : filteredUsers.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="py-32 text-center">
+              <TableRow><TableCell colSpan={7} className="py-32 text-center">
                 <div className="max-w-xs mx-auto space-y-3 opacity-40">
                   <Search className="w-12 h-12 mx-auto" />
                   <p className="text-lg font-medium">Data tidak ditemukan</p>
@@ -1077,6 +1087,7 @@ export default function UserManagementPage() {
                   className={cn(
                     "border-border transition-colors cursor-pointer",
                     isSelected ? "bg-primary/5 hover:bg-primary/8" : "hover:bg-accent/30",
+                    (user as any).marison_review_required && masterReviewRowClass,
                     !isActive && "opacity-60"
                   )}
                 >
@@ -1104,17 +1115,7 @@ export default function UserManagementPage() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-sm text-foreground truncate">{user.fullName}</p>
-                          {(user as any).marison_review_required && (
-                            <span
-                              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600"
-                              title={((user as any).marison_review_reasons || []).join(', ')}
-                            >
-                              <AlertCircle className="h-3 w-3" /> Lengkapi
-                            </span>
-                          )}
-                        </div>
+                        <p className="truncate text-sm font-bold text-foreground">{user.fullName}</p>
                         <p className="text-xs text-primary/70 font-medium truncate">{user.email}</p>
                         <p className="text-[10px] text-muted-foreground font-mono mt-0.5">NIK: {user.nik || '—'}</p>
                       </div>
@@ -1183,6 +1184,13 @@ export default function UserManagementPage() {
                         <span className="text-muted-foreground text-xs font-bold">Belum diisi</span>
                       )}
                     </div>
+                  </TableCell>
+
+                  <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
+                    <MasterReviewStatus
+                      required={(user as any).marison_review_required}
+                      reasons={(user as any).marison_review_reasons}
+                    />
                   </TableCell>
                 </TableRow>
               );

@@ -14,10 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Briefcase, Plus, Pencil, Trash2, Loader2, 
-  Search, Building2, Calendar, MapPin, AlertCircle, CheckCircle2
+  Search, Building2, Calendar, MapPin, CheckCircle2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import { cn } from "@/lib/utils";
+import {
+  MasterReviewStatus,
+  masterReviewRowClass,
+} from "@/components/admin/MasterReviewStatus";
 
 export default function MasterProjectManagementPage() {
   const { toast } = useToast();
@@ -205,11 +210,10 @@ export default function MasterProjectManagementPage() {
             ) : filteredProjects.map((item) => (
               <TableRow
                 key={item.id}
-                className={`group border-b border-border/50 transition-colors hover:bg-muted/20 ${
-                  item.marison_review_required
-                    ? "sidebar-attention-row bg-amber-50/80 hover:bg-amber-100/80 dark:bg-amber-950/20 dark:hover:bg-amber-950/30"
-                    : ""
-                }`}
+                className={cn(
+                  "group border-b border-border/50 transition-colors hover:bg-muted/20",
+                  item.marison_review_required && masterReviewRowClass,
+                )}
               >
                 <TableCell className="pl-6">
                   <span className="rounded bg-primary/5 px-2 py-1 font-mono text-xs font-semibold text-primary">
@@ -253,14 +257,10 @@ export default function MasterProjectManagementPage() {
                   </span>
                 </TableCell>
                 <TableCell>
-                  <span className={`inline-flex max-w-[260px] items-center gap-1 rounded border px-2 py-1 text-xs font-medium ${
-                    item.marison_review_required
-                      ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
-                  }`}>
-                    {item.marison_review_required ? <AlertCircle className="h-3 w-3 shrink-0" /> : <CheckCircle2 className="h-3 w-3 shrink-0" />}
-                    <span className="truncate" title={getProjectNotes(item)}>{getProjectNotes(item)}</span>
-                  </span>
+                  <MasterReviewStatus
+                    required={item.marison_review_required}
+                    reasons={item.marison_review_reasons}
+                  />
                 </TableCell>
                 <TableCell className="text-right pr-8">
                   <div className="flex justify-end gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">

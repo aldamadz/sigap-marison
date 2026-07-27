@@ -18,6 +18,7 @@ describe("sidebar attention indicators", () => {
       "'Master Proyek': { count:",
     ].forEach((mapping) => expect(sidebar).toContain(mapping));
     expect(sidebar).toContain("<SidebarCountBadge count={attention.count} tone={attention.tone} />");
+    expect(sidebar).toContain("await refetchAttention()");
   });
 
   it("highlights operational rows but keeps master review rows as blinking count badges", () => {

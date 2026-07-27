@@ -2,6 +2,7 @@ export type ReconciliableSignerAssignment = {
   step_order: number;
   form_usage_step_id?: string;
   user_id?: string | null;
+  eligible_user_ids?: string[];
   [key: string]: unknown;
 };
 
@@ -29,10 +30,22 @@ export function reconcileSignerAssignments<T extends ReconciliableSignerAssignme
       ? persistedAssignments.find((assignment) => assignment.step_order === current.step_order)
       : undefined;
     const matchingAssignment = persisted || legacyPersisted;
+    const configuredCandidates = Array.isArray(current.eligible_user_ids)
+      ? current.eligible_user_ids.filter(Boolean)
+      : [];
+    const persistedUserId = String(matchingAssignment?.user_id || "");
+    const userIsStillEligible = persistedUserId
+      ? configuredCandidates.includes(persistedUserId)
+      : false;
+    const nextUserId = userIsStillEligible
+      ? persistedUserId
+      : configuredCandidates.length === 1
+        ? configuredCandidates[0]
+        : "";
 
     return {
       ...current,
-      user_id: matchingAssignment?.user_id || "",
+      user_id: nextUserId,
     };
   });
 }

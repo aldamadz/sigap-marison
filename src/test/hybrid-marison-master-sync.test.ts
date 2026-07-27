@@ -78,8 +78,25 @@ describe("Hybrid Marison master sync", () => {
     expect(migration).toContain("Entitas proyek belum dipilih");
     expect(migration).toContain("before insert or update of code, name, office_id, entity_id");
     expect(migration).toContain("set entity_id = null");
-    expect(page).toContain("sidebar-attention-row bg-amber-50/80");
+    expect(page).toContain("masterReviewRowClass");
     expect(page).toContain("<TableHead className=\"text-xs font-semibold\">Keterangan</TableHead>");
     expect(page).toContain("getProjectNotes");
+  });
+
+  it("uses the same review row and Keterangan column for employees, offices, and projects", () => {
+    const component = read("src/components/admin/MasterReviewStatus.tsx");
+    const users = read("src/pages/admin/UserManagementPage.tsx");
+    const offices = read("src/pages/admin/OfficeManagementPage.tsx");
+    const projects = read("src/pages/admin/ProjectManagementPage.tsx");
+
+    expect(component).toContain("masterReviewRowClass");
+    expect(component).toContain('return required ? "Data belum lengkap" : "Lengkap"');
+    [users, offices, projects].forEach((source) => {
+      expect(source).toContain("MasterReviewStatus");
+      expect(source).toContain("masterReviewRowClass");
+      expect(source.toLowerCase()).toContain("keterangan");
+    });
+    expect(users).not.toContain("> Lengkapi</span>");
+    expect(offices).not.toContain("Perlu dilengkapi");
   });
 });

@@ -134,6 +134,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       const data = await getCurrentUser()
       if (data) {
         setUser(data)
+        await refetchAttention()
       }
     }
     initSidebar()
@@ -152,7 +153,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
     window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
     return () => window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
-  }, [])
+  }, [refetchAttention])
 
   const handleLogout = async () => {
     if (isLoggingOut) return

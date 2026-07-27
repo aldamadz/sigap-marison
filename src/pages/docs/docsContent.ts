@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.20.0";
-export const DOCS_UPDATED_AT = "23 Juli 2026";
+export const DOCS_VERSION = "v1.21.0";
+export const DOCS_UPDATED_AT = "27 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -2067,6 +2067,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     steps: [
       "Buka User Organization.",
       "Gunakan pencarian dan filter jabatan jika perlu.",
+      "Dahulukan baris berwarna amber dan baca kolom Keterangan untuk mengetahui data yang perlu diperbaiki.",
       "Edit profil user atau lakukan import data karyawan.",
       "Cek hasil import, termasuk data berhasil, gagal, dan user yang dinonaktifkan.",
     ],
@@ -2077,6 +2078,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     troubleshooting: [
       "Jika import gagal karena akses ditolak, pastikan akun yang melakukan import adalah admin aktif.",
       "Jika kantor belum termapping, tambahkan mapping kantor sebelum import ulang.",
+      "Jika badge sidebar belum berkurang, pastikan seluruh alasan pada kolom Keterangan sudah diselesaikan lalu segarkan data.",
     ],
   },
   {
@@ -2237,6 +2239,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     ],
     steps: [
       "Buka Master Kantor Cabang.",
+      "Periksa baris berwarna amber dan baca kolom Keterangan.",
       "Tambah atau edit nama kantor, kode, dan tipe kantor.",
       "Cek user yang memakai kantor tersebut.",
     ],
@@ -2247,6 +2250,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     troubleshooting: [
       "Jika kandidat cabang salah, cek kantor pada profil user dan tipe kantor.",
       "Jika kantor belum termapping saat import, tambahkan alias kantor lalu import ulang.",
+      "Jika badge masih tampil, selesaikan seluruh alasan pada kolom Keterangan lalu segarkan data.",
     ],
   },
   {
@@ -2265,7 +2269,8 @@ export const ADMIN_DOCS: DocsEntry[] = [
     ],
     steps: [
       "Buka Master Proyek.",
-      "Cek daftar proyek dan cabang terkait.",
+      "Cek daftar proyek, cabang, dan kolom Keterangan.",
+      "Untuk baris amber, lengkapi entitas atau mapping yang disebutkan pada Keterangan.",
       "Pastikan data proyek aktif sebelum dipakai user.",
     ],
     examples: [
@@ -2274,6 +2279,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     troubleshooting: [
       "Jika proyek tidak muncul, cek data source proyek dan status aktif proyek.",
       "Jika unit tidak muncul, cek integrasi unit/proyek dan konfigurasi pengajuan Unit.",
+      "Jika badge Master Proyek masih tampil, periksa proyek amber yang belum memiliki entitas atau mapping cabang lengkap.",
     ],
   },
   {
@@ -2451,6 +2457,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Jika signer tidak bisa setujui, cek apakah tim pemeriksa belum pemeriksaan.",
       "Jika rekomendasi tidak muncul, cek form rekomendasi, departemen PBO, kandidat Staff IT/PBO, dan tahap prasyarat pada Kegunaan Form.",
       "Jika data karyawan staging tidak sesuai, jalankan Periksa Data di panel Integrasi Marison lalu cek issue yang muncul sebelum menekan Sinkronkan.",
+      "Jika admin mengganti tahap atau kandidat signer, buka kembali draft. Draft aktif mengikuti konfigurasi terbaru; surat yang sudah terdaftar tetap memakai snapshot lama.",
     ],
   },
   {
@@ -2903,6 +2910,17 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.21.0",
+    date: "27 Juli 2026",
+    changes: [
+      "Menampilkan jumlah review Master Proyek pada badge sidebar melalui kontrak attention state yang konsisten.",
+      "Menyamakan tampilan review User Organization, Master Kantor Cabang, dan Master Proyek dengan baris amber serta kolom Keterangan.",
+      "Menghapus badge kecil Lengkapi/Perlu dilengkapi dari tabel master agar alasan perbaikan terbaca langsung.",
+      "Memperbarui draft aktif agar kandidat dan tahap penandatangan mengikuti konfigurasi Kegunaan Form terbaru saat dibuka dan sebelum didaftarkan.",
+      "Mempertahankan snapshot penandatangan pada surat yang sudah terdaftar agar jejak audit tidak berubah.",
+    ],
+  },
   {
     version: "v1.20.0",
     date: "23 Juli 2026",

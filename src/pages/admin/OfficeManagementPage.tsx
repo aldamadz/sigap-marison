@@ -15,6 +15,11 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import { marisonIntegrationService } from "@/services/marison-integration.service";
+import {
+  getMasterReviewDescription,
+  MasterReviewStatus,
+  masterReviewRowClass,
+} from "@/components/admin/MasterReviewStatus";
 
 type MasterOfficeRow = {
   id: string;
@@ -183,6 +188,9 @@ export default function OfficeManagementPage() {
       o.name.toLowerCase().includes(searchQuery.toLowerCase())
       || o.code.toLowerCase().includes(searchQuery.toLowerCase())
       || o.kedudukan?.toLowerCase().includes(searchQuery.toLowerCase())
+      || getMasterReviewDescription(o.marison_review_required, o.marison_review_reasons)
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => {
       if (a.marison_review_required !== b.marison_review_required) return a.marison_review_required ? -1 : 1;
@@ -238,7 +246,7 @@ export default function OfficeManagementPage() {
               <TableHead className="font-bold">NAMA KANTOR / CABANG</TableHead>
               <TableHead className="font-bold">ID / KODE EXTERNAL</TableHead>
               <TableHead className="w-[120px] font-bold">KEDUDUKAN</TableHead>
-              <TableHead className="font-bold">STATUS DATA</TableHead>
+              <TableHead className="min-w-[260px] font-bold">KETERANGAN</TableHead>
               <TableHead className="text-right font-bold">AKSI</TableHead>
             </TableRow>
           </TableHeader>
@@ -257,7 +265,13 @@ export default function OfficeManagementPage() {
               </TableRow>
             ) : (
               filteredOffices.map((office) => (
-                <TableRow key={office.id} className="hover:bg-muted/30">
+                <TableRow
+                  key={office.id}
+                  className={cn(
+                    "transition-colors hover:bg-muted/30",
+                    office.marison_review_required && masterReviewRowClass,
+                  )}
+                >
                   <TableCell>
                     <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
                       {office.code}
@@ -271,16 +285,10 @@ export default function OfficeManagementPage() {
                     <BadgeKedudukan status={office.kedudukan} />
                   </TableCell>
                   <TableCell>
-                    {office.marison_review_required ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-600"
-                        title={(office.marison_review_reasons || []).join(", ")}
-                      >
-                        <AlertCircle className="h-3 w-3" /> Perlu dilengkapi
-                      </span>
-                    ) : (
-                      <span className="text-xs text-emerald-600">Lengkap</span>
-                    )}
+                    <MasterReviewStatus
+                      required={office.marison_review_required}
+                      reasons={office.marison_review_reasons}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(office)} className="gap-1">
