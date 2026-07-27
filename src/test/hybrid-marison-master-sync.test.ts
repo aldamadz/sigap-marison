@@ -64,7 +64,22 @@ describe("Hybrid Marison master sync", () => {
     expect(sync).toContain("export const previewMarisonProjectSync");
     expect(sync).toContain("export const executeMarisonProjectSync");
     expect(sync).toContain("Branch proyek external belum tersedia");
+    expect(sync).toContain("Entitas proyek belum dipilih");
     expect(sync).toContain("fallbackOffice");
+    expect(sync).not.toContain("defaultEntityId");
     expect(server).toContain("masterProjectReviewCount");
+  });
+
+  it("requires external projects to be reviewed until an entity is selected", () => {
+    const migration = read("supabase/migrations/20260727121500_require_marison_project_entity_review.sql");
+    const page = read("src/pages/admin/ProjectManagementPage.tsx");
+
+    expect(migration).toContain("if new.entity_id is null then");
+    expect(migration).toContain("Entitas proyek belum dipilih");
+    expect(migration).toContain("before insert or update of code, name, office_id, entity_id");
+    expect(migration).toContain("set entity_id = null");
+    expect(page).toContain("sidebar-attention-row bg-amber-50/80");
+    expect(page).toContain("<TableHead className=\"text-xs font-semibold\">Keterangan</TableHead>");
+    expect(page).toContain("getProjectNotes");
   });
 });

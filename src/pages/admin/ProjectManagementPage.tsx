@@ -130,11 +130,26 @@ export default function MasterProjectManagementPage() {
     } finally { setLoading(false); }
   };
 
-  const filteredProjects = projects.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.master_offices?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const getProjectNotes = (item: any) => {
+    const reasons = Array.isArray(item.marison_review_reasons)
+      ? item.marison_review_reasons.filter(Boolean)
+      : [];
+    return reasons.length > 0 ? reasons.join(" · ") : "Lengkap";
+  };
+
+  const filteredProjects = projects
+    .filter(p =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.master_offices?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getProjectNotes(p).toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (!!a.marison_review_required !== !!b.marison_review_required) {
+        return a.marison_review_required ? -1 : 1;
+      }
+      return String(a.name || "").localeCompare(String(b.name || ""), "id-ID");
+    });
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
@@ -174,20 +189,28 @@ export default function MasterProjectManagementPage() {
               <TableHead className="text-xs font-semibold">Kantor cabang</TableHead>
               <TableHead className="text-xs font-semibold">External</TableHead>
               <TableHead className="text-xs font-semibold">Entitas</TableHead>
+              <TableHead className="text-xs font-semibold">Keterangan</TableHead>
               <TableHead className="pr-8 text-right text-xs font-semibold">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-32"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary"/></TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-32"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary"/></TableCell></TableRow>
             ) : filteredProjects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-20 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-20 text-center text-sm text-muted-foreground">
                   Tidak ada proyek ditemukan.
                 </TableCell>
               </TableRow>
             ) : filteredProjects.map((item) => (
-              <TableRow key={item.id} className="group hover:bg-muted/20 transition-colors border-b border-border/50">
+              <TableRow
+                key={item.id}
+                className={`group border-b border-border/50 transition-colors hover:bg-muted/20 ${
+                  item.marison_review_required
+                    ? "sidebar-attention-row bg-amber-50/80 hover:bg-amber-100/80 dark:bg-amber-950/20 dark:hover:bg-amber-950/30"
+                    : ""
+                }`}
+              >
                 <TableCell className="pl-6">
                   <span className="rounded bg-primary/5 px-2 py-1 font-mono text-xs font-semibold text-primary">
                     {item.code || "Belum ada"}
@@ -219,12 +242,6 @@ export default function MasterProjectManagementPage() {
                         <CheckCircle2 className="h-3 w-3" />
                         ID {item.marison_project_id}
                       </span>
-                      {item.marison_review_required && (
-                        <p className="flex items-center gap-1 text-xs text-amber-600">
-                          <AlertCircle className="h-3 w-3" />
-                          Perlu tinjau
-                        </p>
-                      )}
                     </div>
                   ) : (
                     <span className="text-xs text-muted-foreground">Manual SIGAP</span>
@@ -232,7 +249,17 @@ export default function MasterProjectManagementPage() {
                 </TableCell>
                 <TableCell>
                   <span className="rounded border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                    {item.master_entities?.name || "Tanpa entitas"}
+                    {item.master_entities?.name || "-"}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className={`inline-flex max-w-[260px] items-center gap-1 rounded border px-2 py-1 text-xs font-medium ${
+                    item.marison_review_required
+                      ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+                  }`}>
+                    {item.marison_review_required ? <AlertCircle className="h-3 w-3 shrink-0" /> : <CheckCircle2 className="h-3 w-3 shrink-0" />}
+                    <span className="truncate" title={getProjectNotes(item)}>{getProjectNotes(item)}</span>
                   </span>
                 </TableCell>
                 <TableCell className="text-right pr-8">

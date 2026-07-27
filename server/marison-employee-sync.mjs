@@ -378,14 +378,12 @@ const findProjectForExternal = (project, office, projects) => {
 
 const syncProjects = async (supabase, { projects, branches }, dryRun) => {
   const branchResult = await syncBranches(supabase, branches, dryRun);
-  const [projectsResult, officesResult, entitiesResult] = await Promise.all([
+  const [projectsResult, officesResult] = await Promise.all([
     supabase.from("master_projects").select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons"),
     supabase.from("master_offices").select("id,code,name,kedudukan,marison_branch_id"),
-    supabase.from("master_entities").select("id,code,name").limit(1),
   ]);
   if (projectsResult.error) throw projectsResult.error;
   if (officesResult.error) throw officesResult.error;
-  if (entitiesResult.error) throw entitiesResult.error;
 
   const localProjects = [...(projectsResult.data || [])];
   const offices = officesResult.data || [];
@@ -397,7 +395,6 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     || offices.find((office) => normalizeMarisonName(office.name).includes("kantor pusat"))
     || offices[0]
     || null;
-  const defaultEntityId = entitiesResult.data?.[0]?.id || null;
   const result = {
     matched: 0,
     created: 0,
@@ -437,8 +434,6 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
       });
       continue;
     }
-    const reviewReasons = hasBranch ? [] : ["Branch proyek external belum tersedia"];
-
     const resolved = findProjectForExternal(rawProject, office, localProjects);
     if (resolved.match === "conflict") {
       result.errors.push({ entityType: "project", externalId, name: externalName, reason: resolved.reason });
@@ -446,13 +441,18 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     }
 
     const existing = resolved.project;
+    const entityId = existing?.entity_id || null;
+    const reviewReasons = [
+      ...(hasBranch ? [] : ["Branch proyek external belum tersedia"]),
+      ...(entityId ? [] : ["Entitas proyek belum dipilih"]),
+    ];
     if (existing) {
       result.matched += 1;
       const payload = {
         code: externalCode,
         name: externalName,
         office_id: office.id,
-        entity_id: existing.entity_id || defaultEntityId,
+        entity_id: entityId,
         marison_project_id: externalId,
         marison_project_code: externalCode,
         marison_synced_at: new Date().toISOString(),
@@ -498,7 +498,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
         code: externalCode,
         name: externalName,
         office_id: office.id,
-        entity_id: defaultEntityId,
+        entity_id: null,
         marison_project_id: externalId,
         marison_project_code: externalCode,
         marison_synced_at: new Date().toISOString(),
