@@ -1,6 +1,6 @@
 # SIGAP Feature and Release Map
 
-Snapshot audit: 2026-07-25 (Asia/Jakarta)
+Snapshot audit: 2026-07-27 (Asia/Jakarta)
 
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
@@ -34,7 +34,7 @@ Arti status:
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
-| App container | `agenda-flow-prod` | Web, PDF worker, dan cron sync staging | Ketiga service staging sehat; production tidak diubah |
+| App container | `agenda-flow-prod` | Fastify web, PDF worker, dan cron sync staging | Ketiga service staging sehat; production tidak diubah |
 | Git source | `main` | `staging`, enam commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
@@ -71,8 +71,8 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | AUTH-01 | Login email/password dan remember session | Production + Staging | Login page, BFF auth, Supabase Auth | `profiles`, cookie session | Risiko tinggi; jangan ditarik, hanya ganti mekanisme |
-| AUTH-02 | Session HttpOnly terenkripsi dan facade BFF | Production + Staging; migrasi Fastify total dalam development branch | `backend/src`, `shared/src`, `src/lib/supabase.ts` | Seluruh query browser | Cross-cutting; tidak boleh direvert parsial |
-| AUTH-06 | Runtime Fastify TypeScript tanpa server legacy | Development branch, target staging | Fastify routes/services/domain runtime, healthcheck, graceful shutdown | AUTH-01 sampai AUTH-05, seluruh API domain | Branch membawa baseline staging dan belum dapat dipromosikan selektif ke production sebelum dependensi staging dirilis |
+| AUTH-02 | Session HttpOnly terenkripsi dan facade BFF | Production + Staging; staging memakai Fastify | `backend/src`, `shared/src`, `src/lib/supabase.ts` | Seluruh query browser | Cross-cutting; tidak boleh direvert parsial |
+| AUTH-06 | Runtime Fastify TypeScript tanpa server legacy | Staging deployed dan smoke-tested 27 Juli 2026 | Fastify routes/services/domain runtime, healthcheck, graceful shutdown | AUTH-01 sampai AUTH-05, seluruh API domain | Runtime staging tidak memiliki `/app/server.mjs`; branch membawa baseline staging dan belum dapat dipromosikan selektif ke production sebelum dependensi staging dirilis |
 | AUTH-03 | Reset password via email recovery link | Production + Staging | Reset page, SMTP, auth endpoints | Supabase Auth, SMTP | Nonaktifkan route dan email bersama-sama |
 | AUTH-04 | Rate limit login dan reset password | Production + Staging | In-memory server rate limits | BFF auth | Jangan ditarik tanpa pengganti keamanan |
 | AUTH-05 | Role user/admin dan route protection | Production + Staging | `AdminOnlyRoute`, RLS, profile role | Seluruh menu admin | Risiko tinggi; perubahan harus audit RLS |
@@ -251,6 +251,7 @@ bila diperlukan, rencana rollback, dan smoke test production.
 | P1 | Dua migration lokal memakai versi `20260707113000` | `db push` meminta `--include-all` dan berisiko salah apply | Audit lalu beri versi unik dengan prosedur repair terkontrol |
 | P1 | Full test memiliki satu assertion gagal di `bff-session-security.test.ts` | Required check belum dapat dibuat hijau | Perbaiki test/kontrak session pada branch terpisah |
 | P1 | Publication Realtime production belum diaudit penuh | Badge production belum memiliki bukti setara staging | Audit kelima tabel tanpa mengubah data bisnis |
+| P1 | `backend/src/domain-runtime.ts` masih memakai pengecualian typecheck selama port verbatim | Kesalahan bentuk data domain belum seluruhnya dilindungi compiler | Pecah per service dan hapus `@ts-nocheck` sebelum kandidat production |
 | P2 | `docs/README.md` masih menyebut arsitektur lama | Dokumentasi dapat menyesatkan | Selaraskan dengan BFF Node + SSE + worker |
 | P2 | External read-only API masih memiliki source/schema dormant | Surface dan biaya pemeliharaan | Audit consumer sebelum keputusan hapus |
 
