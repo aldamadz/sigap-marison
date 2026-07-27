@@ -8,7 +8,7 @@ describe("unit allocation type outputs", () => {
   it("keeps type available in allocation input, spreadsheet, and vendor payload", () => {
     const inbox = read("src/pages/surat/InboxPage.tsx");
     const excel = read("src/lib/excel.ts");
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(inbox).toContain("Tipe Unit</th>");
     expect(inbox).toContain('["Tipe Unit", "Tipe", "Type", "Unit Type"]');
@@ -27,7 +27,7 @@ describe("unit allocation type outputs", () => {
 
   it("renders type in screen summaries and notification email", () => {
     const summary = read("src/components/surat/UnitAllocationSummary.tsx");
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(summary.match(/>Tipe<\/th>/g)).toHaveLength(2);
     expect(server).toContain(">Tipe</th>");

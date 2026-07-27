@@ -49,7 +49,6 @@ COPY --from=builder /app/shared/dist ./shared/dist
 COPY backend/package*.json ./backend/
 RUN npm --prefix backend ci --omit=dev
 COPY --from=builder /app/backend/dist ./backend/dist
-COPY server.mjs ./server.mjs
 COPY pdf-worker.mjs ./pdf-worker.mjs
 COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs

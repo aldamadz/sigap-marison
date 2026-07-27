@@ -1,10 +1,9 @@
 import type { HTTPMethods, FastifyInstance } from "fastify";
-// @ts-expect-error server.mjs intentionally has no generated declaration file.
-import { handleRequest } from "../../../server.mjs";
+import { handleRequest } from "../domain-runtime.js";
 
-type CompatibilityRoute = { method: HTTPMethods; url: string };
+type DomainRoute = { method: HTTPMethods; url: string };
 
-const routes: CompatibilityRoute[] = [
+const routes: DomainRoute[] = [
   { method: "GET", url: "/api/events" },
   { method: "GET", url: "/api/profile/avatar/file" },
   { method: "GET", url: "/api/documents/:suratId/pdf" },
@@ -16,6 +15,11 @@ const routes: CompatibilityRoute[] = [
   { method: "POST", url: "/api/auth/password-reset" },
   { method: "GET", url: "/api/integrations/marison/status" },
   { method: "POST", url: "/api/integrations/marison/test" },
+  { method: "GET", url: "/api/integrations/marison/employees/preview" },
+  { method: "GET", url: "/api/integrations/marison/branches/preview" },
+  { method: "POST", url: "/api/integrations/marison/branches/sync" },
+  { method: "POST", url: "/api/integrations/marison/employees/sync" },
+  { method: "POST", url: "/api/internal/marison/directory-sync" },
   { method: "POST", url: "/api/integrations/marison/surat/:suratId/dispatch" },
   { method: "POST", url: "/api/admin/template-preview" },
   { method: "GET", url: "/api/admin/template-preview/:token" },
@@ -32,7 +36,7 @@ const routes: CompatibilityRoute[] = [
   { method: "POST", url: "/api/data-sources/:sourceKey/query" },
 ];
 
-export const registerCompatibilityRoutes = async (app: FastifyInstance) => {
+export const registerDomainRoutes = async (app: FastifyInstance) => {
   for (const route of routes) {
     app.route({
       ...route,

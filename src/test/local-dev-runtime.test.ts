@@ -23,11 +23,9 @@ describe("local development runtime", () => {
 
   it("documents localhost as the development application origin", () => {
     const envExample = read(".env.example");
-    const server = read("server.mjs");
 
     expect(envExample).toContain("APP_PUBLIC_URL=http://localhost:8080");
     expect(envExample).toContain("DEV_API_PROXY_TARGET=http://127.0.0.1:3010");
-    expect(server).toContain("process.env.PORT || process.env.APP_PORT || 80");
     expect(read("backend/src/config/env.ts")).toContain("process.env.PORT || process.env.APP_PORT");
   });
 });

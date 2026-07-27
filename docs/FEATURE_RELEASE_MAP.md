@@ -12,7 +12,7 @@ PR fitur, perubahan schema, atau perubahan deployment.
 Status pada dokumen ini diverifikasi dari:
 
 - route dan menu aplikasi React;
-- service browser dan endpoint BFF di `server.mjs`;
+- service browser dan endpoint Fastify di `backend/src`;
 - migration PostgreSQL dan schema PostgREST kedua project Supabase;
 - container yang berjalan pada `ubuntu-server`;
 - riwayat commit dan branch remote GitHub;
@@ -71,7 +71,8 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | AUTH-01 | Login email/password dan remember session | Production + Staging | Login page, BFF auth, Supabase Auth | `profiles`, cookie session | Risiko tinggi; jangan ditarik, hanya ganti mekanisme |
-| AUTH-02 | Session HttpOnly terenkripsi dan facade BFF | Production + Staging | `server.mjs`, `src/lib/supabase.ts` | Seluruh query browser | Cross-cutting; tidak boleh direvert parsial |
+| AUTH-02 | Session HttpOnly terenkripsi dan facade BFF | Production + Staging; migrasi Fastify total dalam development branch | `backend/src`, `shared/src`, `src/lib/supabase.ts` | Seluruh query browser | Cross-cutting; tidak boleh direvert parsial |
+| AUTH-06 | Runtime Fastify TypeScript tanpa server legacy | Development branch, target staging | Fastify routes/services/domain runtime, healthcheck, graceful shutdown | AUTH-01 sampai AUTH-05, seluruh API domain | Branch membawa baseline staging dan belum dapat dipromosikan selektif ke production sebelum dependensi staging dirilis |
 | AUTH-03 | Reset password via email recovery link | Production + Staging | Reset page, SMTP, auth endpoints | Supabase Auth, SMTP | Nonaktifkan route dan email bersama-sama |
 | AUTH-04 | Rate limit login dan reset password | Production + Staging | In-memory server rate limits | BFF auth | Jangan ditarik tanpa pengganti keamanan |
 | AUTH-05 | Role user/admin dan route protection | Production + Staging | `AdminOnlyRoute`, RLS, profile role | Seluruh menu admin | Risiko tinggi; perubahan harus audit RLS |

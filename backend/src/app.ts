@@ -8,7 +8,7 @@ import { getEnvironment } from "./config/env.js";
 import { registerErrorHandler } from "./plugins/errors.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerBffRoutes } from "./routes/bff.routes.js";
-import { registerCompatibilityRoutes } from "./routes/compatibility.routes.js";
+import { registerDomainRoutes } from "./routes/domain.routes.js";
 import { registerHealthRoutes } from "./routes/health.routes.js";
 
 const securityHeaders = {
@@ -58,7 +58,7 @@ export const buildApp = async () => {
   await registerHealthRoutes(app);
   await registerAuthRoutes(app);
   await registerBffRoutes(app);
-  await registerCompatibilityRoutes(app);
+  await registerDomainRoutes(app);
 
   await app.register(fastifyStatic, {
     root: resolve(env.DIST_DIR),

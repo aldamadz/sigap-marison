@@ -14,23 +14,24 @@ describe("Fastify backend architecture", () => {
     expect(dockerfile).toContain("npm run build:backend");
   });
 
-  it("registers native health, auth, and BFF routes before compatibility routes", () => {
+  it("registers native health, auth, BFF, and domain routes", () => {
     const app = read("backend/src/app.ts");
     const auth = read("backend/src/routes/auth.routes.ts");
     const bff = read("backend/src/routes/bff.routes.ts");
 
-    expect(app.indexOf("registerAuthRoutes(app)")).toBeLessThan(app.indexOf("registerCompatibilityRoutes(app)"));
-    expect(app.indexOf("registerBffRoutes(app)")).toBeLessThan(app.indexOf("registerCompatibilityRoutes(app)"));
+    expect(app.indexOf("registerAuthRoutes(app)")).toBeLessThan(app.indexOf("registerDomainRoutes(app)"));
+    expect(app.indexOf("registerBffRoutes(app)")).toBeLessThan(app.indexOf("registerDomainRoutes(app)"));
     expect(auth).toContain('app.post("/api/auth/login"');
     expect(bff).toContain('app.post("/api/bff/query"');
-    expect(read("backend/src/routes/compatibility.routes.ts")).not.toContain('url: "/api/*"');
+    expect(read("backend/src/routes/domain.routes.ts")).not.toContain('url: "/api/*"');
     expect(read("backend/src/index.ts")).toContain("graceful shutdown started");
   });
 
-  it("does not start the compatibility server when imported", () => {
-    const server = read("server.mjs");
+  it("has no standalone legacy listener", () => {
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(server).toContain("export const handleRequest");
-    expect(server).toContain("if (import.meta.url === entryPath) startLegacyServer()");
+    expect(server).not.toContain("createServer");
+    expect(() => read("server.mjs")).toThrow();
   });
 });

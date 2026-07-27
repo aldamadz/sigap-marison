@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("Marison outbound submission dispatch", () => {
   it("keeps submission POST credentials and HMAC signing on the server", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const client = read("src/services/surat.service.ts");
 
     expect(server).toContain("MARISON_SUBMISSION_DISPATCH_ENABLED");
@@ -41,7 +41,7 @@ describe("Marison outbound submission dispatch", () => {
   });
 
   it("stores dispatch result in the surat snapshot for idempotency", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(server).toContain("marison_dispatch");
     expect(server).toContain('previous.status === "success"');
@@ -49,7 +49,7 @@ describe("Marison outbound submission dispatch", () => {
   });
 
   it("accepts the database final status and skips recommendation child documents", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(server).toContain('["SELESAI", "DONE"]');
     expect(server).toContain('dispatchInput.linked_parent_surat_id');
@@ -59,7 +59,7 @@ describe("Marison outbound submission dispatch", () => {
   });
 
   it("uses persistent application-domain links without exposing storage URLs", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const migration = read("supabase/migrations/20260721223000_persistent_marison_external_file_links.sql");
 
     expect(server).toContain('purpose: "external_marison"');
