@@ -133,11 +133,14 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
 | MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Smoke sync 25 Juli 2026: 9 kantor dan 67 profil terpetakan, 0 konflik; 9 kantor dan 35 profil masuk antrean review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
 | MRN-12 | Tipe unit pada alokasi dan seluruh output | Staging only | Input alokasi, template Excel, ringkasan layar, PDF adendum, PDF kode produksi, PDF summary, email, payload `units[].type` | MRN-04, MRN-05, kontrak OpenAPI unit | Bergantung pada kontrak POST Marison yang masih staging-only; promosikan bersama MRN-05 setelah pengujian dokumen dan payload disetujui |
+| MRN-13 | Hybrid master proyek external | Staging development | Mapping `master_projects.marison_project_id`, sync run/issue audit, panel Integrasi Marison, Master Proyek | `/projects`, MRN-11 branch mapping, ADM-07 | Master proyek ditarik dari external dan tetap memakai UUID lokal SIGAP; project tanpa branch external masuk review, bukan dibuat dummy |
 
 Catatan cronjob:
 
 - Sinkronisasi branch/karyawan menggunakan master UUID SIGAP; ID external hanya menjadi mapping.
+- Sinkronisasi proyek menggunakan pola yang sama: UUID lokal SIGAP tetap menjadi primary key, sedangkan `marison_project_id` menjadi mapping external.
 - Branch selalu diproses sebelum employee agar `branch.id` dapat dipetakan ke `office_id` lokal.
+- Branch juga diproses sebelum project agar `project.branch.id` dapat dipetakan ke `office_id` lokal.
 - Sinkron manual dan worker harian pukul 00:00 Asia/Jakarta memakai jalur orkestrasi, lock, dan audit run yang sama.
 - Data external yang kosong tidak menghapus isian manual; hirarki kantor, role, atasan, dan tanggal kerja tetap dikelola SIGAP.
 - Cronjob production tidak boleh diaktifkan sebelum data HRD, mapping kantor, dan dampak role/login diuji di staging.

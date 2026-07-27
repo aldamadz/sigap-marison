@@ -46,4 +46,22 @@ describe("Hybrid Marison master sync", () => {
     );
     expect(existingAuthUpdate).not.toContain("password:");
   });
+
+  it("adds tracked project sync without replacing local project UUIDs", () => {
+    const migration = read("supabase/migrations/20260727103000_marison_project_master_sync.sql");
+    const server = read("server.mjs");
+    const sync = read("server/marison-employee-sync.mjs");
+
+    expect(migration).toContain("marison_project_id bigint");
+    expect(migration).toContain("master_projects_marison_project_id_uidx");
+    expect(migration).toContain("scope in ('branches', 'directory', 'projects')");
+    expect(migration).toContain("entity_type in ('branch', 'employee', 'project')");
+    expect(migration).not.toContain("alter column id");
+    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/projects")');
+    expect(server).toContain("/api/integrations/marison/projects/sync");
+    expect(server).toContain('scope: "projects"');
+    expect(sync).toContain("export const previewMarisonProjectSync");
+    expect(sync).toContain("export const executeMarisonProjectSync");
+    expect(sync).toContain("Branch proyek external belum tersedia");
+  });
 });

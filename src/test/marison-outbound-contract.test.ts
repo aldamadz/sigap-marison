@@ -24,6 +24,8 @@ describe("Marison outbound contract v1", () => {
   it("accepts the canonical Asset payload supplied to the vendor", () => {
     const fixture = readFixture("asset-purchase-request.example.json");
 
+    expect(fixture.submission_number).toBe("001/UAI/PBO.1/VII/2026");
+    expect(fixture.submitted_by).toBe("A 114");
     expect(marisonAssetPurchaseRequestSchema.parse(fixture)).toEqual(fixture);
     expect(assertMarisonOutboundContract("asset", fixture)).toEqual(fixture);
   });

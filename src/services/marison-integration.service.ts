@@ -61,6 +61,28 @@ export type MarisonBranchSyncResult = {
   errors: MarisonEmployeeSyncIssue[];
 };
 
+export type MarisonProjectSyncPreview = {
+  environment: MarisonEnvironment;
+  generatedAt: string;
+  source: { projects: number; branches: number };
+  matched: number;
+  toCreate: number;
+  toUpdate: number;
+  blocked: number;
+  issues: MarisonEmployeeSyncIssue[];
+};
+
+export type MarisonProjectSyncResult = {
+  environment: MarisonEnvironment;
+  completedAt: string;
+  source: number;
+  created: number;
+  updated: number;
+  matched: number;
+  failed: number;
+  errors: MarisonEmployeeSyncIssue[];
+};
+
 export type MarisonEmployeeSyncPreview = {
   environment: "staging";
   generatedAt: string;
@@ -125,6 +147,16 @@ export const marisonIntegrationService = {
   ),
   syncBranches: () => request<MarisonBranchSyncResult>(
     "/api/integrations/marison/branches/sync",
+    {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }
+  ),
+  previewProjects: () => request<MarisonProjectSyncPreview>(
+    "/api/integrations/marison/projects/preview"
+  ),
+  syncProjects: () => request<MarisonProjectSyncResult>(
+    "/api/integrations/marison/projects/sync",
     {
       method: "POST",
       body: JSON.stringify({ confirm: true }),

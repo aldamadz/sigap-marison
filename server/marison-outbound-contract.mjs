@@ -59,7 +59,10 @@ export const marisonNonUnitSubmissionSchema = z.object({
 }).strict();
 
 export const marisonAssetPurchaseRequestSchema = z.object({
+  submission_number: nonEmptyText,
   branch_id: positiveInteger,
+  submitted_by: nonEmptyText.optional(),
+  submitted_at: dateTime.optional(),
   category: nonEmptyText,
   description: requiredText.optional(),
   items: z.array(z.object({

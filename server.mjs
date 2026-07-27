@@ -30,8 +30,10 @@ import { resolveMarisonOutboundNik } from "./server/marison-outbound-identity.mj
 import {
   executeMarisonBranchSync,
   executeMarisonEmployeeSync,
+  executeMarisonProjectSync,
   previewMarisonBranchSync,
   previewMarisonEmployeeSync,
+  previewMarisonProjectSync,
   runTrackedMarisonSync,
 } from "./server/marison-employee-sync.mjs";
 
@@ -92,6 +94,7 @@ const loginIpRateLimits = new Map();
 const marisonRealtimeClients = new Set();
 let marisonEmployeeSyncInFlight = false;
 let marisonBranchSyncInFlight = false;
+let marisonProjectSyncInFlight = false;
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -2888,6 +2891,14 @@ const getMarisonBranchSyncSource = async () => (
   getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")
 );
 
+const getMarisonProjectSyncSource = async () => {
+  const [branches, projects] = await Promise.all([
+    getAllMarisonCollection(marisonDeploymentEnvironment, "/branches"),
+    getAllMarisonCollection(marisonDeploymentEnvironment, "/projects"),
+  ]);
+  return { branches, projects };
+};
+
 const assertMarisonBranchSyncAvailable = () => {
   if (!supabase || !serviceRoleKey) {
     const err = new Error("Service role environment ini belum dikonfigurasi.");
@@ -2917,7 +2928,7 @@ const syncMarisonBranches = async (req) => {
     err.status = 400;
     throw err;
   }
-  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight) {
+  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
     const err = new Error("Sinkronisasi data external sedang berjalan.");
     err.status = 409;
     throw err;
@@ -2939,6 +2950,51 @@ const syncMarisonBranches = async (req) => {
     });
   } finally {
     marisonBranchSyncInFlight = false;
+  }
+};
+
+const previewMarisonProjects = async (req) => {
+  await requireAdminUser(getBearerToken(req));
+  assertMarisonBranchSyncAvailable();
+  const source = await getMarisonProjectSyncSource();
+  return previewMarisonProjectSync({
+    supabase,
+    ...source,
+    environment: marisonDeploymentEnvironment,
+  });
+};
+
+const syncMarisonProjects = async (req) => {
+  const user = await requireAdminUser(getBearerToken(req));
+  const body = await readJsonBody(req);
+  if (body?.confirm !== true) {
+    const err = new Error("Konfirmasi sinkronisasi proyek wajib dikirim.");
+    err.status = 400;
+    throw err;
+  }
+  assertMarisonBranchSyncAvailable();
+  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
+    const err = new Error("Sinkronisasi data external sedang berjalan.");
+    err.status = 409;
+    throw err;
+  }
+  marisonProjectSyncInFlight = true;
+  try {
+    const source = await getMarisonProjectSyncSource();
+    return await runTrackedMarisonSync({
+      supabase,
+      environment: marisonDeploymentEnvironment,
+      triggerType: "manual",
+      scope: "projects",
+      initiatedBy: user.id,
+      operation: () => executeMarisonProjectSync({
+        supabase,
+        ...source,
+        environment: marisonDeploymentEnvironment,
+      }),
+    });
+  } finally {
+    marisonProjectSyncInFlight = false;
   }
 };
 
@@ -2972,7 +3028,7 @@ const syncMarisonEmployees = async (req) => {
     err.status = 400;
     throw err;
   }
-  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight) {
+  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
     const err = new Error("Sinkronisasi data external sedang berjalan.");
     err.status = 409;
     throw err;
@@ -3010,7 +3066,7 @@ const syncMarisonDirectoryFromCron = async (req) => {
     err.status = 401;
     throw err;
   }
-  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight) {
+  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
     const err = new Error("Sinkronisasi data external sedang berjalan.");
     err.status = 409;
     throw err;
@@ -3684,7 +3740,10 @@ const buildMarisonAssetPayload = async (surat, input, actorId) => {
 
   const location = getMarisonLocation(surat);
   const payload = {
+    submission_number: surat.no_surat,
     branch_id: branchId,
+    submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+    submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     category: firstString(location.office.kedudukan, location.office.position).toLowerCase() === "pusat"
       ? "Pengajuan Pusat"
       : "Pengajuan Cabang",
@@ -4331,6 +4390,16 @@ createServer(async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/branches/sync") {
         const result = await syncMarisonBranches(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/integrations/marison/projects/preview") {
+        const result = await previewMarisonProjects(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/projects/sync") {
+        const result = await syncMarisonProjects(req);
         return sendJson(res, 200, result);
       }
 

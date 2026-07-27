@@ -12,6 +12,8 @@ import {
   type MarisonEmployeeSyncResult,
   type MarisonEnvironmentTest,
   type MarisonProbeResult,
+  type MarisonProjectSyncPreview,
+  type MarisonProjectSyncResult,
 } from "@/services/marison-integration.service";
 
 const checkLabels = {
@@ -46,8 +48,12 @@ export function MarisonIntegrationPanel() {
   const [testResult, setTestResult] = useState<MarisonEnvironmentTest | null>(null);
   const [previewingEmployees, setPreviewingEmployees] = useState(false);
   const [syncingEmployees, setSyncingEmployees] = useState(false);
+  const [previewingProjects, setPreviewingProjects] = useState(false);
+  const [syncingProjects, setSyncingProjects] = useState(false);
   const [employeePreview, setEmployeePreview] = useState<MarisonEmployeeSyncPreview | null>(null);
   const [employeeResult, setEmployeeResult] = useState<MarisonEmployeeSyncResult | null>(null);
+  const [projectPreview, setProjectPreview] = useState<MarisonProjectSyncPreview | null>(null);
+  const [projectResult, setProjectResult] = useState<MarisonProjectSyncResult | null>(null);
 
   if (loading) {
     return (
@@ -89,6 +95,45 @@ export function MarisonIntegrationPanel() {
       toast.error(error instanceof Error ? error.message : "Gagal memeriksa data karyawan");
     } finally {
       setPreviewingEmployees(false);
+    }
+  };
+
+  const previewProjects = async (preserveResult = false) => {
+    setPreviewingProjects(true);
+    if (!preserveResult) setProjectResult(null);
+    try {
+      const preview = await marisonIntegrationService.previewProjects();
+      setProjectPreview(preview);
+      toast.success(`${preview.toCreate + preview.toUpdate} proyek perlu diselaraskan`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal memeriksa data proyek");
+    } finally {
+      setPreviewingProjects(false);
+    }
+  };
+
+  const syncProjects = async () => {
+    if (!projectPreview) return;
+    const confirmed = await appDialog.confirm({
+      title: "Sinkronkan Master Proyek?",
+      description: `${projectPreview.source.projects} proyek ditemukan di API external. ${projectPreview.toCreate} proyek akan dibuat dan ${projectPreview.toUpdate} proyek lama akan diperbarui. Kantor cabang yang diperlukan ikut dipastikan termapping.`,
+      confirmText: "Sinkronkan",
+    });
+    if (!confirmed) return;
+    setSyncingProjects(true);
+    try {
+      const result = await marisonIntegrationService.syncProjects();
+      await previewProjects(true);
+      setProjectResult(result);
+      if (result.failed > 0) {
+        toast.warning(`Sinkronisasi proyek selesai dengan ${result.failed} data perlu ditinjau`);
+      } else {
+        toast.success("Sinkronisasi master proyek selesai");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sinkronisasi master proyek gagal");
+    } finally {
+      setSyncingProjects(false);
     }
   };
 
@@ -159,19 +204,36 @@ export function MarisonIntegrationPanel() {
                   <Button
                     variant="outline"
                     onClick={() => void previewEmployees()}
-                    disabled={previewingEmployees || syncingEmployees || !environmentConfig?.configured}
+                    disabled={previewingEmployees || syncingEmployees || syncingProjects || !environmentConfig?.configured}
                     className="gap-2"
                   >
                     {previewingEmployees ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    Periksa data
+                    Periksa karyawan
                   </Button>
                   <Button
                     onClick={syncEmployees}
-                    disabled={!employeePreview || previewingEmployees || syncingEmployees}
+                    disabled={!employeePreview || previewingEmployees || syncingEmployees || syncingProjects}
                     className="gap-2"
                   >
                     {syncingEmployees ? <Loader2 className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
-                    Sinkronkan
+                    Sinkron karyawan
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void previewProjects()}
+                    disabled={previewingProjects || syncingProjects || syncingEmployees || !environmentConfig?.configured}
+                    className="gap-2"
+                  >
+                    {previewingProjects ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Periksa proyek
+                  </Button>
+                  <Button
+                    onClick={syncProjects}
+                    disabled={!projectPreview || previewingProjects || syncingProjects || syncingEmployees}
+                    className="gap-2"
+                  >
+                    {syncingProjects ? <Loader2 className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
+                    Sinkron proyek
                   </Button>
                 </>
               )}
@@ -231,9 +293,50 @@ export function MarisonIntegrationPanel() {
           </div>
         )}
 
+        {status.isStaging && projectPreview && (
+          <div className="space-y-4">
+            <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
+              {[
+                ["Sumber proyek", projectPreview.source.projects],
+                ["Proyek baru", projectPreview.toCreate],
+                ["Diperbarui", projectPreview.toUpdate],
+                ["Perlu tinjau", projectPreview.blocked],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="bg-background px-4 py-3">
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {projectPreview.issues.length > 0 && (
+              <div className="rounded-md border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{projectPreview.issues.length} proyek/kantor perlu ditinjau</p>
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {projectPreview.issues.slice(0, 5).map((issue, index) => (
+                        <li key={`${issue.externalId || issue.nik || index}-${index}`}>
+                          {issue.name || issue.names?.join(" / ") || "Tanpa nama"} - {issue.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {status.isStaging && employeeResult && (
           <p className="text-sm text-muted-foreground">
             Hasil terakhir: {employeeResult.created} dibuat, {employeeResult.updated} diperbarui, {employeeResult.failed} gagal, dan {employeeResult.skipped} dilewati.
+          </p>
+        )}
+        {status.isStaging && projectResult && (
+          <p className="text-sm text-muted-foreground">
+            Hasil proyek terakhir: {projectResult.created} dibuat, {projectResult.updated} diperbarui, dan {projectResult.failed} perlu ditinjau.
           </p>
         )}
       </CardContent>
