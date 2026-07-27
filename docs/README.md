@@ -19,15 +19,17 @@
 
 ## 🏗️ Arsitektur Sistem (Technical Stack)
 
-SIGAP dibangun di atas infrastruktur **Event-Driven Architecture (EDA)** untuk menjamin skalabilitas:
+SIGAP memakai frontend React dengan BFF Node.js dan PostgreSQL/Supabase sebagai fondasi data serta otorisasi:
 
 | Layer | Teknologi | Peran |
 | :--- | :--- | :--- |
 | **Frontend** | React.js + Tailwind CSS | Antarmuka pengguna yang responsif dan interaktif. |
-| **Backend** | Supabase Edge Functions (Deno) | Logika serverless untuk routing dokumen otomatis. |
+| **Backend** | Node.js BFF (`server.mjs`) | Session HttpOnly, API aplikasi, integrasi eksternal, email, dan akses file privat. |
 | **Database** | PostgreSQL | Penyimpanan data relasional dengan integritas tinggi. |
-| **Realtime** | Supabase Broadcast/Presence | Pengiriman notifikasi instan via WebSocket. |
-| **Storage** | Supabase Storage self-hosted | Penyimpanan privat file PDF dan lampiran transaksi. |
+| **Realtime** | SSE attention + Supabase Realtime terbatas | Badge dan sinyal perubahan tanpa mengirim isi dokumen sensitif. |
+| **Storage** | Supabase Storage self-hosted | Penyimpanan privat terpusat; path production tetap utama dan staging diisolasi dalam namespace `staging/`. |
+| **Workflow** | PostgreSQL RPC + RLS | Reservasi nomor, routing approval, pemeriksaan, revisi, dan audit secara server-side. |
+| **PDF Worker** | Node.js worker + LibreOffice/pdfmake | Membuat PDF, snapshot persetujuan, dan dokumen dinamis. |
 | **Generator PGD** | PDF-native (pdfmake) | Satu renderer untuk Uji PDF, surat baru, snapshot approval, dan Buat Ulang PDF. |
 | **Template Builder** | JSON native template | Fondasi rancangan dokumen dari nol: elemen, binding data, tabel berulang, tanda tangan, versioning. |
 
@@ -39,13 +41,14 @@ Avatar user disimpan pada Supabase Storage self-hosted yang private. Aplikasi me
 
 ## 🔄 Alur Kerja Digital (Workflow)
 
-SIGAP mengeliminasi *race condition* melalui sinkronisasi server-side:
+SIGAP menjaga konsistensi proses melalui jalur server-side:
 
-1.  **Drafting**: User membuat agenda/surat di Dashboard SIGAP.
-2.  **Triggering**: Database mengirim sinyal Webhook ke Edge Function.
-3.  **Routing**: Backend menganalisis tabel `surat_signatures` untuk menentukan penandatangan aktif.
-4.  **Broadcasting**: Pesan dikirimkan secara spesifik ke ID pengguna yang dituju.
-5.  **Notifying**: Browser penerima memutar audio `notif.WAV` dan memperbarui UI secara otomatis.
+1. **Drafting**: User mengisi data dan sistem mereservasi nomor surat sebagai draft.
+2. **Registration**: BFF dan RPC memvalidasi identitas, form, kegunaan, serta matrix approval.
+3. **Routing**: Database mengaktifkan pemeriksa atau penandatangan yang berhak pada tahap berjalan.
+4. **Processing**: Pemeriksaan, persetujuan, penolakan, dan revisi dicatat sebagai histori yang dapat diaudit.
+5. **Attention**: SSE mengirim sinyal ringan agar badge dan tugas aktif segera disinkronkan.
+6. **Document**: PDF worker membangun dokumen dan snapshot berdasarkan data serta status approval terbaru.
 
 ---
 
@@ -60,9 +63,12 @@ Garis besar dokumentasi:
 | File | Deskripsi |
 |------|-----------|
 | [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, termasuk Hirarki Organisasi, dan rencana fitur berjalan |
+| [WORKFLOW_ASET_UNIT.md](./WORKFLOW_ASET_UNIT.md) | Flowchart lengkap Permohonan Aset dan Unit, termasuk pemeriksaan, rekomendasi, revisi, dan tanda tangan ulang |
+| [FEATURE_RELEASE_MAP.md](./FEATURE_RELEASE_MAP.md) | Status fitur per environment, dependensi, selective release, dan prosedur penarikan production |
 | [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |
+| [Kontrak Outbound Marison v1](./contracts/marison/v1/README.md) | Payload kanonis Aset dan Unit yang disepakati bersama vendor |
 
 ---
 
@@ -92,4 +98,4 @@ Jika perubahan tidak menyentuh PDF worker, jangan redeploy `docker-compose.worke
 
 ---
 
-*Last updated: 2026-07-02*
+*Last updated: 2026-07-22*

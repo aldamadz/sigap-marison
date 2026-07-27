@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BriefcaseBusiness, FileCode2, FileSpreadsheet, GitMerge, Hash, Mail, Route, Timer } from "lucide-react";
+import { BriefcaseBusiness, FileCode2, FileSpreadsheet, GitMerge, Hash, Mail, Route, Timer, Server } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -21,6 +21,12 @@ const configurationOptions = [
     label: "Template Builder",
     description: "Rancang dokumen native dari nol dengan elemen, binding, dan tabel berulang.",
     icon: FileCode2,
+  },
+  {
+    value: "/admin/configuration/integration",
+    label: "Integration",
+    description: "Konfigurasi dan pengujian koneksi integrasi Marison.",
+    icon: Server,
   },
   {
     value: "/admin/configuration/workflows",

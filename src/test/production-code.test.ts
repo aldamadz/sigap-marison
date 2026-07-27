@@ -21,8 +21,8 @@ describe("production code serial", () => {
   it("formats and normalizes the allocation spreadsheet boundary", () => {
     const excel = readFileSync(join(process.cwd(), "src/lib/excel.ts"), "utf8");
     const inbox = readFileSync(join(process.cwd(), "src/pages/surat/InboxPage.tsx"), "utf8");
-    expect(excel).toContain('row.getCell(6).numFmt = "000"');
-    expect(excel).toContain('worksheet.getColumn(6).numFmt = "000"');
+    expect(excel).toContain('row.getCell(7).numFmt = "000"');
+    expect(excel).toContain('worksheet.getColumn(7).numFmt = "000"');
     expect(excel).toContain('"Nomor Kode Produksi": parseTemplateSerial');
     expect(inbox).toContain("production_serial: normalizeProductionSerial(row[serialIndex])");
     expect(inbox).toContain("normalizeAllocationDetailForPersistence");
@@ -35,11 +35,12 @@ describe("production code serial", () => {
       Kavling: "A01",
       "Struktur Atas": 1_000_000,
       "Struktur Bawah": 2_000_000,
+      "Tipe Unit": "4.0",
       "Nomor Kode Produksi": "001",
       Blok: "5.2",
       "Tanggal Produksi": "01/01/2026",
     }]);
-    const serialCell = workbook.getWorksheet("Alokasi Unit")?.getCell("F2");
+    const serialCell = workbook.getWorksheet("Alokasi Unit")?.getCell("G2");
     expect(serialCell?.value).toBe(1);
     expect(serialCell?.numFmt).toBe("000");
   });

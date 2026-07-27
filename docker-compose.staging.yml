@@ -29,12 +29,14 @@ services:
       MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
       MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
       MARISON_STAGING_CLIENT_SECRET: "${MARISON_STAGING_CLIENT_SECRET:-}"
+      MARISON_STAGING_OUTBOUND_NIK_OVERRIDE: "${MARISON_STAGING_OUTBOUND_NIK_OVERRIDE:-A 114}"
       MARISON_PRODUCTION_BASE_URL: "${MARISON_PRODUCTION_BASE_URL:-https://external.marisonregency.id/api}"
       MARISON_PRODUCTION_CLIENT_ID: "${MARISON_PRODUCTION_CLIENT_ID:-}"
       MARISON_PRODUCTION_CLIENT_SECRET: "${MARISON_PRODUCTION_CLIENT_SECRET:-}"
       STORAGE_MODE: "${STORAGE_MODE:-self_hosted_supabase}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:-}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-}"
+      STORAGE_PATH_PREFIX: "staging"
     env_file:
       - path: .env.staging
         required: false
@@ -79,6 +81,28 @@ services:
       STORAGE_MODE: "${STORAGE_MODE}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL}"
+      STORAGE_PATH_PREFIX: "staging"
+    env_file:
+      - path: .env.staging
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  agenda-marison-sync-staging:
+    image: agenda-flow:staging
+    container_name: agenda-marison-sync-staging
+    restart: always
+    command: ["node", "server/marison-sync-worker.mjs"]
+    depends_on:
+      agenda-flow-staging:
+        condition: service_healthy
+    environment:
+      MARISON_SYNC_ENABLED: "true"
+      MARISON_SYNC_INTERNAL_URL: "http://agenda-flow-staging/api/internal/marison/directory-sync"
+      MARISON_SYNC_CRON_TOKEN: "${MARISON_SYNC_CRON_TOKEN:-}"
     env_file:
       - path: .env.staging
         required: false

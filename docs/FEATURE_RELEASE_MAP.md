@@ -1,6 +1,6 @@
 # SIGAP Feature and Release Map
 
-Snapshot audit: 2026-07-22 (Asia/Jakarta)
+Snapshot audit: 2026-07-25 (Asia/Jakarta)
 
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
@@ -27,13 +27,14 @@ Arti status:
 | Dormant | Source atau schema masih ada, tetapi runtime/entry point tidak aktif |
 | Removed | Sudah sengaja dikeluarkan dari alur aktif |
 | Drift | Versi runtime tidak sama dengan source/worker yang seharusnya |
+| Development branch | Sedang dibangun dan belum boleh dianggap tersedia di staging atau production |
 
 ## 2. Snapshot Environment
 
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
-| App container | `agenda-flow-prod` | `agenda-flow-staging` | Keduanya sehat saat audit |
+| App container | `agenda-flow-prod` | Web, PDF worker, dan cron sync staging | Ketiga service staging sehat; production tidak diubah |
 | Git source | `main` | `staging`, enam commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
@@ -92,7 +93,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | SUR-01 | Registrasi surat dinamis | Production + Staging | Surat form/service, registration RPC | Form usage, numbering, workflow, storage | Sangat tinggi; gunakan feature flag, jangan revert migration |
-| SUR-02 | Draft registrasi dan reservasi nomor | Production + Staging | Draft/reservation RPC dan tables | SUR-01, numbering | Harus menyelesaikan/void draft sebelum nonaktif |
+| SUR-02 | Draft registrasi, reservasi nomor, dan sinkronisasi matrix aktif | Production + Staging; rekonsiliasi matrix kandidat staging | Draft/reservation RPC, tables, signer reconciliation | SUR-01, numbering, DOC-02 | Harus menyelesaikan/void draft sebelum nonaktif; surat terdaftar tetap memakai snapshot lama |
 | SUR-03 | Nomor surat atomik dan konfigurasi counter | Production + Staging | Numbering admin, RPC | Letter type, office/entity | Tidak boleh ditarik tanpa mekanisme nomor pengganti |
 | SUR-04 | Lampiran awal dan lampiran approval | Production + Staging | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik |
 | SUR-05 | Preview detail dan file viewer bertoken | Production + Staging | Preview modal, file token BFF | Storage, surat authorization | Jangan membuka public URL sebagai pengganti |
@@ -124,22 +125,37 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-02 | Lookup unit berdasarkan project | Production + Staging | `/unit?project_id=...` | MRN-01 | Dapat dinonaktifkan per form/data source |
 | MRN-03 | Lookup non-unit berdasarkan project | Production + Staging | `/non-unit?project_id=...` | MRN-01 | Dapat dinonaktifkan per form/data source |
 | MRN-04 | Alokasi unit, kode produksi, dan rekap | Production + Staging | Surat form/service, production-code | Unit source, PDF attachments | Tinggi; snapshot lama harus tetap terbaca |
-| MRN-05 | Outbound submission unit | Staging enabled; production disabled by default | `/unit-submissions` POST | Surat selesai, project/unit/branch, approvals | Matikan dispatch flag; jangan hapus snapshot response |
-| MRN-06 | Outbound submission non-unit | Staging enabled; production disabled by default | `/non-unit-submissions` POST | Surat selesai, non-unit items, approvals | Sama dengan MRN-05 |
-| MRN-07 | Outbound asset purchase request | Staging enabled; production disabled by default | `/asset-purchase-requests` POST | Surat selesai, branch, approvals | Sama dengan MRN-05 |
-| MRN-08 | Status dan test koneksi Integrasi Marison | Production + Staging | Admin integration page/BFF | Environment deployment | Environment switch via UI sudah removed |
+| MRN-05 | Outbound submission unit | Staging enabled; production disabled by default | `/unit-submissions` POST | Surat selesai, project/unit/branch, approvals | Staging dapat memakai NIK uji tunggal tanpa mengubah profil; matikan dispatch flag untuk menonaktifkan |
+| MRN-06 | Outbound submission non-unit | Staging enabled; production disabled by default | `/non-unit-submissions` POST | Surat selesai, non-unit items, approvals | Mengikuti kebijakan NIK staging MRN-05 |
+| MRN-07 | Outbound asset purchase request | Staging enabled; production disabled by default | `/asset-purchase-requests` POST | Surat selesai, branch, approvals | Mengikuti kebijakan NIK staging MRN-05 |
+| MRN-08 | Status, test koneksi, dan sinkron Integrasi Marison | Production + Staging | `Konfigurasi > Kegunaan Form`/BFF | Environment deployment, admin role | Environment switch via UI sudah removed; route lama hanya redirect |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
+| MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
+| MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Smoke sync 25 Juli 2026: 9 kantor dan 67 profil terpetakan, 0 konflik; 9 kantor dan 35 profil masuk antrean review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
+| MRN-12 | Tipe unit pada alokasi dan seluruh output | Staging only | Input alokasi, template Excel, ringkasan layar, PDF adendum, PDF kode produksi, PDF summary, email, payload `units[].type` | MRN-04, MRN-05, kontrak OpenAPI unit | Bergantung pada kontrak POST Marison yang masih staging-only; promosikan bersama MRN-05 setelah pengujian dokumen dan payload disetujui |
+
+Catatan cronjob:
+
+- Sinkronisasi branch/karyawan menggunakan master UUID SIGAP; ID external hanya menjadi mapping.
+- Branch selalu diproses sebelum employee agar `branch.id` dapat dipetakan ke `office_id` lokal.
+- Sinkron manual dan worker harian pukul 00:00 Asia/Jakarta memakai jalur orkestrasi, lock, dan audit run yang sama.
+- Data external yang kosong tidak menghapus isian manual; hirarki kantor, role, atasan, dan tanggal kerja tetap dikelola SIGAP.
+- Cronjob production tidak boleh diaktifkan sebelum data HRD, mapping kantor, dan dampak role/login diuji di staging.
 
 Temuan keamanan outbound:
 
 - staging telah terverifikasi memperoleh token dan mengakses protected GET dengan
   status `200` menggunakan format signature sesuai OpenAPI terbaru;
 - secret tidak dikirim ke browser dan host dipilih dari environment deployment;
+- NIK uji staging diterapkan hanya saat membangun payload outbound; NIK profil, snapshot audit, dan payload production tidak ditimpa;
 - business POST tidak dijalankan saat audit agar tidak membuat data palsu;
 - belum ada lock/idempotency key lokal saat dispatch. Request bersamaan atau
   timeout setelah upstream menerima payload masih dapat menyebabkan duplikasi;
 - status `success` pada snapshot hanya mencegah pengiriman ulang setelah response
   sukses sudah tersimpan.
+- payload kaya Aset dan Unit sudah dikunci pada `docs/contracts/marison/v1`, tetapi
+  OpenAPI vendor staging masih menunjukkan kontrak lama. Perubahan ini belum boleh
+  dipromosikan sampai vendor menyatakan endpoint siap.
 
 ### 4.6 Dokumen, Template, dan PDF
 
@@ -151,8 +167,8 @@ Temuan keamanan outbound:
 | DOC-04 | Template Designer JSON/version/publish | Production + Staging | Template builder | Builder tables, preview | Dapat disembunyikan tanpa menghapus versi |
 | DOC-05 | PDF job queue dan worker | Production + Staging, production drift | PDF API, jobs, worker | Storage, LibreOffice/pdf renderer | Sinkronkan worker sebelum perubahan renderer |
 | DOC-06 | Renderer PGD dan buat ulang PDF | Production + Staging, production drift risk | PGD renderer, rebuild action | DOC-05, snapshots | Jangan rilis renderer tanpa worker seversi |
-| DOC-07 | Private storage dan authorized download | Production + Staging | BFF storage/file token | Self-hosted Supabase storage | Kontrol keamanan; jangan tarik parsial |
-| DOC-08 | Shared storage dengan namespace environment | Staging candidate | Storage path policy, BFF upload, PDF worker | DOC-05, DOC-07, env deployment | Production tetap tanpa prefix; staging wajib memakai `staging/` dan tidak boleh mengakses path di luar namespace |
+| DOC-07 | Private storage dan authorized download | Production + Staging; perbaikan token staging siap diuji | BFF storage/file token | Self-hosted Supabase storage | Kontrol keamanan; token harus memvalidasi bucket dan object path aktual, jangan tarik parsial |
+| DOC-08 | Shared storage dengan namespace environment | Staging candidate; referensi legacy staging sudah dimigrasikan | Storage path policy, BFF upload, PDF worker, migrator namespace | DOC-05, DOC-07, env deployment | Production tetap tanpa prefix; staging wajib memakai `staging/`; migrator tidak menghapus object sumber |
 
 ### 4.7 Notification, Realtime, Email, dan Audit
 
@@ -162,6 +178,7 @@ Temuan keamanan outbound:
 | NTF-02 | Sidebar attention Realtime via SSE | Production + Staging | Attention provider, `/api/events` | Realtime publication, RLS | Fallback focus refetch tetap ada; jangan kembali polling |
 | NTF-03 | Web Push | Production + Staging jika VAPID tersedia | Service worker, push subscriptions | HTTPS, browser permission | Matikan server send sebelum menghapus UI |
 | NTF-04 | Email notifikasi dan secure file link | Production + Staging jika SMTP tersedia | SMTP, settings, file tokens | Storage, recipients | Matikan config sebelum menghapus route |
+| NTF-05 | Indikator perhatian sidebar beranimasi | Staging only | Badge numerik, warna baris berdasarkan jenis perhatian, mode sidebar penuh/kecil | NTF-02, attention state, prefers-reduced-motion | UI-only; dapat ditarik tanpa mengubah data maupun penghitung attention |
 | AUD-01 | Activity/Audit Log admin | Production + Staging | Audit page/service | `activity_logs`, admin | UI dapat ditarik, log sebaiknya dipertahankan |
 
 ### 4.8 Master Data dan Konfigurasi Admin

@@ -55,6 +55,11 @@ COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
 COPY production-code.mjs ./production-code.mjs
+COPY storage-path-policy.mjs ./storage-path-policy.mjs
+COPY server/marison-outbound-contract.mjs ./server/marison-outbound-contract.mjs
+COPY server/marison-outbound-identity.mjs ./server/marison-outbound-identity.mjs
+COPY server/marison-employee-sync.mjs ./server/marison-employee-sync.mjs
+COPY server/marison-sync-worker.mjs ./server/marison-sync-worker.mjs
 
 EXPOSE 80
 

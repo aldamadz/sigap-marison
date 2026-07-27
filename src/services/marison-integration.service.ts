@@ -31,6 +31,66 @@ export type MarisonEnvironmentTest = {
   };
 };
 
+export type MarisonEmployeeSyncIssue = {
+  externalId?: number | null;
+  nik?: string;
+  name?: string;
+  names?: string[];
+  reason: string;
+};
+
+export type MarisonBranchSyncPreview = {
+  environment: MarisonEnvironment;
+  generatedAt: string;
+  source: number;
+  matched: number;
+  toCreate: number;
+  toUpdate: number;
+  blocked: number;
+  issues: MarisonEmployeeSyncIssue[];
+};
+
+export type MarisonBranchSyncResult = {
+  environment: MarisonEnvironment;
+  completedAt: string;
+  source: number;
+  created: number;
+  updated: number;
+  matched: number;
+  failed: number;
+  errors: MarisonEmployeeSyncIssue[];
+};
+
+export type MarisonEmployeeSyncPreview = {
+  environment: "staging";
+  generatedAt: string;
+  source: { employees: number; branches: number };
+  branches: { matched: number; toCreate: number; toUpdate: number; blocked: number };
+  employees: {
+    ready: number;
+    toCreate: number;
+    toUpdate: number;
+    blocked: number;
+    missingNik: number;
+    conflictingNik: number;
+    mergedDuplicates: number;
+    resolvedConflicts: number;
+  };
+  issues: MarisonEmployeeSyncIssue[];
+};
+
+export type MarisonEmployeeSyncResult = {
+  environment: "staging";
+  completedAt: string;
+  created: number;
+  updated: number;
+  failed: number;
+  skipped: number;
+  branchesCreated: number;
+  branchesUpdated: number;
+  errors: MarisonEmployeeSyncIssue[];
+};
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     ...init,
@@ -50,4 +110,24 @@ export const marisonIntegrationService = {
     method: "POST",
     body: JSON.stringify({}),
   }),
+  previewEmployeeSync: () => request<MarisonEmployeeSyncPreview>(
+    "/api/integrations/marison/employees/preview"
+  ),
+  syncEmployees: () => request<MarisonEmployeeSyncResult>(
+    "/api/integrations/marison/employees/sync",
+    {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }
+  ),
+  previewBranches: () => request<MarisonBranchSyncPreview>(
+    "/api/integrations/marison/branches/preview"
+  ),
+  syncBranches: () => request<MarisonBranchSyncResult>(
+    "/api/integrations/marison/branches/sync",
+    {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }
+  ),
 };

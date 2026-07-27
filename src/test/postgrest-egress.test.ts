@@ -20,7 +20,7 @@ describe("PostgREST egress guardrails", () => {
     expect(userPage).toContain("suratMonitoringService.getPage");
     expect(adminPage).toContain("suratMonitoringService.getPage");
     expect(userPage).not.toContain("selectedSurat._status");
-    expect(userPage).toContain("resolveStatus(selectedSurat, detailSignatures)");
+    expect(userPage).toContain("resolveStatus(selectedSurat, selectedSignatures)");
   });
 
   it("aggregates attention in one database call", () => {

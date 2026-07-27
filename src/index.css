@@ -841,9 +841,34 @@
     animation: glow 2s ease-in-out infinite alternate;
   }
 
+  .sidebar-attention-badge {
+    animation: sidebar-attention-badge-blink 0.9s ease-in-out infinite;
+  }
+
+  .sidebar-attention-row {
+    animation: sidebar-attention-row-blink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes sidebar-attention-badge-blink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.92); }
+  }
+
+  @keyframes sidebar-attention-row-blink {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.18); }
+  }
+
   @keyframes glow {
     from { box-shadow: 0 0 20px -10px hsl(var(--primary) / 0.5); }
     to { box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.7); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-attention-badge,
+    .sidebar-attention-row {
+      animation: none;
+    }
   }
 
   /* Responsive visibility utilities */

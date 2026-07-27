@@ -16,6 +16,25 @@ import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
 import { createPgdPreviewData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
 import { resolveTableHorizontalAlignment } from "./document-layout-rules.mjs";
 import { buildProductionCode } from "./production-code.mjs";
+import {
+  applyStoragePathPrefix,
+  isStoragePathWithinPrefix,
+  normalizeStoragePath,
+  normalizeStoragePathPrefix,
+  removeStoragePathPrefix,
+} from "./storage-path-policy.mjs";
+import {
+  assertMarisonOutboundContract,
+  MARISON_OUTBOUND_CONTRACT_VERSION,
+} from "./server/marison-outbound-contract.mjs";
+import { resolveMarisonOutboundNik } from "./server/marison-outbound-identity.mjs";
+import {
+  executeMarisonBranchSync,
+  executeMarisonEmployeeSync,
+  previewMarisonBranchSync,
+  previewMarisonEmployeeSync,
+  runTrackedMarisonSync,
+} from "./server/marison-employee-sync.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,6 +60,7 @@ const storagePublicBaseUrl = String(
   process.env.STORAGE_PUBLIC_BASE_URL ||
   (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
 ).replace(/\/+$/, "");
+const storagePathPrefix = normalizeStoragePathPrefix(process.env.STORAGE_PATH_PREFIX || "");
 
 const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
@@ -71,6 +91,8 @@ const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
 const marisonRealtimeClients = new Set();
+let marisonEmployeeSyncInFlight = false;
+let marisonBranchSyncInFlight = false;
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -86,6 +108,15 @@ if (!MARISON_ENVIRONMENTS.has(marisonDeploymentEnvironment)) {
 const marisonSubmissionDispatchEnabled = String(
   process.env.MARISON_SUBMISSION_DISPATCH_ENABLED ?? (marisonDeploymentEnvironment === "staging" ? "true" : "false")
 ).toLowerCase() === "true";
+const marisonSyncCronToken = String(
+  process.env.MARISON_SYNC_CRON_TOKEN
+  || createHash("sha256").update(`marison-directory-sync:${sessionSecret}`).digest("hex")
+);
+const marisonOutboundNik = (...candidates) => resolveMarisonOutboundNik({
+  environment: marisonDeploymentEnvironment,
+  stagingOverride: process.env.MARISON_STAGING_OUTBOUND_NIK_OVERRIDE,
+  candidates,
+});
 
 const webPushConfig = {
   publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
@@ -680,12 +711,18 @@ const handleBffStorageFile = async (req, res, url) => {
   const session = requireCookieSession(req);
   const bucket = assertBffIdentifier(url.searchParams.get("bucket"), "Nama bucket");
   const path = sanitizeStoragePath(url.searchParams.get("path"));
-  if (bucket !== "avatars" || !/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+(?:_thumb\.webp)?$/i.test(path)) {
+  let relativePath;
+  try {
+    relativePath = removeStoragePathPrefix(path, storagePathPrefix);
+  } catch {
+    relativePath = "";
+  }
+  if (bucket !== "avatars" || !/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+(?:_thumb\.webp)?$/i.test(relativePath)) {
     const err = new Error("Akses file harus melalui endpoint dokumen yang terotorisasi.");
     err.status = 403;
     throw err;
   }
-  if (!path.startsWith(`${session.user.id}/`)) {
+  if (!relativePath.startsWith(`${session.user.id}/`)) {
     const err = new Error("Akses avatar ditolak.");
     err.status = 403;
     throw err;
@@ -1403,6 +1440,8 @@ const getAttentionStateForUser = async (userId) => {
     unreadNotifications: Number(row?.unread_notifications || 0),
     monitoringCount,
     followUpCount: requesterRevisionCount,
+    masterOfficeReviewCount: Number(row?.master_office_review_count || 0),
+    profileReviewCount: Number(row?.profile_review_count || 0),
     generatedAt: new Date().toISOString(),
   };
 };
@@ -1612,6 +1651,30 @@ const buildEmailFileLink = async (suratId, rawPath, config, requestedBy = null) 
   });
 };
 
+const buildPersistentMarisonFileLink = async (surat, rawPath, requestedBy = null) => {
+  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
+  const requested = parseStorageRef(rawPath);
+  if (!appUrl || !requested) return null;
+
+  const rawToken = randomBytes(32).toString("base64url");
+  const { error } = await supabase
+    .from("file_view_tokens")
+    .insert({
+      token_hash: hashFileViewToken(rawToken),
+      bucket: requested.bucket,
+      object_path: requested.path,
+      storage_origin: requested.origin || "primary",
+      surat_id: surat.id,
+      requested_by: requestedBy,
+      purpose: "external_marison",
+      expires_at: null,
+    });
+  if (error) throw error;
+
+  const filename = encodeURIComponent(buildDocumentFilename(surat, requested.path, "lampiran"));
+  return `${appUrl}/api/files/view/${rawToken}/${filename}`;
+};
+
 const downloadStorageAttachment = async (rawPath) => {
   const requested = parseStorageRef(rawPath);
   if (!requested) return null;
@@ -1728,6 +1791,21 @@ const buildEmailProductionCode = (unit) => {
   }) || unit?.raw?.production_code || "-";
 };
 
+const getEmailUnitType = (unit) => {
+  const detail = unit?.allocation_detail || {};
+  return String(
+    detail.unit_type ||
+    detail.type ||
+    detail.tipe ||
+    unit?.unit_type ||
+    unit?.raw?.unit_type ||
+    unit?.raw?.type ||
+    unit?.raw?.tipe ||
+    unit?.raw?.house_type ||
+    "-"
+  ).trim();
+};
+
 const renderAllocatedUnitsEmailTable = (units, project) => {
   if (!Array.isArray(units) || units.length === 0) return "";
 
@@ -1741,6 +1819,7 @@ const renderAllocatedUnitsEmailTable = (units, project) => {
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;color:#334155">No.</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Proyek</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;color:#334155">Unit</th>
+              <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Tipe</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;color:#334155">Struktur Atas</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;color:#334155">Struktur Bawah</th>
               <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Kode Produksi</th>
@@ -1754,6 +1833,7 @@ const renderAllocatedUnitsEmailTable = (units, project) => {
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px">${index + 1}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${escapeEmailHtml(project?.name || project?.label || "-")}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;font-weight:700">${escapeEmailHtml(getEmailUnitCode(unit))}</td>
+                  <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${escapeEmailHtml(getEmailUnitType(unit))}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px">${escapeEmailHtml(formatEmailRupiah(detail.struktur_atas))}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px">${escapeEmailHtml(formatEmailRupiah(detail.struktur_bawah))}</td>
                   <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;font-family:Consolas,monospace">${escapeEmailHtml(buildEmailProductionCode(unit))}</td>
@@ -2301,12 +2381,8 @@ const parseUploadForm = async (req) => {
   return request.formData();
 };
 
-const sanitizeStoragePath = (value) => String(value || "")
-  .replace(/\\/g, "/")
-  .split("/")
-  .filter(Boolean)
-  .map((part) => part.replace(/[^\w.-]+/g, "_"))
-  .join("/");
+const sanitizeStoragePath = normalizeStoragePath;
+const writableStoragePath = (value) => applyStoragePathPrefix(value, storagePathPrefix);
 
 const uploadInternalStorageFile = async (token, req) => {
   await requireSupabaseUser(token);
@@ -2315,7 +2391,7 @@ const uploadInternalStorageFile = async (token, req) => {
 
   const form = await parseUploadForm(req);
   const bucket = String(form.get("bucket") || "").trim();
-  const requestedPath = sanitizeStoragePath(form.get("path"));
+  const requestedPath = writableStoragePath(form.get("path"));
   const file = form.get("file");
   const upsert = String(form.get("upsert") || "false").toLowerCase() === "true";
 
@@ -2429,7 +2505,7 @@ const uploadProfileAvatar = async (token, req) => {
   }
 
   const extension = allowedTypes.get(file.type);
-  const filePath = `${user.id}/avatar_${Date.now()}_${randomUUID()}.${extension}`;
+  const filePath = writableStoragePath(`${user.id}/avatar_${Date.now()}_${randomUUID()}.${extension}`);
   const thumbnailPath = filePath.replace(/\.[^.]+$/, "_thumb.webp");
   const { error: bucketError } = await storageSupabase.storage.getBucket("avatars");
   if (bucketError) {
@@ -2633,7 +2709,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     if (!key) continue;
 
     const safeName = file.name.replace(/[^\w.-]+/g, "_");
-    const filePath = `lampiran_${suratId}/${Date.now()}_${randomBytes(4).toString("hex")}_${safeName}`;
+    const filePath = writableStoragePath(`lampiran_${suratId}/${Date.now()}_${randomBytes(4).toString("hex")}_${safeName}`);
     const buffer = Buffer.from(await file.arrayBuffer());
     const { error: uploadError } = await uploadStorageClient().storage.from("lampiran_surat").upload(filePath, buffer, {
       contentType: file.type || "application/octet-stream",
@@ -2755,6 +2831,208 @@ const getMarisonAccessToken = async (source, environment) => {
     expiresAt: Date.now() + (Number.isFinite(expiresInSeconds) ? expiresInSeconds : 900) * 1000,
   });
   return token;
+};
+
+const getMarisonProtectedJson = async (environment, endpointPath) => {
+  const config = getMarisonApiConfig(environment);
+  const token = await getMarisonAccessToken({ source_key: "employee_sync" }, environment);
+  const url = new URL(`${config.baseUrl}${endpointPath}`);
+  const timestamp = new Date().toISOString();
+  const bodyHash = sha256Hex(Buffer.alloc(0));
+  const canonical = ["GET", url.pathname, token, bodyHash, timestamp].join(":");
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Timestamp": timestamp,
+      "X-Signature": hmacSha512Hex(token, canonical),
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(payload?.message || `Gagal mengambil ${url.pathname} dari API Marison.`);
+    err.status = response.status;
+    throw err;
+  }
+  return payload;
+};
+
+const getAllMarisonCollection = async (environment, pathname) => {
+  const rows = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const payload = await getMarisonProtectedJson(
+      environment,
+      `${pathname}?per_page=100&page=${page}`
+    );
+    const pageRows = Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.data?.data)
+        ? payload.data.data
+        : [];
+    rows.push(...pageRows);
+    const totalPages = Number(payload?.meta?.total_pages || 1);
+    if (page >= totalPages || pageRows.length === 0) return rows;
+  }
+  const err = new Error(`Pagination ${pathname} melebihi batas aman.`);
+  err.status = 502;
+  throw err;
+};
+
+const getMarisonEmployeeSyncSource = async () => {
+  const branches = await getAllMarisonCollection("staging", "/branches");
+  const employees = await getAllMarisonCollection("staging", "/employees");
+  return { employees, branches };
+};
+
+const getMarisonBranchSyncSource = async () => (
+  getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")
+);
+
+const assertMarisonBranchSyncAvailable = () => {
+  if (!supabase || !serviceRoleKey) {
+    const err = new Error("Service role environment ini belum dikonfigurasi.");
+    err.status = 500;
+    throw err;
+  }
+};
+
+const previewMarisonBranches = async (req) => {
+  await requireAdminUser(getBearerToken(req));
+  assertMarisonBranchSyncAvailable();
+  const branches = await getMarisonBranchSyncSource();
+  return previewMarisonBranchSync({
+    supabase,
+    branches,
+    environment: marisonDeploymentEnvironment,
+  });
+};
+
+const syncMarisonBranches = async (req) => {
+  assertSameOrigin(req);
+  const user = await requireAdminUser(getBearerToken(req));
+  assertMarisonBranchSyncAvailable();
+  const payload = await readJsonBody(req, 4096);
+  if (payload?.confirm !== true) {
+    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
+    err.status = 400;
+    throw err;
+  }
+  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight) {
+    const err = new Error("Sinkronisasi data external sedang berjalan.");
+    err.status = 409;
+    throw err;
+  }
+  marisonBranchSyncInFlight = true;
+  try {
+    const branches = await getMarisonBranchSyncSource();
+    return await runTrackedMarisonSync({
+      supabase,
+      environment: marisonDeploymentEnvironment,
+      triggerType: "manual",
+      scope: "branches",
+      initiatedBy: user.id,
+      operation: () => executeMarisonBranchSync({
+        supabase,
+        branches,
+        environment: marisonDeploymentEnvironment,
+      }),
+    });
+  } finally {
+    marisonBranchSyncInFlight = false;
+  }
+};
+
+const assertMarisonEmployeeSyncAvailable = () => {
+  if (marisonDeploymentEnvironment !== "staging") {
+    const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
+    err.status = 403;
+    throw err;
+  }
+  if (!supabase || !serviceRoleKey) {
+    const err = new Error("Service role staging belum dikonfigurasi.");
+    err.status = 500;
+    throw err;
+  }
+};
+
+const previewMarisonEmployees = async (req) => {
+  await requireAdminUser(getBearerToken(req));
+  assertMarisonEmployeeSyncAvailable();
+  const source = await getMarisonEmployeeSyncSource();
+  return previewMarisonEmployeeSync({ supabase, ...source });
+};
+
+const syncMarisonEmployees = async (req) => {
+  assertSameOrigin(req);
+  const user = await requireAdminUser(getBearerToken(req));
+  assertMarisonEmployeeSyncAvailable();
+  const payload = await readJsonBody(req, 4096);
+  if (payload?.confirm !== true) {
+    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
+    err.status = 400;
+    throw err;
+  }
+  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight) {
+    const err = new Error("Sinkronisasi data external sedang berjalan.");
+    err.status = 409;
+    throw err;
+  }
+  marisonEmployeeSyncInFlight = true;
+  try {
+    const source = await getMarisonEmployeeSyncSource();
+    return await runTrackedMarisonSync({
+      supabase,
+      environment: marisonDeploymentEnvironment,
+      triggerType: "manual",
+      scope: "directory",
+      initiatedBy: user.id,
+      operation: () => executeMarisonEmployeeSync({
+        supabase,
+        ...source,
+        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+      }),
+    });
+  } finally {
+    marisonEmployeeSyncInFlight = false;
+  }
+};
+
+const syncMarisonDirectoryFromCron = async (req) => {
+  assertMarisonEmployeeSyncAvailable();
+  if (marisonSyncCronToken.length < 32) {
+    const err = new Error("Token cron sinkronisasi belum dikonfigurasi.");
+    err.status = 503;
+    throw err;
+  }
+  const suppliedToken = String(req.headers["x-internal-sync-token"] || "");
+  if (!suppliedToken || sha256Hex(suppliedToken) !== sha256Hex(marisonSyncCronToken)) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight) {
+    const err = new Error("Sinkronisasi data external sedang berjalan.");
+    err.status = 409;
+    throw err;
+  }
+  marisonEmployeeSyncInFlight = true;
+  try {
+    const source = await getMarisonEmployeeSyncSource();
+    return await runTrackedMarisonSync({
+      supabase,
+      environment: marisonDeploymentEnvironment,
+      triggerType: "cron",
+      scope: "directory",
+      operation: () => executeMarisonEmployeeSync({
+        supabase,
+        ...source,
+        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+      }),
+    });
+  } finally {
+    marisonEmployeeSyncInFlight = false;
+  }
 };
 
 const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) => {
@@ -2926,7 +3204,14 @@ const canReadSurat = async (surat, userId) => {
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
 
 const storageClientForRef = (ref) => {
-  if (ref?.origin === "external" && storageSupabase) return storageSupabase;
+  if (ref?.origin === "external" && storageSupabase) {
+    if (!isStoragePathWithinPrefix(ref.path, storagePathPrefix)) {
+      const err = new Error("Akses file lintas environment ditolak.");
+      err.status = 403;
+      throw err;
+    }
+    return storageSupabase;
+  }
   return supabase;
 };
 
@@ -2990,6 +3275,16 @@ const parseExternalMoney = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const normalizeExternalDate = (value) => {
+  const text = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
+  if (!match) return text;
+  const [, day, month, rawYear] = match;
+  const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+};
+
 const requireExternalInteger = (value, label) => {
   const parsed = parseExternalInteger(value);
   if (parsed !== null) return parsed;
@@ -3028,6 +3323,33 @@ const externalBranchIdFrom = (...values) => {
     if (parsed !== null) return parsed;
   }
   return null;
+};
+
+const getMarisonLocation = (surat) => {
+  const snapshot = asPlainRecord(surat?.data_snapshot);
+  const snapshotLocation = asPlainRecord(snapshot.location);
+  const location = asPlainRecord(surat?.location_snapshot);
+  return {
+    entity: asPlainRecord(location.entity || snapshotLocation.entity),
+    office: asPlainRecord(location.office || snapshotLocation.office),
+    project: asPlainRecord(location.project || snapshotLocation.project),
+    department: asPlainRecord(location.department || snapshotLocation.department),
+  };
+};
+
+const resolveMarisonBranchId = async (surat, ...values) => {
+  const snapshotBranchId = externalBranchIdFrom(...values);
+  if (snapshotBranchId !== null) return snapshotBranchId;
+
+  const officeId = firstString(surat?.office_id, surat?.location_snapshot?.office?.id);
+  if (!officeId) return null;
+  const { data, error } = await supabase
+    .from("master_offices")
+    .select("marison_branch_id")
+    .eq("id", officeId)
+    .maybeSingle();
+  if (error) throw error;
+  return parseExternalInteger(data?.marison_branch_id);
 };
 
 const getMarisonDispatchInput = (surat) => {
@@ -3074,13 +3396,13 @@ const buildMarisonApprovals = (surat) => {
     .map((signature) => {
       const profile = asPlainRecord(signature.profiles);
       const signerSnapshot = asPlainRecord(signature.signer_snapshot);
-      const nik = firstString(profile.nik, signerSnapshot.nik, signature.nik);
+      const nik = marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik);
       return {
         role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
         nik,
         action: "approved",
         actioned_at: new Date(signature.signed_at).toISOString(),
-        notes: firstString(signature.note, signature.notes),
+        notes: firstString(signature.catatan, signature.note, signature.notes),
       };
     })
     .filter((approval) => approval.nik);
@@ -3094,22 +3416,25 @@ const buildMarisonApprovals = (surat) => {
 };
 
 const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
-  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
-  if (!appUrl) return [];
-  const rows = asArrayValue(surat?.surat_attachments);
+  const rows = [
+    ...(surat?.pdf_path || surat?.file_path
+      ? [{ file_url: surat.pdf_path || surat.file_path, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
+      : []),
+    ...asArrayValue(surat?.surat_attachments),
+  ];
   const links = [];
+  const seen = new Set();
   for (const [index, attachment] of rows.entries()) {
     if (!attachment?.file_url) continue;
-    const tokenPath = await buildEmailFileLink(
-      surat.id,
-      attachment.file_url,
-      { link_ttl_hours: Number(process.env.MARISON_FILE_LINK_TTL_HOURS || 168) },
-      actorId
-    );
-    if (tokenPath) {
+    const ref = parseStorageRef(attachment.file_url);
+    const key = storageRefKey(ref);
+    if (!ref || seen.has(key)) continue;
+    seen.add(key);
+    const link = await buildPersistentMarisonFileLink(surat, attachment.file_url, actorId);
+    if (link) {
       links.push({
-        name: firstString(attachment.file_name, attachment.requirement_label, `Lampiran ${index + 1}`),
-        link: `${appUrl}${tokenPath}`,
+        name: firstString(attachment.requirement_label, attachment.file_name, `Lampiran ${index + 1}`),
+        link,
       });
     }
   }
@@ -3124,14 +3449,27 @@ const buildMarisonUnitPayload = async (surat, input, actorId) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
     const detail = asPlainRecord(record.allocation_detail);
+    const productionSerial = firstString(detail.production_serial, detail.kode_produksi_nomor).padStart(3, "0");
+    const productionBlock = firstString(detail.production_block, detail.kode_produksi_blok);
+    const productionDate = normalizeExternalDate(firstString(detail.production_date, detail.kode_produksi_tanggal));
     const productionCode = buildProductionCode({
-      serial: detail.production_serial || detail.kode_produksi_nomor,
-      block: detail.production_block || detail.kode_produksi_blok,
-      date: detail.production_date || detail.kode_produksi_tanggal,
+      serial: productionSerial,
+      block: productionBlock,
+      date: productionDate,
     }) || firstString(raw.production_code, record.production_code);
     return {
       unit_id: requireExternalInteger(externalIdFrom(record), `Unit ID baris ${index + 1}`),
       production_code: productionCode,
+      type: firstString(
+        raw.type,
+        raw.unit_type,
+        raw.tipe,
+        record.type,
+        record.unit_type,
+        detail.unit_type,
+        detail.type,
+        detail.tipe
+      ),
       addendum_atas_label: "Struktur Atas",
       addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
       addendum_bawah_label: "Struktur Bawah",
@@ -3144,24 +3482,102 @@ const buildMarisonUnitPayload = async (surat, input, actorId) => {
     err.status = 422;
     throw err;
   }
+  const payload = {
+    submission_number: surat.no_surat,
+    project_id: projectId,
+    branch_id: branchId,
+    submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+    submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
+    units,
+    attachments: await buildMarisonAttachmentLinks(surat, actorId),
+    approvals: buildMarisonApprovals(surat),
+  };
   return {
     endpoint: "/unit-submissions",
     kind: "unit",
-    payload: {
-      submission_number: surat.no_surat,
-      project_id: projectId,
-      branch_id: branchId,
-      submitted_by: firstString(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
-      submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
-      type: firstString(input.submission_type, "planning"),
-      units,
-      attachments: await buildMarisonAttachmentLinks(surat, actorId),
-      approvals: buildMarisonApprovals(surat),
-    },
+    contractVersion: MARISON_OUTBOUND_CONTRACT_VERSION,
+    payload: assertMarisonOutboundContract("unit", payload),
   };
 };
 
 const normalizeMarisonItems = (input) => asArrayValue(input.items).filter((item) => item && typeof item === "object");
+
+const getMarisonRecommendationRows = (surat, input, recommendationDocument) => {
+  const snapshot = asPlainRecord(surat?.data_snapshot);
+  const childInput = asPlainRecord(recommendationDocument?.form_input_data);
+  const candidates = [
+    input.recommendation_decisions,
+    snapshot.recommendation_decisions,
+    childInput.recommendation_items,
+  ];
+  return candidates.map(asArrayValue).find((rows) => rows.length > 0) || [];
+};
+
+const findMarisonRecommendationRow = (rows, item, index) => {
+  const itemName = firstString(item.nama_barang, item.item_name, item.nama, item.barang).toLowerCase();
+  return rows.find((candidate) => {
+    const record = asPlainRecord(candidate);
+    const parentIndex = Number(record.parent_item_index || record.item_number || record.no || 0);
+    const parentName = firstString(record.parent_item_name, record.nama_barang).toLowerCase();
+    return parentIndex === index + 1 || (itemName && parentName === itemName);
+  }) || null;
+};
+
+const getMarisonRecommendationDocument = async (parentSuratId) => {
+  const { data: link, error: linkError } = await supabase
+    .from("surat_linked_documents")
+    .select("child_surat_id")
+    .eq("parent_surat_id", parentSuratId)
+    .eq("link_type", "recommendation")
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (linkError) throw linkError;
+  if (!link?.child_surat_id) return null;
+
+  const { data: child, error: childError } = await supabase
+    .from("surat_registrasi")
+    .select(`
+      id, no_surat, judul_surat, status, file_path, pdf_path, form_input_data,
+      surat_signatures (
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
+        profiles:user_id ( id, full_name, nik, job_title )
+      ),
+      surat_attachments ( id, file_url, file_name, file_type, file_size, requirement_key, requirement_label )
+    `)
+    .eq("id", link.child_surat_id)
+    .maybeSingle();
+  if (childError) throw childError;
+  return child || null;
+};
+
+const buildMarisonRecommendationItemAttachment = async (document, recommendation, actorId) => {
+  const attachment = asPlainRecord(recommendation?.recommendation_attachment);
+  const rawPath = firstString(
+    attachment.file_url,
+    recommendation?.recommendation_attachment_url
+  );
+  if (!document || !rawPath) return [];
+  const link = await buildPersistentMarisonFileLink(document, rawPath, actorId);
+  if (!link) return [];
+  return [{
+    name: firstString(attachment.file_name, recommendation?.recommendation_attachment_file_name, "Lampiran rekomendasi"),
+    link,
+  }];
+};
+
+const normalizeMarisonEmbeddedLinks = (value) => asArrayValue(value)
+  .map((attachment, index) => {
+    const record = asPlainRecord(attachment);
+    const link = firstString(record.link, record.url);
+    if (!/^https:\/\//i.test(link)) return null;
+    return {
+      name: firstString(record.name, record.title, record.file_name, `Lampiran item ${index + 1}`),
+      link,
+    };
+  })
+  .filter(Boolean);
 
 const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
@@ -3188,42 +3604,100 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
   return {
     endpoint: "/non-unit-submissions",
     kind: "non_unit",
-    payload: {
+    contractVersion: MARISON_OUTBOUND_CONTRACT_VERSION,
+    payload: assertMarisonOutboundContract("non_unit", {
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
-      submitted_by: firstString(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+      submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),
       items,
       attachments: await buildMarisonAttachmentLinks(surat, actorId),
       approvals: buildMarisonApprovals(surat),
-    },
+    }),
   };
 };
 
-const buildMarisonAssetPayload = async (surat, input) => {
+const buildMarisonAssetPayload = async (surat, input, actorId) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
   const branchId = requireExternalInteger(
-    externalBranchIdFrom(requestedProject, input, surat.location_snapshot),
+    await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot),
     "Branch ID"
   );
   const items = normalizeMarisonItems(input);
-  const assetName = firstString(
-    items.map((item) => firstString(item.nama_barang, item.item_name, item.nama, item.barang)).filter(Boolean).join(", "),
-    surat.judul_surat
-  );
+  if (items.length === 0) {
+    const err = new Error("Item aset belum tersedia untuk dikirim.");
+    err.status = 422;
+    throw err;
+  }
+
+  const recommendationDocument = await getMarisonRecommendationDocument(surat.id);
+  const recommendationRows = getMarisonRecommendationRows(surat, input, recommendationDocument);
+  const payloadItems = await Promise.all(items.map(async (item, index) => {
+    const record = asPlainRecord(item);
+    const recommendation = asPlainRecord(findMarisonRecommendationRow(recommendationRows, record, index));
+    const embeddedAttachments = normalizeMarisonEmbeddedLinks(record.attachments);
+    const recommendationAttachments = await buildMarisonRecommendationItemAttachment(
+      recommendationDocument,
+      recommendation,
+      actorId
+    );
+    const quantity = requireExternalInteger(
+      record.jumlah ?? record.quantity,
+      `Jumlah aset baris ${index + 1}`
+    );
+    const estimatedPrice = parseExternalMoney(
+      record.estimated_price ??
+      record.harga_perkiraan ??
+      record.perkiraan_harga ??
+      record.harga ??
+      record.nominal ??
+      record.nilai
+    );
+    return {
+      request_number: firstString(
+        record.request_number,
+        record.no_pengajuan,
+        record.nomor_pengajuan,
+        items.length === 1 ? surat.no_surat : `${surat.no_surat}-${String(index + 1).padStart(2, "0")}`
+      ),
+      asset_name: firstString(record.nama_barang, record.item_name, record.nama, record.barang),
+      quantity,
+      ...(estimatedPrice > 0 ? { estimated_price: estimatedPrice } : {}),
+      description: firstString(record.keterangan, record.description),
+      attachments: [...embeddedAttachments, ...recommendationAttachments],
+    };
+  }));
+
+  if (recommendationDocument) {
+    const recommendationLinks = await buildMarisonAttachmentLinks(recommendationDocument, actorId);
+    const documentLink = recommendationLinks.find((item) => item.name === "Dokumen pengajuan")?.link ||
+      recommendationLinks[0]?.link || "";
+    if (documentLink) {
+      payloadItems.forEach((item) => {
+        if (!item.attachments.some((attachment) => attachment.link === documentLink)) {
+          item.attachments.push({ name: "Dokumen Rekomendasi Aset", link: documentLink });
+        }
+      });
+    }
+  }
+
+  const location = getMarisonLocation(surat);
+  const payload = {
+    branch_id: branchId,
+    category: firstString(location.office.kedudukan, location.office.position).toLowerCase() === "pusat"
+      ? "Pengajuan Pusat"
+      : "Pengajuan Cabang",
+    description: firstString(input.catatan, surat.judul_surat),
+    items: payloadItems,
+    approvals: buildMarisonApprovals(surat),
+  };
   return {
     endpoint: "/asset-purchase-requests",
     kind: "asset",
-    payload: {
-      request_number: surat.no_surat,
-      branch_id: branchId,
-      category: surat.location_snapshot?.office?.kedudukan === "Pusat" ? "Pengajuan Pusat" : "Pengajuan Cabang",
-      asset_name: assetName,
-      description: firstString(input.catatan, surat.judul_surat),
-      approvals: buildMarisonApprovals(surat),
-    },
+    contractVersion: MARISON_OUTBOUND_CONTRACT_VERSION,
+    payload: assertMarisonOutboundContract("asset", payload),
   };
 };
 
@@ -3232,7 +3706,7 @@ const buildMarisonDispatchPayload = async (surat, actorId) => {
   const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
   if (category === "unit") return buildMarisonUnitPayload(surat, input, actorId);
   if (category === "non_unit" || category === "nonunit") return buildMarisonNonUnitPayload(surat, input, actorId);
-  if (category === "asset") return buildMarisonAssetPayload(surat, input);
+  if (category === "asset") return buildMarisonAssetPayload(surat, input, actorId);
   const err = new Error(`Kategori ${category || "-"} belum memiliki endpoint outbound Marison.`);
   err.status = 422;
   throw err;
@@ -3274,10 +3748,10 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
   const { data: surat, error } = await supabase
     .from("surat_registrasi")
     .select(`
-      id, no_surat, judul_surat, status, current_step, created_at, created_by,
+      id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
       office_id, project_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
       surat_signatures (
-        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, note, signer_snapshot,
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
         profiles:user_id ( id, full_name, nik, job_title )
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
@@ -3295,25 +3769,35 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
     err.status = 403;
     throw err;
   }
-  if (String(surat.status || "").toUpperCase() !== "SELESAI") {
+  if (!["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
     return { skipped: true, reason: "Surat belum selesai ditandatangani." };
   }
 
   const snapshot = asPlainRecord(surat.data_snapshot);
+  const dispatchInput = getMarisonDispatchInput(surat);
+  if (
+    String(dispatchInput.linked_document_type || "").toLowerCase() === "recommendation" ||
+    dispatchInput.linked_parent_surat_id
+  ) {
+    return { skipped: true, reason: "Dokumen rekomendasi mengikuti pengajuan induk dan tidak dikirim sebagai pengajuan aset." };
+  }
   const previous = asPlainRecord(snapshot.marison_dispatch);
   if (previous.status === "success" && previous.environment === marisonDeploymentEnvironment) {
     return { skipped: true, alreadySent: true, dispatch: previous };
   }
 
   const startedAt = new Date().toISOString();
+  let dispatch = null;
   try {
-    const dispatch = await buildMarisonDispatchPayload(surat, actor.id);
+    dispatch = await buildMarisonDispatchPayload(surat, actor.id);
     const response = await postMarisonProtectedJson(marisonDeploymentEnvironment, dispatch.endpoint, dispatch.payload);
     const nextDispatch = {
       status: "success",
       environment: marisonDeploymentEnvironment,
       kind: dispatch.kind,
       endpoint: dispatch.endpoint,
+      contract_version: dispatch.contractVersion || "legacy",
+      payload_hash: sha256Hex(Buffer.from(JSON.stringify(dispatch.payload))),
       sent_at: new Date().toISOString(),
       requested_at: startedAt,
       response: response?.data || response,
@@ -3327,6 +3811,9 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
     const nextDispatch = {
       status: "failed",
       environment: marisonDeploymentEnvironment,
+      kind: dispatch?.kind || null,
+      endpoint: dispatch?.endpoint || null,
+      contract_version: dispatch?.contractVersion || null,
       requested_at: startedAt,
       failed_at: new Date().toISOString(),
       error: error?.message || "Gagal mengirim data ke Marison.",
@@ -3571,7 +4058,12 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  const { data, error } = await storageClientForRef({ origin: tokenData.storage_origin }).storage.from(tokenData.bucket).download(tokenData.object_path);
+  const tokenStorageRef = {
+    origin: tokenData.storage_origin,
+    bucket: tokenData.bucket,
+    path: tokenData.object_path,
+  };
+  const { data, error } = await storageClientForRef(tokenStorageRef).storage.from(tokenData.bucket).download(tokenData.object_path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan");
     err.status = 404;
@@ -3671,7 +4163,13 @@ export const handleRequest = async (req, res) => {
       const token = getBearerToken(req);
       await requireSupabaseUser(token);
       const filePath = sanitizeStoragePath(url.searchParams.get("path"));
-      if (!/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+$/i.test(filePath)) {
+      let relativePath;
+      try {
+        relativePath = removeStoragePathPrefix(filePath, storagePathPrefix);
+      } catch {
+        relativePath = "";
+      }
+      if (!/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+$/i.test(relativePath)) {
         return sendJson(res, 400, { error: "Path foto profil tidak valid." });
       }
       const wantsThumbnail = String(req.headers["sec-fetch-dest"] || "").toLowerCase() === "image";
@@ -3819,6 +4317,31 @@ export const handleRequest = async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/test") {
         const result = await testMarisonEnvironment(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/integrations/marison/employees/preview") {
+        const result = await previewMarisonEmployees(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/integrations/marison/branches/preview") {
+        const result = await previewMarisonBranches(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/branches/sync") {
+        const result = await syncMarisonBranches(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/employees/sync") {
+        const result = await syncMarisonEmployees(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/internal/marison/directory-sync") {
+        const result = await syncMarisonDirectoryFromCron(req);
         return sendJson(res, 200, result);
       }
 

@@ -54,6 +54,21 @@ const getUnitLabel = (unit: AllocationUnit) => {
   return formatSummaryValue(unit.label || unit.value || unit.code || unit.name || raw.code || raw.name);
 };
 
+const getUnitType = (unit: AllocationUnit) => {
+  const raw = asRecord(unit.raw);
+  const detail = asRecord(unit.allocation_detail);
+  return formatSummaryValue(
+    detail.unit_type ||
+    detail.type ||
+    detail.tipe ||
+    raw.unit_type ||
+    raw.type ||
+    raw.tipe ||
+    raw.house_type ||
+    "-",
+  );
+};
+
 const getProjectLabel = (project: unknown) => {
   const record = asRecord(project);
   return formatSummaryValue(record.name || record.label || record.code || project);
@@ -117,12 +132,13 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
             Kode Produksi Unit
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-xs">
+            <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="bg-muted/20 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-center">No.</th>
                   <th className="px-3 py-2">Proyek</th>
                   <th className="px-3 py-2">Unit</th>
+                  <th className="px-3 py-2">Tipe</th>
                   <th className="px-3 py-2">Kode Produksi</th>
                 </tr>
               </thead>
@@ -134,6 +150,7 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
                       <td className="px-3 py-2 text-center tabular-nums">{index + 1}</td>
                       <td className="px-3 py-2">{projectLabel}</td>
                       <td className="px-3 py-2 font-semibold">{getUnitLabel(unit)}</td>
+                      <td className="px-3 py-2">{getUnitType(unit)}</td>
                       <td className="px-3 py-2 font-mono">{getProductionCode(detail) || "-"}</td>
                     </tr>
                   );
@@ -148,11 +165,12 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
             Rekap Adendum Unit
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-xs">
+            <table className="w-full min-w-[660px] text-left text-xs">
               <thead className="bg-muted/20 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-center">No.</th>
                   <th className="px-3 py-2">Kavling</th>
+                  <th className="px-3 py-2">Tipe</th>
                   <th className="px-3 py-2 text-right">Struktur Atas</th>
                   <th className="px-3 py-2 text-right">Struktur Bawah</th>
                   {!compact && <th className="px-3 py-2 text-right">Nominal</th>}
@@ -168,6 +186,7 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
                     <tr key={`${getUnitLabel(unit)}-adendum-${index}`} className="border-t border-border">
                       <td className="px-3 py-2 text-center tabular-nums">{index + 1}</td>
                       <td className="px-3 py-2 font-semibold">{getUnitLabel(unit)}</td>
+                      <td className="px-3 py-2">{getUnitType(unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatMoney(detail.struktur_atas)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatMoney(detail.struktur_bawah)}</td>
                       {!compact && <td className="px-3 py-2 text-right font-semibold tabular-nums">{total > 0 ? total.toLocaleString("id-ID") : "-"}</td>}
@@ -177,7 +196,7 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
               </tbody>
               <tfoot>
                 <tr className="border-t border-border bg-muted/30 font-semibold text-foreground">
-                  <td className="px-3 py-2 text-center" colSpan={2}>Total</td>
+                  <td className="px-3 py-2 text-center" colSpan={3}>Total</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(adendumTotals.atas)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(adendumTotals.bawah)}</td>
                   {!compact && (

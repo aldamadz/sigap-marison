@@ -234,6 +234,8 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Deteksi dokumen rekomendasi tertaut dilakukan dari parameter URL sejak render pertama, sehingga halaman tidak sempat menampilkan pilihan registrasi biasa saat draft rekomendasi sedang dipulihkan.
 - Jika link rekomendasi lama masih membuka `/surat/registrasi?linked_type=recommendation`, aplikasi mengarahkannya ke `/surat/rekomendasi/registrasi` dengan parameter yang sama.
 - Draft aktif dapat dilanjutkan melalui URL `?draft=<draftId>`; jika hanya ada satu draft, halaman membukanya otomatis, sedangkan beberapa draft ditampilkan sebagai pilihan.
+- Saat draft dibuka kembali, alur penandatangan direkonsiliasi dengan konfigurasi Kegunaan Form aktif. Pilihan signer pada tahap yang ID-nya masih sama dipertahankan, tahap baru ditambahkan, dan tahap yang sudah dihapus tidak digunakan lagi.
+- Perubahan matrix hanya diterapkan pada draft yang belum didaftarkan. Surat yang sudah terdaftar tetap memakai snapshot alur saat pendaftaran agar histori persetujuan tidak berubah.
 - Lampiran yang dipilih setelah nomor dipesan langsung diunggah dan dikaitkan ke draft. Saat draft dibuka kembali, file tetap tersedia dan digunakan pada registrasi final tanpa unggah ulang.
 - Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
 - User mengisi detail template berdasarkan Master Form.
@@ -390,6 +392,9 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Setelah approval selesai, dokumen berstatus `DONE`.
 - Pada deployment staging, surat yang sudah selesai ditandatangani dikirim otomatis dari server SIGAP ke API Marison staging untuk kategori `Aset`, `Unit`, dan `Non Unit`.
 - Payload outbound memakai nomor surat, data pengajuan, item/unit yang dipilih, lampiran bertautan token, serta riwayat approval berisi role, NIK, waktu, dan catatan.
+- Selama pengujian integrasi staging, seluruh NIK pemohon dan penandatangan pada payload outbound dapat diganti dengan satu NIK karyawan external yang valid melalui konfigurasi server. Override ini tidak mengubah NIK profil SIGAP dan selalu diabaikan pada production.
+- Kontrak outbound Aset dan Unit v1 memakai fixture kanonis di `docs/contracts/marison/v1` dan divalidasi secara strict sebelum request dikirim.
+- Perubahan nama field, tipe data, atau struktur payload harus melalui versi kontrak baru dan koordinasi vendor; server tidak menyediakan dua bentuk payload untuk endpoint yang sama.
 - Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
 - Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
@@ -399,6 +404,10 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Data hanya dapat dibaca oleh pembuat, penandatangan terkait, admin, atau external client resmi.
 - Integrasi downstream berjalan dari server, memakai access token dan HMAC API Marison, serta tidak pernah mengirim `client_secret` ke browser.
 - Integrasi downstream bersifat idempoten melalui `data_snapshot.marison_dispatch`; surat yang sudah sukses dikirim tidak dikirim ulang otomatis.
+- Kontrak baru tidak boleh diaktifkan pada staging sebelum OpenAPI vendor dan contract test bersama menyatakan struktur payload yang sama.
+- Branch eksternal dipetakan ke `master_offices.marison_branch_id`; payload Aset memakai mapping ini ketika snapshot surat belum membawa ID branch numerik.
+- Master Kantor Cabang adalah mirror read-only dari endpoint `GET /branches` Marison External API. Admin dapat memeriksa dan menjalankan sinkronisasi dari halaman master, tetapi tidak dapat membuat, mengubah, atau menghapus kantor langsung dari SIGAP.
+- Sinkronisasi mempertahankan UUID `master_offices` agar seluruh relasi SIGAP tetap valid, lalu memperbarui nama, kode, kedudukan, ID branch, kode branch, dan waktu sinkron berdasarkan data external.
 
 ## 12. Notifikasi dan Realtime
 
@@ -858,6 +867,10 @@ Fallback data lama:
 - Error akses harus tampil di UI.
 - Storage transaksi surat wajib menggunakan Supabase Storage self-hosted.
 - Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
+- Production dan staging memakai layanan storage self-hosted yang sama agar pengelolaan bucket terpusat. Production mempertahankan path utama, sedangkan seluruh write staging dipaksa masuk ke namespace `staging/`.
+- BFF dan PDF worker menolak akses storage staging ke object path di luar namespace `staging/`. Service-role bersama tetap harus diperlakukan sebagai credential sensitif karena namespace aplikasi bukan pengganti pembatasan credential di tingkat storage.
+- Validasi namespace saat membuka dokumen atau lampiran memakai `bucket` dan object path aktual dari token file. Token yang sah tidak boleh ditolak hanya karena pemeriksaan origin tidak membawa path objek.
+- Referensi file staging yang dibuat sebelum namespace `staging/` diterapkan dimigrasikan secara idempotent ke path baru. Migrasi menyalin objek terlebih dahulu, memperbarui referensi database setelah salinan tersedia, dan tidak menghapus objek sumber.
 
 ## 30. Operasional, Deployment, dan Worker
 
@@ -867,12 +880,16 @@ Fallback data lama:
 - Deployment staging selalu memakai datasource Marison staging, sedangkan deployment production selalu memakai datasource Marison production.
 - Domain production adalah `https://sigap.marisoncloud.com`; DNS Cloudflare berupa proxied `A` record ke origin publik, lalu Caddy meneruskan request ke container production pada `10.10.10.246:3010`.
 - Domain staging adalah `https://sigap.marison-testing.biz.id` dan tetap melalui Cloudflare Tunnel ke container staging pada port host `3011`.
-- Staging memakai project Supabase, Auth, database, bucket storage, dan PDF worker tersendiri; data transaksi production tidak disalin.
+- Staging memakai project Supabase, Auth, database, dan PDF worker tersendiri. Layanan storage fisiknya dipakai bersama production, tetapi object path staging dipisahkan dengan prefix `staging/`; data transaksi production tidak disalin ke database staging.
 - Master/config staging disalin dari production, sedangkan kandidat user dimasking agar matrix dapat diuji tanpa menyalin PII production.
 - `npm run dev` membaca `.env.local`, menjalankan Vite pada port `8080` dan BFF lokal pada port `3010`, serta tetap memakai Supabase dan datasource Marison staging.
 - Request `/api` dari Vite diproxy ke BFF lokal tanpa mengubah Host header agar validasi same-origin dan cookie HttpOnly bekerja sama seperti deployment.
 - Environment Marison dikunci melalui `MARISON_DEPLOYMENT_ENVIRONMENT` pada Docker Compose dan tidak dapat diganti dari UI atau nilai database.
-- Halaman Integrasi Marison hanya menampilkan status endpoint aktif dan tes koneksi Projects, Unit, serta Non Unit untuk admin.
+- Panel Integrasi Marison berada di `Konfigurasi > Kegunaan Form`, menampilkan status endpoint aktif dan tes koneksi Projects, Unit, serta Non Unit untuk admin.
+- Khusus staging, admin dapat memeriksa lalu menyinkronkan data `/branches` dan `/employees` dari panel Kegunaan Form tanpa mengirim credential external ke browser.
+- Jalur sinkron manual tersebut disiapkan sebagai dasar cronjob harian malam atau mingguan, tetapi scheduler belum diaktifkan otomatis sampai hasil staging dan aturan mapping disetujui.
+- Sinkronisasi mempertahankan UUID, role, jabatan, departemen, dan kantor profil lama; NIK dinormalisasi dari sumber external, akun baru memakai role `user`, dan email login memakai pola `nama.lengkap@staging.test`.
+- Employee tanpa NIK atau NIK yang ambigu diblokir dan dilaporkan pada preview; akun yang tidak ada pada response external tidak dinonaktifkan otomatis.
 - External API berjalan sebagai service terpisah.
 - PDF worker dapat dipisah di server lain.
 - Cloudflare Tunnel hanya dipakai oleh staging dan layanan testing lain; hostname production SIGAP tidak terdaftar pada ingress Tunnel.

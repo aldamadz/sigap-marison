@@ -47,35 +47,3 @@ export async function getOfficeWithDescendants(officeId: string): Promise<Master
   walk(officeId);
   return result;
 }
-
-/**
- * Tambah kantor baru
- */
-export async function createOffice(payload: {
-  name: string;
-  kedudukan?: string;
-  code?: string;
-  parent_id?: string | null;
-}) {
-  const { data, error } = await supabase
-    .from('master_offices')
-    .insert([payload])
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-/**
- * Hapus kantor
- */
-export async function deleteOffice(id: string) {
-  const { error } = await supabase
-    .from('master_offices')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
-  return true;
-}

@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { suratService } from "@/services/surat.service";
 
+// ExcelJS 4 types resolve Buffer through an older Node declaration while the
+// project uses generic Buffer types from Node 22. The runtime value is the same
+// binary Buffer; keep the compatibility cast at this fixture boundary.
 const onePixelPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64"
-);
+) as unknown as ExcelJS.Media["buffer"];
 
 describe("recommendation template compatibility", () => {
   it("replaces an in-cell image error with a regular embedded image", () => {

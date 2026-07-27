@@ -1,0 +1,29 @@
+{
+  "branch_id": 1,
+  "category": "Pengajuan Pusat",
+  "description": "Pengajuan pembelian aset untuk tim operasional",
+  "items": [
+    {
+      "request_number": "001/UAI/PBO.1/VII/2026",
+      "asset_name": "Komputer SET",
+      "quantity": 1,
+      "estimated_price": 15000000,
+      "description": "Kebutuhan pengembangan dan pengujian aplikasi",
+      "attachments": [
+        {
+          "name": "Spesifikasi Komputer SET",
+          "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-komputer-spesifikasi-001"
+        }
+      ]
+    }
+  ],
+  "approvals": [
+    {
+      "role": "Pimpinan Departemen",
+      "nik": "EMP-PBO-001",
+      "action": "approved",
+      "actioned_at": "2026-07-21T14:53:33+07:00",
+      "notes": "Kebutuhan departemen telah sesuai"
+    }
+  ]
+}
