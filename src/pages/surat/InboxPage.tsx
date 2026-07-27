@@ -79,6 +79,18 @@ const normalizeAllocationDetailForPersistence = (detail: Record<string, any> = {
   production_serial: normalizeProductionSerial(detail.production_serial),
 });
 
+const getInboxSurat = (item: any) => {
+  const surat = Array.isArray(item?.surat_registrasi)
+    ? item.surat_registrasi[0]
+    : item?.surat_registrasi;
+  return surat && typeof surat === "object" ? surat : null;
+};
+
+const displayText = (value: unknown, fallback = "-") => {
+  const formatted = formatSummaryValue(value);
+  return formatted === "-" ? fallback : formatted;
+};
+
 export default function InboxPage() {
   const queryClient = useQueryClient();
   const { refetch: refetchAttention } = useAttention();
@@ -1333,8 +1345,8 @@ const handleApprove = async (item: any) => {
           {cards.map(({ icon: Icon, label, value, detail }) => (
             <div key={label} className="min-w-0 rounded-lg border border-border bg-muted/10 p-3">
               <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Icon className="h-4 w-4" /><p className="text-xs font-semibold">{label}</p></div>
-              <p className="truncate text-sm font-semibold text-foreground" title={String(value)}>{value}</p>
-              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={String(detail)}>{detail}</p>
+              <p className="truncate text-sm font-semibold text-foreground" title={displayText(value)}>{displayText(value)}</p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={displayText(detail)}>{displayText(detail)}</p>
             </div>
           ))}
         </div>
@@ -1483,8 +1495,8 @@ const handleApprove = async (item: any) => {
           <div className="rounded-md border border-border p-3">
             <p className="mb-2 text-sm font-semibold">Proyek unit</p>
             <div className="rounded-md border border-border bg-muted/30 px-3 py-3">
-              <p className="text-sm font-semibold">{selectedProject?.name || selectedProject?.label || selectedProject?.code || "Proyek belum tersedia"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{selectedProject?.branch?.name || selectedProject?.branch || "Mengikuti pilihan pemohon"}</p>
+              <p className="text-sm font-semibold">{displayText(selectedProject?.name || selectedProject?.label || selectedProject?.code, "Proyek belum tersedia")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{displayText(selectedProject?.branch?.name || selectedProject?.branch, "Mengikuti pilihan pemohon")}</p>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">Proyek dikunci dari pengajuan pemohon. Jika proyek salah, buat pengajuan baru.</p>
           </div>
@@ -2118,7 +2130,7 @@ const handleApprove = async (item: any) => {
             const active = Number(signature.step_order) === Number(item.step_order);
             const rejected = signature.status === "REJECTED";
             const signer = signature.signer_snapshot?.full_name || signature.profiles?.full_name || "Belum ditentukan";
-            const label = signature.label_jabatan || signature.signer_snapshot?.job_title || signature.role_name;
+            const label = displayText(signature.label_jabatan || signature.signer_snapshot?.job_title || signature.role_name, "Tahap approval");
             const needsVerification = signature.verification_required === true;
             const verified = signature.verification_status === "verified";
             const verifier = Array.isArray(signature.verifier_snapshot)
@@ -2210,7 +2222,22 @@ const handleApprove = async (item: any) => {
   };
 
   const renderDocumentsPanel = (item: any) => {
-    const surat = item.surat_registrasi;
+    const surat = getInboxSurat(item);
+    if (!surat?.id) {
+      return (
+        <section className="sigap-panel border-amber-500/30">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold">Dokumen belum bisa dibuka</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Data surat pada antrean ini belum lengkap. Segarkan halaman atau hubungi admin jika tetap muncul.
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
     const attachments = getAttachments(surat);
     const recommendationFiles = getActiveRecommendationDocuments(linkedDocuments as LinkedSuratDocument[]);
     const documentKey = documentOperationKey.pdf(surat.id, "inbox");
@@ -2337,8 +2364,9 @@ const handleApprove = async (item: any) => {
     return <div className="flex min-h-[520px] flex-col items-center justify-center rounded-xl border border-dashed border-destructive/40 bg-destructive/5 p-8 text-center"><AlertTriangle className="mb-4 h-10 w-10 text-destructive" /><h1 className="text-lg font-semibold">Inbox gagal dimuat</h1><p className="mt-2 max-w-md text-sm text-muted-foreground">{(inboxError as Error).message || "Terjadi gangguan saat mengambil antrean."}</p><Button className="mt-5" onClick={() => refetchInbox()} disabled={isFetching}>{isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Coba lagi</Button></div>;
   }
 
+  const activeSurat = getInboxSurat(selectedItem);
   const activeKpi = selectedItem ? getKpiPresentation(selectedItem) : null;
-  const activeBlockers = selectedItem ? getApprovalBlockers(selectedItem) : [];
+  const activeBlockers = selectedItem && activeSurat ? getApprovalBlockers(selectedItem) : [];
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
@@ -2431,9 +2459,9 @@ const handleApprove = async (item: any) => {
 
       <div className="overflow-visible rounded-lg border border-border bg-card shadow-[var(--shadow-card)] lg:h-[calc(100vh-11rem)] lg:min-h-[640px] lg:overflow-hidden">
           <main className="min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden">
-          {selectedItem ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+          {selectedItem && activeSurat ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <div className="shrink-0 flex items-start gap-3 border-b border-border bg-card p-4 sm:p-5">
-              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{selectedItem.surat_registrasi.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{selectedItem.label_jabatan || selectedItem.role_name}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{selectedItem.surat_registrasi.judul_surat}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {new Date(selectedItem.surat_registrasi.created_at).toLocaleString("id-ID")}</p></div>
+              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => (noteRefs.current[selectedItem.id] = element)} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
@@ -2474,7 +2502,7 @@ const handleApprove = async (item: any) => {
                       Simpan & lanjutkan
                     </Button>
                   </div>
-                ) : String(selectedItem.surat_registrasi?.status || "").toUpperCase() === "MENUNGGU_PERBAIKAN" ? (
+                ) : String(activeSurat.status || "").toUpperCase() === "MENUNGGU_PERBAIKAN" ? (
                   <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:justify-end">
                     <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
                       {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
@@ -2518,7 +2546,19 @@ const handleApprove = async (item: any) => {
                 )}
               </div>
             </div>
-          </div> : <div className="flex h-full min-h-[640px] flex-col items-center justify-center p-8 text-center lg:min-h-0"><ShieldCheck className="mb-4 h-10 w-10 text-muted-foreground" /><h2 className="text-lg font-semibold">Tidak ada pengajuan dipilih</h2><p className="mt-2 text-sm text-muted-foreground">Pilih pengajuan dari antrean.</p></div>}
+          </div> : selectedItem ? (
+            <div className="flex h-full min-h-[640px] flex-col items-center justify-center p-8 text-center lg:min-h-0">
+              <AlertTriangle className="mb-4 h-10 w-10 text-amber-600" />
+              <h2 className="text-lg font-semibold">Data antrean belum lengkap</h2>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Antrean ini ada, tetapi detail suratnya belum ikut terbaca. Coba segarkan halaman. Jika masih sama, admin perlu mengecek akses data surat terkait.
+              </p>
+              <Button className="mt-5" onClick={() => refetchInbox()} disabled={isFetching}>
+                {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Segarkan
+              </Button>
+            </div>
+          ) : <div className="flex h-full min-h-[640px] flex-col items-center justify-center p-8 text-center lg:min-h-0"><ShieldCheck className="mb-4 h-10 w-10 text-muted-foreground" /><h2 className="text-lg font-semibold">Tidak ada pengajuan dipilih</h2><p className="mt-2 text-sm text-muted-foreground">Pilih pengajuan dari antrean.</p></div>}
         </main>
       </div>
       <Dialog open={Boolean(revisionDialogItem)} onOpenChange={(open) => { if (!open && !processingId) setRevisionDialogItem(null); }}>
