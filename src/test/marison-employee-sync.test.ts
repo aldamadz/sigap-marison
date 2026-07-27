@@ -163,7 +163,7 @@ describe("Marison employee sync", () => {
   });
 
   it("keeps Master Kantor editable while syncing mapping through the server", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const page = read("src/pages/admin/OfficeManagementPage.tsx");
     const migration = read("supabase/migrations/20260725190000_hybrid_marison_master_sync.sql");
 
@@ -179,7 +179,7 @@ describe("Marison employee sync", () => {
   });
 
   it("keeps execution staging-only, admin-only, and server-side", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const client = read("src/services/marison-integration.service.ts");
     const dockerfile = read("dockerfile");
 
@@ -195,7 +195,7 @@ describe("Marison employee sync", () => {
   });
 
   it("uses the synced office branch mapping for asset dispatch", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(server).toContain("const resolveMarisonBranchId = async");
     expect(server).not.toContain("supabaseAdmin");

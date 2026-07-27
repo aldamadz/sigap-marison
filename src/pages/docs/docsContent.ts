@@ -2848,7 +2848,7 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Staging memiliki project Supabase dan worker PDF sendiri, tetapi memakai storage self-hosted yang sama melalui namespace staging/.",
       "Production memakai origin publik melalui Caddy; staging tetap melalui Cloudflare Tunnel.",
       "Pengembangan lokal dengan `npm run dev` menjalankan Vite dan BFF lokal bersama-sama, memakai `.env.local`, serta tetap menggunakan Supabase dan datasource Marison staging.",
-      "Perubahan `server.mjs` deploy app utama karena container app yang menjalankan server HTTP.",
+      "Perubahan `backend/src` deploy app utama karena container app yang menjalankan server Fastify.",
       "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
     ],
     troubleshooting: [
@@ -2890,7 +2890,7 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         title: "Kapan worker PDF ikut deploy",
         columns: ["Perubahan", "Deploy yang diperlukan"],
         rows: [
-          ["Frontend, dokumentasi, route aplikasi, atau `server.mjs`", "Deploy aplikasi utama saja."],
+          ["Frontend, dokumentasi, route aplikasi, atau `backend/src`", "Deploy aplikasi utama saja."],
           ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Deploy PDF worker."],
           ["Folder `external-api/` atau `docker-compose.external.yml`", "Deploy External API saja."],
           ["Env storage production", "Redeploy service yang membaca env tersebut dengan `--env-file .env.production`."],

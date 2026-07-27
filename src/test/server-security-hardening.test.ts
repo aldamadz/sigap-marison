@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const server = readFileSync(join(process.cwd(), "server.mjs"), "utf8");
+const server = readFileSync(join(process.cwd(), "backend/src/domain-runtime.ts"), "utf8");
 
 describe("server security hardening", () => {
   it("never trusts an unverified JWT payload for authenticated endpoints", () => {

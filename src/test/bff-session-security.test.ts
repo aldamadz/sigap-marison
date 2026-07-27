@@ -21,7 +21,7 @@ describe("SIGAP browser BFF session boundary", () => {
   });
 
   it("stores the real Supabase session in an encrypted HttpOnly same-site cookie", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const cookieWriterStart = server.indexOf("const setSessionCookie");
     const cookieWriterEnd = server.indexOf("const publicSession", cookieWriterStart);
     const cookieWriter = server.slice(cookieWriterStart, cookieWriterEnd);
@@ -43,7 +43,7 @@ describe("SIGAP browser BFF session boundary", () => {
   });
 
   it("does not expose arbitrary private storage through the generic BFF facade", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const handlerStart = server.indexOf("const handleBffStorageFile");
     const handlerEnd = server.indexOf("const openBffRealtimeStream", handlerStart);
     const handler = server.slice(handlerStart, handlerEnd);

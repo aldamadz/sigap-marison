@@ -24,7 +24,7 @@ describe("PostgREST egress guardrails", () => {
   });
 
   it("aggregates attention in one database call", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const start = server.indexOf("const getAttentionStateForUser");
     const end = server.indexOf("const getAttentionStateFromRequest", start);
     const implementation = server.slice(start, end);
