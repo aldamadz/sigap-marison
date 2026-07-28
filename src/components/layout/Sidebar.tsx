@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router'
 import {
   LayoutDashboard, Calendar, ClipboardList, Users, Activity, Settings,
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,

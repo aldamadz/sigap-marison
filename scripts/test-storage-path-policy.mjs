@@ -36,7 +36,7 @@ test("namespace validation distinguishes staging and production paths", () => {
 
 test("server, worker, and compose enforce the environment namespace", async () => {
   const [server, worker, stagingCompose, productionCompose] = await Promise.all([
-    readFile(new URL("../server.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../backend/src/domain-runtime.ts", import.meta.url), "utf8"),
     readFile(new URL("../pdf-worker.mjs", import.meta.url), "utf8"),
     readFile(new URL("../docker-compose.staging.yml", import.meta.url), "utf8"),
     readFile(new URL("../docker-compose.prod.yml", import.meta.url), "utf8"),

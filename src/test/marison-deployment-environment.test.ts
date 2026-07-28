@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("Marison deployment environment", () => {
   it("locks the datasource environment to deployment configuration", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(server).toContain("MARISON_DEPLOYMENT_ENVIRONMENT");
     expect(server).toContain("marisonDeploymentEnvironment");
@@ -33,7 +33,7 @@ describe("Marison deployment environment", () => {
   });
 
   it("uses the deployment URL instead of a shared database email URL", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
 
     expect(server).toContain("process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || raw.app_url");
     expect(server).not.toContain('app_url: "https://sigap.marison-testing.biz.id"');

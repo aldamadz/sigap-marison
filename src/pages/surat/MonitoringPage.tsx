@@ -1,5 +1,5 @@
 import { useDeferredValue, useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search, Loader2, Info, Eye,

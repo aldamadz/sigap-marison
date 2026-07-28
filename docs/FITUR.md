@@ -921,7 +921,7 @@ docker --context ubuntu-server compose -p agenda-flow-production -f docker-compo
 
 - Jangan hilangkan `-p`; nama project Compose yang berbeda mencegah deploy staging menganggap container production sebagai orphan.
 - Jangan hilangkan `--env-file`; staging wajib memakai `.env.staging` dan production wajib memakai `.env.production`.
-- Jika hanya mengubah frontend, halaman dokumentasi, server aplikasi utama, atau `server.mjs`, gunakan command aplikasi utama di atas dan jangan redeploy worker PDF.
+- Jika hanya mengubah frontend, halaman dokumentasi, atau backend aplikasi utama di `backend/src`, gunakan command aplikasi utama di atas dan jangan redeploy worker PDF.
 - Jika perlu redeploy PDF worker, gunakan compose worker secara terpisah:
 
 ```powershell

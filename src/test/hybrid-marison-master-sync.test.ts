@@ -19,7 +19,7 @@ describe("Hybrid Marison master sync", () => {
 
   it("runs the staging cron at midnight Jakarta through the internal tracked route", () => {
     const worker = read("server/marison-sync-worker.mjs");
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const compose = read("docker-compose.staging.yml");
 
     expect(worker).toContain('const timeZone = "Asia/Jakarta"');
@@ -32,7 +32,7 @@ describe("Hybrid Marison master sync", () => {
   });
 
   it("fetches branches before employees and never resets an existing password", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const sync = read("server/marison-employee-sync.mjs");
 
     const sourceLoader = server.slice(

@@ -24,7 +24,7 @@ SIGAP memakai frontend React dengan BFF Node.js dan PostgreSQL/Supabase sebagai 
 | Layer | Teknologi | Peran |
 | :--- | :--- | :--- |
 | **Frontend** | React.js + Tailwind CSS | Antarmuka pengguna yang responsif dan interaktif. |
-| **Backend** | Node.js BFF (`server.mjs`) | Session HttpOnly, API aplikasi, integrasi eksternal, email, dan akses file privat. |
+| **Backend** | Fastify + TypeScript (`backend/src`) | Session HttpOnly, API aplikasi, integrasi eksternal, email, dan akses file privat. |
 | **Database** | PostgreSQL | Penyimpanan data relasional dengan integritas tinggi. |
 | **Realtime** | SSE attention + Supabase Realtime terbatas | Badge dan sinyal perubahan tanpa mengirim isi dokumen sensitif. |
 | **Storage** | Supabase Storage self-hosted | Penyimpanan privat terpusat; path production tetap utama dan staging diisolasi dalam namespace `staging/`. |
