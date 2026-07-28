@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 interface TTDConfig {

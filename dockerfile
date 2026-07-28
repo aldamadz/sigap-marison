@@ -1,7 +1,7 @@
 # ==========================================
 # Tahap 1: Build React Vite App
 # ==========================================
-FROM node:22-alpine AS builder
+FROM node:22.23.1-alpine AS builder
 
 WORKDIR /app
 
@@ -14,6 +14,7 @@ ENV VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=$VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 
 # Install frontend, shared-contract, and backend dependencies reproducibly.
 COPY package*.json ./
+COPY security/fail-closed ./security/fail-closed
 COPY shared/package*.json ./shared/
 COPY backend/package*.json ./backend/
 RUN npm ci \
@@ -30,7 +31,7 @@ RUN npm run build \
 # ==========================================
 # Tahap 2: Serve static app + PDF converter
 # ==========================================
-FROM node:22-alpine
+FROM node:22.23.1-alpine
 
 WORKDIR /app
 
@@ -41,6 +42,7 @@ RUN apk add --no-cache \
     ttf-dejavu
 
 COPY package*.json ./
+COPY security/fail-closed ./security/fail-closed
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist

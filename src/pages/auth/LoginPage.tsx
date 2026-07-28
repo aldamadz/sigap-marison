@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Sun, Moon, Cloud, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';

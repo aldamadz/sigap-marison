@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (id.includes('vite/preload-helper')) return 'vendor-preload-helper';
             if (id.includes('node_modules')) {
-              if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('react/')) return 'vendor-react';
+              if (id.includes('react-dom') || id.includes('react-router') || id.includes('react/')) return 'vendor-react';
               if (id.includes('class-variance-authority') || id.includes('clsx') || id.includes('tailwind-merge')) return 'vendor-ui-utils';
               if (id.includes('@tanstack')) return 'vendor-query';
               if (id.includes('@radix-ui')) return 'vendor-radix';
