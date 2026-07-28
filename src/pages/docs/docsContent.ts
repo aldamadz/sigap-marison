@@ -2843,9 +2843,9 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Pastikan perubahan sudah dibuild atau sudah siap dideploy dari workspace.",
       "Pilih compose staging untuk domain testing atau compose production untuk domain production.",
       "Jalankan command dengan Docker context `ubuntu-server`, nama project `-p`, dan file env yang sesuai.",
-      "Cek status container `agenda-flow-prod` sampai healthy.",
-      "Buka domain production atau route yang berubah untuk pemeriksaan.",
-      "Redeploy worker PDF hanya jika memang ada perubahan worker/runtime PDF.",
+      "Cek status service Compose pada environment yang dipilih sampai aplikasi healthy.",
+      "Buka domain staging atau production yang sesuai dan periksa `/health/ready` serta route yang berubah.",
+      "Redeploy PDF worker atau sync worker hanya jika source, runtime, atau konfigurasi worker tersebut berubah.",
     ],
     examples: [
       "Perubahan dokumentasi `/docs` cukup deploy app utama, tidak perlu deploy PDF worker.",
@@ -2856,7 +2856,8 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Production memakai origin publik melalui Caddy; staging tetap melalui Cloudflare Tunnel.",
       "Pengembangan lokal dengan `npm run dev` menjalankan Vite dan BFF lokal bersama-sama, memakai `.env.local`, serta tetap menggunakan Supabase dan datasource Marison staging.",
       "Perubahan `backend/src` deploy app utama karena container app yang menjalankan server Fastify.",
-      "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
+      "Perubahan `pdf-worker.mjs` pada staging memakai service `agenda-pdf-worker-staging`; `docker-compose.worker.yml` hanya untuk PDF worker production.",
+      "Deploy app-only staging tidak merestart PDF worker atau sync worker yang sudah berjalan.",
     ],
     troubleshooting: [
       "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dengan `STORAGE_PATH_PREFIX=staging`, sedangkan production memakai `.env.production` tanpa prefix.",
@@ -2875,15 +2876,27 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         columns: ["Kebutuhan", "Command"],
         rows: [
           [
-            "Deploy aplikasi staging",
+            "Deploy app-only staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build --no-deps agenda-flow-staging",
+          ],
+          [
+            "Deploy seluruh stack staging",
             "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build",
+          ],
+          [
+            "Deploy PDF worker staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging; docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-pdf-worker-staging",
+          ],
+          [
+            "Deploy sync worker staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging; docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-marison-sync-staging",
           ],
           [
             "Deploy aplikasi production",
             "docker --context ubuntu-server compose -p agenda-flow-production -f docker-compose.prod.yml --env-file .env.production up -d --build",
           ],
           [
-            "Deploy PDF worker",
+            "Deploy PDF worker production",
             "docker --context ubuntu-server compose -p agenda-flow-production-worker -f docker-compose.worker.yml --env-file .env.production up -d --build",
           ],
           [
@@ -2897,8 +2910,9 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         title: "Kapan worker PDF ikut deploy",
         columns: ["Perubahan", "Deploy yang diperlukan"],
         rows: [
-          ["Frontend, dokumentasi, route aplikasi, atau `backend/src`", "Deploy aplikasi utama saja."],
-          ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Deploy PDF worker."],
+          ["Frontend, dokumentasi, route aplikasi, atau `backend/src`", "Deploy aplikasi utama saja; worker tetap berjalan tanpa restart."],
+          ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Redeploy PDF worker pada environment terkait."],
+          ["`server/marison-sync-worker.mjs`, image/runtime, token, URL, jadwal, atau konfigurasi sync", "Redeploy sync worker staging."],
           ["Folder `external-api/` atau `docker-compose.external.yml`", "Deploy External API saja."],
           ["Env storage production", "Redeploy service yang membaca env tersebut dengan `--env-file .env.production`."],
         ],

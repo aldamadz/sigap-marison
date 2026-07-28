@@ -2329,7 +2329,7 @@ const uploadInternalStorageFile = async (token, req) => {
     });
     const err = new Error(
       shouldUseExternalStorage()
-        ? "Server aplikasi tidak bisa menghubungi storage self-hosted. Periksa STORAGE_SUPABASE_URL dari container agenda-flow-prod."
+        ? "Server aplikasi tidak bisa menghubungi storage self-hosted. Periksa STORAGE_SUPABASE_URL pada container aplikasi aktif."
         : "Server aplikasi tidak bisa menghubungi storage Supabase."
     );
     err.status = 502;
