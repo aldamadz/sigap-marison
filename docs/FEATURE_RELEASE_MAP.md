@@ -212,6 +212,12 @@ Temuan keamanan outbound:
 | PIC-01 | Monitoring/PIC/chat/payment lama | Removed dari alur aktif | Riwayat commit lama; route/service aktif tidak ada | Jangan hidupkan kembali tanpa desain baru |
 | ENV-01 | Switch environment Marison lewat UI/OTP | Removed, diganti environment lock | Provider/status locked | Jangan hidupkan; bertentangan dengan isolasi deployment |
 
+### 4.10 Operasional dan Release
+
+| ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
+| --- | --- | --- | --- | --- | --- |
+| OPS-02 | Identitas revision runtime | Staging candidate | OCI image revision label, build arg `GIT_SHA`, `/health/version` | Docker build dan Fastify health routes | Read-only metadata; pertahankan agar runtime dapat dicocokkan dengan commit tanpa membaca file container |
+
 ## 5. Dependensi Utama
 
 Urutan dependensi dari fondasi ke fitur bisnis:

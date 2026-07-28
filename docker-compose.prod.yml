@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: dockerfile
       args:
+        GIT_SHA: "${GIT_SHA:-unknown}"
         VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
