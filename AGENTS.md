@@ -3,8 +3,9 @@
 Dokumen ini adalah instruksi wajib untuk seluruh AI coding agent yang bekerja di
 repository SIGAP. Baca dokumen ini sebelum membuat branch, mengubah kode,
 menjalankan migration, melakukan commit, membuka PR, atau melakukan deployment.
-Setelah itu baca `docs/FEATURE_RELEASE_MAP.md` untuk mengetahui status fitur,
-dependensi, drift environment, dan prosedur penarikan fitur dari production.
+Setelah itu baca `docs/AI_COLLABORATION.md` untuk memeriksa pekerjaan paralel dan
+`docs/FEATURE_RELEASE_MAP.md` untuk mengetahui status fitur, dependensi, drift
+environment, dan prosedur penarikan fitur dari production.
 
 ## Aturan Utama
 
@@ -47,8 +48,9 @@ Kalimat seperti "kerjakan", "perbaiki", "buatkan", "commit", "push", atau
 
 ## Alur Fitur dan Perbaikan
 
-1. Pastikan worktree dan branch aktif sebelum mulai. Jangan menghapus perubahan
-   pengguna yang sudah ada.
+1. Jalankan pemeriksaan dan klaim pekerjaan sesuai
+   `docs/AI_COLLABORATION.md`. Pastikan worktree dan branch aktif sebelum mulai.
+   Jangan menghapus perubahan pengguna atau pekerja lain yang sudah ada.
 2. Temukan Feature ID pekerjaan pada `docs/FEATURE_RELEASE_MAP.md`. Tambahkan ID
    baru pada peta tersebut jika fitur belum terdaftar.
 3. Untuk pekerjaan independen, buat branch `feature/*` atau `fix/*` dari `main`.
