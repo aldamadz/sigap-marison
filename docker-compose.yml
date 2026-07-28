@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-unknown}"
     image: agenda-flow:local
     container_name: agenda-flow
     restart: unless-stopped
