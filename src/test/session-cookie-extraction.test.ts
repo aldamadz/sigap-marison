@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("session-cookie extraction", () => {
   it("moves the AES-GCM session encryption into a typed helper module", () => {
-    const module = read("src/domain/session-cookie.ts");
+    const module = read("backend/src/domain/session-cookie.ts");
     expect(module).toContain("createSessionCookieHelpers");
     expect(module).toContain("createCipheriv");
     expect(module).toContain("aes-256-gcm");
@@ -20,7 +20,7 @@ describe("session-cookie extraction", () => {
   });
 
   it("no longer carries the verbatim @ts-nocheck escape hatch in the helper", () => {
-    const module = read("src/domain/session-cookie.ts");
+    const module = read("backend/src/domain/session-cookie.ts");
     expect(module).not.toContain("@ts-nocheck");
   });
 

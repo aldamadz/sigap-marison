@@ -8,6 +8,10 @@ describe("Docker runtime modules", () => {
   it("copies every local module required by the server and PDF worker", () => {
     const dockerfile = read("dockerfile");
 
+    expect(dockerfile).toContain("COPY --from=builder /app/backend/dist ./backend/dist");
+    expect(read("backend/src/domain-runtime.ts")).toContain('from "./domain/session-cookie.js"');
+    expect(read("backend/src/domain-runtime.ts")).toContain('from "./domain/rate-limit.js"');
+
     for (const runtimeModule of [
       "storage-path-policy.mjs",
       "server/marison-outbound-contract.mjs",
