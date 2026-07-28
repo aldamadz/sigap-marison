@@ -19,6 +19,7 @@ describe("ExcelJS security boundary", () => {
       "scripts/test-document-layout-rules.mjs",
       "scripts/generate-hierarchy-parent-sql.mjs",
       "scripts/apply-hierarchy-parent-from-preview.mjs",
+      "backend/src/domain-runtime.ts",
       "src/test/recommendation-template.test.ts",
       "src/test/signature-layout.test.ts",
     ];

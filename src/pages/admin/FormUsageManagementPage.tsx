@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import { MarisonIntegrationPanel } from "@/components/admin/MarisonIntegrationPanel";
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type UsageStatus = "draft" | "active" | "archived";
@@ -173,6 +174,7 @@ export default function FormUsageManagementPage() {
     steps: [emptyStep(1), emptyStep(2)] as RouteStep[],
     attachments: [] as AttachmentRule[],
   });
+  const marisonPanelRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -220,6 +222,13 @@ export default function FormUsageManagementPage() {
   }, [toast]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    if (searchParams.get("section") !== "marison") return;
+    window.setTimeout(() => {
+      marisonPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+  }, [searchParams]);
 
   useEffect(() => {
     const sourceMatrixId = searchParams.get("source_matrix");
@@ -697,6 +706,10 @@ export default function FormUsageManagementPage() {
         <Button onClick={() => openUsage()} className="lg:shrink-0">
           <Plus className="mr-2 h-4 w-4" /> Tambah Kegunaan
         </Button>
+      </div>
+
+      <div ref={marisonPanelRef}>
+        <MarisonIntegrationPanel />
       </div>
 
       {loading ? (

@@ -20,11 +20,11 @@ describe("PostgREST egress guardrails", () => {
     expect(userPage).toContain("suratMonitoringService.getPage");
     expect(adminPage).toContain("suratMonitoringService.getPage");
     expect(userPage).not.toContain("selectedSurat._status");
-    expect(userPage).toContain("resolveStatus(selectedSurat, detailSignatures)");
+    expect(userPage).toContain("resolveStatus(selectedSurat, selectedSignatures)");
   });
 
   it("aggregates attention in one database call", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const start = server.indexOf("const getAttentionStateForUser");
     const end = server.indexOf("const getAttentionStateFromRequest", start);
     const implementation = server.slice(start, end);

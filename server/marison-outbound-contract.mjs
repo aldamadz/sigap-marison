@@ -1,0 +1,96 @@
+import { z } from "zod";
+
+export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
+
+const requiredText = z.string();
+const nonEmptyText = z.string().trim().min(1);
+const positiveInteger = z.number().int().positive();
+const nonNegativeInteger = z.number().int().nonnegative();
+const dateTime = z.string().datetime({ offset: true });
+
+const externalLink = z.object({
+  name: nonEmptyText,
+  link: z.string().url(),
+}).strict();
+
+const approval = z.object({
+  role: nonEmptyText,
+  nik: nonEmptyText,
+  action: nonEmptyText,
+  actioned_at: dateTime,
+  notes: requiredText.optional(),
+}).strict();
+
+export const marisonUnitSubmissionSchema = z.object({
+  submission_number: nonEmptyText,
+  project_id: positiveInteger,
+  branch_id: positiveInteger,
+  submitted_by: nonEmptyText.optional(),
+  submitted_at: dateTime.optional(),
+  units: z.array(z.object({
+    unit_id: positiveInteger,
+    production_code: nonEmptyText,
+    type: nonEmptyText,
+    addendum_atas_label: requiredText.optional(),
+    addendum_atas_nominal: nonNegativeInteger.optional(),
+    addendum_bawah_label: requiredText.optional(),
+    addendum_bawah_nominal: nonNegativeInteger.optional(),
+    planning_notes: requiredText.optional(),
+  }).strict()).min(1),
+  attachments: z.array(externalLink).optional(),
+  approvals: z.array(approval).min(1),
+}).strict();
+
+export const marisonNonUnitSubmissionSchema = z.object({
+  submission_number: nonEmptyText,
+  project_id: positiveInteger,
+  branch_id: positiveInteger,
+  submitted_by: nonEmptyText.optional(),
+  submitted_at: dateTime.optional(),
+  notes: requiredText.optional(),
+  items: z.array(z.object({
+    non_unit_id: positiveInteger,
+    item_name: nonEmptyText,
+    subtotal: nonNegativeInteger,
+    planning_notes: requiredText.optional(),
+  }).strict()).min(1),
+  attachments: z.array(externalLink).optional(),
+  approvals: z.array(approval).min(1),
+}).strict();
+
+export const marisonAssetPurchaseRequestSchema = z.object({
+  branch_id: positiveInteger,
+  category: nonEmptyText,
+  description: requiredText.optional(),
+  items: z.array(z.object({
+    request_number: nonEmptyText,
+    asset_name: nonEmptyText,
+    quantity: positiveInteger.optional(),
+    estimated_price: nonNegativeInteger.optional(),
+    description: requiredText.optional(),
+    attachments: z.array(externalLink).optional(),
+  }).strict()).min(1),
+  approvals: z.array(approval).min(1),
+}).strict();
+
+const schemas = {
+  unit: marisonUnitSubmissionSchema,
+  non_unit: marisonNonUnitSubmissionSchema,
+  asset: marisonAssetPurchaseRequestSchema,
+};
+
+export const assertMarisonOutboundContract = (kind, payload) => {
+  const schema = schemas[kind];
+  if (!schema) return payload;
+  const result = schema.safeParse(payload);
+  if (result.success) return result.data;
+
+  const details = result.error.issues.map((issue) => ({
+    path: issue.path.join("."),
+    message: issue.message,
+  }));
+  const error = new Error(`Payload Marison ${kind} tidak sesuai kontrak.`);
+  error.status = 422;
+  error.details = details;
+  throw error;
+};

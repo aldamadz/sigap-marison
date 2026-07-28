@@ -61,6 +61,19 @@ import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreads
 import { normalizeProductionSerial } from "@/lib/production-code";
 import { useAttention } from "@/providers/AttentionProvider";
 
+const getAllocationUnitType = (unit: any, detail: Record<string, any> = unit?.allocation_detail || {}) =>
+  String(
+    detail.unit_type ||
+    detail.type ||
+    detail.tipe ||
+    unit?.unit_type ||
+    unit?.raw?.unit_type ||
+    unit?.raw?.type ||
+    unit?.raw?.tipe ||
+    unit?.raw?.house_type ||
+    "",
+  ).trim();
+
 const normalizeAllocationDetailForPersistence = (detail: Record<string, any> = {}) => ({
   ...detail,
   production_serial: normalizeProductionSerial(detail.production_serial),
@@ -723,7 +736,7 @@ const handleApprove = async (item: any) => {
       if (isUnitAllocationRequired(item)) {
         const incompleteUnit = getIncompleteAllocationUnits(item)[0];
         if (incompleteUnit) {
-          throw new Error(`Kode produksi untuk ${incompleteUnit.label || incompleteUnit.value} belum lengkap.`);
+          throw new Error(`Tipe dan kode produksi untuk ${incompleteUnit.label || incompleteUnit.value} belum lengkap.`);
         }
       }
       const missingApprovalAttachments = getMissingApprovalAttachmentLabels(item);
@@ -1171,6 +1184,7 @@ const handleApprove = async (item: any) => {
         Kavling: unit.label || unit.value,
         "Struktur Atas": detail.struktur_atas ? formatRupiahInput(detail.struktur_atas) : "",
         "Struktur Bawah": detail.struktur_bawah ? formatRupiahInput(detail.struktur_bawah) : "",
+        "Tipe Unit": getAllocationUnitType(unit, detail),
         "Nomor Kode Produksi": normalizeProductionSerial(detail.production_serial),
         "Blok": detail.production_block || "",
         "Tanggal Produksi": detail.production_date ? formatDatePickerDisplay(detail.production_date) : "",
@@ -1198,6 +1212,7 @@ const handleApprove = async (item: any) => {
       const kavlingIndex = getImportColumnIndex(headers, ["Kavling", "Unit"]);
       const strukturAtasIndex = getImportColumnIndex(headers, ["Struktur Atas", "Atas"]);
       const strukturBawahIndex = getImportColumnIndex(headers, ["Struktur Bawah", "Bawah"]);
+      const unitTypeIndex = getImportColumnIndex(headers, ["Tipe Unit", "Tipe", "Type", "Unit Type"]);
       const serialIndex = getImportColumnIndex(headers, ["Nomor Kode Produksi", "Nomor", "Serial", "Production Serial"]);
       const blockIndex = getImportColumnIndex(headers, ["Blok", "Production Block"]);
       const dateIndex = getImportColumnIndex(headers, ["Tanggal Produksi", "Tanggal", "Production Date"]);
@@ -1226,6 +1241,7 @@ const handleApprove = async (item: any) => {
           ...((allocationDetails[item.id] || {})[unitValue] || unit.allocation_detail || {}),
           ...(strukturAtasIndex >= 0 ? { struktur_atas: normalizeRupiahDigits(row[strukturAtasIndex] || "") } : {}),
           ...(strukturBawahIndex >= 0 ? { struktur_bawah: normalizeRupiahDigits(row[strukturBawahIndex] || "") } : {}),
+          ...(unitTypeIndex >= 0 ? { unit_type: String(row[unitTypeIndex] || "").trim() } : {}),
           ...(serialIndex >= 0 ? { production_serial: normalizeProductionSerial(row[serialIndex]) } : {}),
           ...(blockIndex >= 0 ? { production_block: String(row[blockIndex] || "").trim() } : {}),
           ...(dateIndex >= 0 ? { production_date: normalizeImportDate(row[dateIndex]) } : {}),
@@ -1377,7 +1393,8 @@ const handleApprove = async (item: any) => {
     const details = getAllocationDetailMap(item);
     return getSelectedAllocationUnits(item).filter((unit: any) => {
       const detail = details[unit.value] || {};
-      return !String(detail.production_serial || "").trim() ||
+      return !getAllocationUnitType(unit, detail) ||
+        !String(detail.production_serial || "").trim() ||
         !String(detail.production_block || "").trim() ||
         !String(detail.production_date || "").trim();
     });
@@ -1539,11 +1556,12 @@ const handleApprove = async (item: any) => {
               <div className="flex h-28 flex-col items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"><Home className="mb-2 h-5 w-5" />Pilih kavling terlebih dahulu.</div>
             ) : (
               <div className="max-h-[520px] overflow-auto rounded-lg border border-border">
-                <table className="w-full min-w-[1120px] border-collapse text-sm">
+                <table className="w-full min-w-[1240px] border-collapse text-sm">
                   <thead className="sticky top-0 z-20 bg-muted text-xs text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
                     <tr>
                       <th className="sticky left-0 z-30 w-12 border-r border-border bg-muted px-3 py-3 text-center font-semibold">No.</th>
                       <th className="sticky left-12 z-30 w-28 border-r border-border bg-muted px-3 py-3 text-left font-semibold">Kavling</th>
+                      <th className="w-32 border-r border-border px-3 py-3 text-left font-semibold">Tipe Unit</th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Atas</th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Bawah</th>
                       <th className="w-36 border-r border-border px-3 py-3 text-left font-semibold">Nomor</th>
@@ -1565,6 +1583,15 @@ const handleApprove = async (item: any) => {
                             <span className="font-semibold">{unit.label}</span>
                             <span className={cn("h-2 w-2 rounded-full", ready ? "bg-emerald-500" : "bg-amber-500")} aria-label={ready ? "Lengkap" : "Belum lengkap"} />
                           </div>
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <Input
+                            value={getAllocationUnitType(unit, detail)}
+                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "unit_type", event.target.value)}
+                            placeholder="4.0"
+                            aria-label={`Tipe unit ${unit.label}`}
+                            className="h-11 text-sm"
+                          />
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
@@ -1847,6 +1874,7 @@ const handleApprove = async (item: any) => {
           return [
             index + 1,
             formatSummaryValue(unit.label || unit.value || unit.code),
+            formatSummaryValue(getAllocationUnitType(unit, detail)),
             code,
             atas ? atas.toLocaleString("id-ID") : "-",
             bawah ? bawah.toLocaleString("id-ID") : "-",
@@ -1857,6 +1885,7 @@ const handleApprove = async (item: any) => {
           "",
           "TOTAL",
           "",
+          "",
           totalAtas ? totalAtas.toLocaleString("id-ID") : "-",
           totalBawah ? totalBawah.toLocaleString("id-ID") : "-",
           totalAtas + totalBawah ? (totalAtas + totalBawah).toLocaleString("id-ID") : "-",
@@ -1866,7 +1895,7 @@ const handleApprove = async (item: any) => {
           theme: "grid",
           styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
           headStyles: { fillColor: [36, 120, 74] },
-          head: [["No.", "Kavling", "Kode Produksi", "Struktur Atas", "Struktur Bawah", "Nominal"]],
+          head: [["No.", "Kavling", "Tipe", "Kode Produksi", "Struktur Atas", "Struktur Bawah", "Nominal"]],
           body: allocationRows,
           didParseCell: (data) => {
             if (data.section === "body" && data.row.index === allocationRows.length - 1) {
@@ -1933,7 +1962,7 @@ const handleApprove = async (item: any) => {
       if (!getAllocationProject(item)?.code) blockers.push("Pilih proyek unit");
       if (selected.length < 1) blockers.push("Pilih minimal 1 unit");
       const incomplete = getIncompleteAllocationUnits(item);
-      if (incomplete.length) blockers.push("Lengkapi kode produksi " + incomplete.length + " unit");
+      if (incomplete.length) blockers.push("Lengkapi tipe dan kode produksi " + incomplete.length + " unit");
     }
     if (shouldSignerInputStageData(item)) {
       const missing = getMissingApprovalAttachmentLabels(item);

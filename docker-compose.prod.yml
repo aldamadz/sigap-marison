@@ -20,6 +20,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "80"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
       APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
       VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
       SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.production}"
@@ -34,6 +35,7 @@ services:
       STORAGE_MODE: "${STORAGE_MODE:-self_hosted_supabase}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:-}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-}"
+      STORAGE_PATH_PREFIX: ""
     env_file:
       - path: .env.production
         required: false
@@ -43,7 +45,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://127.0.0.1/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
+          "require('http').get('http://127.0.0.1/health/ready', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
         ]
       interval: 30s
       timeout: 10s

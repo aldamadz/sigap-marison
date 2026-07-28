@@ -25,6 +25,7 @@ import {
   type RecommendationParentSummary as RecommendationParentSummaryData,
 } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
+import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
@@ -218,6 +219,51 @@ type UsageStepConfig = {
   requiresUnitAllocation?: boolean;
 };
 
+const normalizeRoleName = (
+  raw: unknown,
+  index: number,
+  total: number,
+): "membuat" | "memeriksa" | "menyetujui" => {
+  const value = String(raw ?? "").toLowerCase().trim();
+  if (value === "membuat" || value === "memeriksa" || value === "menyetujui") return value;
+  if (value.includes("setuju") || value.includes("approve") || value.includes("approval") || value.includes("otoris") || value.includes("final")) return "menyetujui";
+  if (value.includes("periksa") || value.includes("review") || value.includes("verifikasi") || value.includes("cek") || value.includes("paraf")) return "memeriksa";
+  if (value.includes("buat") || value.includes("draft") || value.includes("pemohon") || value.includes("request")) return "membuat";
+  if (index === 0) return "membuat";
+  if (index === total - 1) return "menyetujui";
+  return "memeriksa";
+};
+
+const buildSignerAssignments = (detail: UsageDetailRecord): SignerAssignment[] => {
+  try {
+    const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
+    if (!Array.isArray(config)) return [];
+    const total = config.length;
+
+    return config.map((item: UsageStepConfig, index: number) => ({
+      role_name: normalizeRoleName(
+        item.roleName || item.role_name || item.labelJabatan || item.label_jabatan || item.jabatan,
+        index,
+        total,
+      ),
+      label_jabatan: item.labelJabatan || item.label_jabatan || item.jabatan || `Tahap ${index + 1}`,
+      user_id: "",
+      step_order: index + 1,
+      form_usage_step_id: item.form_usage_step_id,
+      action_type: item.action_type || "approval",
+      candidate_scope: item.candidate_scope || "manual",
+      eligible_user_ids: item.eligible_user_ids || [],
+      verifier_user_ids: item.verifier_user_ids || [],
+      attachment_requirements: detail.form_usage_attachment_requirements?.filter(
+        (rule) => rule.stage_order === index + 1,
+      ) || [],
+      requires_unit_allocation: item.requires_unit_allocation === true || item.requiresUnitAllocation === true,
+    }));
+  } catch {
+    return [];
+  }
+};
+
 type CurrentProfile = {
   id: string;
   role?: string | null;
@@ -403,17 +449,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getDisplayFieldValue = (key: string) => getScalarFieldValue(getFormFieldValue(key));
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
-  const normalizeRoleName = (raw: unknown, index: number, total: number): "membuat" | "memeriksa" | "menyetujui" => {
-    const v = String(raw ?? "").toLowerCase().trim();
-    if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as "membuat" | "memeriksa" | "menyetujui";
-    if (v.includes("setuju") || v.includes("approve") || v.includes("approval") || v.includes("otoris") || v.includes("final")) return "menyetujui";
-    if (v.includes("periksa") || v.includes("review") || v.includes("verifikasi") || v.includes("cek") || v.includes("paraf")) return "memeriksa";
-    if (v.includes("buat") || v.includes("draft") || v.includes("pemohon") || v.includes("request")) return "membuat";
-    if (index === 0) return "membuat";
-    if (index === total - 1) return "menyetujui";
-    return "memeriksa";
-  };
-
   const getFullRoles = (item: UsageDetailRecord) => {
     if (!item?.ttd_config) return [];
     try {
@@ -1610,7 +1645,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }));
     setSelectedFormId(String(payload.selectedFormId || usage?.form_id || usage?.master_forms?.id || ""));
     setSelectedUsage(usage);
-    setSigners(Array.isArray(draftToRestore.signer_assignments) ? draftToRestore.signer_assignments : []);
+    const persistedSigners = Array.isArray(draftToRestore.signer_assignments)
+      ? draftToRestore.signer_assignments
+      : [];
+    const configuredSigners = usage ? buildSignerAssignments(usage) : [];
+    setSigners(configuredSigners.length > 0
+      ? reconcileSignerAssignments(configuredSigners, persistedSigners)
+      : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
@@ -1625,6 +1666,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       document.getElementById("surat-registration-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [draftToRestore, usageDetails, setJudulForDisplay]);
+
+  useEffect(() => {
+    if (!activeDraftId || !selectedUsage) return;
+    const configuredSigners = buildSignerAssignments(selectedUsage);
+    if (configuredSigners.length === 0) return;
+
+    setSigners((current) => {
+      const reconciled = reconcileSignerAssignments(configuredSigners, current);
+      return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
+    });
+  }, [activeDraftId, selectedUsage]);
 
   useEffect(() => {
     if (!activeDraftId || !generatedNoSurat || draftToRestore) return;
@@ -1805,25 +1857,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         form_usage_id: isNewUsage ? detail.id : "",
       };
     });
-    try {
-      const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
-      if (Array.isArray(config)) {
-        const total = config.length;
-        setSigners(config.map((c: UsageStepConfig, i: number) => ({
-          role_name: normalizeRoleName(c.roleName || c.role_name || c.labelJabatan || c.label_jabatan || c.jabatan, i, total),
-          label_jabatan: c.labelJabatan || c.label_jabatan || c.jabatan,
-          user_id: "",
-          step_order: i + 1,
-          form_usage_step_id: c.form_usage_step_id,
-          action_type: c.action_type || "approval",
-          candidate_scope: c.candidate_scope || "manual",
-          eligible_user_ids: c.eligible_user_ids || [],
-          verifier_user_ids: c.verifier_user_ids || [],
-          attachment_requirements: detail.form_usage_attachment_requirements?.filter(rule => rule.stage_order === i + 1) || [],
-          requires_unit_allocation: c.requires_unit_allocation === true || c.requiresUnitAllocation === true,
-        })));
-      }
-    } catch { toast({ variant: "destructive", title: "Format Alur Salah" }); }
+    const configuredSigners = buildSignerAssignments(detail);
+    if (configuredSigners.length > 0) {
+      setSigners(configuredSigners);
+    } else {
+      toast({ variant: "destructive", title: "Format Alur Salah" });
+    }
   };
 
   const handleUsageChange = (val: string) => {

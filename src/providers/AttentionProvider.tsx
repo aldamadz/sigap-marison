@@ -59,6 +59,9 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_revision_events" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_recommendation_tasks" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "master_offices" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "marison_sync_issues" }, scheduleRefresh)
       .subscribe();
 
     return () => {

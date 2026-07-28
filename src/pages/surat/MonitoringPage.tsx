@@ -29,6 +29,7 @@ import { buildRegistrationSummaryData } from '@/components/surat/registration-su
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import { suratMonitoringService } from '@/services/surat-monitoring.service';
+import { getSortedApprovalSignatures } from '@/components/surat/approval-signatures';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -194,6 +195,7 @@ const MonitoringPage = () => {
 
   const allData = pageData?.rows || [];
   const totalPages = Math.max(1, Math.ceil((pageData?.count || 0) / (pageData?.pageSize || 24)));
+  const selectedSignatures = getSortedApprovalSignatures(selectedSurat);
 
   const { data: monitoringStats } = useQuery({
     queryKey: ['surat-stats-dashboard'],
@@ -225,7 +227,7 @@ const MonitoringPage = () => {
   };
 
   const enriched = allData.map(s => {
-    const sigs = [...(s.surat_signatures || [])].sort((a, b) => a.step_order - b.step_order);
+    const sigs = getSortedApprovalSignatures(s);
     return { ...s, _sigs: sigs, _status: resolveStatus(s, sigs) };
   });
 
@@ -473,9 +475,7 @@ const MonitoringPage = () => {
 
             {/* Status badge */}
             {selectedSurat && (() => {
-              const detailSignatures = [...(selectedSurat.surat_signatures || [])]
-                .sort((a, b) => a.step_order - b.step_order);
-              const st = resolveStatus(selectedSurat, detailSignatures);
+              const st = resolveStatus(selectedSurat, selectedSignatures);
               return (
                 <div className={cn("flex items-center gap-2 px-4 py-3 rounded-xl border text-[10px] font-black uppercase", st.badgeClass)}>
                   {st.icon} {st.label} — {st.sublabel}
@@ -673,7 +673,7 @@ const MonitoringPage = () => {
               </div>
               <div className="space-y-3 relative">
                 <div className="absolute left-[13px] top-2 bottom-2 w-0.5 bg-border" />
-                {[...(selectedSurat?._sigs || [])].map((sig: any) => (
+                {selectedSignatures.map((sig: any) => (
                   <div key={sig.id} className="relative pl-9">
                     {/* Icon bubble */}
                     <div className={cn(
@@ -714,6 +714,11 @@ const MonitoringPage = () => {
                     </div>
                   </div>
                 ))}
+                {selectedSignatures.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-xs text-muted-foreground">
+                    Tahapan persetujuan belum tersedia.
+                  </p>
+                )}
               </div>
             </div>
 

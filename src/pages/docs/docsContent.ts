@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.18.0";
-export const DOCS_UPDATED_AT = "21 Juli 2026";
+export const DOCS_VERSION = "v1.20.0";
+export const DOCS_UPDATED_AT = "23 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -1368,6 +1368,11 @@ export const USER_DOCS: DocsEntry[] = [
             solution:
               "Itu berarti ada nomor yang sudah dipesan dan belum dikirim. Lanjutkan draft atau batalkan sesuai prosedur yang tersedia.",
           },
+          {
+            problem: "Admin menambah tahap penandatangan setelah draft dibuat",
+            solution:
+              "Buka ulang draft. Sistem memakai alur Kegunaan Form terbaru, mempertahankan signer pada tahap yang sama, lalu meminta Anda memilih signer untuk tahap baru sebelum mendaftarkan surat.",
+          },
         ],
       },
     ],
@@ -2418,12 +2423,13 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: SlidersHorizontal,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, dan kebutuhan lampiran.",
+    summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, kebutuhan lampiran, dan sinkronisasi data Marison.",
     whenToUse: [
       "Membuat kegunaan dokumen baru untuk departemen tertentu.",
       "Mengatur alur tanda tangan 3 sampai 8 tahap.",
       "Menambahkan tim pemeriksa sebelum penandatangan boleh aksi.",
       "Mengatur dokumen rekomendasi atau prasyarat yang harus selesai sebelum surat induk lanjut.",
+      "Mengecek koneksi Marison dan menyinkronkan kantor serta karyawan staging dari satu tempat konfigurasi.",
     ],
     steps: [
       "Buka Kegunaan Form.",
@@ -2431,17 +2437,20 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Atur step tanda tangan dan kandidat signer.",
       "Tambahkan tim pemeriksa bila step perlu pemeriksaan data atau lampiran.",
       "Atur dokumen tertaut bila form membutuhkan rekomendasi aset atau prasyarat sebelum approval lanjut.",
+      "Gunakan panel Integrasi Marison untuk cek koneksi, periksa data, dan menjalankan sinkronisasi manual bila diperlukan.",
       "Simpan konfigurasi dan uji pada registrasi surat.",
     ],
     examples: [
       "Untuk pengajuan cabang, kandidat SPV dan BM dapat dibatasi sesuai kantor pemohon.",
       "Untuk Unit, tim pemeriksa dapat mengisi detail kavling sebelum Mgr. Perencanaan menyetujui.",
       "Untuk aset yang perlu rekomendasi, tugas rekomendasi dapat diarahkan ke Staff IT/PBO dan dikunci saat salah satu kandidat mengambil draft.",
+      "Sebelum cronjob diaktifkan, admin dapat menjalankan sinkron manual untuk memastikan data kantor dan karyawan staging sudah sesuai.",
     ],
     troubleshooting: [
       "Jika user tidak bisa membuat Unit, cek izin departemen pengaju pada konfigurasi Unit.",
       "Jika signer tidak bisa setujui, cek apakah tim pemeriksa belum pemeriksaan.",
       "Jika rekomendasi tidak muncul, cek form rekomendasi, departemen PBO, kandidat Staff IT/PBO, dan tahap prasyarat pada Kegunaan Form.",
+      "Jika data karyawan staging tidak sesuai, jalankan Periksa Data di panel Integrasi Marison lalu cek issue yang muncul sebelum menekan Sinkronkan.",
     ],
   },
   {
@@ -2816,10 +2825,10 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     icon: Database,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Panduan deploy SIGAP dengan aplikasi, database, storage, dan datasource yang terpisah per environment.",
+    summary: "Panduan deploy SIGAP dengan aplikasi, database, dan datasource terpisah serta storage bersama yang dipisahkan berdasarkan namespace.",
     whenToUse: [
       "Mendeploy perubahan frontend, halaman dokumentasi, atau server aplikasi utama.",
-      "Memastikan deployment staging tidak membaca database, storage, atau datasource production dan sebaliknya.",
+      "Memastikan staging tidak membaca database atau datasource production dan hanya mengakses object storage dalam namespace staging/.",
       "Memastikan deploy memakai file env dan nama project Compose yang sesuai.",
       "Memutuskan apakah PDF worker perlu ikut diredeploy.",
     ],
@@ -2836,14 +2845,14 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Domain testing memakai `docker-compose.staging.yml`; environment Marison terkunci ke staging.",
       "Domain production memakai `docker-compose.prod.yml`; environment Marison terkunci ke production.",
       "Production dibuka melalui `https://sigap.marisoncloud.com`, sedangkan staging melalui `https://sigap.marison-testing.biz.id`.",
-      "Staging memiliki project Supabase, storage, dan worker PDF sendiri tanpa data transaksi production.",
+      "Staging memiliki project Supabase dan worker PDF sendiri, tetapi memakai storage self-hosted yang sama melalui namespace staging/.",
       "Production memakai origin publik melalui Caddy; staging tetap melalui Cloudflare Tunnel.",
       "Pengembangan lokal dengan `npm run dev` menjalankan Vite dan BFF lokal bersama-sama, memakai `.env.local`, serta tetap menggunakan Supabase dan datasource Marison staging.",
-      "Perubahan `server.mjs` deploy app utama karena container app yang menjalankan server HTTP.",
+      "Perubahan `backend/src` deploy app utama karena container app yang menjalankan server Fastify.",
       "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
     ],
     troubleshooting: [
-      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dan production memakai `.env.production`.",
+      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dengan `STORAGE_PATH_PREFIX=staging`, sedangkan production memakai `.env.production` tanpa prefix.",
       "Jika datasource salah environment, periksa compose yang dipakai dan nilai `MARISON_DEPLOYMENT_ENVIRONMENT` di container.",
       "Jika login lokal menampilkan 502 atau 403, restart `npm run dev` dan pastikan port 3010 tidak dipakai proses lain. Endpoint `/api` development harus menuju BFF lokal, bukan domain staging publik.",
       "Jika tautan email membuka domain yang salah, periksa `APP_PUBLIC_URL` pada container aktif; nilai ini dikunci oleh file Compose.",
@@ -2881,7 +2890,7 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         title: "Kapan worker PDF ikut deploy",
         columns: ["Perubahan", "Deploy yang diperlukan"],
         rows: [
-          ["Frontend, dokumentasi, route aplikasi, atau `server.mjs`", "Deploy aplikasi utama saja."],
+          ["Frontend, dokumentasi, route aplikasi, atau `backend/src`", "Deploy aplikasi utama saja."],
           ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Deploy PDF worker."],
           ["Folder `external-api/` atau `docker-compose.external.yml`", "Deploy External API saja."],
           ["Env storage production", "Redeploy service yang membaca env tersebut dengan `--env-file .env.production`."],
@@ -2894,6 +2903,39 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.20.0",
+    date: "23 Juli 2026",
+    changes: [
+      "Memindahkan kontrol Integrasi Marison ke Konfigurasi > Kegunaan Form agar cek koneksi serta sinkronisasi kantor dan karyawan berada dekat dengan konfigurasi alur dokumen.",
+      "Menghapus entry sidebar Integrasi Marison agar admin hanya memakai satu jalur operasional.",
+      "Menjaga route Integrasi Marison lama sebagai redirect ke panel baru supaya link lama tetap aman.",
+      "Menambahkan penanda kesiapan cronjob sinkronisasi sebagai rencana otomasi berikutnya tanpa mengaktifkan scheduler diam-diam.",
+    ],
+  },
+  {
+    version: "v1.19.0",
+    date: "22 Juli 2026",
+    changes: [
+      "Menyatukan layanan storage staging dan production agar bucket dapat dikelola dari satu storage self-hosted.",
+      "Mengisolasi seluruh upload staging, avatar, lampiran pemeriksa, dan hasil PDF worker di bawah namespace staging/.",
+      "Menolak akses file lintas environment pada BFF dan worker ketika path tidak sesuai namespace deployment.",
+      "Memperbaiki pembukaan dokumen dan lampiran staging agar validasi namespace membaca object path aktual dari token file.",
+      "Memigrasikan referensi file staging lama ke namespace staging/ tanpa menghapus object sumber.",
+      "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
+      "Menetapkan kontrak payload outbound Aset dan Unit v1 agar nama field, tipe data, struktur item, lampiran, rekomendasi, dan approval konsisten dengan integrasi vendor.",
+      "Menambahkan validasi payload sebelum request dikirim serta contract test berbasis contoh JSON kanonis.",
+      "Menambahkan NIK uji tunggal untuk seluruh pemohon dan penandatangan pada payload outbound staging tanpa mengubah NIK profil atau payload production.",
+      "Menandai kontrak baru belum boleh diaktifkan sampai endpoint staging vendor selesai disesuaikan dan pengujian bersama dinyatakan lulus.",
+      "Menambahkan sinkronisasi branch dan employee API Marison khusus staging melalui halaman Integrasi Marison.",
+      "Menggunakan external employee ID dan NIK sebagai identitas sinkronisasi tanpa mengganti UUID internal SIGAP.",
+      "Membuat email login staging berbasis nama lengkap, mempertahankan role akun lama, dan memakai role user untuk akun baru.",
+      "Memblokir employee tanpa NIK atau NIK konflik serta menampilkan hasil pemeriksaan sebelum admin menjalankan sinkronisasi.",
+      "Mempertahankan jabatan, departemen, dan kantor profil lama agar data uji external yang tidak valid tidak merusak workflow approval.",
+      "Memperbarui draft registrasi agar mengikuti tahap penandatangan terbaru dari konfigurasi Kegunaan Form saat dibuka ulang.",
+      "Mempertahankan pilihan signer pada tahap yang masih sama, menambahkan tahap baru, dan membuang tahap yang sudah dihapus tanpa mengubah surat yang telah didaftarkan.",
+    ],
+  },
   {
     version: "v1.18.0",
     date: "21 Juli 2026",

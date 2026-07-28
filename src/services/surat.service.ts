@@ -544,6 +544,20 @@ export const suratService = {
     ).trim();
   },
 
+  getUnitType(unit: any) {
+    return String(
+      unit?.allocation_detail?.unit_type ||
+      unit?.allocation_detail?.type ||
+      unit?.allocation_detail?.tipe ||
+      unit?.unit_type ||
+      unit?.raw?.unit_type ||
+      unit?.raw?.type ||
+      unit?.raw?.tipe ||
+      unit?.raw?.house_type ||
+      "-"
+    ).trim();
+  },
+
   parseMoney(value: any) {
     return parseRupiahInteger(value);
   },
@@ -639,6 +653,7 @@ export const suratService = {
       return [
         String(index + 1),
         this.getUnitCode(unit),
+        this.getUnitType(unit),
         this.formatRupiah(atas),
         this.formatRupiah(bawah),
         this.formatRupiah(atas + bawah),
@@ -658,9 +673,9 @@ export const suratService = {
     autoTable(doc, {
       startY: 36,
       margin: { left: margin, right: margin },
-      head: [["No", "Kavling", "Struktur Atas", "Struktur Bawah", "Nominal"]],
+      head: [["No", "Kavling", "Tipe", "Struktur Atas", "Struktur Bawah", "Nominal"]],
       body,
-      foot: [["TOTAL", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
+      foot: [["TOTAL", "", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
       theme: "grid",
       styles: {
         font: "helvetica",
@@ -683,17 +698,21 @@ export const suratService = {
       },
       columnStyles: {
         0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 35, halign: "center" },
-        2: { halign: "right" },
+        1: { cellWidth: 28, halign: "center" },
+        2: { cellWidth: 28 },
         3: { halign: "right" },
         4: { halign: "right" },
+        5: { halign: "right" },
       },
       didParseCell: (data) => {
         if (data.section === "foot" && data.column.index === 0) {
-          data.cell.colSpan = 2;
+          data.cell.colSpan = 3;
           data.cell.styles.halign = "center";
         }
         if (data.section === "foot" && data.column.index === 1) {
+          data.cell.text = [];
+        }
+        if (data.section === "foot" && data.column.index === 2) {
           data.cell.text = [];
         }
       },
@@ -714,6 +733,7 @@ export const suratService = {
       String(index + 1),
       project?.name || project?.label || "-",
       this.getUnitCode(unit),
+      this.getUnitType(unit),
       this.buildProductionCode(unit) || "-",
     ]);
 
@@ -728,7 +748,7 @@ export const suratService = {
     autoTable(doc, {
       startY: 35,
       margin: { left: margin, right: margin },
-      head: [["No", "Proyek", "Unit", "Kode Produksi"]],
+      head: [["No", "Proyek", "Unit", "Tipe", "Kode Produksi"]],
       body,
       theme: "grid",
       styles: {
@@ -748,9 +768,10 @@ export const suratService = {
       },
       columnStyles: {
         0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 58 },
-        2: { cellWidth: 25, halign: "center" },
-        3: { cellWidth: 84 },
+        1: { cellWidth: 42 },
+        2: { cellWidth: 24, halign: "center" },
+        3: { cellWidth: 27 },
+        4: { cellWidth: 74 },
       },
     });
 
@@ -2388,7 +2409,7 @@ export const suratService = {
         );
       }
 
-      if (updatedSurat.status === 'SELESAI') {
+      if (['SELESAI', 'DONE'].includes(updatedSurat.status)) {
         await this.finalizeRecommendationRevisionIfNeeded(suratId);
       }
     }
