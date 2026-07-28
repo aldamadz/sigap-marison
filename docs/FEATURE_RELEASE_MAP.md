@@ -212,6 +212,12 @@ Temuan keamanan outbound:
 | PIC-01 | Monitoring/PIC/chat/payment lama | Removed dari alur aktif | Riwayat commit lama; route/service aktif tidak ada | Jangan hidupkan kembali tanpa desain baru |
 | ENV-01 | Switch environment Marison lewat UI/OTP | Removed, diganti environment lock | Provider/status locked | Jangan hidupkan; bertentangan dengan isolasi deployment |
 
+### 4.10 Database dan Operasional
+
+| ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
+| --- | --- | --- | --- | --- | --- |
+| DB-01 | Rekonsiliasi riwayat migration staging | Local filename collision resolved; remote staging verification pending | Migration filename tests dan runbook staging | Staging DB identity, migration history, catalog evidence, backup | Tidak boleh dipromosikan sebagai repair production; production memerlukan audit dan izin tersendiri |
+
 ## 5. Dependensi Utama
 
 Urutan dependensi dari fondasi ke fitur bisnis:
@@ -254,7 +260,7 @@ bila diperlukan, rencana rollback, dan smoke test production.
 | P1 | Branch protection dan required checks belum diverifikasi | PR dapat masuk tanpa quality gate yang konsisten | Aktifkan protection setelah CI tersedia |
 | P0 | Outbound Marison belum memiliki lock/idempotency lokal | Potensi POST ganda | Tambah claim/lock atomik dan idempotency key bila upstream mendukung |
 | P1 | Production PDF worker berada pada source `8918d34` | App dan worker dapat menghasilkan perilaku berbeda | Promosikan worker hanya lewat rilis production terverifikasi |
-| P1 | Dua migration lokal memakai versi `20260707113000` | `db push` meminta `--include-all` dan berisiko salah apply | Audit lalu beri versi unik dengan prosedur repair terkontrol |
+| P1 | Duplicate version `20260707113000` sudah dihapus dari lineage staging, tetapi history/schema remote staging belum diverifikasi | Source bersih belum membuktikan remote konsisten | Ikuti `STAGING_MIGRATION_RECONCILIATION.md`; jangan gunakan `--include-all` atau blind repair |
 | P1 | Full test memiliki satu assertion gagal di `bff-session-security.test.ts` | Required check belum dapat dibuat hijau | Perbaiki test/kontrak session pada branch terpisah |
 | P1 | Publication Realtime production belum diaudit penuh | Badge production belum memiliki bukti setara staging | Audit kelima tabel tanpa mengubah data bisnis |
 | P1 | `backend/src/domain-runtime.ts` masih memakai pengecualian typecheck selama port verbatim | Kesalahan bentuk data domain belum seluruhnya dilindungi compiler | Pecah per service dan hapus `@ts-nocheck` sebelum kandidat production |
