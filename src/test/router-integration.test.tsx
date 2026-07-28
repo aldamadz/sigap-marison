@@ -45,7 +45,7 @@ const renderRouteTree = (initialEntry: string, authenticated: boolean) => render
   </MemoryRouter>,
 );
 
-describe("declarative React Router v7 routes", () => {
+describe("declarative React Router v8 routes", () => {
   it("redirects unauthenticated protected routes", () => {
     renderRouteTree("/private", false);
 
