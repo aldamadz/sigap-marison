@@ -34,6 +34,10 @@ FROM node:22.23.1-alpine
 
 WORKDIR /app
 
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
+ENV GIT_SHA=$GIT_SHA
+
 RUN apk add --no-cache \
     libreoffice \
     font-noto \

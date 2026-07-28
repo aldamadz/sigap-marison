@@ -1,6 +1,6 @@
 # SIGAP Feature and Release Map
 
-Snapshot audit: 2026-07-27 (Asia/Jakarta)
+Snapshot audit: 2026-07-28 (Asia/Jakarta)
 
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
@@ -35,7 +35,7 @@ Arti status:
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
 | App container | `agenda-flow-prod` | Fastify web, PDF worker, dan cron sync staging | Ketiga service staging sehat; production tidak diubah |
-| Git source | `main` | `staging`, enam commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
+| Git source | `main` | `staging`, 88 commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
 | RPC | 51 RPC | 51 RPC | Tidak ada perbedaan RPC |
@@ -55,11 +55,11 @@ bukan hanya waktu pembuatan image.
 | Komponen | Status saat audit | Tindakan yang diperlukan |
 | --- | --- | --- |
 | `main` | Ada; saat ini menjadi source seluruh runtime | Pertahankan sebagai production |
-| `staging` | Sudah ada; enam commit di depan `main` saat snapshot | Gunakan hanya sebagai target PR pengujian staging |
+| `staging` | Sudah ada; 88 commit di depan `main` saat snapshot | Gunakan hanya sebagai target PR pengujian staging |
 | `feature/*` | Belum menjadi alur baku historis | Wajib untuk fitur baru |
 | `fix/*` | Belum menjadi alur baku historis | Wajib untuk perbaikan rutin |
-| GitHub Actions | Tidak ada workflow di `.github/workflows` | Buat CI dan deploy terpisah |
-| Branch protection | Belum diverifikasi | Wajibkan PR dan status checks |
+| GitHub Actions | Quality workflow tersedia pada PR #42 dan belum merged | Merge setelah checks hijau; deploy tetap manual |
+| Branch protection | Tidak tersedia untuk repository private pada paket GitHub saat ini | Gunakan review/check PR secara manual atau upgrade paket |
 | Selective release | Belum dapat diandalkan dari branch staging | Promosikan branch fitur langsung ke `main` |
 
 Aturan operasional lengkap berada di root `AGENTS.md`.
@@ -213,6 +213,14 @@ Temuan keamanan outbound:
 | PIC-01 | Monitoring/PIC/chat/payment lama | Removed dari alur aktif | Riwayat commit lama; route/service aktif tidak ada | Jangan hidupkan kembali tanpa desain baru |
 | ENV-01 | Switch environment Marison lewat UI/OTP | Removed, diganti environment lock | Provider/status locked | Jangan hidupkan; bertentangan dengan isolasi deployment |
 
+### 4.10 Operasional dan Release
+
+| ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
+| --- | --- | --- | --- | --- | --- |
+| OPS-01 | Deploy staging app-only dan full stack yang eksplisit | Staging candidate | Panduan deploy, aturan restart PDF/sync worker, smoke test readiness | Docker context `ubuntu-server`, Compose staging, health routes | Dokumentasi operasional; pertahankan agar deploy app tidak merestart worker tanpa sengaja |
+| OPS-02 | Identitas revision runtime | Staging candidate | OCI image revision label, build arg `GIT_SHA`, `/health/version` | Docker build dan Fastify health routes | Read-only metadata; pertahankan agar runtime dapat dicocokkan dengan commit tanpa membaca file container |
+| DB-01 | Rekonsiliasi riwayat migration staging | Local filename collision resolved; remote staging verification pending | Migration filename tests dan runbook staging | Staging DB identity, migration history, catalog evidence, backup | Tidak boleh dipromosikan sebagai repair production; production memerlukan audit dan izin tersendiri |
+
 ## 5. Dependensi Utama
 
 Urutan dependensi dari fondasi ke fitur bisnis:
@@ -251,11 +259,11 @@ bila diperlukan, rencana rollback, dan smoke test production.
 
 | Prioritas | Temuan | Dampak | Tindakan |
 | --- | --- | --- | --- |
-| P0 | Tidak ada workflow CI/deploy GitHub | Deployment tidak terikat branch | Buat workflow staging dan production |
-| P1 | Branch protection dan required checks belum diverifikasi | PR dapat masuk tanpa quality gate yang konsisten | Aktifkan protection setelah CI tersedia |
+| P0 | Quality workflow masih berada pada PR #42; deploy workflow belum ada | Deployment belum terikat branch | Merge quality workflow setelah hijau; desain deploy staging dan production terpisah |
+| P1 | Branch protection tidak tersedia untuk repository private pada paket GitHub saat ini | Required checks tidak dapat dipaksakan platform | Gunakan review/check PR secara manual atau upgrade paket GitHub |
 | P0 | Outbound Marison belum memiliki lock/idempotency lokal | Potensi POST ganda | Tambah claim/lock atomik dan idempotency key bila upstream mendukung |
 | P1 | Production PDF worker berada pada source `8918d34` | App dan worker dapat menghasilkan perilaku berbeda | Promosikan worker hanya lewat rilis production terverifikasi |
-| P1 | Dua migration lokal memakai versi `20260707113000` | `db push` meminta `--include-all` dan berisiko salah apply | Audit lalu beri versi unik dengan prosedur repair terkontrol |
+| P1 | Duplicate version `20260707113000` sudah dihapus dari lineage staging, tetapi history/schema remote staging belum diverifikasi | Source bersih belum membuktikan remote konsisten | Ikuti `STAGING_MIGRATION_RECONCILIATION.md`; jangan gunakan `--include-all` atau blind repair |
 | P1 | Full test memiliki satu assertion gagal di `bff-session-security.test.ts` | Required check belum dapat dibuat hijau | Perbaiki test/kontrak session pada branch terpisah |
 | P1 | Publication Realtime production belum diaudit penuh | Badge production belum memiliki bukti setara staging | Audit kelima tabel tanpa mengubah data bisnis |
 | P1 | `backend/src/domain-runtime.ts` masih memakai pengecualian typecheck selama port verbatim | Kesalahan bentuk data domain belum seluruhnya dilindungi compiler | Pecah per service dan hapus `@ts-nocheck` sebelum kandidat production |

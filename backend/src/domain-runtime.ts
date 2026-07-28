@@ -37,8 +37,8 @@ import {
   previewMarisonProjectSync,
   runTrackedMarisonSync,
 } from "../../server/marison-employee-sync.mjs";
-import { createSessionCookieHelpers } from "../../src/domain/session-cookie.js";
-import { clientIp, enforceRateLimit, recordRateLimit } from "../../src/domain/rate-limit.js";
+import { createSessionCookieHelpers } from "./domain/session-cookie.js";
+import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -262,11 +262,6 @@ const escapeHtml = (value) => String(value ?? "")
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#39;");
 
-const clientIp = clientIp;
-const enforceRateLimit = enforceRateLimit;
-const recordRateLimit = recordRateLimit;
-const activeRateLimit = () => null;
-
 const defaultEmailSettings = {
   enabled: true,
   inherit_global: true,
@@ -402,6 +397,7 @@ const readJsonBody = async (req, maxBytes = 1024 * 1024) => {
 
 const SESSION_COOKIE_HELPERS = createSessionCookieHelpers(sessionSecret);
 
+const hasSessionCookie = (req) => SESSION_COOKIE_HELPERS.hasSessionCookie(req);
 const readCookieSession = (req) => SESSION_COOKIE_HELPERS.readCookieSession(req);
 const clearedSessionCookie = () => SESSION_COOKIE_HELPERS.clearSessionCookie();
 const setSessionCookie = (res, session) => res.setHeader("Set-Cookie", SESSION_COOKIE_HELPERS.setSessionCookie(session));
@@ -2336,7 +2332,7 @@ const uploadInternalStorageFile = async (token, req) => {
     });
     const err = new Error(
       shouldUseExternalStorage()
-        ? "Server aplikasi tidak bisa menghubungi storage self-hosted. Periksa STORAGE_SUPABASE_URL dari container agenda-flow-prod."
+        ? "Server aplikasi tidak bisa menghubungi storage self-hosted. Periksa STORAGE_SUPABASE_URL pada container aplikasi aktif."
         : "Server aplikasi tidak bisa menghubungi storage Supabase."
     );
     err.status = 502;
@@ -4128,7 +4124,7 @@ export const handleRequest = async (req, res) => {
     if (url.pathname.startsWith("/api/") && ["POST", "PUT", "PATCH", "DELETE"].includes(req.method || "")) {
       assertSameOrigin(req);
     }
-    if (url.pathname.startsWith("/api/") && parseCookies(req)[SESSION_COOKIE]) {
+    if (url.pathname.startsWith("/api/") && hasSessionCookie(req)) {
       await refreshCookieSession(req, res);
     }
     if (req.method === "GET" && url.pathname === "/api/events") {
