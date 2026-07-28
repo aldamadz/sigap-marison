@@ -22,23 +22,25 @@ describe("SIGAP browser BFF session boundary", () => {
 
   it("stores the real Supabase session in an encrypted HttpOnly same-site cookie", () => {
     const server = read("backend/src/domain-runtime.ts");
+    const sessionModule = read("src/domain/session-cookie.ts");
     const cookieWriterStart = server.indexOf("const setSessionCookie");
     const cookieWriterEnd = server.indexOf("const publicSession", cookieWriterStart);
     const cookieWriter = server.slice(cookieWriterStart, cookieWriterEnd);
 
-    expect(server).toContain('createCipheriv("aes-256-gcm"');
-    expect(server).toContain('createDecipheriv("aes-256-gcm"');
-    expect(server).toContain('"HttpOnly"');
-    expect(server).toContain('"SameSite=Lax"');
-    expect(server).toContain('"__Host-sigap_session"');
+    expect(sessionModule).toContain('createCipheriv("aes-256-gcm"');
+    expect(sessionModule).toContain('createDecipheriv("aes-256-gcm"');
+    expect(sessionModule).toContain('"HttpOnly"');
+    expect(sessionModule).toContain('"SameSite=Lax"');
+    expect(sessionModule).toContain('"__Host-sigap_session"');
     expect(server).toContain("createUserSupabaseClient(session.access_token)");
     expect(server).toContain("accessToken: async () => accessToken");
     expect(server).not.toContain('supabase.rpc("create_surat_registrasi_for_actor"');
     expect(server).toContain("assertSameOrigin(req)");
     expect(cookieWriterStart).toBeGreaterThan(-1);
     expect(cookieWriterEnd).toBeGreaterThan(cookieWriterStart);
-    expect(cookieWriter).toContain("user: compactSessionUser(session.user)");
-    expect(cookieWriter).toContain('Buffer.byteLength(cookie, "utf8") > 3800');
+    expect(cookieWriter).toContain("SESSION_COOKIE_HELPERS.setSessionCookie");
+    expect(sessionModule).toContain("SESSION_COOKIE_MAX_BYTES");
+    expect(sessionModule).toContain("Sesi login terlalu besar untuk disimpan dengan aman.");
     expect(cookieWriter).not.toContain("user: session.user");
   });
 
