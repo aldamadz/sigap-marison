@@ -50,7 +50,7 @@ describe("Hybrid Marison master sync", () => {
 
   it("adds tracked project sync without replacing local project UUIDs", () => {
     const migration = read("supabase/migrations/20260727103000_marison_project_master_sync.sql");
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const sync = read("server/marison-employee-sync.mjs");
 
     expect(migration).toContain("marison_project_id bigint");
