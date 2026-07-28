@@ -28,6 +28,16 @@ describe("production code serial", () => {
     expect(inbox).toContain("normalizeAllocationDetailForPersistence");
   });
 
+  it("guards incomplete inbox surat relations before rendering detail", () => {
+    const inbox = readFileSync(join(process.cwd(), "src/pages/surat/InboxPage.tsx"), "utf8");
+    expect(inbox).toContain("const getInboxSurat = (item: any) => {");
+    expect(inbox).toContain("Array.isArray(item?.surat_registrasi)");
+    expect(inbox).toContain("if (!surat?.id)");
+    expect(inbox).toContain("const activeSurat = getInboxSurat(selectedItem);");
+    expect(inbox).toContain("{selectedItem && activeSurat ?");
+    expect(inbox).toContain("Data antrean belum lengkap");
+  });
+
   it("stores a numeric serial and renders it with three digits in Excel", () => {
     const workbook = createUnitAllocationTemplateWorkbook([{
       No: 1,
