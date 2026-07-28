@@ -887,7 +887,7 @@ Fallback data lama:
 - Environment Marison dikunci melalui `MARISON_DEPLOYMENT_ENVIRONMENT` pada Docker Compose dan tidak dapat diganti dari UI atau nilai database.
 - Panel Integrasi Marison berada di `Konfigurasi > Kegunaan Form`, menampilkan status endpoint aktif dan tes koneksi Projects, Unit, serta Non Unit untuk admin.
 - Khusus staging, admin dapat memeriksa lalu menyinkronkan data `/branches` dan `/employees` dari panel Kegunaan Form tanpa mengirim credential external ke browser.
-- Jalur sinkron manual tersebut disiapkan sebagai dasar cronjob harian malam atau mingguan, tetapi scheduler belum diaktifkan otomatis sampai hasil staging dan aturan mapping disetujui.
+- Staging menjalankan sinkronisasi otomatis setiap hari pukul 00:00 Asia/Jakarta setelah sinkron manual dan aturan mapping diuji. Scheduler production tetap nonaktif sampai ada permintaan rilis production yang eksplisit.
 - Sinkronisasi mempertahankan UUID, role, jabatan, departemen, dan kantor profil lama; NIK dinormalisasi dari sumber external, akun baru memakai role `user`, dan email login memakai pola `nama.lengkap@staging.test`.
 - Employee tanpa NIK atau NIK yang ambigu diblokir dan dilaporkan pada preview; akun yang tidak ada pada response external tidak dinonaktifkan otomatis.
 - External API berjalan sebagai service terpisah.
@@ -907,7 +907,13 @@ Fallback data lama:
 - `APP_PUBLIC_URL` dan `VITE_APP_PUBLIC_URL` dikunci oleh masing-masing Compose agar tautan email, reset password, dan API browser tidak silang domain.
 - Credential `MARISON_STAGING_*` dan `MARISON_PRODUCTION_*` hanya tersedia di server dan tidak dikirim ke browser.
 - Fallback lama `MARISON_EXTERNAL_*`, pemilihan environment global dari database, dan switch OTP tidak digunakan lagi.
-- Command deploy staging aplikasi utama:
+- Command deploy staging aplikasi utama saja, tanpa membuat ulang PDF worker atau sync worker:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build --no-deps agenda-flow-staging
+```
+
+- Command deploy seluruh stack staging secara sengaja:
 
 ```powershell
 docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build
@@ -921,12 +927,36 @@ docker --context ubuntu-server compose -p agenda-flow-production -f docker-compo
 
 - Jangan hilangkan `-p`; nama project Compose yang berbeda mencegah deploy staging menganggap container production sebagai orphan.
 - Jangan hilangkan `--env-file`; staging wajib memakai `.env.staging` dan production wajib memakai `.env.production`.
-- Jika hanya mengubah frontend, halaman dokumentasi, atau backend aplikasi utama di `backend/src`, gunakan command aplikasi utama di atas dan jangan redeploy worker PDF.
-- Jika perlu redeploy PDF worker, gunakan compose worker secara terpisah:
+- Deploy aplikasi utama saja tidak merestart PDF worker atau sync worker yang sudah berjalan.
+- Jika hanya mengubah frontend, halaman dokumentasi, atau backend aplikasi utama di `backend/src`, gunakan command aplikasi utama staging di atas.
+- Redeploy PDF worker staging hanya jika `pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font, atau konfigurasi worker berubah:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-pdf-worker-staging
+```
+
+- Redeploy sync worker staging hanya jika `server/marison-sync-worker.mjs`, image/runtime, token, URL, jadwal, atau konfigurasi sinkronisasi berubah:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-marison-sync-staging
+```
+
+- Jika perlu redeploy PDF worker production, gunakan compose worker production secara terpisah:
 
 ```powershell
 docker --context ubuntu-server compose -p agenda-flow-production-worker -f docker-compose.worker.yml --env-file .env.production up -d --build
 ```
+
+- Setelah deploy staging, verifikasi service Compose dan endpoint readiness publik:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging ps
+Invoke-WebRequest -UseBasicParsing https://sigap.marison-testing.biz.id/health/ready
+```
+
+- App harus berstatus healthy. Worker yang ikut dideploy harus berstatus running; periksa log service terkait bila worker tidak stabil.
 
 - Jika hanya mengubah External API, gunakan compose external dan app utama/PDF worker tidak perlu diredeploy:
 
