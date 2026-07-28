@@ -37,6 +37,8 @@ import {
   previewMarisonProjectSync,
   runTrackedMarisonSync,
 } from "../../server/marison-employee-sync.mjs";
+import { createSessionCookieHelpers } from "../../src/domain/session-cookie.js";
+import { clientIp, enforceRateLimit, recordRateLimit } from "../../src/domain/rate-limit.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -260,41 +262,10 @@ const escapeHtml = (value) => String(value ?? "")
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#39;");
 
-const clientIp = (req) => String(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "")
-  .split(",")[0]
-  .trim();
-
-const activeRateLimit = (store, key) => {
-  const now = Date.now();
-  const current = store.get(key);
-  if (current?.resetAt > now) return current;
-  if (current) store.delete(key);
-  return null;
-};
-
-const enforceRateLimit = (store, key, max) => {
-  const current = activeRateLimit(store, key);
-  if (!current || current.count < max) return;
-  const err = new Error("Terlalu banyak percobaan. Coba lagi nanti.");
-  err.status = 429;
-  err.retryAfter = Math.max(1, Math.ceil((current.resetAt - Date.now()) / 1000));
-  throw err;
-};
-
-const recordRateLimit = (store, key, windowMs) => {
-  const current = activeRateLimit(store, key);
-  if (current) {
-    current.count += 1;
-  } else {
-    store.set(key, { count: 1, resetAt: Date.now() + windowMs });
-  }
-  if (store.size > 5000) {
-    const now = Date.now();
-    for (const [entryKey, entry] of store) {
-      if (entry.resetAt <= now) store.delete(entryKey);
-    }
-  }
-};
+const clientIp = clientIp;
+const enforceRateLimit = enforceRateLimit;
+const recordRateLimit = recordRateLimit;
+const activeRateLimit = () => null;
 
 const defaultEmailSettings = {
   enabled: true,
@@ -429,92 +400,12 @@ const readJsonBody = async (req, maxBytes = 1024 * 1024) => {
   }
 };
 
-const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-sigap_session" : "sigap_session";
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-const sessionEncryptionKey = createHash("sha256").update(sessionSecret).digest();
+const SESSION_COOKIE_HELPERS = createSessionCookieHelpers(sessionSecret);
 
-const parseCookies = (req) => Object.fromEntries(
-  String(req.headers.cookie || "")
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const separator = part.indexOf("=");
-      return separator < 0
-        ? [part, ""]
-        : [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))];
-    })
-);
-
-const encryptSession = (session) => {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", sessionEncryptionKey, iv);
-  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(session), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, ciphertext]).toString("base64url");
-};
-
-const decryptSession = (value) => {
-  try {
-    const payload = Buffer.from(String(value || ""), "base64url");
-    if (payload.length < 29) return null;
-    const decipher = createDecipheriv("aes-256-gcm", sessionEncryptionKey, payload.subarray(0, 12));
-    decipher.setAuthTag(payload.subarray(12, 28));
-    return JSON.parse(Buffer.concat([decipher.update(payload.subarray(28)), decipher.final()]).toString("utf8"));
-  } catch {
-    return null;
-  }
-};
-
-const readCookieSession = (req) => req.sigapSession || decryptSession(parseCookies(req)[SESSION_COOKIE]);
-
-const sessionCookie = (session) => [
-  `${SESSION_COOKIE}=${encodeURIComponent(encryptSession(session))}`,
-  "Path=/",
-  "HttpOnly",
-  "SameSite=Lax",
-  process.env.NODE_ENV === "production" ? "Secure" : "",
-  `Max-Age=${SESSION_MAX_AGE_SECONDS}`,
-].filter(Boolean).join("; ");
-
-const clearedSessionCookie = () => [
-  `${SESSION_COOKIE}=`,
-  "Path=/",
-  "HttpOnly",
-  "SameSite=Lax",
-  process.env.NODE_ENV === "production" ? "Secure" : "",
-  "Max-Age=0",
-].filter(Boolean).join("; ");
-
-const compactSessionUser = (user) => ({
-  id: user?.id,
-  email: user?.email || null,
-});
-
-const setSessionCookie = (res, session) => {
-  const cookie = sessionCookie({
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
-    expires_at: session.expires_at,
-    user: compactSessionUser(session.user),
-  });
-  // Browsers commonly reject cookies above 4096 bytes without exposing a useful error.
-  if (Buffer.byteLength(cookie, "utf8") > 3800) {
-    const err = new Error("Sesi login terlalu besar untuk disimpan dengan aman.");
-    err.status = 500;
-    throw err;
-  }
-  res.setHeader("Set-Cookie", cookie);
-};
-
-const publicSession = (session) => session ? {
-  access_token: "cookie-session",
-  refresh_token: "",
-  token_type: "bearer",
-  expires_in: Math.max(0, Number(session.expires_at || 0) - Math.floor(Date.now() / 1000)),
-  expires_at: session.expires_at,
-  user: session.user,
-} : null;
+const readCookieSession = (req) => SESSION_COOKIE_HELPERS.readCookieSession(req);
+const clearedSessionCookie = () => SESSION_COOKIE_HELPERS.clearSessionCookie();
+const setSessionCookie = (res, session) => res.setHeader("Set-Cookie", SESSION_COOKIE_HELPERS.setSessionCookie(session));
+const publicSession = (session) => SESSION_COOKIE_HELPERS.publicSession(session);
 
 const assertSameOrigin = (req) => {
   const origin = String(req.headers.origin || "");
