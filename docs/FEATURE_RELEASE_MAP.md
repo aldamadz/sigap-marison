@@ -217,6 +217,7 @@ Temuan keamanan outbound:
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | OPS-01 | Deploy staging app-only dan full stack yang eksplisit | Staging candidate | Panduan deploy, aturan restart PDF/sync worker, smoke test readiness | Docker context `ubuntu-server`, Compose staging, health routes | Dokumentasi operasional; pertahankan agar deploy app tidak merestart worker tanpa sengaja |
+| OPS-02 | Identitas revision runtime | Staging candidate | OCI image revision label, build arg `GIT_SHA`, `/health/version` | Docker build dan Fastify health routes | Read-only metadata; pertahankan agar runtime dapat dicocokkan dengan commit tanpa membaca file container |
 
 ## 5. Dependensi Utama
 
