@@ -903,15 +903,22 @@ const requireSupabaseUser = async (token) => {
   return userRes.user;
 };
 
+const isActiveAdminProfile = (profile) => Boolean(
+  profile
+  && String(profile.role || "").toLowerCase() === "admin"
+  && profile.is_active !== false
+  && profile.deleted_at == null
+);
+
 const requireAdminUser = async (token) => {
   const user = await requireSupabaseUser(token);
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw error;
-  if (!profile || !["admin", "super_admin"].includes(String(profile.role || "").toLowerCase())) {
+  if (!isActiveAdminProfile(profile)) {
     const err = new Error("Akses ditolak: hanya admin");
     err.status = 403;
     throw err;
@@ -2198,10 +2205,10 @@ const sendInternalNotification = async (token, payload) => {
 
   const { data: actorProfile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", actor.id)
     .maybeSingle();
-  const isAdmin = actorProfile?.role === "admin";
+  const isAdmin = isActiveAdminProfile(actorProfile);
 
   if (!isAdmin) {
     if (!suratId) {
@@ -2552,10 +2559,10 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     : [];
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
-  const allowed = signature.user_id === user.id || verifierIds.includes(user.id) || profile?.role === "admin";
+  const allowed = signature.user_id === user.id || verifierIds.includes(user.id) || isActiveAdminProfile(profile);
   if (!allowed) {
     const err = new Error("Forbidden");
     err.status = 403;
@@ -3080,11 +3087,11 @@ const getMarisonEnvironmentStatus = async (req) => {
   const state = await getMarisonEnvironmentState();
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role, is_active")
+    .select("role, is_active, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw error;
-  const canManage = profile?.role === "admin" && profile?.is_active !== false;
+  const canManage = isActiveAdminProfile(profile);
   const config = getMarisonApiConfig(state.environment);
   const result = {
     environment: state.environment,
@@ -3161,10 +3168,10 @@ const canReadSurat = async (surat, userId) => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", userId)
     .maybeSingle();
-  return profile?.role === "admin" || profile?.role === "super_admin";
+  return isActiveAdminProfile(profile);
 };
 
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
