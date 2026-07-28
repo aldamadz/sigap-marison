@@ -22,7 +22,7 @@
     "build:backend": "npm run build:shared && npm run build --workspace @sigap/backend",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @sigap/shared && npm run typecheck --workspace @sigap/backend",
+    "typecheck": "npm run build:shared && tsc -b --pretty false && npm run typecheck --workspace @sigap/shared && npm run typecheck --workspace @sigap/backend",
     "quality": "npm run lint && npm run typecheck && npm test && npm run test:document-layout && npm run test:pgd-pdf && npm run test:storage-policy && npm run build",
     "preview": "vite preview",
     "start": "node backend/dist/index.js",
