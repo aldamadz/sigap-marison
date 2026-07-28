@@ -1,0 +1,27 @@
+name: Quality Gate
+
+on:
+  push:
+    branches: [staging, main]
+  pull_request:
+    branches: [staging, main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run quality gate
+        run: npm run quality
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
