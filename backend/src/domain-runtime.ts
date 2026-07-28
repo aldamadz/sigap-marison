@@ -262,11 +262,6 @@ const escapeHtml = (value) => String(value ?? "")
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#39;");
 
-const clientIp = clientIp;
-const enforceRateLimit = enforceRateLimit;
-const recordRateLimit = recordRateLimit;
-const activeRateLimit = () => null;
-
 const defaultEmailSettings = {
   enabled: true,
   inherit_global: true,
