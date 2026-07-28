@@ -41,5 +41,27 @@ describe("rate-limit extraction", () => {
     const runtime = await import("../../backend/src/domain-runtime.ts");
 
     expect(runtime.handleRequest).toBeTypeOf("function");
+
+    let responseStatus = 0;
+    let responseBody = "";
+    await runtime.handleRequest(
+      {
+        headers: { host: "localhost", cookie: "sigap_session=invalid" },
+        method: "GET",
+        url: "/api/auth/session",
+      },
+      {
+        setHeader: () => undefined,
+        writeHead: (statusCode: number) => {
+          responseStatus = statusCode;
+        },
+        end: (body?: unknown) => {
+          responseBody = String(body ?? "");
+        },
+      },
+    );
+
+    expect(responseStatus).toBe(200);
+    expect(JSON.parse(responseBody)).toEqual({ session: null, user: null });
   });
 });

@@ -14,6 +14,7 @@ describe("session-cookie extraction", () => {
     expect(module).toContain("setSessionCookie");
     expect(module).toContain("clearSessionCookie");
     expect(module).toContain("readCookieSession");
+    expect(module).toContain("hasSessionCookie");
     expect(module).toContain("publicSession");
     expect(module).toContain("CookieSession");
     expect(module).toContain("FastifyRequest");
@@ -27,6 +28,7 @@ describe("session-cookie extraction", () => {
   it("removes inline session helpers from domain-runtime.ts and delegates to the helper module", () => {
     const runtime = read("backend/src/domain-runtime.ts");
     expect(runtime).not.toContain("const parseCookies = (req)");
+    expect(runtime).toContain("SESSION_COOKIE_HELPERS.hasSessionCookie(req)");
     expect(runtime).not.toContain("const encryptSession = (session)");
     expect(runtime).not.toContain("const decryptSession = (value)");
     expect(runtime).not.toContain("const compactSessionUser = (user)");

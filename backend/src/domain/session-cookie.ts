@@ -72,6 +72,8 @@ export const createSessionCrypto = (sessionSecret: string) => {
 export const createSessionCookieHelpers = (sessionSecret: string) => {
   const { encrypt, decrypt } = createSessionCrypto(sessionSecret);
 
+  const hasSessionCookie = (req: FastifyRequest): boolean => Boolean(parseCookies(req)[SESSION_COOKIE]);
+
   const readCookieSession = (req: FastifyRequest): CookieSession | null => {
     const cached = (req as unknown as { sigapSession?: CookieSession | null }).sigapSession;
     if (cached !== undefined) return cached ?? null;
@@ -142,6 +144,7 @@ export const createSessionCookieHelpers = (sessionSecret: string) => {
   };
 
   return {
+    hasSessionCookie,
     readCookieSession,
     sessionCookie,
     clearedSessionCookie,

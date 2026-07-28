@@ -397,6 +397,7 @@ const readJsonBody = async (req, maxBytes = 1024 * 1024) => {
 
 const SESSION_COOKIE_HELPERS = createSessionCookieHelpers(sessionSecret);
 
+const hasSessionCookie = (req) => SESSION_COOKIE_HELPERS.hasSessionCookie(req);
 const readCookieSession = (req) => SESSION_COOKIE_HELPERS.readCookieSession(req);
 const clearedSessionCookie = () => SESSION_COOKIE_HELPERS.clearSessionCookie();
 const setSessionCookie = (res, session) => res.setHeader("Set-Cookie", SESSION_COOKIE_HELPERS.setSessionCookie(session));
@@ -4116,7 +4117,7 @@ export const handleRequest = async (req, res) => {
     if (url.pathname.startsWith("/api/") && ["POST", "PUT", "PATCH", "DELETE"].includes(req.method || "")) {
       assertSameOrigin(req);
     }
-    if (url.pathname.startsWith("/api/") && parseCookies(req)[SESSION_COOKIE]) {
+    if (url.pathname.startsWith("/api/") && hasSessionCookie(req)) {
       await refreshCookieSession(req, res);
     }
     if (req.method === "GET" && url.pathname === "/api/events") {
