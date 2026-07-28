@@ -95,7 +95,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | SUR-01 | Registrasi surat dinamis | Production + Staging | Surat form/service, registration RPC | Form usage, numbering, workflow, storage | Sangat tinggi; gunakan feature flag, jangan revert migration |
-| SUR-02 | Draft registrasi, reservasi nomor, dan sinkronisasi matrix aktif | Production + Staging; rekonsiliasi matrix kandidat staging | Draft/reservation RPC, tables, signer reconciliation | SUR-01, numbering, DOC-02 | Harus menyelesaikan/void draft sebelum nonaktif; surat terdaftar tetap memakai snapshot lama |
+| SUR-02 | Draft registrasi, reservasi nomor, dan sinkronisasi matrix aktif | Production + Staging; rekonsiliasi matrix kandidat diperkuat di staging | Draft/reservation RPC, tables, signer reconciliation | SUR-01, numbering, DOC-02 | Draft aktif selalu mengikuti kandidat dan tahap terbaru saat dibuka maupun sebelum submit; surat yang sudah terdaftar tetap memakai snapshot lama untuk audit |
 | SUR-03 | Nomor surat atomik dan konfigurasi counter | Production + Staging | Numbering admin, RPC | Letter type, office/entity | Tidak boleh ditarik tanpa mekanisme nomor pengganti |
 | SUR-04 | Lampiran awal dan lampiran approval | Production + Staging | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik |
 | SUR-05 | Preview detail dan file viewer bertoken | Production + Staging | Preview modal, file token BFF | Storage, surat authorization | Jangan membuka public URL sebagai pengganti |
@@ -133,13 +133,17 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-08 | Status, test koneksi, dan sinkron Integrasi Marison | Production + Staging | `Konfigurasi > Kegunaan Form`/BFF | Environment deployment, admin role | Environment switch via UI sudah removed; route lama hanya redirect |
 | MRN-09 | Pemisahan host staging/production | Production + Staging | Compose + server config | `.env.staging`, `.env.production` | Kontrol keamanan; jangan ditarik |
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1 | Development branch | Schema strict, fixture JSON, builder outbound | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
-| MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Smoke sync 25 Juli 2026: 9 kantor dan 67 profil terpetakan, 0 konflik; 9 kantor dan 35 profil masuk antrean review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
+| MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Baris yang perlu ditinjau memakai warna dan kolom Keterangan yang menjelaskan data kurang; badge sidebar menampilkan jumlah review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
 | MRN-12 | Tipe unit pada alokasi dan seluruh output | Staging only | Input alokasi, template Excel, ringkasan layar, PDF adendum, PDF kode produksi, PDF summary, email, payload `units[].type` | MRN-04, MRN-05, kontrak OpenAPI unit | Bergantung pada kontrak POST Marison yang masih staging-only; promosikan bersama MRN-05 setelah pengujian dokumen dan payload disetujui |
+| MRN-13 | Hybrid master proyek external | Staging development | Mapping `master_projects.marison_project_id`, sync run/issue audit, panel Integrasi Marison, Master Proyek, badge review admin | `/projects`, MRN-11 branch mapping, ADM-07 | Master proyek ditarik dari external dan tetap memakai UUID lokal SIGAP; proyek external tidak diberi entitas otomatis, masuk antrean review, dan jumlahnya diteruskan ke badge Master Proyek melalui attention state |
 
 Catatan cronjob:
 
 - Sinkronisasi branch/karyawan menggunakan master UUID SIGAP; ID external hanya menjadi mapping.
+- Sinkronisasi proyek menggunakan pola yang sama: UUID lokal SIGAP tetap menjadi primary key, sedangkan `marison_project_id` menjadi mapping external.
 - Branch selalu diproses sebelum employee agar `branch.id` dapat dipetakan ke `office_id` lokal.
+- Branch juga diproses sebelum project agar `project.branch.id` dapat dipetakan ke `office_id` lokal. Jika branch external kosong, proyek tetap masuk ke kantor penampung sementara dan wajib ditinjau admin.
+- Entitas proyek external dikosongkan saat sync agar tidak ada pemetaan asal-asalan. Baris Master Proyek diberi warna/kedip dan kolom Keterangan sampai entitas dipilih admin.
 - Sinkron manual dan worker harian pukul 00:00 Asia/Jakarta memakai jalur orkestrasi, lock, dan audit run yang sama.
 - Data external yang kosong tidak menghapus isian manual; hirarki kantor, role, atasan, dan tanggal kerja tetap dikelola SIGAP.
 - Cronjob production tidak boleh diaktifkan sebelum data HRD, mapping kantor, dan dampak role/login diuji di staging.

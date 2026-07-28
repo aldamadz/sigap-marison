@@ -144,6 +144,12 @@ const normalizeBranchCode = (value) => String(value ?? "")
   .replace(/[^A-Z0-9-]/g, "")
   .slice(0, 20);
 
+const normalizeProjectCode = (value) => String(value ?? "")
+  .trim()
+  .toUpperCase()
+  .replace(/[^A-Z0-9-]/g, "")
+  .slice(0, 30);
+
 const chooseOfficeCode = (branch, usedCodes) => {
   const preferred = normalizeBranchCode(branch?.code);
   if (preferred && !usedCodes.has(preferred)) return preferred;
@@ -339,6 +345,208 @@ export const executeMarisonBranchSync = async ({ supabase, branches, environment
     matched: branchResult.matched,
     failed: branchResult.errors.length,
     errors: branchResult.errors,
+  };
+};
+
+const findProjectForExternal = (project, office, projects) => {
+  const externalId = Number(project?.id);
+  const byExternalId = projects.find((row) => Number(row.marison_project_id) === externalId);
+  if (byExternalId) return { project: byExternalId, match: "external_id" };
+
+  const externalCode = normalizeProjectCode(project?.code);
+  if (externalCode) {
+    const codeMatches = projects.filter((row) => normalizeProjectCode(row.code) === externalCode);
+    if (codeMatches.length === 1) return { project: codeMatches[0], match: "code" };
+    if (codeMatches.length > 1) {
+      return { project: null, match: "conflict", reason: "Kode proyek cocok dengan lebih dari satu proyek SIGAP" };
+    }
+  }
+
+  const projectName = normalizeMarisonName(project?.name);
+  if (projectName && office?.id) {
+    const nameMatches = projects.filter((row) => (
+      row.office_id === office.id && normalizeMarisonName(row.name) === projectName
+    ));
+    if (nameMatches.length === 1) return { project: nameMatches[0], match: "name_office" };
+    if (nameMatches.length > 1) {
+      return { project: null, match: "conflict", reason: "Nama proyek pada kantor yang sama cocok dengan lebih dari satu proyek SIGAP" };
+    }
+  }
+
+  return { project: null, match: "new" };
+};
+
+const syncProjects = async (supabase, { projects, branches }, dryRun) => {
+  const branchResult = await syncBranches(supabase, branches, dryRun);
+  const [projectsResult, officesResult] = await Promise.all([
+    supabase.from("master_projects").select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons"),
+    supabase.from("master_offices").select("id,code,name,kedudukan,marison_branch_id"),
+  ]);
+  if (projectsResult.error) throw projectsResult.error;
+  if (officesResult.error) throw officesResult.error;
+
+  const localProjects = [...(projectsResult.data || [])];
+  const offices = officesResult.data || [];
+  const branchMappings = new Map(branchResult.mappings);
+  for (const office of offices) {
+    if (office.marison_branch_id != null) branchMappings.set(Number(office.marison_branch_id), office);
+  }
+  const fallbackOffice = offices.find((office) => normalizeMarisonName(office.kedudukan) === "pusat")
+    || offices.find((office) => normalizeMarisonName(office.name).includes("kantor pusat"))
+    || offices[0]
+    || null;
+  const result = {
+    matched: 0,
+    created: 0,
+    updated: 0,
+    createdApplied: 0,
+    updatedApplied: 0,
+    errors: [...branchResult.errors],
+  };
+
+  for (const rawProject of Array.isArray(projects) ? projects : []) {
+    const externalId = Number(rawProject?.id);
+    const externalCode = normalizeProjectCode(rawProject?.code);
+    const externalName = String(rawProject?.name || "").trim();
+    const branchId = Number(rawProject?.branch?.id ?? rawProject?.branch_id);
+    if (!Number.isSafeInteger(externalId)) {
+      result.errors.push({ entityType: "project", externalId: rawProject?.id ?? null, name: externalName || "-", reason: "ID proyek tidak valid" });
+      continue;
+    }
+    if (!externalCode) {
+      result.errors.push({ entityType: "project", externalId, name: externalName || "-", reason: "Kode proyek external belum tersedia" });
+      continue;
+    }
+    if (!externalName) {
+      result.errors.push({ entityType: "project", externalId, name: "-", reason: "Nama proyek external belum tersedia" });
+      continue;
+    }
+    const hasBranch = Number.isSafeInteger(branchId);
+    const office = hasBranch ? branchMappings.get(branchId) : fallbackOffice;
+    if (!office?.id) {
+      result.errors.push({
+        entityType: "project",
+        externalId,
+        name: externalName,
+        reason: hasBranch
+          ? `Branch external ${branchId} belum termapping ke kantor SIGAP`
+          : "Branch proyek external belum tersedia dan kantor pusat penampung belum tersedia",
+      });
+      continue;
+    }
+    const resolved = findProjectForExternal(rawProject, office, localProjects);
+    if (resolved.match === "conflict") {
+      result.errors.push({ entityType: "project", externalId, name: externalName, reason: resolved.reason });
+      continue;
+    }
+
+    const existing = resolved.project;
+    const entityId = existing?.entity_id || null;
+    const reviewReasons = [
+      ...(hasBranch ? [] : ["Branch proyek external belum tersedia"]),
+      ...(entityId ? [] : ["Entitas proyek belum dipilih"]),
+    ];
+    if (existing) {
+      result.matched += 1;
+      const payload = {
+        code: externalCode,
+        name: externalName,
+        office_id: office.id,
+        entity_id: entityId,
+        marison_project_id: externalId,
+        marison_project_code: externalCode,
+        marison_synced_at: new Date().toISOString(),
+        marison_last_seen_at: new Date().toISOString(),
+        marison_review_required: reviewReasons.length > 0,
+        marison_review_reasons: reviewReasons,
+      };
+      const changed = (
+        Number(existing.marison_project_id) !== externalId
+        || String(existing.marison_project_code || "") !== externalCode
+        || existing.code !== externalCode
+        || existing.name !== externalName
+        || existing.office_id !== office.id
+        || existing.entity_id !== payload.entity_id
+      );
+      if (!dryRun) {
+        const { data, error } = await supabase
+          .from("master_projects")
+          .update(payload)
+          .eq("id", existing.id)
+          .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons")
+          .single();
+        if (error) {
+          result.errors.push({ entityType: "project", externalId, name: externalName, reason: error.message });
+          continue;
+        }
+        Object.assign(existing, data);
+        if (changed) {
+          result.updated += 1;
+          result.updatedApplied += 1;
+        }
+      } else if (changed) {
+        result.updated += 1;
+      }
+      continue;
+    }
+
+    result.created += 1;
+    if (dryRun) continue;
+    const { data, error } = await supabase
+      .from("master_projects")
+      .insert({
+        code: externalCode,
+        name: externalName,
+        office_id: office.id,
+        entity_id: null,
+        marison_project_id: externalId,
+        marison_project_code: externalCode,
+        marison_synced_at: new Date().toISOString(),
+        marison_last_seen_at: new Date().toISOString(),
+        marison_review_required: reviewReasons.length > 0,
+        marison_review_reasons: reviewReasons,
+      })
+      .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons")
+      .single();
+    if (error) {
+      result.errors.push({ entityType: "project", externalId, name: externalName, reason: error.message });
+      continue;
+    }
+    localProjects.push(data);
+    result.createdApplied += 1;
+  }
+
+  return result;
+};
+
+export const previewMarisonProjectSync = async ({ supabase, projects, branches, environment = "staging" }) => {
+  const projectResult = await syncProjects(supabase, { projects, branches }, true);
+  return {
+    environment,
+    generatedAt: new Date().toISOString(),
+    source: {
+      projects: Array.isArray(projects) ? projects.length : 0,
+      branches: Array.isArray(branches) ? branches.length : 0,
+    },
+    matched: projectResult.matched,
+    toCreate: projectResult.created,
+    toUpdate: projectResult.updated,
+    blocked: projectResult.errors.length,
+    issues: projectResult.errors,
+  };
+};
+
+export const executeMarisonProjectSync = async ({ supabase, projects, branches, environment = "staging" }) => {
+  const projectResult = await syncProjects(supabase, { projects, branches }, false);
+  return {
+    environment,
+    completedAt: new Date().toISOString(),
+    source: Array.isArray(projects) ? projects.length : 0,
+    created: projectResult.createdApplied,
+    updated: projectResult.updatedApplied,
+    matched: projectResult.matched,
+    failed: projectResult.errors.length,
+    errors: projectResult.errors,
   };
 };
 
@@ -617,7 +825,7 @@ const sanitizeSyncIssueDetails = (issue) => ({
 });
 
 export const replaceMarisonSyncIssues = async ({ supabase, environment, issues, entityTypes }) => {
-  const types = [...new Set(entityTypes || [])].filter((value) => ["branch", "employee"].includes(value));
+  const types = [...new Set(entityTypes || [])].filter((value) => ["branch", "employee", "project"].includes(value));
   if (types.length > 0) {
     const { error: resolveError } = await supabase
       .from("marison_sync_issues")
@@ -629,7 +837,7 @@ export const replaceMarisonSyncIssues = async ({ supabase, environment, issues, 
   }
 
   for (const issue of Array.isArray(issues) ? issues : []) {
-    const entityType = issue?.entityType === "branch" ? "branch" : "employee";
+    const entityType = ["branch", "employee", "project"].includes(issue?.entityType) ? issue.entityType : "employee";
     const externalId = String(issue?.externalId ?? issue?.nik ?? "").trim();
     if (!externalId) continue;
     const { error } = await supabase
@@ -690,7 +898,11 @@ export const runTrackedMarisonSync = async ({
   try {
     const result = await operation();
     const issues = Array.isArray(result?.errors) ? result.errors : [];
-    const entityTypes = scope === "branches" ? ["branch"] : ["branch", "employee"];
+    const entityTypes = scope === "branches"
+      ? ["branch"]
+      : scope === "projects"
+        ? ["branch", "project"]
+        : ["branch", "employee"];
     await replaceMarisonSyncIssues({ supabase, environment, issues, entityTypes });
     const status = Number(result?.failed || 0) > 0 || issues.length > 0 ? "partial" : "success";
     const stats = Object.fromEntries(Object.entries(result || {}).filter(([key]) => key !== "errors"));

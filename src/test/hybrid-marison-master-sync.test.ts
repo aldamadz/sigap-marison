@@ -26,6 +26,7 @@ describe("Hybrid Marison master sync", () => {
     expect(worker).toContain('parts.hour === "00" && parts.minute === "00"');
     expect(server).toContain("/api/internal/marison/directory-sync");
     expect(server).toContain('triggerType: "cron"');
+    expect(server).toContain('scope: "projects"');
     expect(compose).toContain("agenda-marison-sync-staging:");
     expect(compose).toContain('MARISON_SYNC_ENABLED: "true"');
   });
@@ -45,5 +46,57 @@ describe("Hybrid Marison master sync", () => {
       sync.indexOf("} else {", sync.indexOf("const authUpdates = {")),
     );
     expect(existingAuthUpdate).not.toContain("password:");
+  });
+
+  it("adds tracked project sync without replacing local project UUIDs", () => {
+    const migration = read("supabase/migrations/20260727103000_marison_project_master_sync.sql");
+    const server = read("backend/src/domain-runtime.ts");
+    const sync = read("server/marison-employee-sync.mjs");
+
+    expect(migration).toContain("marison_project_id bigint");
+    expect(migration).toContain("master_projects_marison_project_id_uidx");
+    expect(migration).toContain("scope in ('branches', 'directory', 'projects')");
+    expect(migration).toContain("entity_type in ('branch', 'employee', 'project')");
+    expect(migration).not.toContain("alter column id");
+    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/projects")');
+    expect(server).toContain("/api/integrations/marison/projects/sync");
+    expect(server).toContain('scope: "projects"');
+    expect(sync).toContain("export const previewMarisonProjectSync");
+    expect(sync).toContain("export const executeMarisonProjectSync");
+    expect(sync).toContain("Branch proyek external belum tersedia");
+    expect(sync).toContain("Entitas proyek belum dipilih");
+    expect(sync).toContain("fallbackOffice");
+    expect(sync).not.toContain("defaultEntityId");
+    expect(server).toContain("masterProjectReviewCount");
+  });
+
+  it("requires external projects to be reviewed until an entity is selected", () => {
+    const migration = read("supabase/migrations/20260727121500_require_marison_project_entity_review.sql");
+    const page = read("src/pages/admin/ProjectManagementPage.tsx");
+
+    expect(migration).toContain("if new.entity_id is null then");
+    expect(migration).toContain("Entitas proyek belum dipilih");
+    expect(migration).toContain("before insert or update of code, name, office_id, entity_id");
+    expect(migration).toContain("set entity_id = null");
+    expect(page).toContain("masterReviewRowClass");
+    expect(page).toContain("<TableHead className=\"text-xs font-semibold\">Keterangan</TableHead>");
+    expect(page).toContain("getProjectNotes");
+  });
+
+  it("uses the same review row and Keterangan column for employees, offices, and projects", () => {
+    const component = read("src/components/admin/MasterReviewStatus.tsx");
+    const users = read("src/pages/admin/UserManagementPage.tsx");
+    const offices = read("src/pages/admin/OfficeManagementPage.tsx");
+    const projects = read("src/pages/admin/ProjectManagementPage.tsx");
+
+    expect(component).toContain("masterReviewRowClass");
+    expect(component).toContain('return required ? "Data belum lengkap" : "Lengkap"');
+    [users, offices, projects].forEach((source) => {
+      expect(source).toContain("MasterReviewStatus");
+      expect(source).toContain("masterReviewRowClass");
+      expect(source.toLowerCase()).toContain("keterangan");
+    });
+    expect(users).not.toContain("> Lengkapi</span>");
+    expect(offices).not.toContain("Perlu dilengkapi");
   });
 });

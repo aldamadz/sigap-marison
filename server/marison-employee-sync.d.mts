@@ -4,6 +4,12 @@ export type MarisonEmployee = Record<string, unknown> & {
   nik?: string | null;
   name?: string | null;
 };
+export type MarisonProject = Record<string, unknown> & {
+  id?: number;
+  code?: string | null;
+  name?: string | null;
+  branch?: Record<string, unknown> | null;
+};
 
 export function normalizeMarisonName(value: unknown): string;
 export function normalizeMarisonNik(value: unknown): string;
@@ -32,6 +38,18 @@ export function executeMarisonBranchSync(options: {
   branches: Array<Record<string, unknown>>;
   environment?: "staging" | "production";
 }): Promise<Record<string, unknown>>;
+export function previewMarisonProjectSync(options: {
+  supabase: unknown;
+  projects: MarisonProject[];
+  branches: Array<Record<string, unknown>>;
+  environment?: "staging" | "production";
+}): Promise<Record<string, unknown>>;
+export function executeMarisonProjectSync(options: {
+  supabase: unknown;
+  projects: MarisonProject[];
+  branches: Array<Record<string, unknown>>;
+  environment?: "staging" | "production";
+}): Promise<Record<string, unknown>>;
 export function previewMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];
@@ -47,13 +65,13 @@ export function replaceMarisonSyncIssues(options: {
   supabase: unknown;
   environment: "staging" | "production";
   issues: Array<Record<string, unknown>>;
-  entityTypes: Array<"branch" | "employee">;
+  entityTypes: Array<"branch" | "employee" | "project">;
 }): Promise<void>;
 export function runTrackedMarisonSync(options: {
   supabase: unknown;
   environment: "staging" | "production";
   triggerType: "manual" | "cron";
-  scope: "branches" | "directory";
+  scope: "branches" | "directory" | "projects";
   initiatedBy?: string | null;
   operation: () => Promise<Record<string, unknown>>;
 }): Promise<Record<string, unknown>>;

@@ -27,6 +27,7 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("payload_hash: sha256Hex");
     expect(server).toContain("marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik)");
     expect(server).toContain("marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
+    expect(server).toContain("submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
     expect(client).not.toContain("MARISON_STAGING_CLIENT_SECRET");
     expect(client).not.toContain("MARISON_PRODUCTION_CLIENT_SECRET");
     expect(client).not.toContain("client_secret");

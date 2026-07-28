@@ -56,9 +56,12 @@ const runSync = async (dateKey) => {
     console.info("Marison directory cron selesai", {
       date: dateKey,
       status: payload.status,
-      created: payload.created || 0,
-      updated: payload.updated || 0,
-      failed: payload.failed || 0,
+      directoryCreated: payload.directory?.created ?? payload.created ?? 0,
+      directoryUpdated: payload.directory?.updated ?? payload.updated ?? 0,
+      directoryFailed: payload.directory?.failed ?? payload.failed ?? 0,
+      projectCreated: payload.projects?.created ?? 0,
+      projectUpdated: payload.projects?.updated ?? 0,
+      projectFailed: payload.projects?.failed ?? 0,
     });
   } catch (error) {
     console.error("Marison directory cron gagal", {

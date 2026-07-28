@@ -23,6 +23,7 @@ dist-ssr
 coverage/
 playwright-report/
 outputs/
+supabase/.temp/
 
 # Temporary/generated verification artifacts
 tmp/

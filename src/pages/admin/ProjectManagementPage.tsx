@@ -14,11 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Briefcase, Plus, Pencil, Trash2, Loader2, 
-  Search, RefreshCw, Building2, Fingerprint, Calendar, MapPin
+  Search, Building2, Calendar, MapPin, CheckCircle2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import { cn } from "@/lib/utils";
+import {
+  MasterReviewStatus,
+  masterReviewRowClass,
+} from "@/components/admin/MasterReviewStatus";
 
 export default function MasterProjectManagementPage() {
   const { toast } = useToast();
@@ -131,11 +135,26 @@ export default function MasterProjectManagementPage() {
     } finally { setLoading(false); }
   };
 
-  const filteredProjects = projects.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.master_offices?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const getProjectNotes = (item: any) => {
+    const reasons = Array.isArray(item.marison_review_reasons)
+      ? item.marison_review_reasons.filter(Boolean)
+      : [];
+    return reasons.length > 0 ? reasons.join(" · ") : "Lengkap";
+  };
+
+  const filteredProjects = projects
+    .filter(p =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.master_offices?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getProjectNotes(p).toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (!!a.marison_review_required !== !!b.marison_review_required) {
+        return a.marison_review_required ? -1 : 1;
+      }
+      return String(a.name || "").localeCompare(String(b.name || ""), "id-ID");
+    });
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
@@ -173,15 +192,29 @@ export default function MasterProjectManagementPage() {
               <TableHead className="py-4 pl-6 text-xs font-semibold">Kode</TableHead>
               <TableHead className="w-[450px] text-xs font-semibold">Detail proyek</TableHead>
               <TableHead className="text-xs font-semibold">Kantor cabang</TableHead>
+              <TableHead className="text-xs font-semibold">External</TableHead>
               <TableHead className="text-xs font-semibold">Entitas</TableHead>
+              <TableHead className="text-xs font-semibold">Keterangan</TableHead>
               <TableHead className="pr-8 text-right text-xs font-semibold">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-32"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary"/></TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-32"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary"/></TableCell></TableRow>
+            ) : filteredProjects.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-20 text-center text-sm text-muted-foreground">
+                  Tidak ada proyek ditemukan.
+                </TableCell>
+              </TableRow>
             ) : filteredProjects.map((item) => (
-              <TableRow key={item.id} className="group hover:bg-muted/20 transition-colors border-b border-border/50">
+              <TableRow
+                key={item.id}
+                className={cn(
+                  "group border-b border-border/50 transition-colors hover:bg-muted/20",
+                  item.marison_review_required && masterReviewRowClass,
+                )}
+              >
                 <TableCell className="pl-6">
                   <span className="rounded bg-primary/5 px-2 py-1 font-mono text-xs font-semibold text-primary">
                     {item.code || "Belum ada"}
@@ -207,12 +240,30 @@ export default function MasterProjectManagementPage() {
                   </div>
                 </TableCell>
                 <TableCell>
+                  {item.marison_project_id ? (
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+                        <CheckCircle2 className="h-3 w-3" />
+                        ID {item.marison_project_id}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Manual SIGAP</span>
+                  )}
+                </TableCell>
+                <TableCell>
                   <span className="rounded border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                    {item.master_entities?.name || "Tanpa entitas"}
+                    {item.master_entities?.name || "-"}
                   </span>
                 </TableCell>
+                <TableCell>
+                  <MasterReviewStatus
+                    required={item.marison_review_required}
+                    reasons={item.marison_review_reasons}
+                  />
+                </TableCell>
                 <TableCell className="text-right pr-8">
-                  <div className="flex justify-end gap-1 opactiy-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex justify-end gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600 hover:bg-amber-50" onClick={() => handleOpenModal(item)}>
                       <Pencil size={14} />
                     </Button>

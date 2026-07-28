@@ -83,9 +83,15 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const followUpCount = attentionState.followUpCount || 0
   const officeReviewCount = attentionState.masterOfficeReviewCount || 0
   const profileReviewCount = attentionState.profileReviewCount || 0
-  const masterReviewCount = officeReviewCount + profileReviewCount
+  const projectReviewCount = attentionState.masterProjectReviewCount || 0
+  const masterReviewCount = officeReviewCount + profileReviewCount + projectReviewCount
   const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
   const isUserAdmin = user?.role === 'admin'
+  const badgeOnlyAttentionLabels = new Set([
+    'User Organization',
+    'Master Kantor Cabang',
+    'Master Proyek',
+  ])
 
   const getNavAttention = (label: string): { count: number; tone: SidebarAttentionTone } | null => {
     const attentionByLabel: Record<string, { count: number; tone: SidebarAttentionTone }> = {
@@ -95,6 +101,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       'Status Pengajuan': { count: monitoringBadge, tone: 'update' },
       'User Organization': { count: profileReviewCount, tone: 'review' },
       'Master Kantor Cabang': { count: officeReviewCount, tone: 'review' },
+      'Master Proyek': { count: projectReviewCount, tone: 'review' },
     }
     const attention = attentionByLabel[label]
     return attention?.count > 0 ? attention : null
@@ -127,6 +134,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       const data = await getCurrentUser()
       if (data) {
         setUser(data)
+        await refetchAttention()
       }
     }
     initSidebar()
@@ -145,7 +153,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
     window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
     return () => window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
-  }, [])
+  }, [refetchAttention])
 
   const handleLogout = async () => {
     if (isLoggingOut) return
@@ -175,6 +183,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
   const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => {
     const attention = getNavAttention(label)
+    const badgeOnlyAttention = attention && badgeOnlyAttentionLabels.has(label)
     return (
     <NavLink to={path} end={path === '/dashboard' || path === '/admin/users' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
       {({ isActive }) => (
@@ -189,8 +198,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             isActive
               ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            attention && 'sidebar-attention-row',
-            attention && attentionToneClasses[attention.tone].row,
+            attention && !badgeOnlyAttention && 'sidebar-attention-row',
+            attention && !badgeOnlyAttention && attentionToneClasses[attention.tone].row,
           )}
           whileTap={{ scale: 0.98 }}
         >
@@ -352,8 +361,6 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 className={cn(
                   "group flex w-full items-center justify-between rounded-md border border-transparent px-3 py-2.5 transition-colors",
                   isMasterOpen ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]" : "text-muted-foreground hover:bg-accent",
-                  masterReviewCount > 0 && 'sidebar-attention-row',
-                  masterReviewCount > 0 && attentionToneClasses.review.row,
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0">
