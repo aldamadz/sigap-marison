@@ -39,6 +39,7 @@ import {
 } from "../../server/marison-employee-sync.mjs";
 import { createSessionCookieHelpers } from "./domain/session-cookie.js";
 import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
+import { isActiveAdminProfile, isActiveProfile } from "./domain/profile-authorization.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -436,6 +437,27 @@ const createUserSupabaseClient = (accessToken) => createClient(supabaseUrl, supa
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
+const revokedSessionErrorCodes = new Set(["42501", "PGRST301", "PGRST303"]);
+
+const assertActiveSessionProfile = async (session, res) => {
+  const { data: profile, error } = await createUserSupabaseClient(session.access_token)
+    .from("profiles")
+    .select("is_active, deleted_at")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  if (error && !revokedSessionErrorCodes.has(error.code)) {
+    const err = new Error("Gagal memvalidasi status akun.");
+    err.status = 503;
+    throw err;
+  }
+  if (error || !isActiveProfile(profile)) {
+    res.setHeader("Set-Cookie", clearedSessionCookie());
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+};
+
 const requireCookieSession = (req) => {
   const session = readCookieSession(req);
   if (!session?.access_token || !session?.user?.id) {
@@ -450,6 +472,7 @@ const refreshCookieSession = async (req, res) => {
   const session = readCookieSession(req);
   if (!session?.refresh_token) return null;
   if (Number(session.expires_at || 0) * 1000 > Date.now() + 10 * 60_000) {
+    await assertActiveSessionProfile(session, res);
     req.sigapSession = session;
     return session;
   }
@@ -459,6 +482,7 @@ const refreshCookieSession = async (req, res) => {
     res.setHeader("Set-Cookie", clearedSessionCookie());
     return null;
   }
+  await assertActiveSessionProfile(data.session, res);
   req.sigapSession = data.session;
   setSessionCookie(res, data.session);
   return data.session;
@@ -896,15 +920,23 @@ const requireSupabaseUser = async (token) => {
     err.status = 401;
     throw err;
   }
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("is_active, deleted_at")
+    .eq("id", userRes.user.id)
+    .maybeSingle();
+  if (profileError) {
+    const err = new Error("Gagal memvalidasi status akun.");
+    err.status = 503;
+    throw err;
+  }
+  if (!isActiveProfile(profile)) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
   return userRes.user;
 };
-
-const isActiveAdminProfile = (profile) => Boolean(
-  profile
-  && String(profile.role || "").toLowerCase() === "admin"
-  && profile.is_active !== false
-  && profile.deleted_at == null
-);
 
 const requireAdminUser = async (token) => {
   const user = await requireSupabaseUser(token);

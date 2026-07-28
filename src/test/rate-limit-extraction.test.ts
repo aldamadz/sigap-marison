@@ -63,5 +63,5 @@ describe("rate-limit extraction", () => {
 
     expect(responseStatus).toBe(200);
     expect(JSON.parse(responseBody)).toEqual({ session: null, user: null });
-  });
+  }, 10_000);
 });

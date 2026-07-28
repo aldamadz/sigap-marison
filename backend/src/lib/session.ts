@@ -1,12 +1,14 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { getEnvironment } from "../config/env.js";
-import { createPublicSupabaseClient } from "./supabase.js";
+import { isActiveProfile } from "../domain/profile-authorization.js";
+import { createPublicSupabaseClient, createUserSupabaseClient } from "./supabase.js";
 
 const env = getEnvironment();
 const encryptionKey = createHash("sha256").update(env.SESSION_SECRET).digest();
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const SESSION_COOKIE = env.NODE_ENV === "production" ? "__Host-sigap_session" : "sigap_session";
+const revokedSessionErrorCodes = new Set(["42501", "PGRST301", "PGRST303"]);
 
 export interface CookieSession {
   access_token: string;
@@ -93,6 +95,25 @@ export const assertSameOrigin = (request: FastifyRequest) => {
   }
 };
 
+export const requireActiveSessionProfile = async (session: CookieSession, reply: FastifyReply) => {
+  const { data: profile, error } = await createUserSupabaseClient(session.access_token)
+    .from("profiles")
+    .select("is_active, deleted_at")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  if (error && !revokedSessionErrorCodes.has(error.code)) {
+    const unavailable = new Error("Gagal memvalidasi status akun.") as Error & { statusCode: number };
+    unavailable.statusCode = 503;
+    throw unavailable;
+  }
+  if (error || !isActiveProfile(profile)) {
+    clearSessionCookie(reply);
+    const unauthorized = new Error("Unauthorized") as Error & { statusCode: number };
+    unauthorized.statusCode = 401;
+    throw unauthorized;
+  }
+};
+
 export const getSession = async (
   request: FastifyRequest,
   reply: FastifyReply,
@@ -117,6 +138,12 @@ export const getSession = async (
     }
     session = data.session as CookieSession;
     setSessionCookie(reply, session);
+  }
+  try {
+    await requireActiveSessionProfile(session, reply);
+  } catch (error) {
+    if (!required && (error as { statusCode?: number }).statusCode === 401) return null;
+    throw error;
   }
   return session;
 };

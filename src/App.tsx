@@ -130,7 +130,7 @@ const AdminOnlyRoute = ({ children }: { children: ReactNode }) => {
         .eq('id', user.id)
         .maybeSingle();
 
-      if (active) setAllowed(!error && data?.role === 'admin' && data?.is_active !== false && data?.deleted_at == null);
+      if (active) setAllowed(!error && data?.role === 'admin' && data?.is_active === true && data?.deleted_at == null);
     };
 
     checkAdmin();

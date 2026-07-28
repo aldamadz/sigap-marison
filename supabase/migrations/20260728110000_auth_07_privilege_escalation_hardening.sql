@@ -1,7 +1,54 @@
+create or replace function public.is_current_user_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = (select auth.uid())
+      and p.role::text = 'admin'
+      and p.is_active is true
+      and p.deleted_at is null
+  );
+$$;
+
+revoke execute on function public.is_current_user_admin() from public, anon;
+grant execute on function public.is_current_user_admin() to authenticated;
+
+create or replace function public.enforce_active_profile_request()
+returns void
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.role()) = 'authenticated' and not exists (
+    select 1
+    from public.profiles p
+    where p.id = (select auth.uid())
+      and p.is_active is true
+      and p.deleted_at is null
+  ) then
+    raise exception 'Account is inactive'
+      using errcode = '42501';
+  end if;
+end;
+$$;
+
+revoke execute on function public.enforce_active_profile_request() from public;
+grant execute on function public.enforce_active_profile_request() to anon, authenticated, service_role;
+
+alter role authenticator set pgrst.db_pre_request = 'public.enforce_active_profile_request';
+notify pgrst, 'reload config';
+
 create or replace function public.enforce_profile_self_service_fields()
 returns trigger
 language plpgsql
-set search_path = public
+set search_path = ''
 as $$
 declare
   allowed_fields constant text[] := array[
@@ -26,6 +73,8 @@ begin
 end;
 $$;
 
+drop trigger if exists tr_prevent_profile_privilege_self_update on public.profiles;
+drop function if exists public.prevent_profile_privilege_self_update();
 drop trigger if exists enforce_profile_self_service_fields on public.profiles;
 create trigger enforce_profile_self_service_fields
 before update on public.profiles
@@ -37,7 +86,7 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 begin
   insert into public.profiles (
@@ -69,6 +118,8 @@ begin
   return new;
 end;
 $$;
+
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 do $$
 declare
@@ -127,6 +178,8 @@ drop policy if exists master_entities_admin_delete on public.master_entities;
 create policy master_entities_admin_delete on public.master_entities
 for delete to authenticated using (public.is_current_user_admin());
 
+alter table if exists public.master_offices enable row level security;
+
 do $$
 declare
   policy_name text;
@@ -150,9 +203,6 @@ create policy master_offices_admin_update on public.master_offices
 for update to authenticated
 using (public.is_current_user_admin())
 with check (public.is_current_user_admin());
-
-create policy master_offices_admin_delete on public.master_offices
-for delete to authenticated using (public.is_current_user_admin());
 
 drop policy if exists marison_sync_runs_admin_select on public.marison_sync_runs;
 create policy marison_sync_runs_admin_select on public.marison_sync_runs

@@ -6,6 +6,7 @@ import {
   getSession,
   publicSession,
   readSession,
+  requireActiveSessionProfile,
   setSessionCookie,
   type CookieSession,
 } from "../lib/session.js";
@@ -23,6 +24,7 @@ export const login = async (
     unauthorized.statusCode = 401;
     throw unauthorized;
   }
+  await requireActiveSessionProfile(data.session as CookieSession, reply);
   setSessionCookie(reply, data.session as CookieSession);
   return { user: data.user, session: publicSession(data.session as CookieSession) };
 };
@@ -80,6 +82,7 @@ export const verifyOtp = async (
     unauthorized.statusCode = error?.status || 401;
     throw unauthorized;
   }
+  await requireActiveSessionProfile(data.session as CookieSession, reply);
   setSessionCookie(reply, data.session as CookieSession);
   return { user: data.user, session: publicSession(data.session as CookieSession) };
 };
