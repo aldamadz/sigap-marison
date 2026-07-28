@@ -12,14 +12,13 @@ ENV VITE_APP_PUBLIC_URL=$VITE_APP_PUBLIC_URL
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=$VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 
-# Install frontend, shared-contract, and backend dependencies reproducibly.
+# Install all workspace dependencies reproducibly.
 COPY package*.json ./
 COPY security/fail-closed ./security/fail-closed
 COPY shared/package*.json ./shared/
 COPY backend/package*.json ./backend/
-RUN npm ci \
-    && npm --prefix shared ci \
-    && npm --prefix backend ci
+COPY external-api/package*.json ./external-api/
+RUN npm ci
 
 # Copy seluruh kode aplikasi
 COPY . .
@@ -43,13 +42,13 @@ RUN apk add --no-cache \
 
 COPY package*.json ./
 COPY security/fail-closed ./security/fail-closed
+COPY shared/package*.json ./shared/
+COPY backend/package*.json ./backend/
+COPY external-api/package*.json ./external-api/
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY shared/package*.json ./shared/
 COPY --from=builder /app/shared/dist ./shared/dist
-COPY backend/package*.json ./backend/
-RUN npm --prefix backend ci --omit=dev
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY pdf-worker.mjs ./pdf-worker.mjs
 COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
