@@ -1,6 +1,6 @@
 // frontend/src/pages/UserManagementPage.tsx
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { supabase } from '@/lib/supabase';
 import { getUsers } from '@/services/user.service';
 import { User } from '@/types/agenda';

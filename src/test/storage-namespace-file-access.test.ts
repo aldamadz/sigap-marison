@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const server = readFileSync(join(process.cwd(), "server.mjs"), "utf8");
+const server = readFileSync(join(process.cwd(), "backend/src/domain-runtime.ts"), "utf8");
 
 describe("storage namespace file access", () => {
   it("validates consumed file tokens with their actual object path", () => {

@@ -1,0 +1,6 @@
+{
+  "name": "fstream",
+  "version": "1.0.12",
+  "private": true,
+  "main": "index.js"
+}

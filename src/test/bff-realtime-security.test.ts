@@ -21,7 +21,7 @@ describe("user-scoped BFF realtime stream", () => {
   });
 
   it("subscribes upstream with the user's JWT and cleans up every connection", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const streamStart = server.indexOf("const openBffRealtimeStream");
     const streamEnd = server.indexOf("const buildPasswordResetEmailHtml", streamStart);
     const stream = server.slice(streamStart, streamEnd);

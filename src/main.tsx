@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router";
 import App from "./App";
 import "@fontsource-variable/geist";
 import "./index.css";
@@ -35,12 +35,7 @@ createRoot(document.getElementById("root")!).render(
     disableTransitionOnChange
     storageKey="sigap-theme"
   >
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
+    <BrowserRouter>
       <App />
     </BrowserRouter>
   </ThemeProvider>
