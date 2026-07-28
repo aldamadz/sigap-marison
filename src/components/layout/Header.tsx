@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { formatDistanceToNow } from 'date-fns'
 import { id as localeID } from 'date-fns/locale'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { notificationService } from '@/services/notification.service'
 import { useAttention } from '@/providers/AttentionProvider'
 

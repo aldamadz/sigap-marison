@@ -14,6 +14,7 @@ ENV VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=$VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 
 # Copy package.json dan install dependencies
 COPY package*.json ./
+COPY security/fail-closed ./security/fail-closed
 RUN npm ci
 
 # Copy seluruh kode aplikasi
@@ -36,6 +37,7 @@ RUN apk add --no-cache \
     ttf-dejavu
 
 COPY package*.json ./
+COPY security/fail-closed ./security/fail-closed
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
