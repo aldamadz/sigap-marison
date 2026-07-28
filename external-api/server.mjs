@@ -2,7 +2,6 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
-import swaggerUi from "@fastify/swagger-ui";
 import { createClient } from "@supabase/supabase-js";
 
 const port = Number(process.env.PORT || 80);
@@ -319,7 +318,62 @@ await app.register(swagger, {
     },
   },
 });
-await app.register(swaggerUi, { routePrefix: "/docs" });
+app.get("/docs", { schema: { hide: true } }, async (request, reply) => {
+  reply.type("text/html").send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>SIGAP External Surat API Docs</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }
+    h1 { color: #1a1a1a; }
+    h2 { color: #333; margin-top: 32px; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+    pre { background: #f4f4f4; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    .endpoint { margin: 16px 0; padding: 12px; background: #fafafa; border-left: 3px solid #007cba; }
+  </style>
+</head>
+<body>
+  <h1>SIGAP External Surat API</h1>
+  <p>API read-only untuk integrasi data surat SIGAP.</p>
+  
+  <h2>Authentication</h2>
+  <p>Request data wajib membawa:</p>
+  <ul>
+    <li><code>Authorization: Bearer &lt;access_token&gt;</code></li>
+    <li><code>X-Timestamp: &lt;RFC3339 timestamp&gt;</code></li>
+    <li><code>X-Signature: &lt;HMAC_SHA512 signature&gt;</code></li>
+  </ul>
+  
+  <h2>Signature Calculation</h2>
+  <pre>HMAC_SHA512(access_token, METHOD:PATH_WITH_QUERY:ACCESS_TOKEN:BODY_SHA256:TIMESTAMP)</pre>
+  
+  <p>Gunakan timestamp RFC3339 dan minta access token baru setiap 15 menit.</p>
+  
+  <h2>Endpoints</h2>
+  <div class="endpoint">
+    <strong>POST /api/access-token</strong>
+    <p>Generate access token baru. Rate limit: 10 request per menit.</p>
+  </div>
+  
+  <div class="endpoint">
+    <strong>GET /api/surat</strong>
+    <p>List semua surat dengan pagination.</p>
+  </div>
+  
+  <div class="endpoint">
+    <strong>GET /api/surat/:id</strong>
+    <p>Detail surat berdasarkan ID.</p>
+  </div>
+  
+  <div class="endpoint">
+    <strong>GET /api/surat/:id/file</strong>
+    <p>Download file surat (document, pdf, attachment, signature-pdf).</p>
+  </div>
+  
+  <p>Untuk dokumentasi lengkap OpenAPI, akses <a href="/openapi.json">/openapi.json</a>.</p>
+</body>
+</html>`);
+});
 
 app.get("/openapi.json", { schema: { hide: true } }, async () => app.swagger());
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
