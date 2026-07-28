@@ -22,7 +22,7 @@ describe("SIGAP browser BFF session boundary", () => {
 
   it("stores the real Supabase session in an encrypted HttpOnly same-site cookie", () => {
     const server = read("backend/src/domain-runtime.ts");
-    const sessionModule = read("src/domain/session-cookie.ts");
+    const sessionModule = read("backend/src/domain/session-cookie.ts");
     const cookieWriterStart = server.indexOf("const setSessionCookie");
     const cookieWriterEnd = server.indexOf("const publicSession", cookieWriterStart);
     const cookieWriter = server.slice(cookieWriterStart, cookieWriterEnd);

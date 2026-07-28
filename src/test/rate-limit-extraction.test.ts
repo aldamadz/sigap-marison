@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("rate-limit extraction", () => {
   it("moves the rate limit helpers into a typed module", () => {
-    const module = read("src/domain/rate-limit.ts");
+    const module = read("backend/src/domain/rate-limit.ts");
     expect(module).toContain("enforceRateLimit");
     expect(module).toContain("recordRateLimit");
     expect(module).toContain("clientIp");

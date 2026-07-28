@@ -37,8 +37,8 @@ import {
   previewMarisonProjectSync,
   runTrackedMarisonSync,
 } from "../../server/marison-employee-sync.mjs";
-import { createSessionCookieHelpers } from "../../src/domain/session-cookie.js";
-import { clientIp, enforceRateLimit, recordRateLimit } from "../../src/domain/rate-limit.js";
+import { createSessionCookieHelpers } from "./domain/session-cookie.js";
+import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
 
 const execFileAsync = promisify(execFile);
 
