@@ -126,11 +126,11 @@ const AdminOnlyRoute = ({ children }: { children: ReactNode }) => {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('role, is_active')
+        .select('role, is_active, deleted_at')
         .eq('id', user.id)
         .maybeSingle();
 
-      if (active) setAllowed(!error && data?.role === 'admin' && data?.is_active !== false);
+      if (active) setAllowed(!error && data?.role === 'admin' && data?.is_active === true && data?.deleted_at == null);
     };
 
     checkAdmin();
@@ -209,17 +209,17 @@ const App = () => {
           <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
 
           {/* ADMIN MODULE */}
-          <Route path="/admin/users" element={<UserManagementPage />} />
-          <Route path="/admin/users/hierarchy" element={<OrganizationHierarchyPage />} />
-          <Route path="/admin/departments" element={<DepartmentManagementPage />} />
-          <Route path="/admin/entities" element={<EntityManagementPage />} />
+          <Route path="/admin/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/users/hierarchy" element={<AdminOnlyRoute><OrganizationHierarchyPage /></AdminOnlyRoute>} />
+          <Route path="/admin/departments" element={<AdminOnlyRoute><DepartmentManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/entities" element={<AdminOnlyRoute><EntityManagementPage /></AdminOnlyRoute>} />
           <Route path="/admin/forms" element={<Navigate to="/admin/configuration/forms" replace />} />
-          <Route path="/admin/letter-types" element={<LetterTypeManagementPage />} />
-          <Route path="/admin/offices" element={<OfficeManagementPage />} />
+          <Route path="/admin/letter-types" element={<AdminOnlyRoute><LetterTypeManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/offices" element={<AdminOnlyRoute><OfficeManagementPage /></AdminOnlyRoute>} />
           <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/workflows" replace />} />
-          <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
-          <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
-          <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
+          <Route path="/admin/master-projects" element={<AdminOnlyRoute><MasterProjectManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/monitoring" element={<AdminOnlyRoute><AdminMonitoringPage /></AdminOnlyRoute>} />
+          <Route path="/admin/kpi-departments" element={<AdminOnlyRoute><DepartmentKPIPage /></AdminOnlyRoute>} />
 <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
   <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
 

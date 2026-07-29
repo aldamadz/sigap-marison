@@ -39,6 +39,7 @@ import {
 } from "../../server/marison-employee-sync.mjs";
 import { createSessionCookieHelpers } from "./domain/session-cookie.js";
 import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
+import { isActiveAdminProfile, isActiveProfile } from "./domain/profile-authorization.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -436,6 +437,27 @@ const createUserSupabaseClient = (accessToken) => createClient(supabaseUrl, supa
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
+const revokedSessionErrorCodes = new Set(["42501", "PGRST301", "PGRST303"]);
+
+const assertActiveSessionProfile = async (session, res) => {
+  const { data: profile, error } = await createUserSupabaseClient(session.access_token)
+    .from("profiles")
+    .select("is_active, deleted_at")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  if (error && !revokedSessionErrorCodes.has(error.code)) {
+    const err = new Error("Gagal memvalidasi status akun.");
+    err.status = 503;
+    throw err;
+  }
+  if (error || !isActiveProfile(profile)) {
+    res.setHeader("Set-Cookie", clearedSessionCookie());
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+};
+
 const requireCookieSession = (req) => {
   const session = readCookieSession(req);
   if (!session?.access_token || !session?.user?.id) {
@@ -450,6 +472,7 @@ const refreshCookieSession = async (req, res) => {
   const session = readCookieSession(req);
   if (!session?.refresh_token) return null;
   if (Number(session.expires_at || 0) * 1000 > Date.now() + 10 * 60_000) {
+    await assertActiveSessionProfile(session, res);
     req.sigapSession = session;
     return session;
   }
@@ -459,6 +482,7 @@ const refreshCookieSession = async (req, res) => {
     res.setHeader("Set-Cookie", clearedSessionCookie());
     return null;
   }
+  await assertActiveSessionProfile(data.session, res);
   req.sigapSession = data.session;
   setSessionCookie(res, data.session);
   return data.session;
@@ -896,6 +920,21 @@ const requireSupabaseUser = async (token) => {
     err.status = 401;
     throw err;
   }
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("is_active, deleted_at")
+    .eq("id", userRes.user.id)
+    .maybeSingle();
+  if (profileError) {
+    const err = new Error("Gagal memvalidasi status akun.");
+    err.status = 503;
+    throw err;
+  }
+  if (!isActiveProfile(profile)) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
   return userRes.user;
 };
 
@@ -903,11 +942,11 @@ const requireAdminUser = async (token) => {
   const user = await requireSupabaseUser(token);
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw error;
-  if (!profile || !["admin", "super_admin"].includes(String(profile.role || "").toLowerCase())) {
+  if (!isActiveAdminProfile(profile)) {
     const err = new Error("Akses ditolak: hanya admin");
     err.status = 403;
     throw err;
@@ -2194,10 +2233,10 @@ const sendInternalNotification = async (token, payload) => {
 
   const { data: actorProfile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", actor.id)
     .maybeSingle();
-  const isAdmin = actorProfile?.role === "admin";
+  const isAdmin = isActiveAdminProfile(actorProfile);
 
   if (!isAdmin) {
     if (!suratId) {
@@ -2548,10 +2587,10 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     : [];
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
-  const allowed = signature.user_id === user.id || verifierIds.includes(user.id) || profile?.role === "admin";
+  const allowed = signature.user_id === user.id || verifierIds.includes(user.id) || isActiveAdminProfile(profile);
   if (!allowed) {
     const err = new Error("Forbidden");
     err.status = 403;
@@ -3076,11 +3115,11 @@ const getMarisonEnvironmentStatus = async (req) => {
   const state = await getMarisonEnvironmentState();
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role, is_active")
+    .select("role, is_active, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw error;
-  const canManage = profile?.role === "admin" && profile?.is_active !== false;
+  const canManage = isActiveAdminProfile(profile);
   const config = getMarisonApiConfig(state.environment);
   const result = {
     environment: state.environment,
@@ -3157,10 +3196,10 @@ const canReadSurat = async (surat, userId) => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active, deleted_at")
     .eq("id", userId)
     .maybeSingle();
-  return profile?.role === "admin" || profile?.role === "super_admin";
+  return isActiveAdminProfile(profile);
 };
 
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
