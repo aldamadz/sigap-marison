@@ -84,6 +84,11 @@ docker --context ubuntu-server compose `
 11. Jalankan smoke test Aset, Unit, Non Unit, completion bersamaan, timeout,
     lease expiry, dan rekonsiliasi admin.
 
+Gunakan dokumen staging baru untuk smoke test business POST. Jangan memasukkan
+surat historis dengan `data_snapshot.marison_dispatch.status = failed` ke outbox
+tanpa konfirmasi vendor bahwa request lama tidak diterima, karena kegagalan pada
+jalur sinkron lama tidak membuktikan POST belum diproses vendor.
+
 Menjalankan Compose tanpa `--profile marison-outbound` tidak akan memulai worker.
 Ini disengaja agar migration dan aplikasi dapat diverifikasi sebelum POST vendor
 diaktifkan.
