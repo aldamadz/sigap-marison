@@ -5,16 +5,16 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("Marison outbound submission dispatch", () => {
-  it("keeps submission POST credentials and HMAC signing on the server", () => {
+  it("keeps submission POST credentials and HMAC signing in the dedicated worker", () => {
     const server = read("backend/src/domain-runtime.ts");
+    const worker = read("server/marison-outbound-worker.mjs");
     const client = read("src/services/surat.service.ts");
 
     expect(server).toContain("MARISON_SUBMISSION_DISPATCH_ENABLED");
-    expect(server).toContain("/asset-purchase-requests");
-    expect(server).toContain("/unit-submissions");
-    expect(server).toContain("/non-unit-submissions");
-    expect(server).toContain('["POST", url.pathname, token, bodyHash, timestamp].join(":")');
-    expect(server).toContain("dispatchCompletedSuratToMarison");
+    expect(worker).toContain('["POST", url.pathname, accessToken, prepared.payloadHash, timestamp].join(":")');
+    expect(worker).toContain("mark_marison_outbound_post_started");
+    expect(worker).toContain("complete_marison_outbound_after_post");
+    expect(server).not.toContain("postMarisonProtectedJson");
     expect(server).toContain('assertMarisonOutboundContract("unit", payload)');
     expect(server).toContain('assertMarisonOutboundContract("non_unit", {');
     expect(server).toContain('assertMarisonOutboundContract("asset", payload)');
@@ -23,8 +23,8 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("addendum_atas_label");
     expect(server).toContain("request_number: firstString(");
     expect(server).toContain('name: "Dokumen Rekomendasi Aset"');
-    expect(server).toContain("contract_version: dispatch.contractVersion");
-    expect(server).toContain("payload_hash: sha256Hex");
+    expect(server).toContain("p_contract_version: dispatch.contractVersion");
+    expect(server).toContain("p_payload_hash: payloadHash");
     expect(server).toContain("marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik)");
     expect(server).toContain("marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
     expect(server).toContain("submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
@@ -33,20 +33,21 @@ describe("Marison outbound submission dispatch", () => {
     expect(client).not.toContain("client_secret");
   });
 
-  it("dispatches only after final approval succeeds", () => {
+  it("does not depend on a browser fire-and-forget request after final approval", () => {
     const service = read("src/services/surat.service.ts");
+    const migration = read("supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql");
 
-    expect(service).toContain("rpcResult?.isDone");
-    expect(service).toContain("this.dispatchCompletedSuratToMarison(suratId).catch");
-    expect(service).toContain("/api/integrations/marison/surat/${suratId}/dispatch");
+    expect(service).toContain('supabase.rpc("handle_approve_surat_v2"');
+    expect(service).not.toContain("this.dispatchCompletedSuratToMarison(suratId).catch");
+    expect(migration).toContain("enqueue_marison_outbound_after_completion");
   });
 
-  it("stores dispatch result in the surat snapshot for idempotency", () => {
-    const server = read("backend/src/domain-runtime.ts");
+  it("uses the outbox as source of truth and keeps a compatible snapshot summary", () => {
+    const migration = read("supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql");
 
-    expect(server).toContain("marison_dispatch");
-    expect(server).toContain('previous.status === "success"');
-    expect(server).toContain('status: "failed"');
+    expect(migration).toContain("create table public.marison_outbound_dispatches");
+    expect(migration).toContain("unique (surat_id, environment)");
+    expect(migration).toContain("sync_marison_outbound_snapshot");
   });
 
   it("accepts the database final status and skips recommendation child documents", () => {
@@ -54,7 +55,7 @@ describe("Marison outbound submission dispatch", () => {
 
     expect(server).toContain('["SELESAI", "DONE"]');
     expect(server).toContain('dispatchInput.linked_parent_surat_id');
-    expect(server).toContain("Dokumen rekomendasi mengikuti pengajuan induk");
+    expect(server).toContain("Dokumen rekomendasi tidak boleh dikirim terpisah");
     expect(server).toContain("signed_at, catatan, signer_snapshot");
     expect(server).toContain("firstString(signature.catatan, signature.note, signature.notes)");
   });

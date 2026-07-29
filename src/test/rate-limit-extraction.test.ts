@@ -37,6 +37,7 @@ describe("rate-limit extraction", () => {
     vi.stubEnv("STORAGE_SUPABASE_SERVICE_ROLE_KEY", "storage-test-key");
     vi.stubEnv("STORAGE_PUBLIC_BASE_URL", "https://storage.test/storage/v1/object/public");
     vi.stubEnv("MARISON_DEPLOYMENT_ENVIRONMENT", "staging");
+    vi.stubEnv("MARISON_OUTBOUND_INTERNAL_TOKEN", "test-outbound-token-at-least-32-characters");
 
     const runtime = await import("../../backend/src/domain-runtime.ts");
 

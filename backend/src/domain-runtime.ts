@@ -6,7 +6,7 @@ import { extname, isAbsolute, join, normalize, relative, resolve } from "node:pa
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -113,6 +113,10 @@ if (!MARISON_ENVIRONMENTS.has(marisonDeploymentEnvironment)) {
 const marisonSubmissionDispatchEnabled = String(
   process.env.MARISON_SUBMISSION_DISPATCH_ENABLED ?? (marisonDeploymentEnvironment === "staging" ? "true" : "false")
 ).toLowerCase() === "true";
+const marisonOutboundInternalToken = String(process.env.MARISON_OUTBOUND_INTERNAL_TOKEN || "");
+if (marisonSubmissionDispatchEnabled && marisonOutboundInternalToken.length < 32) {
+  throw new Error("MARISON_OUTBOUND_INTERNAL_TOKEN minimal 32 karakter saat outbound Marison aktif.");
+}
 const marisonSyncCronToken = String(
   process.env.MARISON_SYNC_CRON_TOKEN
   || createHash("sha256").update(`marison-directory-sync:${sessionSecret}`).digest("hex")
@@ -136,6 +140,11 @@ if (webPushConfig.publicKey && webPushConfig.privateKey) {
 const hashFileViewToken = (token) => createHash("sha256").update(token).digest("hex");
 const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
 const hmacSha512Hex = (secret, value) => createHmac("sha512", secret).update(value).digest("hex");
+const secretMatches = (supplied, expected) => {
+  const suppliedHash = createHash("sha256").update(String(supplied || "")).digest();
+  const expectedHash = createHash("sha256").update(String(expected || "")).digest();
+  return timingSafeEqual(suppliedHash, expectedHash);
+};
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -3162,6 +3171,16 @@ const getMarisonEnvironmentStatus = async (req) => {
   if (error) throw error;
   const canManage = isActiveAdminProfile(profile);
   const config = getMarisonApiConfig(state.environment);
+  let outboundSettings = null;
+  if (canManage) {
+    const { data, error: outboundError } = await supabase
+      .from("marison_outbound_settings")
+      .select("environment, enabled, updated_at")
+      .eq("singleton", true)
+      .maybeSingle();
+    if (outboundError) throw outboundError;
+    outboundSettings = data;
+  }
   const result = {
     environment: state.environment,
     isStaging: state.environment === "staging",
@@ -3169,6 +3188,15 @@ const getMarisonEnvironmentStatus = async (req) => {
     locked: true,
     source: "deployment",
     updatedAt: state.updatedAt,
+    outbound: canManage ? {
+      runtimeEnabled: marisonSubmissionDispatchEnabled,
+      databaseEnabled: outboundSettings?.enabled === true,
+      databaseEnvironment: outboundSettings?.environment || null,
+      ready: marisonSubmissionDispatchEnabled
+        && outboundSettings?.enabled === true
+        && outboundSettings?.environment === state.environment,
+      updatedAt: outboundSettings?.updated_at || null,
+    } : undefined,
   };
   if (canManage) {
     result.environments = {
@@ -3757,39 +3785,107 @@ const buildMarisonDispatchPayload = async (surat, actorId) => {
   throw err;
 };
 
-const postMarisonProtectedJson = async (environment, endpointPath, payload) => {
-  const config = getMarisonApiConfig(environment);
-  const token = await getMarisonAccessToken({ source_key: "submission_dispatch" }, environment);
-  const body = JSON.stringify(payload);
-  const url = new URL(`${config.baseUrl}${endpointPath}`);
-  const timestamp = new Date().toISOString();
-  const bodyHash = sha256Hex(Buffer.from(body));
-  const canonical = ["POST", url.pathname, token, bodyHash, timestamp].join(":");
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "X-Timestamp": timestamp,
-      "X-Signature": hmacSha512Hex(token, canonical),
-    },
-    body,
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(result?.message || "Gagal mengirim data ke API Marison.");
-    err.status = response.status;
-    err.details = result?.errors || null;
+const getMarisonDispatchQueueStatus = async (req, suratId) => {
+  assertSameOrigin(req);
+  await requireAdminUser(getBearerToken(req));
+  const { data: surat, error } = await supabase
+    .from("surat_registrasi")
+    .select("id, status, data_snapshot")
+    .eq("id", suratId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!surat) {
+    const err = new Error("Surat tidak ditemukan.");
+    err.status = 404;
     throw err;
   }
-  return result;
+  if (marisonSubmissionDispatchEnabled && ["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
+    const { error: ensureError } = await supabase.rpc("ensure_marison_outbound_dispatch", {
+      p_surat_id: suratId,
+      p_environment: marisonDeploymentEnvironment,
+    });
+    if (ensureError) throw ensureError;
+  }
+
+  const { data: dispatchJob, error: jobError } = await supabase
+    .from("marison_outbound_dispatches")
+    .select("id, status, kind, attempt_count, next_attempt_at, last_attempt_at, post_started_at, completed_at, error_code, error_message, external_reference, skipped_reason, created_at, updated_at")
+    .eq("surat_id", suratId)
+    .eq("environment", marisonDeploymentEnvironment)
+    .maybeSingle();
+
+  if (jobError) throw jobError;
+
+  const legacyDispatch = asPlainRecord(surat.data_snapshot?.marison_dispatch);
+
+  return {
+    enabled: marisonSubmissionDispatchEnabled,
+    suratId: surat.id,
+    suratStatus: surat.status,
+    environment: marisonDeploymentEnvironment,
+    job: dispatchJob || null,
+    legacyDispatch: Object.keys(legacyDispatch).length > 0 ? {
+      status: legacyDispatch.status || null,
+      environment: legacyDispatch.environment || null,
+      kind: legacyDispatch.kind || null,
+      sentAt: legacyDispatch.sent_at || null,
+      externalReference: legacyDispatch.external_reference || null,
+    } : null,
+  };
 };
 
-const dispatchCompletedSuratToMarison = async (req, suratId) => {
+const buildMarisonOutboundJob = async (req, jobId) => {
   if (!marisonSubmissionDispatchEnabled) {
-    return { skipped: true, reason: "Outbound Marison tidak aktif pada environment ini." };
+    const err = new Error("Outbound Marison tidak aktif pada environment ini.");
+    err.status = 503;
+    throw err;
   }
-  const actor = await requireSupabaseUser(getBearerToken(req));
+  const suppliedToken = String(req.headers["x-internal-outbound-token"] || "");
+  if (!suppliedToken || !secretMatches(suppliedToken, marisonOutboundInternalToken)) {
+    const err = new Error("Unauthorized");
+    err.status = 401;
+    throw err;
+  }
+  const payload = await readJsonBody(req, 4096);
+  const leaseToken = String(payload?.leaseToken || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leaseToken)) {
+    const err = new Error("Lease token tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { data: job, error: jobError } = await supabase
+    .from("marison_outbound_dispatches")
+    .select("id, surat_id, environment, kind, endpoint, contract_version, payload, payload_body, payload_hash, status, lease_token, lease_expires_at, post_started_at")
+    .eq("id", jobId)
+    .maybeSingle();
+  if (jobError) throw jobError;
+  if (!job) {
+    const err = new Error("Job outbound tidak ditemukan.");
+    err.status = 404;
+    throw err;
+  }
+  if (
+    job.environment !== marisonDeploymentEnvironment ||
+    job.status !== "processing" ||
+    job.lease_token !== leaseToken ||
+    job.post_started_at
+  ) {
+    const err = new Error("Lease job outbound tidak lagi aktif.");
+    err.status = 409;
+    throw err;
+  }
+  if (job.payload_body) {
+    return {
+      kind: job.kind,
+      endpoint: job.endpoint,
+      contractVersion: job.contract_version,
+      payload: job.payload,
+      payloadBody: job.payload_body,
+      payloadHash: job.payload_hash,
+    };
+  }
+
   const { data: surat, error } = await supabase
     .from("surat_registrasi")
     .select(`
@@ -3801,7 +3897,7 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
     `)
-    .eq("id", suratId)
+    .eq("id", job.surat_id)
     .maybeSingle();
   if (error) throw error;
   if (!surat) {
@@ -3809,67 +3905,153 @@ const dispatchCompletedSuratToMarison = async (req, suratId) => {
     err.status = 404;
     throw err;
   }
-  if (!(await canReadSurat(surat, actor.id))) {
-    const err = new Error("Akses ditolak.");
-    err.status = 403;
+  if (!["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
+    const err = new Error("Surat belum selesai ditandatangani.");
+    err.status = 422;
     throw err;
   }
-  if (!["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
-    return { skipped: true, reason: "Surat belum selesai ditandatangani." };
-  }
-
-  const snapshot = asPlainRecord(surat.data_snapshot);
   const dispatchInput = getMarisonDispatchInput(surat);
+  const { data: recommendationLink, error: recommendationError } = await supabase
+    .from("surat_linked_documents")
+    .select("id")
+    .eq("child_surat_id", surat.id)
+    .eq("link_type", "recommendation")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (recommendationError) throw recommendationError;
   if (
+    recommendationLink ||
     String(dispatchInput.linked_document_type || "").toLowerCase() === "recommendation" ||
     dispatchInput.linked_parent_surat_id
   ) {
-    return { skipped: true, reason: "Dokumen rekomendasi mengikuti pengajuan induk dan tidak dikirim sebagai pengajuan aset." };
-  }
-  const previous = asPlainRecord(snapshot.marison_dispatch);
-  if (previous.status === "success" && previous.environment === marisonDeploymentEnvironment) {
-    return { skipped: true, alreadySent: true, dispatch: previous };
+    const err = new Error("Dokumen rekomendasi tidak boleh dikirim terpisah.");
+    err.status = 422;
+    throw err;
   }
 
-  const startedAt = new Date().toISOString();
-  let dispatch = null;
-  try {
-    dispatch = await buildMarisonDispatchPayload(surat, actor.id);
-    const response = await postMarisonProtectedJson(marisonDeploymentEnvironment, dispatch.endpoint, dispatch.payload);
-    const nextDispatch = {
-      status: "success",
-      environment: marisonDeploymentEnvironment,
-      kind: dispatch.kind,
-      endpoint: dispatch.endpoint,
-      contract_version: dispatch.contractVersion || "legacy",
-      payload_hash: sha256Hex(Buffer.from(JSON.stringify(dispatch.payload))),
-      sent_at: new Date().toISOString(),
-      requested_at: startedAt,
-      response: response?.data || response,
-    };
-    await supabase
-      .from("surat_registrasi")
-      .update({ data_snapshot: { ...snapshot, marison_dispatch: nextDispatch } })
-      .eq("id", surat.id);
-    return { success: true, dispatch: nextDispatch };
-  } catch (error) {
-    const nextDispatch = {
-      status: "failed",
-      environment: marisonDeploymentEnvironment,
-      kind: dispatch?.kind || null,
-      endpoint: dispatch?.endpoint || null,
-      contract_version: dispatch?.contractVersion || null,
-      requested_at: startedAt,
-      failed_at: new Date().toISOString(),
-      error: error?.message || "Gagal mengirim data ke Marison.",
-      details: error?.details || null,
-    };
-    await supabase
-      .from("surat_registrasi")
-      .update({ data_snapshot: { ...snapshot, marison_dispatch: nextDispatch } })
-      .eq("id", surat.id);
-    throw error;
+  const dispatch = await buildMarisonDispatchPayload(surat, null);
+  if (dispatch.kind !== job.kind || dispatch.endpoint !== job.endpoint) {
+    const err = new Error("Kategori surat berubah setelah job outbound dibuat.");
+    err.status = 422;
+    throw err;
   }
+  const payloadBody = JSON.stringify(dispatch.payload);
+  const payloadHash = sha256Hex(Buffer.from(payloadBody));
+  const { data: preparedRows, error: preparedError } = await supabase.rpc("prepare_marison_outbound_dispatch", {
+    p_job_id: job.id,
+    p_lease_token: leaseToken,
+    p_kind: dispatch.kind,
+    p_endpoint: dispatch.endpoint,
+    p_contract_version: dispatch.contractVersion,
+    p_payload: dispatch.payload,
+    p_payload_body: payloadBody,
+    p_payload_hash: payloadHash,
+  });
+  if (preparedError) throw preparedError;
+  const prepared = Array.isArray(preparedRows) ? preparedRows[0] : null;
+  if (!prepared) throw new Error("Payload outbound gagal disimpan.");
+
+  return {
+    kind: prepared.kind,
+    endpoint: prepared.endpoint,
+    contractVersion: prepared.contract_version,
+    payload: prepared.payload,
+    payloadBody: prepared.payload_body,
+    payloadHash: prepared.payload_hash,
+  };
+};
+
+const listMarisonOutboundDispatches = async (req, url) => {
+  await requireAdminUser(getBearerToken(req));
+  const allowedStatuses = new Set([
+    "pending", "processing", "succeeded", "failed_retryable", "failed_terminal", "outcome_unknown", "skipped",
+  ]);
+  const status = String(url.searchParams.get("status") || "all");
+  if (status !== "all" && !allowedStatuses.has(status)) {
+    const err = new Error("Filter status tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+  const page = Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("pageSize") || "20", 10) || 20));
+  const from = (page - 1) * pageSize;
+  let query = supabase
+    .from("marison_outbound_dispatches")
+    .select(`
+      id, surat_id, environment, kind, status, attempt_count, next_attempt_at, last_attempt_at,
+      post_started_at, completed_at, external_reference, error_code, error_message, skipped_reason,
+      reconciliation_count, created_at, updated_at,
+      surat_registrasi!inner(no_surat, judul_surat)
+    `, { count: "exact" })
+    .eq("environment", marisonDeploymentEnvironment)
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+  if (status !== "all") query = query.eq("status", status);
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    environment: marisonDeploymentEnvironment,
+    page,
+    pageSize,
+    total: count || 0,
+    items: (data || []).map((row) => ({
+      id: row.id,
+      suratId: row.surat_id,
+      noSurat: row.surat_registrasi?.no_surat || "-",
+      title: row.surat_registrasi?.judul_surat || "-",
+      environment: row.environment,
+      kind: row.kind,
+      status: row.status,
+      attemptCount: row.attempt_count,
+      nextAttemptAt: row.next_attempt_at,
+      lastAttemptAt: row.last_attempt_at,
+      postStartedAt: row.post_started_at,
+      completedAt: row.completed_at,
+      externalReference: row.external_reference,
+      errorCode: row.error_code,
+      failureReason: row.error_message || row.skipped_reason || null,
+      reconciliationCount: row.reconciliation_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+  };
+};
+
+const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
+  assertSameOrigin(req);
+  const actor = await requireAdminUser(getBearerToken(req));
+  const payload = await readJsonBody(req, 8192);
+  const action = String(payload?.action || "");
+  const reason = String(payload?.reason || "").trim();
+  const externalReference = String(payload?.externalReference || "").trim();
+  if (!['mark_succeeded', 'reopen_confirmed_not_received', 'reopen_terminal_pre_post'].includes(action) || !reason) {
+    const err = new Error("Aksi dan alasan rekonsiliasi wajib diisi.");
+    err.status = 400;
+    throw err;
+  }
+  if (action === "mark_succeeded" && !externalReference) {
+    const err = new Error("Referensi eksternal wajib diisi.");
+    err.status = 400;
+    throw err;
+  }
+  if (action === "reopen_confirmed_not_received" && payload?.confirmDuplicateRisk !== true) {
+    const err = new Error("Konfirmasi risiko pengiriman ulang wajib diberikan.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { error } = await supabase.rpc("reconcile_marison_outbound_dispatch", {
+    p_job_id: dispatchId,
+    p_actor_id: actor.id,
+    p_action: action,
+    p_reason: reason,
+    p_external_reference: externalReference || null,
+    p_confirm_duplicate_risk: payload?.confirmDuplicateRisk === true,
+  });
+  if (error) throw error;
+  return { success: true };
 };
 
 const getAuthorizedSurat = async (suratId, token) => {
@@ -4400,9 +4582,26 @@ export const handleRequest = async (req, res) => {
         return sendJson(res, 200, result);
       }
 
+      if (req.method === "GET" && url.pathname === "/api/integrations/marison/dispatches") {
+        const result = await listMarisonOutboundDispatches(req, url);
+        return sendJson(res, 200, result);
+      }
+
+      const marisonReconcileMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/reconcile$/i);
+      if (req.method === "POST" && marisonReconcileMatch) {
+        const result = await reconcileMarisonOutboundDispatch(req, marisonReconcileMatch[1]);
+        return sendJson(res, 200, result);
+      }
+
       const marisonDispatchMatch = url.pathname.match(/^\/api\/integrations\/marison\/surat\/([0-9a-f-]+)\/dispatch$/i);
       if (req.method === "POST" && marisonDispatchMatch) {
-        const result = await dispatchCompletedSuratToMarison(req, marisonDispatchMatch[1]);
+        const result = await getMarisonDispatchQueueStatus(req, marisonDispatchMatch[1]);
+        return sendJson(res, 200, result);
+      }
+
+      const marisonBuildMatch = url.pathname.match(/^\/api\/internal\/marison\/outbound\/([0-9a-f-]+)\/build$/i);
+      if (req.method === "POST" && marisonBuildMatch) {
+        const result = await buildMarisonOutboundJob(req, marisonBuildMatch[1]);
         return sendJson(res, 200, result);
       }
 

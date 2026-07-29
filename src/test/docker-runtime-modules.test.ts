@@ -17,6 +17,7 @@ describe("Docker runtime modules", () => {
       "server/marison-outbound-contract.mjs",
       "server/marison-outbound-identity.mjs",
       "server/marison-sync-worker.mjs",
+      "server/marison-outbound-worker.mjs",
     ]) {
       expect(dockerfile).toContain(
         `COPY ${runtimeModule} ./${runtimeModule}`,

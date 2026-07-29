@@ -37,7 +37,7 @@ export const buildApp = async () => {
     trustProxy: env.TRUST_PROXY,
     logger: {
       level: env.NODE_ENV === "production" ? "info" : "debug",
-      redact: ["req.headers.authorization", "req.headers.cookie", "res.headers.set-cookie"],
+      redact: ["req.headers.authorization", "req.headers.cookie", "req.headers.x-internal-outbound-token", "res.headers.set-cookie"],
     },
     requestIdHeader: "x-request-id",
   });
