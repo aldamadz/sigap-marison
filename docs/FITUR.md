@@ -237,6 +237,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Saat draft dibuka kembali, alur penandatangan direkonsiliasi dengan konfigurasi Kegunaan Form aktif. Pilihan signer pada tahap yang ID-nya masih sama dipertahankan, tahap baru ditambahkan, dan tahap yang sudah dihapus tidak digunakan lagi.
 - Perubahan matrix hanya diterapkan pada draft yang belum didaftarkan. Surat yang sudah terdaftar tetap memakai snapshot alur saat pendaftaran agar histori persetujuan tidak berubah.
 - Lampiran yang dipilih setelah nomor dipesan langsung diunggah dan dikaitkan ke draft. Saat draft dibuka kembali, file tetap tersedia dan digunakan pada registrasi final tanpa unggah ulang.
+- Upload lampiran pemohon menampilkan nama file aktif, urutan file, persentase byte yang sudah terkirim, fase penyimpanan metadata, serta status berhasil atau gagal. Ringkasan dan pendaftaran dikunci sampai proses selesai.
 - Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
 - User mengisi detail template berdasarkan Master Form.
 - Jika user memilih `Aset` atau `Non Unit`, field teknis Unit tidak ditampilkan dan tidak ditulis ke dokumen.
@@ -324,8 +325,10 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Perencanaan mengisi `Struktur Atas`, `Struktur Bawah`, dan komponen kode produksi per unit.
 - Input `Struktur Atas` dan `Struktur Bawah` menerima nominal hasil ketik maupun paste dengan pemisah ribuan. Nilai `1.000.000`, `1,000,000`, dan `1000000` dinormalisasi menjadi satu juta serta ditampilkan sebagai `1.000.000`.
 - Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai tabel satu baris per kavling dengan header sticky, sehingga tim pemeriksa tetap melihat kolom `Struktur Atas`, `Struktur Bawah`, `Nomor`, `Blok`, dan `Tanggal` saat daftar discroll.
+- Tipe Unit tetap berupa teks dan memakai contoh `60`, sehingga nilai lain seperti `60/72` tetap dapat dicatat tanpa dibulatkan.
+- Datepicker Tanggal Produksi membuka bulan berjalan untuk data kosong dan menandai hari ini tanpa mengisi nilai otomatis. Tanggal baru disimpan setelah tim pemeriksa memilihnya.
 - Setelah memilih kavling, tim pemeriksa dapat mengunduh template Excel alokasi unit, mengisi struktur atas/bawah, nomor, blok, dan tanggal produksi secara massal, lalu import kembali ke tabel pemeriksaan.
-- Template Excel alokasi unit memiliki keterangan cell yang memberi contoh input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
+- Template Excel alokasi unit memiliki keterangan cell yang memberi contoh Tipe Unit `60`, input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
 - Nomor kode produksi pada template Excel memakai format tiga digit. Input `1` maupun `001` ditampilkan, diimport, disimpan, dan diekspor sebagai `001`.
 - Import alokasi unit menerima `.xlsx`, `.xls`, dan `.csv`, hanya memperbarui kavling yang sudah dipilih, serta memberi informasi jika ada baris yang dilewati.
 - Format kode produksi otomatis: `[nomor]/UAI/PRC/[blok]/[tanggal]`.

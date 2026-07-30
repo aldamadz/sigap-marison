@@ -98,7 +98,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | SUR-01 | Registrasi surat dinamis | Production + Staging | Surat form/service, registration RPC | Form usage, numbering, workflow, storage | Sangat tinggi; gunakan feature flag, jangan revert migration |
 | SUR-02 | Draft registrasi, reservasi nomor, dan sinkronisasi matrix aktif | Production + Staging; rekonsiliasi matrix kandidat diperkuat di staging | Draft/reservation RPC, tables, signer reconciliation | SUR-01, numbering, DOC-02 | Draft aktif selalu mengikuti kandidat dan tahap terbaru saat dibuka maupun sebelum submit; surat yang sudah terdaftar tetap memakai snapshot lama untuk audit |
 | SUR-03 | Nomor surat atomik dan konfigurasi counter | Production + Staging | Numbering admin, RPC | Letter type, office/entity | Tidak boleh ditarik tanpa mekanisme nomor pengganti |
-| SUR-04 | Lampiran awal dan lampiran approval | Production + Staging | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik |
+| SUR-04 | Lampiran awal dan lampiran approval | Production + Staging; progres byte nyata dalam development branch | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik |
 | SUR-05 | Preview detail dan file viewer bertoken | Production + Staging | Preview modal, file token BFF | Storage, surat authorization | Jangan membuka public URL sebagai pengganti |
 | SUR-06 | Inbox persetujuan | Production + Staging | Inbox page, signatures | Workflow approval, attention | Nonaktifkan write/signing lebih dahulu |
 | SUR-07 | Status pengajuan/monitoring pengguna | Production + Staging | Monitoring page/service | Surat, signatures, revision | Aman sebagai read-only; jangan hapus data |
@@ -127,7 +127,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-01 | Lookup project Marison | Production + Staging | External data source `/projects` | Token + HMAC | Dapat dinonaktifkan per data source |
 | MRN-02 | Lookup unit berdasarkan project | Production + Staging | `/unit?project_id=...` | MRN-01 | Dapat dinonaktifkan per form/data source |
 | MRN-03 | Lookup non-unit berdasarkan project | Production + Staging | `/non-unit?project_id=...` | MRN-01 | Dapat dinonaktifkan per form/data source |
-| MRN-04 | Alokasi unit, kode produksi, dan rekap | Production + Staging | Surat form/service, production-code | Unit source, PDF attachments | Tinggi; snapshot lama harus tetap terbaca |
+| MRN-04 | Alokasi unit, kode produksi, dan rekap | Production + Staging; perbaikan datepicker dan contoh tipe dalam development branch | Surat form/service, production-code | Unit source, PDF attachments | Tinggi; snapshot lama harus tetap terbaca |
 | MRN-05 | Outbound submission unit | Staging enabled; production disabled by default | `/unit-submissions` POST | Surat selesai, project/unit/branch, approvals | Staging dapat memakai NIK uji tunggal tanpa mengubah profil; matikan dispatch flag untuk menonaktifkan |
 | MRN-06 | Outbound submission non-unit | Staging enabled; production disabled by default | `/non-unit-submissions` POST | Surat selesai, non-unit items, approvals | Mengikuti kebijakan NIK staging MRN-05 |
 | MRN-07 | Outbound asset purchase request | Staging enabled; production disabled by default | `/asset-purchase-requests` POST | Surat selesai, branch, approvals | Mengikuti kebijakan NIK staging MRN-05 |

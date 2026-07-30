@@ -143,6 +143,16 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
     row.getCell(6).numFmt = "#,##0";
     row.getCell(7).numFmt = "000";
     row.getCell(9).numFmt = "dd/mm/yyyy";
+    row.getCell(4).dataValidation = {
+      type: "textLength",
+      operator: "greaterThanOrEqual",
+      formulae: [1],
+      allowBlank: true,
+      showErrorMessage: false,
+      showInputMessage: true,
+      promptTitle: "Tipe Unit",
+      prompt: "Isi tipe unit, contoh: 60. Format lain seperti 60/72 tetap dapat digunakan.",
+    };
     row.getCell(5).dataValidation = {
       type: "whole",
       operator: "greaterThanOrEqual",
