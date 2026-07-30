@@ -121,9 +121,9 @@ const marisonSyncCronToken = String(
   process.env.MARISON_SYNC_CRON_TOKEN
   || createHash("sha256").update(`marison-directory-sync:${sessionSecret}`).digest("hex")
 );
-const marisonOutboundNik = (...candidates) => resolveMarisonOutboundNik({
+const marisonOutboundNik = (override, ...candidates) => resolveMarisonOutboundNik({
   environment: marisonDeploymentEnvironment,
-  stagingOverride: process.env.MARISON_STAGING_OUTBOUND_NIK_OVERRIDE,
+  stagingOverride: override,
   candidates,
 });
 
@@ -3175,7 +3175,7 @@ const getMarisonEnvironmentStatus = async (req) => {
   if (canManage) {
     const { data, error: outboundError } = await supabase
       .from("marison_outbound_settings")
-      .select("environment, enabled, updated_at")
+      .select("environment, enabled, updated_at, override_nik, override_branch_id, override_project_id")
       .eq("singleton", true)
       .maybeSingle();
     if (outboundError) throw outboundError;
@@ -3195,8 +3195,19 @@ const getMarisonEnvironmentStatus = async (req) => {
       ready: marisonSubmissionDispatchEnabled
         && outboundSettings?.enabled === true
         && outboundSettings?.environment === state.environment,
-      updatedAt: outboundSettings?.updated_at || null,
-    } : undefined,
+       updatedAt: outboundSettings?.updated_at || null,
+       overrideNikConfigured: Boolean(outboundSettings?.override_nik),
+       overrideNikMasked: outboundSettings?.override_nik
+         ? `${String(outboundSettings.override_nik).slice(0, 2)}***${String(outboundSettings.override_nik).slice(-2)}`
+         : null,
+       overrideBranchId: outboundSettings?.override_branch_id || null,
+       overrideProjectId: outboundSettings?.override_project_id || null,
+       overrideSources: {
+         nik: outboundSettings?.override_nik ? "override" : "synchronized",
+         branchId: outboundSettings?.override_branch_id ? "override" : "synchronized",
+         projectId: outboundSettings?.override_project_id ? "override" : "synchronized",
+       },
+     } : undefined,
   };
   if (canManage) {
     result.environments = {
@@ -3422,6 +3433,70 @@ const resolveMarisonBranchId = async (surat, ...values) => {
   return parseExternalInteger(data?.marison_branch_id);
 };
 
+const configureMarisonOutboundIdentityOverrides = async (req) => {
+  const actor = await requireAdminUser(getBearerToken(req));
+  const payload = await readJsonBody(req, 4096);
+  const { data, error } = await supabase.rpc("configure_marison_outbound_identity_overrides", {
+    p_actor_id: actor.id,
+    p_environment: marisonDeploymentEnvironment,
+    p_override_nik: String(payload?.overrideNik || "").trim() || null,
+    p_override_branch_id: payload?.overrideBranchId == null || payload.overrideBranchId === "" ? null : Number(payload.overrideBranchId),
+    p_override_project_id: payload?.overrideProjectId == null || payload.overrideProjectId === "" ? null : Number(payload.overrideProjectId),
+    p_reason: String(payload?.reason || "").trim(),
+  });
+  if (error) throw error;
+  return { success: true, configuration: data, actorId: actor.id };
+};
+
+const getMarisonOutboundOverrides = async () => {
+  const { data, error } = await supabase
+    .from("marison_outbound_settings")
+    .select("environment, override_nik, override_branch_id, override_project_id")
+    .eq("singleton", true)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.environment !== marisonDeploymentEnvironment) {
+    throw new Error("Konfigurasi outbound Marison tidak cocok dengan environment deployment.");
+  }
+  if (marisonDeploymentEnvironment === "production" && (data.override_nik || data.override_branch_id || data.override_project_id)) {
+    throw new Error("Override identity outbound tidak boleh aktif di production.");
+  }
+  const branchId = parseExternalInteger(data.override_branch_id);
+  const projectId = parseExternalInteger(data.override_project_id);
+  if (data.override_branch_id != null && branchId === null) throw new Error("Override branch ID outbound tidak valid.");
+  if (data.override_project_id != null && projectId === null) throw new Error("Override project ID outbound tidak valid.");
+  if (branchId !== null) {
+    const { data: office, error: officeError } = await supabase
+      .from("master_offices")
+      .select("marison_branch_id, marison_review_required")
+      .eq("marison_branch_id", branchId)
+      .maybeSingle();
+    if (officeError) throw officeError;
+    if (!office || office.marison_review_required) throw new Error("Override branch ID outbound tidak tervalidasi.");
+  }
+  if (projectId !== null) {
+    const { data: project, error: projectError } = await supabase
+      .from("master_projects")
+      .select("marison_project_id, office_id, marison_review_required, master_offices!inner(marison_branch_id)")
+      .eq("marison_project_id", projectId)
+      .maybeSingle();
+    if (projectError) throw projectError;
+    if (!project || project.marison_review_required) throw new Error("Override project ID outbound tidak tervalidasi.");
+    const projectBranchId = parseExternalInteger(project.master_offices?.marison_branch_id);
+    if (branchId !== null && projectBranchId !== branchId) throw new Error("Override project dan branch outbound tidak cocok.");
+  }
+  return {
+    nik: String(data.override_nik || "").trim(),
+    branchId,
+    projectId,
+    sources: {
+      nik: data.override_nik ? "override" : "synchronized",
+      branchId: data.override_branch_id ? "override" : "synchronized",
+      projectId: data.override_project_id ? "override" : "synchronized",
+    },
+  };
+};
+
 const getMarisonDispatchInput = (surat) => {
   const formInput = asPlainRecord(surat?.form_input_data);
   const snapshot = asPlainRecord(surat?.data_snapshot);
@@ -3459,14 +3534,14 @@ const getMarisonRequestedProject = (surat, input) => {
   );
 };
 
-const buildMarisonApprovals = (surat) => {
+const buildMarisonApprovals = (surat, overrides = {}) => {
   const approvals = asArrayValue(surat?.surat_signatures)
     .filter((signature) => signature?.is_signed && signature?.signed_at)
     .sort((left, right) => Number(left.step_order || 0) - Number(right.step_order || 0))
     .map((signature) => {
       const profile = asPlainRecord(signature.profiles);
       const signerSnapshot = asPlainRecord(signature.signer_snapshot);
-      const nik = marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik);
+      const nik = marisonOutboundNik(null, profile.nik, signerSnapshot.nik, signature.nik);
       return {
         role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
         nik,
@@ -3511,10 +3586,10 @@ const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
   return links;
 };
 
-const buildMarisonUnitPayload = async (surat, input, actorId) => {
+const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
-  const projectId = requireExternalInteger(externalIdFrom(requestedProject), "Project ID");
-  const branchId = requireExternalInteger(externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
+   const projectId = requireExternalInteger(overrides.projectId ?? externalIdFrom(requestedProject), "Project ID");
+   const branchId = requireExternalInteger(overrides.branchId ?? externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
   const units = getMarisonAllocatedUnits(surat, input).map((unit, index) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
@@ -3556,11 +3631,11 @@ const buildMarisonUnitPayload = async (surat, input, actorId) => {
     submission_number: surat.no_surat,
     project_id: projectId,
     branch_id: branchId,
-    submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+     submitted_by: marisonOutboundNik(overrides.nik, surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     units,
     attachments: await buildMarisonAttachmentLinks(surat, actorId),
-    approvals: buildMarisonApprovals(surat),
+     approvals: buildMarisonApprovals(surat, overrides),
   };
   return {
     endpoint: "/unit-submissions",
@@ -3649,10 +3724,10 @@ const normalizeMarisonEmbeddedLinks = (value) => asArrayValue(value)
   })
   .filter(Boolean);
 
-const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
+const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {}) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
-  const projectId = requireExternalInteger(externalIdFrom(requestedProject), "Project ID");
-  const branchId = requireExternalInteger(externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
+  const projectId = requireExternalInteger(overrides.projectId ?? externalIdFrom(requestedProject), "Project ID");
+  const branchId = requireExternalInteger(overrides.branchId ?? externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
   const items = normalizeMarisonItems(input).map((item, index) => {
     const record = asPlainRecord(item);
     const raw = getExternalRaw(record);
@@ -3679,20 +3754,20 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId) => {
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
-      submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+      submitted_by: marisonOutboundNik(overrides.nik, surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),
       items,
       attachments: await buildMarisonAttachmentLinks(surat, actorId),
-      approvals: buildMarisonApprovals(surat),
+      approvals: buildMarisonApprovals(surat, overrides),
     }),
   };
 };
 
-const buildMarisonAssetPayload = async (surat, input, actorId) => {
+const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
   const branchId = requireExternalInteger(
-    await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot),
+    overrides.branchId ?? await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot),
     "Branch ID"
   );
   const items = normalizeMarisonItems(input);
@@ -3757,14 +3832,14 @@ const buildMarisonAssetPayload = async (surat, input, actorId) => {
   const payload = {
     submission_number: surat.no_surat,
     branch_id: branchId,
-    submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
+    submitted_by: marisonOutboundNik(overrides.nik, surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik),
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     category: firstString(location.office.kedudukan, location.office.position).toLowerCase() === "pusat"
       ? "Pengajuan Pusat"
       : "Pengajuan Cabang",
     description: firstString(input.catatan, surat.judul_surat),
     items: payloadItems,
-    approvals: buildMarisonApprovals(surat),
+    approvals: buildMarisonApprovals(surat, overrides),
   };
   return {
     endpoint: "/asset-purchase-requests",
@@ -3774,12 +3849,12 @@ const buildMarisonAssetPayload = async (surat, input, actorId) => {
   };
 };
 
-const buildMarisonDispatchPayload = async (surat, actorId) => {
+const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
   const input = getMarisonDispatchInput(surat);
   const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
-  if (category === "unit") return buildMarisonUnitPayload(surat, input, actorId);
-  if (category === "non_unit" || category === "nonunit") return buildMarisonNonUnitPayload(surat, input, actorId);
-  if (category === "asset") return buildMarisonAssetPayload(surat, input, actorId);
+  if (category === "unit") return buildMarisonUnitPayload(surat, input, actorId, overrides);
+  if (category === "non_unit" || category === "nonunit") return buildMarisonNonUnitPayload(surat, input, actorId, overrides);
+  if (category === "asset") return buildMarisonAssetPayload(surat, input, actorId, overrides);
   const err = new Error(`Kategori ${category || "-"} belum memiliki endpoint outbound Marison.`);
   err.status = 422;
   throw err;
@@ -3930,7 +4005,8 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     throw err;
   }
 
-  const dispatch = await buildMarisonDispatchPayload(surat, null);
+   const overrides = await getMarisonOutboundOverrides();
+   const dispatch = await buildMarisonDispatchPayload(surat, null, overrides);
   if (dispatch.kind !== job.kind || dispatch.endpoint !== job.endpoint) {
     const err = new Error("Kategori surat berubah setelah job outbound dibuat.");
     err.status = 422;
@@ -3938,7 +4014,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
   }
   const payloadBody = JSON.stringify(dispatch.payload);
   const payloadHash = sha256Hex(Buffer.from(payloadBody));
-  const { data: preparedRows, error: preparedError } = await supabase.rpc("prepare_marison_outbound_dispatch", {
+   const { data: preparedRows, error: preparedError } = await supabase.rpc("prepare_marison_outbound_dispatch_with_sources", {
     p_job_id: job.id,
     p_lease_token: leaseToken,
     p_kind: dispatch.kind,
@@ -3946,7 +4022,8 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     p_contract_version: dispatch.contractVersion,
     p_payload: dispatch.payload,
     p_payload_body: payloadBody,
-    p_payload_hash: payloadHash,
+     p_payload_hash: payloadHash,
+     p_resolution_sources: overrides.sources,
   });
   if (preparedError) throw preparedError;
   const prepared = Array.isArray(preparedRows) ? preparedRows[0] : null;
@@ -4539,6 +4616,11 @@ export const handleRequest = async (req, res) => {
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/status") {
         const result = await getMarisonEnvironmentStatus(req);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/integrations/marison/outbound-overrides") {
+        const result = await configureMarisonOutboundIdentityOverrides(req);
         return sendJson(res, 200, result);
       }
 

@@ -25,9 +25,9 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('name: "Dokumen Rekomendasi Aset"');
     expect(server).toContain("p_contract_version: dispatch.contractVersion");
     expect(server).toContain("p_payload_hash: payloadHash");
-    expect(server).toContain("marisonOutboundNik(profile.nik, signerSnapshot.nik, signature.nik)");
-    expect(server).toContain("marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
-    expect(server).toContain("submitted_by: marisonOutboundNik(surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
+    expect(server).toContain("marisonOutboundNik(null, profile.nik, signerSnapshot.nik, signature.nik)");
+    expect(server).toContain("submitted_by: marisonOutboundNik(overrides.nik, surat.requester_snapshot?.nik, surat.data_snapshot?.requester?.nik)");
+    expect(server).toContain("getMarisonOutboundOverrides()");
     expect(client).not.toContain("MARISON_STAGING_CLIENT_SECRET");
     expect(client).not.toContain("MARISON_PRODUCTION_CLIENT_SECRET");
     expect(client).not.toContain("client_secret");

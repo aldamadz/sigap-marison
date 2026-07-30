@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: dockerfile
       args:
-        GIT_SHA: "${GIT_SHA:-unknown}"
+        GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
         VITE_APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
@@ -19,6 +19,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       NODE_ENV: production
       PORT: "80"
       TRUST_PROXY: "${TRUST_PROXY:-true}"
