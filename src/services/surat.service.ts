@@ -637,22 +637,6 @@ export const suratService = {
     if (error) throw error;
   },
 
-  async dispatchCompletedSuratToMarison(suratId: string) {
-    const { data: { session } } = await supabase.auth.getSession({ force: true });
-    if (!session?.access_token) return null;
-
-    const response = await fetch(`/api/integrations/marison/surat/${suratId}/dispatch`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(String(payload?.error || "Gagal mengirim data ke API Marison."));
-    }
-    return payload;
-  },
-
   createUnitRecapAttachment(project: any, units: any[]) {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 15;
@@ -2441,12 +2425,6 @@ export const suratService = {
       if (['SELESAI', 'DONE'].includes(updatedSurat.status)) {
         await this.finalizeRecommendationRevisionIfNeeded(suratId);
       }
-    }
-
-    if (rpcResult?.isDone) {
-      this.dispatchCompletedSuratToMarison(suratId).catch((dispatchError) => {
-        console.error("Gagal mengirim surat selesai ke API Marison:", dispatchError);
-      });
     }
 
     return { success: true };

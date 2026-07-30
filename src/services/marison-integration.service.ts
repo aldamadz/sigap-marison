@@ -7,6 +7,13 @@ export type MarisonEnvironmentStatus = {
   locked: boolean;
   source: "deployment";
   updatedAt: string | null;
+  outbound?: {
+    runtimeEnabled: boolean;
+    databaseEnabled: boolean;
+    databaseEnvironment: MarisonEnvironment | null;
+    ready: boolean;
+    updatedAt: string | null;
+  };
   environments?: Partial<Record<MarisonEnvironment, { configured: boolean; host: string }>>;
 };
 
@@ -113,6 +120,44 @@ export type MarisonEmployeeSyncResult = {
   errors: MarisonEmployeeSyncIssue[];
 };
 
+export type MarisonDispatchStatus =
+  | "pending"
+  | "processing"
+  | "succeeded"
+  | "failed_retryable"
+  | "failed_terminal"
+  | "outcome_unknown"
+  | "skipped";
+
+export type MarisonDispatchRow = {
+  id: string;
+  suratId: string;
+  noSurat: string;
+  title: string;
+  environment: MarisonEnvironment;
+  kind: "unit" | "non_unit" | "asset" | null;
+  status: MarisonDispatchStatus;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  lastAttemptAt: string | null;
+  postStartedAt: string | null;
+  completedAt: string | null;
+  externalReference: string | null;
+  errorCode: string | null;
+  failureReason: string | null;
+  reconciliationCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarisonDispatchPage = {
+  environment: MarisonEnvironment;
+  page: number;
+  pageSize: number;
+  total: number;
+  items: MarisonDispatchRow[];
+};
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     ...init,
@@ -162,4 +207,20 @@ export const marisonIntegrationService = {
       body: JSON.stringify({ confirm: true }),
     }
   ),
+  listDispatches: (status: MarisonDispatchStatus | "all" = "all", page = 1, pageSize = 20) => {
+    const search = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+    return request<MarisonDispatchPage>(`/api/integrations/marison/dispatches?${search}`);
+  },
+  reconcileDispatch: (
+    dispatchId: string,
+    payload: {
+      action: "mark_succeeded" | "reopen_confirmed_not_received" | "reopen_terminal_pre_post";
+      reason: string;
+      externalReference?: string;
+      confirmDuplicateRisk?: boolean;
+    }
+  ) => request<{ success: true }>(`/api/integrations/marison/dispatches/${dispatchId}/reconcile`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
 };
