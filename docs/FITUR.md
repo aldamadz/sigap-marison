@@ -576,13 +576,16 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 ### Fungsional
 
-- Admin mengelola proyek internal.
+- Admin mengelola proyek internal dan dapat menambah proyek manual.
+- Proyek manual dapat dibiarkan khusus SIGAP atau dipetakan ke `ID Proyek Marison` dan `Kode Proyek Marison` yang benar.
+- ID Proyek Marison harus unik. Sinkronisasi berikutnya mencocokkan proyek berdasarkan ID tersebut agar tidak membuat duplikat.
 - Proyek dipakai untuk cabang dan nomor surat.
 - Proyek juga menjadi konteks filter dan integrasi unit.
 
 ### Non-Fungsional
 
 - Kode proyek harus sinkron dengan kebutuhan nomor surat dan integrasi eksternal.
+- Proyek manual hanya dapat dipakai untuk integrasi Non Unit jika ID proyek dan ID branch pada kantor proyek sudah lengkap.
 - Perubahan proyek tidak boleh merusak surat yang sudah dibuat.
 
 ## 20. Matriks Tanda Tangan
