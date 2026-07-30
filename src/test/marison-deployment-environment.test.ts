@@ -52,7 +52,7 @@ describe("Marison deployment environment", () => {
     expect(panel).not.toContain("InputOTP");
   });
 
-  it("keeps Marison integration on its own configuration page", () => {
+  it("keeps Marison credential management on its own page and exposes only outbox reconciliation on form usage", () => {
     const formUsages = read("src/pages/admin/FormUsageManagementPage.tsx");
     const integrationPage = read("src/pages/admin/MarisonIntegrationPage.tsx");
     const configuration = read("src/components/configuration/ConfigurationLayout.tsx");
@@ -63,8 +63,8 @@ describe("Marison deployment environment", () => {
     expect(routes).toContain('<Route path="integration" element={<MarisonIntegrationPage />} />');
     expect(integrationPage).toContain("MarisonIntegrationPanel");
     expect(integrationPage).not.toContain("Navigate");
+    expect(formUsages).toContain("MarisonOutboundQueuePanel");
     expect(formUsages).not.toContain("MarisonIntegrationPanel");
-    expect(formUsages).not.toContain('section") !== "marison"');
     expect(sidebar).not.toContain("Integrasi Marison");
   });
 });
