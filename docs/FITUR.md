@@ -237,6 +237,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Saat draft dibuka kembali, alur penandatangan direkonsiliasi dengan konfigurasi Kegunaan Form aktif. Pilihan signer pada tahap yang ID-nya masih sama dipertahankan, tahap baru ditambahkan, dan tahap yang sudah dihapus tidak digunakan lagi.
 - Perubahan matrix hanya diterapkan pada draft yang belum didaftarkan. Surat yang sudah terdaftar tetap memakai snapshot alur saat pendaftaran agar histori persetujuan tidak berubah.
 - Lampiran yang dipilih setelah nomor dipesan langsung diunggah dan dikaitkan ke draft. Saat draft dibuka kembali, file tetap tersedia dan digunakan pada registrasi final tanpa unggah ulang.
+- Validasi registrasi menghitung gabungan file baru dan lampiran draft yang sudah tersimpan berdasarkan persyaratan masing-masing. Lampiran draft dibaca ulang dari database saat submit agar batas minimum/maksimum tidak bergantung pada state browser.
 - Upload lampiran pemohon menampilkan nama file aktif, urutan file, persentase byte yang sudah terkirim, fase penyimpanan metadata, serta status berhasil atau gagal. Ringkasan dan pendaftaran dikunci sampai proses selesai.
 - Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
 - User mengisi detail template berdasarkan Master Form.

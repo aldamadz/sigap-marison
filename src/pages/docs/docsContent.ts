@@ -2989,6 +2989,7 @@ export const DOCS_CHANGELOG = [
       "Mengunci ringkasan serta pendaftaran surat selama lampiran masih diunggah atau disimpan.",
       "Memisahkan Integrasi Marison menjadi halaman khusus di Konfigurasi agar Kegunaan Form hanya memuat aturan dokumen dan approval.",
       "Mengklasifikasikan seluruh pekerjaan pembangunan pada Kegunaan Form Permohonan Teknik Cabang sebagai Non Unit tanpa mengubah matrix penandatangan.",
+      "Memperbaiki validasi lampiran pemohon agar file yang sudah tersimpan pada draft ikut dihitung terhadap batas minimum dan maksimum saat pendaftaran final.",
     ],
   },
   {

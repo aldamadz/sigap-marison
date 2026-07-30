@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { parseRupiahInteger } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
+import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -1694,8 +1695,7 @@ export const suratService = {
     payload: any,
     signers: any[],
     file: File | null,
-    lampiranFiles?: File[] | File | null,
-    draftAttachments: SuratRegistrationDraftFile[] = []
+    lampiranFiles?: File[] | File | null
   ) {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession({ force: true });
@@ -1711,6 +1711,16 @@ export const suratService = {
         : lampiranFiles
           ? [lampiranFiles]
           : [];
+      const payloadDraftId = this.cleanUuid(payload.draft_id);
+      let persistedDraftAttachments: SuratRegistrationDraftFile[] = [];
+      if (payloadDraftId) {
+        const { data, error } = await supabase
+          .from("surat_registration_draft_files")
+          .select("id, draft_id, file_url, file_name, file_type, file_size, requirement_key, requirement_label, created_at")
+          .eq("draft_id", payloadDraftId);
+        if (error) throw error;
+        persistedDraftAttachments = (data || []) as SuratRegistrationDraftFile[];
+      }
 
       const noUrut      = parseInt(payload.no_surat.split("/")[0]);
       const currentYear = new Date().getFullYear();
@@ -1747,35 +1757,11 @@ export const suratService = {
       const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
         .filter((requirement: any) => Number(requirement.stage_order) === 0);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
-      const configuredInitialKeys = new Set(initialRequirements.map((requirement: any) => requirement.requirement_key));
-      const unconfiguredAttachment = attachmentFiles.find(file => {
-        const key = initialAttachmentMeta[file.name]?.key;
-        return !key || !configuredInitialKeys.has(key);
-      });
-      if (unconfiguredAttachment) {
-        throw new Error(`Lampiran ${unconfiguredAttachment.name} tidak memiliki konfigurasi yang valid.`);
-      }
-      initialRequirements.forEach((requirement: any) => {
-        const files = attachmentFiles.filter(file => initialAttachmentMeta[file.name]?.key === requirement.requirement_key);
-        const minimum = requirement.is_required
-          ? Math.max(1, Number(requirement.min_files || 1))
-          : 0;
-        const maximum = Math.max(minimum, Number(requirement.max_files || 1));
-        if (files.length < minimum) {
-          throw new Error(`Lampiran pemohon belum lengkap: ${requirement.label || requirement.requirement_key}.`);
-        }
-        if (files.length > maximum) {
-          throw new Error(`Lampiran ${requirement.label || requirement.requirement_key} melebihi batas.`);
-        }
-        files.forEach(file => {
-          const allowedTypes = Array.isArray(requirement.allowed_types) ? requirement.allowed_types : [];
-          if (allowedTypes.length > 0 && file.type && !allowedTypes.includes(file.type)) {
-            throw new Error(`Tipe file ${file.name} tidak diizinkan.`);
-          }
-          if (requirement.max_size_bytes && file.size > Number(requirement.max_size_bytes)) {
-            throw new Error(`Ukuran file ${file.name} melebihi batas.`);
-          }
-        });
+      validateInitialRegistrationAttachments({
+        requirements: initialRequirements,
+        newFiles: attachmentFiles,
+        newFileMetadata: initialAttachmentMeta,
+        persistedFiles: persistedDraftAttachments,
       });
 
       const activeSigners = signers.filter(s => s.user_id);
@@ -1810,7 +1796,6 @@ export const suratService = {
       payload = { ...payload, signature_steps: signatureSteps };
 
       let payloadReservationId = this.cleanUuid(payload.reservation_id);
-      const payloadDraftId = this.cleanUuid(payload.draft_id);
       if (!payloadReservationId && payloadDraftId) {
         const { data: draftReservation, error: draftReservationError } = await supabase
           .from("surat_registration_drafts")
@@ -1913,10 +1898,10 @@ export const suratService = {
         requirements: payload.initial_attachment_meta || {},
       });
       let reusedDraftAttachments: any[] = [];
-      if (draftAttachments.length > 0) {
+      if (persistedDraftAttachments.length > 0) {
         const { data, error } = await supabase
           .from("surat_attachments")
-          .insert(draftAttachments.map(attachment => ({
+          .insert(persistedDraftAttachments.map(attachment => ({
             surat_id: surat.id,
             file_url: attachment.file_url,
             file_name: attachment.file_name,
