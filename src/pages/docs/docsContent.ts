@@ -1567,6 +1567,28 @@ export const USER_DOCS: DocsEntry[] = [
             ],
           },
           {
+            type: "steps",
+            title: "Mengisi pekerjaan Non Unit",
+            items: [
+              "Pilih proyek cabang yang sesuai. Sistem memakai mapping proyek tersebut untuk mengambil jenis pekerjaan.",
+              "Pada setiap item, pilih jenis pekerjaan lalu isi nama pekerjaan yang benar-benar diajukan.",
+              "Isi nilai pengajuan. Angka dapat diketik atau ditempel dalam format seperti 1000000 atau 1.000.000.",
+              "Tambahkan catatan perencanaan jika ada ruang lingkup, lokasi, atau ketentuan teknis yang perlu diketahui penandatangan.",
+              "Periksa total dan rincian item pada ringkasan sebelum menekan Data Sudah Benar, Daftarkan.",
+            ],
+          },
+          {
+            type: "table",
+            title: "Data pada setiap pekerjaan",
+            columns: ["Data", "Isi", "Contoh"],
+            rows: [
+              ["Jenis pekerjaan", "Dipilih dari master Non Unit proyek.", "INFRA - Pekerjaan Infrastruktur"],
+              ["Nama pekerjaan", "Nama pekerjaan aktual pada pengajuan.", "Pembangunan saluran blok A"],
+              ["Nilai pengajuan", "Nilai untuk item tersebut.", "Rp 125.000.000"],
+              ["Catatan perencanaan", "Ruang lingkup atau informasi teknis; opsional.", "Termasuk material dan tenaga pemasangan"],
+            ],
+          },
+          {
             type: "callout",
             title: "Non Unit berbeda dari Non Aset",
             description: "Non Unit menjelaskan bahwa proses tidak memakai kavling/alokasi unit. Non Aset menjelaskan bahwa kebutuhan tidak dicatat sebagai aset. Jika keduanya terasa cocok, ikuti kegunaan form yang ditetapkan admin atau konfirmasikan klasifikasinya sebelum memesan nomor.",
@@ -2990,6 +3012,9 @@ export const DOCS_CHANGELOG = [
       "Memisahkan Integrasi Marison menjadi halaman khusus di Konfigurasi agar Kegunaan Form hanya memuat aturan dokumen dan approval.",
       "Mengklasifikasikan seluruh pekerjaan pembangunan pada Kegunaan Form Permohonan Teknik Cabang sebagai Non Unit tanpa mengubah matrix penandatangan.",
       "Memperbaiki validasi lampiran pemohon agar file yang sudah tersimpan pada draft ikut dihitung terhadap batas minimum dan maksimum saat pendaftaran final.",
+      "Menambahkan form Non Unit terstruktur berdasarkan proyek dengan jenis pekerjaan eksternal, nama pekerjaan, nilai pengajuan, catatan perencanaan, dan total otomatis.",
+      "Menyamakan data Non Unit pada ringkasan konfirmasi, detail pengajuan, PDF PGD, dan kontrak outbound agar tidak ada input ganda atau kolom mentah.",
+      "Menyimpan mapping proyek serta cabang Marison pada snapshot surat tanpa memakai UUID lokal sebagai ID external.",
     ],
   },
   {

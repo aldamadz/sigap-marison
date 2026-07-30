@@ -37,6 +37,13 @@ import {
 } from "@/components/surat/RegistrationSummaryDialog";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { RecommendationParentSummary } from "@/components/surat/RecommendationParentSummary";
+import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
+import {
+  normalizeNonUnitOption,
+  validateNonUnitRows,
+  type NonUnitExternalOption,
+  type NonUnitRequestRow,
+} from "@/components/surat/non-unit-request";
 
 interface SuratFormProps {
   onSuccess: (noSurat: string, judul: string) => void;
@@ -60,6 +67,8 @@ type MasterRecord = {
   departmentSortIndexes?: Record<string, number>;
   dept_sort_indexes?: Record<string, number>;
   job_title?: string | null;
+  marison_project_id?: number | null;
+  marison_branch_id?: number | null;
   branch?: { name?: string } | null;
 };
 
@@ -386,6 +395,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
   const [externalProjects, setExternalProjects]   = useState<ProjectOption[]>([]);
+  const [nonUnitOptions, setNonUnitOptions]       = useState<NonUnitExternalOption[]>([]);
+  const [nonUnitLoading, setNonUnitLoading]       = useState(false);
+  const [nonUnitError, setNonUnitError]           = useState<string | null>(null);
+  const [nonUnitReloadKey, setNonUnitReloadKey]   = useState(0);
   const [projectsLoading, setProjectsLoading]     = useState(false);
   const [projectsError, setProjectsError]         = useState<string | null>(null);
   const [projectUnitAvailability, setProjectUnitAvailability] = useState<{
@@ -965,6 +978,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const isTableFieldComplete = (field: TemplateField) => {
     if (field.key === RECOMMENDATION_ITEMS_KEY) return isRecommendationItemsComplete(field);
+    if (field.key === "items" && getRequestCategory() === "non_unit" && !shouldUseDefaultBranchProject) {
+      return validateNonUnitRows(getFormFieldValue(field.key)).length === 0;
+    }
     const rows = getTableRows(field.key).filter((row: TableRow) =>
       Object.values(row ?? {}).some((value) => String(value ?? "").trim())
     );
@@ -1283,9 +1299,45 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isBranchOfficeSelected = Boolean(formData.office_id && !isPusatSelected);
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
   const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects && getRequestCategory() !== "unit";
+  const selectedMarisonProjectId = Number(selectedProject?.marison_project_id || 0);
+  const selectedMarisonBranchId = Number(selectedOffice?.marison_branch_id || 0);
+  const isNonUnitMode = getRequestCategory() === "non_unit";
+  const isNonUnitProjectReady = isNonUnitMode &&
+    Number.isSafeInteger(selectedMarisonProjectId) &&
+    selectedMarisonProjectId > 0 &&
+    Number.isSafeInteger(selectedMarisonBranchId) &&
+    selectedMarisonBranchId > 0;
 
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
+    if (isNonUnitMode && isNonUnitProjectReady && selectedProject) {
+      input.requested_project = {
+        id: selectedMarisonProjectId,
+        value: String(selectedMarisonProjectId),
+        external_id: selectedMarisonProjectId,
+        code: selectedProject.code || "",
+        name: selectedProject.name || "",
+        label: selectedProject.name || selectedProject.code || "",
+        branch_id: selectedMarisonBranchId,
+        branch: {
+          id: selectedMarisonBranchId,
+          name: selectedOffice?.name || "",
+        },
+        raw: {
+          id: selectedMarisonProjectId,
+          project_id: selectedMarisonProjectId,
+          code: selectedProject.code || "",
+          name: selectedProject.name || "",
+          branch_id: selectedMarisonBranchId,
+          branch: {
+            id: selectedMarisonBranchId,
+            name: selectedOffice?.name || "",
+          },
+        },
+      };
+    } else if (isNonUnitMode) {
+      delete input.requested_project;
+    }
     if (shouldUseDefaultBranchProject) {
       return {
         ...input,
@@ -1300,7 +1352,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       delete input.project_is_default;
     }
     return input;
-  }, [formData.form_input_data, shouldUseDefaultBranchProject]);
+  }, [
+    formData.form_input_data,
+    isNonUnitMode,
+    isNonUnitProjectReady,
+    selectedMarisonProjectId,
+    selectedMarisonBranchId,
+    selectedProject,
+    selectedOffice?.name,
+    shouldUseDefaultBranchProject,
+  ]);
 
   const effectiveFormData = useMemo(() => ({
     ...formData,
@@ -1309,14 +1370,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }), [formData, shouldUseDefaultBranchProject, effectiveFormInputData]);
 
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
-    project_id: effectiveFormData.project_id,
+    project_id: isNonUnitMode ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
     project_code: shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
     project_name: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
     office_id: formData.office_id,
     entity_id: formData.entity_id,
     dept_id: formData.dept_id,
     ...effectiveFormInputData,
-  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject]);
+  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, isNonUnitMode, selectedMarisonProjectId]);
 
   const isDirty = useMemo(
     () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
@@ -1795,6 +1856,47 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [selectedUsage, externalVariables, isUnitMode]);
 
   useEffect(() => {
+    if (!isNonUnitMode || !selectedUsage || !generatedNoSurat) {
+      setNonUnitOptions([]);
+      setNonUnitError(null);
+      setNonUnitLoading(false);
+      return;
+    }
+    if (!isNonUnitProjectReady) {
+      setNonUnitOptions([]);
+      setNonUnitError(null);
+      setNonUnitLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setNonUnitLoading(true);
+    setNonUnitError(null);
+    requestExternalOptions("marison_non_units_by_project", {
+      project_id: selectedMarisonProjectId,
+    })
+      .then((options: ExternalOption[]) => {
+        if (cancelled) return;
+        const normalized = options
+          .map((option) => normalizeNonUnitOption(option))
+          .filter((option): option is NonUnitExternalOption => Boolean(option));
+        setNonUnitOptions(normalized);
+        if (normalized.length === 0) {
+          setNonUnitError("Belum ada jenis pekerjaan Non Unit untuk proyek ini.");
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setNonUnitOptions([]);
+        setNonUnitError(error instanceof Error ? error.message : "Gagal mengambil jenis pekerjaan Non Unit.");
+      })
+      .finally(() => {
+        if (!cancelled) setNonUnitLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isNonUnitMode, isNonUnitProjectReady, selectedMarisonProjectId, nonUnitReloadKey, selectedUsage?.id, generatedNoSurat]);
+
+  useEffect(() => {
     if (getRequestCategory() !== "unit") return;
     if (externalProjects.length > 0) return;
     let cancelled = false;
@@ -1986,6 +2088,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         variant: "destructive",
         title: "Proyek Cabang Belum Dipilih",
         description: "Kantor cabang ini memiliki proyek, jadi pilih proyek cabang terlebih dahulu.",
+      });
+    }
+    if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !isNonUnitProjectReady) {
+      return toast({
+        variant: "destructive",
+        title: "Proyek Belum Terhubung",
+        description: "Non Unit membutuhkan proyek dengan ID proyek dan cabang Marison. Minta admin melengkapi Master Proyek.",
       });
     }
     setIsProcessingNumber(true);
@@ -2272,6 +2381,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         return false;
       }
     }
+    if (isNonUnitMode && !shouldUseDefaultBranchProject) {
+      if (!isNonUnitProjectReady) {
+        toast({
+          variant: "destructive",
+          title: "Proyek Belum Terhubung",
+          description: "Pilih proyek yang memiliki ID proyek dan cabang Marison sebelum mendaftarkan Non Unit.",
+        });
+        return false;
+      }
+      const firstError = validateNonUnitRows(effectiveFormInputData.items)[0];
+      if (firstError) {
+        toast({
+          variant: "destructive",
+          title: "Data Non Unit Belum Lengkap",
+          description: firstError.message,
+        });
+        return false;
+      }
+    }
     const missingField = getManualInputFields(selectedUsage).find((field: TemplateField) => !isManualFieldComplete(field));
     if (missingField) {
       toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
@@ -2298,7 +2426,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       .filter((field) => !hiddenKeys.has(field.key))
       .map((field) => ({
         key: field.key,
-        label: field.label || humanizeInputKey(field.key),
+        label: field.key === "items" && isNonUnitMode
+          ? "Daftar Pekerjaan Non Unit"
+          : field.label || humanizeInputKey(field.key),
         type: field.type,
         value: effectiveFormInputData[field.key],
       }))
@@ -2935,6 +3065,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const renderTableField = (field: TemplateField) => {
     if (field.key === RECOMMENDATION_ITEMS_KEY) return renderRecommendationItemsField(field);
+    if (field.key === "items" && isNonUnitMode && !shouldUseDefaultBranchProject) {
+      return (
+        <NonUnitRequestEditor
+          rows={getTableRows(field.key) as NonUnitRequestRow[]}
+          options={nonUnitOptions}
+          loading={nonUnitLoading}
+          error={nonUnitError}
+          projectReady={isNonUnitProjectReady}
+          projectName={selectedProject?.name || ""}
+          onChange={(rows) => setTableRows(field.key, rows)}
+          onRetry={() => setNonUnitReloadKey((current) => current + 1)}
+        />
+      );
+    }
 
     const columns = field.table_config?.columns ?? [];
     const rows = getTableRows(field.key);
@@ -3149,6 +3293,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const isTable = field.type === "table";
     const isLongText = field.type === "textarea";
     const inputPlaceholder = field.placeholder || `Isi ${field.label}`;
+    const displayLabel = field.key === "items" && isNonUnitMode
+      ? "Detail Pekerjaan Non Unit"
+      : field.label;
 
     return (
       <div key={field.key} className={cn(
@@ -3162,7 +3309,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 {index + 1}
               </span>
               <Label className="text-sm font-semibold text-foreground">
-                {field.label}
+                {displayLabel}
               </Label>
             </div>
             {!isTable && (
@@ -3310,7 +3457,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             { value: "asset", label: "Aset", description: "Dokumen aset / properti" },
             { value: "unit", label: "Unit", description: "Permohonan/order bangun unit" },
             { value: "non_asset", label: "Non Aset", description: "Dokumen barang/jasa non aset" },
-            { value: "non_unit", label: "Non Unit", description: "Dokumen umum selain unit" },
+            { value: "non_unit", label: "Non Unit", description: "Pekerjaan proyek tanpa alokasi kavling" },
           ].map((option) => (
             (() => {
               const unitDisabled = option.value === "unit" && !canRequesterChooseUnit;

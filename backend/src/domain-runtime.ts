@@ -1793,6 +1793,9 @@ const renderEmailInputDetails = (inputValue) => {
     "signers",
   ]);
   const items = Array.isArray(input.items) ? input.items : [];
+  const isNonUnitItems = items.some((item) =>
+    item?.non_unit_id != null || item?.item_name != null || item?.planning_notes != null
+  );
   const recommendationItems = Array.isArray(input.recommendation_items) ? input.recommendation_items : [];
   const detailRows = Object.entries(input)
     .filter(([key, value]) => !hiddenKeys.has(key) && value !== "" && value != null)
@@ -1818,8 +1821,46 @@ const renderEmailInputDetails = (inputValue) => {
     ["keterangan", "Keterangan"],
   ].filter(([key]) => items.some((item) => item?.[key] != null && String(item[key]).trim()));
 
-  const itemsHtml = items.length && itemColumns.length
+  const itemsHtml = isNonUnitItems && items.length
     ? `
+      <div style="margin-bottom:${detailRows ? "16px" : "0"}">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#0f172a">Daftar Pekerjaan Non Unit</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1">
+            <thead>
+              <tr style="background:#e2e8f0">
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px;color:#334155">No.</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Jenis Pekerjaan</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Nama Pekerjaan</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;color:#334155">Nilai Pengajuan</th>
+                <th style="padding:9px;border:1px solid #cbd5e1;text-align:left;font-size:12px;color:#334155">Catatan Perencanaan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item, index) => {
+                const raw = item?.raw && typeof item.raw === "object" ? item.raw : {};
+                const code = String(raw?.code || item?.kode || "").trim();
+                const name = String(item?.non_unit_name || item?.label || raw?.name || "-").trim();
+                return `
+                  <tr>
+                    <td style="padding:9px;border:1px solid #cbd5e1;text-align:center;font-size:12px">${index + 1}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px">${escapeEmailHtml(code ? `${code} - ${name}` : name)}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;white-space:pre-wrap">${escapeEmailHtml(item?.item_name || item?.nama_barang || "-")}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;white-space:nowrap">${escapeEmailHtml(formatEmailRupiah(item?.subtotal))}</td>
+                    <td style="padding:9px;border:1px solid #cbd5e1;font-size:12px;white-space:pre-wrap">${escapeEmailHtml(item?.planning_notes || "-")}</td>
+                  </tr>`;
+              }).join("")}
+              <tr style="background:#f8fafc;font-weight:700">
+                <td colspan="3" style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px">Total Pengajuan</td>
+                <td style="padding:9px;border:1px solid #cbd5e1;text-align:right;font-size:12px;white-space:nowrap">${escapeEmailHtml(formatEmailRupiah(items.reduce((total, item) => total + parseEmailMoney(item?.subtotal), 0)))}</td>
+                <td style="padding:9px;border:1px solid #cbd5e1"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`
+    : items.length && itemColumns.length
+      ? `
       <div style="margin-bottom:${detailRows ? "16px" : "0"}">
         <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#0f172a">Daftar Barang</div>
         <div style="overflow-x:auto">
@@ -1840,7 +1881,7 @@ const renderEmailInputDetails = (inputValue) => {
           </table>
         </div>
       </div>`
-    : "";
+      : "";
 
   const recommendationItemsHtml = recommendationItems.length
     ? `
