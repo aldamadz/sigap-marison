@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -176,6 +177,15 @@ type LinkedDocumentContext = {
 };
 type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
 type AttachmentRequirement = NonNullable<UsageDetailRecord["form_usage_attachment_requirements"]>[number];
+
+type AttachmentUploadState = {
+  phase: "uploading" | "saving" | "success" | "error";
+  fileName: string;
+  fileIndex: number;
+  fileCount: number;
+  percent: number;
+  message?: string;
+};
 type TableRow = Record<string, unknown>;
 type ExternalOption = { value: string; label: string; raw?: unknown };
 type ProjectRaw = { id: string; code?: string; name?: string; branch?: { name?: string } | null };
@@ -369,6 +379,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [initialAttachmentFiles, setInitialAttachmentFiles] = useState<Record<string, File[]>>({});
   const [draftAttachments, setDraftAttachments]   = useState<SuratRegistrationDraftFile[]>([]);
   const [uploadingRequirement, setUploadingRequirement] = useState<string | null>(null);
+  const [attachmentUploadStates, setAttachmentUploadStates] = useState<Record<string, AttachmentUploadState>>({});
   const [uploadingRecommendationAttachment, setUploadingRecommendationAttachment] = useState<string | null>(null);
   const [registrationSummaryOpen, setRegistrationSummaryOpen] = useState(false);
   const [externalOptions, setExternalOptions]     = useState<Record<string, ExternalOption[]>>({});
@@ -2044,6 +2055,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setDraftAttachments([]);
       setInitialAttachmentFiles({});
       setLampiranFiles([]);
+      setAttachmentUploadStates({});
       setDraftSaveState("idle");
       setSearchParams({}, { replace: true });
       await refreshActiveDrafts();
@@ -2133,6 +2145,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setInitialAttachmentFiles({});
     setDraftAttachments([]);
     setUploadingRequirement(null);
+    setAttachmentUploadStates({});
     setUploadingRecommendationAttachment(null);
     setRegistrationSummaryOpen(false);
     setDatePickerOpen({});
@@ -3442,21 +3455,68 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
 
     setUploadingRequirement(rule.requirement_key);
+    setAttachmentUploadStates(previous => ({
+      ...previous,
+      [rule.requirement_key]: {
+        phase: "uploading",
+        fileName: selected[0]?.name || "",
+        fileIndex: 1,
+        fileCount: selected.length,
+        percent: 0,
+      },
+    }));
     try {
       const uploaded = await suratService.uploadRegistrationDraftFiles(activeDraftId, selected, {
         key: rule.requirement_key,
         label: rule.label,
+      }, progress => {
+        setAttachmentUploadStates(previous => ({
+          ...previous,
+          [rule.requirement_key]: {
+            phase: progress.phase,
+            fileName: progress.fileName,
+            fileIndex: progress.fileIndex,
+            fileCount: progress.fileCount,
+            percent: progress.percent,
+          },
+        }));
       });
       setDraftAttachments(previous => [...previous, ...uploaded]);
+      setAttachmentUploadStates(previous => ({
+        ...previous,
+        [rule.requirement_key]: {
+          phase: "success",
+          fileName: uploaded.at(-1)?.file_name || selected.at(-1)?.name || "",
+          fileIndex: selected.length,
+          fileCount: selected.length,
+          percent: 100,
+        },
+      }));
       toast({
         title: "Lampiran Tersimpan",
         description: `${uploaded.length} file tersimpan pada draft.`,
       });
     } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : error && typeof error === "object" && "message" in error && typeof error.message === "string"
+          ? error.message
+          : "Coba unggah kembali.";
+      setAttachmentUploadStates(previous => ({
+        ...previous,
+        [rule.requirement_key]: {
+          phase: "error",
+          fileName: previous[rule.requirement_key]?.fileName || selected[0]?.name || "",
+          fileIndex: previous[rule.requirement_key]?.fileIndex || 1,
+          fileCount: selected.length,
+          percent: previous[rule.requirement_key]?.percent || 0,
+          message,
+        },
+      }));
       toast({
         variant: "destructive",
         title: "Gagal Mengunggah Lampiran",
-        description: error instanceof Error ? error.message : "Coba unggah kembali.",
+        description: message,
       });
     } finally {
       setUploadingRequirement(null);
@@ -3491,20 +3551,64 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               attachment => attachment.requirement_key === rule.requirement_key
             );
             const totalFiles = files.length + persistedFiles.length;
-            const isUploading = uploadingRequirement === rule.requirement_key;
+            const uploadState = attachmentUploadStates[rule.requirement_key];
+            const uploadInProgress = uploadState?.phase === "uploading" || uploadState?.phase === "saving";
             return (
               <div key={rule.id} className="rounded-xl border border-border bg-background/70 p-4">
                 <div className="mb-3">
                   <span className="text-xs font-black uppercase">{rule.label}</span>
                   {rule.is_required && <span className="ml-2 text-destructive">*</span>}
                   <p className="mt-1 text-[10px] font-medium text-muted-foreground">
-                    {isUploading
-                      ? "Mengunggah dan menyimpan..."
+                    {uploadInProgress
+                      ? uploadState.phase === "saving" ? "Menyimpan data lampiran..." : "Mengunggah lampiran..."
                       : totalFiles > 0
                         ? `${totalFiles} dari ${rule.max_files} file tersimpan`
                         : `Maksimal ${rule.max_files} file`}
                   </p>
                 </div>
+                {uploadState && (
+                  <div
+                    className={cn(
+                      "mb-3 rounded-lg border px-3 py-3",
+                      uploadState.phase === "error"
+                        ? "border-destructive/40 bg-destructive/5"
+                        : uploadState.phase === "success"
+                          ? "border-emerald-500/30 bg-emerald-500/5"
+                          : "border-primary/25 bg-primary/5",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground">
+                          {uploadState.fileName || "Lampiran"}
+                        </p>
+                        <p className={cn(
+                          "mt-1",
+                          uploadState.phase === "error" ? "text-destructive" : "text-muted-foreground",
+                        )}>
+                          {uploadState.phase === "uploading" &&
+                            `File ${uploadState.fileIndex} dari ${uploadState.fileCount} sedang diunggah`}
+                          {uploadState.phase === "saving" && "Upload selesai. Menyimpan data lampiran"}
+                          {uploadState.phase === "success" && "Lampiran berhasil disimpan"}
+                          {uploadState.phase === "error" && (uploadState.message || "Upload gagal. Pilih file untuk mencoba kembali")}
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                        {uploadState.phase === "error" ? "Gagal" : `${uploadState.percent}%`}
+                      </span>
+                    </div>
+                    {uploadState.phase !== "error" && (
+                      <Progress
+                        value={uploadState.percent}
+                        className="mt-3 h-2"
+                        aria-label={`Progres upload ${rule.label}`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={uploadState.percent}
+                      />
+                    )}
+                  </div>
+                )}
                 {persistedFiles.length > 0 && (
                   <div className="mb-3 space-y-2">
                     {persistedFiles.map(attachment => (
@@ -3533,7 +3637,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   type="file"
                   multiple={rule.allow_multiple || rule.max_files > 1}
                   accept={rule.allowed_types?.join(",")}
-                  disabled={isUploading || totalFiles >= rule.max_files}
+                  disabled={Boolean(uploadingRequirement) || totalFiles >= rule.max_files}
                   onChange={event => {
                     const selected = Array.from(event.target.files || []);
                     event.currentTarget.value = "";

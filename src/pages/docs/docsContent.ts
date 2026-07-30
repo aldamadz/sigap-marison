@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.21.0";
-export const DOCS_UPDATED_AT = "27 Juli 2026";
+export const DOCS_VERSION = "v1.22.0";
+export const DOCS_UPDATED_AT = "30 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -1289,7 +1289,7 @@ export const USER_DOCS: DocsEntry[] = [
           "Pilih kategori pengajuan: Aset, Non Aset, Unit, atau Non Unit sesuai izin departemen.",
           "Untuk kategori Aset, tentukan apakah permohonan membutuhkan dokumen rekomendasi tertaut. Jika memilih butuh rekomendasi, rekomendasi dibuat sebagai surat terpisah dengan nomor dan approval sendiri.",
           "Pilih kegunaan form. Pilihan ini menentukan template, nomor surat, kandidat penandatangan, dan lampiran wajib.",
-          "Isi tempat, tanggal, detail permohonan, catatan, dan lampiran yang diminta.",
+          "Isi tempat, tanggal, detail permohonan, catatan, dan lampiran yang diminta. Tunggu progres lampiran mencapai 100% dan berstatus tersimpan sebelum membuka ringkasan.",
           "Pilih kandidat penandatangan dari daftar yang tersedia. Untuk cabang, kandidat dapat mengikuti kantor pemohon.",
           "Kirim pengajuan. Setelah terkirim, dokumen masuk ke tahap persetujuan pertama.",
         ],
@@ -2924,6 +2924,17 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.22.0",
+    date: "30 Juli 2026",
+    changes: [
+      "Memperbaiki susunan datepicker Tanggal Produksi pada tabel alokasi Unit untuk desktop dan mobile.",
+      "Membuka datepicker kosong pada bulan berjalan dan menandai hari ini tanpa mengisi tanggal sebelum dipilih.",
+      "Menggunakan contoh Tipe Unit `60` pada input dan template Excel sambil tetap menerima format teks seperti `60/72`.",
+      "Menambahkan progres upload lampiran pemohon berdasarkan byte file, urutan file, fase penyimpanan, dan status hasil.",
+      "Mengunci ringkasan serta pendaftaran surat selama lampiran masih diunggah atau disimpan.",
+    ],
+  },
   {
     version: "v1.21.0",
     date: "27 Juli 2026",

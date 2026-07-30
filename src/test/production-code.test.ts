@@ -45,7 +45,7 @@ describe("production code serial", () => {
       Kavling: "A01",
       "Struktur Atas": 1_000_000,
       "Struktur Bawah": 2_000_000,
-      "Tipe Unit": "4.0",
+      "Tipe Unit": "60",
       "Nomor Kode Produksi": "001",
       Blok: "5.2",
       "Tanggal Produksi": "01/01/2026",

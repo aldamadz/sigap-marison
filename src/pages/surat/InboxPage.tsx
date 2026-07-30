@@ -60,6 +60,7 @@ import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/
 import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
 import { normalizeProductionSerial } from "@/lib/production-code";
 import { useAttention } from "@/providers/AttentionProvider";
+import { parseLocalDateInput } from "@/lib/local-date";
 
 const getAllocationUnitType = (unit: any, detail: Record<string, any> = unit?.allocation_detail || {}) =>
   String(
@@ -1283,8 +1284,8 @@ const handleApprove = async (item: any) => {
 
   const formatDatePickerDisplay = (value: string) => {
     if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
+    const date = parseLocalDateInput(value);
+    if (!date) return value;
     return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
@@ -1600,7 +1601,7 @@ const handleApprove = async (item: any) => {
                           <Input
                             value={getAllocationUnitType(unit, detail)}
                             onChange={(event) => updateAllocationDetail(item.id, unit.value, "unit_type", event.target.value)}
-                            placeholder="4.0"
+                            placeholder="60"
                             aria-label={`Tipe unit ${unit.label}`}
                             className="h-11 text-sm"
                           />
@@ -1667,17 +1668,32 @@ const handleApprove = async (item: any) => {
                           />
                         </td>
                         <td className="border-r border-border px-2 py-2">
-                          <Popover open={Boolean(allocationDateOpen[dateKey])} onOpenChange={(open) => setAllocationDateOpen((previous) => ({ ...previous, [dateKey]: open }))}>
+                          <Popover
+                            open={Boolean(allocationDateOpen[dateKey])}
+                            onOpenChange={(open) => setAllocationDateOpen((previous) => ({ ...previous, [dateKey]: open }))}
+                          >
                             <PopoverTrigger asChild>
-                              <Button type="button" variant="outline" className="h-11 w-full justify-start font-mono text-sm">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-11 w-full justify-start font-mono text-sm"
+                                aria-label={`Pilih tanggal produksi ${unit.label}`}
+                              >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {formatDatePickerDisplay(detail.production_date || "") || "dd/mm/yyyy"}
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
+                            <PopoverContent
+                              className="w-auto max-w-[calc(100vw-1.5rem)] p-0"
+                              align="end"
+                              sideOffset={6}
+                              collisionPadding={12}
+                            >
                               <Calendar
                                 mode="single"
-                                selected={detail.production_date ? new Date(detail.production_date) : undefined}
+                                selected={parseLocalDateInput(detail.production_date)}
+                                defaultMonth={parseLocalDateInput(detail.production_date) || new Date()}
+                                today={new Date()}
                                 onSelect={(date) => {
                                   if (!date) return;
                                   updateAllocationDetail(item.id, unit.value, "production_date", toDateInputValue(date));

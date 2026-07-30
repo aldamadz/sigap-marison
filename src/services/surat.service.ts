@@ -204,6 +204,16 @@ export interface SuratRegistrationDraftFile {
   created_at: string;
 }
 
+export interface RegistrationDraftUploadProgress {
+  phase: "uploading" | "saving";
+  fileName: string;
+  fileIndex: number;
+  fileCount: number;
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
 export const suratService = {
   getUnitConfigFromForm(form: any) {
     const raw = form?.unit_config;
@@ -1504,15 +1514,38 @@ export const suratService = {
   async uploadRegistrationDraftFiles(
     draftId: string,
     files: File[],
-    requirement?: { key?: string; label?: string }
+    requirement?: { key?: string; label?: string },
+    onProgress?: (progress: RegistrationDraftUploadProgress) => void,
   ): Promise<SuratRegistrationDraftFile[]> {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Sesi login tidak tersedia.");
     const rows = [];
-    for (const file of files) {
+    const totalBytes = files.reduce((total, file) => total + file.size, 0);
+    let completedBytes = 0;
+
+    for (const [index, file] of files.entries()) {
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
       const path = `drafts/${draftId}/${crypto.randomUUID()}_${safeName}`;
-      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path, file });
+      const uploaded = await appStorageService.upload({
+        bucket: "lampiran_surat",
+        path,
+        file,
+        onProgress: ({ loaded }) => {
+          const aggregateLoaded = completedBytes + Math.min(loaded, file.size);
+          onProgress?.({
+            phase: "uploading",
+            fileName: file.name,
+            fileIndex: index + 1,
+            fileCount: files.length,
+            loaded: aggregateLoaded,
+            total: totalBytes,
+            percent: totalBytes > 0
+              ? Math.min(Math.round((aggregateLoaded / totalBytes) * 100), 100)
+              : 100,
+          });
+        },
+      });
+      completedBytes += file.size;
       rows.push({
         draft_id: draftId,
         created_by: user.id,
@@ -1525,6 +1558,15 @@ export const suratService = {
       });
     }
     if (rows.length === 0) return [];
+    onProgress?.({
+      phase: "saving",
+      fileName: files.at(-1)?.name || "",
+      fileIndex: files.length,
+      fileCount: files.length,
+      loaded: totalBytes,
+      total: totalBytes,
+      percent: 100,
+    });
     const { data, error } = await supabase
       .from("surat_registration_draft_files")
       .insert(rows)
