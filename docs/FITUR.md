@@ -888,8 +888,8 @@ Fallback data lama:
 - `npm run dev` membaca `.env.local`, menjalankan Vite pada port `8080` dan BFF lokal pada port `3010`, serta tetap memakai Supabase dan datasource Marison staging.
 - Request `/api` dari Vite diproxy ke BFF lokal tanpa mengubah Host header agar validasi same-origin dan cookie HttpOnly bekerja sama seperti deployment.
 - Environment Marison dikunci melalui `MARISON_DEPLOYMENT_ENVIRONMENT` pada Docker Compose dan tidak dapat diganti dari UI atau nilai database.
-- Panel Integrasi Marison berada di `Konfigurasi > Kegunaan Form`, menampilkan status endpoint aktif dan tes koneksi Projects, Unit, serta Non Unit untuk admin.
-- Khusus staging, admin dapat memeriksa lalu menyinkronkan data `/branches` dan `/employees` dari panel Kegunaan Form tanpa mengirim credential external ke browser.
+- Halaman `Konfigurasi > Integration` menampilkan status endpoint aktif, tes koneksi, pemeriksaan data, dan sinkronisasi manual master Marison untuk admin.
+- Khusus staging, admin dapat memeriksa lalu menyinkronkan data `/branches` dan `/employees` dari halaman Integration tanpa mengirim credential external ke browser.
 - Staging menjalankan sinkronisasi otomatis setiap hari pukul 00:00 Asia/Jakarta setelah sinkron manual dan aturan mapping diuji. Scheduler production tetap nonaktif sampai ada permintaan rilis production yang eksplisit.
 - Sinkronisasi mempertahankan UUID, role, jabatan, departemen, dan kantor profil lama; NIK dinormalisasi dari sumber external, akun baru memakai role `user`, dan email login memakai pola `nama.lengkap@staging.test`.
 - Employee tanpa NIK atau NIK yang ambigu diblokir dan dilaporkan pada preview; akun yang tidak ada pada response external tidak dinonaktifkan otomatis.

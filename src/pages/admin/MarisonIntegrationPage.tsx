@@ -1,5 +1,5 @@
-import { Navigate } from "react-router";
+import { MarisonIntegrationPanel } from "@/components/admin/MarisonIntegrationPanel";
 
 export default function MarisonIntegrationPage() {
-  return <Navigate to="/admin/configuration/form-usages?section=marison" replace />;
+  return <MarisonIntegrationPanel />;
 }

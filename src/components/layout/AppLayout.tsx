@@ -23,6 +23,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/admin/kpi-departments': { title: 'SLA Departemen', subtitle: 'Evaluasi approval berdasarkan jam kerja efektif' },
   '/admin/configuration/forms': { title: 'Form & Template', subtitle: 'Konfigurasi template dan input dokumen' },
   '/admin/configuration/template-designer': { title: 'Template Builder', subtitle: 'Rancang dokumen native dengan elemen dan data berulang' },
+  '/admin/configuration/integration': { title: 'Integrasi Marison', subtitle: 'Periksa koneksi dan sinkronisasi master data Marison' },
   '/admin/configuration/workflows': { title: 'Alur Persetujuan', subtitle: 'Konfigurasi urutan dan posisi tanda tangan' },
   '/admin/configuration/kpi': { title: 'SLA Departemen', subtitle: 'Konfigurasi waktu kerja efektif departemen' },
 }
