@@ -13,6 +13,13 @@ import {
 import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
 import { cn } from "@/lib/utils";
 import { formatRevisionValue as formatTypedRevisionValue } from "@/components/surat/revision-utils";
+import {
+  formatNonUnitCurrency,
+  getNonUnitRowOption,
+  getNonUnitTotal,
+  isNonUnitRequestRows,
+  type NonUnitRequestRow,
+} from "@/components/surat/non-unit-request";
 
 export type RegistrationSummaryField = {
   key: string;
@@ -204,6 +211,63 @@ const TableSummary = ({
   }
   if (normalizedFieldKey === "recommendation_items") {
     return <div className="space-y-3">{rows.map((row, index) => <AttachmentPreview key={index} row={row} index={index} />)}</div>;
+  }
+  if (normalizedFieldKey === "items" && isNonUnitRequestRows(rows)) {
+    const total = getNonUnitTotal(rows);
+    return (
+      <div className="overflow-hidden rounded-md border border-border">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-xs">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="w-14 px-3 py-2 text-center">No.</th>
+                <th className="px-3 py-2">Jenis Pekerjaan</th>
+                <th className="px-3 py-2">Nama Pekerjaan</th>
+                <th className="px-3 py-2 text-right">Nilai Pengajuan</th>
+                <th className="px-3 py-2">Catatan Perencanaan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((rawRow, index) => {
+                const row = rawRow as NonUnitRequestRow;
+                const option = getNonUnitRowOption(row);
+                return (
+                  <tr key={index} className="border-t border-border">
+                    <td className="px-3 py-3 text-center tabular-nums">{index + 1}</td>
+                    <td className="px-3 py-3 align-top">
+                      <p className="font-semibold text-foreground">
+                        {option?.raw?.code ? `${option.raw.code} - ` : ""}{option?.label || "-"}
+                      </p>
+                      {option?.raw?.description && (
+                        <p className="mt-1 max-w-64 whitespace-pre-wrap text-muted-foreground">{String(option.raw.description)}</p>
+                      )}
+                    </td>
+                    <td className="max-w-64 whitespace-pre-wrap px-3 py-3 align-top font-medium text-foreground">
+                      {formatSummaryValue(row.item_name || row.nama_barang)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right align-top font-semibold tabular-nums">
+                      {formatNonUnitCurrency(row.subtotal)}
+                    </td>
+                    <td className="max-w-72 whitespace-pre-wrap px-3 py-3 align-top">
+                      {formatSummaryValue(row.planning_notes)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t-2 border-border bg-muted/20">
+              <tr>
+                <th colSpan={3} className="px-3 py-3 text-right text-xs font-semibold">Total pengajuan</th>
+                <th className="whitespace-nowrap px-3 py-3 text-right text-sm font-semibold tabular-nums">
+                  {formatNonUnitCurrency(total)}
+                </th>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    );
   }
   if (normalizedFieldKey === "items" || rows.some((row) => formatSummaryValue(row.nama_barang || row.nama || row.barang) !== "-")) {
     const columns = ITEM_COLUMNS.filter((column) =>

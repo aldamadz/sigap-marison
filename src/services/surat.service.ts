@@ -494,7 +494,9 @@ export const suratService = {
       }];
     } else {
       normalized.request_mode = "barang";
-      delete normalized.requested_project;
+      if (normalized.request_category !== "non_unit") {
+        delete normalized.requested_project;
+      }
       delete normalized.requested_unit_count;
       delete normalized.unit_request_sentence;
       delete normalized.unit_config_snapshot;
