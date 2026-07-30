@@ -2319,10 +2319,12 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Memastikan pilihan proyek tersedia saat registrasi.",
       "Memeriksa relasi proyek dengan cabang.",
       "Menyediakan data proyek untuk pengajuan Unit.",
+      "Menambahkan proyek staging secara manual untuk pengujian integrasi.",
     ],
     steps: [
       "Buka Master Proyek.",
       "Cek daftar proyek, cabang, dan kolom Keterangan.",
+      "Klik Tambah manual untuk membuat proyek lokal. Isi ID dan kode proyek Marison hanya jika nilainya sudah diketahui dari API external.",
       "Untuk baris amber, lengkapi entitas atau mapping yang disebutkan pada Keterangan.",
       "Pastikan data proyek aktif sebelum dipakai user.",
     ],
@@ -2331,6 +2333,8 @@ export const ADMIN_DOCS: DocsEntry[] = [
     ],
     troubleshooting: [
       "Jika proyek tidak muncul, cek data source proyek dan status aktif proyek.",
+      "Jika proyek manual tidak muncul pada Non Unit, pastikan ID Proyek Marison dan ID Branch Marison pada kantor proyek sudah terisi.",
+      "Jika ID external ditolak, cari proyek lain yang sudah memakai ID tersebut. Satu ID hanya boleh terhubung ke satu proyek SIGAP.",
       "Jika unit tidak muncul, cek integrasi unit/proyek dan konfigurasi pengajuan Unit.",
       "Jika badge Master Proyek masih tampil, periksa proyek amber yang belum memiliki entitas atau mapping cabang lengkap.",
     ],
@@ -3023,6 +3027,7 @@ export const DOCS_CHANGELOG = [
       "Menyimpan mapping proyek serta cabang Marison pada snapshot surat tanpa memakai UUID lokal sebagai ID external.",
       "Menambahkan pilihan Proyek Tujuan Non Unit untuk pemohon Kantor Pusat dan memastikan ID cabang mengikuti kantor proyek yang dipilih.",
       "Menyaring pilihan Non Unit ke proyek yang sudah siap terhubung agar data tidak terkirim ke proyek atau cabang external yang salah.",
+      "Menambahkan mapping manual ID dan kode proyek Marison pada Master Proyek staging dengan validasi ID positif dan pencegahan duplikasi.",
     ],
   },
   {
