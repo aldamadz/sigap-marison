@@ -31,6 +31,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/configuration': 'Configuration',
   '/admin/configuration/forms': 'Form & Template',
   '/admin/configuration/template-designer': 'Template Builder',
+  '/admin/configuration/integration': 'Integrasi Marison',
   '/admin/configuration/workflows': 'Alur Persetujuan',
   '/admin/configuration/kpi': 'SLA Departemen',
   '/admin/settings': 'Pengaturan',

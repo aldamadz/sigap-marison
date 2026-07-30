@@ -54,6 +54,7 @@ const ENTRY_RELATED_TITLES: Record<string, string[]> = {
   "admin-forms": ["Kegunaan Form", "Registrasi Surat", "Alur Persetujuan"],
   "admin-workflows": ["Kegunaan Form", "Form dan Template"],
   "admin-form-usages": ["Form dan Template", "Master Jenis Surat", "User Organization", "Persetujuan"],
+  "admin-integration": ["User Organization", "Master Kantor Cabang", "Master Proyek"],
   "admin-numbering": ["Registrasi Surat", "Master Entitas", "Master Jenis Surat", "Master Proyek"],
   "admin-job-title-labels": ["User Organization", "Form dan Template"],
   "admin-sla": ["Persetujuan", "Riwayat Terlibat", "Monitoring Admin"],
