@@ -1418,14 +1418,14 @@ export const USER_DOCS: DocsEntry[] = [
     steps: [
       "Tentukan apakah permohonan berkaitan dengan unit/kavling properti.",
       "Jika berkaitan dengan unit/kavling, pilih Unit; jika tidak, lanjutkan menilai jenis barang atau prosesnya.",
-      "Pilih Aset untuk barang yang dicatat sebagai aset, Non Aset untuk kebutuhan operasional, atau Non Unit untuk proses yang memang dikonfigurasi tanpa alokasi unit.",
+      "Pilih Aset untuk barang yang dicatat sebagai aset, Non Aset untuk kebutuhan operasional, atau Non Unit untuk pekerjaan pembangunan/proyek fisik tanpa alokasi kavling.",
       "Periksa form dan kegunaan yang muncul. Sistem hanya menampilkan konfigurasi yang sesuai kategori dan departemen Anda.",
     ],
     examples: [
       "Komputer inventaris kantor menggunakan Aset.",
       "ATK, jasa sewa, biaya promosi, atau bahan habis pakai menggunakan Non Aset.",
       "Order bangun rumah pada kavling proyek menggunakan Unit.",
-      "Dokumen pekerjaan proyek yang tidak memilih kavling menggunakan Non Unit jika kegunaannya dikonfigurasi demikian.",
+      "SPK, pembangunan infrastruktur, perbaikan kawasan, material proyek, dan tenaga proyek tanpa pemilihan kavling menggunakan Non Unit.",
     ],
     troubleshooting: [
       "Jika form atau kegunaan tidak muncul, pastikan kategori yang dipilih sesuai dan minta admin memeriksa konfigurasi departemen.",
@@ -1448,8 +1448,8 @@ export const USER_DOCS: DocsEntry[] = [
         rows: [
           ["Apakah permohonan membutuhkan proyek, pemilihan kavling, dan alokasi unit?", "Pilih Unit.", "Lanjutkan ke klasifikasi barang atau proses."],
           ["Apakah barang akan menjadi inventaris/aset perusahaan?", "Pilih Aset.", "Pertimbangkan Non Aset atau Non Unit."],
-          ["Apakah kebutuhan berupa biaya operasional, jasa, sewa, promosi, atau barang habis pakai?", "Pilih Non Aset.", "Periksa apakah kegunaannya merupakan proses Non Unit."],
-          ["Apakah kegunaan dokumen memang disiapkan tanpa alokasi kavling/unit?", "Pilih Non Unit.", "Hubungi admin jika tidak ada kategori yang sesuai."],
+          ["Apakah kebutuhan berupa biaya operasional, jasa, sewa, promosi, atau barang habis pakai dan bukan pekerjaan pembangunan?", "Pilih Non Aset.", "Periksa apakah kegunaannya merupakan pekerjaan Non Unit."],
+          ["Apakah permohonan berupa pekerjaan pembangunan/proyek fisik tanpa alokasi kavling/unit?", "Pilih Non Unit.", "Hubungi admin jika tidak ada kategori yang sesuai."],
         ],
       },
       {
@@ -1489,7 +1489,7 @@ export const USER_DOCS: DocsEntry[] = [
       {
         type: "group",
         title: "Non Aset",
-        description: "Untuk kebutuhan barang/jasa dan biaya operasional yang tidak dicatat sebagai aset perusahaan.",
+        description: "Untuk kebutuhan barang/jasa dan biaya operasional yang tidak dicatat sebagai aset perusahaan serta bukan pekerjaan pembangunan/proyek fisik.",
         sections: [
           {
             type: "table",
@@ -1497,7 +1497,7 @@ export const USER_DOCS: DocsEntry[] = [
             columns: ["Kegunaan", "Contoh"],
             rows: [
               ["Barang habis pakai", "ATK, bahan kebersihan, konsumsi, bahan pendukung, atau kebutuhan rutin."],
-              ["Jasa dan sewa", "Sewa peralatan, dokumentasi, tenaga pemasangan, jasa perbaikan, atau layanan pihak ketiga."],
+              ["Jasa dan sewa operasional", "Sewa peralatan, dokumentasi, layanan operasional, atau jasa pihak ketiga yang tidak menjadi pekerjaan pembangunan."],
               ["Promosi dan kegiatan", "Banner, baliho, brosur, paid promote, sponsorship, pameran, atau customer gathering."],
               ["Biaya operasional", "Perpanjangan iklan, perawatan, biaya pemasangan, dan kebutuhan operasional lain."],
             ],
@@ -1553,15 +1553,16 @@ export const USER_DOCS: DocsEntry[] = [
       {
         type: "group",
         title: "Non Unit",
-        description: "Untuk dokumen yang tidak membutuhkan pemilihan kavling atau alokasi unit, tetapi kegunaannya dikonfigurasi sebagai Non Unit.",
+        description: "Untuk seluruh permohonan pekerjaan pembangunan/proyek fisik yang tidak membutuhkan pemilihan kavling atau alokasi unit.",
         sections: [
           {
             type: "table",
             title: "Kegunaan Non Unit",
             columns: ["Kegunaan", "Contoh", "Catatan"],
             rows: [
-              ["Pekerjaan proyek tanpa kavling", "Pekerjaan kawasan, infrastruktur, fasilitas umum, atau pekerjaan proyek lain yang tidak menunjuk unit tertentu.", "Pilih sesuai kegunaan yang tersedia untuk departemen."],
-              ["Dokumen umum selain unit", "Permohonan atau proses administrasi yang memakai alur khusus tanpa data kavling.", "Tidak menghasilkan rekap adendum atau kode produksi Unit."],
+              ["SPK dan pembangunan", "Pembuatan SPK, pembangunan kawasan, talud, jalan, jembatan, pondasi, saluran, fasos, atau fasum.", "Tidak memilih kavling/unit tertentu."],
+              ["Perbaikan dan infrastruktur proyek", "Perbaikan jalan, saluran, jaringan air/listrik, penerangan, perkerasan, atau rehabilitasi kawasan.", "Tidak menghasilkan rekap adendum atau kode produksi Unit."],
+              ["Material, alat, dan tenaga proyek", "Sirtu, pasir, urugan, sewa excavator, tenaga harian proyek, pemadatan, atau pembersihan lahan.", "Mengikuti matrix Permohonan Teknik Cabang."],
               ["Cabang tanpa proyek", "Pengajuan non-unit dari KC/KCP yang belum memiliki master proyek.", "Nomor surat memakai kode proyek virtual 000."],
             ],
           },
@@ -1581,7 +1582,7 @@ export const USER_DOCS: DocsEntry[] = [
           ["Aset", "Inventaris/aset perusahaan", "Mengikuti konteks kantor", "Tidak", "Dapat tersedia", "Komputer inventaris"],
           ["Non Aset", "Barang/jasa dan biaya operasional", "Mengikuti konteks kantor", "Tidak", "Tidak", "Sewa alat atau banner"],
           ["Unit", "Order bangun dan unit properti", "Wajib", "Wajib dialokasikan", "Tidak", "Pembangunan 3 unit"],
-          ["Non Unit", "Proses tanpa alokasi unit", "Sesuai kegunaan; dapat memakai 000", "Tidak", "Tidak", "Pekerjaan kawasan tanpa kavling"],
+          ["Non Unit", "Pekerjaan pembangunan/proyek fisik tanpa alokasi kavling", "Sesuai kegunaan; dapat memakai 000", "Tidak", "Tidak", "SPK atau pekerjaan kawasan"],
         ],
       },
       {
@@ -1602,7 +1603,7 @@ export const USER_DOCS: DocsEntry[] = [
           },
           {
             problem: "Bingung memilih Non Aset atau Non Unit",
-            solution: "Gunakan Non Aset untuk kebutuhan operasional/barang-jasa non aset. Gunakan Non Unit hanya ketika kegunaan proses tersebut memang disiapkan tanpa alokasi unit.",
+            solution: "Gunakan Non Aset untuk kebutuhan operasional/barang-jasa non aset. Gunakan Non Unit untuk pekerjaan pembangunan/proyek fisik yang tidak membutuhkan alokasi kavling.",
           },
         ],
       },
@@ -2987,6 +2988,7 @@ export const DOCS_CHANGELOG = [
       "Menambahkan progres upload lampiran pemohon berdasarkan byte file, urutan file, fase penyimpanan, dan status hasil.",
       "Mengunci ringkasan serta pendaftaran surat selama lampiran masih diunggah atau disimpan.",
       "Memisahkan Integrasi Marison menjadi halaman khusus di Konfigurasi agar Kegunaan Form hanya memuat aturan dokumen dan approval.",
+      "Mengklasifikasikan seluruh pekerjaan pembangunan pada Kegunaan Form Permohonan Teknik Cabang sebagai Non Unit tanpa mengubah matrix penandatangan.",
     ],
   },
   {

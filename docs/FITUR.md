@@ -249,9 +249,9 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 
 - Dokumentasi user menyediakan satu panduan terpadu untuk memilih `Aset`, `Non Aset`, `Unit`, dan `Non Unit`.
 - `Aset` digunakan untuk barang yang menjadi inventaris/aset perusahaan, termasuk pengadaan atau peremajaan perangkat. Dokumen rekomendasi dapat tersedia sesuai departemen dan konfigurasi.
-- `Non Aset` digunakan untuk barang habis pakai, jasa, sewa, promosi, kegiatan, dan biaya operasional yang tidak dicatat sebagai aset.
+- `Non Aset` digunakan untuk barang habis pakai, jasa, sewa, promosi, kegiatan, dan biaya operasional yang tidak dicatat sebagai aset serta bukan pekerjaan pembangunan/proyek fisik.
 - `Unit` digunakan untuk order bangun yang wajib memiliki proyek, jumlah unit, alokasi kavling, struktur atas/bawah, dan kode produksi.
-- `Non Unit` digunakan untuk kegunaan dokumen yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk proses proyek atau dokumen umum yang dikonfigurasi demikian.
+- `Non Unit` digunakan untuk seluruh permohonan pekerjaan pembangunan/proyek fisik yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk SPK, infrastruktur, fasilitas umum, perbaikan kawasan, material proyek, dan tenaga proyek.
 - `Non Aset` dan `Non Unit` tidak dianggap istilah yang sama: Non Aset menjelaskan klasifikasi kebutuhan, sedangkan Non Unit menjelaskan tidak adanya proses alokasi kavling.
 - Panduan menampilkan kegunaan, contoh, data yang diminta, alur, perbandingan kategori, dan solusi ketika form/kegunaan tidak muncul.
 
@@ -589,7 +589,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin dapat memfilter daftar Kegunaan Form berdasarkan form dan departemen pengaju.
 - Admin dapat membuat Kegunaan Form kategori `Non Aset` selain `Aset`, `Unit`, dan `Non Unit`.
 - Admin dapat mengatur scope kandidat signer per tahap: manual, kantor pemohon, kantor pusat, atau semua kantor.
-- Kegunaan PGD cabang tersedia untuk `Permohonan Marketing Cabang` dan `Permohonan Teknik Cabang`, dengan Spv/BM mengikuti kantor pemohon serta Manager Marketing/Direktur Utama mengikuti kantor pusat.
+- Kegunaan PGD cabang tersedia untuk `Permohonan Marketing Cabang` dan `Permohonan Teknik Cabang`, dengan Spv/BM mengikuti kantor pemohon serta Manager Marketing/Direktur Utama mengikuti kantor pusat. `Permohonan Teknik Cabang` diklasifikasikan sebagai `Non Unit` karena mencakup pekerjaan pembangunan/proyek fisik tanpa alokasi kavling.
 - Kegunaan PGD diperluas untuk permohonan utilitas PDAM/PLN, SLO/SLF, legal-perizinan, karangan bunga, aset/non aset pusat dan cabang, HRD/GA, event, entertain, parcel, serta kompensasi proyek dengan alur signer sesuai konfigurasi bisnis.
 - Registrasi kegunaan cabang dapat dibuat oleh admin cabang seperti `Marketing (Cabang)`, `Teknik (Cabang)`, `Umum & Keuangan (Cabang)`, atau departemen `Cabang`; penanda tangan tahap `Membuat` tetap mengikuti matrix signer yang dikonfigurasi.
 - Jika kategori `Unit` aktif, izin pemakaiannya diatur terpisah per departemen pada Configuration `Pengajuan Unit`.

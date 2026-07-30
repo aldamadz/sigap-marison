@@ -169,7 +169,7 @@ Temuan keamanan outbound:
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
 | --- | --- | --- | --- | --- | --- |
 | DOC-01 | Master form dan input schema dinamis | Production + Staging | Form management | Form usage, template | Sangat tinggi untuk SUR-01 |
-| DOC-02 | Form usage per departemen dan step | Production + Staging | Form usage management | Forms, workflow, departments | Jangan tarik bila form aktif menggunakannya |
+| DOC-02 | Form usage per departemen dan step | Production + Staging; koreksi `Permohonan Teknik Cabang` menjadi `Non Unit` siap diuji di staging | Form usage management | Forms, workflow, departments | Jangan tarik bila form aktif menggunakannya; surat terdaftar tetap memakai snapshot kategorinya |
 | DOC-03 | Excel template mapping dan dynamic signature | Production + Staging | Excel/signature services | DOC-01, WF-02 | Snapshot/template lama harus kompatibel |
 | DOC-04 | Template Designer JSON/version/publish | Production + Staging | Template builder | Builder tables, preview | Dapat disembunyikan tanpa menghapus versi |
 | DOC-05 | PDF job queue dan worker | Production + Staging, production drift | PDF API, jobs, worker | Storage, LibreOffice/pdf renderer | Sinkronkan worker sebelum perubahan renderer |
