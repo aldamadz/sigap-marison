@@ -18,10 +18,43 @@ export type NonUnitRowError = {
   message: string;
 };
 
+export type NonUnitProjectMapping = {
+  projectId: number | null;
+  branchId: number | null;
+  projectOffice: Record<string, unknown> | null;
+  ready: boolean;
+};
+
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+
+const asPositiveSafeInteger = (value: unknown): number | null => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+export const resolveNonUnitProjectMapping = (
+  project: unknown,
+  offices: unknown,
+): NonUnitProjectMapping => {
+  const projectRecord = asRecord(project);
+  const officeId = String(projectRecord.office_id ?? "");
+  const projectOffice = Array.isArray(offices)
+    ? offices
+        .map(asRecord)
+        .find((office) => String(office.id ?? "") === officeId) ?? null
+    : null;
+  const projectId = asPositiveSafeInteger(projectRecord.marison_project_id);
+  const branchId = asPositiveSafeInteger(projectOffice?.marison_branch_id);
+  return {
+    projectId,
+    branchId,
+    projectOffice,
+    ready: projectId !== null && branchId !== null,
+  };
+};
 
 export const parseNonUnitMoney = (value: unknown): number => {
   if (typeof value === "number") {

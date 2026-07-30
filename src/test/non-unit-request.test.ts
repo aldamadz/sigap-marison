@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatNonUnitMoneyInput,
   getNonUnitTotal,
+  resolveNonUnitProjectMapping,
   selectNonUnitType,
   updateNonUnitRow,
   validateNonUnitRows,
@@ -61,5 +62,41 @@ describe("Non Unit request normalization", () => {
 
     expect(normalized.requested_project).toEqual(requestedProject);
     expect(normalized.request_mode).toBe("barang");
+  });
+
+  it("uses the branch mapping owned by the destination project", () => {
+    const mapping = resolveNonUnitProjectMapping(
+      {
+        id: "local-project",
+        office_id: "project-office",
+        marison_project_id: 19,
+      },
+      [
+        { id: "requester-office", marison_branch_id: 1 },
+        { id: "project-office", marison_branch_id: 14, name: "Cabang Seed Sample" },
+      ],
+    );
+
+    expect(mapping).toMatchObject({
+      projectId: 19,
+      branchId: 14,
+      ready: true,
+      projectOffice: {
+        id: "project-office",
+        name: "Cabang Seed Sample",
+      },
+    });
+  });
+
+  it("fails closed when the project or its office has no external mapping", () => {
+    expect(resolveNonUnitProjectMapping(
+      { office_id: "project-office", marison_project_id: null },
+      [{ id: "project-office", marison_branch_id: 14 }],
+    ).ready).toBe(false);
+
+    expect(resolveNonUnitProjectMapping(
+      { office_id: "project-office", marison_project_id: 19 },
+      [{ id: "project-office", marison_branch_id: null }],
+    ).ready).toBe(false);
   });
 });

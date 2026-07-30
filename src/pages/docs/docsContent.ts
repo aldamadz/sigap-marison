@@ -1570,7 +1570,7 @@ export const USER_DOCS: DocsEntry[] = [
             type: "steps",
             title: "Mengisi pekerjaan Non Unit",
             items: [
-              "Pilih proyek cabang yang sesuai. Sistem memakai mapping proyek tersebut untuk mengambil jenis pekerjaan.",
+              "Pilih Proyek Tujuan yang sesuai. Pemohon Kantor Pusat melihat seluruh proyek siap, sedangkan pemohon cabang hanya melihat proyek siap pada kantornya.",
               "Pada setiap item, pilih jenis pekerjaan lalu isi nama pekerjaan yang benar-benar diajukan.",
               "Isi nilai pengajuan. Angka dapat diketik atau ditempel dalam format seperti 1000000 atau 1.000.000.",
               "Tambahkan catatan perencanaan jika ada ruang lingkup, lokasi, atau ketentuan teknis yang perlu diketahui penandatangan.",
@@ -1587,6 +1587,12 @@ export const USER_DOCS: DocsEntry[] = [
               ["Nilai pengajuan", "Nilai untuk item tersebut.", "Rp 125.000.000"],
               ["Catatan perencanaan", "Ruang lingkup atau informasi teknis; opsional.", "Termasuk material dan tenaga pemasangan"],
             ],
+          },
+          {
+            type: "callout",
+            title: "Proyek tidak tersedia",
+            description: "Proyek hanya dapat dipilih jika ID proyek dan kantor proyek sudah terhubung ke Marison. Admin dapat meninjau proyek yang belum siap pada Master Proyek.",
+            tone: "warning",
           },
           {
             type: "callout",
@@ -3015,6 +3021,8 @@ export const DOCS_CHANGELOG = [
       "Menambahkan form Non Unit terstruktur berdasarkan proyek dengan jenis pekerjaan eksternal, nama pekerjaan, nilai pengajuan, catatan perencanaan, dan total otomatis.",
       "Menyamakan data Non Unit pada ringkasan konfirmasi, detail pengajuan, PDF PGD, dan kontrak outbound agar tidak ada input ganda atau kolom mentah.",
       "Menyimpan mapping proyek serta cabang Marison pada snapshot surat tanpa memakai UUID lokal sebagai ID external.",
+      "Menambahkan pilihan Proyek Tujuan Non Unit untuk pemohon Kantor Pusat dan memastikan ID cabang mengikuti kantor proyek yang dipilih.",
+      "Menyaring pilihan Non Unit ke proyek yang sudah siap terhubung agar data tidak terkirim ke proyek atau cabang external yang salah.",
     ],
   },
   {

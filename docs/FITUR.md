@@ -254,8 +254,10 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - `Unit` digunakan untuk order bangun yang wajib memiliki proyek, jumlah unit, alokasi kavling, struktur atas/bawah, dan kode produksi.
 - `Non Unit` digunakan untuk seluruh permohonan pekerjaan pembangunan/proyek fisik yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk SPK, infrastruktur, fasilitas umum, perbaikan kawasan, material proyek, dan tenaga proyek.
 - Untuk proyek yang sudah terhubung ke Marison, setiap item Non Unit berisi jenis pekerjaan dari master eksternal, nama pekerjaan aktual, nilai pengajuan, dan catatan perencanaan opsional.
+- Pemohon Kantor Pusat memilih Proyek Tujuan dari seluruh proyek yang siap terhubung, sedangkan pemohon cabang hanya melihat proyek siap pada kantornya.
 - Nilai seluruh item Non Unit dijumlahkan otomatis pada form, ringkasan konfirmasi, dan detail pengajuan.
-- Data proyek eksternal disimpan sebagai snapshot bersama surat. ID proyek/cabang tidak diambil dari UUID internal dan tidak ditebak saat surat selesai.
+- Data proyek eksternal disimpan sebagai snapshot bersama surat. ID proyek tidak diambil dari UUID internal, dan ID cabang selalu mengikuti kantor proyek tujuan, bukan kantor pemohon.
+- Proyek yang belum mempunyai mapping proyek atau kantor external tidak dapat dipilih untuk Non Unit dan tetap masuk antrean review Master Proyek.
 - Cabang tanpa proyek tetap dapat memakai alur PGD lokal dengan kode proyek virtual `000`; alur ini tidak memaksakan jenis pekerjaan dari proyek eksternal.
 - `Non Aset` dan `Non Unit` tidak dianggap istilah yang sama: Non Aset menjelaskan klasifikasi kebutuhan, sedangkan Non Unit menjelaskan tidak adanya proses alokasi kavling.
 - Panduan menampilkan kegunaan, contoh, data yang diminta, alur, perbandingan kategori, dan solusi ketika form/kegunaan tidak muncul.

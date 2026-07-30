@@ -40,6 +40,7 @@ import { RecommendationParentSummary } from "@/components/surat/RecommendationPa
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
 import {
   normalizeNonUnitOption,
+  resolveNonUnitProjectMapping,
   validateNonUnitRows,
   type NonUnitExternalOption,
   type NonUnitRequestRow,
@@ -1299,14 +1300,33 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isBranchOfficeSelected = Boolean(formData.office_id && !isPusatSelected);
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
   const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects && getRequestCategory() !== "unit";
-  const selectedMarisonProjectId = Number(selectedProject?.marison_project_id || 0);
-  const selectedMarisonBranchId = Number(selectedOffice?.marison_branch_id || 0);
   const isNonUnitMode = getRequestCategory() === "non_unit";
-  const isNonUnitProjectReady = isNonUnitMode &&
-    Number.isSafeInteger(selectedMarisonProjectId) &&
-    selectedMarisonProjectId > 0 &&
-    Number.isSafeInteger(selectedMarisonBranchId) &&
-    selectedMarisonBranchId > 0;
+  const nonUnitProjectCandidates = useMemo(
+    () => isPusatSelected ? (master.projects || []) : filteredProjects,
+    [filteredProjects, isPusatSelected, master.projects],
+  );
+  const readyNonUnitProjects = useMemo(
+    () => nonUnitProjectCandidates.filter((project) =>
+      resolveNonUnitProjectMapping(project, master.offices).ready
+    ),
+    [master.offices, nonUnitProjectCandidates],
+  );
+  const unavailableNonUnitProjectCount = nonUnitProjectCandidates.length - readyNonUnitProjects.length;
+  const projectSelectionOptions = isNonUnitMode ? readyNonUnitProjects : filteredProjects;
+  const selectedNonUnitProjectMapping = useMemo(
+    () => resolveNonUnitProjectMapping(selectedProject, master.offices),
+    [master.offices, selectedProject],
+  );
+  const selectedMarisonProjectId = selectedNonUnitProjectMapping.projectId || 0;
+  const selectedMarisonBranchId = selectedNonUnitProjectMapping.branchId || 0;
+  const selectedProjectOffice = selectedNonUnitProjectMapping.projectOffice as MasterRecord | null;
+  const isNonUnitProjectReady = isNonUnitMode && selectedNonUnitProjectMapping.ready;
+  const shouldShowProjectSelector = Boolean(
+    formData.office_id && (!isPusatSelected || isNonUnitMode)
+  );
+  const hasRegisteredProjectCandidates = isNonUnitMode
+    ? nonUnitProjectCandidates.length > 0
+    : branchHasRegisteredProjects;
 
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
@@ -1321,7 +1341,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         branch_id: selectedMarisonBranchId,
         branch: {
           id: selectedMarisonBranchId,
-          name: selectedOffice?.name || "",
+          name: selectedProjectOffice?.name || "",
         },
         raw: {
           id: selectedMarisonProjectId,
@@ -1331,7 +1351,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           branch_id: selectedMarisonBranchId,
           branch: {
             id: selectedMarisonBranchId,
-            name: selectedOffice?.name || "",
+            name: selectedProjectOffice?.name || "",
           },
         },
       };
@@ -1359,7 +1379,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedMarisonProjectId,
     selectedMarisonBranchId,
     selectedProject,
-    selectedOffice?.name,
+    selectedProjectOffice?.name,
     shouldUseDefaultBranchProject,
   ]);
 
@@ -2083,18 +2103,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       if (!Number.isFinite(count) || count < 1) {
         return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
       }
-    } else if (branchHasRegisteredProjects && !formData.project_id) {
+    } else if (branchHasRegisteredProjects && !formData.project_id && requestCategory !== "non_unit") {
       return toast({
         variant: "destructive",
         title: "Proyek Cabang Belum Dipilih",
         description: "Kantor cabang ini memiliki proyek, jadi pilih proyek cabang terlebih dahulu.",
       });
     }
+    if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !formData.project_id) {
+      return toast({
+        variant: "destructive",
+        title: "Proyek Tujuan Wajib Dipilih",
+        description: "Pilih proyek yang sudah terhubung ke Marison untuk melanjutkan pengajuan Non Unit.",
+      });
+    }
     if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !isNonUnitProjectReady) {
       return toast({
         variant: "destructive",
         title: "Proyek Belum Terhubung",
-        description: "Non Unit membutuhkan proyek dengan ID proyek dan cabang Marison. Minta admin melengkapi Master Proyek.",
+        description: "Mapping proyek atau kantor proyek belum lengkap. Minta admin meninjau Master Proyek.",
       });
     }
     setIsProcessingNumber(true);
@@ -4000,28 +4027,49 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               </Select>
             </div>
 
-            {/* Proyek (cabang saja) */}
-            {!isPusatSelected && formData.office_id && (
+            {/* Proyek cabang, serta proyek tujuan untuk Non Unit dari pusat. */}
+            {shouldShowProjectSelector && (
               <div className="space-y-2 animate-in slide-in-from-top-2">
                 <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
-                  <Briefcase className="w-3 h-3" /> Proyek Cabang
+                  <Briefcase className="w-3 h-3" />
+                  {isNonUnitMode ? "Proyek Tujuan" : "Proyek Cabang"}
                 </Label>
-                {branchHasRegisteredProjects ? (
+                {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
                   <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
                     <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
                       <SelectValue placeholder="Pilih Proyek..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {filteredProjects.map((p: MasterRecord) => (
-                        <SelectItem key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</SelectItem>
-                      ))}
+                      {projectSelectionOptions.map((p: MasterRecord) => {
+                        const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
+                        const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
+                        return (
+                          <SelectItem key={p.id} value={p.id}>
+                            {isNonUnitMode && isPusatSelected && projectOffice?.name
+                              ? `${projectLabel} · ${projectOffice.name}`
+                              : projectLabel}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
+                ) : hasRegisteredProjectCandidates && isNonUnitMode ? (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                    <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
+                    <div className="mt-1 text-xs">
+                      Mapping proyek dan kantor proyek perlu dilengkapi di Master Proyek.
+                    </div>
+                  </div>
                 ) : (
                   <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5">
                     <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
                     <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
                   </div>
+                )}
+                {isNonUnitMode && unavailableNonUnitProjectCount > 0 && (
+                  <p className="px-1 text-xs text-muted-foreground">
+                    {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison belum lengkap.
+                  </p>
                 )}
               </div>
             )}
