@@ -13,6 +13,10 @@ export type MarisonEnvironmentStatus = {
     databaseEnvironment: MarisonEnvironment | null;
     ready: boolean;
     updatedAt: string | null;
+    overrideNikConfigured?: boolean;
+    overrideNikMasked?: string | null;
+    overrideBranchId?: number | null;
+    overrideProjectId?: number | null;
   };
   environments?: Partial<Record<MarisonEnvironment, { configured: boolean; host: string }>>;
 };
@@ -177,6 +181,11 @@ export const marisonIntegrationService = {
     method: "POST",
     body: JSON.stringify({}),
   }),
+  saveOutboundOverrides: (payload: { overrideNik?: string; overrideBranchId?: number | null; overrideProjectId?: number | null; reason: string }) =>
+    request<{ success: true; configuration: unknown }>("/api/integrations/marison/outbound-overrides", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   previewEmployeeSync: () => request<MarisonEmployeeSyncPreview>(
     "/api/integrations/marison/employees/preview"
   ),

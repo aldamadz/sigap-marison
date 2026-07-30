@@ -14,6 +14,7 @@ const routes: DomainRoute[] = [
   { method: "GET", url: "/api/files/view/:token/*" },
   { method: "POST", url: "/api/auth/password-reset" },
   { method: "GET", url: "/api/integrations/marison/status" },
+  { method: "POST", url: "/api/integrations/marison/outbound-overrides" },
   { method: "POST", url: "/api/integrations/marison/test" },
   { method: "GET", url: "/api/integrations/marison/employees/preview" },
   { method: "GET", url: "/api/integrations/marison/branches/preview" },

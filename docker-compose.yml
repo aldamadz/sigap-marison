@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: dockerfile
       args:
-        GIT_SHA: "${GIT_SHA:-unknown}"
+        GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
     image: agenda-flow:local
     container_name: agenda-flow
     restart: unless-stopped

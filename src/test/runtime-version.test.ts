@@ -38,7 +38,8 @@ describe("runtime revision metadata", () => {
       "docker-compose.prod.yml",
       "docker-compose.worker.yml",
     ]) {
-      expect(read(composePath)).toContain('GIT_SHA: "${GIT_SHA:-unknown}"');
+       expect(read(composePath)).toContain('GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"');
     }
+    expect(read("docker-compose.staging.yml")).toContain('GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"');
   });
 });

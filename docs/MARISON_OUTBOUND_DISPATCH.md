@@ -95,6 +95,19 @@ diaktifkan.
 
 ## Rekonsiliasi
 
+## Override Identitas Outbound Staging
+
+Admin dapat mengisi override NIK, ID kantor/cabang vendor, dan ID proyek vendor
+melalui halaman Integrasi Marison staging. Nilai ini hanya memengaruhi payload
+outbound baru; profil, master kantor, master proyek, foreign key, dan hasil sync
+tidak diubah. Override disimpan bersama audit perubahan before/after yang
+memask NIK. Job yang payload-nya sudah tersimpan tidak berubah ketika konfigurasi
+override berubah.
+
+Override kosong memakai nilai hasil sinkronisasi. Override tidak valid, tidak
+terpetakan, atau pasangan proyek-cabang tidak cocok menghentikan build payload
+sebelum POST vendor.
+
 Untuk `outcome_unknown`, admin wajib memeriksa sistem vendor terlebih dahulu:
 
 - **Diterima**: isi external reference dan alasan pemeriksaan.
