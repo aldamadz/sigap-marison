@@ -2416,8 +2416,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         },
         latestSigners,
         null,
-        lampiranFiles,
-        draftAttachments
+        lampiranFiles
       );
       if (result) {
         let autoSignWarning = "";
