@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
-import { MarisonIntegrationPanel } from "@/components/admin/MarisonIntegrationPanel";
 import { MarisonOutboundQueuePanel } from "@/components/admin/MarisonOutboundQueuePanel";
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
@@ -223,13 +222,6 @@ export default function FormUsageManagementPage() {
   }, [toast]);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  useEffect(() => {
-    if (searchParams.get("section") !== "marison") return;
-    window.setTimeout(() => {
-      marisonPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 150);
-  }, [searchParams]);
 
   useEffect(() => {
     const sourceMatrixId = searchParams.get("source_matrix");
@@ -709,8 +701,7 @@ export default function FormUsageManagementPage() {
         </Button>
       </div>
 
-      <div ref={marisonPanelRef} className="space-y-4">
-        <MarisonIntegrationPanel />
+      <div ref={marisonPanelRef}>
         <MarisonOutboundQueuePanel />
       </div>
 
