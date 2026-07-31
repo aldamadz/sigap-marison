@@ -891,6 +891,8 @@ Fallback data lama:
 
 - Aplikasi utama berjalan di Docker production.
 - Deployment staging selalu memakai datasource Marison staging, sedangkan deployment production selalu memakai datasource Marison production.
+
+- Mapping payload Marison staging pada Master User, Master Kantor, dan Master Proyek hanya menunjuk record mirror hasil sinkronisasi. Data SIGAP tetap menjadi data internal; payload memakai mapping staging per record dan per signer bila tersedia, lalu data SIGAP yang terbukti valid di katalog mirror, atau fail-closed.
 - Domain production adalah `https://sigap.marisoncloud.com`; DNS Cloudflare berupa proxied `A` record ke origin publik, lalu Caddy meneruskan request ke container production pada `10.10.10.246:3010`.
 - Domain staging adalah `https://sigap.marison-testing.biz.id` dan tetap melalui Cloudflare Tunnel ke container staging pada port host `3011`.
 - Staging memakai project Supabase, Auth, database, dan PDF worker tersendiri. Layanan storage fisiknya dipakai bersama production, tetapi object path staging dipisahkan dengan prefix `staging/`; data transaksi production tidak disalin ke database staging.

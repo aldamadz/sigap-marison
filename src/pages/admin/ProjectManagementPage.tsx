@@ -24,6 +24,9 @@ import {
   masterReviewRowClass,
 } from "@/components/admin/MasterReviewStatus";
 import { normalizeManualProjectMapping } from "@/lib/master-project-mapping";
+import { MarisonPayloadMappingCell } from "@/components/admin/MarisonPayloadMappingCell";
+import { marisonPayloadMappingService, type MarisonPayloadMapping } from "@/services/marison-payload-mapping.service";
+import { matchesMarisonPayloadMappingFilter } from "@/lib/marison-payload-mapping";
 
 export default function MasterProjectManagementPage() {
   const { toast } = useToast();
@@ -35,6 +38,9 @@ export default function MasterProjectManagementPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [overrides, setOverrides] = useState<MarisonPayloadMapping[]>([]);
+  const [officeMappings, setOfficeMappings] = useState<MarisonPayloadMapping[]>([]);
+  const [overrideFilter, setOverrideFilter] = useState("all");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -60,13 +66,19 @@ export default function MasterProjectManagementPage() {
         .from("master_projects")
         .select(`
           *,
-          master_offices ( name, kedudukan ),
+           master_offices ( id, name, kedudukan, marison_branch_id, marison_synced_at, marison_review_required ),
           master_entities ( name )
         `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setProjects(data || []);
+      const [projectMappings, officeMappingRows] = await Promise.all([
+        marisonPayloadMappingService.list('project'),
+        marisonPayloadMappingService.list('office'),
+      ]);
+      setOverrides(projectMappings);
+      setOfficeMappings(officeMappingRows);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Gagal Memuat", description: error.message });
     } finally {
@@ -173,7 +185,29 @@ export default function MasterProjectManagementPage() {
     return reasons.length > 0 ? reasons.join(" · ") : "Lengkap";
   };
 
+  const getEffectiveOfficeBranchId = (project: any) => {
+    const officeMapping = officeMappings.find((entry) =>
+      entry.entity_type === "office" && entry.record_id === project.office_id);
+    if (officeMapping?.mapping_valid) return officeMapping.mapped_branch_id;
+    if (
+      project.master_offices?.marison_branch_id
+      && project.master_offices?.marison_synced_at
+      && !project.master_offices?.marison_review_required
+    ) return project.master_offices.marison_branch_id;
+    return null;
+  };
+
   const filteredProjects = projects
+    .filter((project) => {
+      const override = overrides.find((item) => item.entity_type === "project" && item.record_id === project.id);
+      const hasSource = Boolean(project.marison_project_id && project.marison_synced_at && !project.marison_review_required && project.master_offices?.marison_branch_id && !project.master_offices?.marison_review_required);
+      return matchesMarisonPayloadMappingFilter(
+        overrideFilter,
+        project.marison_project_id,
+        hasSource,
+        override,
+      );
+    })
     .filter(p =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -209,6 +243,7 @@ export default function MasterProjectManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="empty">ID external kosong</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Mapping tidak valid</SelectItem></SelectContent></Select>
           <Button onClick={() => handleOpenModal()} className="h-11 px-5 text-sm font-semibold">
             <Plus className="mr-2 h-4 w-4" /> Tambah manual
           </Button>
@@ -224,6 +259,7 @@ export default function MasterProjectManagementPage() {
               <TableHead className="w-[450px] text-xs font-semibold">Detail proyek</TableHead>
               <TableHead className="text-xs font-semibold">Kantor cabang</TableHead>
               <TableHead className="text-xs font-semibold">External</TableHead>
+              <TableHead className="min-w-[270px] text-xs font-semibold">Mapping Payload Staging</TableHead>
               <TableHead className="text-xs font-semibold">Entitas</TableHead>
               <TableHead className="text-xs font-semibold">Keterangan</TableHead>
               <TableHead className="pr-8 text-right text-xs font-semibold">Aksi</TableHead>
@@ -231,10 +267,10 @@ export default function MasterProjectManagementPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-32"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary"/></TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-32"><Loader2 className="animate-spin mx-auto w-10 h-10 text-primary"/></TableCell></TableRow>
             ) : filteredProjects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-20 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={8} className="py-20 text-center text-sm text-muted-foreground">
                   Tidak ada proyek ditemukan.
                 </TableCell>
               </TableRow>
@@ -287,6 +323,7 @@ export default function MasterProjectManagementPage() {
                     <span className="text-xs text-muted-foreground">Manual SIGAP</span>
                   )}
                 </TableCell>
+                <TableCell><MarisonPayloadMappingCell entityType="project" recordId={item.id} source={item.marison_project_id} sourceValid={Boolean(item.marison_project_id && item.marison_synced_at && !item.marison_review_required && item.master_offices?.marison_branch_id && item.master_offices?.marison_synced_at && !item.master_offices?.marison_review_required)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapping_valid)} effectiveBranchId={getEffectiveOfficeBranchId(item)} field="project" override={overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)), next] : current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)))} /></TableCell>
                 <TableCell>
                   <span className="rounded border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
                     {item.master_entities?.name || "-"}
