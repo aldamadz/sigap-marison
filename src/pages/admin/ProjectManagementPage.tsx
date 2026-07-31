@@ -192,7 +192,7 @@ export default function MasterProjectManagementPage() {
     if (
       project.master_offices?.marison_branch_id
       && project.master_offices?.marison_synced_at
-      && !project.master_offices?.marison_review_required
+
     ) return project.master_offices.marison_branch_id;
     return null;
   };
@@ -200,7 +200,7 @@ export default function MasterProjectManagementPage() {
   const filteredProjects = projects
     .filter((project) => {
       const override = overrides.find((item) => item.entity_type === "project" && item.record_id === project.id);
-      const hasSource = Boolean(project.marison_project_id && project.marison_synced_at && !project.marison_review_required && project.master_offices?.marison_branch_id && !project.master_offices?.marison_review_required);
+       const hasSource = Boolean(project.marison_project_id > 0 && project.marison_synced_at && project.master_offices?.marison_branch_id > 0 && project.master_offices?.marison_synced_at);
       return matchesMarisonPayloadMappingFilter(
         overrideFilter,
         project.marison_project_id,
@@ -243,7 +243,7 @@ export default function MasterProjectManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="empty">ID external kosong</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Mapping tidak valid</SelectItem></SelectContent></Select>
+           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
           <Button onClick={() => handleOpenModal()} className="h-11 px-5 text-sm font-semibold">
             <Plus className="mr-2 h-4 w-4" /> Tambah manual
           </Button>
@@ -323,7 +323,7 @@ export default function MasterProjectManagementPage() {
                     <span className="text-xs text-muted-foreground">Manual SIGAP</span>
                   )}
                 </TableCell>
-                <TableCell><MarisonPayloadMappingCell entityType="project" recordId={item.id} source={item.marison_project_id} sourceValid={Boolean(item.marison_project_id && item.marison_synced_at && !item.marison_review_required && item.master_offices?.marison_branch_id && item.master_offices?.marison_synced_at && !item.master_offices?.marison_review_required)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapping_valid)} effectiveBranchId={getEffectiveOfficeBranchId(item)} field="project" override={overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)), next] : current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)))} /></TableCell>
+                 <TableCell><MarisonPayloadMappingCell entityType="project" recordId={item.id} source={item.marison_project_id} sourceValid={Boolean(item.marison_project_id > 0 && item.marison_synced_at && item.master_offices?.marison_branch_id > 0 && item.master_offices?.marison_synced_at)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapping_valid)} effectiveBranchId={getEffectiveOfficeBranchId(item)} field="project" override={overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)), next] : current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)))} /></TableCell>
                 <TableCell>
                   <span className="rounded border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
                     {item.master_entities?.name || "-"}

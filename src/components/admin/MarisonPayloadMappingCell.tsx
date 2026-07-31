@@ -49,8 +49,15 @@ export function MarisonPayloadMappingCell({
     ? selected?.nik ?? override?.mapped_nik
     : selected?.external_id ?? override?.mapped_external_id;
   const effective = override && !mappingValid
-    ? 'Mapping tidak valid'
+    ? 'Perlu koreksi relasi'
     : mappedPayloadValue ?? (sourceValid ? source : 'Belum dapat dikirim');
+  const status = override && !mappingValid
+    ? 'Perlu koreksi relasi'
+    : mappingValid
+      ? 'Siap dikirim - mapping staging'
+      : sourceValid
+        ? 'Siap dikirim - data external'
+        : 'Belum dapat dikirim';
 
   useEffect(() => {
     let active = true;
@@ -103,7 +110,7 @@ export function MarisonPayloadMappingCell({
     }
     if (reset && !(await appDialog.confirm({
       title: 'Reset mapping tersimpan?',
-      description: `Mapping ${selected?.name || override?.mapped_name || '-'} akan dihapus dan nilai payload kembali memakai data SIGAP yang valid.`,
+        description: `Mapping ${selected?.name || override?.mapped_name || '-'} akan dihapus dan nilai payload kembali memakai identitas external sumber.`,
       confirmText: 'Reset mapping',
     }))) return;
 
@@ -134,7 +141,7 @@ export function MarisonPayloadMappingCell({
       onChanged(nextMapping);
       setValue(reset ? '' : value);
       setReason('');
-      toast.success(reset ? 'Mapping direset ke data SIGAP' : 'Mapping disimpan');
+       toast.success(reset ? 'Mapping direset ke data external sumber' : 'Mapping disimpan');
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : 'Mapping gagal disimpan';
       setError(message);
@@ -145,7 +152,7 @@ export function MarisonPayloadMappingCell({
   };
 
   const candidates = remoteCatalog.filter((item) => item.valid).slice(0, 8);
-  const effectiveInvalid = effective === 'Belum dapat dikirim' || effective === 'Mapping tidak valid';
+  const effectiveInvalid = effective === 'Belum dapat dikirim' || effective === 'Perlu koreksi relasi';
   return (
     <div className="min-w-[250px] space-y-1.5">
       <div className="grid grid-cols-[auto_1fr] gap-x-2 text-[11px] text-muted-foreground">
@@ -157,6 +164,8 @@ export function MarisonPayloadMappingCell({
         </b>
         <span>Nilai yang Dikirim</span>
         <b className={effectiveInvalid ? 'text-destructive' : 'text-primary'}>{effective}</b>
+        <span>Status</span>
+        <b className={effectiveInvalid ? 'text-destructive' : 'text-primary'}>{status}</b>
       </div>
       <div className="relative flex gap-1">
         <Input

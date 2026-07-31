@@ -3474,33 +3474,33 @@ const getMarisonOutboundMappings = async (surat = null) => {
   const officeMapping = recordOverrides[0] || {};
   const projectMapping = recordOverrides[1] || {};
   const [officeTarget, projectTarget] = await Promise.all([
-    officeMapping.target_record_id ? supabase.from("master_offices").select("marison_branch_id, marison_synced_at, marison_review_required").eq("id", officeMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    projectMapping.target_record_id ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, marison_review_required, office_id, master_offices!inner(marison_branch_id, marison_synced_at, marison_review_required)").eq("id", projectMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+     officeMapping.target_record_id ? supabase.from("master_offices").select("marison_branch_id, marison_synced_at").eq("id", officeMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+     projectMapping.target_record_id ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, office_id, master_offices!inner(marison_branch_id, marison_synced_at)").eq("id", projectMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
   ]);
   for (const result of [officeTarget, projectTarget]) if (result.error) throw result.error;
   const sourceBranchId = await resolveMarisonBranchId(surat);
   const sourceProjectId = externalIdFrom(getMarisonRequestedProject(surat, getMarisonDispatchInput(surat)));
-  const mappedBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at && !officeTarget.data?.marison_review_required ? officeTarget.data.marison_branch_id : null;
-  const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && !projectTarget.data?.marison_review_required && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at && !projectTarget.data?.master_offices?.marison_review_required ? projectTarget.data.marison_project_id : null;
+   const mappedBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at ? officeTarget.data.marison_branch_id : null;
+   const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
   const effectiveBranchId = parseExternalInteger(mappedBranchId ?? (await isValidSourceBranchId(sourceBranchId) ? sourceBranchId : null));
   const effectiveProjectId = parseExternalInteger(mappedProjectId ?? (await isValidSourceProjectId(sourceProjectId) ? sourceProjectId : null));
   if (effectiveBranchId !== null) {
     const { data: effectiveOffice, error: effectiveOfficeError } = await supabase
       .from("master_offices")
-      .select("marison_branch_id, marison_review_required")
+       .select("marison_branch_id, marison_synced_at")
       .eq("marison_branch_id", effectiveBranchId)
       .maybeSingle();
     if (effectiveOfficeError) throw effectiveOfficeError;
-    if (!effectiveOffice || effectiveOffice.marison_review_required) throw new Error("Effective branch ID outbound tidak tervalidasi.");
+     if (!effectiveOffice || !effectiveOffice.marison_branch_id || !effectiveOffice.marison_synced_at) throw new Error("Effective branch ID outbound tidak tervalidasi.");
   }
   if (effectiveProjectId !== null) {
     const { data: effectiveProject, error: effectiveProjectError } = await supabase
       .from("master_projects")
-      .select("marison_project_id, marison_review_required, master_offices!inner(marison_branch_id, marison_synced_at, marison_review_required)")
+       .select("marison_project_id, marison_synced_at, master_offices!inner(marison_branch_id, marison_synced_at)")
       .eq("marison_project_id", effectiveProjectId)
       .maybeSingle();
     if (effectiveProjectError) throw effectiveProjectError;
-    if (!effectiveProject || effectiveProject.marison_review_required || !effectiveProject.master_offices?.marison_synced_at || effectiveProject.master_offices?.marison_review_required) {
+     if (!effectiveProject || !effectiveProject.marison_project_id || !effectiveProject.marison_synced_at || !effectiveProject.master_offices?.marison_branch_id || !effectiveProject.master_offices?.marison_synced_at) {
       throw new Error("Effective project ID outbound tidak tervalidasi.");
     }
     const effectiveProjectBranchId = parseExternalInteger(effectiveProject.master_offices?.marison_branch_id);
@@ -3510,8 +3510,8 @@ const getMarisonOutboundMappings = async (surat = null) => {
     branchId: effectiveBranchId,
     projectId: effectiveProjectId,
     sources: {
-      branchId: mappedBranchId ? "mapping_staging" : effectiveBranchId !== null ? "synchronized" : "unavailable",
-      projectId: mappedProjectId ? "mapping_staging" : effectiveProjectId !== null ? "synchronized" : "unavailable",
+       branchId: mappedBranchId ? "staging_mapping" : effectiveBranchId !== null ? "external_source" : "unavailable",
+       projectId: mappedProjectId ? "staging_mapping" : effectiveProjectId !== null ? "external_source" : "unavailable",
     },
   };
 };
@@ -3519,7 +3519,7 @@ const getMarisonOutboundMappings = async (surat = null) => {
 const isValidSourceBranchId = async (branchId) => {
   if (branchId == null) return false;
   const { data, error } = await supabase.from("master_offices").select("id")
-    .eq("marison_branch_id", branchId).not("marison_synced_at", "is", null).eq("marison_review_required", false).limit(1).maybeSingle();
+     .eq("marison_branch_id", branchId).not("marison_synced_at", "is", null).limit(1).maybeSingle();
   if (error) throw error;
   return Boolean(data);
 };
@@ -3527,9 +3527,9 @@ const isValidSourceBranchId = async (branchId) => {
 const isValidSourceProjectId = async (projectId) => {
   if (projectId == null) return false;
   const { data, error } = await supabase.from("master_projects")
-    .select("id, master_offices!inner(marison_branch_id, marison_synced_at, marison_review_required)").eq("marison_project_id", projectId)
-    .not("marison_synced_at", "is", null).eq("marison_review_required", false)
-    .not("master_offices.marison_branch_id", "is", null).not("master_offices.marison_synced_at", "is", null).eq("master_offices.marison_review_required", false).limit(1).maybeSingle();
+     .select("id, master_offices!inner(marison_branch_id, marison_synced_at)").eq("marison_project_id", projectId)
+     .not("marison_synced_at", "is", null)
+     .not("master_offices.marison_branch_id", "is", null).not("master_offices.marison_synced_at", "is", null).limit(1).maybeSingle();
   if (error) throw error;
   return Boolean(data);
 };
@@ -3645,7 +3645,7 @@ const loadMarisonProfileIdentityResolver = async (profileIds) => {
     && !profile?.deleted_at
     && profile?.marison_employee_id != null
     && profile?.marison_synced_at
-    && !profile?.marison_review_required
+     && profile?.marison_employee_id > 0
   );
 
   return (profileId, fallbackNik, label) => {

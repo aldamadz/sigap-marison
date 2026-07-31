@@ -4,14 +4,15 @@ MRN-16 memetakan record SIGAP trial ke record mirror hasil sinkronisasi Marison 
 
 ## Katalog
 
-- Employee: `profiles` dengan `marison_employee_id`, `marison_synced_at`, dan review bersih.
-- Kantor: `master_offices` dengan `marison_branch_id`, `marison_synced_at`, dan review bersih.
-- Proyek: `master_projects` dengan `marison_project_id`, `marison_synced_at`, kantor mirror, dan review bersih.
+- Employee: `profiles` dengan `marison_employee_id`, NIK valid, dan `marison_synced_at`.
+- Kantor: `master_offices` dengan `marison_branch_id` dan `marison_synced_at`.
+- Proyek: `master_projects` dengan `marison_project_id`, `marison_synced_at`, dan kantor mirror dengan branch ID/provenance valid.
+- `marison_review_required` hanya status kelengkapan operasional SIGAP; tidak memblokir identitas external payload.
 - UI mencari katalog lokal hasil sync, bukan memanggil API external per ketikan.
 
 ## Nilai Payload
 
-Prioritas: mapping staging record terkait, lalu data SIGAP yang terbukti ada di katalog mirror, lalu fail-closed.
+Prioritas: mapping staging record terkait, lalu identitas external milik record hasil sync, lalu fail-closed.
 
 Contoh user trial:
 
@@ -27,5 +28,6 @@ Contoh kantor dan proyek:
 
 - Activity log mencatat actor, environment, record SIGAP, target mirror, before/after, dan reason.
 - Payload source mencatat `requesterNik` dan `approval:<step_order>:<profile_id>`.
+- `payload_resolution_sources` memakai `external_source`, `staging_mapping`, atau `unavailable`.
 - NIK tidak ditulis ke audit log; UI admin menerima nilai penuh melalui BFF `no-store`.
 - Singleton MRN-15 dipertahankan untuk histori/status lama dan deprecated untuk payload bisnis.

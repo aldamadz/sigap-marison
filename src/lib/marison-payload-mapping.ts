@@ -1,6 +1,6 @@
 import type { MarisonPayloadMapping } from '@/services/marison-payload-mapping.service';
 
-export type MarisonPayloadMappingFilter = 'all' | 'override' | 'empty' | 'unavailable' | 'invalid';
+export type MarisonPayloadMappingFilter = 'all' | 'external' | 'override' | 'empty' | 'unavailable' | 'invalid';
 
 export const matchesMarisonPayloadMappingFilter = (
   filter: MarisonPayloadMappingFilter | string,
@@ -14,6 +14,7 @@ export const matchesMarisonPayloadMappingFilter = (
   const hasMapping = Boolean(mapping?.target_record_id);
   const mappingValid = hasMapping && mapping?.mapping_valid === true;
 
+  if (filter === 'external') return sourceValid && !mappingValid;
   if (filter === 'override') return mappingValid;
   if (filter === 'empty') return !hasSourceId;
   if (filter === 'unavailable') return !sourceValid && !mappingValid;

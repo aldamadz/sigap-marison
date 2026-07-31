@@ -20,7 +20,7 @@ describe('MRN-16 per-profile signer payload resolution', () => {
   });
 
   it('uses validated SIGAP NIK without mapping and fails invalid signer', () => {
-    expect(resolveProfilePayloadIdentity({ profileId: 'B', sourceNik: 'A 115', mappingNik: '', validSourceNik: true }).source).toBe('synchronized');
+    expect(resolveProfilePayloadIdentity({ profileId: 'B', sourceNik: 'A 115', mappingNik: '', validSourceNik: true }).source).toBe('external_source');
     expect(() => resolveProfilePayloadIdentity({ profileId: 'C', sourceNik: 'TRIAL-003', mappingNik: '', validSourceNik: false })).toThrow('C');
   });
 
@@ -45,13 +45,13 @@ describe('MRN-16 per-profile signer payload resolution', () => {
     expect(buildApprovalResolutionKey(2, 'signer-a')).toBe('approval:2:signer-a');
     expect(buildApprovalResolutionKey(4, 'signer-a')).toBe('approval:4:signer-a');
     expect(mergePayloadResolutionSources(
-      { branchId: 'synchronized', projectId: 'mapping_staging' },
-      { requesterNik: 'mapping_staging', 'approval:2:signer-a': 'synchronized' },
+       { branchId: 'external_source', projectId: 'staging_mapping' },
+       { requesterNik: 'staging_mapping', 'approval:2:signer-a': 'external_source' },
     )).toEqual({
-      branchId: 'synchronized',
-      projectId: 'mapping_staging',
-      requesterNik: 'mapping_staging',
-      'approval:2:signer-a': 'synchronized',
+       branchId: 'external_source',
+       projectId: 'staging_mapping',
+       requesterNik: 'staging_mapping',
+       'approval:2:signer-a': 'external_source',
     });
   });
 });

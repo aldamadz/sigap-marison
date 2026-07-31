@@ -37,7 +37,7 @@ describe('MRN-16 staging payload mappings', () => {
     const backend = read('backend/src/domain-runtime.ts');
     expect(backend).toContain('loadMarisonProfileIdentityResolver');
     expect(backend).toContain('signature.user_id');
-    expect(backend).toContain('mapping_staging');
+    expect(backend).toContain('staging_mapping');
     expect(backend).toContain('buildApprovalResolutionKey(signature.step_order');
     expect(backend).toContain('const identity = await resolveMarisonOutboundIdentity(surat)');
     expect(backend).toContain('submitted_by: overrides.nik');

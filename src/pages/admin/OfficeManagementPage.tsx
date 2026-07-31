@@ -192,7 +192,7 @@ export default function OfficeManagementPage() {
   const filteredOffices = offices
     .filter((office) => {
       const override = overrides.find((item) => item.entity_type === "office" && item.record_id === office.id);
-      const hasSource = Boolean(office.marison_branch_id && office.marison_synced_at && !office.marison_review_required);
+       const hasSource = Boolean(office.marison_branch_id > 0 && office.marison_synced_at);
       return matchesMarisonPayloadMappingFilter(
         overrideFilter,
         office.marison_branch_id,
@@ -234,7 +234,7 @@ export default function OfficeManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="empty">ID external kosong</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Mapping tidak valid</SelectItem></SelectContent></Select>
+           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
           <Button variant="outline" onClick={loadData} size="icon">
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           </Button>
@@ -299,7 +299,7 @@ export default function OfficeManagementPage() {
                    <TableCell className="text-xs text-muted-foreground">
                      {office.marison_branch_id ?? "-"} / {office.marison_branch_code || "-"}
                    </TableCell>
-                   <TableCell><MarisonPayloadMappingCell entityType="office" recordId={office.id} source={office.marison_branch_id} sourceValid={Boolean(office.marison_branch_id && office.marison_synced_at && !office.marison_review_required)} mappingValid={Boolean(overrides.find((item) => item.entity_type === "office" && item.record_id === office.id)?.mapping_valid)} field="branch" override={overrides.find((item) => item.entity_type === "office" && item.record_id === office.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((item) => !(item.entity_type === "office" && item.record_id === office.id)), next] : current.filter((item) => !(item.entity_type === "office" && item.record_id === office.id)))} /></TableCell>
+                   <TableCell><MarisonPayloadMappingCell entityType="office" recordId={office.id} source={office.marison_branch_id} sourceValid={Boolean(office.marison_branch_id > 0 && office.marison_synced_at)} mappingValid={Boolean(overrides.find((item) => item.entity_type === "office" && item.record_id === office.id)?.mapping_valid)} field="branch" override={overrides.find((item) => item.entity_type === "office" && item.record_id === office.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((item) => !(item.entity_type === "office" && item.record_id === office.id)), next] : current.filter((item) => !(item.entity_type === "office" && item.record_id === office.id)))} /></TableCell>
                   <TableCell>
                     <BadgeKedudukan status={office.kedudukan} />
                   </TableCell>
