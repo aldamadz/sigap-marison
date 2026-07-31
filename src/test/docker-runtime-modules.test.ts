@@ -16,6 +16,9 @@ describe("Docker runtime modules", () => {
       "storage-path-policy.mjs",
       "server/marison-outbound-contract.mjs",
       "server/marison-outbound-identity.mjs",
+      "server/marison-payload-identity.mjs",
+      "server/marison-payload-mapping-handler.mjs",
+      "server/marison-payload-mapping-request.mjs",
       "server/marison-sync-worker.mjs",
       "server/marison-outbound-worker.mjs",
     ]) {
