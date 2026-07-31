@@ -2,6 +2,8 @@
 
 MRN-16 memetakan record SIGAP trial ke record mirror hasil sinkronisasi Marison staging. Mapping tidak mengubah nama, NIK, kantor, atau proyek SIGAP dan tidak berlaku di production.
 
+Status per 31 Juli 2026: migration dan aplikasi sudah diterapkan di staging. Acceptance backend rollback serta pemeriksaan UI desktop/mobile telah lulus tanpa mengubah antrean bisnis atau mengirim POST bisnis ke Marison.
+
 ## Katalog
 
 - Employee: `profiles` dengan `marison_employee_id`, NIK valid, dan `marison_synced_at`.
