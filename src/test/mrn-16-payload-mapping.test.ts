@@ -37,7 +37,7 @@ describe('MRN-16 staging payload mappings', () => {
     const backend = read('backend/src/domain-runtime.ts');
     expect(backend).toContain('loadMarisonProfileIdentityResolver');
     expect(backend).toContain('signature.user_id');
-    expect(backend).toContain('mapping_staging');
+    expect(backend).toContain('staging_mapping');
     expect(backend).toContain('buildApprovalResolutionKey(signature.step_order');
     expect(backend).toContain('const identity = await resolveMarisonOutboundIdentity(surat)');
     expect(backend).toContain('submitted_by: overrides.nik');
@@ -51,6 +51,7 @@ describe('MRN-16 staging payload mappings', () => {
     expect(resolver).not.toContain('override_nik');
     expect(resolver).toContain('isValidSourceBranchId');
     expect(resolver).toContain('isValidSourceProjectId');
+    expect(read('supabase/migrations/20260731170000_mrn16_external_identity_readiness.sql')).toContain('marison_payload_effective_branch_id');
   });
 
   it('records per-signer resolution sources in immutable prepared metadata', () => {

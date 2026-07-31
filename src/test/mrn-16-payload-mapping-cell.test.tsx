@@ -51,7 +51,7 @@ describe('MRN-16 override cell', () => {
         />
       </AppDialogProvider>,
     );
-    expect(screen.getByText('Belum dapat dikirim')).toBeInTheDocument();
+    expect(screen.getAllByText('Belum dapat dikirim')).toHaveLength(2);
 
     rerender(
       <AppDialogProvider>
@@ -79,7 +79,7 @@ describe('MRN-16 override cell', () => {
         />
       </AppDialogProvider>,
     );
-    expect(screen.getByText('Mapping tidak valid')).toBeInTheDocument();
+    expect(screen.getAllByText('Perlu koreksi relasi')).toHaveLength(2);
   });
 
   it('shows the mapped NIK instead of the external employee ID for profile payloads', () => {

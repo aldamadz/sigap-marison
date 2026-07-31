@@ -39,6 +39,7 @@ import {
 import { MarisonPayloadMappingCell } from '@/components/admin/MarisonPayloadMappingCell';
 import { marisonPayloadMappingService, type MarisonPayloadMapping } from '@/services/marison-payload-mapping.service';
 import { matchesMarisonPayloadMappingFilter } from '@/lib/marison-payload-mapping';
+import { isMarisonProfileExternalIdentityValid } from '@/lib/marison-payload-mapping';
 
 type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
@@ -436,7 +437,7 @@ export default function UserManagementPage() {
   const filteredUsers = useMemo(() => users
      .filter(u => {
        const override = overrides.find((item) => item.entity_type === 'profile' && item.record_id === u.id);
-       const hasSource = Boolean(u.nik && (u as any).marison_employee_id && (u as any).marison_synced_at && !(u as any).marison_review_required);
+        const hasSource = isMarisonProfileExternalIdentityValid(u);
        if (!matchesMarisonPayloadMappingFilter(
          overrideFilter,
          (u as any).marison_employee_id,
@@ -1016,7 +1017,7 @@ export default function UserManagementPage() {
               { val: statusFilter, set: (value: string) => setStatusFilter(value), icon: <AlertCircle className="w-4 h-4 text-primary" />, ph: "Status Akun",
                 opts: [["all","Semua Status"],["active","Aktif"],["inactive","Nonaktif"]] },
               { val: overrideFilter, set: (value: string) => setOverrideFilter(value), icon: <Hash className="w-4 h-4 text-primary" />, ph: "Outbound",
-                opts: [["all","Semua"],["override","Menggunakan mapping staging"],["empty","ID external kosong"],["unavailable","Belum dapat dikirim"],["invalid","Mapping tidak valid"]] },
+                 opts: [["all","Semua"],["external","Siap dari data external"],["override","Menggunakan mapping staging"],["unavailable","Belum dapat dikirim"],["invalid","Perlu koreksi relasi"]] },
               { val: officeFilter, set: (value: string) => setOfficeFilter(value), icon: <Building2 className="w-4 h-4 text-primary" />,   ph: "Kantor",
                 opts: [["all","Semua Kantor"], ...uniqueOffices.map(o => [o,o])] },
               { val: deptFilter,   set: (value: string) => setDeptFilter(value),   icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Departemen",
@@ -1150,7 +1151,7 @@ export default function UserManagementPage() {
                     ) : <span className="text-muted-foreground text-xs font-bold">—</span>}
                   </TableCell>
                   <TableCell>{(user as any).marison_employee_id || '-'}</TableCell>
-                  <TableCell><MarisonPayloadMappingCell entityType="profile" recordId={user.id} source={user.nik} sourceValid={Boolean(user.nik && (user as any).marison_employee_id && (user as any).marison_synced_at && !(user as any).marison_review_required)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id)?.mapping_valid)} field="nik" override={overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)), next] : current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)))} /></TableCell>
+                   <TableCell><MarisonPayloadMappingCell entityType="profile" recordId={user.id} sigapLabel={`${user.fullName} / ${user.nik || '-'}`} externalIdentity={isMarisonProfileExternalIdentityValid(user) ? `Employee ${(user as any).marison_employee_id} / NIK ${user.nik}` : '-'} source={user.nik} sourceValid={isMarisonProfileExternalIdentityValid(user)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id)?.mapping_valid)} field="nik" override={overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)), next] : current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)))} /></TableCell>
 
                   <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
                     {(user as any).role === 'admin' ? (

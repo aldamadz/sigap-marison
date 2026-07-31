@@ -199,7 +199,7 @@ describe("Marison employee sync", () => {
 
     expect(server).toContain("const resolveMarisonBranchId = async");
     expect(server).not.toContain("supabaseAdmin");
-    expect(server).toContain('.select("marison_branch_id")');
+    expect(server).toContain('.select("marison_branch_id, marison_synced_at")');
     expect(server).toContain(
       "await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot)"
     );

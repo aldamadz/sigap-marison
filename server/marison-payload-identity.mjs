@@ -30,9 +30,9 @@ export const resolveProfilePayloadIdentity = ({ profileId, sourceNik, mappingNik
     throw error;
   }
   const mapped = normalized(mappingNik);
-  if (mapped) return { profileId: id, nik: mapped, source: 'mapping_staging' };
+  if (mapped) return { profileId: id, nik: mapped, source: 'staging_mapping' };
   const source = normalized(sourceNik);
-  if (source && validSourceNik) return { profileId: id, nik: source, source: 'synchronized' };
+  if (source && validSourceNik) return { profileId: id, nik: source, source: 'external_source' };
   const error = new Error(`${label} (${id}) belum memiliki mapping employee staging yang valid.`);
   error.status = 422;
   throw error;

@@ -6,6 +6,7 @@ import {
   resolveApprovalPayloadIdentities,
   resolveProfilePayloadIdentity,
 } from '../../server/marison-payload-identity.mjs';
+import { isMarisonProfileExternalIdentityValid } from '@/lib/marison-payload-mapping';
 
 describe('MRN-16 per-profile signer payload resolution', () => {
   it('keeps requester and signer mappings independent', () => {
@@ -20,8 +21,15 @@ describe('MRN-16 per-profile signer payload resolution', () => {
   });
 
   it('uses validated SIGAP NIK without mapping and fails invalid signer', () => {
-    expect(resolveProfilePayloadIdentity({ profileId: 'B', sourceNik: 'A 115', mappingNik: '', validSourceNik: true }).source).toBe('synchronized');
+    expect(resolveProfilePayloadIdentity({ profileId: 'B', sourceNik: 'A 115', mappingNik: '', validSourceNik: true }).source).toBe('external_source');
     expect(() => resolveProfilePayloadIdentity({ profileId: 'C', sourceNik: 'TRIAL-003', mappingNik: '', validSourceNik: false })).toThrow('C');
+  });
+
+  it('matches backend profile readiness for active and inactive external identities', () => {
+    const profile = { is_active: true, deleted_at: null, marison_employee_id: 116, nik: 'A 116', marison_synced_at: '2026-07-31T00:00:00Z' };
+    expect(isMarisonProfileExternalIdentityValid(profile)).toBe(true);
+    expect(isMarisonProfileExternalIdentityValid({ ...profile, is_active: false })).toBe(false);
+    expect(isMarisonProfileExternalIdentityValid({ ...profile, deleted_at: '2026-07-31T00:00:00Z' })).toBe(false);
   });
 
   it('uses current profile mapping over stale signer snapshot and repeats consistently', () => {
@@ -45,13 +53,13 @@ describe('MRN-16 per-profile signer payload resolution', () => {
     expect(buildApprovalResolutionKey(2, 'signer-a')).toBe('approval:2:signer-a');
     expect(buildApprovalResolutionKey(4, 'signer-a')).toBe('approval:4:signer-a');
     expect(mergePayloadResolutionSources(
-      { branchId: 'synchronized', projectId: 'mapping_staging' },
-      { requesterNik: 'mapping_staging', 'approval:2:signer-a': 'synchronized' },
+       { branchId: 'external_source', projectId: 'staging_mapping' },
+       { requesterNik: 'staging_mapping', 'approval:2:signer-a': 'external_source' },
     )).toEqual({
-      branchId: 'synchronized',
-      projectId: 'mapping_staging',
-      requesterNik: 'mapping_staging',
-      'approval:2:signer-a': 'synchronized',
+       branchId: 'external_source',
+       projectId: 'staging_mapping',
+       requesterNik: 'staging_mapping',
+       'approval:2:signer-a': 'external_source',
     });
   });
 });

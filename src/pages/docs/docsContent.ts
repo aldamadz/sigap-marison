@@ -92,8 +92,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.22.0";
-export const DOCS_UPDATED_AT = "30 Juli 2026";
+export const DOCS_VERSION = "v1.23.0";
+export const DOCS_UPDATED_AT = "31 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -2111,7 +2111,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: Users,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengelola akun, role, status aktif, jabatan, departemen, kantor, dan data organisasi karyawan.",
+     summary: "Mengelola akun, organisasi karyawan, dan identitas employee payload staging.",
     whenToUse: [
       "Import atau memperbarui data karyawan aktif.",
       "Mengubah role user menjadi admin atau user biasa.",
@@ -2123,6 +2123,8 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Dahulukan baris berwarna amber dan baca kolom Keterangan untuk mengetahui data yang perlu diperbaiki.",
       "Edit profil user atau lakukan import data karyawan.",
       "Cek hasil import, termasuk data berhasil, gagal, dan user yang dinonaktifkan.",
+      "User hasil sinkron dengan NIK external valid otomatis berstatus Siap dikirim - data external.",
+      "Untuk user lokal/trial, cari employee external dari katalog Mapping Payload Staging. Simpan atau Reset hanya mengubah nilai outbound, bukan NIK SIGAP.",
     ],
     examples: [
       "Jika NIK sama tetapi nama atau jabatan berubah, sistem memperbarui data user yang sama.",
@@ -2284,7 +2286,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: MapPin,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur kantor pusat, cabang, kost, dan mapping kantor untuk user serta workflow.",
+     summary: "Mengatur kantor pusat, cabang, kost, mapping workflow, dan identitas branch payload staging.",
     whenToUse: [
       "Menambah kantor atau cabang baru.",
       "Membetulkan mapping kantor dari data import HRD.",
@@ -2295,6 +2297,8 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Periksa baris berwarna amber dan baca kolom Keterangan.",
       "Tambah atau edit nama kantor, kode, dan tipe kantor.",
       "Cek user yang memakai kantor tersebut.",
+      "Pada Mapping Payload Staging, kantor hasil sinkron dengan branch ID valid otomatis berstatus Siap dikirim - data external.",
+      "Untuk kantor lokal/trial, cari kantor external hasil sinkronisasi lalu klik Simpan. Reset mengembalikan penggunaan identitas external sumber atau status Belum dapat dikirim.",
     ],
     examples: [
       "User KC Jepara akan melihat kandidat SPV/BM Jepara pada workflow yang mengikuti kantor pemohon.",
@@ -2314,7 +2318,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: Briefcase,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur dan memantau data proyek yang dipakai pada pengajuan Unit dan dokumen proyek.",
+     summary: "Mengatur proyek SIGAP dan identitas project payload staging tanpa mengubah data internal.",
     whenToUse: [
       "Memastikan pilihan proyek tersedia saat registrasi.",
       "Memeriksa relasi proyek dengan cabang.",
@@ -2327,6 +2331,8 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Klik Tambah manual untuk membuat proyek lokal. Isi ID dan kode proyek Marison hanya jika nilainya sudah diketahui dari API external.",
       "Untuk baris amber, lengkapi entitas atau mapping yang disebutkan pada Keterangan.",
       "Pastikan data proyek aktif sebelum dipakai user.",
+      "Proyek hasil sinkron dengan project ID dan relasi branch external valid otomatis berstatus Siap dikirim - data external.",
+      "Untuk proyek lokal/trial, pilih project external dari katalog branch efektif. Mapping branch yang tidak cocok berstatus Perlu koreksi relasi dan ditolak backend.",
     ],
     examples: [
       "Saat pemohon memilih proyek Marison Jepara Perluasan, proyek itu terkunci untuk proses Unit selanjutnya.",
@@ -3010,6 +3016,16 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.23.0",
+    date: "31 Juli 2026",
+    changes: [
+      "Menetapkan identitas external hasil sinkronisasi sebagai sumber payload yang siap dikirim tanpa mapping ulang.",
+      "Menambahkan mapping payload staging untuk record lokal/trial dengan validasi effective branch dan fallback dari office mapping saat branch source stale.",
+      "Menampilkan Identitas External, nilai efektif, dan status payload pada Master User, Master Kantor, dan Master Proyek.",
+      "Menjaga MRN-16 sebagai staging candidate; migration dan deployment staging belum dijalankan.",
+    ],
+  },
   {
     version: "v1.22.0",
     date: "30 Juli 2026",
