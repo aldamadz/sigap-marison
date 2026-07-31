@@ -2,6 +2,14 @@ import type { MarisonPayloadMapping } from '@/services/marison-payload-mapping.s
 
 export type MarisonPayloadMappingFilter = 'all' | 'external' | 'override' | 'empty' | 'unavailable' | 'invalid';
 
+export const isMarisonProfileExternalIdentityValid = (profile: any) => Boolean(
+  profile?.is_active !== false
+  && !profile?.deleted_at
+  && profile?.marison_employee_id > 0
+  && String(profile?.nik || '').trim()
+  && profile?.marison_synced_at,
+);
+
 export const matchesMarisonPayloadMappingFilter = (
   filter: MarisonPayloadMappingFilter | string,
   sourceExternalId: string | number | null | undefined,

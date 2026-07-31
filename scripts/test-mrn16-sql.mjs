@@ -28,7 +28,8 @@ insert into public.profiles(id, role, full_name, nik, marison_employee_id, maris
  ('00000000-0000-0000-0000-000000000002', 'user', 'User', 'TRIAL-001', null, null),
  ('00000000-0000-0000-0000-000000000003', 'user', 'Agung', 'A 114', 114, now()),
  ('00000000-0000-0000-0000-000000000004', 'user', 'Signer B', 'A 115', 115, now()),
- ('00000000-0000-0000-0000-000000000005', 'user', 'Trial Two', 'TRIAL-002', null, null);
+ ('00000000-0000-0000-0000-000000000005', 'user', 'Trial Two', 'TRIAL-002', null, null),
+ ('00000000-0000-0000-0000-000000000006', 'user', 'Inactive Mirror', 'A 116', 116, now());
 insert into public.master_offices(id, name, code, kedudukan, marison_branch_id, marison_synced_at) values
  ('10000000-0000-0000-0000-000000000001', 'KC External', 'EXT', 'KC', 12, now()),
  ('10000000-0000-0000-0000-000000000002', 'KC Trial', 'TRIAL', 'KC', null, null),
@@ -40,9 +41,12 @@ insert into public.master_projects(id, name, code, office_id, marison_project_id
 ${migration}
 ${auditActionFixMigration}
 ${externalIdentityReadinessMigration}
+update public.master_offices set marison_branch_id = 999, marison_synced_at = null where id = '10000000-0000-0000-0000-000000000002';
+do $$ begin if public.marison_payload_effective_branch_id('10000000-0000-0000-0000-000000000002') is not null then raise exception 'stale source branch must fail closed without mapping'; end if; end $$;
 update public.profiles set marison_review_required = true where id in ('00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004');
 update public.master_offices set marison_review_required = true where id in ('10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000003');
 update public.master_projects set marison_review_required = true where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003');
+update public.profiles set is_active = false where id = '00000000-0000-0000-0000-000000000006';
 do $$ begin if not public.marison_payload_profile_source_valid('00000000-0000-0000-0000-000000000003') or not public.marison_payload_office_source_valid('10000000-0000-0000-0000-000000000001') or not public.marison_payload_project_source_valid('20000000-0000-0000-0000-000000000001') then raise exception 'source-only external identity must ignore operational review'; end if; end $$;
 do $$ begin raise notice 'create mapping A'; perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','map trial user'); end $$;
 do $$ begin raise notice 'create mapping B'; perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000003','many to one'); end $$;
@@ -50,6 +54,7 @@ do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000
 do $$ declare c int; begin select count(*) into c from public.marison_outbound_record_mappings where target_record_id = '00000000-0000-0000-0000-000000000003'; if c <> 2 then raise exception 'many-to-one failed'; end if; end $$;
 do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','production','profile','00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','production blocked'); raise exception 'production guard failed'; exception when others then if sqlerrm not like '%staging-only%' then raise; end if; end $$;
 do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000009','missing target'); raise exception 'missing target guard failed'; exception when others then if sqlerrm not like '%Target mapping%' then raise; end if; end $$;
+do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000006','inactive target'); raise exception 'inactive target guard failed'; exception when others then if sqlerrm not like '%Target mapping employee%' then raise; end if; end $$;
 do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','wrong entity target'); raise exception 'wrong entity guard failed'; exception when others then if sqlerrm not like '%Target mapping%' then raise; end if; end $$;
 do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000009','00000000-0000-0000-0000-000000000003','missing source'); raise exception 'missing source guard failed'; exception when others then if sqlerrm not like '%Source profile%' then raise; end if; end $$;
 do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','office','00000000-0000-0000-0000-000000000009','00000000-0000-0000-0000-000000000001','missing office source'); raise exception 'missing office guard failed'; exception when others then if sqlerrm not like '%Source office%' then raise; end if; end $$;

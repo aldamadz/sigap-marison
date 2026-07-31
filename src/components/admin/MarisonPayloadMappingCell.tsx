@@ -15,6 +15,8 @@ type Props = {
   entityType: MarisonMappingEntity;
   recordId: string;
   source: string | number | null | undefined;
+  sigapLabel?: string;
+  externalIdentity?: string;
   override: MarisonPayloadMapping | null;
   field: 'nik' | 'branch' | 'project';
   onChanged: (override: MarisonPayloadMapping | null) => void;
@@ -28,6 +30,8 @@ export function MarisonPayloadMappingCell({
   entityType,
   recordId,
   source,
+  sigapLabel,
+  externalIdentity,
   override,
   field,
   onChanged,
@@ -157,7 +161,9 @@ export function MarisonPayloadMappingCell({
     <div className="min-w-[250px] space-y-1.5">
       <div className="grid grid-cols-[auto_1fr] gap-x-2 text-[11px] text-muted-foreground">
         <span>Data SIGAP</span>
-        <b className={sourceValid ? 'text-foreground' : 'text-destructive'}>{source || '-'}</b>
+        <b className={sourceValid ? 'text-foreground' : 'text-destructive'}>{sigapLabel || source || '-'}</b>
+        <span>Identitas External</span>
+        <b className={sourceValid ? 'text-foreground' : 'text-muted-foreground'}>{externalIdentity || '-'}</b>
         <span>Mapping Payload Staging</span>
         <b className={override && !mappingValid ? 'text-destructive' : 'text-amber-700 dark:text-amber-300'}>
           {selected?.name || override?.mapped_name || '-'}

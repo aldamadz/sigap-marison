@@ -3436,11 +3436,28 @@ const resolveMarisonBranchId = async (surat, ...values) => {
   if (!officeId) return null;
   const { data, error } = await supabase
     .from("master_offices")
-    .select("marison_branch_id")
+    .select("marison_branch_id, marison_synced_at")
     .eq("id", officeId)
     .maybeSingle();
   if (error) throw error;
-  return parseExternalInteger(data?.marison_branch_id);
+  if (data?.marison_branch_id > 0 && data?.marison_synced_at) return parseExternalInteger(data.marison_branch_id);
+  if (marisonDeploymentEnvironment !== "staging") return null;
+  const { data: mapping, error: mappingError } = await supabase
+    .from("marison_outbound_record_mappings")
+    .select("target_record_id")
+    .eq("environment", "staging")
+    .eq("entity_type", "office")
+    .eq("record_id", officeId)
+    .maybeSingle();
+  if (mappingError) throw mappingError;
+  if (!mapping?.target_record_id) return null;
+  const { data: target, error: targetError } = await supabase
+    .from("master_offices")
+    .select("marison_branch_id, marison_synced_at")
+    .eq("id", mapping.target_record_id)
+    .maybeSingle();
+  if (targetError) throw targetError;
+  return target?.marison_branch_id > 0 && target?.marison_synced_at ? parseExternalInteger(target.marison_branch_id) : null;
 };
 
 const configureMarisonOutboundIdentityOverrides = async (req) => {
@@ -3643,9 +3660,10 @@ const loadMarisonProfileIdentityResolver = async (profileIds) => {
     profile?.nik
     && profile?.is_active
     && !profile?.deleted_at
-    && profile?.marison_employee_id != null
+    && profile?.marison_employee_id > 0
     && profile?.marison_synced_at
-     && profile?.marison_employee_id > 0
+    && profile?.is_active
+    && !profile?.deleted_at
   );
 
   return (profileId, fallbackNik, label) => {

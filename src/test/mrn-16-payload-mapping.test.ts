@@ -51,6 +51,7 @@ describe('MRN-16 staging payload mappings', () => {
     expect(resolver).not.toContain('override_nik');
     expect(resolver).toContain('isValidSourceBranchId');
     expect(resolver).toContain('isValidSourceProjectId');
+    expect(read('supabase/migrations/20260731170000_mrn16_external_identity_readiness.sql')).toContain('marison_payload_effective_branch_id');
   });
 
   it('records per-signer resolution sources in immutable prepared metadata', () => {

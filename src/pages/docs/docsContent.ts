@@ -92,8 +92,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.22.0";
-export const DOCS_UPDATED_AT = "30 Juli 2026";
+export const DOCS_VERSION = "v1.23.0";
+export const DOCS_UPDATED_AT = "31 Juli 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -3016,6 +3016,16 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.23.0",
+    date: "31 Juli 2026",
+    changes: [
+      "Menetapkan identitas external hasil sinkronisasi sebagai sumber payload yang siap dikirim tanpa mapping ulang.",
+      "Menambahkan mapping payload staging untuk record lokal/trial dengan validasi effective branch dan fallback dari office mapping saat branch source stale.",
+      "Menampilkan Identitas External, nilai efektif, dan status payload pada Master User, Master Kantor, dan Master Proyek.",
+      "Menjaga MRN-16 sebagai staging candidate; migration dan deployment staging belum dijalankan.",
+    ],
+  },
   {
     version: "v1.22.0",
     date: "30 Juli 2026",

@@ -14,6 +14,18 @@ returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.id = p_project_id and pr.marison_project_id > 0 and pr.marison_synced_at is not null and o.marison_branch_id > 0 and o.marison_synced_at is not null)
 $$;
 
+create or replace function public.marison_payload_effective_branch_id(p_office_id uuid)
+returns bigint language sql stable security definer set search_path = '' as $$
+  select coalesce(
+    (select o.marison_branch_id from public.master_offices o where o.id = p_office_id and o.marison_branch_id > 0 and o.marison_synced_at is not null),
+    (select o.marison_branch_id
+     from public.marison_outbound_record_mappings m
+     join public.master_offices o on o.id = m.target_record_id
+     where m.environment = 'staging' and m.entity_type = 'office' and m.record_id = p_office_id
+       and o.marison_branch_id > 0 and o.marison_synced_at is not null)
+  )
+$$;
+
 create or replace function public.get_marison_payload_mapping_catalog(p_actor_id uuid, p_environment text, p_entity_type text, p_query text default '', p_limit integer default 20, p_branch_id bigint default null)
 returns table(id uuid, name text, nik text, code text, external_id bigint, office_name text, branch_id bigint, valid boolean)
 language plpgsql security definer set search_path = '' as $$
@@ -25,7 +37,7 @@ begin
   elsif p_entity_type = 'office' then
     return query select o.id, o.name, null::text, o.code, o.marison_branch_id, null::text, o.marison_branch_id, public.marison_payload_office_source_valid(o.id) from public.master_offices o where o.marison_branch_id > 0 and (p_query = '' or o.name ilike '%'||p_query||'%' or o.code ilike '%'||p_query||'%') order by o.name limit least(greatest(p_limit, 1), 50);
   elsif p_entity_type = 'project' then
-    return query select pr.id, pr.name, null::text, pr.code, pr.marison_project_id, o.name, o.marison_branch_id, public.marison_payload_project_source_valid(pr.id) from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.marison_project_id > 0 and (p_branch_id is null or o.marison_branch_id = p_branch_id) and (p_query = '' or pr.name ilike '%'||p_query||'%' or pr.code ilike '%'||p_query||'%') order by pr.name limit least(greatest(p_limit, 1), 50);
+    return query select pr.id, pr.name, null::text, pr.code, pr.marison_project_id, o.name, public.marison_payload_effective_branch_id(o.id), public.marison_payload_project_source_valid(pr.id) from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.marison_project_id > 0 and (p_branch_id is null or public.marison_payload_effective_branch_id(o.id) = p_branch_id) and (p_query = '' or pr.name ilike '%'||p_query||'%' or pr.code ilike '%'||p_query||'%') order by pr.name limit least(greatest(p_limit, 1), 50);
   else raise exception 'Invalid catalog entity' using errcode = '22023'; end if;
 end;
 $$;
@@ -36,6 +48,8 @@ revoke execute on function public.marison_payload_project_source_valid(uuid) fro
 grant execute on function public.marison_payload_profile_source_valid(uuid) to service_role;
 grant execute on function public.marison_payload_office_source_valid(uuid) to service_role;
 grant execute on function public.marison_payload_project_source_valid(uuid) to service_role;
+revoke execute on function public.marison_payload_effective_branch_id(uuid) from public, anon, authenticated;
+grant execute on function public.marison_payload_effective_branch_id(uuid) to service_role;
 
 create or replace function public.configure_marison_payload_mapping(p_actor_id uuid, p_environment text, p_entity_type text, p_record_id uuid, p_target_record_id uuid, p_reason text, p_expected_updated_at timestamptz default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -63,10 +77,9 @@ begin
   if p_entity_type = 'project' then
     if not public.marison_payload_project_source_valid(p_target_record_id) then raise exception 'Target mapping project bukan mirror external valid' using errcode = '22023'; end if;
     if coalesce((select o.marison_branch_id from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.id = p_target_record_id), 0) = 0
-      or coalesce((select o.marison_branch_id from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.id = p_record_id), (select o.marison_branch_id from public.marison_outbound_record_mappings m join public.master_offices o on o.id = m.target_record_id where m.environment = 'staging' and m.entity_type = 'office' and m.record_id = (select source_project.office_id from public.master_projects source_project where source_project.id = p_record_id)), 0) = 0
+      or coalesce(public.marison_payload_effective_branch_id((select source_project.office_id from public.master_projects source_project where source_project.id = p_record_id)), 0) = 0
       or (select o.marison_branch_id from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.id = p_target_record_id) <> coalesce(
-      (select o.marison_branch_id from public.master_projects pr join public.master_offices o on o.id = pr.office_id where pr.id = p_record_id),
-      (select o.marison_branch_id from public.marison_outbound_record_mappings m join public.master_offices o on o.id = m.target_record_id where m.environment = 'staging' and m.entity_type = 'office' and m.record_id = (select source_project.office_id from public.master_projects source_project where source_project.id = p_record_id))
+      public.marison_payload_effective_branch_id((select source_project.office_id from public.master_projects source_project where source_project.id = p_record_id))
     ) then raise exception 'Project dan branch external tidak cocok' using errcode = '22023'; end if;
   end if;
   insert into public.marison_outbound_record_mappings(environment, entity_type, record_id, target_record_id, updated_by, updated_at) values(p_environment,p_entity_type,p_record_id,p_target_record_id,p_actor_id,clock_timestamp()) on conflict(environment,entity_type,record_id) do update set target_record_id=excluded.target_record_id,updated_by=excluded.updated_by,updated_at=excluded.updated_at returning id,updated_at into new_id,new_version;
@@ -93,7 +106,7 @@ begin
     case when m.entity_type='profile' then public.marison_payload_profile_source_valid(m.target_record_id)
       when m.entity_type='office' then public.marison_payload_office_source_valid(m.target_record_id)
       else public.marison_payload_project_source_valid(m.target_record_id)
-        and coalesce((select toff.marison_branch_id from public.master_projects tp join public.master_offices toff on toff.id=tp.office_id where tp.id=m.target_record_id),0) = coalesce((select soff.marison_branch_id from public.master_projects sp join public.master_offices soff on soff.id=sp.office_id where sp.id=m.record_id), (select mo.marison_branch_id from public.marison_outbound_record_mappings om join public.master_offices mo on mo.id=om.target_record_id where om.environment='staging' and om.entity_type='office' and om.record_id=(select source_project.office_id from public.master_projects source_project where source_project.id=m.record_id)), 0)
+        and coalesce((select toff.marison_branch_id from public.master_projects tp join public.master_offices toff on toff.id=tp.office_id where tp.id=m.target_record_id),0) = coalesce(public.marison_payload_effective_branch_id((select source_project.office_id from public.master_projects source_project where source_project.id=m.record_id)), 0)
     end
   from public.marison_outbound_record_mappings m
   left join public.profiles p on m.entity_type='profile' and p.id=m.target_record_id
