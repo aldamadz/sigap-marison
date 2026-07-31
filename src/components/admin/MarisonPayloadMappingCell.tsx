@@ -45,9 +45,12 @@ export function MarisonPayloadMappingCell({
   const [error, setError] = useState('');
   const [remoteCatalog, setRemoteCatalog] = useState<MarisonMappingCatalog[]>(catalog);
   const selected = remoteCatalog.find((item) => item.id === value);
+  const mappedPayloadValue = field === 'nik'
+    ? selected?.nik ?? override?.mapped_nik
+    : selected?.external_id ?? override?.mapped_external_id;
   const effective = override && !mappingValid
     ? 'Mapping tidak valid'
-    : selected?.external_id ?? override?.mapped_external_id ?? (sourceValid ? source : 'Belum dapat dikirim');
+    : mappedPayloadValue ?? (sourceValid ? source : 'Belum dapat dikirim');
 
   useEffect(() => {
     let active = true;
