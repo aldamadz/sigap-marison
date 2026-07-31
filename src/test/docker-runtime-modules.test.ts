@@ -9,6 +9,9 @@ describe("Docker runtime modules", () => {
     const dockerfile = read("dockerfile");
 
     expect(dockerfile).toContain("COPY --from=builder /app/backend/dist ./backend/dist");
+    expect(dockerfile.indexOf("RUN apk add --no-cache")).toBeLessThan(
+      dockerfile.indexOf("ARG GIT_SHA=unknown"),
+    );
     expect(read("backend/src/domain-runtime.ts")).toContain('from "./domain/session-cookie.js"');
     expect(read("backend/src/domain-runtime.ts")).toContain('from "./domain/rate-limit.js"');
 
