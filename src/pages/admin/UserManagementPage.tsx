@@ -36,6 +36,9 @@ import {
   MasterReviewStatus,
   masterReviewRowClass,
 } from '@/components/admin/MasterReviewStatus';
+import { MarisonPayloadMappingCell } from '@/components/admin/MarisonPayloadMappingCell';
+import { marisonPayloadMappingService, type MarisonPayloadMapping } from '@/services/marison-payload-mapping.service';
+import { matchesMarisonPayloadMappingFilter } from '@/lib/marison-payload-mapping';
 
 type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
@@ -390,6 +393,8 @@ export default function UserManagementPage() {
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState<number | 'all'>(10);
   const [syncIssueCount, setSyncIssueCount] = useState(0);
+  const [overrides, setOverrides] = useState<MarisonPayloadMapping[]>([]);
+  const [overrideFilter, setOverrideFilter] = useState('all');
   const importRef = useRef<HTMLInputElement>(null);
 
   const fetchUsers = async () => {
@@ -404,6 +409,7 @@ export default function UserManagementPage() {
           .eq('status', 'open'),
       ]);
       setUsers(nextUsers);
+      setOverrides(await marisonPayloadMappingService.list('profile'));
       setSyncIssueCount(issueResult.count || 0);
     }
     catch (e) { console.error(e); }
@@ -423,11 +429,20 @@ export default function UserManagementPage() {
     officeFilter !== 'all',
     deptFilter !== 'all',
     jobFilter !== 'all',
+    overrideFilter !== 'all',
     sortBy !== 'name_asc',
   ].filter(Boolean).length;
 
   const filteredUsers = useMemo(() => users
-    .filter(u => {
+     .filter(u => {
+       const override = overrides.find((item) => item.entity_type === 'profile' && item.record_id === u.id);
+       const hasSource = Boolean(u.nik && (u as any).marison_employee_id && (u as any).marison_synced_at && !(u as any).marison_review_required);
+       if (!matchesMarisonPayloadMappingFilter(
+         overrideFilter,
+         (u as any).marison_employee_id,
+         hasSource,
+         override,
+       )) return false;
       const s = searchQuery.toLowerCase();
       const ok = u.fullName.toLowerCase().includes(s)
         || (u.email?.toLowerCase() || '').includes(s)
@@ -458,9 +473,9 @@ export default function UserManagementPage() {
         return `${statusA} ${a.fullName}`.localeCompare(`${statusB} ${b.fullName}`, 'id');
       }
       return String(a.fullName || '').localeCompare(String(b.fullName || ''), 'id');
-    }), [users, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
+    }), [users, overrides, overrideFilter, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
 
-  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy, pageSize]);
+  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, overrideFilter, sortBy, pageSize]);
 
   const showAll    = pageSize === 'all';
   const totalPages = showAll ? 1 : Math.max(1, Math.ceil(filteredUsers.length / (pageSize as number)));
@@ -1000,6 +1015,8 @@ export default function UserManagementPage() {
             {[
               { val: statusFilter, set: (value: string) => setStatusFilter(value), icon: <AlertCircle className="w-4 h-4 text-primary" />, ph: "Status Akun",
                 opts: [["all","Semua Status"],["active","Aktif"],["inactive","Nonaktif"]] },
+              { val: overrideFilter, set: (value: string) => setOverrideFilter(value), icon: <Hash className="w-4 h-4 text-primary" />, ph: "Outbound",
+                opts: [["all","Semua"],["override","Menggunakan mapping staging"],["empty","ID external kosong"],["unavailable","Belum dapat dikirim"],["invalid","Mapping tidak valid"]] },
               { val: officeFilter, set: (value: string) => setOfficeFilter(value), icon: <Building2 className="w-4 h-4 text-primary" />,   ph: "Kantor",
                 opts: [["all","Semua Kantor"], ...uniqueOffices.map(o => [o,o])] },
               { val: deptFilter,   set: (value: string) => setDeptFilter(value),   icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Departemen",
@@ -1047,6 +1064,8 @@ export default function UserManagementPage() {
               {[
                 { label: "Karyawan", className: "min-w-[280px]" },
                 { label: "No. HP", className: "min-w-[150px]" },
+                { label: "ID External", className: "min-w-[120px]" },
+                { label: "Mapping Payload Staging", className: "min-w-[280px]" },
                 { label: "Role", className: "min-w-[120px]" },
                 { label: "Jabatan & Unit", className: "min-w-[260px]" },
                 { label: "Masa Kerja", className: "min-w-[170px]" },
@@ -1060,14 +1079,14 @@ export default function UserManagementPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="py-32">
+              <TableRow><TableCell colSpan={9} className="py-32">
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                   <p className="text-muted-foreground font-medium animate-pulse text-sm">Memuat data karyawan...</p>
                 </div>
               </TableCell></TableRow>
             ) : filteredUsers.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="py-32 text-center">
+              <TableRow><TableCell colSpan={9} className="py-32 text-center">
                 <div className="max-w-xs mx-auto space-y-3 opacity-40">
                   <Search className="w-12 h-12 mx-auto" />
                   <p className="text-lg font-medium">Data tidak ditemukan</p>
@@ -1130,6 +1149,8 @@ export default function UserManagementPage() {
                       </div>
                     ) : <span className="text-muted-foreground text-xs font-bold">—</span>}
                   </TableCell>
+                  <TableCell>{(user as any).marison_employee_id || '-'}</TableCell>
+                  <TableCell><MarisonPayloadMappingCell entityType="profile" recordId={user.id} source={user.nik} sourceValid={Boolean(user.nik && (user as any).marison_employee_id && (user as any).marison_synced_at && !(user as any).marison_review_required)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id)?.mapping_valid)} field="nik" override={overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)), next] : current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)))} /></TableCell>
 
                   <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
                     {(user as any).role === 'admin' ? (

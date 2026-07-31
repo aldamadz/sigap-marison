@@ -18,19 +18,17 @@ describe("Marison outbound identity overrides", () => {
 
   it("resolves override values before source values and validates synchronized mappings", () => {
     const server = read("backend/src/domain-runtime.ts");
-    expect(server).toContain("getMarisonOutboundOverrides");
-    expect(server).toContain("override_branch_id");
-    expect(server).toContain("override_project_id");
-    expect(server).toContain("projectBranchId !== branchId");
-    expect(server).toContain("overrides.projectId ?? externalIdFrom");
-    expect(server).toContain("overrides.branchId ?? externalBranchIdFrom");
+    expect(server).toContain("getMarisonOutboundMappings");
+    expect(server).toContain("mappedBranchId");
+    expect(server).toContain("mappedProjectId");
+    expect(server).toContain("effectiveProjectBranchId !== effectiveBranchId");
+    expect(server).toContain("isValidSourceProjectId");
   });
 
   it("keeps override controls admin-only and excludes credentials from browser service", () => {
     const panel = read("src/components/admin/MarisonIntegrationPanel.tsx");
     const service = read("src/services/marison-integration.service.ts");
-    expect(panel).toContain("Override identitas outbound staging");
-    expect(panel).toContain("Simpan override");
+    expect(panel).not.toContain("Override identitas outbound staging");
     expect(service).toContain("/api/integrations/marison/outbound-overrides");
     expect(service).not.toContain("CLIENT_SECRET");
   });

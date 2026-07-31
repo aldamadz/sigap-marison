@@ -20,6 +20,9 @@ import {
   MasterReviewStatus,
   masterReviewRowClass,
 } from "@/components/admin/MasterReviewStatus";
+import { MarisonPayloadMappingCell } from "@/components/admin/MarisonPayloadMappingCell";
+import { marisonPayloadMappingService, type MarisonPayloadMapping } from "@/services/marison-payload-mapping.service";
+import { matchesMarisonPayloadMappingFilter } from "@/lib/marison-payload-mapping";
 
 type MasterOfficeRow = {
   id: string;
@@ -56,6 +59,8 @@ export default function OfficeManagementPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [syncIssueCount, setSyncIssueCount] = useState(0);
+  const [overrides, setOverrides] = useState<MarisonPayloadMapping[]>([]);
+  const [overrideFilter, setOverrideFilter] = useState("all");
 
   const loadData = async () => {
     try {
@@ -67,6 +72,7 @@ export default function OfficeManagementPage() {
 
       if (error) throw error;
       setOffices((data || []) as MasterOfficeRow[]);
+      setOverrides(await marisonPayloadMappingService.list('office'));
       const { count } = await supabase
         .from("marison_sync_issues")
         .select("id", { count: "exact", head: true })
@@ -184,6 +190,16 @@ export default function OfficeManagementPage() {
   };
 
   const filteredOffices = offices
+    .filter((office) => {
+      const override = overrides.find((item) => item.entity_type === "office" && item.record_id === office.id);
+      const hasSource = Boolean(office.marison_branch_id && office.marison_synced_at && !office.marison_review_required);
+      return matchesMarisonPayloadMappingFilter(
+        overrideFilter,
+        office.marison_branch_id,
+        hasSource,
+        override,
+      );
+    })
     .filter(o =>
       o.name.toLowerCase().includes(searchQuery.toLowerCase())
       || o.code.toLowerCase().includes(searchQuery.toLowerCase())
@@ -218,6 +234,7 @@ export default function OfficeManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="empty">ID external kosong</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Mapping tidak valid</SelectItem></SelectContent></Select>
           <Button variant="outline" onClick={loadData} size="icon">
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           </Button>
@@ -245,6 +262,7 @@ export default function OfficeManagementPage() {
               <TableHead className="w-[120px] font-bold">KODE</TableHead>
               <TableHead className="font-bold">NAMA KANTOR / CABANG</TableHead>
               <TableHead className="font-bold">ID / KODE EXTERNAL</TableHead>
+              <TableHead className="min-w-[270px] font-bold">MAPPING PAYLOAD STAGING</TableHead>
               <TableHead className="w-[120px] font-bold">KEDUDUKAN</TableHead>
               <TableHead className="min-w-[260px] font-bold">KETERANGAN</TableHead>
               <TableHead className="text-right font-bold">AKSI</TableHead>
@@ -253,13 +271,13 @@ export default function OfficeManagementPage() {
           <TableBody>
             {loading && offices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-20">
+                 <TableCell colSpan={7} className="text-center py-20">
                   <Loader2 className="animate-spin mx-auto w-8 h-8 text-primary"/>
                 </TableCell>
               </TableRow>
             ) : filteredOffices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-20 text-muted-foreground">
+                 <TableCell colSpan={7} className="text-center py-20 text-muted-foreground">
                   Tidak ada data kantor ditemukan.
                 </TableCell>
               </TableRow>
@@ -278,9 +296,10 @@ export default function OfficeManagementPage() {
                     </code>
                   </TableCell>
                   <TableCell className="font-medium">{office.name}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {office.marison_branch_id ?? "-"} / {office.marison_branch_code || "-"}
-                  </TableCell>
+                   <TableCell className="text-xs text-muted-foreground">
+                     {office.marison_branch_id ?? "-"} / {office.marison_branch_code || "-"}
+                   </TableCell>
+                   <TableCell><MarisonPayloadMappingCell entityType="office" recordId={office.id} source={office.marison_branch_id} sourceValid={Boolean(office.marison_branch_id && office.marison_synced_at && !office.marison_review_required)} mappingValid={Boolean(overrides.find((item) => item.entity_type === "office" && item.record_id === office.id)?.mapping_valid)} field="branch" override={overrides.find((item) => item.entity_type === "office" && item.record_id === office.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((item) => !(item.entity_type === "office" && item.record_id === office.id)), next] : current.filter((item) => !(item.entity_type === "office" && item.record_id === office.id)))} /></TableCell>
                   <TableCell>
                     <BadgeKedudukan status={office.kedudukan} />
                   </TableCell>

@@ -56,11 +56,6 @@ export function MarisonIntegrationPanel() {
   const [employeeResult, setEmployeeResult] = useState<MarisonEmployeeSyncResult | null>(null);
   const [projectPreview, setProjectPreview] = useState<MarisonProjectSyncPreview | null>(null);
   const [projectResult, setProjectResult] = useState<MarisonProjectSyncResult | null>(null);
-  const [overrideNik, setOverrideNik] = useState("");
-  const [overrideBranchId, setOverrideBranchId] = useState("");
-  const [overrideProjectId, setOverrideProjectId] = useState("");
-  const [overrideReason, setOverrideReason] = useState("");
-  const [savingOverrides, setSavingOverrides] = useState(false);
 
   if (loading) {
     return (
@@ -166,24 +161,6 @@ export function MarisonIntegrationPanel() {
       toast.error(error instanceof Error ? error.message : "Sinkronisasi karyawan dan kantor gagal");
     } finally {
       setSyncingEmployees(false);
-    }
-  };
-
-  const saveOverrides = async () => {
-    setSavingOverrides(true);
-    try {
-      await marisonIntegrationService.saveOutboundOverrides({
-        overrideNik: overrideNik.trim() || undefined,
-        overrideBranchId: overrideBranchId.trim() ? Number(overrideBranchId) : null,
-        overrideProjectId: overrideProjectId.trim() ? Number(overrideProjectId) : null,
-        reason: overrideReason.trim(),
-      });
-      toast.success("Override outbound disimpan");
-      setOverrideReason("");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Override outbound gagal disimpan");
-    } finally {
-      setSavingOverrides(false);
     }
   };
 
@@ -363,21 +340,6 @@ export function MarisonIntegrationPanel() {
           <p className="text-sm text-muted-foreground">
             Hasil proyek terakhir: {projectResult.created} dibuat, {projectResult.updated} diperbarui, dan {projectResult.failed} perlu ditinjau.
           </p>
-        )}
-        {status.isStaging && (
-          <div className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50/40 p-4 dark:bg-amber-950/20">
-            <div>
-              <p className="text-sm font-semibold">Override identitas outbound staging</p>
-              <p className="mt-1 text-xs text-muted-foreground">Override hanya memengaruhi payload outbound baru. Data internal dan hasil sinkronisasi tidak berubah.</p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1.5"><Label htmlFor="marison-override-nik">NIK outbound</Label><Input id="marison-override-nik" value={overrideNik} onChange={(event) => setOverrideNik(event.target.value)} placeholder="Kosong = gunakan sumber" /></div>
-              <div className="space-y-1.5"><Label htmlFor="marison-override-branch">ID kantor/cabang vendor</Label><Input id="marison-override-branch" inputMode="numeric" value={overrideBranchId} onChange={(event) => setOverrideBranchId(event.target.value.replace(/\D/g, ""))} placeholder="Kosong = gunakan sumber" /></div>
-              <div className="space-y-1.5"><Label htmlFor="marison-override-project">ID proyek vendor</Label><Input id="marison-override-project" inputMode="numeric" value={overrideProjectId} onChange={(event) => setOverrideProjectId(event.target.value.replace(/\D/g, ""))} placeholder="Kosong = gunakan sumber" /></div>
-            </div>
-            <div className="space-y-1.5"><Label htmlFor="marison-override-reason">Alasan perubahan</Label><Input id="marison-override-reason" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Wajib untuk audit" maxLength={2000} /></div>
-            <Button onClick={() => void saveOverrides()} disabled={savingOverrides || !overrideReason.trim()}>{savingOverrides ? "Menyimpan..." : "Simpan override"}</Button>
-          </div>
         )}
       </CardContent>
     </Card>
