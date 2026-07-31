@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const migration = readFileSync("supabase/migrations/20260731100000_marison_outbound_payload_mappings.sql", "utf8");
+const auditActionFixMigration = readFileSync("supabase/migrations/20260731145000_fix_marison_payload_mapping_audit_action.sql", "utf8");
 const sql = `
 create extension if not exists pgcrypto;
 do $$ begin create role anon; exception when duplicate_object then null; end $$;
@@ -17,7 +18,8 @@ create table public.master_offices (
 create table public.master_projects (
   id uuid primary key, name text, code text, office_id uuid references public.master_offices(id), marison_project_id bigint, marison_synced_at timestamptz, marison_review_required boolean not null default false
 );
-create table public.activity_logs (id uuid default gen_random_uuid(), user_id uuid, action text, table_name text, record_id text, old_values jsonb, new_values jsonb);
+create type public.activity_action as enum ('CREATE', 'INSERT', 'UPDATE', 'DELETE');
+create table public.activity_logs (id uuid default gen_random_uuid(), user_id uuid, action public.activity_action, table_name text, record_id text, old_values jsonb, new_values jsonb);
 create or replace function public.is_current_user_admin() returns boolean language sql as $$ select false $$;
 create or replace function public.mask_marison_override_nik(value text) returns text language sql immutable as $$ select case when value is null then null else left(value, 2) || '***' || right(value, 2) end $$;
 insert into public.profiles(id, role, full_name, nik, marison_employee_id, marison_synced_at) values
@@ -35,6 +37,7 @@ insert into public.master_projects(id, name, code, office_id, marison_project_id
  ('20000000-0000-0000-0000-000000000002', 'Trial Project', 'TRIAL-P', '10000000-0000-0000-0000-000000000002', null, null),
  ('20000000-0000-0000-0000-000000000003', 'External Project B', 'EXT-P-B', '10000000-0000-0000-0000-000000000003', 26, now());
 ${migration}
+${auditActionFixMigration}
 do $$ begin raise notice 'create mapping A'; perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','map trial user'); end $$;
 do $$ begin raise notice 'create mapping B'; perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000001','staging','profile','00000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000003','many to one'); end $$;
 do $$ begin perform public.configure_marison_payload_mapping('00000000-0000-0000-0000-000000000002','staging','profile','00000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000003','non admin'); raise exception 'non-admin guard failed'; exception when others then if sqlerrm not like '%Active admin%' then raise; end if; end $$;
