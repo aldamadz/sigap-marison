@@ -3023,7 +3023,7 @@ export const DOCS_CHANGELOG = [
       "Menetapkan identitas external hasil sinkronisasi sebagai sumber payload yang siap dikirim tanpa mapping ulang.",
       "Menambahkan mapping payload staging untuk record lokal/trial dengan validasi effective branch dan fallback dari office mapping saat branch source stale.",
       "Menampilkan Identitas External, nilai efektif, dan status payload pada Master User, Master Kantor, dan Master Proyek.",
-      "Menjaga MRN-16 sebagai staging candidate; migration dan deployment staging belum dijalankan.",
+      "Menerapkan MRN-16 di staging dan menyelesaikan acceptance backend rollback serta pemeriksaan UI desktop/mobile tanpa mengubah antrean bisnis.",
     ],
   },
   {
