@@ -26,6 +26,13 @@ describe('MRN-16 staging payload mappings', () => {
     expect(backend).toContain('marison_project_id');
   });
 
+  it('uses valid activity log enum values for mapping inserts and updates', () => {
+    const migration = read('supabase/migrations/20260731145000_fix_marison_payload_mapping_audit_action.sql');
+    expect(migration).toContain("'INSERT'::public.activity_action");
+    expect(migration).toContain("'UPDATE'::public.activity_action");
+    expect(migration).not.toContain("'UPSERT'");
+  });
+
   it('resolves requester and each signer by stable profile ID', () => {
     const backend = read('backend/src/domain-runtime.ts');
     expect(backend).toContain('loadMarisonProfileIdentityResolver');
