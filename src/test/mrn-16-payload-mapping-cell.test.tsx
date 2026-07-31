@@ -82,6 +82,45 @@ describe('MRN-16 override cell', () => {
     expect(screen.getByText('Mapping tidak valid')).toBeInTheDocument();
   });
 
+  it('shows the mapped NIK instead of the external employee ID for profile payloads', () => {
+    render(
+      <AppDialogProvider>
+        <MarisonPayloadMappingCell
+          entityType="profile"
+          recordId="profile-a"
+          source="STAGING-ADMIN"
+          sourceValid={false}
+          mappingValid={true}
+          field="nik"
+          catalog={[{
+            id: 'target-a',
+            name: 'Andrian Ardiyanto',
+            nik: 'A 001',
+            external_id: 114,
+            valid: true,
+          }]}
+          override={{
+            entity_type: 'profile',
+            record_id: 'profile-a',
+            target_record_id: 'target-a',
+            mapped_name: 'Andrian Ardiyanto',
+            mapped_nik: 'A 001',
+            mapped_code: null,
+            mapped_external_id: 114,
+            mapped_office_name: null,
+            mapped_branch_id: null,
+            mapping_valid: true,
+            updated_at: '2026-07-31T00:00:00.000Z',
+          }}
+          onChanged={vi.fn()}
+        />
+      </AppDialogProvider>,
+    );
+
+    expect(screen.getByText('A 001')).toBeInTheDocument();
+    expect(screen.queryByText('114')).not.toBeInTheDocument();
+  });
+
   it('debounces a project catalog request and scopes it to the effective branch', async () => {
     vi.mocked(marisonPayloadMappingService.catalog).mockResolvedValue([
       { id: 'project-target', name: 'Proyek Mirror', external_id: 25, branch_id: 12, valid: true },
