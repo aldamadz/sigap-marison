@@ -3662,8 +3662,6 @@ const loadMarisonProfileIdentityResolver = async (profileIds) => {
     && !profile?.deleted_at
     && profile?.marison_employee_id > 0
     && profile?.marison_synced_at
-    && profile?.is_active
-    && !profile?.deleted_at
   );
 
   return (profileId, fallbackNik, label) => {
