@@ -82,6 +82,19 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
   });
 
+  it("keeps HTTP 422 replacements separate, audited, and single-active", () => {
+    const migration = read("supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql");
+    const server = read("backend/src/domain-runtime.ts");
+    expect(migration).toContain("replacement_of_dispatch_id");
+    expect(migration).toContain("marison_outbound_one_active_job_idx");
+    expect(migration).toContain("marison_outbound_replacement_events");
+    expect(migration).toContain("Only staging HTTP 422 dispatches can be replaced");
+    expect(migration).toContain("Active replacement already exists");
+    expect(migration).toContain("pg_advisory_xact_lock");
+    expect(server).toContain("createMarisonOutboundReplacement");
+    expect(server).toContain("Replacement outbound hanya tersedia di staging.");
+  });
+
   it("protects the internal build route with a minimum-length constant-time token", () => {
     const server = read("backend/src/domain-runtime.ts");
     const routes = read("backend/src/routes/domain.routes.ts");

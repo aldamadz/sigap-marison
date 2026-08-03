@@ -17,6 +17,7 @@ import { useMarisonEnvironment } from "@/providers/MarisonEnvironmentProvider";
 import {
   marisonIntegrationService,
   type MarisonDispatchRow,
+  type MarisonDispatchFilter,
   type MarisonDispatchStatus,
 } from "@/services/marison-integration.service";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,7 @@ type RecoveryState = "idle" | "checking" | "eligible" | "blocked" | "failed";
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<MarisonDispatchStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<MarisonDispatchFilter>("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<MarisonDispatchRow | null>(null);
   const [action, setAction] = useState<ReconciliationAction>("mark_succeeded");
@@ -63,6 +64,8 @@ export function MarisonOutboundQueuePanel() {
   const [preflightReason, setPreflightReason] = useState<string | null>(null);
   const [preflightReasonCode, setPreflightReasonCode] = useState<string | null>(null);
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
+  const [replacement, setReplacement] = useState<MarisonDispatchRow | null>(null);
+  const [replacementReason, setReplacementReason] = useState("");
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -143,6 +146,18 @@ export function MarisonOutboundQueuePanel() {
     setRecoveryState("idle");
     setReason("");
   };
+  const submitReplacement = async () => {
+    if (!replacement || !replacementReason.trim()) return;
+    try {
+      await marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
+      setReplacement(null);
+      setReplacementReason("");
+      await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
+      toast.success("Pengiriman pengganti dibuat");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Pengiriman pengganti gagal dibuat");
+    }
+  };
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
     && (action !== "reopen_confirmed_not_received" || riskConfirmed);
@@ -177,10 +192,10 @@ export function MarisonOutboundQueuePanel() {
             >
               <SelectTrigger id="marison-outbound-status" className="w-full sm:w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua status</SelectItem>
-                {(Object.keys(statusLabels) as MarisonDispatchStatus[]).map((value) => (
-                  <SelectItem key={value} value={value}>{statusLabels[value]}</SelectItem>
-                ))}
+                <SelectItem value="all">Semua</SelectItem>
+                <SelectItem value="attention">Perlu Tindakan</SelectItem>
+                <SelectItem value="processing">Diproses</SelectItem>
+                <SelectItem value="succeeded">Berhasil</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="icon" onClick={() => void dispatches.refetch()} disabled={dispatches.isFetching}>
@@ -260,7 +275,10 @@ export function MarisonOutboundQueuePanel() {
                               </Button>
                             </div>
                           )}
-                          {row.status === "failed_terminal" && !row.postStartedAt && (
+                           {row.status === "failed_terminal" && row.errorCode?.startsWith("marison_http_422") && (
+                             <Button size="sm" variant="destructive" onClick={() => { setReplacement(row); setReplacementReason(""); }}>Buat pengiriman pengganti</Button>
+                           )}
+                           {row.status === "failed_terminal" && !row.postStartedAt && !row.errorCode?.startsWith("marison_http_422") && (
                             <Button size="sm" variant="outline" onClick={() => void openRecovery(row)} disabled={preflightId === row.id}>
                               {preflightId === row.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />} Bangun ulang dan coba lagi
                             </Button>
@@ -341,6 +359,13 @@ export function MarisonOutboundQueuePanel() {
               Simpan Rekonsiliasi
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={replacement !== null} onOpenChange={(open) => !open && setReplacement(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Buat pengiriman pengganti</DialogTitle><DialogDescription>Job lama tetap immutable. Pengiriman pengganti membuat idempotency key dan audit baru.</DialogDescription></DialogHeader>
+          <div className="space-y-2 py-2"><Label htmlFor="replacement-reason">Alasan</Label><Textarea id="replacement-reason" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value)} rows={4} maxLength={2000} /></div>
+          <DialogFooter><Button variant="outline" onClick={() => setReplacement(null)}>Batal</Button><Button onClick={() => void submitReplacement()} disabled={!replacementReason.trim()}>Buat pengiriman pengganti</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

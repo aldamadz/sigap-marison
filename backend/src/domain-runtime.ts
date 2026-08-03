@@ -4230,7 +4230,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
 const listMarisonOutboundDispatches = async (req, url) => {
   await requireAdminUser(getBearerToken(req));
   const allowedStatuses = new Set([
-    "pending", "processing", "succeeded", "failed_retryable", "failed_terminal", "outcome_unknown", "skipped",
+    "pending", "processing", "succeeded", "failed_retryable", "failed_terminal", "outcome_unknown", "skipped", "attention",
   ]);
   const status = String(url.searchParams.get("status") || "all");
   if (status !== "all" && !allowedStatuses.has(status)) {
@@ -4252,7 +4252,8 @@ const listMarisonOutboundDispatches = async (req, url) => {
     .eq("environment", marisonDeploymentEnvironment)
     .order("created_at", { ascending: false })
     .range(from, from + pageSize - 1);
-  if (status !== "all") query = query.eq("status", status);
+  if (status === "attention") query = query.in("status", ["failed_terminal", "outcome_unknown"]);
+  else if (status !== "all") query = query.eq("status", status);
   const { data, error, count } = await query;
   if (error) throw error;
 
@@ -4356,6 +4357,30 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
   });
   if (error) throw error;
   return { success: true };
+};
+
+const createMarisonOutboundReplacement = async (req, dispatchId) => {
+  assertSameOrigin(req);
+  const actor = await requireAdminUser(getBearerToken(req));
+  if (marisonDeploymentEnvironment !== "staging") {
+    const err = new Error("Replacement outbound hanya tersedia di staging.");
+    err.status = 404;
+    throw err;
+  }
+  const payload = await readJsonBody(req, 4096);
+  const reason = String(payload?.reason || "").trim();
+  if (!reason) {
+    const err = new Error("Alasan replacement wajib diisi.");
+    err.status = 400;
+    throw err;
+  }
+  const { data, error } = await supabase.rpc("create_marison_outbound_replacement", {
+    p_dispatch_id: dispatchId,
+    p_actor_id: actor.id,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return { replacementId: data };
 };
 
 const getAuthorizedSurat = async (suratId, token) => {
@@ -4900,6 +4925,10 @@ export const handleRequest = async (req, res) => {
       if (req.method === "POST" && marisonReconcileMatch) {
         const result = await reconcileMarisonOutboundDispatch(req, marisonReconcileMatch[1]);
         return sendJson(res, 200, result);
+      }
+      const marisonReplacementMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/replacement$/i);
+      if (req.method === "POST" && marisonReplacementMatch) {
+        return sendJson(res, 200, await createMarisonOutboundReplacement(req, marisonReplacementMatch[1]));
       }
 
       const marisonDispatchMatch = url.pathname.match(/^\/api\/integrations\/marison\/surat\/([0-9a-f-]+)\/dispatch$/i);
