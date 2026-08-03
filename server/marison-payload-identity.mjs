@@ -1,4 +1,5 @@
 const normalized = (value) => String(value ?? '').trim();
+const VALID_SOURCES = new Set(['external_source', 'staging_mapping']);
 
 export const getCanonicalRequesterProfileId = (surat) => normalized(
   surat?.requester_snapshot?.profile_id
@@ -21,6 +22,42 @@ export const mergePayloadResolutionSources = (baseSources, identitySources) => (
   ...(baseSources || {}),
   ...(identitySources || {}),
 });
+
+export const normalizePayloadResolutionSources = (sources, { kind, approvalCount, expectedApprovalKeys = null }) => {
+  const input = sources && typeof sources === 'object' && !Array.isArray(sources) ? sources : {};
+  const normalizedSources = { ...input };
+  if (!normalizedSources.requesterNik && VALID_SOURCES.has(normalizedSources.nik)) {
+    normalizedSources.requesterNik = normalizedSources.nik;
+  }
+  delete normalizedSources.nik;
+
+  const required = ['requesterNik', 'branchId'];
+  if (kind === 'unit' || kind === 'non_unit') required.push('projectId');
+  if (required.some((key) => !VALID_SOURCES.has(normalizedSources[key]))) {
+    throw new Error('Metadata sumber payload belum lengkap.');
+  }
+
+  const approvalKeys = Object.keys(normalizedSources).filter((key) => key.startsWith('approval:'));
+  const expectedKeys = expectedApprovalKeys ? new Set(expectedApprovalKeys) : null;
+  if (approvalKeys.length !== approvalCount || (expectedKeys && (expectedKeys.size !== approvalCount || [...expectedKeys].some((key) => !approvalKeys.includes(key))))) {
+    throw new Error('Metadata sumber signer belum lengkap.');
+  }
+  if (approvalKeys.some((key) => {
+    const parts = key.split(':');
+    return parts.length !== 3 || !/^\d+$/.test(parts[1]) || !parts[2] || !VALID_SOURCES.has(normalizedSources[key]);
+  })) {
+    throw new Error('Metadata sumber signer belum lengkap.');
+  }
+  return normalizedSources;
+};
+
+export const isPrePostRecoveryEligible = (job, environment) => Boolean(
+  environment === 'staging'
+  && job?.status === 'failed_terminal'
+  && !job?.post_started_at
+  && !job?.response
+  && !job?.external_reference
+);
 
 export const resolveProfilePayloadIdentity = ({ profileId, sourceNik, mappingNik, validSourceNik, label = 'Profile' }) => {
   const id = normalized(profileId);

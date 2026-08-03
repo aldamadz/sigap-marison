@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, RotateCcw, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -57,6 +58,8 @@ export function MarisonOutboundQueuePanel() {
   const [reason, setReason] = useState("");
   const [externalReference, setExternalReference] = useState("");
   const [riskConfirmed, setRiskConfirmed] = useState(false);
+  const [preflightId, setPreflightId] = useState<string | null>(null);
+  const [preflightReason, setPreflightReason] = useState<string | null>(null);
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -100,6 +103,23 @@ export function MarisonOutboundQueuePanel() {
     setReason("");
     setExternalReference("");
     setRiskConfirmed(false);
+  };
+  const openRecovery = async (row: MarisonDispatchRow) => {
+    setPreflightId(row.id);
+    try {
+      const result = await marisonIntegrationService.preflightDispatch(row.id);
+      if (!result.eligible) {
+        setPreflightReason(result.reason || "Job belum memenuhi syarat recovery.");
+        toast.error(result.reason || "Job belum memenuhi syarat recovery.");
+        return;
+      }
+      setPreflightReason(null);
+      openReconciliation(row, "reopen_terminal_pre_post");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Preflight recovery gagal.");
+    } finally {
+      setPreflightId(null);
+    }
   };
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
@@ -189,7 +209,7 @@ export function MarisonOutboundQueuePanel() {
                           <p className="mt-2 text-xs text-muted-foreground">{row.kind ? kindLabels[row.kind] : "Tidak dikirim"}</p>
                         </TableCell>
                         <TableCell className="min-w-40 align-top text-sm tabular-nums">
-                          <p>{row.attemptCount} / 3</p>
+                           <p>Percobaan pengiriman: {row.attemptCount} dari 3</p>
                           <p className="mt-1 text-xs text-muted-foreground">Terakhir {formatDateTime(row.lastAttemptAt)}</p>
                         </TableCell>
                         <TableCell className="min-w-64 align-top">
@@ -199,7 +219,9 @@ export function MarisonOutboundQueuePanel() {
                             </p>
                           ) : row.failureReason ? (
                             <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
-                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {row.failureReason}
+                               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {row.failureReason === "Resolution sources are required"
+                                 ? "Dokumen dibuat sebelum metadata payload lengkap dan perlu dibangun ulang."
+                                 : row.failureReason}
                             </p>
                           ) : (
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -217,8 +239,8 @@ export function MarisonOutboundQueuePanel() {
                             </div>
                           )}
                           {row.status === "failed_terminal" && !row.postStartedAt && (
-                            <Button size="sm" variant="outline" onClick={() => openReconciliation(row, "reopen_terminal_pre_post")}>
-                              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Coba lagi
+                            <Button size="sm" variant="outline" onClick={() => void openRecovery(row)} disabled={preflightId === row.id}>
+                              {preflightId === row.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />} Bangun ulang dan coba lagi
                             </Button>
                           )}
                         </TableCell>
@@ -253,11 +275,19 @@ export function MarisonOutboundQueuePanel() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {selected && (
+              {selected && (
               <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                 <p className="font-medium text-foreground">{selected.noSurat}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{selected.title}</p>
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">Job {selected.id}</p>
+              </div>
+              )}
+            {preflightReason && (
+              <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                <p>{preflightReason}</p>
+                {preflightReason.includes("Signer tahap 1") && (
+                  <Link className="mt-2 inline-block font-medium underline" to="/admin/users">Buka Master User</Link>
+                )}
               </div>
             )}
             {action === "mark_succeeded" && (

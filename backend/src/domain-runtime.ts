@@ -32,6 +32,7 @@ import {
   buildApprovalResolutionKey,
   getCanonicalRequesterProfileId,
   mergePayloadResolutionSources,
+  normalizePayloadResolutionSources,
   resolveProfilePayloadIdentity,
 } from "../../server/marison-payload-identity.mjs";
 import { executeMarisonPayloadMappingCommand } from "../../server/marison-payload-mapping-handler.mjs";
@@ -4037,7 +4038,14 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
     err.status = 422;
     throw err;
   }
-  return { ...dispatch, resolutionSources: resolvedOverrides.sources };
+  return {
+    ...dispatch,
+    resolutionSources: normalizePayloadResolutionSources(resolvedOverrides.sources, {
+      kind: dispatch.kind,
+      approvalCount: dispatch.payload.approvals?.length || 0,
+      expectedApprovalKeys: Object.keys(identity.sources).filter((key) => key.startsWith("approval:")),
+    }),
+  };
 };
 
 const getMarisonDispatchQueueStatus = async (req, suratId) => {
@@ -4859,6 +4867,47 @@ export const handleRequest = async (req, res) => {
       if (req.method === "POST" && marisonDispatchMatch) {
         const result = await getMarisonDispatchQueueStatus(req, marisonDispatchMatch[1]);
         return sendJson(res, 200, result);
+      }
+
+      const marisonPreflightMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/preflight$/i);
+      if (req.method === "GET" && marisonPreflightMatch) {
+        assertSameOrigin(req);
+        await requireAdminUser(getBearerToken(req));
+        if (marisonDeploymentEnvironment !== "staging") {
+          const err = new Error("Recovery outbound hanya tersedia di staging.");
+          err.status = 404;
+          throw err;
+        }
+        const { data: job, error: jobError } = await supabase
+          .from("marison_outbound_dispatches")
+          .select("id, surat_id, environment, status, kind, post_started_at, response, external_reference")
+          .eq("id", marisonPreflightMatch[1])
+          .maybeSingle();
+        if (jobError) throw jobError;
+        if (!isPrePostRecoveryEligible(job, marisonDeploymentEnvironment)) {
+          return { eligible: false, reason: "Job tidak terbukti gagal sebelum POST." };
+        }
+        const { data: surat, error: suratError } = await supabase
+          .from("surat_registrasi")
+          .select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))")
+          .eq("id", job.surat_id)
+          .maybeSingle();
+        if (suratError) throw suratError;
+        if (!surat) return { eligible: false, reason: "Surat tidak ditemukan." };
+        try {
+          const identity = await resolveMarisonOutboundIdentity(surat);
+          const mappings = await getMarisonOutboundMappings(surat);
+          const sources = normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
+          return { eligible: true, kind: job.kind, sources: Object.fromEntries(Object.entries(sources).map(([key, value]) => [key, value])) };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Identity payload belum siap.";
+          return {
+            eligible: false,
+            reason: message.includes("Penandatangan tahap 1")
+              ? "Signer tahap 1 belum memiliki identitas payload yang valid. Lengkapi Mapping Payload Staging pada Master User sebelum membangun ulang dokumen."
+              : message,
+          };
+        }
       }
 
       const marisonBuildMatch = url.pathname.match(/^\/api\/internal\/marison\/outbound\/([0-9a-f-]+)\/build$/i);

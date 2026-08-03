@@ -33,3 +33,11 @@ Contoh kantor dan proyek:
 - `payload_resolution_sources` memakai `external_source`, `staging_mapping`, atau `unavailable`.
 - NIK tidak ditulis ke audit log; UI admin menerima nilai penuh melalui BFF `no-store`.
 - Singleton MRN-15 dipertahankan untuk histori/status lama dan deprecated untuk payload bisnis.
+
+## Kontrak Durable Sources
+
+`requesterNik` adalah key canonical pemohon. Setiap signer memakai
+`approval:<step_order>:<profile_id>`. `branchId` selalu wajib; `projectId` wajib
+untuk Unit dan Non Unit. Nilai source valid hanya `external_source` atau
+`staging_mapping`; `unavailable` menahan prepare. Key legacy `nik` hanya diterima
+di boundary compatibility dan dinormalisasi menjadi `requesterNik`.
