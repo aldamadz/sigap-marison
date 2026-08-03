@@ -40,10 +40,14 @@ reused for a different `submission_number` or payload.
 - Item attachments contain recommendation images/screenshots/photos, technical
   item documents, and external reference links.
 - Approval or recommendation-signature snapshots are not attachments.
+- The canonical center-submission example uses `branch_id: 1` and requester
+  Andreas (`A 144`).
 
 ## Approval rules
 
 - `approvals` contains approvals for the parent Asset request only.
+- The example includes, in order, Staff IT / Aldama (`A 114`), Manager PO,
+  Manager HRD & GA, Direktur 1, and Direktur Utama.
 - Recommendation signers are excluded.
 - If one person signs both documents, only the parent-request signature is sent.
 - `submitted_by` is requester profile external NIK/mapping.

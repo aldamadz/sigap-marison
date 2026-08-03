@@ -1,7 +1,7 @@
 {
   "submission_number": "001/UAI/PBO.1/VIII/2026",
-  "branch_id": 12,
-  "submitted_by": "A 114",
+  "branch_id": 1,
+  "submitted_by": "A 144",
   "submitted_at": "2026-08-03T14:45:00+07:00",
   "category": "Pengajuan Pusat",
   "description": "Permohonan pemenuhan dan perbaikan perangkat operasional.",
@@ -69,11 +69,38 @@
   ],
   "approvals": [
     {
-      "role": "Pimpinan Departemen",
-      "nik": "EMP-PBO-001",
+      "role": "Staff IT / Aldama",
+      "nik": "A 114",
       "action": "approved",
       "actioned_at": "2026-08-03T14:53:33+07:00",
-      "notes": "Permohonan induk telah disetujui."
+      "notes": "Permohonan induk disetujui oleh Staff IT Aldama."
+    },
+    {
+      "role": "Manager PO",
+      "nik": "MGR-PO-001",
+      "action": "approved",
+      "actioned_at": "2026-08-03T15:03:33+07:00",
+      "notes": "Permohonan induk telah diperiksa."
+    },
+    {
+      "role": "Manager HRD & GA",
+      "nik": "MGR-HRDGA-001",
+      "action": "approved",
+      "actioned_at": "2026-08-03T15:13:33+07:00"
+    },
+    {
+      "role": "Direktur 1",
+      "nik": "DIR-001",
+      "action": "approved",
+      "actioned_at": "2026-08-03T15:23:33+07:00",
+      "notes": "Disetujui sesuai kewenangan."
+    },
+    {
+      "role": "Direktur Utama",
+      "nik": "DIR-UTAMA-001",
+      "action": "approved",
+      "actioned_at": "2026-08-03T15:33:33+07:00",
+      "notes": "Permohonan induk disetujui."
     }
   ]
 }
