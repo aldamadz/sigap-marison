@@ -7,7 +7,9 @@ eksplisit dan kejelasan mekanisme deduplikasi dari vendor.
 
 ## Jaminan Utama
 
-- Satu business job untuk setiap pasangan `surat_id` dan environment.
+- Satu job aktif untuk setiap pasangan `surat_id` dan environment.
+- Penolakan vendor HTTP 422 dapat menghasilkan generasi pengganti yang terpisah;
+  job lama dan auditnya tidak diubah.
 - Hanya satu worker lokal yang memegang lease aktif selama dua menit.
 - Payload, body JSON, dan SHA-256 disimpan sekali sebelum POST.
 - Kegagalan sebelum POST dapat dicoba maksimal tiga kali dengan backoff 15 dan
@@ -112,6 +114,25 @@ pemohon sebagai fallback signer.
 
 Label `attempt_count` pada UI berarti jumlah percobaan pengiriman, bukan jumlah
 approval signer.
+
+### Pengiriman Pengganti HTTP 422
+
+HTTP 422 membuktikan vendor menerima POST tetapi menolak isi request. Setelah
+data penyebab penolakan diperbaiki, admin dapat membuat job pengganti dari
+`Konfigurasi > Integration > Antrean Outbound Marison`.
+
+- Generasi pertama adalah job asli; setiap job pengganti menambah nomor generasi.
+- Satu job hanya boleh mempunyai satu pengganti langsung dan hanya satu generasi
+  boleh aktif untuk surat/environment yang sama.
+- Idempotency key tiap generasi deterministik dan audit alasan disimpan append-only.
+- Job pre-POST, `outcome_unknown`, job production, serta job yang sudah memiliki
+  external reference tidak dapat memakai tindakan ini.
+- Klik ganda dan permintaan bersamaan ditolak secara atomik. Konflik ditampilkan
+  sebagai instruksi untuk memuat ulang antrean.
+
+Pengiriman pengganti berbeda dari recovery pre-POST. Recovery memakai job yang
+sama karena POST belum dimulai, sedangkan pengganti membuat job generasi baru
+karena vendor sudah memberikan penolakan pasti.
 
 ## Override Identitas Outbound Staging
 

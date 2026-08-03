@@ -4123,9 +4123,11 @@ const getMarisonDispatchQueueStatus = async (req, suratId) => {
 
   const { data: dispatchJob, error: jobError } = await supabase
     .from("marison_outbound_dispatches")
-    .select("id, status, kind, attempt_count, next_attempt_at, last_attempt_at, post_started_at, completed_at, error_code, error_message, external_reference, skipped_reason, created_at, updated_at")
+    .select("id, generation, replacement_of_dispatch_id, status, kind, attempt_count, next_attempt_at, last_attempt_at, post_started_at, completed_at, error_code, error_message, external_reference, skipped_reason, created_at, updated_at")
     .eq("surat_id", suratId)
     .eq("environment", marisonDeploymentEnvironment)
+    .order("generation", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (jobError) throw jobError;
@@ -4281,7 +4283,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
 const listMarisonOutboundDispatches = async (req, url) => {
   await requireAdminUser(getBearerToken(req));
   const allowedStatuses = new Set([
-    "pending", "processing", "succeeded", "failed_retryable", "failed_terminal", "outcome_unknown", "skipped",
+    "pending", "processing", "succeeded", "failed_retryable", "failed_terminal", "outcome_unknown", "skipped", "attention",
   ]);
   const status = String(url.searchParams.get("status") || "all");
   if (status !== "all" && !allowedStatuses.has(status)) {
@@ -4295,7 +4297,7 @@ const listMarisonOutboundDispatches = async (req, url) => {
   let query = supabase
     .from("marison_outbound_dispatches")
     .select(`
-      id, surat_id, environment, kind, status, attempt_count, next_attempt_at, last_attempt_at,
+      id, surat_id, environment, generation, replacement_of_dispatch_id, kind, status, attempt_count, next_attempt_at, last_attempt_at,
       post_started_at, completed_at, external_reference, error_code, error_message, skipped_reason,
       reconciliation_count, created_at, updated_at,
       surat_registrasi!inner(no_surat, judul_surat)
@@ -4303,7 +4305,8 @@ const listMarisonOutboundDispatches = async (req, url) => {
     .eq("environment", marisonDeploymentEnvironment)
     .order("created_at", { ascending: false })
     .range(from, from + pageSize - 1);
-  if (status !== "all") query = query.eq("status", status);
+  if (status === "attention") query = query.in("status", ["failed_terminal", "outcome_unknown"]);
+  else if (status !== "all") query = query.eq("status", status);
   const { data, error, count } = await query;
   if (error) throw error;
 
@@ -4318,6 +4321,8 @@ const listMarisonOutboundDispatches = async (req, url) => {
       noSurat: row.surat_registrasi?.no_surat || "-",
       title: row.surat_registrasi?.judul_surat || "-",
       environment: row.environment,
+      generation: row.generation,
+      replacementOfDispatchId: row.replacement_of_dispatch_id,
       kind: row.kind,
       status: row.status,
       attemptCount: row.attempt_count,
@@ -4407,6 +4412,45 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
   });
   if (error) throw error;
   return { success: true };
+};
+
+const createMarisonOutboundReplacement = async (req, dispatchId) => {
+  assertSameOrigin(req);
+  const actor = await requireAdminUser(getBearerToken(req));
+  if (marisonDeploymentEnvironment !== "staging") {
+    const err = new Error("Replacement outbound hanya tersedia di staging.");
+    err.status = 404;
+    throw err;
+  }
+  const payload = await readJsonBody(req, 4096);
+  const reason = String(payload?.reason || "").trim();
+  if (!reason) {
+    const err = new Error("Alasan replacement wajib diisi.");
+    err.status = 400;
+    throw err;
+  }
+  const { data, error } = await supabase.rpc("create_marison_outbound_replacement", {
+    p_dispatch_id: dispatchId,
+    p_actor_id: actor.id,
+    p_reason: reason,
+  });
+  if (error) {
+    const mapped = new Error(
+      error.code === "40001" || error.code === "23505"
+        ? "Job pengganti sudah dibuat atau ada pengiriman aktif untuk surat ini. Muat ulang antrean."
+        : error.code === "P0002"
+          ? "Job outbound tidak ditemukan."
+          : error.code === "55000"
+            ? "Job ini tidak memenuhi syarat pengiriman pengganti HTTP 422."
+            : "Pengiriman pengganti gagal dibuat."
+    );
+    mapped.status = error.code === "P0002" ? 404
+      : error.code === "42501" ? 403
+        : ["40001", "23505", "55000"].includes(error.code) ? 409
+          : 500;
+    throw mapped;
+  }
+  return { replacementId: data };
 };
 
 const getAuthorizedSurat = async (suratId, token) => {
@@ -4951,6 +4995,10 @@ export const handleRequest = async (req, res) => {
       if (req.method === "POST" && marisonReconcileMatch) {
         const result = await reconcileMarisonOutboundDispatch(req, marisonReconcileMatch[1]);
         return sendJson(res, 200, result);
+      }
+      const marisonReplacementMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/replacement$/i);
+      if (req.method === "POST" && marisonReplacementMatch) {
+        return sendJson(res, 200, await createMarisonOutboundReplacement(req, marisonReplacementMatch[1]));
       }
 
       const marisonDispatchMatch = url.pathname.match(/^\/api\/integrations\/marison\/surat\/([0-9a-f-]+)\/dispatch$/i);

@@ -17,6 +17,7 @@ import { useMarisonEnvironment } from "@/providers/MarisonEnvironmentProvider";
 import {
   marisonIntegrationService,
   type MarisonDispatchRow,
+  type MarisonDispatchFilter,
   type MarisonDispatchStatus,
 } from "@/services/marison-integration.service";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,7 @@ type RecoveryState = "idle" | "checking" | "eligible" | "blocked" | "failed";
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<MarisonDispatchStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<MarisonDispatchFilter>("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<MarisonDispatchRow | null>(null);
   const [action, setAction] = useState<ReconciliationAction>("mark_succeeded");
@@ -63,6 +64,8 @@ export function MarisonOutboundQueuePanel() {
   const [preflightReason, setPreflightReason] = useState<string | null>(null);
   const [preflightReasonCode, setPreflightReasonCode] = useState<string | null>(null);
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
+  const [replacement, setReplacement] = useState<MarisonDispatchRow | null>(null);
+  const [replacementReason, setReplacementReason] = useState("");
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -91,6 +94,18 @@ export function MarisonOutboundQueuePanel() {
       await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Rekonsiliasi gagal"),
+  });
+  const replacementMutation = useMutation({
+    mutationFn: async () => {
+      if (!replacement || !replacementReason.trim()) throw new Error("Alasan pengiriman pengganti wajib diisi.");
+      return marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
+    },
+    onSuccess: async () => {
+      setReplacement(null);
+      setReplacementReason("");
+      await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
+      toast.success("Pengiriman pengganti masuk ke antrean");
+    },
   });
 
   const totalPages = Math.max(1, Math.ceil((dispatches.data?.total || 0) / 20));
@@ -157,7 +172,7 @@ export function MarisonOutboundQueuePanel() {
               Antrean Outbound Marison
             </CardTitle>
             <CardDescription className="mt-2">
-              Satu job per surat dan environment. Hasil yang tidak pasti tidak dikirim ulang otomatis.
+              Setiap pengiriman tercatat sebagai generasi terpisah. Hasil yang tidak pasti tidak dikirim ulang otomatis.
             </CardDescription>
             <Badge
               variant={environmentStatus.outbound?.ready ? "outline" : "destructive"}
@@ -177,10 +192,10 @@ export function MarisonOutboundQueuePanel() {
             >
               <SelectTrigger id="marison-outbound-status" className="w-full sm:w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua status</SelectItem>
-                {(Object.keys(statusLabels) as MarisonDispatchStatus[]).map((value) => (
-                  <SelectItem key={value} value={value}>{statusLabels[value]}</SelectItem>
-                ))}
+                <SelectItem value="all">Semua</SelectItem>
+                <SelectItem value="attention">Perlu Tindakan</SelectItem>
+                <SelectItem value="processing">Diproses</SelectItem>
+                <SelectItem value="succeeded">Berhasil</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="icon" onClick={() => void dispatches.refetch()} disabled={dispatches.isFetching}>
@@ -223,6 +238,7 @@ export function MarisonOutboundQueuePanel() {
                           <p className="font-medium text-foreground">{row.noSurat}</p>
                           <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.title}</p>
                           <p className="mt-2 text-xs text-muted-foreground">Dibuat {formatDateTime(row.createdAt)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Generasi {row.generation}</p>
                         </TableCell>
                         <TableCell className="min-w-44 align-top">
                           <Badge variant="outline" className={cn("whitespace-nowrap", statusTone[row.status])}>
@@ -260,7 +276,20 @@ export function MarisonOutboundQueuePanel() {
                               </Button>
                             </div>
                           )}
-                          {row.status === "failed_terminal" && !row.postStartedAt && (
+                           {row.status === "failed_terminal" && row.errorCode?.startsWith("marison_http_422") && (
+                             <Button
+                               size="sm"
+                               variant="destructive"
+                               onClick={() => {
+                                 replacementMutation.reset();
+                                 setReplacement(row);
+                                 setReplacementReason("");
+                               }}
+                             >
+                               Buat pengiriman pengganti
+                             </Button>
+                           )}
+                           {row.status === "failed_terminal" && !row.postStartedAt && !row.errorCode?.startsWith("marison_http_422") && (
                             <Button size="sm" variant="outline" onClick={() => void openRecovery(row)} disabled={preflightId === row.id}>
                               {preflightId === row.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />} Bangun ulang dan coba lagi
                             </Button>
@@ -339,6 +368,61 @@ export function MarisonOutboundQueuePanel() {
             >
               {reconciliation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan Rekonsiliasi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={replacement !== null}
+        onOpenChange={(open) => {
+          if (!open && !replacementMutation.isPending) {
+            setReplacement(null);
+            setReplacementReason("");
+            replacementMutation.reset();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Buat pengiriman pengganti</DialogTitle>
+            <DialogDescription>
+              Gunakan setelah data penyebab penolakan HTTP 422 diperbaiki. Riwayat pengiriman lama tetap tersimpan.
+            </DialogDescription>
+          </DialogHeader>
+          {replacement && (
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <p className="font-medium text-foreground">{replacement.noSurat}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Generasi {replacement.generation} akan digantikan oleh generasi baru.</p>
+            </div>
+          )}
+          <div className="space-y-2 py-2">
+            <Label htmlFor="replacement-reason">Alasan dan perbaikan yang dilakukan</Label>
+            <Textarea
+              id="replacement-reason"
+              value={replacementReason}
+              onChange={(event) => {
+                replacementMutation.reset();
+                setReplacementReason(event.target.value);
+              }}
+              placeholder="Contoh: Mapping proyek diperbaiki sesuai data external."
+              rows={4}
+              maxLength={2000}
+              disabled={replacementMutation.isPending}
+            />
+            {replacementMutation.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                {replacementMutation.error instanceof Error ? replacementMutation.error.message : "Pengiriman pengganti gagal dibuat."}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplacement(null)} disabled={replacementMutation.isPending}>Batal</Button>
+            <Button
+              onClick={() => replacementMutation.mutate()}
+              disabled={!replacementReason.trim() || replacementMutation.isPending}
+            >
+              {replacementMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Buat pengiriman pengganti
             </Button>
           </DialogFooter>
         </DialogContent>

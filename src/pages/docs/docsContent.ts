@@ -92,8 +92,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.23.0";
-export const DOCS_UPDATED_AT = "31 Juli 2026";
+export const DOCS_VERSION = "v1.24.0";
+export const DOCS_UPDATED_AT = "3 Agustus 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -3016,6 +3016,16 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.24.0",
+    date: "3 Agustus 2026",
+    changes: [
+      "Memindahkan Antrean Outbound Marison sepenuhnya ke halaman Konfigurasi Integration.",
+      "Membedakan recovery kegagalan sebelum POST dengan pengiriman pengganti setelah penolakan HTTP 422.",
+      "Menambahkan generasi job, idempotency key deterministik, audit append-only, dan perlindungan pengiriman pengganti ganda.",
+      "Menampilkan nomor generasi, status penyimpanan, dan pesan konflik operasional pada panel antrean admin.",
+    ],
+  },
   {
     version: "v1.23.0",
     date: "31 Juli 2026",

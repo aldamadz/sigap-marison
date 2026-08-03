@@ -11,10 +11,10 @@ vi.mock("@/providers/MarisonEnvironmentProvider", () => ({
 
 vi.mock("@/services/marison-integration.service", async () => {
   const actual = await vi.importActual<typeof import("@/services/marison-integration.service")>("@/services/marison-integration.service");
-  return { ...actual, marisonIntegrationService: { listDispatches: vi.fn(), preflightDispatch: vi.fn(), reconcileDispatch: vi.fn() } };
+  return { ...actual, marisonIntegrationService: { listDispatches: vi.fn(), preflightDispatch: vi.fn(), reconcileDispatch: vi.fn(), createReplacement: vi.fn() } };
 });
 
-const row = { id: "job-1", suratId: "surat-1", noSurat: "047/UAI/MKT.1.NKMZ7/VII/2026", title: "Unit test", environment: "staging", kind: "unit", status: "failed_terminal", attemptCount: 3, nextAttemptAt: null, lastAttemptAt: null, externalReference: null, failureReason: "Resolution sources are required", reconciliationCount: 0, createdAt: "2026-08-03T00:00:00Z", updatedAt: "2026-08-03T00:00:00Z", postStartedAt: null, completedAt: null } as any;
+const row = { id: "job-1", suratId: "surat-1", noSurat: "047/UAI/MKT.1.NKMZ7/VII/2026", title: "Unit test", environment: "staging", generation: 1, replacementOfDispatchId: null, kind: "unit", status: "failed_terminal", attemptCount: 3, nextAttemptAt: null, lastAttemptAt: null, externalReference: null, errorCode: null, failureReason: "Resolution sources are required", reconciliationCount: 0, createdAt: "2026-08-03T00:00:00Z", updatedAt: "2026-08-03T00:00:00Z", postStartedAt: null, completedAt: null } as any;
 const renderPanel = () => render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MarisonOutboundQueuePanel /></QueryClientProvider></MemoryRouter>);
 
 describe("Marison outbound recovery dialog", () => {
@@ -22,6 +22,7 @@ describe("Marison outbound recovery dialog", () => {
     vi.clearAllMocks();
     vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row] });
     vi.mocked(marisonIntegrationService.reconcileDispatch).mockResolvedValue({ success: true });
+    vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
   });
 
   it("keeps form hidden while preflight is checking and blocks network failure", async () => {
@@ -64,5 +65,39 @@ describe("Marison outbound recovery dialog", () => {
     fireEvent.click(button);
     expect(marisonIntegrationService.preflightDispatch).toHaveBeenCalledTimes(1);
     await act(async () => resolve({ eligible: true, reasonCode: null, reason: null }));
+  });
+
+  it("creates one HTTP 422 replacement and locks the dialog while saving", async () => {
+    let resolve!: (value: { replacementId: string }) => void;
+    vi.mocked(marisonIntegrationService.createReplacement).mockReturnValue(new Promise((done) => { resolve = done; }) as never);
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({
+      environment: "staging", page: 1, pageSize: 20, total: 1,
+      items: [{ ...row, postStartedAt: "2026-08-03T00:01:00Z", errorCode: "marison_http_422", failureReason: "Marison menolak request dengan HTTP 422." }],
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    fireEvent.change(screen.getByLabelText(/alasan dan perbaikan/i), { target: { value: "Mapping proyek diperbaiki." } });
+    const submit = screen.getByRole("button", { name: /^buat pengiriman pengganti$/i });
+    fireEvent.click(submit);
+    await waitFor(() => expect(marisonIntegrationService.createReplacement).toHaveBeenCalledTimes(1));
+    fireEvent.click(submit);
+    expect(marisonIntegrationService.createReplacement).toHaveBeenCalledTimes(1);
+    expect(submit).toBeDisabled();
+    await act(async () => resolve({ replacementId: "job-2" }));
+    await waitFor(() => expect(screen.queryByLabelText(/alasan dan perbaikan/i)).not.toBeInTheDocument());
+  });
+
+  it("keeps replacement context open and shows an inline conflict", async () => {
+    vi.mocked(marisonIntegrationService.createReplacement).mockRejectedValue(new Error("Job pengganti sudah dibuat. Muat ulang antrean."));
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({
+      environment: "staging", page: 1, pageSize: 20, total: 1,
+      items: [{ ...row, postStartedAt: "2026-08-03T00:01:00Z", errorCode: "marison_http_422" }],
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    fireEvent.change(screen.getByLabelText(/alasan dan perbaikan/i), { target: { value: "Payload sudah dikoreksi." } });
+    fireEvent.click(screen.getByRole("button", { name: /^buat pengiriman pengganti$/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sudah dibuat/i);
+    expect(screen.getByLabelText(/alasan dan perbaikan/i)).toHaveValue("Payload sudah dikoreksi.");
   });
 });

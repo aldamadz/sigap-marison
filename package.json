@@ -13,6 +13,7 @@
     "test:pgd-pdf": "node --test scripts/test-pgd-pdf-renderer.mjs",
     "test:storage-policy": "node --test scripts/test-storage-path-policy.mjs",
     "test:mrn16-sql": "node scripts/test-mrn16-sql.mjs",
+    "test:outbound-replacement-sql": "node scripts/test-outbound-replacement-sql.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",
     "dev:server": "npm run dev --workspace @sigap/backend",

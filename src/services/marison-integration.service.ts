@@ -132,6 +132,7 @@ export type MarisonDispatchStatus =
   | "failed_terminal"
   | "outcome_unknown"
   | "skipped";
+export type MarisonDispatchFilter = MarisonDispatchStatus | "attention" | "all";
 
 export type MarisonDispatchRow = {
   id: string;
@@ -139,6 +140,8 @@ export type MarisonDispatchRow = {
   noSurat: string;
   title: string;
   environment: MarisonEnvironment;
+  generation: number;
+  replacementOfDispatchId: string | null;
   kind: "unit" | "non_unit" | "asset" | null;
   status: MarisonDispatchStatus;
   attemptCount: number;
@@ -216,7 +219,7 @@ export const marisonIntegrationService = {
       body: JSON.stringify({ confirm: true }),
     }
   ),
-  listDispatches: (status: MarisonDispatchStatus | "all" = "all", page = 1, pageSize = 20) => {
+  listDispatches: (status: MarisonDispatchFilter = "all", page = 1, pageSize = 20) => {
     const search = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
     return request<MarisonDispatchPage>(`/api/integrations/marison/dispatches?${search}`);
   },
@@ -235,4 +238,8 @@ export const marisonIntegrationService = {
   preflightDispatch: (dispatchId: string) => request<{ eligible: boolean; reasonCode?: string | null; reason?: string | null; blockedStage?: number }>(
     `/api/integrations/marison/dispatches/${dispatchId}/preflight`
   ),
+  createReplacement: (dispatchId: string, reason: string) => request<{ replacementId: string }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  }),
 };

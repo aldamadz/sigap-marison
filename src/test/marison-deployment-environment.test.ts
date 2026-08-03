@@ -63,7 +63,8 @@ describe("Marison deployment environment", () => {
     expect(routes).toContain('<Route path="integration" element={<MarisonIntegrationPage />} />');
     expect(integrationPage).toContain("MarisonIntegrationPanel");
     expect(integrationPage).not.toContain("Navigate");
-    expect(formUsages).toContain("MarisonOutboundQueuePanel");
+    expect(formUsages).not.toContain("MarisonOutboundQueuePanel");
+    expect(integrationPage).toContain("MarisonOutboundQueuePanel");
     expect(formUsages).not.toContain("MarisonIntegrationPanel");
     expect(sidebar).not.toContain("Integrasi Marison");
   });
