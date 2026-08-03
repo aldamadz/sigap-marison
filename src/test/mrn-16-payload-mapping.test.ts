@@ -54,6 +54,17 @@ describe('MRN-16 staging payload mappings', () => {
     expect(read('supabase/migrations/20260731170000_mrn16_external_identity_readiness.sql')).toContain('marison_payload_effective_branch_id');
   });
 
+  it('resolves Unit and Non Unit branch from effective project while keeping Asset office-based', () => {
+    const backend = read('backend/src/domain-runtime.ts');
+    const resolver = backend.slice(backend.indexOf('const getMarisonOutboundMappings'), backend.indexOf('const isValidSourceBranchId'));
+    expect(resolver).toContain('const getMarisonOutboundMappings = async (surat = null, kind = "asset")');
+    expect(resolver).toContain('kind !== "asset" && sourceProjectId !== null');
+    expect(resolver).toContain('const projectBranchId = sourceProject.data?.master_offices?.marison_branch_id');
+    expect(resolver).toContain('const sourceBranchId = kind === "asset" ? await resolveMarisonBranchId(surat) : projectBranchId');
+    expect(backend).toContain('getMarisonOutboundMappings(surat, job.kind)');
+    expect(backend).toContain('getMarisonOutboundMappings(surat, job.kind);');
+  });
+
   it('records per-signer resolution sources in immutable prepared metadata', () => {
     const migration = read('supabase/migrations/20260730120000_marison_outbound_identity_overrides.sql');
     const backend = read('backend/src/domain-runtime.ts');

@@ -3476,10 +3476,11 @@ const configureMarisonOutboundIdentityOverrides = async (req) => {
   return { success: true, configuration: data, actorId: actor.id };
 };
 
-const getMarisonOutboundMappings = async (surat = null) => {
+const getMarisonOutboundMappings = async (surat = null, kind = "asset") => {
   const useStagingMappings = marisonDeploymentEnvironment === "staging";
   const officeId = firstString(surat?.office_id, surat?.location_snapshot?.office?.id);
   const recordProjectId = firstString(surat?.project_id, surat?.location_snapshot?.project?.id);
+  const sourceProjectId = externalIdFrom(getMarisonRequestedProject(surat, getMarisonDispatchInput(surat)));
   const recordQueries = [
     useStagingMappings && officeId ? supabase.from("marison_outbound_record_mappings").select("entity_type, record_id, target_record_id").eq("environment", "staging").eq("entity_type", "office").eq("record_id", officeId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     useStagingMappings && recordProjectId ? supabase.from("marison_outbound_record_mappings").select("entity_type, record_id, target_record_id").eq("environment", "staging").eq("entity_type", "project").eq("record_id", recordProjectId).maybeSingle() : Promise.resolve({ data: null, error: null }),
@@ -3491,16 +3492,18 @@ const getMarisonOutboundMappings = async (surat = null) => {
   });
   const officeMapping = recordOverrides[0] || {};
   const projectMapping = recordOverrides[1] || {};
-  const [officeTarget, projectTarget] = await Promise.all([
+   const [officeTarget, projectTarget, sourceProject] = await Promise.all([
      officeMapping.target_record_id ? supabase.from("master_offices").select("marison_branch_id, marison_synced_at").eq("id", officeMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
      projectMapping.target_record_id ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, office_id, master_offices!inner(marison_branch_id, marison_synced_at)").eq("id", projectMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-  ]);
-  for (const result of [officeTarget, projectTarget]) if (result.error) throw result.error;
-  const sourceBranchId = await resolveMarisonBranchId(surat);
-  const sourceProjectId = externalIdFrom(getMarisonRequestedProject(surat, getMarisonDispatchInput(surat)));
-   const mappedBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at ? officeTarget.data.marison_branch_id : null;
-   const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
-  const effectiveBranchId = parseExternalInteger(mappedBranchId ?? (await isValidSourceBranchId(sourceBranchId) ? sourceBranchId : null));
+     kind !== "asset" && sourceProjectId !== null ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, master_offices!inner(marison_branch_id, marison_synced_at)").eq("marison_project_id", sourceProjectId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+   ]);
+   for (const result of [officeTarget, projectTarget, sourceProject]) if (result.error) throw result.error;
+    const officeBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at ? officeTarget.data.marison_branch_id : null;
+    const projectBranchId = sourceProject.data?.master_offices?.marison_branch_id && sourceProject.data?.master_offices?.marison_synced_at ? sourceProject.data.master_offices.marison_branch_id : null;
+    const mappedBranchId = projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.master_offices.marison_branch_id : null;
+    const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
+   const sourceBranchId = kind === "asset" ? await resolveMarisonBranchId(surat) : projectBranchId;
+   const effectiveBranchId = parseExternalInteger((kind === "asset" ? officeBranchId : mappedBranchId) ?? (await isValidSourceBranchId(sourceBranchId) ? sourceBranchId : null));
   const effectiveProjectId = parseExternalInteger(mappedProjectId ?? (await isValidSourceProjectId(sourceProjectId) ? sourceProjectId : null));
   if (effectiveBranchId !== null) {
     const { data: effectiveOffice, error: effectiveOfficeError } = await supabase
@@ -3528,7 +3531,7 @@ const getMarisonOutboundMappings = async (surat = null) => {
     branchId: effectiveBranchId,
     projectId: effectiveProjectId,
     sources: {
-       branchId: mappedBranchId ? "staging_mapping" : effectiveBranchId !== null ? "external_source" : "unavailable",
+       branchId: (kind === "asset" ? officeBranchId : mappedBranchId) ? "staging_mapping" : effectiveBranchId !== null ? "external_source" : "unavailable",
        projectId: mappedProjectId ? "staging_mapping" : effectiveProjectId !== null ? "external_source" : "unavailable",
     },
   };
@@ -4193,7 +4196,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     throw err;
   }
 
-   const overrides = await getMarisonOutboundMappings(surat);
+   const overrides = await getMarisonOutboundMappings(surat, job.kind);
    const dispatch = await buildMarisonDispatchPayload(surat, null, overrides);
   if (dispatch.kind !== job.kind || dispatch.endpoint !== job.endpoint) {
     const err = new Error("Kategori surat berubah setelah job outbound dibuat.");
@@ -4290,7 +4293,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
   }
   try {
     const identity = await resolveMarisonOutboundIdentity(surat);
-    const mappings = await getMarisonOutboundMappings(surat);
+     const mappings = await getMarisonOutboundMappings(surat, job.kind);
     normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
     return { eligible: true, reasonCode: null, reason: null };
   } catch (error) {
