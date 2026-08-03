@@ -232,7 +232,7 @@ export const marisonIntegrationService = {
     method: "POST",
     body: JSON.stringify(payload),
   }),
-  preflightDispatch: (dispatchId: string) => request<{ eligible: boolean; kind?: string; reason?: string; sources?: Record<string, string> }>(
+  preflightDispatch: (dispatchId: string) => request<{ eligible: boolean; reasonCode?: string | null; reason?: string | null; blockedStage?: number }>(
     `/api/integrations/marison/dispatches/${dispatchId}/preflight`
   ),
 };

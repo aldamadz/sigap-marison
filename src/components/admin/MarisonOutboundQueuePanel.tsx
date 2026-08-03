@@ -60,6 +60,7 @@ export function MarisonOutboundQueuePanel() {
   const [riskConfirmed, setRiskConfirmed] = useState(false);
   const [preflightId, setPreflightId] = useState<string | null>(null);
   const [preflightReason, setPreflightReason] = useState<string | null>(null);
+  const [preflightReasonCode, setPreflightReasonCode] = useState<string | null>(null);
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -103,23 +104,35 @@ export function MarisonOutboundQueuePanel() {
     setReason("");
     setExternalReference("");
     setRiskConfirmed(false);
+    setPreflightReason(null);
+    setPreflightReasonCode(null);
   };
   const openRecovery = async (row: MarisonDispatchRow) => {
+    openReconciliation(row, "reopen_terminal_pre_post");
     setPreflightId(row.id);
     try {
       const result = await marisonIntegrationService.preflightDispatch(row.id);
       if (!result.eligible) {
         setPreflightReason(result.reason || "Job belum memenuhi syarat recovery.");
+        setPreflightReasonCode(result.reasonCode || "NOT_PRE_POST_FAILURE");
         toast.error(result.reason || "Job belum memenuhi syarat recovery.");
         return;
       }
       setPreflightReason(null);
+      setPreflightReasonCode(null);
       openReconciliation(row, "reopen_terminal_pre_post");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Preflight recovery gagal.");
     } finally {
       setPreflightId(null);
     }
+  };
+  const closeDialog = () => {
+    setSelected(null);
+    setPreflightId(null);
+    setPreflightReason(null);
+    setPreflightReasonCode(null);
+    setReason("");
   };
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
@@ -262,7 +275,7 @@ export function MarisonOutboundQueuePanel() {
         </CardContent>
       </Card>
 
-      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+      <Dialog open={selected !== null} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{action === "mark_succeeded" ? "Tandai Sudah Diterima" : "Buka Ulang Pengiriman"}</DialogTitle>
@@ -282,25 +295,26 @@ export function MarisonOutboundQueuePanel() {
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">Job {selected.id}</p>
               </div>
               )}
+            {preflightId && <div className="rounded-md border border-blue-300/60 bg-blue-50 px-3 py-3 text-sm">Memeriksa kelayakan recovery...</div>}
             {preflightReason && (
               <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
                 <p>{preflightReason}</p>
-                {preflightReason.includes("Signer tahap 1") && (
+                {preflightReasonCode === "SIGNER_IDENTITY_MISSING" && (
                   <Link className="mt-2 inline-block font-medium underline" to="/admin/users">Buka Master User</Link>
                 )}
               </div>
             )}
-            {action === "mark_succeeded" && (
+            {!preflightId && !preflightReason && action === "mark_succeeded" && (
               <div className="space-y-2">
                 <Label htmlFor="marison-external-reference">Referensi eksternal</Label>
                 <Input id="marison-external-reference" value={externalReference} onChange={(event) => setExternalReference(event.target.value)} maxLength={200} />
               </div>
             )}
-            <div className="space-y-2">
+            {!preflightId && !preflightReason && <div className="space-y-2">
               <Label htmlFor="marison-reconciliation-reason">Alasan dan bukti pemeriksaan</Label>
               <Textarea id="marison-reconciliation-reason" value={reason} onChange={(event) => setReason(event.target.value)} rows={4} maxLength={2000} />
-            </div>
-            {action === "reopen_confirmed_not_received" && (
+            </div>}
+            {!preflightId && !preflightReason && action === "reopen_confirmed_not_received" && (
               <label className="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-5">
                 <Checkbox checked={riskConfirmed} onCheckedChange={(checked) => setRiskConfirmed(checked === true)} />
                 <span>Saya sudah memastikan request sebelumnya tidak diterima vendor dan memahami risiko data ganda.</span>
@@ -308,11 +322,11 @@ export function MarisonOutboundQueuePanel() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelected(null)}>Batal</Button>
+            <Button variant="outline" onClick={closeDialog}>Tutup</Button>
             <Button
               variant={action === "mark_succeeded" ? "default" : "destructive"}
               onClick={() => reconciliation.mutate()}
-              disabled={!canSubmit || reconciliation.isPending}
+              disabled={Boolean(preflightId || preflightReason) || !canSubmit || reconciliation.isPending}
             >
               {reconciliation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan Rekonsiliasi

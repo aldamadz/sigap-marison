@@ -76,8 +76,8 @@ describe("durable Marison outbound dispatch", () => {
     const routes = read("backend/src/routes/domain.routes.ts");
     const server = read("backend/src/domain-runtime.ts");
     expect(routes).toContain('GET", url: "/api/integrations/marison/dispatches/:dispatchId/preflight');
-    expect(server).toContain("isPrePostRecoveryEligible");
-    expect(server).toContain("Recovery outbound hanya tersedia di staging.");
+    expect(server).toContain("preflightMarisonOutboundRecovery");
+    expect(server).toContain("NOT_PRE_POST_FAILURE");
   });
 
   it("protects the internal build route with a minimum-length constant-time token", () => {
