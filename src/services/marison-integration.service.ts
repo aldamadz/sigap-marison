@@ -140,6 +140,8 @@ export type MarisonDispatchRow = {
   noSurat: string;
   title: string;
   environment: MarisonEnvironment;
+  generation: number;
+  replacementOfDispatchId: string | null;
   kind: "unit" | "non_unit" | "asset" | null;
   status: MarisonDispatchStatus;
   attemptCount: number;

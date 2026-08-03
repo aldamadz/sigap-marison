@@ -4123,9 +4123,11 @@ const getMarisonDispatchQueueStatus = async (req, suratId) => {
 
   const { data: dispatchJob, error: jobError } = await supabase
     .from("marison_outbound_dispatches")
-    .select("id, status, kind, attempt_count, next_attempt_at, last_attempt_at, post_started_at, completed_at, error_code, error_message, external_reference, skipped_reason, created_at, updated_at")
+    .select("id, generation, replacement_of_dispatch_id, status, kind, attempt_count, next_attempt_at, last_attempt_at, post_started_at, completed_at, error_code, error_message, external_reference, skipped_reason, created_at, updated_at")
     .eq("surat_id", suratId)
     .eq("environment", marisonDeploymentEnvironment)
+    .order("generation", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (jobError) throw jobError;
@@ -4295,7 +4297,7 @@ const listMarisonOutboundDispatches = async (req, url) => {
   let query = supabase
     .from("marison_outbound_dispatches")
     .select(`
-      id, surat_id, environment, kind, status, attempt_count, next_attempt_at, last_attempt_at,
+      id, surat_id, environment, generation, replacement_of_dispatch_id, kind, status, attempt_count, next_attempt_at, last_attempt_at,
       post_started_at, completed_at, external_reference, error_code, error_message, skipped_reason,
       reconciliation_count, created_at, updated_at,
       surat_registrasi!inner(no_surat, judul_surat)
@@ -4319,6 +4321,8 @@ const listMarisonOutboundDispatches = async (req, url) => {
       noSurat: row.surat_registrasi?.no_surat || "-",
       title: row.surat_registrasi?.judul_surat || "-",
       environment: row.environment,
+      generation: row.generation,
+      replacementOfDispatchId: row.replacement_of_dispatch_id,
       kind: row.kind,
       status: row.status,
       attemptCount: row.attempt_count,
@@ -4430,7 +4434,22 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
     p_actor_id: actor.id,
     p_reason: reason,
   });
-  if (error) throw error;
+  if (error) {
+    const mapped = new Error(
+      error.code === "40001" || error.code === "23505"
+        ? "Job pengganti sudah dibuat atau ada pengiriman aktif untuk surat ini. Muat ulang antrean."
+        : error.code === "P0002"
+          ? "Job outbound tidak ditemukan."
+          : error.code === "55000"
+            ? "Job ini tidak memenuhi syarat pengiriman pengganti HTTP 422."
+            : "Pengiriman pengganti gagal dibuat."
+    );
+    mapped.status = error.code === "P0002" ? 404
+      : error.code === "42501" ? 403
+        : ["40001", "23505", "55000"].includes(error.code) ? 409
+          : 500;
+    throw mapped;
+  }
   return { replacementId: data };
 };
 

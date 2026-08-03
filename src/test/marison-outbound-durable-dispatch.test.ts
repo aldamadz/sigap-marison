@@ -82,17 +82,24 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
   });
 
-  it("keeps HTTP 422 replacements separate, audited, and single-active", () => {
+  it("keeps HTTP 422 replacements generation-aware, deterministic, and single-child", () => {
     const migration = read("supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql");
     const server = read("backend/src/domain-runtime.ts");
     expect(migration).toContain("replacement_of_dispatch_id");
+    expect(migration).toContain("generation integer not null default 1");
+    expect(migration).toContain("marison_outbound_dispatch_generation_idx");
+    expect(migration).toContain("marison_outbound_single_replacement_idx");
     expect(migration).toContain("marison_outbound_one_active_job_idx");
     expect(migration).toContain("marison_outbound_replacement_events");
-    expect(migration).toContain("Only staging HTTP 422 dispatches can be replaced");
-    expect(migration).toContain("Active replacement already exists");
+    expect(migration).toContain("Only confirmed staging HTTP 422 dispatches can be replaced");
+    expect(migration).toContain("Replacement already exists");
+    expect(migration).toContain("v_old.post_started_at is null");
+    expect(migration).toContain("format('sigap:staging:%s:%s:g%s'");
     expect(migration).toContain("pg_advisory_xact_lock");
+    expect(migration).not.toContain("gen_random_uuid()), 'pending'");
     expect(server).toContain("createMarisonOutboundReplacement");
     expect(server).toContain("Replacement outbound hanya tersedia di staging.");
+    expect(server).toContain('.order("generation", { ascending: false })');
   });
 
   it("protects the internal build route with a minimum-length constant-time token", () => {

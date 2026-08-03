@@ -95,6 +95,18 @@ export function MarisonOutboundQueuePanel() {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Rekonsiliasi gagal"),
   });
+  const replacementMutation = useMutation({
+    mutationFn: async () => {
+      if (!replacement || !replacementReason.trim()) throw new Error("Alasan pengiriman pengganti wajib diisi.");
+      return marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
+    },
+    onSuccess: async () => {
+      setReplacement(null);
+      setReplacementReason("");
+      await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
+      toast.success("Pengiriman pengganti masuk ke antrean");
+    },
+  });
 
   const totalPages = Math.max(1, Math.ceil((dispatches.data?.total || 0) / 20));
   useEffect(() => {
@@ -146,18 +158,6 @@ export function MarisonOutboundQueuePanel() {
     setRecoveryState("idle");
     setReason("");
   };
-  const submitReplacement = async () => {
-    if (!replacement || !replacementReason.trim()) return;
-    try {
-      await marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
-      setReplacement(null);
-      setReplacementReason("");
-      await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
-      toast.success("Pengiriman pengganti dibuat");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Pengiriman pengganti gagal dibuat");
-    }
-  };
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
     && (action !== "reopen_confirmed_not_received" || riskConfirmed);
@@ -172,7 +172,7 @@ export function MarisonOutboundQueuePanel() {
               Antrean Outbound Marison
             </CardTitle>
             <CardDescription className="mt-2">
-              Satu job per surat dan environment. Hasil yang tidak pasti tidak dikirim ulang otomatis.
+              Setiap pengiriman tercatat sebagai generasi terpisah. Hasil yang tidak pasti tidak dikirim ulang otomatis.
             </CardDescription>
             <Badge
               variant={environmentStatus.outbound?.ready ? "outline" : "destructive"}
@@ -238,6 +238,7 @@ export function MarisonOutboundQueuePanel() {
                           <p className="font-medium text-foreground">{row.noSurat}</p>
                           <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.title}</p>
                           <p className="mt-2 text-xs text-muted-foreground">Dibuat {formatDateTime(row.createdAt)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Generasi {row.generation}</p>
                         </TableCell>
                         <TableCell className="min-w-44 align-top">
                           <Badge variant="outline" className={cn("whitespace-nowrap", statusTone[row.status])}>
@@ -276,7 +277,17 @@ export function MarisonOutboundQueuePanel() {
                             </div>
                           )}
                            {row.status === "failed_terminal" && row.errorCode?.startsWith("marison_http_422") && (
-                             <Button size="sm" variant="destructive" onClick={() => { setReplacement(row); setReplacementReason(""); }}>Buat pengiriman pengganti</Button>
+                             <Button
+                               size="sm"
+                               variant="destructive"
+                               onClick={() => {
+                                 replacementMutation.reset();
+                                 setReplacement(row);
+                                 setReplacementReason("");
+                               }}
+                             >
+                               Buat pengiriman pengganti
+                             </Button>
                            )}
                            {row.status === "failed_terminal" && !row.postStartedAt && !row.errorCode?.startsWith("marison_http_422") && (
                             <Button size="sm" variant="outline" onClick={() => void openRecovery(row)} disabled={preflightId === row.id}>
@@ -361,11 +372,59 @@ export function MarisonOutboundQueuePanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={replacement !== null} onOpenChange={(open) => !open && setReplacement(null)}>
+      <Dialog
+        open={replacement !== null}
+        onOpenChange={(open) => {
+          if (!open && !replacementMutation.isPending) {
+            setReplacement(null);
+            setReplacementReason("");
+            replacementMutation.reset();
+          }
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Buat pengiriman pengganti</DialogTitle><DialogDescription>Job lama tetap immutable. Pengiriman pengganti membuat idempotency key dan audit baru.</DialogDescription></DialogHeader>
-          <div className="space-y-2 py-2"><Label htmlFor="replacement-reason">Alasan</Label><Textarea id="replacement-reason" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value)} rows={4} maxLength={2000} /></div>
-          <DialogFooter><Button variant="outline" onClick={() => setReplacement(null)}>Batal</Button><Button onClick={() => void submitReplacement()} disabled={!replacementReason.trim()}>Buat pengiriman pengganti</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Buat pengiriman pengganti</DialogTitle>
+            <DialogDescription>
+              Gunakan setelah data penyebab penolakan HTTP 422 diperbaiki. Riwayat pengiriman lama tetap tersimpan.
+            </DialogDescription>
+          </DialogHeader>
+          {replacement && (
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <p className="font-medium text-foreground">{replacement.noSurat}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Generasi {replacement.generation} akan digantikan oleh generasi baru.</p>
+            </div>
+          )}
+          <div className="space-y-2 py-2">
+            <Label htmlFor="replacement-reason">Alasan dan perbaikan yang dilakukan</Label>
+            <Textarea
+              id="replacement-reason"
+              value={replacementReason}
+              onChange={(event) => {
+                replacementMutation.reset();
+                setReplacementReason(event.target.value);
+              }}
+              placeholder="Contoh: Mapping proyek diperbaiki sesuai data external."
+              rows={4}
+              maxLength={2000}
+              disabled={replacementMutation.isPending}
+            />
+            {replacementMutation.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                {replacementMutation.error instanceof Error ? replacementMutation.error.message : "Pengiriman pengganti gagal dibuat."}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplacement(null)} disabled={replacementMutation.isPending}>Batal</Button>
+            <Button
+              onClick={() => replacementMutation.mutate()}
+              disabled={!replacementReason.trim() || replacementMutation.isPending}
+            >
+              {replacementMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Buat pengiriman pengganti
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
