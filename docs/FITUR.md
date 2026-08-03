@@ -900,6 +900,7 @@ Fallback data lama:
 - `npm run dev` membaca `.env.local`, menjalankan Vite pada port `8080` dan BFF lokal pada port `3010`, serta tetap memakai Supabase dan datasource Marison staging.
 - Request `/api` dari Vite diproxy ke BFF lokal tanpa mengubah Host header agar validasi same-origin dan cookie HttpOnly bekerja sama seperti deployment.
 - Environment Marison dikunci melalui `MARISON_DEPLOYMENT_ENVIRONMENT` pada Docker Compose dan tidak dapat diganti dari UI atau nilai database.
+- Docker runtime wajib menyalin setiap modul lokal yang diimpor backend/worker; regression test packaging menjaga image tidak lolos build tetapi gagal saat container dimulai.
 - Halaman `Konfigurasi > Integration` menampilkan status endpoint aktif, tes koneksi, pemeriksaan data, dan sinkronisasi manual master Marison untuk admin.
 - Antrean Outbound Marison berada pada halaman Integration. Kegagalan sebelum POST dapat dibangun ulang pada job yang sama setelah preflight, sedangkan penolakan pasti HTTP 422 menggunakan job pengganti bergenerasi dengan alasan audit dan perlindungan klik ganda.
 - Khusus staging, admin dapat memeriksa lalu menyinkronkan data `/branches` dan `/employees` dari halaman Integration tanpa mengirim credential external ke browser.

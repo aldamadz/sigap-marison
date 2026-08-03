@@ -62,6 +62,7 @@ COPY production-code.mjs ./production-code.mjs
 COPY storage-path-policy.mjs ./storage-path-policy.mjs
 COPY server/marison-outbound-contract.mjs ./server/marison-outbound-contract.mjs
 COPY server/marison-outbound-identity.mjs ./server/marison-outbound-identity.mjs
+COPY server/marison-branch-resolution.mjs ./server/marison-branch-resolution.mjs
 COPY server/marison-payload-identity.mjs ./server/marison-payload-identity.mjs
 COPY server/marison-payload-mapping-handler.mjs ./server/marison-payload-mapping-handler.mjs
 COPY server/marison-payload-mapping-request.mjs ./server/marison-payload-mapping-request.mjs
