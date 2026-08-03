@@ -83,6 +83,8 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("NOT_PRE_POST_FAILURE");
     expect(server).toContain("Job outbound tidak ditemukan.");
     expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
+    expect(server).toContain("return sendJson(res, 200, {\n          eligible: preflight.eligible");
+    expect(server).toContain('return sendJson(res, 404, { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Surat tidak ditemukan." });');
   });
 
   it("keeps HTTP 422 replacements generation-aware, deterministic, and single-child", () => {

@@ -5032,9 +5032,16 @@ export const handleRequest = async (req, res) => {
           .eq("id", job.surat_id)
           .maybeSingle();
         if (suratError) throw suratError;
-        if (!surat) return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Surat tidak ditemukan." };
+        if (!surat) {
+          return sendJson(res, 404, { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Surat tidak ditemukan." });
+        }
         const preflight = await preflightMarisonOutboundRecovery(job, surat);
-        return { eligible: preflight.eligible, reasonCode: preflight.reasonCode, reason: preflight.reason, blockedStage: preflight.blockedStage };
+        return sendJson(res, 200, {
+          eligible: preflight.eligible,
+          reasonCode: preflight.reasonCode,
+          reason: preflight.reason,
+          blockedStage: preflight.blockedStage,
+        });
       }
 
       const marisonBuildMatch = url.pathname.match(/^\/api\/internal\/marison\/outbound\/([0-9a-f-]+)\/build$/i);

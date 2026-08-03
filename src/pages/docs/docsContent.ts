@@ -3025,7 +3025,7 @@ export const DOCS_CHANGELOG = [
       "Menambahkan generasi job, idempotency key deterministik, audit append-only, dan perlindungan pengiriman pengganti ganda.",
       "Menampilkan nomor generasi, status penyimpanan, dan pesan konflik operasional pada panel antrean admin.",
       "Menambahkan regression test packaging agar seluruh modul resolver Marison tersedia saat container staging dimulai.",
-      "Memperbaiki error runtime pada Bangun Ulang dan Coba Lagi dengan memastikan helper eligibility recovery tersedia pada handler backend.",
+      "Memperbaiki error dan loading tanpa akhir pada Bangun Ulang dan Coba Lagi dengan memastikan helper eligibility serta respons preflight tersedia pada handler backend.",
       "Menerapkan migration dan aplikasi MRN-17 di staging serta memverifikasi antrean lama tetap utuh tanpa business POST.",
     ],
   },
