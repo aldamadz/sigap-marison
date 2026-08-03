@@ -47,6 +47,7 @@ const formatDateTime = (value: string | null) => value
   : "-";
 
 type ReconciliationAction = "mark_succeeded" | "reopen_confirmed_not_received" | "reopen_terminal_pre_post";
+type RecoveryState = "idle" | "checking" | "eligible" | "blocked" | "failed";
 
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
@@ -61,6 +62,7 @@ export function MarisonOutboundQueuePanel() {
   const [preflightId, setPreflightId] = useState<string | null>(null);
   const [preflightReason, setPreflightReason] = useState<string | null>(null);
   const [preflightReasonCode, setPreflightReasonCode] = useState<string | null>(null);
+  const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -106,22 +108,28 @@ export function MarisonOutboundQueuePanel() {
     setRiskConfirmed(false);
     setPreflightReason(null);
     setPreflightReasonCode(null);
+    setRecoveryState("idle");
   };
   const openRecovery = async (row: MarisonDispatchRow) => {
     openReconciliation(row, "reopen_terminal_pre_post");
     setPreflightId(row.id);
+    setRecoveryState("checking");
     try {
       const result = await marisonIntegrationService.preflightDispatch(row.id);
       if (!result.eligible) {
         setPreflightReason(result.reason || "Job belum memenuhi syarat recovery.");
         setPreflightReasonCode(result.reasonCode || "NOT_PRE_POST_FAILURE");
+        setRecoveryState("blocked");
         toast.error(result.reason || "Job belum memenuhi syarat recovery.");
         return;
       }
       setPreflightReason(null);
       setPreflightReasonCode(null);
-      openReconciliation(row, "reopen_terminal_pre_post");
+      setRecoveryState("eligible");
     } catch (error) {
+      setPreflightReason("Preflight recovery gagal. Coba lagi atau tutup dialog.");
+      setPreflightReasonCode("PREFLIGHT_FAILED");
+      setRecoveryState("failed");
       toast.error(error instanceof Error ? error.message : "Preflight recovery gagal.");
     } finally {
       setPreflightId(null);
@@ -132,6 +140,7 @@ export function MarisonOutboundQueuePanel() {
     setPreflightId(null);
     setPreflightReason(null);
     setPreflightReasonCode(null);
+    setRecoveryState("idle");
     setReason("");
   };
   const canSubmit = reason.trim().length > 0
@@ -304,17 +313,17 @@ export function MarisonOutboundQueuePanel() {
                 )}
               </div>
             )}
-            {!preflightId && !preflightReason && action === "mark_succeeded" && (
+            {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && action === "mark_succeeded" && (
               <div className="space-y-2">
                 <Label htmlFor="marison-external-reference">Referensi eksternal</Label>
                 <Input id="marison-external-reference" value={externalReference} onChange={(event) => setExternalReference(event.target.value)} maxLength={200} />
               </div>
             )}
-            {!preflightId && !preflightReason && <div className="space-y-2">
+            {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && <div className="space-y-2">
               <Label htmlFor="marison-reconciliation-reason">Alasan dan bukti pemeriksaan</Label>
               <Textarea id="marison-reconciliation-reason" value={reason} onChange={(event) => setReason(event.target.value)} rows={4} maxLength={2000} />
             </div>}
-            {!preflightId && !preflightReason && action === "reopen_confirmed_not_received" && (
+            {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && action === "reopen_confirmed_not_received" && (
               <label className="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-5">
                 <Checkbox checked={riskConfirmed} onCheckedChange={(checked) => setRiskConfirmed(checked === true)} />
                 <span>Saya sudah memastikan request sebelumnya tidak diterima vendor dan memahami risiko data ganda.</span>
@@ -326,7 +335,7 @@ export function MarisonOutboundQueuePanel() {
             <Button
               variant={action === "mark_succeeded" ? "default" : "destructive"}
               onClick={() => reconciliation.mutate()}
-              disabled={Boolean(preflightId || preflightReason) || !canSubmit || reconciliation.isPending}
+              disabled={(action === "reopen_terminal_pre_post" && recoveryState !== "eligible") || !canSubmit || reconciliation.isPending}
             >
               {reconciliation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan Rekonsiliasi

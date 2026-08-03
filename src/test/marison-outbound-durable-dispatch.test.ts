@@ -78,6 +78,8 @@ describe("durable Marison outbound dispatch", () => {
     expect(routes).toContain('GET", url: "/api/integrations/marison/dispatches/:dispatchId/preflight');
     expect(server).toContain("preflightMarisonOutboundRecovery");
     expect(server).toContain("NOT_PRE_POST_FAILURE");
+    expect(server).toContain("Job outbound tidak ditemukan.");
+    expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
   });
 
   it("protects the internal build route with a minimum-length constant-time token", () => {

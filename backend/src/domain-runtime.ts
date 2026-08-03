@@ -4330,6 +4330,11 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
   if (action === "reopen_terminal_pre_post") {
     const { data: job, error: jobError } = await supabase.from("marison_outbound_dispatches").select("id, surat_id, environment, status, kind, post_started_at, response, external_reference").eq("id", dispatchId).maybeSingle();
     if (jobError) throw jobError;
+    if (!job) {
+      const err = new Error("Job outbound tidak ditemukan.");
+      err.status = 404;
+      throw err;
+    }
     const { data: surat, error: suratError } = await supabase.from("surat_registrasi").select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))").eq("id", job?.surat_id).maybeSingle();
     if (suratError) throw suratError;
     const preflight = await preflightMarisonOutboundRecovery(job, surat);
@@ -4918,13 +4923,16 @@ export const handleRequest = async (req, res) => {
           .eq("id", marisonPreflightMatch[1])
           .maybeSingle();
         if (jobError) throw jobError;
+        if (!job) {
+          return sendJson(res, 404, { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job outbound tidak ditemukan." });
+        }
         const { data: surat, error: suratError } = await supabase
           .from("surat_registrasi")
           .select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))")
           .eq("id", job.surat_id)
           .maybeSingle();
         if (suratError) throw suratError;
-        if (!surat) return { eligible: false, reason: "Surat tidak ditemukan." };
+        if (!surat) return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Surat tidak ditemukan." };
         const preflight = await preflightMarisonOutboundRecovery(job, surat);
         return { eligible: preflight.eligible, reasonCode: preflight.reasonCode, reason: preflight.reason, blockedStage: preflight.blockedStage };
       }

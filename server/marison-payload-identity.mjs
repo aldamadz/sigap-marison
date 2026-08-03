@@ -53,6 +53,9 @@ export const normalizePayloadResolutionSources = (sources, { kind, approvalCount
 
 export const isPrePostRecoveryEligible = (job, environment) => Boolean(
   environment === 'staging'
+  && job?.environment === 'staging'
+  && job?.environment === environment
+  && job
   && job?.status === 'failed_terminal'
   && !job?.post_started_at
   && !job?.response

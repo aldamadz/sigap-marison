@@ -26,9 +26,11 @@ describe("MRN-16 canonical resolution sources", () => {
   });
 
   it("allows only failed pre-POST staging jobs to recover", () => {
-    const base = { status: "failed_terminal", post_started_at: null, response: null, external_reference: null };
+    const base = { environment: "staging", status: "failed_terminal", post_started_at: null, response: null, external_reference: null };
     expect(isPrePostRecoveryEligible(base, "staging")).toBe(true);
+    expect(isPrePostRecoveryEligible({ ...base, environment: "production" }, "staging")).toBe(false);
     expect(isPrePostRecoveryEligible({ ...base, post_started_at: "2026-08-03T00:00:00Z" }, "staging")).toBe(false);
     expect(isPrePostRecoveryEligible(base, "production")).toBe(false);
+    expect(isPrePostRecoveryEligible(null, "staging")).toBe(false);
   });
 });
