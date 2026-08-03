@@ -7,6 +7,7 @@ import {
 } from '../../server/marison-payload-mapping-request.mjs';
 import { executeMarisonPayloadMappingCommand } from '../../server/marison-payload-mapping-handler.mjs';
 import { matchesMarisonPayloadMappingFilter } from '@/lib/marison-payload-mapping';
+import { resolveMarisonEffectiveProjectBranch } from '../../server/marison-branch-resolution.mjs';
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
@@ -54,15 +55,51 @@ describe('MRN-16 staging payload mappings', () => {
     expect(read('supabase/migrations/20260731170000_mrn16_external_identity_readiness.sql')).toContain('marison_payload_effective_branch_id');
   });
 
-  it('resolves Unit and Non Unit branch from effective project while keeping Asset office-based', () => {
-    const backend = read('backend/src/domain-runtime.ts');
-    const resolver = backend.slice(backend.indexOf('const getMarisonOutboundMappings'), backend.indexOf('const isValidSourceBranchId'));
-    expect(resolver).toContain('const getMarisonOutboundMappings = async (surat = null, kind = "asset")');
-    expect(resolver).toContain('kind !== "asset" && sourceProjectId !== null');
-    expect(resolver).toContain('const projectBranchId = sourceProject.data?.master_offices?.marison_branch_id');
-    expect(resolver).toContain('const sourceBranchId = kind === "asset" ? await resolveMarisonBranchId(surat) : projectBranchId');
-    expect(backend).toContain('getMarisonOutboundMappings(surat, job.kind)');
-    expect(backend).toContain('getMarisonOutboundMappings(surat, job.kind);');
+  it.each([
+    ['048', 'unit', 13, 8],
+    ['046', 'non_unit', 20, 11],
+    ['047', 'non_unit', 12, 1],
+  ])('resolves surat %s from effective project, not requester office', (_surat, kind, projectId, branchId) => {
+    expect(resolveMarisonEffectiveProjectBranch({
+      kind,
+      officeBranchId: 1,
+      sourceProject: { marison_project_id: projectId, master_offices: { marison_branch_id: branchId } },
+    })).toEqual({ projectId, branchId, branchSource: 'external_source' });
+  });
+
+  it('uses mapped target project and its matching target branch', () => {
+    expect(resolveMarisonEffectiveProjectBranch({
+      kind: 'unit',
+      officeBranchId: 1,
+      sourceProject: { marison_project_id: 13, master_offices: { marison_branch_id: 8 } },
+      mappedProject: { marison_project_id: 20, master_offices: { marison_branch_id: 11 } },
+    })).toEqual({ projectId: 20, branchId: 11, branchSource: 'staging_mapping' });
+  });
+
+  it('keeps Asset branch based on application office', () => {
+    expect(resolveMarisonEffectiveProjectBranch({
+      kind: 'asset',
+      officeBranchId: 1,
+      sourceProject: { marison_project_id: 20, master_offices: { marison_branch_id: 11 } },
+    })).toEqual({ projectId: null, branchId: 1, branchSource: 'office' });
+  });
+
+  it('rejects invalid project or branch before POST', () => {
+    const post = vi.fn();
+    expect(() => resolveMarisonEffectiveProjectBranch({
+      kind: 'unit',
+      officeBranchId: 1,
+      sourceProject: { marison_project_id: 'invalid', master_offices: { marison_branch_id: 0 } },
+    })).toThrow('Effective project dan branch outbound tidak tervalidasi.');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('resolves project from master data when snapshot omits external project ID', () => {
+    expect(resolveMarisonEffectiveProjectBranch({
+      kind: 'non_unit',
+      officeBranchId: 1,
+      sourceProject: { marison_project_id: 12, master_offices: { marison_branch_id: 1 } },
+    })).toEqual({ projectId: 12, branchId: 1, branchSource: 'external_source' });
   });
 
   it('records per-signer resolution sources in immutable prepared metadata', () => {

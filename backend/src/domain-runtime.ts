@@ -35,6 +35,7 @@ import {
   normalizePayloadResolutionSources,
   resolveProfilePayloadIdentity,
 } from "../../server/marison-payload-identity.mjs";
+import { resolveMarisonEffectiveProjectBranch } from "../../server/marison-branch-resolution.mjs";
 import { executeMarisonPayloadMappingCommand } from "../../server/marison-payload-mapping-handler.mjs";
 import {
   parseMarisonPayloadCatalogQuery,
@@ -3495,16 +3496,26 @@ const getMarisonOutboundMappings = async (surat = null, kind = "asset") => {
    const [officeTarget, projectTarget, sourceProject] = await Promise.all([
      officeMapping.target_record_id ? supabase.from("master_offices").select("marison_branch_id, marison_synced_at").eq("id", officeMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
      projectMapping.target_record_id ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, office_id, master_offices!inner(marison_branch_id, marison_synced_at)").eq("id", projectMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-     kind !== "asset" && sourceProjectId !== null ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, master_offices!inner(marison_branch_id, marison_synced_at)").eq("marison_project_id", sourceProjectId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+     kind !== "asset" && (sourceProjectId !== null || recordProjectId)
+       ? (() => {
+         const query = supabase.from("master_projects").select("marison_project_id, marison_synced_at, master_offices!inner(marison_branch_id, marison_synced_at)");
+         return (sourceProjectId !== null ? query.eq("marison_project_id", sourceProjectId) : query.eq("id", recordProjectId)).maybeSingle();
+       })()
+       : Promise.resolve({ data: null, error: null }),
    ]);
    for (const result of [officeTarget, projectTarget, sourceProject]) if (result.error) throw result.error;
     const officeBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at ? officeTarget.data.marison_branch_id : null;
     const projectBranchId = sourceProject.data?.master_offices?.marison_branch_id && sourceProject.data?.master_offices?.marison_synced_at ? sourceProject.data.master_offices.marison_branch_id : null;
     const mappedBranchId = projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.master_offices.marison_branch_id : null;
     const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
-   const sourceBranchId = kind === "asset" ? await resolveMarisonBranchId(surat) : projectBranchId;
-   const effectiveBranchId = parseExternalInteger((kind === "asset" ? officeBranchId : mappedBranchId) ?? (await isValidSourceBranchId(sourceBranchId) ? sourceBranchId : null));
-  const effectiveProjectId = parseExternalInteger(mappedProjectId ?? (await isValidSourceProjectId(sourceProjectId) ? sourceProjectId : null));
+   const effectiveProjectBranch = resolveMarisonEffectiveProjectBranch({
+     kind,
+     officeBranchId: kind === "asset" ? await resolveMarisonBranchId(surat) : officeBranchId,
+     sourceProject: sourceProject.data,
+     mappedProject: projectTarget.data && mappedProjectId ? projectTarget.data : null,
+   });
+   const effectiveBranchId = parseExternalInteger(effectiveProjectBranch.branchId);
+   const effectiveProjectId = parseExternalInteger(effectiveProjectBranch.projectId ?? (await isValidSourceProjectId(sourceProjectId) ? sourceProjectId : null));
   if (effectiveBranchId !== null) {
     const { data: effectiveOffice, error: effectiveOfficeError } = await supabase
       .from("master_offices")
@@ -3531,7 +3542,7 @@ const getMarisonOutboundMappings = async (surat = null, kind = "asset") => {
     branchId: effectiveBranchId,
     projectId: effectiveProjectId,
     sources: {
-       branchId: (kind === "asset" ? officeBranchId : mappedBranchId) ? "staging_mapping" : effectiveBranchId !== null ? "external_source" : "unavailable",
+       branchId: kind === "asset" ? "external_source" : effectiveProjectBranch.branchSource,
        projectId: mappedProjectId ? "staging_mapping" : effectiveProjectId !== null ? "external_source" : "unavailable",
     },
   };
