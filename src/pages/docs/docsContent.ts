@@ -3024,6 +3024,7 @@ export const DOCS_CHANGELOG = [
       "Membedakan recovery kegagalan sebelum POST dengan pengiriman pengganti setelah penolakan HTTP 422.",
       "Menambahkan generasi job, idempotency key deterministik, audit append-only, dan perlindungan pengiriman pengganti ganda.",
       "Menampilkan nomor generasi, status penyimpanan, dan pesan konflik operasional pada panel antrean admin.",
+      "Menambahkan regression test packaging agar seluruh modul resolver Marison tersedia saat container staging dimulai.",
     ],
   },
   {
