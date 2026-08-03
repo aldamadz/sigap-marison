@@ -86,6 +86,9 @@ describe("Marison outbound recovery dialog", () => {
     });
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    expect(screen.getByText(/yang perlu diperiksa/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /proyek dan branch external/i })).toHaveAttribute("href", "/admin/master-projects");
+    expect(screen.getByRole("link", { name: /identitas external pemohon/i })).toHaveAttribute("href", "/admin/users");
     fireEvent.change(screen.getByLabelText(/alasan dan perbaikan/i), { target: { value: "Mapping proyek diperbaiki." } });
     const submit = screen.getByRole("button", { name: /^buat pengiriman pengganti$/i });
     fireEvent.click(submit);

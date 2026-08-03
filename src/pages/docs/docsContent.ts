@@ -3027,6 +3027,8 @@ export const DOCS_CHANGELOG = [
       "Menambahkan regression test packaging agar seluruh modul resolver Marison tersedia saat container staging dimulai.",
       "Memperbaiki error dan loading tanpa akhir pada Bangun Ulang dan Coba Lagi dengan memastikan helper eligibility serta respons preflight tersedia pada handler backend.",
       "Menampilkan konfigurasi yang perlu diperbaiki beserta tautan langsung ke User Organization, Master Kantor Cabang, atau Master Proyek pada diagnosis recovery.",
+      "Menjelaskan data yang perlu diperiksa sebelum membuat pengiriman pengganti HTTP 422, tanpa menyebut semua penolakan vendor sebagai kesalahan konfigurasi.",
+      "Memperbaiki validasi resolution source projectId pada Unit dan Non Unit agar PostgreSQL tidak menafsirkannya sebagai array literal.",
       "Menerapkan migration dan aplikasi MRN-17 di staging serta memverifikasi antrean lama tetap utuh tanpa business POST.",
     ],
   },
