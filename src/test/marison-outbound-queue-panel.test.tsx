@@ -42,8 +42,17 @@ describe("Marison outbound recovery dialog", () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /bangun ulang/i }));
     expect(await screen.findByText(/signer tahap 1/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /buka master user/i })).toHaveAttribute("href", "/admin/users");
+    expect(screen.getByText(/mapping penandatangan belum lengkap/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /buka user organization/i })).toHaveAttribute("href", "/admin/users");
     expect(screen.queryByLabelText(/alasan dan bukti/i)).not.toBeInTheDocument();
+  });
+
+  it("points a project and branch mismatch to Master Proyek", async () => {
+    vi.mocked(marisonIntegrationService.preflightDispatch).mockResolvedValue({ eligible: false, reasonCode: "PROJECT_BRANCH_MISMATCH", reason: "Project ID external terhubung ke Branch ID external yang berbeda." });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /bangun ulang/i }));
+    expect(await screen.findByText(/relasi proyek dan kantor tidak cocok/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /buka master proyek/i })).toHaveAttribute("href", "/admin/master-projects");
   });
 
   it("shows recovery form only after eligible preflight and closes cleanly", async () => {
@@ -51,6 +60,7 @@ describe("Marison outbound recovery dialog", () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /bangun ulang/i }));
     expect(await screen.findByLabelText(/alasan dan bukti/i)).toBeInTheDocument();
+    expect(screen.getByText(/konfigurasi payload siap/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /tutup/i }));
     await waitFor(() => expect(screen.queryByLabelText(/alasan dan bukti/i)).not.toBeInTheDocument());
     expect(marisonIntegrationService.preflightDispatch).toHaveBeenCalledTimes(1);

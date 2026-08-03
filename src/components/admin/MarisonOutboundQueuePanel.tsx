@@ -50,6 +50,47 @@ const formatDateTime = (value: string | null) => value
 type ReconciliationAction = "mark_succeeded" | "reopen_confirmed_not_received" | "reopen_terminal_pre_post";
 type RecoveryState = "idle" | "checking" | "eligible" | "blocked" | "failed";
 
+const recoveryGuidance: Record<string, { title: string; nextStep: string; href?: string; linkLabel?: string }> = {
+  SIGNER_IDENTITY_MISSING: {
+    title: "Mapping penandatangan belum lengkap",
+    nextStep: "Lengkapi Identitas External atau Mapping Payload Staging milik penandatangan yang disebutkan.",
+    href: "/admin/users",
+    linkLabel: "Buka User Organization",
+  },
+  REQUESTER_IDENTITY_MISSING: {
+    title: "Mapping pemohon belum lengkap",
+    nextStep: "Lengkapi Identitas External atau Mapping Payload Staging milik pemohon.",
+    href: "/admin/users",
+    linkLabel: "Buka User Organization",
+  },
+  BRANCH_IDENTITY_MISSING: {
+    title: "Identitas external kantor belum lengkap",
+    nextStep: "Lengkapi Branch ID external atau Mapping Payload Staging pada kantor terkait.",
+    href: "/admin/offices",
+    linkLabel: "Buka Master Kantor Cabang",
+  },
+  PROJECT_IDENTITY_MISSING: {
+    title: "Identitas external proyek belum lengkap",
+    nextStep: "Lengkapi Project ID external dan pastikan kantor pemilik proyek sudah tersinkron.",
+    href: "/admin/master-projects",
+    linkLabel: "Buka Master Proyek",
+  },
+  PROJECT_BRANCH_MISMATCH: {
+    title: "Relasi proyek dan kantor tidak cocok",
+    nextStep: "Pasangkan proyek ke project external yang berada pada branch kantor proyek yang benar.",
+    href: "/admin/master-projects",
+    linkLabel: "Buka Master Proyek",
+  },
+  NOT_PRE_POST_FAILURE: {
+    title: "Job tidak dapat dibangun ulang",
+    nextStep: "Periksa status job dan riwayat pengiriman sebelum melanjutkan.",
+  },
+  PREFLIGHT_FAILED: {
+    title: "Pemeriksaan otomatis gagal",
+    nextStep: "Muat ulang antrean dan jalankan pemeriksaan kembali.",
+  },
+};
+
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
   const queryClient = useQueryClient();
@@ -161,6 +202,16 @@ export function MarisonOutboundQueuePanel() {
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
     && (action !== "reopen_confirmed_not_received" || riskConfirmed);
+  const activeRecoveryGuidance = preflightReasonCode ? recoveryGuidance[preflightReasonCode] : null;
+  const recoveryDialogDescription = recoveryState === "checking"
+    ? "Sistem sedang memeriksa identitas external, mapping payload, dan status POST job."
+    : recoveryState === "eligible"
+      ? "Konfigurasi payload sudah lengkap dan job terbukti belum memulai POST."
+      : recoveryState === "blocked"
+        ? "Perbaikan data master diperlukan sebelum job dapat dibangun ulang."
+        : recoveryState === "failed"
+          ? "Pemeriksaan otomatis belum berhasil diselesaikan."
+          : "Sistem akan memeriksa konfigurasi yang diperlukan sebelum job dibangun ulang.";
 
   return (
     <>
@@ -322,7 +373,7 @@ export function MarisonOutboundQueuePanel() {
                 ? "Gunakan hanya setelah keberadaan pengajuan dipastikan pada sistem vendor."
                 : action === "reopen_confirmed_not_received"
                   ? "Gunakan hanya setelah vendor memastikan request sebelumnya tidak diterima."
-                  : "Gunakan setelah konfigurasi diperbaiki. Job ini terbukti belum memulai POST."}
+                  : recoveryDialogDescription}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -336,10 +387,21 @@ export function MarisonOutboundQueuePanel() {
             {preflightId && <div className="rounded-md border border-blue-300/60 bg-blue-50 px-3 py-3 text-sm">Memeriksa kelayakan recovery...</div>}
             {preflightReason && (
               <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-                <p>{preflightReason}</p>
-                {preflightReasonCode === "SIGNER_IDENTITY_MISSING" && (
-                  <Link className="mt-2 inline-block font-medium underline" to="/admin/users">Buka Master User</Link>
+                <p className="font-medium">{activeRecoveryGuidance?.title || "Konfigurasi belum siap"}</p>
+                <p className="mt-1">{preflightReason}</p>
+                {activeRecoveryGuidance?.nextStep && <p className="mt-1 text-xs opacity-80">{activeRecoveryGuidance.nextStep}</p>}
+                {activeRecoveryGuidance?.href && activeRecoveryGuidance.linkLabel && (
+                  <Link className="mt-2 inline-block font-medium underline" to={activeRecoveryGuidance.href}>{activeRecoveryGuidance.linkLabel}</Link>
                 )}
+              </div>
+            )}
+            {action === "reopen_terminal_pre_post" && recoveryState === "eligible" && (
+              <div className="flex items-start gap-2 rounded-md border border-emerald-300/60 bg-emerald-50 px-3 py-3 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-medium">Konfigurasi payload siap</p>
+                  <p className="mt-1 text-xs opacity-80">Isi alasan audit untuk membuka kembali job dan membangun payload terbaru.</p>
+                </div>
               </div>
             )}
             {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && action === "mark_succeeded" && (

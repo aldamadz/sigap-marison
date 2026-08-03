@@ -9,7 +9,10 @@ Status per 3 Agustus 2026: model generasi replacement dan panel antrean sudah
 diterapkan serta diuji di staging tanpa membuat replacement atau mengirim
 business POST. Hotfix runtime memastikan helper eligibility recovery ikut
 di-import dan hasil preflight selalu dikirim sebagai respons HTTP oleh handler;
-keduanya dilindungi regression test. Production belum disentuh.
+keduanya dilindungi regression test. Diagnosis preflight membedakan mapping
+pemohon/penandatangan, identitas kantor, identitas proyek, dan ketidaksesuaian
+project-branch agar admin diarahkan ke master data yang tepat. Production belum
+disentuh.
 
 ## Jaminan Utama
 

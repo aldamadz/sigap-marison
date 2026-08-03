@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyMarisonRecoveryIssue,
   isPrePostRecoveryEligible,
   normalizePayloadResolutionSources,
 } from "../../server/marison-payload-identity.mjs";
@@ -32,5 +33,15 @@ describe("MRN-16 canonical resolution sources", () => {
     expect(isPrePostRecoveryEligible({ ...base, post_started_at: "2026-08-03T00:00:00Z" }, "staging")).toBe(false);
     expect(isPrePostRecoveryEligible(base, "production")).toBe(false);
     expect(isPrePostRecoveryEligible(null, "staging")).toBe(false);
+  });
+
+  it.each([
+    ["Penandatangan tahap 2 belum memiliki mapping.", "SIGNER_IDENTITY_MISSING"],
+    ["Pemohon belum memiliki mapping.", "REQUESTER_IDENTITY_MISSING"],
+    ["Effective branch ID outbound tidak tervalidasi.", "BRANCH_IDENTITY_MISSING"],
+    ["Effective project ID outbound tidak tervalidasi.", "PROJECT_IDENTITY_MISSING"],
+    ["Effective project dan branch outbound tidak cocok.", "PROJECT_BRANCH_MISMATCH"],
+  ])("classifies recovery issue %s", (message, reasonCode) => {
+    expect(classifyMarisonRecoveryIssue(message)).toMatchObject({ reasonCode });
   });
 });
