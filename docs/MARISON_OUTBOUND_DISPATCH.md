@@ -7,7 +7,8 @@ eksplisit dan kejelasan mekanisme deduplikasi dari vendor.
 
 Status per 3 Agustus 2026: model generasi replacement dan panel antrean sudah
 diterapkan serta diuji di staging tanpa membuat replacement atau mengirim
-business POST. Production belum disentuh.
+business POST. Hotfix runtime memastikan helper eligibility recovery ikut
+di-import oleh handler dan dilindungi regression test. Production belum disentuh.
 
 ## Jaminan Utama
 

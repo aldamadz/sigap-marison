@@ -31,6 +31,7 @@ import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identit
 import {
   buildApprovalResolutionKey,
   getCanonicalRequesterProfileId,
+  isPrePostRecoveryEligible,
   mergePayloadResolutionSources,
   normalizePayloadResolutionSources,
   resolveProfilePayloadIdentity,

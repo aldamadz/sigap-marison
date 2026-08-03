@@ -75,7 +75,10 @@ describe("durable Marison outbound dispatch", () => {
   it("exposes staging recovery preflight separately from reconciliation", () => {
     const routes = read("backend/src/routes/domain.routes.ts");
     const server = read("backend/src/domain-runtime.ts");
+    const identityImports = [...server.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']\.\.\/\.\.\/server\/marison-payload-identity\.mjs["'];/g)]
+      .flatMap((match) => match[1].split(",").map((name) => name.trim()));
     expect(routes).toContain('GET", url: "/api/integrations/marison/dispatches/:dispatchId/preflight');
+    expect(identityImports).toContain("isPrePostRecoveryEligible");
     expect(server).toContain("preflightMarisonOutboundRecovery");
     expect(server).toContain("NOT_PRE_POST_FAILURE");
     expect(server).toContain("Job outbound tidak ditemukan.");
