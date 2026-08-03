@@ -1,0 +1,17 @@
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Payload validation failed.",
+    "fields": [
+      {
+        "path": "items.1.recommendation_action",
+        "message": "Expected one of: service, replace_component, buy_new."
+      },
+      {
+        "path": "attachments.0.link",
+        "message": "Must be an HTTPS file-gateway URL."
+      }
+    ]
+  }
+}

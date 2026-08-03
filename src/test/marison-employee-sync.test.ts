@@ -200,9 +200,8 @@ describe("Marison employee sync", () => {
     expect(server).toContain("const resolveMarisonBranchId = async");
     expect(server).not.toContain("supabaseAdmin");
     expect(server).toContain('.select("marison_branch_id, marison_synced_at")');
-    expect(server).toContain(
-      "await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot)"
-    );
+    expect(server).toContain("const resolveMarisonOfficeBranch = async");
+    expect(server).toContain('entity_type", "office"');
   });
 
   it("recovers an orphan Auth user and always supplies a required job title", () => {

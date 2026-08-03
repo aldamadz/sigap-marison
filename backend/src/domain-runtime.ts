@@ -35,6 +35,7 @@ import {
   normalizePayloadResolutionSources,
   resolveProfilePayloadIdentity,
 } from "../../server/marison-payload-identity.mjs";
+import { resolveMarisonEffectiveProjectBranch } from "../../server/marison-branch-resolution.mjs";
 import { executeMarisonPayloadMappingCommand } from "../../server/marison-payload-mapping-handler.mjs";
 import {
   parseMarisonPayloadCatalogQuery,
@@ -3461,6 +3462,41 @@ const resolveMarisonBranchId = async (surat, ...values) => {
   return target?.marison_branch_id > 0 && target?.marison_synced_at ? parseExternalInteger(target.marison_branch_id) : null;
 };
 
+const resolveMarisonOfficeBranch = async (surat) => {
+  const officeId = firstString(surat?.office_id, surat?.location_snapshot?.office?.id);
+  if (!officeId) return { branchId: null, source: "unavailable" };
+  if (marisonDeploymentEnvironment === "staging") {
+    const { data: mapping, error: mappingError } = await supabase
+      .from("marison_outbound_record_mappings")
+      .select("target_record_id")
+      .eq("environment", "staging")
+      .eq("entity_type", "office")
+      .eq("record_id", officeId)
+      .maybeSingle();
+    if (mappingError) throw mappingError;
+    if (mapping?.target_record_id) {
+      const { data: target, error: targetError } = await supabase
+        .from("master_offices")
+        .select("marison_branch_id, marison_synced_at")
+        .eq("id", mapping.target_record_id)
+        .maybeSingle();
+      if (targetError) throw targetError;
+      if (target?.marison_branch_id > 0 && target?.marison_synced_at) {
+        return { branchId: parseExternalInteger(target.marison_branch_id), source: "staging_mapping" };
+      }
+    }
+  }
+  const { data: office, error } = await supabase
+    .from("master_offices")
+    .select("marison_branch_id, marison_synced_at")
+    .eq("id", officeId)
+    .maybeSingle();
+  if (error) throw error;
+  return office?.marison_branch_id > 0 && office?.marison_synced_at
+    ? { branchId: parseExternalInteger(office.marison_branch_id), source: "external_source" }
+    : { branchId: null, source: "unavailable" };
+};
+
 const configureMarisonOutboundIdentityOverrides = async (req) => {
   const actor = await requireAdminUser(getBearerToken(req));
   const payload = await readJsonBody(req, 4096);
@@ -3476,10 +3512,11 @@ const configureMarisonOutboundIdentityOverrides = async (req) => {
   return { success: true, configuration: data, actorId: actor.id };
 };
 
-const getMarisonOutboundMappings = async (surat = null) => {
+const getMarisonOutboundMappings = async (surat = null, kind = "asset") => {
   const useStagingMappings = marisonDeploymentEnvironment === "staging";
   const officeId = firstString(surat?.office_id, surat?.location_snapshot?.office?.id);
   const recordProjectId = firstString(surat?.project_id, surat?.location_snapshot?.project?.id);
+  const sourceProjectId = externalIdFrom(getMarisonRequestedProject(surat, getMarisonDispatchInput(surat)));
   const recordQueries = [
     useStagingMappings && officeId ? supabase.from("marison_outbound_record_mappings").select("entity_type, record_id, target_record_id").eq("environment", "staging").eq("entity_type", "office").eq("record_id", officeId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     useStagingMappings && recordProjectId ? supabase.from("marison_outbound_record_mappings").select("entity_type, record_id, target_record_id").eq("environment", "staging").eq("entity_type", "project").eq("record_id", recordProjectId).maybeSingle() : Promise.resolve({ data: null, error: null }),
@@ -3491,17 +3528,31 @@ const getMarisonOutboundMappings = async (surat = null) => {
   });
   const officeMapping = recordOverrides[0] || {};
   const projectMapping = recordOverrides[1] || {};
-  const [officeTarget, projectTarget] = await Promise.all([
+   const [officeTarget, projectTarget, sourceProject] = await Promise.all([
      officeMapping.target_record_id ? supabase.from("master_offices").select("marison_branch_id, marison_synced_at").eq("id", officeMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
      projectMapping.target_record_id ? supabase.from("master_projects").select("marison_project_id, marison_synced_at, office_id, master_offices!inner(marison_branch_id, marison_synced_at)").eq("id", projectMapping.target_record_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-  ]);
-  for (const result of [officeTarget, projectTarget]) if (result.error) throw result.error;
-  const sourceBranchId = await resolveMarisonBranchId(surat);
-  const sourceProjectId = externalIdFrom(getMarisonRequestedProject(surat, getMarisonDispatchInput(surat)));
-   const mappedBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at ? officeTarget.data.marison_branch_id : null;
-   const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
-  const effectiveBranchId = parseExternalInteger(mappedBranchId ?? (await isValidSourceBranchId(sourceBranchId) ? sourceBranchId : null));
-  const effectiveProjectId = parseExternalInteger(mappedProjectId ?? (await isValidSourceProjectId(sourceProjectId) ? sourceProjectId : null));
+     kind !== "asset" && (sourceProjectId !== null || recordProjectId)
+       ? (() => {
+         const query = supabase.from("master_projects").select("marison_project_id, marison_synced_at, master_offices!inner(marison_branch_id, marison_synced_at)");
+         return (sourceProjectId !== null ? query.eq("marison_project_id", sourceProjectId) : query.eq("id", recordProjectId)).maybeSingle();
+       })()
+       : Promise.resolve({ data: null, error: null }),
+   ]);
+   for (const result of [officeTarget, projectTarget, sourceProject]) if (result.error) throw result.error;
+     const officeBranchId = officeTarget.data?.marison_branch_id && officeTarget.data?.marison_synced_at ? officeTarget.data.marison_branch_id : null;
+    const projectBranchId = sourceProject.data?.master_offices?.marison_branch_id && sourceProject.data?.master_offices?.marison_synced_at ? sourceProject.data.master_offices.marison_branch_id : null;
+    const mappedBranchId = projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.master_offices.marison_branch_id : null;
+    const mappedProjectId = projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
+    const officeResolution = kind === "asset" ? await resolveMarisonOfficeBranch(surat) : null;
+    const effectiveProjectBranch = resolveMarisonEffectiveProjectBranch({
+      kind,
+      officeBranchId: kind === "asset" ? officeResolution.branchId : officeBranchId,
+      officeSource: kind === "asset" ? officeResolution.source : null,
+     sourceProject: sourceProject.data,
+     mappedProject: projectTarget.data && mappedProjectId ? projectTarget.data : null,
+   });
+   const effectiveBranchId = parseExternalInteger(effectiveProjectBranch.branchId);
+   const effectiveProjectId = parseExternalInteger(effectiveProjectBranch.projectId ?? (await isValidSourceProjectId(sourceProjectId) ? sourceProjectId : null));
   if (effectiveBranchId !== null) {
     const { data: effectiveOffice, error: effectiveOfficeError } = await supabase
       .from("master_offices")
@@ -3528,7 +3579,7 @@ const getMarisonOutboundMappings = async (surat = null) => {
     branchId: effectiveBranchId,
     projectId: effectiveProjectId,
     sources: {
-       branchId: mappedBranchId ? "staging_mapping" : effectiveBranchId !== null ? "external_source" : "unavailable",
+       branchId: kind === "asset" ? officeResolution.source : effectiveProjectBranch.branchSource,
        projectId: mappedProjectId ? "staging_mapping" : effectiveProjectId !== null ? "external_source" : "unavailable",
     },
   };
@@ -3937,7 +3988,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
 const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
   const branchId = requireExternalInteger(
-    overrides.branchId ?? await resolveMarisonBranchId(surat, requestedProject, input, surat.location_snapshot),
+    overrides.branchId ?? (await resolveMarisonOfficeBranch(surat)).branchId,
     "Branch ID"
   );
   const items = normalizeMarisonItems(input);
@@ -4193,7 +4244,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     throw err;
   }
 
-   const overrides = await getMarisonOutboundMappings(surat);
+   const overrides = await getMarisonOutboundMappings(surat, job.kind);
    const dispatch = await buildMarisonDispatchPayload(surat, null, overrides);
   if (dispatch.kind !== job.kind || dispatch.endpoint !== job.endpoint) {
     const err = new Error("Kategori surat berubah setelah job outbound dibuat.");
@@ -4291,7 +4342,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
   }
   try {
     const identity = await resolveMarisonOutboundIdentity(surat);
-    const mappings = await getMarisonOutboundMappings(surat);
+     const mappings = await getMarisonOutboundMappings(surat, job.kind);
     normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
     return { eligible: true, reasonCode: null, reason: null };
   } catch (error) {

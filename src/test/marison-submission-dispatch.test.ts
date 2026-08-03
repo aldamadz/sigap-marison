@@ -26,7 +26,7 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("p_contract_version: dispatch.contractVersion");
     expect(server).toContain("p_payload_hash: payloadHash");
     expect(server).toContain("submitted_by: overrides.nik");
-    expect(server).toContain("getMarisonOutboundMappings(surat)");
+    expect(server).toContain("getMarisonOutboundMappings(surat, job.kind)");
     expect(client).not.toContain("MARISON_STAGING_CLIENT_SECRET");
     expect(client).not.toContain("MARISON_PRODUCTION_CLIENT_SECRET");
     expect(client).not.toContain("client_secret");
