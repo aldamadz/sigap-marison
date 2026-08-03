@@ -63,7 +63,7 @@ describe('MRN-16 staging payload mappings', () => {
     expect(resolveMarisonEffectiveProjectBranch({
       kind,
       officeBranchId: 1,
-      sourceProject: { marison_project_id: projectId, master_offices: { marison_branch_id: branchId } },
+      sourceProject: { marison_project_id: projectId, marison_synced_at: '2026-08-01T00:00:00Z', master_offices: { marison_branch_id: branchId, marison_synced_at: '2026-08-01T00:00:00Z' } },
     })).toEqual({ projectId, branchId, branchSource: 'external_source' });
   });
 
@@ -71,8 +71,8 @@ describe('MRN-16 staging payload mappings', () => {
     expect(resolveMarisonEffectiveProjectBranch({
       kind: 'unit',
       officeBranchId: 1,
-      sourceProject: { marison_project_id: 13, master_offices: { marison_branch_id: 8 } },
-      mappedProject: { marison_project_id: 20, master_offices: { marison_branch_id: 11 } },
+      sourceProject: { marison_project_id: 13, marison_synced_at: '2026-08-01T00:00:00Z', master_offices: { marison_branch_id: 8, marison_synced_at: '2026-08-01T00:00:00Z' } },
+      mappedProject: { marison_project_id: 20, marison_synced_at: '2026-08-01T00:00:00Z', master_offices: { marison_branch_id: 11, marison_synced_at: '2026-08-01T00:00:00Z' } },
     })).toEqual({ projectId: 20, branchId: 11, branchSource: 'staging_mapping' });
   });
 
@@ -81,7 +81,7 @@ describe('MRN-16 staging payload mappings', () => {
       kind: 'asset',
       officeBranchId: 1,
       sourceProject: { marison_project_id: 20, master_offices: { marison_branch_id: 11 } },
-    })).toEqual({ projectId: null, branchId: 1, branchSource: 'office' });
+    })).toEqual({ projectId: null, branchId: 1, branchSource: 'external_source' });
   });
 
   it('rejects invalid project or branch before POST', () => {
@@ -94,11 +94,31 @@ describe('MRN-16 staging payload mappings', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('rejects stale source project provenance', () => {
+    expect(() => resolveMarisonEffectiveProjectBranch({
+      kind: 'unit',
+      sourceProject: { marison_project_id: 13, marison_synced_at: null, master_offices: { marison_branch_id: 8, marison_synced_at: '2026-08-01T00:00:00Z' } },
+    })).toThrow('Effective project dan branch outbound tidak tervalidasi.');
+  });
+
+  it('rejects stale source project office provenance', () => {
+    expect(() => resolveMarisonEffectiveProjectBranch({
+      kind: 'unit',
+      sourceProject: { marison_project_id: 13, marison_synced_at: '2026-08-01T00:00:00Z', master_offices: { marison_branch_id: 8, marison_synced_at: null } },
+    })).toThrow('Effective project dan branch outbound tidak tervalidasi.');
+  });
+
+  it('labels Asset office mapping and synchronized office source distinctly', () => {
+    expect(resolveMarisonEffectiveProjectBranch({ kind: 'asset', officeBranchId: 1, officeSource: 'staging_mapping' })).toEqual({ projectId: null, branchId: 1, branchSource: 'staging_mapping' });
+    expect(resolveMarisonEffectiveProjectBranch({ kind: 'asset', officeBranchId: 1, officeSource: 'external_source' })).toEqual({ projectId: null, branchId: 1, branchSource: 'external_source' });
+    expect(resolveMarisonEffectiveProjectBranch({ kind: 'asset', officeBranchId: null })).toEqual({ projectId: null, branchId: null, branchSource: 'unavailable' });
+  });
+
   it('resolves project from master data when snapshot omits external project ID', () => {
     expect(resolveMarisonEffectiveProjectBranch({
       kind: 'non_unit',
       officeBranchId: 1,
-      sourceProject: { marison_project_id: 12, master_offices: { marison_branch_id: 1 } },
+      sourceProject: { marison_project_id: 12, marison_synced_at: '2026-08-01T00:00:00Z', master_offices: { marison_branch_id: 1, marison_synced_at: '2026-08-01T00:00:00Z' } },
     })).toEqual({ projectId: 12, branchId: 1, branchSource: 'external_source' });
   });
 
