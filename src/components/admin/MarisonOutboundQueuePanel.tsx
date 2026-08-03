@@ -91,6 +91,24 @@ const recoveryGuidance: Record<string, { title: string; nextStep: string; href?:
   },
 };
 
+const replacementChecks: Record<NonNullable<MarisonDispatchRow["kind"]>, Array<{ label: string; href?: string }>> = {
+  unit: [
+    { label: "Proyek dan branch external pemilik proyek", href: "/admin/master-projects" },
+    { label: "Identitas external pemohon dan seluruh penandatangan", href: "/admin/users" },
+    { label: "Data unit, alokasi kavling, serta dokumen yang diwajibkan" },
+  ],
+  non_unit: [
+    { label: "Proyek dan branch external pemilik proyek", href: "/admin/master-projects" },
+    { label: "Identitas external pemohon dan seluruh penandatangan", href: "/admin/users" },
+    { label: "Rincian pekerjaan, nilai, serta dokumen yang diwajibkan" },
+  ],
+  asset: [
+    { label: "Branch external kantor pengajuan", href: "/admin/offices" },
+    { label: "Identitas external pemohon dan seluruh penandatangan", href: "/admin/users" },
+    { label: "Item aset, rekomendasi per item, serta seluruh dokumen" },
+  ],
+};
+
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
   const queryClient = useQueryClient();
@@ -203,6 +221,7 @@ export function MarisonOutboundQueuePanel() {
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
     && (action !== "reopen_confirmed_not_received" || riskConfirmed);
   const activeRecoveryGuidance = preflightReasonCode ? recoveryGuidance[preflightReasonCode] : null;
+  const activeReplacementChecks = replacement?.kind ? replacementChecks[replacement.kind] : [];
   const recoveryDialogDescription = recoveryState === "checking"
     ? "Sistem sedang memeriksa identitas external, mapping payload, dan status POST job."
     : recoveryState === "eligible"
@@ -448,13 +467,32 @@ export function MarisonOutboundQueuePanel() {
           <DialogHeader>
             <DialogTitle>Buat pengiriman pengganti</DialogTitle>
             <DialogDescription>
-              Gunakan setelah data penyebab penolakan HTTP 422 diperbaiki. Riwayat pengiriman lama tetap tersimpan.
+              Vendor menolak payload sebelumnya. Periksa data di bawah sebelum membuat generasi pengiriman baru.
             </DialogDescription>
           </DialogHeader>
           {replacement && (
             <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
               <p className="font-medium text-foreground">{replacement.noSurat}</p>
               <p className="mt-1 text-xs text-muted-foreground">Generasi {replacement.generation} akan digantikan oleh generasi baru.</p>
+            </div>
+          )}
+          {replacement && (
+            <div className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-medium">Yang perlu diperiksa</p>
+                  <p className="mt-1 text-xs opacity-80">{replacement.failureReason || "Vendor tidak memberikan detail field yang ditolak."}</p>
+                </div>
+              </div>
+              <ul className="space-y-1.5 pl-6 text-xs">
+                {activeReplacementChecks.map((item) => (
+                  <li key={item.label} className="list-disc">
+                    {item.href ? <Link className="font-medium underline" to={item.href}>{item.label}</Link> : item.label}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs opacity-80">Jika seluruh data di atas sudah benar, penolakan berasal dari validasi vendor. Cantumkan koreksi yang dilakukan pada alasan audit.</p>
             </div>
           )}
           <div className="space-y-2 py-2">

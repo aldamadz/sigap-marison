@@ -143,6 +143,17 @@ Pengiriman pengganti berbeda dari recovery pre-POST. Recovery memakai job yang
 sama karena POST belum dimulai, sedangkan pengganti membuat job generasi baru
 karena vendor sudah memberikan penolakan pasti.
 
+Dialog pengiriman pengganti tidak lagi hanya meminta admin "memperbaiki
+konfigurasi". SIGAP menampilkan daftar data yang harus diperiksa sesuai kategori:
+identitas external pemohon dan penandatangan, relasi proyek dan branch, rincian
+item, serta dokumen. Jika vendor hanya mengembalikan HTTP 422 tanpa field yang
+spesifik, dialog menyatakannya secara eksplisit agar admin tidak mengira selalu
+ada kesalahan pada konfigurasi SIGAP.
+
+Unit dan Non Unit mewajibkan resolution source `projectId`. Migration
+`20260803170000_fix_marison_resolution_source_array.sql` memakai `array_append`
+agar penambahan key tersebut tidak ditafsirkan PostgreSQL sebagai array literal.
+
 ## Override Identitas Outbound Staging
 
 Admin dapat mengisi override NIK, ID kantor/cabang vendor, dan ID proyek vendor
