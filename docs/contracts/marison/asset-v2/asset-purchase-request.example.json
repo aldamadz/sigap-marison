@@ -1,0 +1,79 @@
+{
+  "submission_number": "001/UAI/PBO.1/VIII/2026",
+  "branch_id": 12,
+  "submitted_by": "A 114",
+  "submitted_at": "2026-08-03T14:45:00+07:00",
+  "category": "Pengajuan Pusat",
+  "description": "Permohonan pemenuhan dan perbaikan perangkat operasional.",
+  "attachments": [
+    {
+      "name": "PDF Final Permohonan Aset",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-request-final-001"
+    },
+    {
+      "name": "PDF Rekomendasi Gabungan",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-recommendation-combined-001"
+    },
+    {
+      "name": "Lampiran Umum Pemohon",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-general-001"
+    }
+  ],
+  "items": [
+    {
+      "asset_name": "Laptop operasional",
+      "quantity": 2,
+      "estimated_price": 14000000,
+      "description": "Laptop untuk pekerjaan administrasi dan layanan lapangan.",
+      "recommendation_action": "buy_new",
+      "recommendation_description": "Perangkat lama tidak memenuhi kebutuhan aplikasi.",
+      "recommendation_notes": "Prioritaskan spesifikasi sesuai standar TI.",
+      "attachments": [
+        {
+          "name": "Foto kondisi laptop lama",
+          "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-item-001-photo"
+        },
+        {
+          "name": "Spesifikasi teknis laptop",
+          "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-item-001-spec"
+        },
+        {
+          "name": "Referensi produk vendor",
+          "link": "https://vendor.example.test/products/laptop-operasional"
+        }
+      ]
+    },
+    {
+      "asset_name": "Printer jaringan",
+      "quantity": 1,
+      "estimated_price": 6500000,
+      "description": "Printer pengganti untuk kebutuhan cetak dokumen kantor.",
+      "recommendation_action": "replace_component",
+      "recommendation_description": "Komponen utama printer rusak dan penggantian lebih efisien.",
+      "recommendation_notes": "Pastikan kompatibilitas dengan jaringan kantor.",
+      "attachments": [
+        {
+          "name": "Screenshot hasil pemeriksaan printer",
+          "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-item-002-check"
+        },
+        {
+          "name": "Dokumen teknis printer",
+          "link": "https://sigap.marison-testing.biz.id/api/files/view/staging-asset-item-002-spec"
+        },
+        {
+          "name": "Referensi komponen",
+          "link": "https://vendor.example.test/products/printer-network"
+        }
+      ]
+    }
+  ],
+  "approvals": [
+    {
+      "role": "Pimpinan Departemen",
+      "nik": "EMP-PBO-001",
+      "action": "approved",
+      "actioned_at": "2026-08-03T14:53:33+07:00",
+      "notes": "Permohonan induk telah disetujui."
+    }
+  ]
+}
