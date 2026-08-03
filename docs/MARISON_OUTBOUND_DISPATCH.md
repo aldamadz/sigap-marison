@@ -5,6 +5,10 @@ Dokumen ini menjelaskan rollout dan operasi outbox untuk `MRN-05`, `MRN-06`, dan
 Production tidak boleh diaktifkan tanpa persetujuan rilis production yang
 eksplisit dan kejelasan mekanisme deduplikasi dari vendor.
 
+Status per 3 Agustus 2026: model generasi replacement dan panel antrean sudah
+diterapkan serta diuji di staging tanpa membuat replacement atau mengirim
+business POST. Production belum disentuh.
+
 ## Jaminan Utama
 
 - Satu job aktif untuk setiap pasangan `surat_id` dan environment.
