@@ -32,6 +32,7 @@ import {
   buildApprovalResolutionKey,
   getCanonicalRequesterProfileId,
   mergePayloadResolutionSources,
+  normalizePayloadResolutionSources,
   resolveProfilePayloadIdentity,
 } from "../../server/marison-payload-identity.mjs";
 import { executeMarisonPayloadMappingCommand } from "../../server/marison-payload-mapping-handler.mjs";
@@ -4037,7 +4038,14 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
     err.status = 422;
     throw err;
   }
-  return { ...dispatch, resolutionSources: resolvedOverrides.sources };
+  return {
+    ...dispatch,
+    resolutionSources: normalizePayloadResolutionSources(resolvedOverrides.sources, {
+      kind: dispatch.kind,
+      approvalCount: dispatch.payload.approvals?.length || 0,
+      expectedApprovalKeys: Object.keys(identity.sources).filter((key) => key.startsWith("approval:")),
+    }),
+  };
 };
 
 const getMarisonDispatchQueueStatus = async (req, suratId) => {
@@ -4276,6 +4284,27 @@ const listMarisonOutboundDispatches = async (req, url) => {
   };
 };
 
+const preflightMarisonOutboundRecovery = async (job, surat) => {
+  if (!isPrePostRecoveryEligible(job, marisonDeploymentEnvironment) || !surat || !["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
+    return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
+  }
+  try {
+    const identity = await resolveMarisonOutboundIdentity(surat);
+    const mappings = await getMarisonOutboundMappings(surat);
+    normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
+    return { eligible: true, reasonCode: null, reason: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Identity payload belum siap.";
+    const match = message.match(/Penandatangan tahap (\d+)/);
+    return {
+      eligible: false,
+      reasonCode: match ? "SIGNER_IDENTITY_MISSING" : message.includes("Pemohon") ? "REQUESTER_IDENTITY_MISSING" : message.includes("Branch") ? "BRANCH_IDENTITY_MISSING" : message.includes("Project") ? "PROJECT_IDENTITY_MISSING" : "NOT_PRE_POST_FAILURE",
+      reason: match ? `Signer tahap ${match[1]} belum memiliki identitas payload yang valid. Lengkapi Mapping Payload Staging pada Master User sebelum membangun ulang dokumen.` : message,
+      ...(match ? { blockedStage: Number(match[1]) } : {}),
+    };
+  }
+};
+
 const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
   assertSameOrigin(req);
   const actor = await requireAdminUser(getBearerToken(req));
@@ -4297,6 +4326,24 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
     const err = new Error("Konfirmasi risiko pengiriman ulang wajib diberikan.");
     err.status = 400;
     throw err;
+  }
+  if (action === "reopen_terminal_pre_post") {
+    const { data: job, error: jobError } = await supabase.from("marison_outbound_dispatches").select("id, surat_id, environment, status, kind, post_started_at, response, external_reference").eq("id", dispatchId).maybeSingle();
+    if (jobError) throw jobError;
+    if (!job) {
+      const err = new Error("Job outbound tidak ditemukan.");
+      err.status = 404;
+      throw err;
+    }
+    const { data: surat, error: suratError } = await supabase.from("surat_registrasi").select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))").eq("id", job?.surat_id).maybeSingle();
+    if (suratError) throw suratError;
+    const preflight = await preflightMarisonOutboundRecovery(job, surat);
+    if (!preflight.eligible) {
+      const err = new Error(preflight.reason);
+      err.status = 409;
+      err.code = preflight.reasonCode;
+      throw err;
+    }
   }
 
   const { error } = await supabase.rpc("reconcile_marison_outbound_dispatch", {
@@ -4859,6 +4906,35 @@ export const handleRequest = async (req, res) => {
       if (req.method === "POST" && marisonDispatchMatch) {
         const result = await getMarisonDispatchQueueStatus(req, marisonDispatchMatch[1]);
         return sendJson(res, 200, result);
+      }
+
+      const marisonPreflightMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/preflight$/i);
+      if (req.method === "GET" && marisonPreflightMatch) {
+        assertSameOrigin(req);
+        await requireAdminUser(getBearerToken(req));
+        if (marisonDeploymentEnvironment !== "staging") {
+          const err = new Error("Recovery outbound hanya tersedia di staging.");
+          err.status = 404;
+          throw err;
+        }
+        const { data: job, error: jobError } = await supabase
+          .from("marison_outbound_dispatches")
+          .select("id, surat_id, environment, status, kind, post_started_at, response, external_reference")
+          .eq("id", marisonPreflightMatch[1])
+          .maybeSingle();
+        if (jobError) throw jobError;
+        if (!job) {
+          return sendJson(res, 404, { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job outbound tidak ditemukan." });
+        }
+        const { data: surat, error: suratError } = await supabase
+          .from("surat_registrasi")
+          .select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))")
+          .eq("id", job.surat_id)
+          .maybeSingle();
+        if (suratError) throw suratError;
+        if (!surat) return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Surat tidak ditemukan." };
+        const preflight = await preflightMarisonOutboundRecovery(job, surat);
+        return { eligible: preflight.eligible, reasonCode: preflight.reasonCode, reason: preflight.reason, blockedStage: preflight.blockedStage };
       }
 
       const marisonBuildMatch = url.pathname.match(/^\/api\/internal\/marison\/outbound\/([0-9a-f-]+)\/build$/i);

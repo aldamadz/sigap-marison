@@ -72,6 +72,16 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("assertSameOrigin(req)");
   });
 
+  it("exposes staging recovery preflight separately from reconciliation", () => {
+    const routes = read("backend/src/routes/domain.routes.ts");
+    const server = read("backend/src/domain-runtime.ts");
+    expect(routes).toContain('GET", url: "/api/integrations/marison/dispatches/:dispatchId/preflight');
+    expect(server).toContain("preflightMarisonOutboundRecovery");
+    expect(server).toContain("NOT_PRE_POST_FAILURE");
+    expect(server).toContain("Job outbound tidak ditemukan.");
+    expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
+  });
+
   it("protects the internal build route with a minimum-length constant-time token", () => {
     const server = read("backend/src/domain-runtime.ts");
     const routes = read("backend/src/routes/domain.routes.ts");

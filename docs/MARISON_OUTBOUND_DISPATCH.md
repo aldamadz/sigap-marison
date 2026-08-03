@@ -95,6 +95,24 @@ diaktifkan.
 
 ## Rekonsiliasi
 
+### Recovery Pre-POST
+
+`failed_terminal` hanya dapat dibuka ulang melalui preflight staging oleh admin
+aktif. Preflight memeriksa `post_started_at`, response, external reference, dan
+seluruh identity source terkini. Job dengan kemungkinan POST tidak eligible.
+
+Recovery memakai job existing dan `reopen_terminal_pre_post`; event rekonsiliasi
+append-only mempertahankan state lama. Worker kemudian membangun payload, body,
+hash, dan `payload_resolution_sources` secara atomik. Payload prepared yang sudah
+ada tetap immutable.
+
+Untuk signer yang belum valid, admin harus melengkapi Mapping Payload Staging pada
+Master User. Sistem tidak membuat mapping otomatis dan tidak memakai mapping
+pemohon sebagai fallback signer.
+
+Label `attempt_count` pada UI berarti jumlah percobaan pengiriman, bukan jumlah
+approval signer.
+
 ## Override Identitas Outbound Staging
 
 Admin dapat mengisi override NIK, ID kantor/cabang vendor, dan ID proyek vendor

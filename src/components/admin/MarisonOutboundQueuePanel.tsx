@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, RotateCcw, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ const formatDateTime = (value: string | null) => value
   : "-";
 
 type ReconciliationAction = "mark_succeeded" | "reopen_confirmed_not_received" | "reopen_terminal_pre_post";
+type RecoveryState = "idle" | "checking" | "eligible" | "blocked" | "failed";
 
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
@@ -57,6 +59,10 @@ export function MarisonOutboundQueuePanel() {
   const [reason, setReason] = useState("");
   const [externalReference, setExternalReference] = useState("");
   const [riskConfirmed, setRiskConfirmed] = useState(false);
+  const [preflightId, setPreflightId] = useState<string | null>(null);
+  const [preflightReason, setPreflightReason] = useState<string | null>(null);
+  const [preflightReasonCode, setPreflightReasonCode] = useState<string | null>(null);
+  const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -100,6 +106,42 @@ export function MarisonOutboundQueuePanel() {
     setReason("");
     setExternalReference("");
     setRiskConfirmed(false);
+    setPreflightReason(null);
+    setPreflightReasonCode(null);
+    setRecoveryState("idle");
+  };
+  const openRecovery = async (row: MarisonDispatchRow) => {
+    openReconciliation(row, "reopen_terminal_pre_post");
+    setPreflightId(row.id);
+    setRecoveryState("checking");
+    try {
+      const result = await marisonIntegrationService.preflightDispatch(row.id);
+      if (!result.eligible) {
+        setPreflightReason(result.reason || "Job belum memenuhi syarat recovery.");
+        setPreflightReasonCode(result.reasonCode || "NOT_PRE_POST_FAILURE");
+        setRecoveryState("blocked");
+        toast.error(result.reason || "Job belum memenuhi syarat recovery.");
+        return;
+      }
+      setPreflightReason(null);
+      setPreflightReasonCode(null);
+      setRecoveryState("eligible");
+    } catch (error) {
+      setPreflightReason("Preflight recovery gagal. Coba lagi atau tutup dialog.");
+      setPreflightReasonCode("PREFLIGHT_FAILED");
+      setRecoveryState("failed");
+      toast.error(error instanceof Error ? error.message : "Preflight recovery gagal.");
+    } finally {
+      setPreflightId(null);
+    }
+  };
+  const closeDialog = () => {
+    setSelected(null);
+    setPreflightId(null);
+    setPreflightReason(null);
+    setPreflightReasonCode(null);
+    setRecoveryState("idle");
+    setReason("");
   };
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
@@ -189,7 +231,7 @@ export function MarisonOutboundQueuePanel() {
                           <p className="mt-2 text-xs text-muted-foreground">{row.kind ? kindLabels[row.kind] : "Tidak dikirim"}</p>
                         </TableCell>
                         <TableCell className="min-w-40 align-top text-sm tabular-nums">
-                          <p>{row.attemptCount} / 3</p>
+                           <p>Percobaan pengiriman: {row.attemptCount} dari 3</p>
                           <p className="mt-1 text-xs text-muted-foreground">Terakhir {formatDateTime(row.lastAttemptAt)}</p>
                         </TableCell>
                         <TableCell className="min-w-64 align-top">
@@ -199,7 +241,9 @@ export function MarisonOutboundQueuePanel() {
                             </p>
                           ) : row.failureReason ? (
                             <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
-                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {row.failureReason}
+                               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {row.failureReason === "Resolution sources are required"
+                                 ? "Dokumen dibuat sebelum metadata payload lengkap dan perlu dibangun ulang."
+                                 : row.failureReason}
                             </p>
                           ) : (
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -217,8 +261,8 @@ export function MarisonOutboundQueuePanel() {
                             </div>
                           )}
                           {row.status === "failed_terminal" && !row.postStartedAt && (
-                            <Button size="sm" variant="outline" onClick={() => openReconciliation(row, "reopen_terminal_pre_post")}>
-                              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Coba lagi
+                            <Button size="sm" variant="outline" onClick={() => void openRecovery(row)} disabled={preflightId === row.id}>
+                              {preflightId === row.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />} Bangun ulang dan coba lagi
                             </Button>
                           )}
                         </TableCell>
@@ -240,7 +284,7 @@ export function MarisonOutboundQueuePanel() {
         </CardContent>
       </Card>
 
-      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+      <Dialog open={selected !== null} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{action === "mark_succeeded" ? "Tandai Sudah Diterima" : "Buka Ulang Pengiriman"}</DialogTitle>
@@ -253,24 +297,33 @@ export function MarisonOutboundQueuePanel() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {selected && (
+              {selected && (
               <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                 <p className="font-medium text-foreground">{selected.noSurat}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{selected.title}</p>
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">Job {selected.id}</p>
               </div>
+              )}
+            {preflightId && <div className="rounded-md border border-blue-300/60 bg-blue-50 px-3 py-3 text-sm">Memeriksa kelayakan recovery...</div>}
+            {preflightReason && (
+              <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                <p>{preflightReason}</p>
+                {preflightReasonCode === "SIGNER_IDENTITY_MISSING" && (
+                  <Link className="mt-2 inline-block font-medium underline" to="/admin/users">Buka Master User</Link>
+                )}
+              </div>
             )}
-            {action === "mark_succeeded" && (
+            {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && action === "mark_succeeded" && (
               <div className="space-y-2">
                 <Label htmlFor="marison-external-reference">Referensi eksternal</Label>
                 <Input id="marison-external-reference" value={externalReference} onChange={(event) => setExternalReference(event.target.value)} maxLength={200} />
               </div>
             )}
-            <div className="space-y-2">
+            {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && <div className="space-y-2">
               <Label htmlFor="marison-reconciliation-reason">Alasan dan bukti pemeriksaan</Label>
               <Textarea id="marison-reconciliation-reason" value={reason} onChange={(event) => setReason(event.target.value)} rows={4} maxLength={2000} />
-            </div>
-            {action === "reopen_confirmed_not_received" && (
+            </div>}
+            {(action !== "reopen_terminal_pre_post" || recoveryState === "eligible") && action === "reopen_confirmed_not_received" && (
               <label className="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-5">
                 <Checkbox checked={riskConfirmed} onCheckedChange={(checked) => setRiskConfirmed(checked === true)} />
                 <span>Saya sudah memastikan request sebelumnya tidak diterima vendor dan memahami risiko data ganda.</span>
@@ -278,11 +331,11 @@ export function MarisonOutboundQueuePanel() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelected(null)}>Batal</Button>
+            <Button variant="outline" onClick={closeDialog}>Tutup</Button>
             <Button
               variant={action === "mark_succeeded" ? "default" : "destructive"}
               onClick={() => reconciliation.mutate()}
-              disabled={!canSubmit || reconciliation.isPending}
+              disabled={(action === "reopen_terminal_pre_post" && recoveryState !== "eligible") || !canSubmit || reconciliation.isPending}
             >
               {reconciliation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan Rekonsiliasi
