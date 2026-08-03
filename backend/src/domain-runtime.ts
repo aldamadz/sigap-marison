@@ -30,6 +30,7 @@ import {
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
 import {
   buildApprovalResolutionKey,
+  classifyMarisonRecoveryIssue,
   getCanonicalRequesterProfileId,
   isPrePostRecoveryEligible,
   mergePayloadResolutionSources,
@@ -4352,13 +4353,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: true, reasonCode: null, reason: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Identity payload belum siap.";
-    const match = message.match(/Penandatangan tahap (\d+)/);
-    return {
-      eligible: false,
-      reasonCode: match ? "SIGNER_IDENTITY_MISSING" : message.includes("Pemohon") ? "REQUESTER_IDENTITY_MISSING" : message.includes("Branch") ? "BRANCH_IDENTITY_MISSING" : message.includes("Project") ? "PROJECT_IDENTITY_MISSING" : "NOT_PRE_POST_FAILURE",
-      reason: match ? `Signer tahap ${match[1]} belum memiliki identitas payload yang valid. Lengkapi Mapping Payload Staging pada Master User sebelum membangun ulang dokumen.` : message,
-      ...(match ? { blockedStage: Number(match[1]) } : {}),
-    };
+    return { eligible: false, ...classifyMarisonRecoveryIssue(message) };
   }
 };
 

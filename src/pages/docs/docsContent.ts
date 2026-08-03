@@ -3026,6 +3026,7 @@ export const DOCS_CHANGELOG = [
       "Menampilkan nomor generasi, status penyimpanan, dan pesan konflik operasional pada panel antrean admin.",
       "Menambahkan regression test packaging agar seluruh modul resolver Marison tersedia saat container staging dimulai.",
       "Memperbaiki error dan loading tanpa akhir pada Bangun Ulang dan Coba Lagi dengan memastikan helper eligibility serta respons preflight tersedia pada handler backend.",
+      "Menampilkan konfigurasi yang perlu diperbaiki beserta tautan langsung ke User Organization, Master Kantor Cabang, atau Master Proyek pada diagnosis recovery.",
       "Menerapkan migration dan aplikasi MRN-17 di staging serta memverifikasi antrean lama tetap utuh tanpa business POST.",
     ],
   },

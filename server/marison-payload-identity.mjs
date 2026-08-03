@@ -62,6 +62,46 @@ export const isPrePostRecoveryEligible = (job, environment) => Boolean(
   && !job?.external_reference
 );
 
+export const classifyMarisonRecoveryIssue = (value) => {
+  const message = normalized(value) || 'Identitas payload belum siap.';
+  const lowerMessage = message.toLowerCase();
+  const signerMatch = message.match(/penandatangan tahap\s+(\d+)/i);
+
+  if (signerMatch) {
+    const blockedStage = Number(signerMatch[1]);
+    return {
+      reasonCode: 'SIGNER_IDENTITY_MISSING',
+      reason: `Penandatangan tahap ${blockedStage} belum memiliki Identitas External atau Mapping Payload Staging yang valid.`,
+      blockedStage,
+    };
+  }
+  if (lowerMessage.includes('pemohon')) {
+    return {
+      reasonCode: 'REQUESTER_IDENTITY_MISSING',
+      reason: 'Pemohon belum memiliki Identitas External atau Mapping Payload Staging yang valid.',
+    };
+  }
+  if (lowerMessage.includes('project') && lowerMessage.includes('branch') && lowerMessage.includes('tidak cocok')) {
+    return {
+      reasonCode: 'PROJECT_BRANCH_MISMATCH',
+      reason: 'Project ID external terhubung ke Branch ID external yang berbeda dari kantor proyek efektif.',
+    };
+  }
+  if (lowerMessage.includes('project')) {
+    return {
+      reasonCode: 'PROJECT_IDENTITY_MISSING',
+      reason: 'Identitas external proyek atau kantor pemilik proyek belum lengkap dan tervalidasi.',
+    };
+  }
+  if (lowerMessage.includes('branch')) {
+    return {
+      reasonCode: 'BRANCH_IDENTITY_MISSING',
+      reason: 'Branch ID external untuk kantor terkait belum lengkap dan tervalidasi.',
+    };
+  }
+  return { reasonCode: 'NOT_PRE_POST_FAILURE', reason: message };
+};
+
 export const resolveProfilePayloadIdentity = ({ profileId, sourceNik, mappingNik, validSourceNik, label = 'Profile' }) => {
   const id = normalized(profileId);
   if (!id) {
