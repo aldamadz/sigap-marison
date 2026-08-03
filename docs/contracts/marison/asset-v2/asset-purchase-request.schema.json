@@ -54,11 +54,8 @@
       "required": [
         "asset_name",
         "quantity",
-        "estimated_price",
-        "description",
         "recommendation_action",
         "recommendation_description",
-        "recommendation_notes",
         "attachments"
       ],
       "properties": {

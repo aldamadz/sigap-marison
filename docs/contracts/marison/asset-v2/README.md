@@ -46,7 +46,7 @@ reused for a different `submission_number` or payload.
 ## Approval rules
 
 - `approvals` contains approvals for the parent Asset request only.
-- The example includes, in order, Staff IT / Aldama (`A 114`), Manager PO,
+- The example includes, in order, Staff IT (`A 114`; Aldama is named in notes), Manager PO,
   Manager HRD & GA, Direktur 1, and Direktur Utama.
 - Recommendation signers are excluded.
 - If one person signs both documents, only the parent-request signature is sent.

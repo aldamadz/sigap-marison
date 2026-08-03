@@ -49,7 +49,7 @@
       "estimated_price": 6500000,
       "description": "Printer pengganti untuk kebutuhan cetak dokumen kantor.",
       "recommendation_action": "replace_component",
-      "recommendation_description": "Komponen utama printer rusak dan penggantian lebih efisien.",
+      "recommendation_description": "Printhead printer rusak; penggantian printhead lebih efisien daripada mengganti seluruh perangkat.",
       "recommendation_notes": "Pastikan kompatibilitas dengan jaringan kantor.",
       "attachments": [
         {
@@ -69,7 +69,7 @@
   ],
   "approvals": [
     {
-      "role": "Staff IT / Aldama",
+      "role": "Staff IT",
       "nik": "A 114",
       "action": "approved",
       "actioned_at": "2026-08-03T14:53:33+07:00",
