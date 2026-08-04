@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { parseRupiahInteger } from "@/lib/rupiah";
+import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { documentPreviewService } from "./document-preview.service";
@@ -577,8 +577,8 @@ export const suratService = {
 
   formatRupiah(value: any) {
     const amount = this.parseMoney(value);
-    if (amount === 0) return "";
-    return new Intl.NumberFormat("id-ID").format(amount);
+    if (amount === 0) return "Rp 0";
+    return formatRupiahCanonical(amount);
   },
 
   buildProductionCode(unit: any) {

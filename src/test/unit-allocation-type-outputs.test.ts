@@ -11,7 +11,7 @@ describe("unit allocation type outputs", () => {
     const server = read("backend/src/domain-runtime.ts");
 
     expect(inbox).toContain("Tipe Unit</th>");
-    expect(inbox).toContain('placeholder="60"');
+    expect(inbox).toContain('placeholder="30"');
     expect(inbox).toContain('["Tipe Unit", "Tipe", "Type", "Unit Type"]');
     expect(excel).toContain('{ header: "Tipe Unit", key: "Tipe Unit"');
     expect(excel).toContain("Isi tipe unit, contoh: 60.");

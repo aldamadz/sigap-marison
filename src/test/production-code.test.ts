@@ -51,7 +51,7 @@ describe("production code serial", () => {
       "Tanggal Produksi": "01/01/2026",
     }]);
     const serialCell = workbook.getWorksheet("Alokasi Unit")?.getCell("G2");
-    expect(serialCell?.value).toBe(1);
+    expect(serialCell?.value).toBe("001");
     expect(serialCell?.numFmt).toBe("000");
   });
 });

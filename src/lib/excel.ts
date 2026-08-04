@@ -75,9 +75,10 @@ export const exportRowsToXlsx = async (
 
 const parseTemplateNumber = (value: string | number) => {
   if (typeof value === "number") return value;
-  const digits = String(value || "").replace(/[^\d-]/g, "");
-  const parsed = Number(digits);
-  return Number.isFinite(parsed) ? parsed : "";
+  const str = String(value || "").trim();
+  const cleaned = str.replace(/^Rp\.?\s*/i, "").replace(/[.,\s]/g, "").replace(/\D/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : "";
 };
 
 const parseTemplateDate = (value: string) => {
@@ -90,8 +91,7 @@ const parseTemplateDate = (value: string) => {
 const parseTemplateSerial = (value: string | number) => {
   const normalized = normalizeProductionSerial(value);
   if (!normalized) return "";
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : normalized;
+  return normalized;
 };
 
 export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplateRow[]) => {
@@ -112,13 +112,23 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   ];
 
   rows.forEach((row) => {
-    worksheet.addRow({
+    const excelRow = worksheet.addRow({
       ...row,
+      "Tipe Unit": String(row["Tipe Unit"] || "").replace(/\D/g, ""),
       "Struktur Atas": parseTemplateNumber(row["Struktur Atas"]),
       "Struktur Bawah": parseTemplateNumber(row["Struktur Bawah"]),
       "Nomor Kode Produksi": parseTemplateSerial(row["Nomor Kode Produksi"]),
+      "Blok": String(row["Blok"] || ""),
       "Tanggal Produksi": parseTemplateDate(row["Tanggal Produksi"]),
     });
+    const tipeCell = excelRow.getCell(4);
+    if (tipeCell.value !== null && tipeCell.value !== undefined && tipeCell.value !== "") {
+      tipeCell.value = { text: String(tipeCell.value) } as any;
+    }
+    const blokCell = excelRow.getCell(8);
+    if (blokCell.value !== null && blokCell.value !== undefined && blokCell.value !== "") {
+      blokCell.value = { text: String(blokCell.value) } as any;
+    }
   });
 
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
