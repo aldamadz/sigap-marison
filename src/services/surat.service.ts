@@ -2749,12 +2749,15 @@ export const suratService = {
     }).filter(Boolean);
   },
 
-  async getMyInboxCompact(params: { limit?: number; cursor?: string } = {}) {
+  async getMyInboxCompact(params: { limit?: number; cursor?: string; search?: string; request_category?: string; task_type?: string } = {}) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Unauthorized");
     const qs = new URLSearchParams();
     if (params.limit) qs.set("limit", String(params.limit));
     if (params.cursor) qs.set("cursor", params.cursor);
+    if (params.search) qs.set("search", params.search);
+    if (params.request_category) qs.set("request_category", params.request_category);
+    if (params.task_type) qs.set("task_type", params.task_type);
     const response = await fetch(`/api/surat/inbox?${qs.toString()}`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
       cache: "no-store",

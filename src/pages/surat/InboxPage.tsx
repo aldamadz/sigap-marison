@@ -98,6 +98,11 @@ export default function InboxPage() {
   const appDialog = useAppDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [kpiFilter, setKpiFilter] = useState("all");
@@ -145,18 +150,39 @@ export default function InboxPage() {
   const [inboxTotal, setInboxTotal] = useState(0);
   const [detailCache, setDetailCache] = useState<Record<string, any>>({});
 
+  const inboxFilterKey = `${debouncedSearch}|${categoryFilter}|${actionFilter}`;
+  const prevFilterKeyRef = useRef(inboxFilterKey);
+  useEffect(() => {
+    if (prevFilterKeyRef.current !== inboxFilterKey) {
+      prevFilterKeyRef.current = inboxFilterKey;
+      setInboxCursor(null);
+      setInboxAllItems([]);
+      setInboxHasMore(false);
+      setInboxTotal(0);
+    }
+  }, [inboxFilterKey]);
+
+  const taskTypeParam = actionFilter === "approval" ? "approval" : actionFilter === "verification" ? "verification" : undefined;
+
   const { data: inboxPage, isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
-    queryKey: ['surat-inbox-compact', inboxCursor] as string[],
-    queryFn: () => suratService.getMyInboxCompact({ limit: 20, cursor: inboxCursor || undefined }),
+    queryKey: ['surat-inbox-compact', inboxFilterKey, inboxCursor] as string[],
+    queryFn: () => suratService.getMyInboxCompact({
+      limit: 20,
+      cursor: inboxCursor || undefined,
+      search: debouncedSearch || undefined,
+      request_category: categoryFilter !== "all" ? categoryFilter : undefined,
+      task_type: taskTypeParam,
+    }),
     staleTime: 30000,
     placeholderData: keepPreviousData,
   });
 
   useEffect(() => {
     if (!inboxPage) return;
-    const page = inboxPage as { items: any[]; total: number; hasMore: boolean; nextCursor: string | null; pageSize: number };
+    const page = inboxPage as { items: any[]; total: number | null; hasMore: boolean; nextCursor: string | null; pageSize: number };
     if (!inboxCursor) {
       setInboxAllItems(page.items);
+      if (page.total !== null) setInboxTotal(page.total);
     } else {
       setInboxAllItems((prev) => {
         const ids = new Set(prev.map((i: any) => i.id));
@@ -165,7 +191,6 @@ export default function InboxPage() {
       });
     }
     setInboxHasMore(page.hasMore);
-    setInboxTotal(page.total);
   }, [inboxPage]);
 
   const inbox = inboxAllItems;
@@ -244,25 +269,15 @@ export default function InboxPage() {
   ), [kpiDetails]);
 
   const filteredInbox = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
-    return [...inbox]
-      .filter((item: any) => {
-        const kpi = kpiBySignature.get(item.id);
-        const action = getTaskAction(item);
-        const matchesSearch = !search || [
-          item.judul_surat,
-          item.no_surat,
-          item.requester_name,
-          item.requester_department,
-        ].some((value) => String(value || "").toLowerCase().includes(search));
-        const matchesCategory = categoryFilter === "all" || (item.request_category || "").toLowerCase() === categoryFilter;
-        const matchesKpi = kpiFilter === "all" ||
-          (kpiFilter === "late" && kpi?.is_late) ||
-          (kpiFilter === "due" && kpi && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes <= 30) ||
-          (kpiFilter === "on_time" && (!kpi || (!kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes > 30)));
-        return matchesSearch && matchesCategory && matchesKpi && (actionFilter === "all" || action === actionFilter);
-      });
-  }, [inbox, searchTerm, categoryFilter, kpiFilter, actionFilter, kpiBySignature]);
+    return [...inbox].filter((item: any) => {
+      const kpi = kpiBySignature.get(item.id);
+      const matchesKpi = kpiFilter === "all" ||
+        (kpiFilter === "late" && kpi?.is_late) ||
+        (kpiFilter === "due" && kpi && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes <= 30) ||
+        (kpiFilter === "on_time" && (!kpi || (!kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes > 30)));
+      return matchesKpi;
+    });
+  }, [inbox, kpiFilter, kpiBySignature]);
 
   const requestedTaskId = searchParams.get("task");
   const selectedCompactItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;

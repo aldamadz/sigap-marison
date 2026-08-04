@@ -1388,9 +1388,14 @@ const INBOX_DETAIL_SELECT = `
   )
 `.trim();
 
+const INBOX_TASK_TYPE_ALLOWLIST = ["approval", "verification"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 const parseInboxLimit = (raw) => {
+  if (!raw) return { error: null, value: 20 };
+  if (!/^\d+$/.test(raw)) return { error: "limit harus integer positif", value: null };
   const n = parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < 1) return { error: "limit harus integer >= 1", value: null };
+  if (n < 1) return { error: "limit minimum 1", value: null };
   if (n > 50) return { error: "limit maksimum 50", value: null };
   return { error: null, value: n };
 };
@@ -1403,13 +1408,27 @@ const parseInboxCursor = (raw) => {
     if (parts.length !== 3) throw new Error("format invalid");
     const [at, taskType, id] = parts;
     if (!at || !taskType || !id) throw new Error("field kosong");
-    if (!["approval", "verification"].includes(taskType)) throw new Error("task_type tidak valid");
+    if (!INBOX_TASK_TYPE_ALLOWLIST.includes(taskType)) throw new Error("task_type tidak valid");
     const ts = new Date(at);
     if (isNaN(ts.getTime())) throw new Error("timestamp tidak valid");
+    if (!UUID_RE.test(id)) throw new Error("id bukan UUID valid");
     return { error: null, value: { at, taskType, id } };
   } catch {
     return { error: "cursor tidak valid", value: null };
   }
+};
+
+const parseInboxSearch = (raw) => {
+  if (!raw) return { error: null, value: null };
+  const trimmed = raw.trim();
+  if (trimmed.length > 200) return { error: "search maksimum 200 karakter", value: null };
+  return { error: null, value: trimmed };
+};
+
+const parseInboxTaskType = (raw) => {
+  if (!raw) return { error: null, value: null };
+  if (!INBOX_TASK_TYPE_ALLOWLIST.includes(raw)) return { error: "task_type tidak valid", value: null };
+  return { error: null, value: raw };
 };
 
 const encodeCursor = (item) =>
@@ -1421,40 +1440,59 @@ const getInboxCompact = async (token, url) => {
 
   const rawLimit = url.searchParams.get("limit") || "20";
   const limitResult = parseInboxLimit(rawLimit);
-  if (limitResult.error) {
-    const err = new Error(limitResult.error);
-    err.status = 400;
-    throw err;
-  }
+  if (limitResult.error) { const err = new Error(limitResult.error); err.status = 400; throw err; }
   const pageSize = limitResult.value;
 
   const rawCursor = url.searchParams.get("cursor") || null;
   const cursorResult = parseInboxCursor(rawCursor);
-  if (cursorResult.error) {
-    const err = new Error(cursorResult.error);
-    err.status = 400;
-    throw err;
-  }
+  if (cursorResult.error) { const err = new Error(cursorResult.error); err.status = 400; throw err; }
   const cursor = cursorResult.value;
 
-  const [listRes, countRes] = await Promise.all([
-    supabase.rpc("get_compact_inbox", {
+  const rawSearch = url.searchParams.get("search") || null;
+  const searchResult = parseInboxSearch(rawSearch);
+  if (searchResult.error) { const err = new Error(searchResult.error); err.status = 400; throw err; }
+  const search = searchResult.value;
+
+  const rawCategory = url.searchParams.get("request_category") || null;
+  const category = rawCategory && rawCategory.trim() ? rawCategory.trim() : null;
+
+  const rawTaskType = url.searchParams.get("task_type") || null;
+  const taskTypeResult = parseInboxTaskType(rawTaskType);
+  if (taskTypeResult.error) { const err = new Error(taskTypeResult.error); err.status = 400; throw err; }
+  const taskType = taskTypeResult.value;
+
+  const rpcParams = {
+    p_user_id: userId,
+    p_limit: pageSize,
+    p_cursor_at: cursor?.at || null,
+    p_cursor_task_type: cursor?.taskType || null,
+    p_cursor_id: cursor?.id || null,
+    p_search: search,
+    p_request_category: category,
+    p_task_type: taskType,
+  };
+
+  const needsCount = !cursor;
+  const queries = [supabase.rpc("get_compact_inbox", rpcParams)];
+  if (needsCount) {
+    queries.push(supabase.rpc("get_compact_inbox_count", {
       p_user_id: userId,
-      p_limit: pageSize,
-      p_cursor_at: cursor?.at || null,
-      p_cursor_task_type: cursor?.taskType || null,
-      p_cursor_id: cursor?.id || null,
-    }),
-    supabase.rpc("get_compact_inbox_count", { p_user_id: userId }),
-  ]);
+      p_search: search,
+      p_request_category: category,
+      p_task_type: taskType,
+    }));
+  }
+  const results = await Promise.all(queries);
+  const listRes = results[0];
+  const countRes = needsCount ? results[1] : null;
 
   if (listRes.error) throw listRes.error;
-  if (countRes.error) throw countRes.error;
+  if (countRes?.error) throw countRes.error;
 
   const rows = listRes.data || [];
   const hasMore = rows.length > pageSize;
   const items = hasMore ? rows.slice(0, pageSize) : rows;
-  const total = Number(countRes.data || 0);
+  const total = needsCount ? Number(countRes?.data || 0) : null;
   const lastItem = items[items.length - 1];
   const nextCursor = hasMore && lastItem ? encodeCursor(lastItem) : null;
 
@@ -1463,11 +1501,23 @@ const getInboxCompact = async (token, url) => {
 
 const getInboxDetail = async (token, signatureId) => {
   const user = await requireSupabaseUser(token);
-  if (!signatureId || !/^[0-9a-f-]{36}$/.test(signatureId)) {
+  if (!signatureId || !UUID_RE.test(signatureId)) {
     const err = new Error("signature ID tidak valid");
     err.status = 400;
     throw err;
   }
+
+  const { data: isActive, error: activeError } = await supabase.rpc("is_inbox_task_active", {
+    p_user_id: user.id,
+    p_signature_id: signatureId,
+  });
+  if (activeError) throw activeError;
+  if (!isActive) {
+    const err = new Error("Task tidak aktif atau tidak ditemukan untuk user ini");
+    err.status = 403;
+    throw err;
+  }
+
   const { data, error } = await supabase
     .from("surat_signatures")
     .select(INBOX_DETAIL_SELECT)
@@ -1480,21 +1530,7 @@ const getInboxDetail = async (token, signatureId) => {
     throw err;
   }
   const surat = Array.isArray(data.surat_registrasi) ? data.surat_registrasi[0] : data.surat_registrasi;
-  if (!surat) {
-    const err = new Error("Not found");
-    err.status = 404;
-    throw err;
-  }
-  const isSignerTask = data.user_id === user.id;
-  const isVerifierTask = Array.isArray(data.verifier_snapshot) &&
-    data.verifier_snapshot.some((entry) => entry?.user_id === user.id);
-  const isAdminAccess = false;
-  if (!isSignerTask && !isVerifierTask && !isAdminAccess) {
-    const err = new Error("Akses ditolak: bukan signer atau verifier untuk task ini");
-    err.status = 403;
-    throw err;
-  }
-  if (surat.surat_signatures) {
+  if (surat?.surat_signatures) {
     surat.surat_signatures = [...surat.surat_signatures]
       .sort((a, b) => Number(a.step_order) - Number(b.step_order));
   }
@@ -1509,24 +1545,27 @@ const getAttentionStateForUser = async (userId) => {
     throw err;
   }
 
-  const { data, error } = await supabase.rpc("get_attention_state_for_user", {
-    p_user_id: userId,
-  });
-  if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
+  const [attentionRes, compactCountRes] = await Promise.all([
+    supabase.rpc("get_attention_state_for_user", { p_user_id: userId }),
+    supabase.rpc("get_compact_inbox_count", { p_user_id: userId }),
+  ]);
+  if (attentionRes.error) throw attentionRes.error;
+  if (compactCountRes.error) throw compactCountRes.error;
+  const row = Array.isArray(attentionRes.data) ? attentionRes.data[0] : attentionRes.data;
   const approvalCount = Number(row?.approval_count || 0);
   const verificationCount = Number(row?.verification_count || 0);
   const revisionCount = Number(row?.revision_count || 0);
   const requesterRevisionCount = Number(row?.follow_up_count || 0);
   const recommendationCount = Number(row?.recommendation_count || 0);
   const monitoringCount = Number(row?.monitoring_count || 0);
+  const compactInboxCount = Number(compactCountRes.data || 0);
 
   return {
     approvalCount,
     verificationCount,
     revisionCount,
     recommendationCount,
-    inboxCount: approvalCount + verificationCount + revisionCount,
+    inboxCount: compactInboxCount,
     unreadNotifications: Number(row?.unread_notifications || 0),
     monitoringCount,
     followUpCount: requesterRevisionCount,
