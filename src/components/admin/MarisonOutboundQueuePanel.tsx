@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, RotateCcw, Send } from "lucide-react";
@@ -19,6 +19,9 @@ import {
   type MarisonDispatchRow,
   type MarisonDispatchFilter,
   type MarisonDispatchStatus,
+  type ReplacementPreflight,
+  type VendorDiagnosis,
+  type VendorDiagnosisIssue,
 } from "@/services/marison-integration.service";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +52,7 @@ const formatDateTime = (value: string | null) => value
 
 type ReconciliationAction = "mark_succeeded" | "reopen_confirmed_not_received" | "reopen_terminal_pre_post";
 type RecoveryState = "idle" | "checking" | "eligible" | "blocked" | "failed";
+type ReplacementPreflightState = "idle" | "checking" | "ready" | "blocked" | "failed";
 
 const recoveryGuidance: Record<string, { title: string; nextStep: string; href?: string; linkLabel?: string }> = {
   SIGNER_IDENTITY_MISSING: {
@@ -91,23 +95,99 @@ const recoveryGuidance: Record<string, { title: string; nextStep: string; href?:
   },
 };
 
-const replacementChecks: Record<NonNullable<MarisonDispatchRow["kind"]>, Array<{ label: string; href?: string }>> = {
-  unit: [
-    { label: "Proyek dan branch external pemilik proyek", href: "/admin/master-projects" },
-    { label: "Identitas external pemohon dan seluruh penandatangan", href: "/admin/users" },
-    { label: "Data unit, alokasi kavling, serta dokumen yang diwajibkan" },
-  ],
-  non_unit: [
-    { label: "Proyek dan branch external pemilik proyek", href: "/admin/master-projects" },
-    { label: "Identitas external pemohon dan seluruh penandatangan", href: "/admin/users" },
-    { label: "Rincian pekerjaan, nilai, serta dokumen yang diwajibkan" },
-  ],
-  asset: [
-    { label: "Branch external kantor pengajuan", href: "/admin/offices" },
-    { label: "Identitas external pemohon dan seluruh penandatangan", href: "/admin/users" },
-    { label: "Item aset, rekomendasi per item, serta seluruh dokumen" },
-  ],
+const diagnosisAreaGuidance: Record<string, { title: string; nextStep: string; href?: string; linkLabel?: string }> = {
+  identity: {
+    title: "Identitas external ditolak",
+    nextStep: "Pastikan pemohon dan setiap penandatangan menggunakan employee external atau Mapping Payload Staging yang valid.",
+    href: "/admin/users",
+    linkLabel: "Buka User Organization",
+  },
+  unit_type: {
+    title: "Tipe unit tidak dikenali vendor",
+    nextStep: "Samakan Tipe Unit pada alokasi dengan referensi tipe unit di Marison.",
+    href: "/admin/master-projects",
+    linkLabel: "Buka Master Proyek",
+  },
+  project: {
+    title: "Proyek external ditolak vendor",
+    nextStep: "Periksa Project ID external dan relasi kantor pemilik proyek.",
+    href: "/admin/master-projects",
+    linkLabel: "Buka Master Proyek",
+  },
+  branch: {
+    title: "Branch external ditolak vendor",
+    nextStep: "Periksa Branch ID external pada kantor terkait.",
+    href: "/admin/offices",
+    linkLabel: "Buka Master Kantor Cabang",
+  },
+  generic: {
+    title: "Penolakan vendor belum spesifik",
+    nextStep: "Vendor tidak menyebutkan field atau area yang ditolak. Periksa seluruh payload dan hubungi vendor untuk detail lebih lanjut.",
+  },
 };
+
+function getDiagnosisArea(issue: VendorDiagnosisIssue): string {
+  const msg = issue.message.toLowerCase();
+  if (issue.label === "Identitas external" || msg.includes("nik")) return "identity";
+  if (issue.label === "Tipe unit" || msg.includes("tipe unit") || msg.includes("tipe") || msg.includes("type")) return "unit_type";
+  if (issue.label === "Proyek external" || msg.includes("project") || msg.includes("proyek")) return "project";
+  if (issue.label === "Branch external" || msg.includes("branch") || msg.includes("kantor")) return "branch";
+  return "generic";
+}
+
+function DiagnosisBlock({ diagnosis, safeContext }: { diagnosis: VendorDiagnosis; safeContext: ReplacementPreflight["safeContext"] }) {
+  if (!diagnosis.detailsAvailable) {
+    return (
+      <div className="rounded-md border border-border bg-muted/60 px-3 py-3 text-sm">
+        <p className="font-medium text-foreground">Vendor menolak pengiriman</p>
+        <p className="mt-1 text-muted-foreground">Vendor tidak memberikan detail field yang ditolak.</p>
+      </div>
+    );
+  }
+
+  const areas = [...new Set(diagnosis.issues.map(getDiagnosisArea))];
+
+  return (
+    <div className="space-y-3">
+      {areas.map((area) => {
+        const guidance = diagnosisAreaGuidance[area];
+        const areaIssues = diagnosis.issues.filter((i) => getDiagnosisArea(i) === area);
+        return (
+          <div key={area} className={area === "generic" ? "rounded-md border border-border bg-muted/60 px-3 py-3 text-sm" : "rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"}>
+            <div className="flex items-start gap-2">
+              {area !== "generic" && <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+              <div className="flex-1">
+                <p className="font-medium text-foreground">{guidance?.title || "Penolakan vendor"}</p>
+                {areaIssues.map((issue, idx) => (
+                  <p key={idx} className="mt-1 text-muted-foreground">{issue.message}</p>
+                ))}
+                {area === "identity" && diagnosis.specificity === "area" && (
+                  <p className="mt-1 text-xs text-muted-foreground italic">Vendor tidak menyebutkan NIK milik siapa yang ditolak.</p>
+                )}
+                {area === "identity" && safeContext?.roles && safeContext.roles.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Peran yang dikirim: {safeContext.roles.join(", ")}.
+                  </p>
+                )}
+                {area === "unit_type" && safeContext?.unitTypes && safeContext.unitTypes.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Tipe unit yang dikirim: {safeContext.unitTypes.join(", ")}.
+                  </p>
+                )}
+                {guidance && (
+                  <p className="mt-2 text-xs text-muted-foreground">{guidance.nextStep}</p>
+                )}
+                {guidance?.href && guidance.linkLabel && (
+                  <Link className="mt-1 inline-block font-medium underline" to={guidance.href}>{guidance.linkLabel}</Link>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function MarisonOutboundQueuePanel() {
   const { status: environmentStatus } = useMarisonEnvironment();
@@ -125,6 +205,10 @@ export function MarisonOutboundQueuePanel() {
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
   const [replacement, setReplacement] = useState<MarisonDispatchRow | null>(null);
   const [replacementReason, setReplacementReason] = useState("");
+  const [replacementPreflightState, setReplacementPreflightState] = useState<ReplacementPreflightState>("idle");
+  const [replacementPreflightData, setReplacementPreflightData] = useState<ReplacementPreflight | null>(null);
+  const [marisonFixConfirmed, setMarisonFixConfirmed] = useState(false);
+  const replacementPreflightSeq = useRef(0);
 
   const dispatches = useQuery({
     queryKey: ["marison-outbound-dispatches", statusFilter, page],
@@ -162,6 +246,9 @@ export function MarisonOutboundQueuePanel() {
     onSuccess: async () => {
       setReplacement(null);
       setReplacementReason("");
+      setReplacementPreflightState("idle");
+      setReplacementPreflightData(null);
+      setMarisonFixConfirmed(false);
       await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
       toast.success("Pengiriman pengganti masuk ke antrean");
     },
@@ -209,6 +296,35 @@ export function MarisonOutboundQueuePanel() {
       setPreflightId(null);
     }
   };
+  const openReplacement = async (row: MarisonDispatchRow) => {
+    replacementMutation.reset();
+    setReplacement(row);
+    setReplacementReason("");
+    setMarisonFixConfirmed(false);
+    setReplacementPreflightState("checking");
+    setReplacementPreflightData(null);
+    const seq = ++replacementPreflightSeq.current;
+    try {
+      const result = await marisonIntegrationService.preflightReplacement(row.id);
+      if (seq !== replacementPreflightSeq.current) return;
+      setReplacementPreflightData(result);
+      if (result.payloadBodyInvariantViolated) {
+        setReplacementPreflightState("blocked");
+        toast.error("Payload job sebelumnya tidak tersedia. Tidak dapat mendiagnosis penolakan.");
+      } else if (result.localValidationIssues) {
+        setReplacementPreflightState("blocked");
+      } else if (!result.eligible) {
+        setReplacementPreflightState("blocked");
+      } else {
+        setReplacementPreflightState("ready");
+      }
+    } catch (error) {
+      if (seq !== replacementPreflightSeq.current) return;
+      setReplacementPreflightState("failed");
+      setReplacementPreflightData(null);
+      toast.error(error instanceof Error ? error.message : "Pemeriksaan penolakan gagal.");
+    }
+  };
   const closeDialog = () => {
     setSelected(null);
     setPreflightId(null);
@@ -221,7 +337,12 @@ export function MarisonOutboundQueuePanel() {
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
     && (action !== "reopen_confirmed_not_received" || riskConfirmed);
   const activeRecoveryGuidance = preflightReasonCode ? recoveryGuidance[preflightReasonCode] : null;
-  const activeReplacementChecks = replacement?.kind ? replacementChecks[replacement.kind] : [];
+  const canSubmitReplacement = replacementPreflightState === "ready"
+    && replacementPreflightData?.eligible === true
+    && replacementReason.trim().length > 0
+    && !replacementMutation.isPending
+    && (replacementPreflightData.sigapChanged || marisonFixConfirmed);
+
   const recoveryDialogDescription = recoveryState === "checking"
     ? "Sistem sedang memeriksa identitas external, mapping payload, dan status POST job."
     : recoveryState === "eligible"
@@ -350,11 +471,7 @@ export function MarisonOutboundQueuePanel() {
                              <Button
                                size="sm"
                                variant="destructive"
-                               onClick={() => {
-                                 replacementMutation.reset();
-                                 setReplacement(row);
-                                 setReplacementReason("");
-                               }}
+                               onClick={() => void openReplacement(row)}
                              >
                                Buat pengiriman pengganti
                              </Button>
@@ -403,23 +520,28 @@ export function MarisonOutboundQueuePanel() {
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">Job {selected.id}</p>
               </div>
               )}
-            {preflightId && <div className="rounded-md border border-blue-300/60 bg-blue-50 px-3 py-3 text-sm">Memeriksa kelayakan recovery...</div>}
+            {preflightId && (
+              <div role="status" aria-live="polite" className="rounded-md border border-border bg-muted/60 px-3 py-3 text-sm">
+                <p className="font-medium text-foreground">Memeriksa kelayakan recovery</p>
+                <p className="mt-1 text-muted-foreground">Sistem sedang memeriksa identitas external, mapping payload, dan status POST job.</p>
+              </div>
+            )}
             {preflightReason && (
               <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-                <p className="font-medium">{activeRecoveryGuidance?.title || "Konfigurasi belum siap"}</p>
-                <p className="mt-1">{preflightReason}</p>
-                {activeRecoveryGuidance?.nextStep && <p className="mt-1 text-xs opacity-80">{activeRecoveryGuidance.nextStep}</p>}
+                <p className="font-medium text-foreground">{activeRecoveryGuidance?.title || "Konfigurasi belum siap"}</p>
+                <p className="mt-1 text-muted-foreground">{preflightReason}</p>
+                {activeRecoveryGuidance?.nextStep && <p className="mt-1 text-xs text-muted-foreground">{activeRecoveryGuidance.nextStep}</p>}
                 {activeRecoveryGuidance?.href && activeRecoveryGuidance.linkLabel && (
                   <Link className="mt-2 inline-block font-medium underline" to={activeRecoveryGuidance.href}>{activeRecoveryGuidance.linkLabel}</Link>
                 )}
               </div>
             )}
             {action === "reopen_terminal_pre_post" && recoveryState === "eligible" && (
-              <div className="flex items-start gap-2 rounded-md border border-emerald-300/60 bg-emerald-50 px-3 py-3 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
+              <div role="status" aria-live="polite" className="flex items-start gap-2 rounded-md border border-emerald-300/60 bg-emerald-50 px-3 py-3 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
-                  <p className="font-medium">Konfigurasi payload siap</p>
-                  <p className="mt-1 text-xs opacity-80">Isi alasan audit untuk membuka kembali job dan membangun payload terbaru.</p>
+                  <p className="font-medium text-foreground">Konfigurasi payload siap</p>
+                  <p className="mt-1 text-muted-foreground">Isi alasan audit untuk membuka kembali job dan membangun payload terbaru.</p>
                 </div>
               </div>
             )}
@@ -459,6 +581,9 @@ export function MarisonOutboundQueuePanel() {
           if (!open && !replacementMutation.isPending) {
             setReplacement(null);
             setReplacementReason("");
+            setReplacementPreflightState("idle");
+            setReplacementPreflightData(null);
+            setMarisonFixConfirmed(false);
             replacementMutation.reset();
           }
         }}
@@ -467,7 +592,7 @@ export function MarisonOutboundQueuePanel() {
           <DialogHeader>
             <DialogTitle>Buat pengiriman pengganti</DialogTitle>
             <DialogDescription>
-              Vendor menolak payload sebelumnya. Periksa data di bawah sebelum membuat generasi pengiriman baru.
+              Vendor menolak payload sebelumnya. Periksa diagnosis di bawah sebelum membuat generasi pengiriman baru.
             </DialogDescription>
           </DialogHeader>
           {replacement && (
@@ -476,54 +601,98 @@ export function MarisonOutboundQueuePanel() {
               <p className="mt-1 text-xs text-muted-foreground">Generasi {replacement.generation} akan digantikan oleh generasi baru.</p>
             </div>
           )}
-          {replacement && (
-            <div className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  <p className="font-medium">Yang perlu diperiksa</p>
-                  <p className="mt-1 text-xs opacity-80">{replacement.failureReason || "Vendor tidak memberikan detail field yang ditolak."}</p>
-                </div>
-              </div>
-              <ul className="space-y-1.5 pl-6 text-xs">
-                {activeReplacementChecks.map((item) => (
-                  <li key={item.label} className="list-disc">
-                    {item.href ? <Link className="font-medium underline" to={item.href}>{item.label}</Link> : item.label}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs opacity-80">Jika seluruh data di atas sudah benar, penolakan berasal dari validasi vendor. Cantumkan koreksi yang dilakukan pada alasan audit.</p>
+          {replacementPreflightState === "checking" && (
+            <div role="status" aria-live="polite" className="rounded-md border border-border bg-muted/60 px-3 py-3 text-sm">
+              <p className="font-medium text-foreground">Memeriksa penyebab penolakan</p>
+              <p className="mt-1 text-muted-foreground">Sistem sedang memeriksa diagnosis vendor, payload sebelumnya, dan perubahan data SIGAP.</p>
             </div>
           )}
-          <div className="space-y-2 py-2">
-            <Label htmlFor="replacement-reason">Alasan dan perbaikan yang dilakukan</Label>
-            <Textarea
-              id="replacement-reason"
-              value={replacementReason}
-              onChange={(event) => {
-                replacementMutation.reset();
-                setReplacementReason(event.target.value);
-              }}
-              placeholder="Contoh: Mapping proyek diperbaiki sesuai data external."
-              rows={4}
-              maxLength={2000}
-              disabled={replacementMutation.isPending}
-            />
-            {replacementMutation.isError && (
-              <p role="alert" className="text-sm text-destructive">
-                {replacementMutation.error instanceof Error ? replacementMutation.error.message : "Pengiriman pengganti gagal dibuat."}
-              </p>
-            )}
-          </div>
+          {replacementPreflightState === "failed" && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm text-destructive">
+              <p className="font-medium">Pemeriksaan gagal</p>
+              <p className="mt-1 text-muted-foreground">Tidak dapat memeriksa penyebab penolakan. Muat ulang antrean dan coba lagi.</p>
+            </div>
+          )}
+          {replacementPreflightState === "blocked" && replacementPreflightData && (
+            <div className="space-y-3">
+              {replacementPreflightData.payloadBodyInvariantViolated && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm text-destructive">
+                  <p className="font-medium">Payload sebelumnya tidak tersedia</p>
+                  <p className="mt-1 text-muted-foreground">Job ini seharusnya memiliki payload setelah POST, tetapi payload tidak ditemukan. Ini merupakan pelanggaran invariant. Laporkan ke tim infrastruktur.</p>
+                </div>
+              )}
+              {!replacementPreflightData.payloadBodyInvariantViolated && replacementPreflightData.localValidationIssues && (
+                <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="font-medium text-foreground">Validasi lokal gagal</p>
+                  <p className="mt-1 text-muted-foreground">{replacementPreflightData.localValidationIssues}</p>
+                </div>
+              )}
+              {replacementPreflightData.vendorDiagnosis && replacementPreflightData.vendorDiagnosis.detailsAvailable && (
+                <DiagnosisBlock diagnosis={replacementPreflightData.vendorDiagnosis} safeContext={replacementPreflightData.safeContext} />
+              )}
+            </div>
+          )}
+          {replacementPreflightState === "ready" && replacementPreflightData && (
+            <div className="space-y-3">
+              {replacementPreflightData.vendorDiagnosis && (
+                <DiagnosisBlock diagnosis={replacementPreflightData.vendorDiagnosis} safeContext={replacementPreflightData.safeContext} />
+              )}
+              {replacementPreflightData.changedAreas && replacementPreflightData.changedAreas.length > 0 && (
+                <div className="rounded-md border border-blue-300 bg-blue-50 px-3 py-3 text-sm dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+                  <p className="font-medium text-foreground">Perubahan sejak pengiriman terakhir</p>
+                  <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                    {replacementPreflightData.changedAreas.map((change, idx) => (
+                      <li key={idx}>{change}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {replacementPreflightData.noSigapChangesNote && (
+                <div className="rounded-md border border-border bg-muted/60 px-3 py-3 text-sm">
+                  <p className="text-muted-foreground">{replacementPreflightData.noSigapChangesNote}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {replacementPreflightState === "ready" && replacementPreflightData && replacement && (
+            <div className="space-y-2 py-2">
+              <Label htmlFor="replacement-reason">Alasan dan perbaikan yang dilakukan</Label>
+              <Textarea
+                id="replacement-reason"
+                value={replacementReason}
+                onChange={(event) => {
+                  replacementMutation.reset();
+                  setReplacementReason(event.target.value);
+                }}
+                placeholder="Contoh: Mapping proyek diperbaiki sesuai data external."
+                rows={4}
+                maxLength={2000}
+                disabled={replacementMutation.isPending}
+              />
+              {replacementPreflightState === "ready" && replacementPreflightData && !replacementPreflightData.sigapChanged && (
+                <label className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm leading-5">
+                  <Checkbox checked={marisonFixConfirmed} onCheckedChange={(checked) => setMarisonFixConfirmed(checked === true)} />
+                  <span>Saya sudah memperbaiki data referensi di sistem Marison dan siap membuat pengiriman pengganti.</span>
+                </label>
+              )}
+              {replacementMutation.isError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {replacementMutation.error instanceof Error ? replacementMutation.error.message : "Pengiriman pengganti gagal dibuat."}
+                </p>
+              )}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReplacement(null)} disabled={replacementMutation.isPending}>Batal</Button>
-            <Button
-              onClick={() => replacementMutation.mutate()}
-              disabled={!replacementReason.trim() || replacementMutation.isPending}
-            >
-              {replacementMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Buat pengiriman pengganti
-            </Button>
+            <Button variant="outline" onClick={() => { setReplacement(null); setReplacementReason(""); setReplacementPreflightState("idle"); setReplacementPreflightData(null); setMarisonFixConfirmed(false); replacementMutation.reset(); }} disabled={replacementMutation.isPending}>Batal</Button>
+            {replacementPreflightState === "ready" && (
+              <Button
+                onClick={() => replacementMutation.mutate()}
+                disabled={!canSubmitReplacement}
+              >
+                {replacementMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Buat pengiriman pengganti
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
