@@ -238,6 +238,28 @@ export const marisonIntegrationService = {
   preflightDispatch: (dispatchId: string) => request<{ eligible: boolean; reasonCode?: string | null; reason?: string | null; blockedStage?: number }>(
     `/api/integrations/marison/dispatches/${dispatchId}/preflight`
   ),
+  preflightReplacement: (dispatchId: string) => request<{
+    eligible: boolean;
+    vendorDiagnosis: {
+      detailsAvailable: boolean;
+      specificity: "field" | "area" | "generic";
+      summary: string;
+      issues: Array<{ path: string; label: string; message: string; specificity: string }>;
+    };
+    payloadBodyInvariantViolated: boolean;
+    safeContext: {
+      roles?: string[];
+      unitTypes?: string[];
+      itemNames?: string[];
+      hasProjectId?: boolean;
+      hasBranchId?: boolean;
+      attachmentCount?: number;
+    } | null;
+    localValidationIssues: string | null;
+    changedAreas: string[] | null;
+    sigapChanged: boolean;
+    noSigapChangesNote?: string;
+  }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
   createReplacement: (dispatchId: string, reason: string) => request<{ replacementId: string }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
     method: "POST",
     body: JSON.stringify({ reason }),
