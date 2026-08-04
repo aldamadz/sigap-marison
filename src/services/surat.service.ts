@@ -2749,6 +2749,43 @@ export const suratService = {
     }).filter(Boolean);
   },
 
+  async getMyInboxCompact(params: { limit?: number; cursor?: string; search?: string; request_category?: string; task_type?: string } = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Unauthorized");
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.cursor) qs.set("cursor", params.cursor);
+    if (params.search) qs.set("search", params.search);
+    if (params.request_category) qs.set("request_category", params.request_category);
+    if (params.task_type) qs.set("task_type", params.task_type);
+    const response = await fetch(`/api/surat/inbox?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Gagal memuat inbox."));
+    return payload as {
+      items: any[];
+      total: number;
+      hasMore: boolean;
+      nextCursor: string | null;
+      pageSize: number;
+    };
+  },
+
+  async getMyInboxDetail(signatureId: string) {
+    if (!signatureId) throw new Error("signature ID wajib diisi");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Unauthorized");
+    const response = await fetch(`/api/surat/inbox/${encodeURIComponent(signatureId)}/detail`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Gagal memuat detail task."));
+    return payload as any;
+  },
+
   async getLinkedDocuments(parentSuratId: string): Promise<LinkedSuratDocument[]> {
     if (!parentSuratId) return [];
     const { data, error } = await supabase.rpc("get_surat_linked_documents", {

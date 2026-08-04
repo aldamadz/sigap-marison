@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { 
   Loader2, 
@@ -98,6 +98,11 @@ export default function InboxPage() {
   const appDialog = useAppDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [kpiFilter, setKpiFilter] = useState("all");
@@ -138,16 +143,64 @@ export default function InboxPage() {
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. DATA INBOX
-  const { data: inbox = [], isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
-    queryKey: ['surat-inbox'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unauthorized");
-      return await suratService.getMyInbox(user.id);
-    },
+  // 1. DATA INBOX (compact)
+  const [inboxCursor, setInboxCursor] = useState<string | null>(null);
+  const [inboxAllItems, setInboxAllItems] = useState<any[]>([]);
+  const [inboxHasMore, setInboxHasMore] = useState(false);
+  const [inboxTotal, setInboxTotal] = useState(0);
+  const [detailCache, setDetailCache] = useState<Record<string, any>>({});
+
+  const inboxFilterKey = `${debouncedSearch}|${categoryFilter}|${actionFilter}`;
+  const prevFilterKeyRef = useRef(inboxFilterKey);
+  useEffect(() => {
+    if (prevFilterKeyRef.current !== inboxFilterKey) {
+      prevFilterKeyRef.current = inboxFilterKey;
+      setInboxCursor(null);
+      setInboxAllItems([]);
+      setInboxHasMore(false);
+      setInboxTotal(0);
+    }
+  }, [inboxFilterKey]);
+
+  const taskTypeParam = actionFilter === "approval" ? "approval" : actionFilter === "verification" ? "verification" : undefined;
+
+  const { data: inboxPage, isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
+    queryKey: ['surat-inbox-compact', inboxFilterKey, inboxCursor] as string[],
+    queryFn: () => suratService.getMyInboxCompact({
+      limit: 20,
+      cursor: inboxCursor || undefined,
+      search: debouncedSearch || undefined,
+      request_category: categoryFilter !== "all" ? categoryFilter : undefined,
+      task_type: taskTypeParam,
+    }),
     staleTime: 30000,
+    placeholderData: keepPreviousData,
   });
+
+  useEffect(() => {
+    if (!inboxPage) return;
+    const page = inboxPage as { items: any[]; total: number | null; hasMore: boolean; nextCursor: string | null; pageSize: number };
+    if (!inboxCursor) {
+      setInboxAllItems(page.items);
+      if (page.total !== null) setInboxTotal(page.total);
+    } else {
+      setInboxAllItems((prev) => {
+        const ids = new Set(prev.map((i: any) => i.id));
+        const next = page.items.filter((i: any) => !ids.has(i.id));
+        return [...prev, ...next];
+      });
+    }
+    setInboxHasMore(page.hasMore);
+  }, [inboxPage]);
+
+  const inbox = inboxAllItems;
+
+  const refetchInboxFull = () => {
+    setInboxCursor(null);
+    setInboxAllItems([]);
+    setDetailCache({});
+    refetchInbox();
+  };
 
   const { data: kpiDetails = [], isLoading: kpiLoading } = useQuery({
     queryKey: ['surat-inbox-kpi'],
@@ -216,36 +269,35 @@ export default function InboxPage() {
   ), [kpiDetails]);
 
   const filteredInbox = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
-    return [...inbox]
-      .filter((item: any) => {
-        const surat = item.surat_registrasi || {};
-        const requester = surat.requester_snapshot || surat.data_snapshot?.requester || {};
-        const category = String(surat.form_input_data?.request_category || surat.data_snapshot?.request_category || "").toLowerCase();
-        const kpi = kpiBySignature.get(item.id);
-        const action = getTaskAction(item);
-        const matchesSearch = !search || [
-          surat.judul_surat,
-          surat.no_surat,
-          requester.full_name,
-          surat.location_snapshot?.department?.name,
-        ].some((value) => String(value || "").toLowerCase().includes(search));
-        const matchesCategory = categoryFilter === "all" || category === categoryFilter;
-        const matchesKpi = kpiFilter === "all" ||
-          (kpiFilter === "late" && kpi?.is_late) ||
-          (kpiFilter === "due" && kpi && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes <= 30) ||
-          (kpiFilter === "on_time" && (!kpi || (!kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes > 30)));
-        return matchesSearch && matchesCategory && matchesKpi && (actionFilter === "all" || action === actionFilter);
-      })
-      .sort((left: any, right: any) => {
-        const leftStarted = new Date(left.available_at || left.surat_registrasi?.created_at || 0).getTime();
-        const rightStarted = new Date(right.available_at || right.surat_registrasi?.created_at || 0).getTime();
-        return leftStarted - rightStarted;
-      });
-  }, [inbox, searchTerm, categoryFilter, kpiFilter, actionFilter, kpiBySignature]);
+    return [...inbox].filter((item: any) => {
+      const kpi = kpiBySignature.get(item.id);
+      const matchesKpi = kpiFilter === "all" ||
+        (kpiFilter === "late" && kpi?.is_late) ||
+        (kpiFilter === "due" && kpi && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes <= 30) ||
+        (kpiFilter === "on_time" && (!kpi || (!kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes > 30)));
+      return matchesKpi;
+    });
+  }, [inbox, kpiFilter, kpiBySignature]);
 
   const requestedTaskId = searchParams.get("task");
-  const selectedItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;
+  const selectedCompactItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;
+  const selectedSignatureId = selectedCompactItem?.id || null;
+
+  const { data: selectedDetail, isFetching: detailFetching } = useQuery({
+    queryKey: ['surat-inbox-detail', selectedSignatureId],
+    queryFn: () => suratService.getMyInboxDetail(selectedSignatureId!),
+    enabled: Boolean(selectedSignatureId),
+    staleTime: 30000,
+    gcTime: 120000,
+  });
+
+  useEffect(() => {
+    if (selectedDetail && selectedSignatureId) {
+      setDetailCache((prev) => ({ ...prev, [selectedSignatureId]: selectedDetail }));
+    }
+  }, [selectedDetail, selectedSignatureId]);
+
+  const selectedItem = selectedDetail || detailCache[selectedSignatureId || ""] || selectedCompactItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
 
   const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
@@ -317,9 +369,13 @@ export default function InboxPage() {
     const scheduleInboxRefresh = () => {
       if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
       realtimeRefreshTimerRef.current = setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["surat-inbox"] });
+        setInboxCursor(null);
+        setInboxAllItems([]);
+        setDetailCache({});
+        queryClient.invalidateQueries({ queryKey: ["surat-inbox-compact"] });
         queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] });
         queryClient.invalidateQueries({ queryKey: ["surat-linked-documents"] });
+        queryClient.invalidateQueries({ queryKey: ["surat-inbox-detail"] });
       }, 700);
     };
 
@@ -708,7 +764,7 @@ const handleApprove = async (item: any) => {
     });
 
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
+      queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
       queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
       refetchAttention(),
     ]);
@@ -749,7 +805,7 @@ const handleApprove = async (item: any) => {
         description: "Alur dokumen telah dihentikan secara permanen.",
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
         refetchAttention(),
       ]);
@@ -850,7 +906,7 @@ const handleApprove = async (item: any) => {
         return next;
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
         refetchAttention(),
       ]);
@@ -1135,7 +1191,7 @@ const handleApprove = async (item: any) => {
         description: `Pengajuan masuk status Menunggu Perbaikan dan dikirim ke ${targetLabel[target] || "tujuan revisi"}.`,
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
         refetchAttention(),
@@ -2109,7 +2165,7 @@ const handleApprove = async (item: any) => {
         description: "Pengajuan dikirim ke pemohon untuk persetujuan kelanjutan proses.",
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
         queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
         refetchAttention(),
@@ -2502,18 +2558,39 @@ const handleApprove = async (item: any) => {
                       <p className="mt-1 text-xs text-muted-foreground">Ubah pencarian atau filter.</p>
                     </div>
                   )}
+                  {inboxHasMore && (
+                    <div className="pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                        disabled={isFetching}
+                        onClick={() => setInboxCursor((inboxPage as any)?.nextCursor ?? null)}
+                      >
+                        {isFetching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+                        Muat lebih banyak ({inboxTotal - inboxAllItems.length} tersisa)
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </PopoverContent>
           </Popover>
-          <Badge variant="outline" className="h-10 px-3 text-sm">{inbox.length} total</Badge>
+          <Badge variant="outline" className="h-10 px-3 text-sm">{inboxTotal} total</Badge>
           {isFetching || kpiLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
         </div>
       </header>
 
       <div className="overflow-visible rounded-lg border border-border bg-card shadow-[var(--shadow-card)] lg:h-[calc(100vh-11rem)] lg:min-h-[640px] lg:overflow-hidden">
           <main className="min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden">
-          {selectedItem && activeSurat ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+          {detailFetching && !selectedDetail && selectedCompactItem ? (
+            <div className="flex flex-col gap-4 p-6">
+              <Skeleton className="h-6 w-1/3" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : selectedItem && activeSurat ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <div className="shrink-0 flex items-start gap-3 border-b border-border bg-card p-4 sm:p-5">
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
