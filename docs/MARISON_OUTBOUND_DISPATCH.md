@@ -5,14 +5,18 @@ Dokumen ini menjelaskan rollout dan operasi outbox untuk `MRN-05`, `MRN-06`, dan
 Production tidak boleh diaktifkan tanpa persetujuan rilis production yang
 eksplisit dan kejelasan mekanisme deduplikasi dari vendor.
 
-Status per 3 Agustus 2026: model generasi replacement dan panel antrean sudah
+Status per 4 Agustus 2026: model generasi replacement dan panel antrean sudah
 diterapkan serta diuji di staging tanpa membuat replacement atau mengirim
 business POST. Hotfix runtime memastikan helper eligibility recovery ikut
 di-import dan hasil preflight selalu dikirim sebagai respons HTTP oleh handler;
 keduanya dilindungi regression test. Diagnosis preflight membedakan mapping
 pemohon/penandatangan, identitas kantor, identitas proyek, dan ketidaksesuaian
-project-branch agar admin diarahkan ke master data yang tepat. Production belum
-disentuh.
+project-branch agar admin diarahkan ke master data yang tepat. Preflight
+replacement HTTP 422 sekarang menjalankan diagnosis vendor spesifik, membangun
+konteks aman tanpa NIK atau payload mentah, membandingkan perubahan SIGAP,
+dan memvalidasi surat serta payload kandidat sebelum mengizinkan pengganti.
+POST replacement menjalankan ulang preflight untuk mencegah bypass TOCTOU.
+Production belum disentuh.
 
 ## Jaminan Utama
 
@@ -149,6 +153,36 @@ identitas external pemohon dan penandatangan, relasi proyek dan branch, rincian
 item, serta dokumen. Jika vendor hanya mengembalikan HTTP 422 tanpa field yang
 spesifik, dialog menyatakannya secara eksplisit agar admin tidak mengira selalu
 ada kesalahan pada konfigurasi SIGAP.
+
+#### Preflight Replacement HTTP 422
+
+`GET /api/integrations/marison/dispatches/:dispatchId/replacement-preflight`
+adalah endpoint read-only yang menjalankan diagnosis spesifik sebelum admin membuat
+pengiriman pengganti. Endpoint ini:
+
+- Hanya tersedia di staging dan memerlukan sesi admin.
+- Membaca response vendor dan payload_body dari job yang gagal tanpa mengubah
+  status, lease, atau membuat event apapun.
+- Menjalankan `diagnoseVendorRejection` untuk mengklasifikasikan penolakan vendor
+  dengan specificity `field`, `area`, atau `generic`. Diagnosis `generic` tidak
+  mengarahkan admin ke halaman master data yang menyesatkan.
+- Membangun `safeContext` yang berisi peran (Pemohon, Penandatangan tahap N)
+  dan tipe unit tanpa mengekspos NIK atau payload mentah ke browser.
+- Memvalidasi bahwa `payload_body` ada dan hash SHA-256 cocok untuk job pasca-POST.
+  Jika `payload_body` null, JSON malformed, atau hash tidak cocok, endpoint
+  melaporkan `payloadBodyInvariantViolated: true` dan `eligible: false`.
+- Memvalidasi bahwa surat berstatus final dan seluruh penandatangan telah
+  menandatangani. Jika tidak, `eligible: false` dengan `reasonCode` stabil.
+- Membangun payload kandidat menggunakan builder pure (tanpa side effect) dan
+  membandingkan perubahan SIGAP. Hasil perbandingan hanya berisi ringkasan
+  seperti "Mapping pemohon berubah" tanpa NIK atau signed URL.
+- Jika tidak ada perubahan SIGAP, endpoint mengembalikan
+  `noSigapChangesNote` dan UI mewajibkan admin mencentang konfirmasi bahwa
+  perbaikan dilakukan di sistem Marison.
+
+POST `create_marisonOutboundReplacement` menjalankan ulang preflight yang sama
+tepat sebelum RPC untuk mencegah bypass TOCTOU. Jika preflight gagal, POST
+mengembalikan 409.
 
 Unit dan Non Unit mewajibkan resolution source `projectId`. Migration
 `20260803170000_fix_marison_resolution_source_array.sql` memakai `array_append`

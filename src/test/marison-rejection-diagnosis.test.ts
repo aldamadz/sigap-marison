@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diagnoseVendorRejection, buildSafeContext, comparePayloads } from "../../server/marison-rejection-diagnosis.mjs";
+import { diagnoseVendorRejection, buildSafeContext, comparePayloads, collectSensitiveValues } from "../../server/marison-rejection-diagnosis.mjs";
 
 describe("diagnoseVendorRejection", () => {
   it("returns generic when response is null", () => {
@@ -34,10 +34,16 @@ describe("diagnoseVendorRejection", () => {
     expect(result.issues[0].message).toBe("Tipe unit tidak ditemukan di referensi.");
   });
 
-  it("masks NIK values in messages", () => {
+  it("masks 16-digit NIK values in messages", () => {
     const result = diagnoseVendorRejection({ message: "NIK 1234567890123456 tidak terdaftar." });
-    expect(result.issues[0].message).toContain("1234****3456");
     expect(result.issues[0].message).not.toContain("1234567890123456");
+    expect(result.issues[0].message).toContain("****");
+  });
+
+  it("masks alphanumeric NIK-like values like A 114", () => {
+    const result = diagnoseVendorRejection({ message: "NIK A 114 tidak terdaftar." });
+    expect(result.issues[0].message).not.toContain("A 114");
+    expect(result.issues[0].message).toContain("***");
   });
 
   it("parses FastAPI detail array with field specificity", () => {
@@ -73,10 +79,21 @@ describe("diagnoseVendorRejection", () => {
     expect(result.specificity).toBe("area");
   });
 
-  it("falls back to generic for unknown messages", () => {
+  it("falls back to generic for unknown messages without misleading links", () => {
     const result = diagnoseVendorRejection({ message: "Internal server error." });
     expect(result.specificity).toBe("generic");
     expect(result.issues[0].label).toBe("");
+    expect(result.summary).toBe("Penolakan vendor belum spesifik.");
+  });
+
+  it("summary is area-specific for area issues", () => {
+    const result = diagnoseVendorRejection({ message: "NIK tidak terdaftar." });
+    expect(result.summary).toBe("Identitas external ditolak vendor");
+  });
+
+  it("summary is field-specific for detail array issues", () => {
+    const result = diagnoseVendorRejection({ detail: [{ loc: ["body", "submitted_by"], msg: "invalid", type: "value_error" }] });
+    expect(result.summary).toBe("Vendor menolak field tertentu pada payload.");
   });
 });
 
@@ -98,24 +115,13 @@ describe("buildSafeContext", () => {
   });
 
   it("extracts unit types for unit kind", () => {
-    const payload = {
-      units: [
-        { type: "60" },
-        { type: "60/72" },
-        { type: "60" },
-      ],
-    };
+    const payload = { units: [{ type: "60" }, { type: "60/72" }, { type: "60" }] };
     const context = buildSafeContext(payload, "unit");
     expect(context?.unitTypes).toEqual(["60", "60/72"]);
   });
 
   it("extracts item names for non_unit kind", () => {
-    const payload = {
-      items: [
-        { item_name: "Pekerjaan A" },
-        { item_name: "Pekerjaan B" },
-      ],
-    };
+    const payload = { items: [{ item_name: "Pekerjaan A" }, { item_name: "Pekerjaan B" }] };
     const context = buildSafeContext(payload, "non_unit");
     expect(context?.itemNames).toEqual(["Pekerjaan A", "Pekerjaan B"]);
   });
@@ -126,7 +132,7 @@ describe("buildSafeContext", () => {
     expect(context?.unitTypes).toHaveLength(10);
   });
 
-  it("does not expose NIK values", () => {
+  it("does not expose NIK values in safe context", () => {
     const payload = {
       submitted_by: "1234567890123456",
       approvals: [{ nik: "1111222233334444", role: "signer", action: "approved", actioned_at: "2026-01-01T00:00:00Z" }],
@@ -135,6 +141,33 @@ describe("buildSafeContext", () => {
     const serialized = JSON.stringify(context);
     expect(serialized).not.toContain("1234567890123456");
     expect(serialized).not.toContain("1111222233334444");
+  });
+
+  it("does not expose alphanumeric NIK like A 114", () => {
+    const payload = { submitted_by: "A 114" };
+    const context = buildSafeContext(payload, "unit");
+    const serialized = JSON.stringify(context);
+    expect(serialized).not.toContain("A 114");
+  });
+});
+
+describe("collectSensitiveValues", () => {
+  it("collects submitted_by and approval NIKs", () => {
+    const payload = {
+      submitted_by: "1234567890123456",
+      approvals: [
+        { nik: "1111222233334444", role: "signer" },
+        { nik: "A 114", role: "signer" },
+      ],
+    };
+    const values = collectSensitiveValues(payload);
+    expect(values.has("1234567890123456")).toBe(true);
+    expect(values.has("1111222233334444")).toBe(true);
+    expect(values.has("A 114")).toBe(true);
+  });
+
+  it("returns empty set for null payload", () => {
+    expect(collectSensitiveValues(null).size).toBe(0);
   });
 });
 
@@ -153,11 +186,12 @@ describe("comparePayloads", () => {
     expect(changes).toContain("Mapping penandatangan tahap 1 berubah.");
   });
 
-  it("detects unit type change", () => {
+  it("detects unit type change without extra quote", () => {
     const old = { units: [{ type: "60" }] };
     const current = { units: [{ type: "60/72" }] };
     const changes = comparePayloads(old, current, "unit");
-    expect(changes.some((c) => c.includes("Tipe unit berubah"))).toBe(true);
+    expect(changes.some((c) => c.includes("Tipe unit berubah dari 60 menjadi 60/72."))).toBe(true);
+    expect(changes.some((c) => c.includes('".') && !c.includes('."'))).toBe(false);
   });
 
   it("detects project ID change", () => {
@@ -193,5 +227,9 @@ describe("comparePayloads", () => {
   it("returns empty array for identical payloads", () => {
     const payload = { submitted_by: "A", project_id: 1, branch_id: 2 };
     expect(comparePayloads(payload, payload, "unit")).toEqual([]);
+  });
+
+  it("returns empty array when old payload is null", () => {
+    expect(comparePayloads(null, { project_id: 1 }, "unit")).toEqual([]);
   });
 });

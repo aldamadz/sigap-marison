@@ -124,6 +124,41 @@ export type MarisonEmployeeSyncResult = {
   errors: MarisonEmployeeSyncIssue[];
 };
 
+export type VendorDiagnosisSpecificity = "field" | "area" | "generic";
+
+export type VendorDiagnosisIssue = {
+  path: string;
+  label: string;
+  message: string;
+  specificity: VendorDiagnosisSpecificity;
+};
+
+export type VendorDiagnosis = {
+  detailsAvailable: boolean;
+  specificity: VendorDiagnosisSpecificity;
+  summary: string;
+  issues: VendorDiagnosisIssue[];
+};
+
+export type ReplacementPreflight = {
+  eligible: boolean;
+  vendorDiagnosis: VendorDiagnosis;
+  payloadBodyInvariantViolated: boolean;
+  safeContext: {
+    roles?: string[];
+    unitTypes?: string[];
+    itemNames?: string[];
+    hasProjectId?: boolean;
+    hasBranchId?: boolean;
+    attachmentCount?: number;
+  } | null;
+  localValidationIssues: string | null;
+  changedAreas: string[] | null;
+  sigapChanged: boolean;
+  noSigapChangesNote?: string;
+  reasonCode?: string | null;
+};
+
 export type MarisonDispatchStatus =
   | "pending"
   | "processing"
@@ -238,28 +273,7 @@ export const marisonIntegrationService = {
   preflightDispatch: (dispatchId: string) => request<{ eligible: boolean; reasonCode?: string | null; reason?: string | null; blockedStage?: number }>(
     `/api/integrations/marison/dispatches/${dispatchId}/preflight`
   ),
-  preflightReplacement: (dispatchId: string) => request<{
-    eligible: boolean;
-    vendorDiagnosis: {
-      detailsAvailable: boolean;
-      specificity: "field" | "area" | "generic";
-      summary: string;
-      issues: Array<{ path: string; label: string; message: string; specificity: string }>;
-    };
-    payloadBodyInvariantViolated: boolean;
-    safeContext: {
-      roles?: string[];
-      unitTypes?: string[];
-      itemNames?: string[];
-      hasProjectId?: boolean;
-      hasBranchId?: boolean;
-      attachmentCount?: number;
-    } | null;
-    localValidationIssues: string | null;
-    changedAreas: string[] | null;
-    sigapChanged: boolean;
-    noSigapChangesNote?: string;
-  }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
+  preflightReplacement: (dispatchId: string) => request<ReplacementPreflight>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
   createReplacement: (dispatchId: string, reason: string) => request<{ replacementId: string }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
     method: "POST",
     body: JSON.stringify({ reason }),

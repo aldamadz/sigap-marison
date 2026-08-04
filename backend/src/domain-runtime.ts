@@ -32,6 +32,7 @@ import {
   diagnoseVendorRejection,
   buildSafeContext,
   comparePayloads,
+  collectSensitiveValues,
 } from "../../server/marison-rejection-diagnosis.mjs";
 import {
   buildApprovalResolutionKey,
@@ -4430,6 +4431,12 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
     err.status = 400;
     throw err;
   }
+  const preflight = await preflightMarisonOutboundReplacement(req, dispatchId);
+  if (!preflight.eligible) {
+    const err = new Error(preflight.localValidationIssues || "Job tidak memenuhi syarat pengiriman pengganti.");
+    err.status = 409;
+    throw err;
+  }
   const { data, error } = await supabase.rpc("create_marison_outbound_replacement", {
     p_dispatch_id: dispatchId,
     p_actor_id: actor.id,
@@ -4492,24 +4499,58 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
   } else if (job.payload_body) {
     try {
       failedPayload = typeof job.payload_body === "string" ? JSON.parse(job.payload_body) : job.payload_body;
-    } catch { failedPayload = null; }
+    } catch {
+      payloadBodyInvariantViolated = true;
+      failedPayload = null;
+    }
+    if (failedPayload && job.payload_hash) {
+      const computedHash = sha256Hex(Buffer.from(typeof job.payload_body === "string" ? job.payload_body : JSON.stringify(job.payload_body)));
+      if (computedHash !== job.payload_hash) {
+        payloadBodyInvariantViolated = true;
+        failedPayload = null;
+      }
+    }
   }
 
-  const safeContext = buildSafeContext(failedPayload, job.kind);
+  const sensitiveValues = collectSensitiveValues(failedPayload);
+  const safeContext = buildSafeContext(failedPayload, job.kind, sensitiveValues);
 
   let localValidationIssues = null;
   let changedAreas = null;
   let sigapChanged = false;
+  let reasonCode = null;
 
-  if (!payloadBodyInvariantViolated) {
+  if (payloadBodyInvariantViolated) {
+    reasonCode = "PAYLOAD_BODY_INVARIANT_VIOLATED";
+  } else {
+    let surat = null;
     try {
-      const { data: surat, error: suratError } = await supabase
+      const { data: suratData, error: suratError } = await supabase
         .from("surat_registrasi")
         .select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))")
         .eq("id", job.surat_id)
         .maybeSingle();
       if (suratError) throw suratError;
-      if (surat && ["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
+      surat = suratData;
+    } catch {
+      localValidationIssues = "Surat tidak dapat dimuat untuk validasi.";
+      reasonCode = "SURAT_UNAVAILABLE";
+    }
+
+    if (surat && !localValidationIssues) {
+      if (!["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
+        localValidationIssues = "Surat belum selesai ditandatangani.";
+        reasonCode = "SURAT_NOT_FINAL";
+      } else {
+        const signatures = Array.isArray(surat.surat_signatures) ? surat.surat_signatures : [];
+        const allSigned = signatures.length > 0 && signatures.every((s) => s.is_signed && s.signed_at);
+        if (!allSigned) {
+          localValidationIssues = "Seluruh penandatangan belum menandatangani surat.";
+          reasonCode = "SIGNATURES_INCOMPLETE";
+        }
+      }
+
+      if (!localValidationIssues) {
         try {
           const identity = await resolveMarisonOutboundIdentity(surat);
           const mappings = await getMarisonOutboundMappings(surat, job.kind);
@@ -4525,13 +4566,17 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
           }
         } catch (validationError) {
           localValidationIssues = validationError instanceof Error ? validationError.message : "Validasi lokal gagal.";
+          reasonCode = "LOCAL_VALIDATION_FAILED";
         }
       }
-    } catch { localValidationIssues = "Surat tidak dapat dimuat untuk validasi."; }
+    }
   }
 
+  const eligible = !payloadBodyInvariantViolated && !localValidationIssues;
+
   const result = {
-    eligible: !payloadBodyInvariantViolated && !localValidationIssues,
+    eligible,
+    reasonCode,
     vendorDiagnosis: diagnosis,
     payloadBodyInvariantViolated,
     safeContext,
@@ -4540,7 +4585,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
     sigapChanged,
   };
 
-  if (!sigapChanged && !payloadBodyInvariantViolated) {
+  if (!sigapChanged && !payloadBodyInvariantViolated && eligible) {
     result.noSigapChangesNote = "Belum ada perubahan terkait yang terdeteksi di SIGAP. Pastikan data referensi di Marison sudah diperbaiki sebelum membuat pengiriman pengganti.";
   }
 

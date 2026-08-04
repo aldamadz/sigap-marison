@@ -1,8 +1,16 @@
-const NIK_PATTERN = /\b\d{16}\b/g;
+const SENSITIVE_VALUE_PATTERNS = [
+  { re: /\b\d{4}\d{8}\d{4}\b/g, mask: (m) => `${m.slice(0, 4)}****${m.slice(-4)}` },
+  { re: /\b[A-Za-z]{1,3}\s?\d{3,}\b/g, mask: (m) => m.length <= 4 ? `${m.slice(0, 2)}***` : `${m.slice(0, 3)}***` },
+];
 
-const maskNik = (text) => {
+const maskSensitiveValues = (text) => {
   if (typeof text !== "string") return String(text ?? "");
-  return text.replace(NIK_PATTERN, (match) => `${match.slice(0, 4)}****${match.slice(-4)}`);
+  let result = text;
+  for (const { re, mask } of SENSITIVE_VALUE_PATTERNS) {
+    re.lastIndex = 0;
+    result = result.replace(re, mask);
+  }
+  return result;
 };
 
 const PATH_LABELS = {
@@ -36,7 +44,7 @@ export const diagnoseVendorRejection = (response) => {
       const path = typeof entry?.loc === "string" ? entry.loc : Array.isArray(entry?.loc) ? entry.loc.join(".") : "";
       const message = typeof entry?.msg === "string" ? entry.msg : String(entry?.msg ?? "");
       if (!path && !message) continue;
-      issues.push({ path, label: getPathLabel(path), message: maskNik(message), specificity: "field" });
+      issues.push({ path, label: getPathLabel(path), message: maskSensitiveValues(message), specificity: "field" });
     }
   }
 
@@ -46,19 +54,19 @@ export const diagnoseVendorRejection = (response) => {
 
     if (issues.length === 0) {
       if (lowerMessage.includes("nik") && lowerMessage.includes("tidak terdaftar")) {
-        issues.push({ path: "", label: "Identitas external", message: maskNik(rawMessage), specificity: "area" });
+        issues.push({ path: "", label: "Identitas external", message: maskSensitiveValues(rawMessage), specificity: "area" });
       } else if (lowerMessage.includes("tipe unit") && lowerMessage.includes("tidak ditemukan")) {
-        issues.push({ path: "", label: "Tipe unit", message: maskNik(rawMessage), specificity: "area" });
+        issues.push({ path: "", label: "Tipe unit", message: maskSensitiveValues(rawMessage), specificity: "area" });
       } else if (lowerMessage.includes("nik")) {
-        issues.push({ path: "", label: "Identitas external", message: maskNik(rawMessage), specificity: "area" });
+        issues.push({ path: "", label: "Identitas external", message: maskSensitiveValues(rawMessage), specificity: "area" });
       } else if (lowerMessage.includes("tipe") || lowerMessage.includes("type")) {
-        issues.push({ path: "", label: "Tipe unit", message: maskNik(rawMessage), specificity: "area" });
+        issues.push({ path: "", label: "Tipe unit", message: maskSensitiveValues(rawMessage), specificity: "area" });
       } else if (lowerMessage.includes("project") || lowerMessage.includes("proyek")) {
-        issues.push({ path: "", label: "Proyek external", message: maskNik(rawMessage), specificity: "area" });
+        issues.push({ path: "", label: "Proyek external", message: maskSensitiveValues(rawMessage), specificity: "area" });
       } else if (lowerMessage.includes("branch") || lowerMessage.includes("kantor")) {
-        issues.push({ path: "", label: "Branch external", message: maskNik(rawMessage), specificity: "area" });
+        issues.push({ path: "", label: "Branch external", message: maskSensitiveValues(rawMessage), specificity: "area" });
       } else {
-        issues.push({ path: "", label: "", message: maskNik(rawMessage), specificity: "generic" });
+        issues.push({ path: "", label: "", message: maskSensitiveValues(rawMessage), specificity: "generic" });
       }
     }
   }
@@ -67,7 +75,7 @@ export const diagnoseVendorRejection = (response) => {
     const stringKeys = Object.keys(response).filter((key) => typeof response[key] === "string" && response[key].trim());
     for (const key of stringKeys) {
       if (key === "detail" || key === "message") continue;
-      issues.push({ path: key, label: getPathLabel(key), message: maskNik(String(response[key])), specificity: "generic" });
+      issues.push({ path: key, label: getPathLabel(key), message: maskSensitiveValues(String(response[key])), specificity: "generic" });
     }
   }
 
@@ -85,12 +93,24 @@ export const diagnoseVendorRejection = (response) => {
     ? "Vendor menolak field tertentu pada payload."
     : specificity === "area"
       ? "Identitas external ditolak vendor"
-      : "Vendor menolak pengiriman.";
+      : "Penolakan vendor belum spesifik.";
 
   return { detailsAvailable: true, specificity, summary, issues };
 };
 
-export const buildSafeContext = (payload, kind) => {
+export const collectSensitiveValues = (payload) => {
+  const values = new Set();
+  if (!payload || typeof payload !== "object") return values;
+  if (typeof payload.submitted_by === "string" && payload.submitted_by.trim()) values.add(payload.submitted_by.trim());
+  if (Array.isArray(payload.approvals)) {
+    for (const approval of payload.approvals) {
+      if (approval && typeof approval.nik === "string" && approval.nik.trim()) values.add(approval.nik.trim());
+    }
+  }
+  return values;
+};
+
+export const buildSafeContext = (payload, kind, sensitiveValues) => {
   if (!payload || typeof payload !== "object") return null;
 
   const context = {};
@@ -121,6 +141,25 @@ export const buildSafeContext = (payload, kind) => {
   if (Array.isArray(payload.attachments)) context.attachmentCount = payload.attachments.length;
 
   return Object.keys(context).length > 0 ? context : null;
+};
+
+export const sanitizePayloadForComparison = (payload) => {
+  if (!payload || typeof payload !== "object") return null;
+  const sanitized = { ...payload };
+  delete sanitized.submitted_by;
+  if (Array.isArray(sanitized.approvals)) {
+    sanitized.approvals = sanitized.approvals.map((a) => {
+      const { nik, ...rest } = a;
+      return rest;
+    });
+  }
+  if (Array.isArray(sanitized.attachments)) {
+    sanitized.attachments = sanitized.attachments.map((a) => {
+      const { link, ...rest } = a;
+      return rest;
+    });
+  }
+  return sanitized;
 };
 
 export const comparePayloads = (oldPayload, newPayload, kind) => {
@@ -159,7 +198,7 @@ export const comparePayloads = (oldPayload, newPayload, kind) => {
     const oldTypes = [...new Set(oldPayload.units.map((u) => u.type).filter(Boolean))];
     const newTypes = [...new Set(newPayload.units.map((u) => u.type).filter(Boolean))];
     if (oldTypes.join(",") !== newTypes.join(",")) {
-      changes.push(`Tipe unit berubah dari ${oldTypes.join(", ") || "-"} menjadi ${newTypes.join(", ") || "-"}".`);
+      changes.push(`Tipe unit berubah dari ${oldTypes.join(", ") || "-"} menjadi ${newTypes.join(", ") || "-"}.`);
     }
   }
 

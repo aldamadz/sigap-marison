@@ -18,6 +18,16 @@ const row = { id: "job-1", suratId: "surat-1", noSurat: "047/UAI/MKT.1.NKMZ7/VII
 const row422 = { ...row, id: "job-422", postStartedAt: "2026-08-03T00:01:00Z", errorCode: "marison_http_422", failureReason: "Marison menolak request dengan HTTP 422." };
 const renderPanel = () => render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MarisonOutboundQueuePanel /></QueryClientProvider></MemoryRouter>);
 
+const eligiblePreflight = {
+  eligible: true,
+  vendorDiagnosis: { detailsAvailable: true, specificity: "area" as const, summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" as const }] },
+  payloadBodyInvariantViolated: false,
+  safeContext: { roles: ["Pemohon", "Penandatangan tahap 1"] },
+  localValidationIssues: null,
+  changedAreas: ["Mapping pemohon berubah."],
+  sigapChanged: true,
+};
+
 describe("Marison outbound recovery dialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,11 +98,9 @@ describe("Marison outbound replacement preflight", () => {
 
   it("shows NIK diagnosis with area specificity and roles from safe context", async () => {
     vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
-      eligible: true,
-      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" }] },
-      payloadBodyInvariantViolated: false,
+      ...eligiblePreflight,
+      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" as const }] },
       safeContext: { roles: ["Pemohon", "Penandatangan tahap 1", "Penandatangan tahap 2"], unitTypes: undefined, hasProjectId: true, hasBranchId: true, attachmentCount: 1 },
-      localValidationIssues: null,
       changedAreas: [],
       sigapChanged: false,
       noSigapChangesNote: "Belum ada perubahan terkait yang terdeteksi di SIGAP. Pastikan data referensi di Marison sudah diperbaiki sebelum membuat pengiriman pengganti.",
@@ -108,11 +116,9 @@ describe("Marison outbound replacement preflight", () => {
 
   it("shows unit type diagnosis with safe context unit types", async () => {
     vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
-      eligible: true,
-      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Tipe unit", message: "Tipe unit tidak ditemukan di referensi.", specificity: "area" }] },
-      payloadBodyInvariantViolated: false,
+      ...eligiblePreflight,
+      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Tipe unit", message: "Tipe unit tidak ditemukan di referensi.", specificity: "area" as const }] },
       safeContext: { roles: ["Pemohon"], unitTypes: ["60", "60/72"], hasProjectId: true, hasBranchId: true, attachmentCount: 2 },
-      localValidationIssues: null,
       changedAreas: ["Tipe unit berubah dari 60 menjadi 60/72."],
       sigapChanged: true,
     });
@@ -125,11 +131,9 @@ describe("Marison outbound replacement preflight", () => {
 
   it("does not expose NIK or raw payload in browser", async () => {
     vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
-      eligible: true,
-      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" }] },
-      payloadBodyInvariantViolated: false,
+      ...eligiblePreflight,
+      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" as const }] },
       safeContext: { roles: ["Pemohon", "Penandatangan tahap 1"] },
-      localValidationIssues: null,
       changedAreas: ["Mapping pemohon berubah."],
       sigapChanged: true,
     });
@@ -142,11 +146,9 @@ describe("Marison outbound replacement preflight", () => {
 
   it("requires Marison fix confirmation when SIGAP has no changes", async () => {
     vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
-      eligible: true,
-      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" }] },
-      payloadBodyInvariantViolated: false,
+      ...eligiblePreflight,
+      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" as const }] },
       safeContext: { roles: ["Pemohon"] },
-      localValidationIssues: null,
       changedAreas: [],
       sigapChanged: false,
       noSigapChangesNote: "Belum ada perubahan terkait yang terdeteksi di SIGAP.",
@@ -164,6 +166,7 @@ describe("Marison outbound replacement preflight", () => {
   it("shows payload invariant violation", async () => {
     vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
       eligible: false,
+      reasonCode: "PAYLOAD_BODY_INVARIANT_VIOLATED",
       vendorDiagnosis: { detailsAvailable: false, specificity: "generic", summary: "", issues: [] },
       payloadBodyInvariantViolated: true,
       safeContext: null,
@@ -176,18 +179,62 @@ describe("Marison outbound replacement preflight", () => {
     expect(await screen.findByText(/payload sebelumnya tidak tersedia/i)).toBeInTheDocument();
   });
 
+  it("submit button is disabled when preflight is blocked", async () => {
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
+      eligible: false,
+      reasonCode: "LOCAL_VALIDATION_FAILED",
+      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" as const }] },
+      payloadBodyInvariantViolated: false,
+      safeContext: { roles: ["Pemohon"] },
+      localValidationIssues: "Mapping pemohon belum lengkap.",
+      changedAreas: null,
+      sigapChanged: false,
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    await screen.findByText(/validasi lokal gagal/i);
+    expect(screen.queryByRole("button", { name: /^buat pengiriman pengganti$/i })).not.toBeInTheDocument();
+  });
+
+  it("submit button is disabled when preflight is checking", async () => {
+    let resolve!: (value: any) => void;
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockReturnValue(new Promise((done) => { resolve = done; }) as never);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    expect(screen.getByText(/memeriksa penyebab penolakan/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^buat pengiriman pengganti$/i })).not.toBeInTheDocument();
+    await act(async () => resolve({ ...eligiblePreflight }));
+  });
+
+  it("stale response from job A does not overwrite job B dialog", async () => {
+    let resolveA!: (value: any) => void;
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockReturnValue(new Promise((done) => { resolveA = done; }) as never);
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row422] });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    await act(async () => resolveA({ ...eligiblePreflight, vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Job A diagnosis", issues: [{ path: "", label: "Identitas external", message: "Job A NIK error", specificity: "area" as const }] } }));
+    expect(screen.getByText(/job a nik error/i)).toBeInTheDocument();
+  });
+
+  it("generic vendor message does not link to User Organization", async () => {
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
+      ...eligiblePreflight,
+      vendorDiagnosis: { detailsAvailable: true, specificity: "generic", summary: "Penolakan vendor belum spesifik.", issues: [{ path: "", label: "", message: "Internal server error.", specificity: "generic" as const }] },
+      safeContext: null,
+      changedAreas: [],
+      sigapChanged: true,
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    expect(await screen.findByText(/penolakan vendor belum spesifik/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /buka user organization/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /buka master proyek/i })).not.toBeInTheDocument();
+  });
+
   it("creates replacement after confirmation and locks dialog while saving", async () => {
     let resolve!: (value: { replacementId: string }) => void;
     vi.mocked(marisonIntegrationService.createReplacement).mockReturnValue(new Promise((done) => { resolve = done; }) as never);
-    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
-      eligible: true,
-      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" }] },
-      payloadBodyInvariantViolated: false,
-      safeContext: { roles: ["Pemohon"] },
-      localValidationIssues: null,
-      changedAreas: ["Mapping pemohon berubah."],
-      sigapChanged: true,
-    });
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({ ...eligiblePreflight });
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
     await screen.findByText(/mapping pemohon berubah/i);
@@ -204,18 +251,10 @@ describe("Marison outbound replacement preflight", () => {
 
   it("keeps replacement context open and shows an inline conflict", async () => {
     vi.mocked(marisonIntegrationService.createReplacement).mockRejectedValue(new Error("Job pengganti sudah dibuat. Muat ulang antrean."));
-    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
-      eligible: true,
-      vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Identitas external ditolak vendor", issues: [{ path: "", label: "Identitas external", message: "NIK tidak terdaftar.", specificity: "area" }] },
-      payloadBodyInvariantViolated: false,
-      safeContext: { roles: ["Pemohon"] },
-      localValidationIssues: null,
-      changedAreas: [],
-      sigapChanged: true,
-    });
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({ ...eligiblePreflight });
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
-    await screen.findByText(/identitas external ditolak/i);
+    await screen.findByText(/mapping pemohon berubah/i);
     fireEvent.change(screen.getByLabelText(/alasan dan perbaikan/i), { target: { value: "Payload sudah dikoreksi." } });
     fireEvent.click(screen.getByRole("button", { name: /^buat pengiriman pengganti$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/sudah dibuat/i);
