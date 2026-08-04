@@ -272,7 +272,8 @@ export default function InboxPage() {
     queryKey: ['surat-inbox-detail', selectedSignatureId],
     queryFn: () => suratService.getMyInboxDetail(selectedSignatureId!),
     enabled: Boolean(selectedSignatureId),
-    staleTime: 15000,
+    staleTime: 30000,
+    gcTime: 120000,
   });
 
   useEffect(() => {
@@ -2567,7 +2568,14 @@ const handleApprove = async (item: any) => {
 
       <div className="overflow-visible rounded-lg border border-border bg-card shadow-[var(--shadow-card)] lg:h-[calc(100vh-11rem)] lg:min-h-[640px] lg:overflow-hidden">
           <main className="min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden">
-          {selectedItem && activeSurat ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+          {detailFetching && !selectedDetail && selectedCompactItem ? (
+            <div className="flex flex-col gap-4 p-6">
+              <Skeleton className="h-6 w-1/3" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : selectedItem && activeSurat ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <div className="shrink-0 flex items-start gap-3 border-b border-border bg-card p-4 sm:p-5">
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}

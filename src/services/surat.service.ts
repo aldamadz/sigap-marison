@@ -2750,7 +2750,7 @@ export const suratService = {
   },
 
   async getMyInboxCompact(params: { limit?: number; cursor?: string } = {}) {
-    const { data: { session } } = await supabase.auth.getSession({ force: true });
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Unauthorized");
     const qs = new URLSearchParams();
     if (params.limit) qs.set("limit", String(params.limit));
@@ -2772,7 +2772,7 @@ export const suratService = {
 
   async getMyInboxDetail(signatureId: string) {
     if (!signatureId) throw new Error("signature ID wajib diisi");
-    const { data: { session } } = await supabase.auth.getSession({ force: true });
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Unauthorized");
     const response = await fetch(`/api/surat/inbox/${encodeURIComponent(signatureId)}/detail`, {
       headers: { Authorization: `Bearer ${session.access_token}` },

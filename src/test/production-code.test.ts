@@ -34,7 +34,7 @@ describe("production code serial", () => {
     expect(inbox).toContain("Array.isArray(item?.surat_registrasi)");
     expect(inbox).toContain("if (!surat?.id)");
     expect(inbox).toContain("const activeSurat = getInboxSurat(selectedItem);");
-    expect(inbox).toContain("{selectedItem && activeSurat ?");
+    expect(inbox).toContain("selectedItem && activeSurat");
     expect(inbox).toContain("Data antrean belum lengkap");
   });
 

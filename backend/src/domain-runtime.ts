@@ -1368,20 +1368,6 @@ const consumeTemplatePreview = (token) => {
   return preview.pdf;
 };
 
-const INBOX_COMPACT_SELECT = `
-  id, surat_id, user_id, role_name, label_jabatan, step_order, action_type,
-  requires_unit_allocation, available_at,
-  verification_required, verification_status, verifier_snapshot,
-  attachment_requirements_snapshot,
-  surat_registrasi!inner (
-    id, no_surat, judul_surat, status, current_step, created_at, request_date,
-    requester_snapshot, location_snapshot,
-    data_snapshot->revision,
-    surat_attachments ( id ),
-    surat_linked_documents_count:surat_linked_documents(count)
-  )
-`.trim();
-
 const INBOX_DETAIL_SELECT = `
   id, surat_id, user_id, role_name, label_jabatan, step_order, is_signed, action_type,
   requires_unit_allocation, available_at, signer_snapshot,
@@ -1389,7 +1375,9 @@ const INBOX_DETAIL_SELECT = `
   verification_required, verification_status, verified_at, verified_by,
   verification_note, verifier_snapshot,
   surat_registrasi!inner (
-    *,
+    id, no_surat, judul_surat, status, current_step, created_at, updated_at,
+    request_date, request_place, policy_snapshot,
+    requester_snapshot, location_snapshot, form_input_data, data_snapshot,
     surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id ),
     surat_signatures (
       id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan,
@@ -1400,140 +1388,83 @@ const INBOX_DETAIL_SELECT = `
   )
 `.trim();
 
-const isSignatureActiveForInbox = (sig, surat, userId) => {
-  if (!surat) return false;
-  const suratStatus = String(surat.status || "").toUpperCase();
-  const revision = surat.revision || surat.data_snapshot?.revision || {};
-  const revisionTargetIds = Array.isArray(revision.target_user_ids) ? revision.target_user_ids : [];
-  if (suratStatus === "MENUNGGU_PERBAIKAN") {
-    const isRevisionCheckerTask = revision.target_type === "checker" &&
-      revisionTargetIds.includes(userId) &&
-      sig.task_type === "verification" &&
-      Number(sig.step_order) === Number(revision.target_step || sig.step_order);
-    const isRevisionSignerTask = revision.target_type === "signer" &&
-      revisionTargetIds.includes(userId) &&
-      sig.user_id === userId &&
-      Number(sig.step_order) === Number(revision.target_step || sig.step_order);
-    return isRevisionCheckerTask || isRevisionSignerTask;
-  }
-  if (suratStatus !== "PROSES") return false;
-  if (Number(sig.step_order) !== Number(surat.current_step)) return false;
-  if (sig.task_type === "verification" && sig.verification_status === "verified") return false;
-  return true;
+const parseInboxLimit = (raw) => {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return { error: "limit harus integer >= 1", value: null };
+  if (n > 50) return { error: "limit maksimum 50", value: null };
+  return { error: null, value: n };
 };
+
+const parseInboxCursor = (raw) => {
+  if (!raw) return { error: null, value: null };
+  try {
+    const decoded = Buffer.from(raw, "base64").toString("utf8");
+    const parts = decoded.split("|");
+    if (parts.length !== 3) throw new Error("format invalid");
+    const [at, taskType, id] = parts;
+    if (!at || !taskType || !id) throw new Error("field kosong");
+    if (!["approval", "verification"].includes(taskType)) throw new Error("task_type tidak valid");
+    const ts = new Date(at);
+    if (isNaN(ts.getTime())) throw new Error("timestamp tidak valid");
+    return { error: null, value: { at, taskType, id } };
+  } catch {
+    return { error: "cursor tidak valid", value: null };
+  }
+};
+
+const encodeCursor = (item) =>
+  Buffer.from(`${item.available_at}|${item.task_type}|${item.id}`).toString("base64");
 
 const getInboxCompact = async (token, url) => {
   const user = await requireSupabaseUser(token);
   const userId = user.id;
-  const pageSize = Math.min(Number(url.searchParams.get("limit") || 20), 50);
-  const cursor = url.searchParams.get("cursor") || null;
 
-  const [signerRes, verifierRes] = await Promise.all([
-    supabase
-      .from("surat_signatures")
-      .select(INBOX_COMPACT_SELECT)
-      .eq("user_id", userId)
-      .eq("is_signed", false)
-      .in("surat_registrasi.status", ["PROSES", "MENUNGGU_PERBAIKAN"])
-      .order("available_at", { ascending: true })
-      .order("id", { ascending: true }),
-    supabase
-      .from("surat_signatures")
-      .select(INBOX_COMPACT_SELECT)
-      .eq("is_signed", false)
-      .eq("verification_required", true)
-      .eq("verification_status", "pending")
-      .filter("verifier_snapshot", "cs", JSON.stringify([{ user_id: userId }]))
-      .in("surat_registrasi.status", ["PROSES", "MENUNGGU_PERBAIKAN"])
-      .order("available_at", { ascending: true })
-      .order("id", { ascending: true }),
+  const rawLimit = url.searchParams.get("limit") || "20";
+  const limitResult = parseInboxLimit(rawLimit);
+  if (limitResult.error) {
+    const err = new Error(limitResult.error);
+    err.status = 400;
+    throw err;
+  }
+  const pageSize = limitResult.value;
+
+  const rawCursor = url.searchParams.get("cursor") || null;
+  const cursorResult = parseInboxCursor(rawCursor);
+  if (cursorResult.error) {
+    const err = new Error(cursorResult.error);
+    err.status = 400;
+    throw err;
+  }
+  const cursor = cursorResult.value;
+
+  const [listRes, countRes] = await Promise.all([
+    supabase.rpc("get_compact_inbox", {
+      p_user_id: userId,
+      p_limit: pageSize,
+      p_cursor_at: cursor?.at || null,
+      p_cursor_task_type: cursor?.taskType || null,
+      p_cursor_id: cursor?.id || null,
+    }),
+    supabase.rpc("get_compact_inbox_count", { p_user_id: userId }),
   ]);
 
-  if (signerRes.error) throw signerRes.error;
-  if (verifierRes.error) throw verifierRes.error;
+  if (listRes.error) throw listRes.error;
+  if (countRes.error) throw countRes.error;
 
-  const rows = [
-    ...((signerRes.data || []).map((item) => ({ ...item, task_type: "approval" }))),
-    ...((verifierRes.data || []).map((item) => ({ ...item, task_type: "verification" }))),
-  ];
+  const rows = listRes.data || [];
+  const hasMore = rows.length > pageSize;
+  const items = hasMore ? rows.slice(0, pageSize) : rows;
+  const total = Number(countRes.data || 0);
+  const lastItem = items[items.length - 1];
+  const nextCursor = hasMore && lastItem ? encodeCursor(lastItem) : null;
 
-  const seen = new Set();
-  const active = rows
-    .map((sig) => {
-      const surat = Array.isArray(sig.surat_registrasi) ? sig.surat_registrasi[0] : sig.surat_registrasi;
-      if (!surat) return null;
-      if (!isSignatureActiveForInbox(sig, surat, userId)) return null;
-      const key = `${sig.task_type}:${sig.id}`;
-      if (seen.has(key)) return null;
-      seen.add(key);
-      const requester = surat.requester_snapshot || {};
-      const location = surat.location_snapshot || {};
-      const attachmentCount = Array.isArray(surat.surat_attachments) ? surat.surat_attachments.length : 0;
-      const linkedCount = Array.isArray(surat.surat_linked_documents_count)
-        ? (surat.surat_linked_documents_count[0]?.count || 0)
-        : 0;
-      return {
-        id: sig.id,
-        surat_id: surat.id || sig.surat_id,
-        task_type: sig.task_type,
-        no_surat: surat.no_surat || null,
-        judul_surat: surat.judul_surat || null,
-        request_category: surat.data_snapshot?.request_category || null,
-        requester_name: requester.full_name || null,
-        requester_department: location.department?.name || null,
-        requester_office: location.office?.name || null,
-        current_step: surat.current_step,
-        step_order: sig.step_order,
-        role_name: sig.role_name || null,
-        label_jabatan: sig.label_jabatan || null,
-        action_type: sig.action_type || null,
-        requires_unit_allocation: Boolean(sig.requires_unit_allocation),
-        has_attachment_requirements: Array.isArray(sig.attachment_requirements_snapshot) && sig.attachment_requirements_snapshot.length > 0,
-        verification_required: Boolean(sig.verification_required),
-        verification_status: sig.verification_status || null,
-        surat_status: surat.status,
-        available_at: sig.available_at || surat.created_at,
-        created_at: surat.created_at,
-        request_date: surat.request_date || null,
-        has_attachments: attachmentCount > 0,
-        attachment_count: attachmentCount,
-        has_linked_documents: Number(linkedCount) > 0,
-        is_revision_task: String(surat.status || "").toUpperCase() === "MENUNGGU_PERBAIKAN",
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const ta = new Date(a.available_at || a.created_at || 0).getTime();
-      const tb = new Date(b.available_at || b.created_at || 0).getTime();
-      if (ta !== tb) return ta - tb;
-      return a.id < b.id ? -1 : 1;
-    });
-
-  const total = active.length;
-  let startIndex = 0;
-  if (cursor) {
-    const idx = active.findIndex((item) => item.id === cursor);
-    if (idx >= 0) startIndex = idx + 1;
-  }
-  const page = active.slice(startIndex, startIndex + pageSize);
-  const lastItem = page[page.length - 1];
-  const nextCursor = page.length === pageSize && startIndex + pageSize < total
-    ? lastItem?.id || null
-    : null;
-
-  return {
-    items: page,
-    total,
-    hasMore: nextCursor !== null,
-    nextCursor,
-    pageSize,
-  };
+  return { items, total, hasMore, nextCursor, pageSize };
 };
 
 const getInboxDetail = async (token, signatureId) => {
   const user = await requireSupabaseUser(token);
-  if (!signatureId) {
-    const err = new Error("signature ID wajib diisi");
+  if (!signatureId || !/^[0-9a-f-]{36}$/.test(signatureId)) {
+    const err = new Error("signature ID tidak valid");
     err.status = 400;
     throw err;
   }
@@ -1557,8 +1488,9 @@ const getInboxDetail = async (token, signatureId) => {
   const isSignerTask = data.user_id === user.id;
   const isVerifierTask = Array.isArray(data.verifier_snapshot) &&
     data.verifier_snapshot.some((entry) => entry?.user_id === user.id);
-  if (!isSignerTask && !isVerifierTask) {
-    const err = new Error("Unauthorized");
+  const isAdminAccess = false;
+  if (!isSignerTask && !isVerifierTask && !isAdminAccess) {
+    const err = new Error("Akses ditolak: bukan signer atau verifier untuk task ini");
     err.status = 403;
     throw err;
   }
