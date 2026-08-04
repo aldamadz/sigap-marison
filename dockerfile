@@ -69,6 +69,7 @@ COPY server/marison-payload-mapping-request.mjs ./server/marison-payload-mapping
 COPY server/marison-employee-sync.mjs ./server/marison-employee-sync.mjs
 COPY server/marison-sync-worker.mjs ./server/marison-sync-worker.mjs
 COPY server/marison-outbound-worker.mjs ./server/marison-outbound-worker.mjs
+COPY server/marison-rejection-diagnosis.mjs ./server/marison-rejection-diagnosis.mjs
 
 EXPOSE 80
 
