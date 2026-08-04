@@ -32,6 +32,8 @@ const routes: DomainRoute[] = [
   { method: "GET", url: "/api/admin/marison-payload-mapping-catalog" },
   { method: "POST", url: "/api/admin/marison-payload-mappings" },
   { method: "GET", url: "/api/admin/template-preview/:token" },
+  { method: "GET", url: "/api/surat/inbox" },
+  { method: "GET", url: "/api/surat/inbox/:signatureId/detail" },
   { method: "GET", url: "/api/attention/state" },
   { method: "GET", url: "/api/push/public-key" },
   { method: "POST", url: "/api/push/subscribe" },
