@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatSummaryValue } from "@/components/surat/request-summary";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { cn } from "@/lib/utils";
-import { parseRupiahInteger } from "@/lib/rupiah";
+import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
 
 type UnitAllocationSummaryProps = {
@@ -41,8 +41,9 @@ const formatDate = (value: unknown) => {
 
 const formatMoney = (value: unknown) => {
   const amount = parseMoney(value);
-  if (!Number.isFinite(amount) || amount === 0) return "-";
-  return amount.toLocaleString("id-ID");
+  if (amount === 0 && (value === null || value === undefined || value === "")) return "-";
+  if (!Number.isFinite(amount)) return "-";
+  return formatRupiahCanonical(amount);
 };
 
 const parseMoney = (value: unknown) => {
@@ -189,7 +190,7 @@ export function UnitAllocationSummary({ units, project, requestedCount, compact,
                       <td className="px-3 py-2">{getUnitType(unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatMoney(detail.struktur_atas)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatMoney(detail.struktur_bawah)}</td>
-                      {!compact && <td className="px-3 py-2 text-right font-semibold tabular-nums">{total > 0 ? total.toLocaleString("id-ID") : "-"}</td>}
+                      {!compact && <td className="px-3 py-2 text-right font-semibold tabular-nums">{total > 0 ? formatRupiahCanonical(total) : "-"}</td>}
                     </tr>
                   );
                 })}

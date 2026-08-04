@@ -55,7 +55,7 @@ import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/c
 import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
-import { formatRupiahInput, normalizeRupiahDigits } from "@/lib/rupiah";
+import { formatCurrencyInput, parseCurrencyInput, formatRupiah as formatRupiahCanonical, normalizeRupiahDigits } from "@/lib/rupiah";
 import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/components/surat/revision-utils";
 import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
 import { normalizeProductionSerial } from "@/lib/production-code";
@@ -584,6 +584,31 @@ const handleApprove = async (item: any) => {
     }
     if (!stageDataPreparedByVerifier && isUnitAllocationRequired(item)) {
       const details = getAllocationDetailMap(item);
+      const unitTypeInvalid = selectedUnits.find((unit: any) => {
+        const detail = details[unit.value] || {};
+        const t = String(getAllocationUnitType(unit, detail)).trim();
+        return !t || !/^\d+$/.test(t);
+      });
+      if (unitTypeInvalid) {
+        throw new Error(`Tipe unit untuk kavling ${unitTypeInvalid.label || unitTypeInvalid.value} wajib diisi dengan angka (contoh: 30).`);
+      }
+      const nominalInvalid = selectedUnits.find((unit: any) => {
+        const detail = details[unit.value] || {};
+        const atas = detail.struktur_atas;
+        const bawah = detail.struktur_bawah;
+        if (atas !== "" && atas !== null && atas !== undefined) {
+          const v = parseCurrencyInput(atas);
+          if (v === null) return true;
+        }
+        if (bawah !== "" && bawah !== null && bawah !== undefined) {
+          const v = parseCurrencyInput(bawah);
+          if (v === null) return true;
+        }
+        return false;
+      });
+      if (nominalInvalid) {
+        throw new Error(`Nominal Struktur Atas/Bawah untuk kavling ${nominalInvalid.label || nominalInvalid.value} harus berupa angka bulat non-negatif.`);
+      }
       const incompleteUnit = selectedUnits.find((unit: any) => {
         const detail = details[unit.value] || {};
         return !String(detail.production_serial || "").trim() ||
@@ -591,7 +616,7 @@ const handleApprove = async (item: any) => {
           !String(detail.production_date || "").trim();
       });
       if (incompleteUnit) {
-        throw new Error(`Kode produksi untuk ${incompleteUnit.label || incompleteUnit.value} belum lengkap.`);
+        throw new Error(`Kode produksi untuk kavling ${incompleteUnit.label || incompleteUnit.value} belum lengkap.`);
       }
     }
     const selectedApprovalFiles = stageDataPreparedByVerifier ? [] : getSelectedApprovalFiles(item);
@@ -952,7 +977,7 @@ const handleApprove = async (item: any) => {
       return;
     }
     if (row.value_type === "money") {
-      updateRevisionRow(row.index, { nilai_disetujui: formatRupiahInput(value) });
+      updateRevisionRow(row.index, { nilai_disetujui: formatCurrencyInput(value) });
       return;
     }
     updateRevisionRow(row.index, { nilai_disetujui: value });
@@ -1195,8 +1220,8 @@ const handleApprove = async (item: any) => {
         No: index + 1,
         Proyek: project?.name || project?.label || project?.code || "",
         Kavling: unit.label || unit.value,
-        "Struktur Atas": detail.struktur_atas ? formatRupiahInput(detail.struktur_atas) : "",
-        "Struktur Bawah": detail.struktur_bawah ? formatRupiahInput(detail.struktur_bawah) : "",
+        "Struktur Atas": detail.struktur_atas ? formatCurrencyInput(detail.struktur_atas) : "",
+        "Struktur Bawah": detail.struktur_bawah ? formatCurrencyInput(detail.struktur_bawah) : "",
         "Tipe Unit": getAllocationUnitType(unit, detail),
         "Nomor Kode Produksi": normalizeProductionSerial(detail.production_serial),
         "Blok": detail.production_block || "",
@@ -1252,9 +1277,9 @@ const handleApprove = async (item: any) => {
         const unitValue = unit.value || unit.label;
         importedDetails[unitValue] = {
           ...((allocationDetails[item.id] || {})[unitValue] || unit.allocation_detail || {}),
-          ...(strukturAtasIndex >= 0 ? { struktur_atas: normalizeRupiahDigits(row[strukturAtasIndex] || "") } : {}),
-          ...(strukturBawahIndex >= 0 ? { struktur_bawah: normalizeRupiahDigits(row[strukturBawahIndex] || "") } : {}),
-          ...(unitTypeIndex >= 0 ? { unit_type: String(row[unitTypeIndex] || "").trim() } : {}),
+          ...(strukturAtasIndex >= 0 ? { struktur_atas: (() => { const v = parseCurrencyInput(row[strukturAtasIndex] || ""); return v !== null ? String(v) : ""; })() } : {}),
+          ...(strukturBawahIndex >= 0 ? { struktur_bawah: (() => { const v = parseCurrencyInput(row[strukturBawahIndex] || ""); return v !== null ? String(v) : ""; })() } : {}),
+          ...(unitTypeIndex >= 0 ? { unit_type: String(row[unitTypeIndex] || "").trim().replace(/\D/g, "") } : {}),
           ...(serialIndex >= 0 ? { production_serial: normalizeProductionSerial(row[serialIndex]) } : {}),
           ...(blockIndex >= 0 ? { production_block: String(row[blockIndex] || "").trim() } : {}),
           ...(dateIndex >= 0 ? { production_date: normalizeImportDate(row[dateIndex]) } : {}),
@@ -1599,47 +1624,54 @@ const handleApprove = async (item: any) => {
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
+                            inputMode="numeric"
                             value={getAllocationUnitType(unit, detail)}
-                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "unit_type", event.target.value)}
-                            placeholder="60"
-                            aria-label={`Tipe unit ${unit.label}`}
+                            onChange={(event) => {
+                              const val = event.target.value.replace(/\D/g, "");
+                              updateAllocationDetail(item.id, unit.value, "unit_type", val);
+                            }}
+                            placeholder="30"
+                            aria-label={`Tipe unit kavling ${unit.label}`}
                             className="h-11 text-sm"
                           />
                         </td>
                         <td className="border-r border-border px-2 py-2">
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            value={formatRupiahInput(detail.struktur_atas)}
-                            onChange={(event) => updateAllocationDetail(
-                              item.id,
-                              unit.value,
-                              "struktur_atas",
-                              normalizeRupiahDigits(event.target.value),
-                            )}
-                            placeholder="1.000.000"
-                            aria-label={`Struktur atas ${unit.label}`}
-                            className="h-11 text-right text-sm tabular-nums"
-                          />
+                          <div className="flex h-11 items-center overflow-hidden rounded-md border border-input focus-within:ring-1 focus-within:ring-ring">
+                            <span className="flex h-full select-none items-center border-r border-input bg-muted/60 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">Rp</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatCurrencyInput(detail.struktur_atas)}
+                              onChange={(event) => {
+                                const raw = parseCurrencyInput(event.target.value);
+                                updateAllocationDetail(item.id, unit.value, "struktur_atas", raw !== null ? String(raw) : "");
+                              }}
+                              placeholder="1.000.000"
+                              aria-label={`Struktur atas kavling ${unit.label}`}
+                              className="h-full w-full bg-transparent px-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
+                            />
+                          </div>
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <div className="flex h-11 items-center overflow-hidden rounded-md border border-input focus-within:ring-1 focus-within:ring-ring">
+                            <span className="flex h-full select-none items-center border-r border-input bg-muted/60 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">Rp</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatCurrencyInput(detail.struktur_bawah)}
+                              onChange={(event) => {
+                                const raw = parseCurrencyInput(event.target.value);
+                                updateAllocationDetail(item.id, unit.value, "struktur_bawah", raw !== null ? String(raw) : "");
+                              }}
+                              placeholder="1.000.000"
+                              aria-label={`Struktur bawah kavling ${unit.label}`}
+                              className="h-full w-full bg-transparent px-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
+                            />
+                          </div>
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
-                            type="text"
                             inputMode="numeric"
-                            value={formatRupiahInput(detail.struktur_bawah)}
-                            onChange={(event) => updateAllocationDetail(
-                              item.id,
-                              unit.value,
-                              "struktur_bawah",
-                              normalizeRupiahDigits(event.target.value),
-                            )}
-                            placeholder="1.000.000"
-                            aria-label={`Struktur bawah ${unit.label}`}
-                            className="h-11 text-right text-sm tabular-nums"
-                          />
-                        </td>
-                        <td className="border-r border-border px-2 py-2">
-                          <Input
                             value={detail.production_serial || ""}
                             onChange={(event) => updateAllocationDetail(
                               item.id,
@@ -1654,16 +1686,22 @@ const handleApprove = async (item: any) => {
                               normalizeProductionSerial(event.target.value),
                             )}
                             placeholder="001"
-                            aria-label={`Nomor kode produksi ${unit.label}`}
+                            aria-label={`Nomor kode produksi kavling ${unit.label}`}
                             className="h-11 font-mono text-sm"
                           />
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
+                            inputMode="decimal"
                             value={detail.production_block || ""}
-                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_block", event.target.value)}
-                            placeholder="4.1"
-                            aria-label={`Blok kode produksi ${unit.label}`}
+                            onChange={(event) => {
+                              const val = event.target.value.replace(/[^\d.]/g, "");
+                              const parts = val.split(".");
+                              const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : val;
+                              updateAllocationDetail(item.id, unit.value, "production_block", normalized);
+                            }}
+                            placeholder="5.2"
+                            aria-label={`Blok kode produksi kavling ${unit.label}`}
                             className="h-11 font-mono text-sm"
                           />
                         </td>
@@ -1892,8 +1930,8 @@ const handleApprove = async (item: any) => {
         let totalBawah = 0;
         const allocationRows = allocation.units.map((unit: any, index: number) => {
           const detail = unit.allocation_detail || {};
-          const atas = Number(String(detail.struktur_atas || "0").replace(/\D/g, "")) || 0;
-          const bawah = Number(String(detail.struktur_bawah || "0").replace(/\D/g, "")) || 0;
+          const atas = parseCurrencyInput(detail.struktur_atas) ?? 0;
+          const bawah = parseCurrencyInput(detail.struktur_bawah) ?? 0;
           totalAtas += atas;
           totalBawah += bawah;
           const code = detail.production_serial && detail.production_block && detail.production_date
@@ -1904,9 +1942,9 @@ const handleApprove = async (item: any) => {
             formatSummaryValue(unit.label || unit.value || unit.code),
             formatSummaryValue(getAllocationUnitType(unit, detail)),
             code,
-            atas ? atas.toLocaleString("id-ID") : "-",
-            bawah ? bawah.toLocaleString("id-ID") : "-",
-            atas + bawah ? (atas + bawah).toLocaleString("id-ID") : "-",
+            atas ? formatRupiahCanonical(atas) : "-",
+            bawah ? formatRupiahCanonical(bawah) : "-",
+            atas + bawah ? formatRupiahCanonical(atas + bawah) : "-",
           ];
         });
         allocationRows.push([
@@ -1914,9 +1952,9 @@ const handleApprove = async (item: any) => {
           "TOTAL",
           "",
           "",
-          totalAtas ? totalAtas.toLocaleString("id-ID") : "-",
-          totalBawah ? totalBawah.toLocaleString("id-ID") : "-",
-          totalAtas + totalBawah ? (totalAtas + totalBawah).toLocaleString("id-ID") : "-",
+          totalAtas ? formatRupiahCanonical(totalAtas) : "-",
+          totalBawah ? formatRupiahCanonical(totalBawah) : "-",
+          totalAtas + totalBawah ? formatRupiahCanonical(totalAtas + totalBawah) : "-",
         ]);
         autoTable(doc, {
           startY: cursorY,
@@ -2654,7 +2692,7 @@ const handleApprove = async (item: any) => {
                               value={row.nilai_disetujui}
                               onChange={(event) => revisionDialogItem
                                 ? updateApprovedRevisionValue(revisionDialogItem, row, event.target.value)
-                                : updateRevisionRow(row.index, { nilai_disetujui: formatRupiahInput(event.target.value) })}
+                                : updateRevisionRow(row.index, { nilai_disetujui: formatCurrencyInput(event.target.value) })}
                               placeholder={revisionDialogItem ? getApprovedValuePlaceholder(revisionDialogItem, row) : "Isi nilai yang disetujui"}
                               className="mt-1"
                             />
