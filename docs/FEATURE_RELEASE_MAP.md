@@ -34,14 +34,16 @@ Arti status:
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
-| App container | `agenda-flow-prod` | Fastify web, outbound worker, PDF worker, dan cron sync staging | Keempat service staging sehat; production tidak diubah |
-| Git source | `main` | `staging`, 88 commit di depan `main` saat snapshot | Source environment sudah terpisah; runtime tetap harus diverifikasi setelah deploy |
+| App container | `agenda-flow-prod` | `agenda-flow-staging` SHA `83abeb09` (healthy) | Keempat service staging sehat; production tidak diubah |
+| PDF worker | `agenda-pdf-worker` | `agenda-pdf-worker-staging` (up, started) | Staging sudah ikut image terbaru |
+| Marison outbound worker | `agenda-marison-outbound-staging` | Up 20+ hours (healthy) | Tidak diubah deployment ini; sehat |
+| Marison sync | — | `agenda-marison-sync-staging` (started) | Cron sync aktif |
+| Git source | `main` @ `aca7cfc` | `staging` @ `83abeb0` | staging 95+ commit di depan main |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
 | RPC | 51 RPC | 51 RPC | Tidak ada perbedaan RPC |
 | PDF worker | Source commit `8918d34` | Source terbaru saat deploy | Production worker mengalami drift |
 | Marison environment | Dikunci `production` | Dikunci `staging` | Tidak dapat ditukar dari browser |
-| Marison outbound default | Nonaktif jika flag tidak diisi | Aktif jika flag tidak diisi | Sesuai pemisahan environment |
 | Marison outbound host | `external.marisonregency.id` | `marison-external.digivasi.com` | Sudah terisolasi |
 | Realtime Sidebar | Konfigurasi publication belum diaudit penuh | Lima tabel sudah dipublikasikan | Staging telah lulus tes SSE end-to-end |
 | Deployment | Docker Compose manual | Docker Compose manual | Belum ada GitHub Actions berbasis branch |
@@ -49,6 +51,14 @@ Arti status:
 Catatan: commit dokumentasi dan migration yang lebih baru dari image tidak selalu
 berarti app container tertinggal. Audit source dilakukan dengan hash isi file,
 bukan hanya waktu pembuatan image.
+
+> **Hotfix Dockerfile 2026-08-04**: Commit `83abeb0` (`fix(docker): include
+> marison-rejection-diagnosis.mjs in staging image`) dipush langsung ke branch
+> `staging` sebagai darurat karena container tidak dapat start tanpa file tersebut.
+> Perubahan ini **belum melalui PR**. Saat PR #89 dirilis ke `main`, Dockerfile
+> harus memuat baris COPY yang sama agar production image tidak mengalami error
+> identik. Pastikan Dockerfile di branch rilis production sudah menyertakan baris:
+> `COPY server/marison-rejection-diagnosis.mjs ./server/marison-rejection-diagnosis.mjs`
 
 ## 3. Kondisi GitHub
 
@@ -136,7 +146,8 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MRN-10 | Kontrak outbound kaya Aset dan Unit v1; draft kontrak Aset vendor v2 | Staging candidate; Aset v2 dokumentasi terpisah menunggu konfirmasi vendor | Schema strict, fixture JSON, builder outbound, `docs/contracts/marison/asset-v2` | MRN-05, MRN-07, kesiapan endpoint vendor | Jangan deploy atau ubah dispatch sebelum OpenAPI vendor sesuai dan contract test bersama lulus |
 | MRN-15 | Override identitas outbound Marison staging | Staging deployed and smoke-tested 30 Juli 2026 | Admin override NIK/branch/project, audit, effective payload resolver | MRN-05, MRN-06, MRN-07, master sync | Staging-only; production override ditolak oleh migration dan runtime; production belum disentuh |
 | MRN-16 | Mapping payload outbound Marison per Master Data | Staging deployed and smoke-tested 31 Juli 2026 | Record hasil sync otomatis memakai external identity; record lokal/trial memakai mapping katalog mirror employee/branch/project; per-signer NIK resolver; admin endpoint; effective payload resolver | MRN-15 compatibility data, MRN-11, MRN-13, ADM-01, ADM-06, ADM-07 | Migration dan deployment staging sudah diterapkan; acceptance backend rollback serta UI desktop/mobile lulus; `marison_review_required` tidak memblokir identity payload; data SIGAP dan production tidak berubah; singleton MRN-15 tidak digunakan payload |
-| MRN-17 | Recovery dan pengiriman pengganti Outbound Marison | Staging follow-up 4 Agustus 2026 | Recovery pre-POST pada job yang sama; diagnosis konfigurasi mengarahkan admin ke User Organization, Master Kantor, atau Master Proyek; replacement pasca-HTTP 422 menampilkan diagnosis vendor spesifik (NIK, tipe unit, proyek, branch, atau generic) dengan safe context tanpa NIK atau payload mentah; preflight replacement read-only memvalidasi payload_body invariant, hash, surat final, dan signature lengkap; POST replacement menjalankan ulang preflight untuk mencegah TOCTOU; UI membedakan state checking/blocked/ready; konfirmasi perbaikan Marison wajib jika tidak ada perubahan SIGAP; generasi baru memakai idempotency key deterministik, audit append-only, dan satu job aktif | MRN-05, MRN-06, MRN-07, MRN-16 | Migration `20260803120000_marison_outbound_replacement_jobs.sql` sudah diterapkan; migration forward-only `20260803170000_fix_marison_resolution_source_array.sql` menghilangkan kegagalan array `projectId` pada Unit/Non Unit; production belum disentuh |
+| MRN-17 | Recovery dan pengiriman pengganti Outbound Marison | Staging deployed 4 Agustus 2026 (PR #89 merged, SHA 855c873) | Recovery pre-POST pada job yang sama; diagnosis konfigurasi mengarahkan admin ke User Organization, Master Kantor, atau Master Proyek; replacement pasca-HTTP 422 menampilkan diagnosis vendor spesifik (NIK, tipe unit, proyek, branch, atau generic) dengan safe context tanpa NIK atau payload mentah; preflight replacement read-only memvalidasi payload_body invariant, hash, surat final, dan signature lengkap; POST replacement menjalankan ulang preflight untuk mencegah TOCTOU; UI membedakan state checking/blocked/ready; konfirmasi perbaikan Marison wajib jika tidak ada perubahan SIGAP; generasi baru memakai idempotency key deterministik, audit append-only, dan satu job aktif | MRN-05, MRN-06, MRN-07, MRN-16 | Migration `20260803120000_marison_outbound_replacement_jobs.sql` sudah diterapkan; migration forward-only `20260803170000_fix_marison_resolution_source_array.sql` menghilangkan kegagalan array `projectId` pada Unit/Non Unit; production belum disentuh; Dockerfile hotfix `83abeb0` wajib disertakan saat rilis production |
+| TIM-01 | Canonical currency module dan input UX Tim Pemeriksa | Staging deployed 4 Agustus 2026 (PR #91 merged, SHA db80239) | Canonical rupiah.ts: parseCurrencyInput, formatCurrencyInput, formatRupiah, formatRupiahZero; Tipe Unit digit-only inputMode=numeric placeholder 30; Struktur Atas/Bawah currency input prefix Rp non-editable right-aligned; Nomor Kode Produksi normalized 3-digit on blur; Blok decimal-only single dot; PDF semua nominal Rp 1.000.000, empty→-, zero→Rp 0, total rows; Excel Tipe Unit dan Blok Text cell, Nomor string 001; validasi bisnis per-kavling; 47 regression tests | MRN-12, SUR-04 | No migration; no schema change; 300/300 tests pass; production belum disentuh |
 | MRN-11 | Hybrid master branch dan karyawan external | Staging available | Mapping ID external ke UUID lokal, review kelengkapan admin, sync run/issue audit, cron harian staging | `/branches`, `/employees`, Auth admin, ADM-01, ADM-02, ADM-03, ADM-06 | Baris yang perlu ditinjau memakai warna dan kolom Keterangan yang menjelaskan data kurang; badge sidebar menampilkan jumlah review. Production tetap nonaktif sampai endpoint production tersedia dan hasil review staging disetujui |
 | MRN-12 | Tipe unit pada alokasi dan seluruh output | Staging only | Input alokasi, template Excel, ringkasan layar, PDF adendum, PDF kode produksi, PDF summary, email, payload `units[].type` | MRN-04, MRN-05, kontrak OpenAPI unit | Bergantung pada kontrak POST Marison yang masih staging-only; promosikan bersama MRN-05 setelah pengujian dokumen dan payload disetujui |
 | MRN-13 | Hybrid master proyek external | Staging; mapping manual proyek siap divalidasi | Mapping `master_projects.marison_project_id`, sync run/issue audit, panel Integrasi Marison, Master Proyek, badge review admin | `/projects`, MRN-11 branch mapping, ADM-07 | Master proyek ditarik dari external dan tetap memakai UUID lokal SIGAP; admin dapat membuat proyek lokal atau memetakan ID external secara manual tanpa membuat duplikat; proyek external tanpa entitas masuk antrean review |
