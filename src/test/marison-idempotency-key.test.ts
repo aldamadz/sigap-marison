@@ -6,6 +6,8 @@ const read = (path: string) => readFileSync(resolve(path), "utf8");
 
 const migration = read("supabase/migrations/20260805090000_fix_generation_aware_idempotency_key.sql");
 const original = read("supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql");
+const sqlTest = read("supabase/tests/marison_idempotency_key.integration.sql");
+const nodeRunner = read("scripts/test-idempotency-key-sql.mjs");
 
 describe("generation-aware idempotency key migration", () => {
   it("is forward-only (CREATE OR REPLACE FUNCTION)", () => {
@@ -62,23 +64,35 @@ describe("generation-aware idempotency key migration", () => {
 });
 
 describe("generation-aware idempotency key SQL integration test", () => {
-  const sqlTest = read("supabase/tests/marison_idempotency_key.integration.sql");
+  it("uses canonical fixtures, not _test_ tables", () => {
+    expect(sqlTest).not.toContain("_test_profiles");
+    expect(sqlTest).not.toContain("_test_surat");
+    expect(sqlTest).toContain("insert into public.profiles");
+    expect(sqlTest).toContain("insert into public.surat_registrasi");
+  });
 
-  it("does NOT \\ir the migration (run on disposable DB)", () => {
+  it("creates at least two surat fixtures with test UUIDs", () => {
+    expect(sqlTest).toContain("IKY-SURAT-001");
+    expect(sqlTest).toContain("IKY-SURAT-002");
+    expect(sqlTest).toContain("000000000010");
+    expect(sqlTest).toContain("000000000011");
+  });
+
+  it("does NOT \\ir the migration (applied on disposable DB before transaction)", () => {
     expect(sqlTest).not.toContain("\\ir ../migrations");
     expect(sqlTest).not.toContain("create or replace function public.prepare_marison_outbound_dispatch");
   });
 
   it("tests generation 1 exact key (legacy)", () => {
-    expect(sqlTest).toContain("gen1 exact key mismatch");
+    expect(sqlTest).toContain("generation 1 exact key");
   });
 
   it("tests generation 2 exact key (:g2)", () => {
-    expect(sqlTest).toContain("gen2 exact key mismatch");
+    expect(sqlTest).toContain("generation 2 exact key");
   });
 
   it("tests generation 3 exact key (:g3)", () => {
-    expect(sqlTest).toContain("gen3 exact key mismatch");
+    expect(sqlTest).toContain("generation 3 exact key");
   });
 
   it("tests malformed key rejected with 55000", () => {
@@ -87,15 +101,40 @@ describe("generation-aware idempotency key SQL integration test", () => {
     expect(sqlTest).toContain("key must be unchanged after rejection");
   });
 
+  it("tests unique constraint via GET STACKED DIAGNOSTICS constraint_name", () => {
+    expect(sqlTest).toContain("get stacked diagnostics v_constraint_name = constraint_name");
+    expect(sqlTest).toContain("marison_outbound_dispatches_idempotency_key_key");
+  });
+
+  it("tests unique constraint in isolation on surat 2 (same key, different surat)", () => {
+    expect(sqlTest).toContain("IKY-SURAT-002");
+    expect(sqlTest).toContain("v_surat2_id");
+  });
+
   it("tests repeat prepare is idempotent", () => {
     expect(sqlTest).toContain("repeat prepare idempotent");
   });
 
-  it("tests unique constraint still enforced", () => {
-    expect(sqlTest).toContain("unique constraint active");
-  });
-
   it("is rollback-based", () => {
     expect(sqlTest.trimEnd().endsWith("rollback;")).toBe(true);
+  });
+});
+
+describe("disposable SQL runner wired into quality gate", () => {
+  it("node runner exists and runs migrations + assertions on disposable postgres", () => {
+    expect(nodeRunner).toContain("20260805090000_fix_generation_aware_idempotency_key.sql");
+    expect(nodeRunner).toContain("20260729103000_durable_marison_outbound_dispatch.sql");
+    expect(nodeRunner).toContain("20260803120000_marison_outbound_replacement_jobs.sql");
+    expect(nodeRunner).toContain('spawnSync("docker"');
+    expect(nodeRunner).toContain('["run", "-d"');
+    expect(nodeRunner).toContain("ON_ERROR_STOP=1");
+    expect(nodeRunner).toContain("finally");
+    expect(nodeRunner).toContain('run(["rm", "-f", id])');
+  });
+
+  it("package.json quality script includes the SQL runner", () => {
+    const pkg = JSON.parse(read("package.json"));
+    expect(pkg.scripts["test:idempotency-key-sql"]).toContain("test-idempotency-key-sql.mjs");
+    expect(pkg.scripts.quality).toContain("test:idempotency-key-sql");
   });
 });
