@@ -121,7 +121,7 @@ describe("generation-aware idempotency key SQL integration test", () => {
 });
 
 describe("disposable SQL runner wired into quality gate", () => {
-  it("node runner exists and runs migrations + assertions on disposable postgres", () => {
+  it("single cross-platform node runner exists (no ps1/sh duplicates)", () => {
     expect(nodeRunner).toContain("20260805090000_fix_generation_aware_idempotency_key.sql");
     expect(nodeRunner).toContain("20260729103000_durable_marison_outbound_dispatch.sql");
     expect(nodeRunner).toContain("20260803120000_marison_outbound_replacement_jobs.sql");
@@ -130,11 +130,21 @@ describe("disposable SQL runner wired into quality gate", () => {
     expect(nodeRunner).toContain("ON_ERROR_STOP=1");
     expect(nodeRunner).toContain("finally");
     expect(nodeRunner).toContain('run(["rm", "-f", id])');
+    // runner must NOT duplicate the integration assertions
+    expect(nodeRunner).not.toContain("sigap:staging:unit:f0000000");
+    expect(nodeRunner).not.toContain("IKY-SURAT-001");
   });
 
-  it("package.json quality script includes the SQL runner", () => {
+  it("node runner reads and executes the integration SQL file as single source of truth", () => {
+    expect(nodeRunner).toContain("marison_idempotency_key.integration.sql");
+    expect(nodeRunner).toContain("integrationTest");
+    expect(nodeRunner).toContain("fixtureSql + baseMigration + replacementMigration + fixMigration + integrationTest");
+  });
+
+  it("package.json quality includes only test:idempotency-key-sql (not outbound-replacement)", () => {
     const pkg = JSON.parse(read("package.json"));
     expect(pkg.scripts["test:idempotency-key-sql"]).toContain("test-idempotency-key-sql.mjs");
     expect(pkg.scripts.quality).toContain("test:idempotency-key-sql");
+    expect(pkg.scripts.quality).not.toContain("test:outbound-replacement-sql");
   });
 });
