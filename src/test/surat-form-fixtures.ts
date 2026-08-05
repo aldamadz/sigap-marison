@@ -216,3 +216,231 @@ export function buildDraftForRestore(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+// ─── Additional Fixtures for TEST-SURAT-02 ─────────────────────
+
+// Unit category usage
+export const UUID_UNIT = {
+  form_usage: "b3eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+  form_a: "c4eebc99-9c0b-4ef8-bb6d-6bb9bd380a23",
+  step1: "d5eebc99-9c0b-4ef8-bb6d-6bb9bd380a24",
+  step2: "e6eebc99-9c0b-4ef8-bb6d-6bb9bd380a25",
+} as const;
+
+export const UNIT_FORM_USAGE_RAW = [
+  {
+    id: UUID_UNIT.form_usage,
+    name: "Permohonan Unit",
+    form_id: UUID_UNIT.form_a,
+    request_category: "unit",
+    scope_type: null,
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_UNIT.form_a,
+      nama_form: "FORM PERMOHONAN UNIT",
+      nomor_form: "FU-001",
+      link_form: "https://storage.example.com/unit-template.xlsx",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "requested_project", label: "Proyek", type: "external_select", default_source: "manual", external_source_key: "marison_projects", cell: "C11" },
+        { key: "requested_unit_count", label: "Jumlah Unit", type: "number", required: true, default_source: "manual", cell: "C12" },
+      ]),
+      unit_config: JSON.stringify({ request_sentence_cell: "C11" }),
+      signature_layout: null,
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_UNIT.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_UNIT.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [],
+  },
+];
+
+// Non-unit category usage
+export const UUID_NON_UNIT = {
+  form_usage: "f7eebc99-9c0b-4ef8-bb6d-6bb9bd380a26",
+  form_a: "08eebc99-9c0b-4ef8-bb6d-6bb9bd380a27",
+  step1: "19eebc99-9c0b-4ef8-bb6d-6bb9bd380a28",
+  step2: "2aeebc99-9c0b-4ef8-bb6d-6bb9bd380a29",
+} as const;
+
+export const NON_UNIT_FORM_USAGE_RAW = [
+  {
+    id: UUID_NON_UNIT.form_usage,
+    name: "Permohonan Non Unit",
+    form_id: UUID_NON_UNIT.form_a,
+    request_category: "non_unit",
+    scope_type: null,
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_NON_UNIT.form_a,
+      nama_form: "FORM PERMOHONAN NON UNIT",
+      nomor_form: "FNU-001",
+      link_form: "https://storage.example.com/non-unit-template.xlsx",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "items", label: "Items", type: "table", required: true, default_source: "manual", cell: "C11", table_config: { columns: [
+          { key: "nama_barang", label: "Nama Barang", required: true },
+          { key: "sat", label: "Satuan" },
+          { key: "jumlah", label: "Jumlah" },
+          { key: "status", label: "Status" },
+          { key: "keterangan", label: "Keterangan" },
+        ]}},
+      ]),
+      unit_config: null,
+      signature_layout: null,
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_NON_UNIT.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_NON_UNIT.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [],
+  },
+];
+
+// Usage with attachments
+export const UUID_ATTACH = {
+  form_usage: "3beebc99-9c0b-4ef8-bb6d-6bb9bd380a2a",
+  form_a: "4ceebc99-9c0b-4ef8-bb6d-6bb9bd380a2b",
+  step1: "5deebc99-9c0b-4ef8-bb6d-6bb9bd380a2c",
+  step2: "6eee0bc9-9c0b-4ef8-bb6d-6bb9bd380a2d",
+} as const;
+
+export const ATTACHMENT_FORM_USAGE_RAW = [
+  {
+    id: UUID_ATTACH.form_usage,
+    name: "Permohonan dengan Lampiran",
+    form_id: UUID_ATTACH.form_a,
+    request_category: "asset",
+    scope_type: null,
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_ATTACH.form_a,
+      nama_form: "FORM PERMOHONAN ASET LAMPIRAN",
+      nomor_form: "FAL-001",
+      link_form: "https://storage.example.com/attach-template.xlsx",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
+      ]),
+      unit_config: null,
+      signature_layout: null,
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_ATTACH.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_ATTACH.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [
+      {
+        id: "att-req-001",
+        stage_order: 0,
+        requirement_key: "surat_kuasa",
+        label: "Surat Kuasa",
+        is_required: true,
+        allow_multiple: false,
+        min_files: 1,
+        max_files: 3,
+        allowed_types: ["application/pdf", "image/jpeg"],
+        max_size_bytes: 5242880,
+      },
+    ],
+  },
+];
+
+// KC profile for Flow 14
+export const CURRENT_PROFILE_KC = {
+  id: UUID.user,
+  role: "user",
+  department_id: UUID.dept_pbo,
+  office_id: UUID.office_kc,
+};
+
+// Master data with projects for unit/non-unit flows
+export const MASTER_PROJECTS_POPULATED = [
+  { id: "proj-001", name: "Griya Asri", code: "GA01", office_id: UUID.office_kc, entity_id: UUID.entity, marison_project_id: 19, marison_branch_id: 14 },
+];
+
+export const MASTER_DATA_WITH_PROJECTS = {
+  ...MASTER_DATA_DEFAULT,
+  projects: MASTER_PROJECTS_POPULATED,
+};
+
+// External options fetch responses
+export const MARISON_PROJECTS_RESPONSE = {
+  options: [
+    { value: "19", label: "GA01 - Griya Asri", raw: { id: "proj-001", code: "GA01", name: "Griya Asri", branch: { name: "KC. Semarang" } } },
+  ],
+};
+
+export const MARISON_UNITS_RESPONSE = {
+  options: [
+    { value: "unit-a1", label: "A-01" },
+    { value: "unit-a2", label: "A-02" },
+    { value: "unit-b1", label: "B-01" },
+  ],
+};
+
+export const MARISON_NON_UNITS_RESPONSE = {
+  options: [
+    { value: "12", label: "Pekerjaan Infrastruktur", raw: { id: 12, code: "INFRA", name: "Pekerjaan Infrastruktur", project_id: 19 } },
+  ],
+};
+
+// Multi-item form usage (for Flow 2)
+export const UUID_MULTI = {
+  form_usage: "7fee0bc9-9c0b-4ef8-bb6d-6bb9bd380a2e",
+  form_a: "8afe1bc9-9c0b-4ef8-bb6d-6bb9bd380a2f",
+  step1: "9bfe2bc9-9c0b-4ef8-bb6d-6bb9bd380a30",
+  step2: "acfe3bc9-9c0b-4ef8-bb6d-6bb9bd380a31",
+} as const;
+
+export const MULTI_ITEM_FORM_USAGE_RAW = [
+  {
+    id: UUID_MULTI.form_usage,
+    name: "Permohonan Multi Item",
+    form_id: UUID_MULTI.form_a,
+    request_category: "asset",
+    scope_type: null,
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_MULTI.form_a,
+      nama_form: "FORM PERMOHONAN MULTI",
+      nomor_form: "FM-001",
+      link_form: "https://storage.example.com/multi-template.xlsx",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "items", label: "Items", type: "table", required: true, default_source: "manual", cell: "C11", table_config: { columns: [
+          { key: "nama_barang", label: "Nama Barang", required: true },
+          { key: "sat", label: "Satuan" },
+          { key: "jumlah", label: "Jumlah" },
+          { key: "status", label: "Status" },
+          { key: "keterangan", label: "Keterangan" },
+        ]}},
+      ]),
+      unit_config: null,
+      signature_layout: null,
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_MULTI.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_MULTI.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [],
+  },
+];
+
+// Recommendation parent summary
+export const RECOMMENDATION_PARENT_SUMMARY = {
+  parent_surat_id: "parent-surat-001",
+  parent_no_surat: "001/FA/MKT/VII/2026",
+  parent_title: "Permohonan Aset : Printer Epson",
+  form_input_data: {
+    request_category: "asset",
+    items: [
+      { nama_barang: "Printer Epson L3250", sat: "Unit", jumlah: "2", status: "2" },
+    ],
+  },
+};

@@ -17,6 +17,7 @@ import {
   serviceMock,
   supabaseMock,
   defaultProps,
+  registerFetchRoute,
 } from "./surat-form-harness";
 import {
   UUID,
@@ -280,4 +281,94 @@ export async function navigateToReadyToSubmit() {
   await navigateToNumberGenerated();
   await fillNamaBarang("Printer Epson");
   await selectAllSigners();
+}
+
+// ─── Category selection helpers ─────────────────────────────────
+
+export async function selectCategory(category: string) {
+  const btn = await screen.findByText(category);
+  await act(async () => { fireEvent.click(btn); });
+}
+
+export async function selectCategoryUnit() {
+  await selectCategory("Unit");
+  // Wait for unit-specific UI to render
+  await waitFor(() => {
+    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form Dokumen/i)).toBeTruthy();
+  });
+}
+
+export async function selectCategoryNonUnit() {
+  await selectCategory("Non Unit");
+  await waitFor(() => {
+    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form Dokumen/i)).toBeTruthy();
+  });
+}
+
+// ─── Mount with custom config ───────────────────────────────────
+
+/**
+ * Mount form with custom supabase.from mock for form_usages.
+ * Useful when test needs different usage data than FORM_USAGES_RAW.
+ */
+export async function mountFormWithUsage(usageData: unknown[], profileData?: unknown) {
+  const profile = profileData || CURRENT_PROFILE_DEFAULT;
+  (supabaseMock.from as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+    (table: string) => {
+      if (table === "profiles") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn().mockResolvedValue({ data: profile, error: null }),
+        };
+      }
+      if (table === "form_usages") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockResolvedValue({ data: usageData, error: null }),
+        };
+      }
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        in: vi.fn().mockReturnThis(),
+      };
+    }
+  );
+  render(<SuratForm {...defaultProps()} />);
+  await screen.findByText(/Lokasi dan Klasifikasi/i);
+}
+
+// ─── Fetch mock helpers ─────────────────────────────────────────
+
+/**
+ * Register fetch routes for external data sources.
+ * Call BEFORE mountForm.
+ */
+export function registerExternalDataRoutes() {
+  registerFetchRoute(
+    "/api/data-sources/marison_projects/query",
+    { options: [{ value: "19", label: "GA01 - Griya Asri", raw: { id: "proj-001", code: "GA01", name: "Griya Asri", branch: { name: "KC. Semarang" } } }] }
+  );
+  registerFetchRoute(
+    "/api/data-sources/marison_units_by_project/query",
+    { options: [{ value: "unit-a1", label: "A-01" }, { value: "unit-a2", label: "A-02" }] }
+  );
+  registerFetchRoute(
+    "/api/data-sources/marison_non_units_by_project/query",
+    { options: [{ value: "12", label: "Pekerjaan Infrastruktur", raw: { id: 12, code: "INFRA", name: "Pekerjaan Infrastruktur", project_id: 19 } }] }
+  );
+}
+
+// ─── Attachment helpers ─────────────────────────────────────────
+
+export async function uploadAttachment(fileName: string) {
+  const fileInput = screen.getByLabelText(/Pilih File/i) as HTMLInputElement;
+  const file = new File(["test content"], fileName, { type: "application/pdf" });
+  await act(async () => {
+    fireEvent.change(fileInput, { target: { files: [file] } });
+  });
 }
