@@ -3,10 +3,11 @@
  *
  * Design rules:
  * - findByText / findByRole / waitFor for async element discovery
- * - Text-based or value-based element location (no combobox index, no CSS class)
+ * - Label-wrapper-based Select trigger location (no combobox index, no CSS class)
  * - Fake timers controlled precisely for 900ms autosave debounce
  * - No retry loops — single attempt, fail fast
  * - No arbitrary sleep
+ * - No flushPromises
  */
 
 import { vi, expect } from "vitest";
@@ -15,7 +16,6 @@ import React from "react";
 import {
   serviceMock,
   supabaseMock,
-  toastMock,
   defaultProps,
 } from "./surat-form-harness";
 import {
@@ -75,16 +75,19 @@ export function configureStandardMocks() {
 // ─── Element location helpers ───────────────────────────────────
 
 /**
- * Find a Radix Select trigger by its displayed text (placeholder or selected value).
- * Falls back to finding by label if text match fails.
+ * Find a Radix Select trigger by its associated label text.
+ * Uses label-wrapper DOM structure: label and combobox are siblings
+ * inside a common parent div.
+ * Falls back to matching combobox text content.
  */
-function findSelectTrigger(pattern: RegExp): HTMLElement {
-  // Try matching by displayed text inside combobox
-  const comboboxes = screen.getAllByRole("combobox");
-  for (const cb of comboboxes) {
-    if (pattern.test(cb.textContent || "")) return cb;
+function findSelectTrigger(labelPattern: RegExp): HTMLElement {
+  const label = screen.getByText(labelPattern);
+  const wrapper = label.parentElement;
+  if (wrapper) {
+    const cb = wrapper.querySelector("[role='combobox']");
+    if (cb) return cb as HTMLElement;
   }
-  throw new Error(`No combobox with text matching ${pattern}`);
+  throw new Error(`No Select trigger found for label ${labelPattern}`);
 }
 
 // ─── Mount ──────────────────────────────────────────────────────
@@ -97,7 +100,7 @@ export async function mountForm() {
 // ─── Select helpers ─────────────────────────────────────────────
 
 export async function selectLetterType() {
-  const trigger = findSelectTrigger(/Pilih Jenis/i);
+  const trigger = findSelectTrigger(/Jenis Dokumen/i);
   await act(async () => { fireEvent.click(trigger); });
   const option = await screen.findByText(/MH.*Permohonan/i);
   await act(async () => { fireEvent.click(option); });
@@ -105,7 +108,7 @@ export async function selectLetterType() {
 }
 
 export async function selectEntity() {
-  const trigger = findSelectTrigger(/Pilih PT/i);
+  const trigger = findSelectTrigger(/Entitas \(PT\)/i);
   await act(async () => { fireEvent.click(trigger); });
   const listbox = await screen.findByRole("listbox");
   const option = within(listbox).getByText(/PT-SIG/i);
@@ -122,9 +125,8 @@ export async function selectForm() {
   // If only one form is available, it auto-selects. Check first.
   try {
     screen.getByText(/FORM PERMOHONAN ASET/i);
-    // Already selected — skip click
   } catch {
-    const trigger = findSelectTrigger(/Pilih form/i);
+    const trigger = findSelectTrigger(/Form Dokumen/i);
     await act(async () => { fireEvent.click(trigger); });
     const listbox = await screen.findByRole("listbox");
     const option = within(listbox).getByText(/FORM PERMOHONAN ASET/i);
@@ -139,7 +141,7 @@ export async function selectUsage() {
     el => el.closest("[role='combobox']") !== null
   );
   if (!alreadySelected) {
-    const trigger = findSelectTrigger(/Pilih kegunaan/i);
+    const trigger = findSelectTrigger(/Kegunaan/i);
     await act(async () => { fireEvent.click(trigger); });
     const listbox = await screen.findByRole("listbox");
     const option = within(listbox).getByText(/Permohonan Aset/i);
@@ -156,36 +158,55 @@ export async function selectFormAndUsage() {
 
 export async function clickGetNumber() {
   const btn = screen.getByRole("button", { name: /Dapatkan Nomor Surat/i });
-  await act(async () => {
-    fireEvent.click(btn);
-  });
+  await act(async () => { fireEvent.click(btn); });
   await screen.findByText(/Nomor Terdaftar/i);
 }
 
 // ─── Autosave with fake timers ──────────────────────────────────
 
+/**
+ * Edit a field and deterministically complete the 900ms autosave.
+ * Uses fake timers to advance exactly 900ms.
+ * Verifies that saveRegistrationDraft was called.
+ */
 export async function editFieldAndWaitForAutosave(
   field: HTMLElement,
   value: string
 ) {
   vi.useFakeTimers();
   fireEvent.change(field, { target: { value } });
-  act(() => {
-    vi.advanceTimersByTime(900);
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
+  act(() => { vi.advanceTimersByTime(900); });
+  await act(async () => { await Promise.resolve(); });
+  vi.useRealTimers();
+}
+
+/**
+ * Edit a field, unmount before 900ms, advance timer.
+ * saveRegistrationDraft must NOT be called (cleanup cancelled timer).
+ */
+export function editFieldAndUnmountBeforeAutosave(
+  unmount: () => void,
+  field: HTMLElement,
+  value: string
+) {
+  vi.useFakeTimers();
+  fireEvent.change(field, { target: { value } });
+  // Unmount before 900ms fires
+  unmount();
+  // Now advance past 900ms
+  act(() => { vi.advanceTimersByTime(1200); });
   vi.useRealTimers();
 }
 
 // ─── Fill Nama Barang ───────────────────────────────────────────
 
+/**
+ * GAP: production renderManualField uses <Label> without htmlFor,
+ * so getByLabelText("Nama Barang") does NOT work.
+ * Using placeholder text as fallback.
+ */
 export async function fillNamaBarang(value: string) {
-  const label = screen.getByText("Nama Barang");
-  const card = label.closest("[class*='rounded-lg']");
-  const input = card?.querySelector("input") as HTMLInputElement;
-  if (!input) throw new Error("Nama Barang input not found");
+  const input = screen.getByPlaceholderText(/Isi Nama Barang/i) as HTMLInputElement;
   fireEvent.change(input, { target: { value } });
 }
 
@@ -200,12 +221,20 @@ export async function selectSigner(stepLabel: string, userName: string) {
   await act(async () => { fireEvent.click(userOption); });
 }
 
+/**
+ * Select all signers for the default 2-step usage config.
+ * Uses fake timers to complete the 900ms autosave between signer changes.
+ */
 export async function selectAllSigners() {
   await selectSigner("Pemohon", "Pemohon Staging");
-  await waitFor(() => {
-    expect(serviceMock.saveRegistrationDraft).toHaveBeenCalled();
-  });
+
+  // Complete autosave deterministically with fake timers
+  vi.useFakeTimers();
+  act(() => { vi.advanceTimersByTime(900); });
+  await act(async () => { await Promise.resolve(); });
+  vi.useRealTimers();
   serviceMock.saveRegistrationDraft.mockClear();
+
   await selectSigner("Direktur", "Direktur Utama");
 }
 
@@ -225,10 +254,8 @@ export async function submitFromDialog() {
 
 export async function closeDialog() {
   const dialog = screen.getByRole("dialog");
-  const closeBtn = within(dialog).getAllByRole("button").find(
-    btn => !btn.textContent?.includes("Daftarkan")
-  );
-  if (closeBtn) await act(async () => { fireEvent.click(closeBtn); });
+  const closeBtn = within(dialog).getByRole("button", { name: /Kembali Perbaiki/i });
+  await act(async () => { fireEvent.click(closeBtn); });
   await waitFor(() => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

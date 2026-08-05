@@ -160,11 +160,6 @@ export function setupTestHarness() {
   serviceMock.getMasterData.mockResolvedValue(undefined);
   serviceMock.getActiveRegistrationDrafts.mockResolvedValue([]);
 
-  // Safe default for autosave — returns Promise even after mock reset
-  // Prevents "Cannot read properties of undefined (reading 'then')" if
-  // a setTimeout fires after teardown resets mock implementations.
-  serviceMock.saveRegistrationDraft.mockResolvedValue(undefined);
-
   // Supabase auth defaults
   supabaseMock.auth.getUser.mockResolvedValue({
     data: { user: { id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" } },
@@ -238,13 +233,6 @@ export function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
-}
-
-// ─── Flush Promises ─────────────────────────────────────────────
-export function flushPromises(ms = 0): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 // ─── Default Props Factory ──────────────────────────────────────

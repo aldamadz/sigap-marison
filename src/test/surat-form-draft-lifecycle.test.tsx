@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import React from "react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -7,12 +8,19 @@ import {
   allowServiceCalls,
   assertStrictServiceCalls,
   toastMock,
+  defaultProps,
 } from "./surat-form-harness";
 import { UUID } from "./surat-form-fixtures";
+import { SuratForm } from "@/components/surat/SuratForm";
 import {
   configureStandardMocks,
-  navigateToNumberGenerated,
+  selectLetterType,
+  selectEntity,
+  selectCategoryAset,
+  selectFormAndUsage,
+  clickGetNumber,
   editFieldAndWaitForAutosave,
+  editFieldAndUnmountBeforeAutosave,
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -31,10 +39,21 @@ afterEach(() => {
   teardownTestHarness();
 });
 
+/** Mount and navigate to number generated, returning unmount handle. */
+async function mountToNumberGenerated() {
+  const { unmount } = render(<SuratForm {...defaultProps()} />);
+  await screen.findByText(/Lokasi dan Klasifikasi/i);
+  await selectLetterType();
+  await selectEntity();
+  await selectCategoryAset();
+  await selectFormAndUsage();
+  await clickGetNumber();
+  return { unmount };
+}
+
 describe("Flow 6: Draft Lifecycle", () => {
   it("autosave triggers after field edit with 900ms debounce", async () => {
-    await navigateToNumberGenerated();
-
+    await mountToNumberGenerated();
     expect(serviceMock.saveRegistrationDraft).not.toHaveBeenCalled();
 
     const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
@@ -51,7 +70,7 @@ describe("Flow 6: Draft Lifecycle", () => {
   });
 
   it("draft state shows saved after autosave completes", async () => {
-    await navigateToNumberGenerated();
+    await mountToNumberGenerated();
     toastMock.mockClear();
 
     const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
@@ -64,13 +83,24 @@ describe("Flow 6: Draft Lifecycle", () => {
   });
 
   it("draft number persists after autosave", async () => {
-    await navigateToNumberGenerated();
+    await mountToNumberGenerated();
 
     const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
     await editFieldAndWaitForAutosave(perihal, "Judul Manual");
 
     expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
     expect(screen.getByText(/Nomor Terdaftar/i)).toBeInTheDocument();
+    assertStrictServiceCalls();
+  });
+
+  it("unmount before 900ms cancels autosave timer", async () => {
+    const { unmount } = await mountToNumberGenerated();
+
+    const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
+    editFieldAndUnmountBeforeAutosave(unmount, perihal, "Judul Manual");
+
+    // saveRegistrationDraft must NOT be called — cleanup cancelled the timer
+    expect(serviceMock.saveRegistrationDraft).not.toHaveBeenCalled();
     assertStrictServiceCalls();
   });
 });

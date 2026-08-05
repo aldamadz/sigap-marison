@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen, within, fireEvent } from "@testing-library/react";
+import { screen, within, fireEvent, act } from "@testing-library/react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -114,7 +114,7 @@ describe("Flow 13: Submit Retry", () => {
 
     // Resolve
     deferred.resolve(CREATE_REGISTRASI_RESULT);
-    await new Promise((r) => setTimeout(r, 50));
+    await act(async () => { await Promise.resolve(); });
 
     expect(onSuccessMock).toHaveBeenCalled();
     assertStrictServiceCalls();
