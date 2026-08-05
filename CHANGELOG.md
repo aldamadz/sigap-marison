@@ -1,5 +1,51 @@
 # Changelog
 
+## [2026-08-04] INBOX-01: Compact Approval Inbox — server-side filter, lazy detail, pagination
+
+### Added
+- `get_compact_inbox` RPC: server-side filter (search, request_category, task_type), keyset cursor pagination (available_at, task_type, id), returns compact item type without form_input_data/data_snapshot/attachments.
+- `get_compact_inbox_count` RPC: same predicate as list for badge consistency, used for pagination total on first page only.
+- `is_inbox_task_active` RPC: canonical predicate for detail authorization, checks signer/verifier active step and revision state.
+- `GET /api/surat/inbox`: BFF endpoint with strict validation (limit 1-50, cursor base64, search max 200 chars, task_type allowlist).
+- `GET /api/surat/inbox/:signatureId/detail`: BFF endpoint with UUID validation and is_inbox_task_active authorization.
+- `compact_inbox_item` PostgreSQL type for RPC return value.
+- `suratService.getMyInboxCompact()` and `suratService.getMyInboxDetail()` in client service.
+- Lazy detail loading with skeleton placeholder in InboxPage.
+- Load-more pagination button with remaining count.
+- Debounced search (400ms) with filter key reset on change.
+- `keepPreviousData` for smooth pagination transitions.
+- 43 compact inbox tests (structural contracts, behavioral: cursor, pagination, limit, filter).
+
+### Changed
+- Inbox query key renamed from `surat-inbox` to `surat-inbox-compact`.
+- InboxPage now uses compact list + separate detail query instead of full inbox query.
+- `filteredInbox` memo simplified (search/category moved to server-side).
+- Attention badge `inboxCount` now uses `get_compact_inbox_count` for consistency.
+- `InboxPage.tsx` invalidation updated for new query keys.
+
+### Fixed
+- `domain.routes.ts`: registered `/api/surat/inbox` and `/api/surat/inbox/:signatureId/detail` routes (PR #93).
+
+### Security
+- All three RPC functions: SECURITY INVOKER, `SET search_path = public`.
+- Grants: `service_role` only; `REVOKE` from `PUBLIC`, `anon`, `authenticated`.
+- `p_user_id` sourced from BFF session, never from client.
+- Detail authorization via `is_inbox_task_active` RPC (returns 403 for inactive/other user).
+- Search parameterized via ILIKE (no SQL injection).
+- Cursor validated: base64 decode, UUID format, timestamp, task_type allowlist.
+
+### Migration
+- `20260804081000_compact_inbox_rpc.sql`: applied to staging Supabase (wrufczusfopgvwvxsmjk).
+
+### Verification
+- `npm audit`: 0 vulnerabilities.
+- `npm run lint`: clean.
+- `npm run typecheck`: clean.
+- `npm test`: 343/343 tests passed (54 files).
+- `npm run build`: production build succeeded.
+- `git diff --check`: no whitespace errors.
+- Staging container healthy, endpoints returning 401 (auth enforced).
+
 ## [2026-08-04] fix: tighten transitive dependency security overrides
 
 ### Added

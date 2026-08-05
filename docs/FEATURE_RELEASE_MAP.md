@@ -1,6 +1,6 @@
 # SIGAP Feature and Release Map
 
-Snapshot audit: 2026-07-31 (Asia/Jakarta)
+Snapshot audit: 2026-08-04 (Asia/Jakarta)
 
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
@@ -34,11 +34,11 @@ Arti status:
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
-| App container | `agenda-flow-prod` | `agenda-flow-staging` SHA `83abeb09` (healthy) | Keempat service staging sehat; production tidak diubah |
+| App container | `agenda-flow-prod` | `agenda-flow-staging` SHA `b368fd6` (healthy) | Keempat service staging sehat; production tidak diubah |
 | PDF worker | `agenda-pdf-worker` | `agenda-pdf-worker-staging` (up, started) | Staging sudah ikut image terbaru |
 | Marison outbound worker | `agenda-marison-outbound-staging` | Up 20+ hours (healthy) | Tidak diubah deployment ini; sehat |
 | Marison sync | — | `agenda-marison-sync-staging` (started) | Cron sync aktif |
-| Git source | `main` @ `aca7cfc` | `staging` @ `83abeb0` | staging 95+ commit di depan main |
+| Git source | `main` @ `aca7cfc` | `staging` @ `b368fd6` | staging 97+ commit di depan main |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
 | RPC | 51 RPC | 51 RPC | Tidak ada perbedaan RPC |
@@ -111,7 +111,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | SUR-04 | Lampiran awal dan lampiran approval | Production + Staging; progres byte nyata dan validasi lampiran draft siap diuji di staging | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik; submit harus membaca ulang file draft dari database |
 | SUR-05 | Preview detail dan file viewer bertoken | Production + Staging | Preview modal, file token BFF | Storage, surat authorization | Jangan membuka public URL sebagai pengganti |
 | SUR-06 | Inbox persetujuan | Production + Staging | Inbox page, signatures | Workflow approval, attention | Nonaktifkan write/signing lebih dahulu |
-| INBOX-01 | Compact Approval Inbox — server-side filter, lazy detail, pagination | Staging candidate (NOT deployed, migration pending review). Branch fix/compact-approval-inbox, 4 Agustus 2026 | BFF GET /api/surat/inbox (compact RPC), GET /api/surat/inbox/:id/detail (lazy, auth via is_inbox_task_active RPC); server-side filter: search, request_category, task_type; keyset cursor (available_at, task_type, id) base64-encoded; count only on first page; attention badge inboxCount uses get_compact_inbox_count; is_inbox_task_active canonical predicate; debounce search 400ms | SUR-06, AUTH-02, attention badge SQL | Migration 20260804081000_compact_inbox_rpc.sql NOT applied yet. 335/335 tests pass (54 files). SQL integration test with 25+ fixtures in supabase/tests/compact_inbox.integration.sql. Residual: EXPLAIN ANALYZE needed on staging fixture for verifier_snapshot GIN index decision; migration must be reviewed and applied before feature is functional |
+| INBOX-01 | Compact Approval Inbox — server-side filter, lazy detail, pagination | Staging deployed 4 Agustus 2026 (PR #92 + #93 merged, SHA b368fd6) | BFF GET /api/surat/inbox (compact RPC), GET /api/surat/inbox/:id/detail (lazy, auth via is_inbox_task_active RPC); server-side filter: search, request_category, task_type; keyset cursor (available_at, task_type, id) base64-encoded; count only on first page; attention badge inboxCount uses get_compact_inbox_count; is_inbox_task_active canonical predicate; debounce search 400ms | SUR-06, AUTH-02, attention badge SQL | Migration 20260804081000_compact_inbox_rpc.sql applied to staging Supabase. 343/343 tests pass (54 files). SQL integration test with 25+ fixtures in supabase/tests/compact_inbox.integration.sql. Staging container healthy, endpoints returning 401 (auth enforced). Residual: EXPLAIN ANALYZE needed on staging fixture for verifier_snapshot GIN index decision; production belum disentuh |
 | SUR-07 | Status pengajuan/monitoring pengguna | Production + Staging | Monitoring page/service | Surat, signatures, revision | Aman sebagai read-only; jangan hapus data |
 | SUR-08 | Riwayat keterlibatan | Production + Staging | History page | Surat/signatures | UI dapat ditarik terpisah |
 | SUR-09 | Monitoring admin dan pagination server-side | Production + Staging | Admin monitoring, monitoring RPC | Surat, admin role | UI/endpoint dapat ditarik bersama-sama |
