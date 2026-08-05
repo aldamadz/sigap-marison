@@ -1534,7 +1534,23 @@ const getInboxDetail = async (token, signatureId) => {
     surat.surat_signatures = [...surat.surat_signatures]
       .sort((a, b) => Number(a.step_order) - Number(b.step_order));
   }
-  return { ...data, surat_registrasi: surat };
+
+  // Derive task_type with the SAME canonical rule as get_compact_inbox:
+  // a user who is the assigned signer (user_id) sees an approval task;
+  // otherwise a user present in verifier_snapshot of a pending, not-yet-signed,
+  // verification-required signature sees a verification task. Signer wins on
+  // overlap (mirrors the RPC's NOT EXISTS dedup). We never guess from label.
+  const isSigner = data.user_id === user.id;
+  const verifierHit = Array.isArray(data.verifier_snapshot)
+    ? data.verifier_snapshot.some((v: any) => v && v.user_id === user.id)
+    : false;
+  const taskType = isSigner
+    ? "approval"
+    : verifierHit && data.verification_required === true && data.verification_status === "pending"
+      ? "verification"
+      : null;
+
+  return { ...data, task_type: taskType, surat_registrasi: surat };
 };
 
 const getAttentionStateForUser = async (userId) => {
