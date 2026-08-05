@@ -44,17 +44,7 @@ describe("Flow 4: Non Unit", () => {
     teardownTestHarness();
   });
 
-  it("non-unit category button is clickable", async () => {
-    await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW);
-    await selectLetterType();
-    await selectEntity();
-
-    const nonUnitBtn = screen.getByText("Non Unit");
-    expect(nonUnitBtn).toBeInTheDocument();
-    assertStrictServiceCalls();
-  });
-
-  it("selecting non-unit category shows form selectors", async () => {
+  it("non-unit category shows form selectors", async () => {
     await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW);
     await selectLetterType();
     await selectEntity();

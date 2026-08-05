@@ -372,3 +372,58 @@ export async function uploadAttachment(fileName: string) {
     fireEvent.change(fileInput, { target: { files: [file] } });
   });
 }
+
+// ─── Search Params helpers ──────────────────────────────────────
+
+/**
+ * Mount form with custom URL search params.
+ * Use for linked document flows (Flow 5).
+ * For recommendation flow, waits for RecommendationParentSummary.
+ * For normal flow, waits for "Lokasi dan Klasifikasi".
+ */
+export async function mountFormWithSearchParams(params: Record<string, string>) {
+  const { setSearchParamsOverride } = await import("./surat-form-harness");
+  setSearchParamsOverride(new URLSearchParams(params));
+  render(<SuratForm {...defaultProps()} />);
+
+  if (params.linked_type === "recommendation") {
+    // In recommendation flow, the component renders RecommendationParentSummary
+    // instead of "Lokasi dan Klasifikasi"
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Lokasi dan Klasifikasi/i) ||
+        screen.queryByText(/Pengajuan aset/i) ||
+        screen.queryByText(/Permohonan Aset/i)
+      ).toBeTruthy();
+    });
+  } else {
+    await screen.findByText(/Lokasi dan Klasifikasi/i);
+  }
+}
+
+// ─── Table row helpers ──────────────────────────────────────────
+
+/**
+ * Fill a table row by finding inputs within the table section.
+ */
+export async function fillTableRow(rowIndex: number, values: Record<string, string>) {
+  // Find all table row containers
+  const rows = screen.getAllByRole("row");
+  // Skip header row
+  const dataRows = rows.filter(r => !r.querySelector("th"));
+  const targetRow = dataRows[rowIndex];
+  if (!targetRow) throw new Error(`Row ${rowIndex} not found`);
+
+  for (const [colKey, value] of Object.entries(values)) {
+    // Find input by column header or placeholder
+    const inputs = targetRow.querySelectorAll("input");
+    // Try to match by data attribute or position
+    for (const input of inputs) {
+      const placeholder = input.getAttribute("placeholder") || "";
+      if (placeholder.toLowerCase().includes(colKey.toLowerCase())) {
+        fireEvent.change(input, { target: { value } });
+        break;
+      }
+    }
+  }
+}

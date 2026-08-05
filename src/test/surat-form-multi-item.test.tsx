@@ -3,7 +3,7 @@
  * Flow 12: Summary Payload
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -42,7 +42,7 @@ afterEach(() => {
 });
 
 describe("Flow 2: Aset Multi-Item", () => {
-  it("items table appears after getting number with multi-item usage", async () => {
+  it("items table renders with Nama Barang column after number", async () => {
     await mountFormWithUsage(MULTI_ITEM_FORM_USAGE_RAW);
     await selectLetterType();
     await selectEntity();
@@ -51,18 +51,6 @@ describe("Flow 2: Aset Multi-Item", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Items/i)).toBeInTheDocument();
-    });
-    assertStrictServiceCalls();
-  });
-
-  it("items table has Nama Barang column", async () => {
-    await mountFormWithUsage(MULTI_ITEM_FORM_USAGE_RAW);
-    await selectLetterType();
-    await selectEntity();
-    await selectCategoryAset();
-    await clickGetNumber();
-
-    await waitFor(() => {
       expect(screen.getByText(/Nama Barang/i)).toBeInTheDocument();
     });
     assertStrictServiceCalls();

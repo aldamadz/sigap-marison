@@ -1,9 +1,5 @@
 /**
  * Flow 8: Auto-title dan Auto-place
- *
- * Verifies that judul_surat auto-generates based on category,
- * items, and office selection. Also verifies request_place
- * auto-derives from selected office.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
@@ -42,7 +38,7 @@ afterEach(() => {
 });
 
 describe("Flow 8: Auto-title and Auto-place", () => {
-  it("auto-generates title for asset category", async () => {
+  it("auto-generates title containing 'Permohonan Aset' and office suffix", async () => {
     await mountForm();
     await selectLetterType();
     await selectEntity();
@@ -50,17 +46,16 @@ describe("Flow 8: Auto-title and Auto-place", () => {
     await selectFormAndUsage();
     await clickGetNumber();
 
-    // Auto-title should be set via setJudulForDisplay
-    // For asset category without items: "Permohonan Aset <officeSuffix>"
+    // For pusat office + asset category + no items:
+    // title = "Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat"
     const calls = setJudulForDisplayMock.mock.calls;
     const lastTitle = calls[calls.length - 1]?.[0] || "";
-    expect(lastTitle).toContain("Permohonan");
-    expect(typeof lastTitle).toBe("string");
-    expect(lastTitle.length).toBeGreaterThan(0);
+    expect(lastTitle).toContain("Permohonan Aset");
+    expect(lastTitle).toContain("Kantor Pusat");
     assertStrictServiceCalls();
   });
 
-  it("auto-sets request_place from office selection", async () => {
+  it("auto-sets request_place to 'Magelang' for pusat office", async () => {
     await mountForm();
     await selectLetterType();
     await selectEntity();
@@ -68,14 +63,15 @@ describe("Flow 8: Auto-title and Auto-place", () => {
     await selectFormAndUsage();
     await clickGetNumber();
 
-    // request_place should be auto-derived from office "Kantor Pusat"
-    // which maps to "Magelang" for pusat office
-    const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
-    expect(perihal).toBeInTheDocument();
+    // request_place should be "Magelang" for pusat office
+    // Find the request_place input (Tempat field)
+    const tempatInput = screen.getByPlaceholderText(/Jakarta|Tempat/i) as HTMLInputElement;
+    expect(tempatInput).toBeTruthy();
+    expect(tempatInput.value).toBe("Magelang");
     assertStrictServiceCalls();
   });
 
-  it("title updates when manual override is cleared", async () => {
+  it("manual title override prevents auto-update, clear reverts to auto", async () => {
     await mountForm();
     await selectLetterType();
     await selectEntity();
@@ -83,21 +79,20 @@ describe("Flow 8: Auto-title and Auto-place", () => {
     await selectFormAndUsage();
     await clickGetNumber();
 
-    // Record auto-title
     const calls = setJudulForDisplayMock.mock.calls;
     const autoTitle = calls[calls.length - 1]?.[0] || "";
 
     // Manual override
     const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
-    fireEvent.change(perihal, { target: { value: "Judul Manual" } });
-    expect(setJudulForDisplayMock).toHaveBeenLastCalledWith("Judul Manual");
+    fireEvent.change(perihal, { target: { value: "Judul Manual Saya" } });
+    expect(setJudulForDisplayMock).toHaveBeenLastCalledWith("Judul Manual Saya");
 
     // Clear override → should revert to auto
     fireEvent.change(perihal, { target: { value: "" } });
     const revertedCalls = setJudulForDisplayMock.mock.calls;
     const revertedTitle = revertedCalls[revertedCalls.length - 1]?.[0] || "";
-    // After clearing, auto-title should be regenerated
-    expect(revertedTitle).not.toBe("Judul Manual");
+    expect(revertedTitle).toContain("Permohonan Aset");
+    expect(revertedTitle).not.toBe("Judul Manual Saya");
     assertStrictServiceCalls();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Flow 10: Required attachment
+ * Flow 10: Required attachment dan upload progress
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
@@ -52,7 +52,6 @@ describe("Flow 10: Required attachment", () => {
     await selectCategoryAset();
     await clickGetNumber();
 
-    // Should show "Surat Kuasa" requirement
     await waitFor(() => {
       expect(screen.getByText(/Surat Kuasa/i)).toBeInTheDocument();
     });

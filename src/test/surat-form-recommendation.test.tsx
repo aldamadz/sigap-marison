@@ -1,17 +1,8 @@
 /**
  * Flow 5: Recommendation linked document
- *
- * BLOCKED: requires react-router mock override for URL params.
- * The current harness mock returns empty URLSearchParams.
- * To test linked documents, we need to override useSearchParams
- * to return params like linked_type=recommendation&parent_surat=...
- *
- * This test verifies the recommendation flow exists in the codebase
- * but cannot be fully tested without modifying the harness mock
- * for react-router, which would affect all other tests.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -20,13 +11,14 @@ import {
   assertStrictServiceCalls,
 } from "./surat-form-harness";
 import {
+  UUID,
   MASTER_DATA_DEFAULT,
-  FORM_USAGES_RAW,
   RECOMMENDATION_PARENT_SUMMARY,
 } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
   mountForm,
+  mountFormWithSearchParams,
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -46,17 +38,50 @@ afterEach(() => {
 });
 
 describe("Flow 5: Recommendation linked document", () => {
-  it("getRecommendationParentSummary is available as service method", () => {
-    // Verify the service mock is properly configured
-    expect(serviceMock.getRecommendationParentSummary).toBeDefined();
-    expect(typeof serviceMock.getRecommendationParentSummary).toBe("function");
+  it("calls getRecommendationParentSummary with correct task ID", async () => {
+    await mountFormWithSearchParams({
+      linked_type: "recommendation",
+      parent_surat: UUID.surat,
+      parent_no_surat: "001/FA/MKT/VII/2026",
+      task_id: "task-001",
+    });
+
+    await waitFor(() => {
+      expect(serviceMock.getRecommendationParentSummary).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = serviceMock.getRecommendationParentSummary.mock.calls[0][0];
+    expect(callArg).toBe("task-001");
+    assertStrictServiceCalls();
   });
 
-  it("mounts without linked document context (no URL params)", async () => {
+  it("renders recommendation parent summary with correct data", async () => {
+    await mountFormWithSearchParams({
+      linked_type: "recommendation",
+      parent_surat: UUID.surat,
+      parent_no_surat: "001/FA/MKT/VII/2026",
+      task_id: "task-001",
+    });
+
+    await waitFor(() => {
+      expect(serviceMock.getRecommendationParentSummary).toHaveBeenCalled();
+    });
+
+    // Should show parent surat number
+    await waitFor(() => {
+      expect(screen.getByText(/001\/FA\/MKT\/VII\/2026/i)).toBeInTheDocument();
+    });
+
+    // Should show parent item name
+    expect(screen.getByText(/Printer Epson L3250/i)).toBeInTheDocument();
+    assertStrictServiceCalls();
+  });
+
+  it("without linked_type param renders normal form", async () => {
     await mountForm();
 
-    // Without linked_type param, should render normal form
     expect(screen.getByText(/Lokasi dan Klasifikasi/i)).toBeInTheDocument();
+    expect(serviceMock.getRecommendationParentSummary).not.toHaveBeenCalled();
     assertStrictServiceCalls();
   });
 });

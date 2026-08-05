@@ -41,29 +41,19 @@ afterEach(() => {
 });
 
 describe("Flow 15: Usage/form cascade", () => {
-  it("form and usage selectors appear after category selection", async () => {
-    await mountForm();
-    await selectLetterType();
-    await selectEntity();
-    await selectCategoryAset();
-
-    expect(screen.getByText(/Form Dokumen/i)).toBeInTheDocument();
-    expect(screen.getByText(/Kegunaan/i)).toBeInTheDocument();
-    assertStrictServiceCalls();
-  });
-
-  it("get number button appears after form/usage selection", async () => {
+  it("form and usage auto-select when only one option available", async () => {
     await mountForm();
     await selectLetterType();
     await selectEntity();
     await selectCategoryAset();
     await selectFormAndUsage();
 
-    expect(screen.getByRole("button", { name: /Dapatkan Nomor Surat/i })).toBeInTheDocument();
+    const btn = screen.getByRole("button", { name: /Dapatkan Nomor Surat/i });
+    expect(btn).not.toBeDisabled();
     assertStrictServiceCalls();
   });
 
-  it("number is displayed after successful generation", async () => {
+  it("number persists after form/usage selection", async () => {
     await mountForm();
     await selectLetterType();
     await selectEntity();

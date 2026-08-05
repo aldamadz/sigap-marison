@@ -434,13 +434,72 @@ export const MULTI_ITEM_FORM_USAGE_RAW = [
 
 // Recommendation parent summary
 export const RECOMMENDATION_PARENT_SUMMARY = {
+  task_id: "task-001",
   parent_surat_id: "parent-surat-001",
-  parent_no_surat: "001/FA/MKT/VII/2026",
-  parent_title: "Permohonan Aset : Printer Epson",
+  no_surat: "001/FA/MKT/VII/2026",
+  judul_surat: "Permohonan Aset : Printer Epson",
+  requester_name: "Pemohon Staging",
+  requester_job_title: "Staff",
+  department_name: "Pengembangan Organisasi",
+  department_code: "PBO",
+  office_name: "Kantor Pusat",
+  office_kedudukan: "Pusat",
+  project_name: null,
+  request_place: "Magelang",
+  request_date: "2026-07-01",
+  request_category: "asset",
   form_input_data: {
     request_category: "asset",
     items: [
       { nama_barang: "Printer Epson L3250", sat: "Unit", jumlah: "2", status: "2" },
     ],
   },
+  attachments: [],
+};
+
+// ─── External Select Usage (Flow 11) ─────────────────────────
+
+export const UUID_EXTERNAL = {
+  form_usage: "a3eebc99-9c0b-4ef8-bb6d-6bb9bd380a32",
+  form_a: "b4eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+  step1: "c5eebc99-9c0b-4ef8-bb6d-6bb9bd380a34",
+  step2: "d6eebc99-9c0b-4ef8-bb6d-6bb9bd380a35",
+} as const;
+
+export const EXTERNAL_SELECT_FORM_USAGE_RAW = [
+  {
+    id: UUID_EXTERNAL.form_usage,
+    name: "Permohonan dengan External",
+    form_id: UUID_EXTERNAL.form_a,
+    request_category: "asset",
+    scope_type: null,
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_EXTERNAL.form_a,
+      nama_form: "FORM PERMOHONAN EXTERNAL",
+      nomor_form: "FE-001",
+      link_form: "https://storage.example.com/external-template.xlsx",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
+        { key: "unit_kerja", label: "Unit Kerja", type: "external_select", default_source: "manual", external_source_key: "marison_departments", cell: "C12" },
+      ]),
+      unit_config: null,
+      signature_layout: null,
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_EXTERNAL.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_EXTERNAL.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [],
+  },
+];
+
+export const MARISON_DEPARTMENTS_RESPONSE = {
+  options: [
+    { value: "dept-1", label: "Teknik" },
+    { value: "dept-2", label: "Marketing" },
+    { value: "dept-3", label: "Keuangan" },
+  ],
 };

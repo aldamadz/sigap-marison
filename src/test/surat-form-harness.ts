@@ -122,6 +122,17 @@ export function allowServiceCalls(...names: (keyof typeof serviceMock)[]) {
   for (const name of names) allowedServiceCalls.add(name);
 }
 
+// ─── Search Params Override ────────────────────────────────────
+let searchParamsOverride: URLSearchParams | null = null;
+
+export function setSearchParamsOverride(params: URLSearchParams) {
+  searchParamsOverride = params;
+}
+
+export function clearSearchParamsOverride() {
+  searchParamsOverride = null;
+}
+
 // ─── Setup / Teardown ───────────────────────────────────────────
 // ─── jsdom Polyfills ────────────────────────────────────────────
 function installJsdomPolyfills() {
@@ -181,7 +192,7 @@ export function setupTestHarness() {
   vi.mock("react-router", () => {
     const setSearchParams = vi.fn();
     return {
-      useSearchParams: () => [new URLSearchParams(), setSearchParams],
+      useSearchParams: () => [searchParamsOverride || new URLSearchParams(), setSearchParams],
       useNavigate: () => vi.fn(),
       useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "default" }),
       useParams: () => ({}),
@@ -193,6 +204,7 @@ export function setupTestHarness() {
 
 export function teardownTestHarness() {
   global.fetch = originalFetch;
+  searchParamsOverride = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.useRealTimers();

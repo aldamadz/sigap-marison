@@ -42,27 +42,25 @@ afterEach(() => {
 });
 
 describe("Flow 3: Unit pusat", () => {
-  it("unit category button is clickable", async () => {
-    await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
-    await selectLetterType();
-    await selectEntity();
-
-    // Unit button should be visible
-    const unitBtn = screen.getByText("Unit");
-    expect(unitBtn).toBeInTheDocument();
-    assertStrictServiceCalls();
-  });
-
-  it("selecting unit category shows form selectors", async () => {
+  it("unit category shows form selectors", async () => {
     await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
     await selectLetterType();
     await selectEntity();
     await selectCategory("Unit");
 
-    // After selecting unit, form/usage selectors should appear
     await waitFor(() => {
       expect(screen.getByText(/Form Dokumen/i)).toBeInTheDocument();
     });
+    assertStrictServiceCalls();
+  });
+
+  it("unit category button is visible and clickable", async () => {
+    await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
+    await selectLetterType();
+    await selectEntity();
+
+    const unitBtn = screen.getByText("Unit");
+    expect(unitBtn).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 });
