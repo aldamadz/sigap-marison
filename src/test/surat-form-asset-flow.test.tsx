@@ -161,33 +161,41 @@ async function clickGetNumber() {
 }
 
 async function selectSignerInPopover(signerSection: HTMLElement, stepIndex: number, userName: string) {
-  // Each signer step has a button showing "Pilih {label_jabatan}..." or selected user name
-  // These buttons are inside the Popover and have class "justify-between"
-  const allButtons = Array.from(signerSection.querySelectorAll("button"));
-  // Filter to the signer selection buttons — they have text like "Pilih Pemohon..."
-  const signerButtons = allButtons.filter(btn => {
-    const text = btn.textContent || "";
-    return text.includes("Pilih") || btn.className.includes("justify-between");
-  });
-
-  const trigger = signerButtons[stepIndex];
+  // Re-query buttons with retry — autosave re-renders may temporarily alter DOM
+  let trigger: HTMLElement | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const allButtons = Array.from(signerSection.querySelectorAll("button"));
+    const signerButtons = allButtons.filter(btn => {
+      const text = btn.textContent || "";
+      return text.includes("Pilih") || btn.className.includes("justify-between");
+    });
+    trigger = signerButtons[stepIndex] || null;
+    if (trigger) break;
+    await act(async () => { await flushPromises(200); });
+  }
   if (!trigger) throw new Error(`Signer trigger at step ${stepIndex} not found`);
+
   await act(async () => {
-    fireEvent.click(trigger);
-    await flushPromises(200);
+    fireEvent.click(trigger!);
+    await flushPromises(300);
   });
 
-  // The CommandList renders in a Popover portal
-  // Find the user by text - search in the entire document (portal)
-  const commandItems = screen.getAllByText(userName);
-  // Click the one inside a CommandItem (has data attributes from cmdk)
-  const target = commandItems.find(el =>
-    el.closest("[cmdk-item]") || el.closest('[role="option"]')
-  ) || commandItems[0];
+  // Use retry to handle autosave re-renders that may briefly unmount portal
+  let target: HTMLElement | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const elements = screen.getAllByText(userName);
+      target = elements.find(el => el.closest("[cmdk-item]") || el.closest('[role="option"]')) || elements[0];
+      break;
+    } catch {
+      await act(async () => { await flushPromises(200); });
+    }
+  }
+  if (!target) throw new Error(`User ${userName} not found in signer popover`);
 
   await act(async () => {
-    fireEvent.click(target);
-    await flushPromises(30);
+    fireEvent.click(target!);
+    await flushPromises(50);
   });
 }
 
