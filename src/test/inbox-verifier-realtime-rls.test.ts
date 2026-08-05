@@ -32,6 +32,11 @@ describe("inbox verifier realtime RLS migration", () => {
     expect(body).not.toContain("jsonb_array_elements");
   });
 
+  it("guards the verifier containment path with auth.uid() is not null", () => {
+    expect(migration).toContain("auth.uid() is not null");
+    expect(migration).toContain("and ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', auth.uid()::text))");
+  });
+
   it("preserves grants (revoke public/anon, grant authenticated+service_role)", () => {
     expect(migration).toContain("revoke all on function public.can_read_surat(uuid) from public, anon");
     expect(migration).toContain("grant execute on function public.can_read_surat(uuid) to authenticated, service_role");
@@ -60,30 +65,36 @@ describe("inbox verifier realtime RLS migration", () => {
 describe("inbox verifier realtime RLS SQL integration test", () => {
   const sqlTest = read("supabase/tests/inbox_verifier_realtime_rls.integration.sql");
 
+  it("applies the migration and exercises public.can_read_surat (not only helpers)", () => {
+    expect(sqlTest).toContain("create or replace function public.can_read_surat");
+    expect(sqlTest).toContain("security definer");
+    expect(sqlTest).toContain("request.jwt.claim.sub");
+    expect(sqlTest).toContain("set local role authenticated");
+    expect(sqlTest).not.toContain("_t_old_can_read");
+    expect(sqlTest).not.toContain("_t_new_can_read");
+  });
+
   it("tests requester, signer, verifier, admin can read", () => {
-    expect(sqlTest).toContain("requester should read");
-    expect(sqlTest).toContain("signer should read");
-    expect(sqlTest).toContain("verifier should read");
-    expect(sqlTest).toContain("admin should read");
+    expect(sqlTest).toContain("requester must read via created_by");
+    expect(sqlTest).toContain("signer must read via user_id");
+    expect(sqlTest).toContain("verifier must read via verifier_snapshot");
+    expect(sqlTest).toContain("admin must read");
   });
 
-  it("tests unrelated user is rejected", () => {
+  it("tests unrelated user and null actor are rejected", () => {
     expect(sqlTest).toContain("unrelated must be rejected");
+    expect(sqlTest).toContain("null actor must not read");
   });
 
-  it("tests empty/null/malformed snapshot rejected", () => {
-    expect(sqlTest).toContain("empty snapshot must not grant");
-    expect(sqlTest).toContain("null snapshot must not grant");
-    expect(sqlTest).toContain("malformed snapshot must not grant");
+  it("tests verifier_snapshot with {\"user_id\":null} never grants standalone access", () => {
+    expect(sqlTest).toContain('{"user_id":null');
+    expect(sqlTest).toContain("null-user-only surat must not be readable by verifier");
+    expect(sqlTest).toContain("null-user-only surat must not be readable by unrelated");
+    expect(sqlTest).toContain("null-user-only surat must not be readable by null actor");
   });
 
-  it("tests multiple verifiers work", () => {
-    expect(sqlTest).toContain("verifier should read under both predicates (multiple)");
-  });
-
-  it("runs an equivalence sweep asserting zero mismatches", () => {
-    expect(sqlTest).toContain("predicate mismatch count must be zero");
-    expect(sqlTest).toContain("EQUIVALENCE SWEEP OK");
+  it("tests verifier SELECT returns all signatures of a readable surat", () => {
+    expect(sqlTest).toContain("verifier SELECT must see both signatures of readable surat");
   });
 
   it("is rollback-based", () => {

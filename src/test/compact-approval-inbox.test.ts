@@ -261,7 +261,8 @@ describe("compact approval inbox — SQL integration test", () => {
 
   it("dual role dedup test uses UNION (not UNION ALL)", () => {
     expect(sqlTest).toContain("Dual role does NOT duplicate");
-    expect(sqlTest).toContain("UNION\n    SELECT");
+    // Use a regex tolerant of CRLF so the assertion is not line-ending dependent.
+    expect(sqlTest).toMatch(/UNION\r?\n\s*SELECT/);
   });
 
   it("category test extracts from JSON path", () => {

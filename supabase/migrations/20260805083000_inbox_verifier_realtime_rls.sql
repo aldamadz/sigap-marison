@@ -44,7 +44,10 @@ as $$
           where ss.surat_id = sr.id
             and (
               ss.user_id = auth.uid()
-              or ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', auth.uid()::text))
+              or (
+                auth.uid() is not null
+                and ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', auth.uid()::text))
+              )
             )
         )
         or exists (
