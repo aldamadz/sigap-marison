@@ -90,6 +90,7 @@ describe("durable Marison outbound dispatch", () => {
   it("keeps HTTP 422 replacements generation-aware, deterministic, and single-child", () => {
     const migration = read("supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql");
     const server = read("backend/src/domain-runtime.ts");
+    const routes = read("backend/src/routes/domain.routes.ts");
     expect(migration).toContain("replacement_of_dispatch_id");
     expect(migration).toContain("generation integer not null default 1");
     expect(migration).toContain("marison_outbound_dispatch_generation_idx");
@@ -105,6 +106,8 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("createMarisonOutboundReplacement");
     expect(server).toContain("Replacement outbound hanya tersedia di staging.");
     expect(server).toContain('.order("generation", { ascending: false })');
+    expect(routes).toContain('GET", url: "/api/integrations/marison/dispatches/:dispatchId/replacement-preflight');
+    expect(routes).toContain('POST", url: "/api/integrations/marison/dispatches/:dispatchId/replacement');
   });
 
   it("protects the internal build route with a minimum-length constant-time token", () => {
