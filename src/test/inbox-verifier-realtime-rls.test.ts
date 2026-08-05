@@ -47,13 +47,6 @@ describe("inbox verifier realtime RLS migration", () => {
   });
 
   it("old and new predicate are semantically equivalent for valid verifier snapshot", () => {
-    // old: exists(select 1 from jsonb_array_elements(coalesce(ss.verifier_snapshot,'[]')) v where v->>'user_id' = auth.uid()::text)
-    // new: ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', auth.uid()::text))
-    // JSONB containment @> with an array of one object returns true iff the snapshot
-    // contains that exact object (or a superset). For verifier_snapshot arrays of
-    // {user_id, full_name, job_title}, containing {"user_id":X} is equivalent to
-    // an element whose user_id == X. This is proven by the SQL integration test
-    // equivalence sweep (0 mismatches across actors x fixtures).
     expect(migration).toContain("ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', auth.uid()::text))");
   });
 
@@ -65,36 +58,50 @@ describe("inbox verifier realtime RLS migration", () => {
 describe("inbox verifier realtime RLS SQL integration test", () => {
   const sqlTest = read("supabase/tests/inbox_verifier_realtime_rls.integration.sql");
 
-  it("applies the migration and exercises public.can_read_surat (not only helpers)", () => {
-    expect(sqlTest).toContain("create or replace function public.can_read_surat");
-    expect(sqlTest).toContain("security definer");
+  it("applies migration via \\ir (not inlined function body)", () => {
+    expect(sqlTest).toContain("\\ir ../migrations/20260805083000_inbox_verifier_realtime_rls.sql");
+    expect(sqlTest).not.toContain("create or replace function public.can_read_surat");
+  });
+
+  it("creates transaction-local profile fixtures with test UUIDs", () => {
+    expect(sqlTest).toContain("insert into public.profiles");
+    expect(sqlTest).toContain("a0000000-0000-0000-0000-000000000001");
+    expect(sqlTest).toContain("a0000000-0000-0000-0000-000000000004");
+    expect(sqlTest).toContain("'admin'");
+    expect(sqlTest).toContain("on conflict");
+  });
+
+  it("does not use real staging UUIDs", () => {
+    expect(sqlTest).not.toContain("fe7c4836-a360-4d53-89e0-376c7193451e");
+    expect(sqlTest).not.toContain("fbc7e006-1646-47b4-8f25-681651c54076");
+    expect(sqlTest).not.toContain("fffb3bc5-a1b8-4c8c-aabb-78d3ca9ad946");
+    expect(sqlTest).not.toContain("fb627906-a1bc-41f1-bf5a-e6e5fbd79254");
+    expect(sqlTest).not.toContain("6d2e3979-c5d6-49b2-94e1-db6a8fac96f7");
+  });
+
+  it("tests actual SELECT through surat_signatures RLS policy", () => {
+    expect(sqlTest).toContain("select count(*) into v_count from public.surat_signatures");
     expect(sqlTest).toContain("request.jwt.claim.sub");
     expect(sqlTest).toContain("set local role authenticated");
-    expect(sqlTest).not.toContain("_t_old_can_read");
-    expect(sqlTest).not.toContain("_t_new_can_read");
   });
 
   it("tests requester, signer, verifier, admin can read", () => {
-    expect(sqlTest).toContain("requester must read via created_by");
-    expect(sqlTest).toContain("signer must read via user_id");
-    expect(sqlTest).toContain("verifier must read via verifier_snapshot");
-    expect(sqlTest).toContain("admin must read");
+    expect(sqlTest).toContain("requester must see both signatures of surat 1 via created_by");
+    expect(sqlTest).toContain("signer must see both signatures of surat 1 via user_id");
+    expect(sqlTest).toContain("verifier must see both signatures of surat 1 via verifier_snapshot");
+    expect(sqlTest).toContain("admin must see both signatures of surat 1 via admin role");
   });
 
   it("tests unrelated user and null actor are rejected", () => {
-    expect(sqlTest).toContain("unrelated must be rejected");
-    expect(sqlTest).toContain("null actor must not read");
+    expect(sqlTest).toContain("unrelated must not see any signatures of surat 1");
+    expect(sqlTest).toContain("null actor must not see any signatures of surat 1");
   });
 
   it("tests verifier_snapshot with {\"user_id\":null} never grants standalone access", () => {
     expect(sqlTest).toContain('{"user_id":null');
-    expect(sqlTest).toContain("null-user-only surat must not be readable by verifier");
-    expect(sqlTest).toContain("null-user-only surat must not be readable by unrelated");
-    expect(sqlTest).toContain("null-user-only surat must not be readable by null actor");
-  });
-
-  it("tests verifier SELECT returns all signatures of a readable surat", () => {
-    expect(sqlTest).toContain("verifier SELECT must see both signatures of readable surat");
+    expect(sqlTest).toContain("verifier must not see signatures of null-user-only surat 2");
+    expect(sqlTest).toContain("unrelated must not see signatures of null-user-only surat 2");
+    expect(sqlTest).toContain("null actor must not see signatures of null-user-only surat 2");
   });
 
   it("is rollback-based", () => {
