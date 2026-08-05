@@ -297,7 +297,15 @@ export default function InboxPage() {
     }
   }, [selectedDetail, selectedSignatureId]);
 
-  const selectedItem = selectedDetail || detailCache[selectedSignatureId || ""] || selectedCompactItem;
+  // Merge, do not replace: preserve the canonical task_type from the compact
+  // item (which carries the authoritative "approval"/"verification" value) and
+  // fill in the richer detail fields. Detail payload historically omits
+  // task_type; without this merge verification tasks lose their mode and the
+  // "Alokasi unit perencanaan" panel plus "Simpan & lanjutkan" disappear.
+  const selectedDetailItem = selectedDetail || detailCache[selectedSignatureId || ""];
+  const selectedItem = selectedCompactItem
+    ? { ...selectedCompactItem, ...(selectedDetailItem || {}) }
+    : selectedDetailItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
 
   const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
