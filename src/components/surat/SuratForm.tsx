@@ -45,199 +45,60 @@ import {
   type NonUnitExternalOption,
   type NonUnitRequestRow,
 } from "@/components/surat/non-unit-request";
+import {
+  canDepartmentRequestUnit,
+  clearRecommendationInput,
+  clearUnitInput,
+  getExternalInputFields,
+  getFullRoles,
+  getInputSchema,
+  getManualInputFields,
+  getScalarFieldValue,
+  getWorkflowCategories,
+  hasPlaceDateMapping,
+  hasUnitRequestFields,
+  isMultiSelectField,
+  isUnitExternalField,
+  isUnitField,
+  normalizeTableRows,
+} from "@/components/surat/form/surat-form-schema";
+import {
+  formatDatePickerDisplay,
+  formatFileSize,
+  formatIndonesianList,
+  getDefaultRequestPlace as getDefaultRequestPlaceForOffice,
+  getDepartmentShortLabel,
+  getDepartmentTitlePart,
+  getOfficeShortLabel,
+  getOfficeTitleSuffix,
+  getShortPersonName,
+  normalizeNameSearch,
+  parseDateInputValue,
+  toDateInputValue,
+  toReadableName,
+} from "@/components/surat/form/surat-form-formatters";
+import type {
+  AttachmentRequirement,
+  AttachmentUploadState,
+  CandidateScope,
+  CurrentProfile,
+  ExternalOption,
+  FormInputData,
+  LinkedDocumentContext,
+  MasterData,
+  MasterRecord,
+  ProjectOption,
+  ProjectRaw,
+  RecommendationItemAttachment,
+  RequestCategory,
+  SignerAssignment,
+  SuratFormProps,
+  TableRow,
+  TemplateField,
+  UsageDetailRecord,
+  UsageStepConfig,
+} from "@/components/surat/form/surat-form-types";
 
-interface SuratFormProps {
-  onSuccess: (noSurat: string, judul: string) => void;
-  isLoading: boolean;
-  setIsLoading: (val: boolean) => void;
-  setJudulForDisplay: (val: string) => void;
-}
-
-type MasterRecord = {
-  id: string;
-  full_name?: string;
-  name?: string;
-  code?: string;
-  kedudukan?: string;
-  dept_index?: number;
-  office_id?: string;
-  entity_id?: string;
-  department_id?: string | null;
-  departmentIds?: string[];
-  dept_ids?: string[];
-  departmentSortIndexes?: Record<string, number>;
-  dept_sort_indexes?: Record<string, number>;
-  job_title?: string | null;
-  marison_project_id?: number | null;
-  marison_branch_id?: number | null;
-  branch?: { name?: string } | null;
-};
-
-type MasterData = {
-  entities: MasterRecord[];
-  depts: MasterRecord[];
-  offices: MasterRecord[];
-  types: MasterRecord[];
-  users: MasterRecord[];
-  projects: MasterRecord[];
-};
-
-type UsageDetailRecord = {
-  id: string;
-  name?: string;
-  form_id?: string;
-  request_category?: "asset" | "unit" | "non_unit" | "non_asset";
-  scope_type?: "all" | "pusat" | "cabang";
-  is_cabang?: boolean;
-  request_categories?: Array<"asset" | "unit" | "non_unit" | "non_asset">;
-  recommendation_config?: RecommendationConfig;
-  workflow_allowed_departments?: Array<{ department_id: string }>;
-  form_usage_steps?: Array<{
-    id: string;
-    step_order: number;
-    role_name: string;
-    label: string;
-    action_type?: "approval" | "unit_allocation";
-    candidate_scope?: CandidateScope | null;
-    signer_department_id?: string | null;
-    form_usage_step_users?: Array<{ user_id: string }>;
-    form_usage_step_verifiers?: Array<{ user_id: string }>;
-  }>;
-  form_usage_attachment_requirements?: Array<{
-    id: string;
-    stage_order: number;
-    requirement_key: string;
-    label: string;
-    is_required: boolean;
-    allow_multiple: boolean;
-    min_files: number;
-    max_files: number;
-    allowed_types?: string[];
-    max_size_bytes?: number | null;
-  }>;
-  ttd_config?: unknown;
-  master_forms?: {
-    id?: string;
-    nama_form?: string;
-    nomor_form?: string;
-    link_form?: string;
-    department_id?: string;
-    input_schema?: unknown;
-    unit_config?: unknown;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-};
-
-type TemplateField = {
-  key: string;
-  label?: string;
-  placeholder?: string;
-  type?: string;
-  required?: boolean;
-  default_source?: string;
-  defaultSource?: string;
-  cell?: string;
-  merge_range?: string;
-  mergeRange?: string;
-  multiple?: boolean;
-  is_multiple?: boolean;
-  external_source_key?: string;
-  externalSourceKey?: string;
-  external_dependency_key?: string;
-  externalDependencyKey?: string;
-  value_key?: string;
-  table_config?: {
-    start_row?: number;
-    end_row?: number;
-    no_column?: string;
-    columns?: Array<{
-      key: string;
-      label?: string;
-      type?: string;
-      required?: boolean;
-      options?: Array<{ label?: string; value: string | number } | string | number>;
-      helper_text?: string;
-      helperText?: string;
-    }>;
-  };
-};
-
-type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
-type RecommendationConfig = {
-  enabled?: boolean;
-  optional?: boolean;
-  required_before_step?: number;
-  form_id?: string;
-  usage_id?: string;
-  department_id?: string;
-  letter_type_id?: string;
-  template_name?: string;
-};
-type LinkedDocumentContext = {
-  type: "recommendation";
-  parentSuratId: string;
-  parentNoSurat?: string;
-  requiredBeforeStep?: number | null;
-  formId?: string;
-  usageId?: string;
-  departmentId?: string;
-  letterTypeId?: string;
-  taskId?: string;
-};
-type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
-type AttachmentRequirement = NonNullable<UsageDetailRecord["form_usage_attachment_requirements"]>[number];
-
-type AttachmentUploadState = {
-  phase: "uploading" | "saving" | "success" | "error";
-  fileName: string;
-  fileIndex: number;
-  fileCount: number;
-  percent: number;
-  message?: string;
-};
-type TableRow = Record<string, unknown>;
-type ExternalOption = { value: string; label: string; raw?: unknown };
-type ProjectRaw = { id: string; code?: string; name?: string; branch?: { name?: string } | null };
-type ProjectOption = { value: string; label: string; raw?: ProjectRaw };
-type FormFieldValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | { value?: string; label?: string; code?: string; name?: string; branch?: { name?: string } | null }
-  | Array<{ value?: string; label?: string } | string>
-  | TableRow[]
-  | Record<string, unknown>;
-type FormInputData = Record<string, FormFieldValue>;
-type SignerAssignment = {
-  step_order: number;
-  role_name: string;
-  label_jabatan: string;
-  user_id?: string | null;
-  form_usage_step_id?: string;
-  action_type?: "approval" | "unit_allocation";
-  candidate_scope?: CandidateScope;
-  eligible_user_ids?: string[];
-  verifier_user_ids?: string[];
-  attachment_requirements?: UsageDetailRecord["form_usage_attachment_requirements"];
-  requires_unit_allocation?: boolean;
-};
-type UsageStepConfig = {
-  form_usage_step_id?: string;
-  roleName?: string;
-  role_name?: string;
-  labelJabatan?: string;
-  label_jabatan?: string;
-  jabatan?: string;
-  action_type?: "approval" | "unit_allocation";
-  candidate_scope?: CandidateScope;
-  eligible_user_ids?: string[];
-  verifier_user_ids?: string[];
-  requires_unit_allocation?: boolean;
-  requiresUnitAllocation?: boolean;
-};
 
 const normalizeRoleName = (
   raw: unknown,
@@ -284,47 +145,6 @@ const buildSignerAssignments = (detail: UsageDetailRecord): SignerAssignment[] =
   }
 };
 
-type CurrentProfile = {
-  id: string;
-  role?: string | null;
-  department_id?: string | null;
-  office_id?: string | null;
-};
-type RecommendationItemAttachment = {
-  draft_file_id?: string;
-  file_url?: string;
-  file_name?: string;
-  file_type?: string | null;
-  file_size?: number | null;
-  uploaded_at?: string;
-  source?: "upload" | "paste" | "drop";
-};
-
-const toDateInputValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const parseDateInputValue = (value?: string | null) => {
-  if (!value) return undefined;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return undefined;
-  const [, year, month, day] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-  return Number.isNaN(date.getTime()) ? undefined : date;
-};
-
-const formatDatePickerDisplay = (value?: string | null) => {
-  const date = parseDateInputValue(value);
-  if (!date) return "";
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
-};
 
 const RECOMMENDATION_TEMPLATE_NAME = "Rekomendasi Peremajaan Alat";
 const RECOMMENDATION_ITEMS_KEY = "recommendation_items";
@@ -463,85 +283,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [loadRecommendationParentSummary]);
 
   const getFormFieldValue = (key: string) => formData.form_input_data[key];
-  const getScalarFieldValue = (value: FormFieldValue) => {
-    if (typeof value === "string" || typeof value === "number") return String(value);
-    if (value && typeof value === "object" && !Array.isArray(value) && "value" in value) {
-      const candidate = (value as { value?: unknown }).value;
-      return typeof candidate === "string" || typeof candidate === "number" ? String(candidate) : "";
-    }
-    return "";
-  };
   const getDisplayFieldValue = (key: string) => getScalarFieldValue(getFormFieldValue(key));
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
-  const getFullRoles = (item: UsageDetailRecord) => {
-    if (!item?.ttd_config) return [];
-    try {
-      const config = typeof item.ttd_config === "string" ? JSON.parse(item.ttd_config) : item.ttd_config;
-      return Array.isArray(config) ? config.map((c: { labelJabatan?: string; jabatan?: string; roleName?: string; role_name?: string }) => c.labelJabatan || c.jabatan || c.roleName || c.role_name) : [];
-    } catch { return []; }
-  };
-
-  const getInputSchema = (item: UsageDetailRecord) => {
-    const raw = item?.master_forms?.input_schema;
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === "string") {
-      try {
-        const parsed = JSON.parse(raw || "[]");
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  };
-
-  const getManualInputFields = (item: UsageDetailRecord) =>
-    getInputSchema(item).filter((field: TemplateField) => {
-      const source = field.default_source || field.defaultSource || "manual";
-      return source === "manual";
-    });
-
-  const getExternalInputFields = (item: UsageDetailRecord) =>
-    getManualInputFields(item).filter((field: TemplateField) => field.type === "external_select");
-
-  const isMultiSelectField = (field: TemplateField) =>
-    field.multiple === true || field.is_multiple === true || field.key === "unit";
-
-  const isUnitField = (field: TemplateField) =>
-    [
-      "unit",
-      "requested_project",
-      "requested_unit_count",
-      "unit_request_sentence",
-      "unit_config_snapshot",
-      "allocated_project",
-      "allocated_units",
-      "allocated_unit_count",
-    ].includes(field.key);
-
-  const isUnitExternalField = (field: TemplateField) =>
-    isUnitField(field) ||
-    String(field.external_source_key || field.externalSourceKey || "") === "marison_units_by_project";
-
-  const getWorkflowCategories = (item: UsageDetailRecord | null | undefined): RequestCategory[] => {
-    if (item?.request_category) return [item.request_category];
-    const categories = Array.isArray(item?.request_categories) ? item.request_categories : [];
-    return categories.length > 0 ? categories : ["asset", "non_unit"];
-  };
-
-  const hasUnitRequestFields = (item: UsageDetailRecord) =>
-    getWorkflowCategories(item).includes("unit");
-
-  const canDepartmentRequestUnit = (item: UsageDetailRecord, deptId: string) => {
-    if (!deptId) return false;
-    const allowedDepartments = Array.isArray(item.workflow_allowed_departments)
-      ? item.workflow_allowed_departments
-      : [];
-    if (!item.form_usage_steps && !hasUnitRequestFields(item)) return true;
-    return allowedDepartments.some(permission => permission.department_id === deptId);
-  };
-
   const canCurrentDepartmentRequestUnit = (item: UsageDetailRecord) =>
     canDepartmentRequestUnit(item, requesterDepartmentId);
 
@@ -575,22 +319,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getRequestMode = () => getRequestCategory() === "unit" ? "unit" : "barang";
   const isUnitMode = getRequestCategory() === "unit";
 
-  const clearUnitInput = (inputData: Record<string, unknown>) => {
-    const nextInput = { ...inputData };
-    delete nextInput.requested_project;
-    delete nextInput.requested_unit_count;
-    delete nextInput.unit_request_sentence;
-    delete nextInput.unit_config_snapshot;
-    return nextInput;
-  };
-
-  const clearRecommendationInput = (inputData: Record<string, unknown>) => {
-    const nextInput = { ...inputData };
-    delete nextInput.requires_recommendation;
-    delete nextInput.recommendation_template_name;
-    delete nextInput.recommendation_attachment_note;
-    return nextInput;
-  };
 
   const applyRecommendationChoice = (required: boolean) => {
     setFormData(prev => ({
@@ -660,16 +388,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
   };
 
-  const hasPlaceDateMapping = (item: UsageDetailRecord) => {
-    const mappedSources = new Set(
-      getInputSchema(item)
-        .filter((field: TemplateField) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
-        .map((field: TemplateField) => field.default_source || field.defaultSource || "manual")
-    );
-    return mappedSources.has("request_place_date") ||
-      (mappedSources.has("request_place") && mappedSources.has("request_date"));
-  };
-
   const getRequestCombinationLabel = () => {
     const category = getRequestCategory();
     if (category === "asset") return "Aset";
@@ -702,15 +420,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return payload.options || [];
   };
 
-  const normalizeTableRows = (value: unknown): TableRow[] => {
-    const rows = value;
-    if (!Array.isArray(rows) || rows.length === 0) return [{}];
-    return rows
-      .filter((row): row is TableRow => !!row && typeof row === "object" && !Array.isArray(row))
-      .map((row) => ({ ...row }));
-  };
-
   const getTableRows = (key: string) => normalizeTableRows(formData.form_input_data[key]);
+
   const parentRecommendationItems = useMemo(() => {
     if (!recommendationParentSummary?.form_input_data) return [] as TableRow[];
     const input = recommendationParentSummary.form_input_data;
@@ -818,12 +529,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return Boolean(String(value ?? "").trim());
     });
 
-  const formatFileSize = (bytes?: number | null) => {
-    const size = Number(bytes || 0);
-    if (!Number.isFinite(size) || size <= 0) return "";
-    if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  };
 
   const uploadRecommendationItemAttachment = async (
     fieldKey: string,
@@ -1123,49 +828,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [master.depts, formData.dept_id, requesterDepartmentId]
   );
 
-  const formatIndonesianList = (values: string[]) => {
-    const cleaned = values.map((value) => value.trim()).filter(Boolean);
-    if (cleaned.length === 0) return "";
-    if (cleaned.length === 1) return cleaned[0];
-    if (cleaned.length === 2) return `${cleaned[0]} dan ${cleaned[1]}`;
-    return `${cleaned.slice(0, -1).join(", ")}, dan ${cleaned[cleaned.length - 1]}`;
-  };
-
-  const toReadableLocationName = (value: string) => value
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-
-  const getDepartmentTitlePart = (department?: MasterRecord | null) => {
-    const rawName = String(department?.name || "").replace(/\s*\(cabang\)\s*/i, "").trim();
-    if (!rawName) return "";
-    if (/^dept\.?\s+/i.test(rawName)) return rawName.replace(/^dept\.?\s+/i, "Dept. ");
-    return `Dept. ${rawName}`;
-  };
-
-  const getOfficeTitleSuffix = (office?: MasterRecord | null, department?: MasterRecord | null) => {
-    if (!office) return "";
-    const name = String(office.name || "").trim();
-    const kedudukan = String(office.kedudukan || "").trim().toUpperCase();
-    if (kedudukan === "PUSAT" || name.toUpperCase().includes("KANTOR PUSAT")) {
-      return [getDepartmentTitlePart(department), "Kantor Pusat"].filter(Boolean).join(" ");
-    }
-    if (kedudukan === "KCP" || /^KCP\b|^KCP\./i.test(name)) {
-      return `KCP. ${toReadableLocationName(name.replace(/^KCP\.?\s*/i, ""))}`.trim();
-    }
-    if (kedudukan === "KC" || /^KC\b|^KC\./i.test(name)) {
-      return `KC. ${toReadableLocationName(name.replace(/^KC\.?\s*/i, ""))}`.trim();
-    }
-    return name;
-  };
-
-  const getDefaultRequestPlace = (office?: MasterRecord | null) => {
-    const suffix = getOfficeTitleSuffix(office, selectedDepartment);
-    if (!suffix || suffix.includes("Kantor Pusat")) return "Magelang";
-    return suffix.replace(/^(KC|KCP)\.\s+/i, "").trim() || "Magelang";
-  };
+  const getDefaultRequestPlace = (office?: MasterRecord | null) =>
+    getDefaultRequestPlaceForOffice(office, selectedDepartment);
 
   const buildAutoTitle = () => {
     const category = getRequestCategory();
@@ -1404,45 +1068,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [generatedNoSurat, formData.judul_surat, formData.form_input_data]
   );
 
-  const normalizeNameSearch = (value: string) =>
-    value.toLowerCase().replace(/\s+/g, " ").trim();
-
   const getSelectedSignerName = (userId: string) =>
-    master.users?.find((u: MasterRecord) => u.id === userId)?.full_name || "";
-
-  const getShortPersonName = (name?: string | null) => {
-    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
-    return parts[0] || "PIC";
-  };
-
-  const toReadableName = (value?: string | null) =>
-    String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\b\w/g, letter => letter.toUpperCase());
-
-  const getDepartmentShortLabel = (department?: MasterRecord | null) => {
-    const code = String(department?.code || "").trim().toUpperCase();
-    const name = String(department?.name || "").trim();
-    const normalizedName = name.toLowerCase();
-    if (code === "PBO" || normalizedName === "pengembangan organisasi") return "PO";
-    if (code === "HRD" || normalizedName.includes("hrd")) return "HRD";
-    if (code === "KEU" || normalizedName.includes("keuangan")) return "Keu";
-    if (code === "MKT" || normalizedName.includes("marketing")) return "Marketing";
-    return code || name || "Pusat";
-  };
-
-  const getOfficeShortLabel = (office?: MasterRecord | null) => {
-    const kedudukan = String(office?.kedudukan || "").trim();
-    const name = String(office?.name || "").trim();
-    if (!name) return kedudukan || "Kantor";
-    const normalized = name.replace(/\s+/g, " ").trim();
-    const prefixed = normalized.match(/^(KC|KCP)\s+(.+)$/i);
-    if (prefixed) return `${prefixed[1].toUpperCase()}. ${toReadableName(prefixed[2])}`;
-    if (/^KOST\s+/i.test(normalized)) return toReadableName(normalized);
-    if (kedudukan && kedudukan.toLowerCase() !== "pusat") return `${kedudukan.toUpperCase()}. ${toReadableName(normalized)}`;
-    return toReadableName(normalized);
-  };
+    master.users?.find((user: MasterRecord) => user.id === userId)?.full_name || "";
 
   const getRecommendationPicLabel = (userId: string) => {
     const user = master.users.find((item) => item.id === userId);
