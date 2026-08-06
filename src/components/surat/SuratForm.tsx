@@ -27,6 +27,7 @@ import {
 } from "@/services/surat.service";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
+import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
@@ -289,10 +290,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const canCurrentDepartmentRequestUnit = (item: UsageDetailRecord) =>
     canDepartmentRequestUnit(item, requesterDepartmentId);
 
-  const shouldRequireInitialAttachment = () => {
-    const initialRules = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
-    return initialRules.some(rule => rule.is_required && rule.min_files > 0);
-  };
 
   const getInitialAttachmentRequirements = () =>
     selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
@@ -2002,15 +1999,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
       return false;
     }
-    if (lampiranFiles.length + draftAttachments.length === 0 && shouldRequireInitialAttachment()) {
-      toast({ variant: "destructive", title: "Lampiran Wajib", description: "Unggah minimal satu lampiran." });
-      return false;
-    }
     const missingInitialAttachments = getMissingInitialAttachmentLabels();
     if (missingInitialAttachments.length > 0) {
       toast({
         variant: "destructive",
-        title: "Lampiran Belum Lengkap",
+        title: "Lampiran Wajib",
         description: `Lengkapi: ${missingInitialAttachments.join(", ")}.`,
       });
       return false;
@@ -2095,6 +2088,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       }
     });
 
+    const persistedInitialAttachments = selectInitialRegistrationDraftAttachments(
+      draftAttachments,
+      new Set(getInitialAttachmentRequirements().map((requirement) => requirement.requirement_key)),
+      effectiveFormInputData,
+    );
     const localAttachments = [
       ...lampiranFiles.map((file, index) => ({
         id: `main-${index}-${file.name}`,
@@ -2131,7 +2129,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       fields,
       attachments: [
         ...localAttachments,
-        ...draftAttachments.map((attachment) => ({
+        ...persistedInitialAttachments.map((attachment) => ({
           id: attachment.id,
           name: attachment.file_name,
           type: attachment.file_type,
