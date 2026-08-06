@@ -16,8 +16,15 @@ describe("inbox verification task_type preserved on detail merge", () => {
     // The selected item must keep the compact item's fields (task_type) and
     // only overlay the detail fields. A plain `selectedDetail || selectedCompactItem`
     // replacement loses task_type once the detail loads.
-    expect(inbox).toContain("{ ...selectedCompactItem, ...(selectedDetailItem || {}) }");
     expect(inbox).toContain("const selectedDetailItem = selectedDetail || detailCache");
+    expect(inbox).toContain("...selectedCompactItem");
+    expect(inbox).toContain("...(selectedDetailItem || {})");
+  });
+
+  it("1b. task_type merge is null-safe (detail null does not clobber compact)", () => {
+    // detail.task_type may be null/undefined (stale runtime/cache); it must
+    // fall back to the compact item's canonical task_type via nullish coalescing.
+    expect(inbox).toContain("task_type: selectedDetailItem?.task_type ?? selectedCompactItem.task_type");
   });
 
   it("2. Compact item remains the base of the selected item", () => {
@@ -77,9 +84,45 @@ describe("inbox verification task_type — behavioral", () => {
         : null;
   };
 
-  // Mirrors src/pages/surat/InboxPage.tsx selectedItem merge.
+  // Mirrors src/pages/surat/InboxPage.tsx selectedItem merge (null-safe).
   const mergeSelected = (compact: any, detail: any) =>
-    compact ? { ...compact, ...(detail || {}) } : detail;
+    compact
+      ? {
+          ...compact,
+          ...(detail || {}),
+          task_type: detail?.task_type ?? compact.task_type,
+        }
+      : detail;
+
+  it("edge case: compact task_type=verification + detail task_type=null stays verification", () => {
+    // A stale/runtime-old detail payload may carry task_type: null (the BFF
+    // historically omitted it). Null must NOT overwrite the compact value.
+    const compact = { id: "sig-1", task_type: "verification", no_surat: "050/..." };
+    const detail = { id: "sig-1", task_type: null, user_id: "u-1", verifier_snapshot: [{ user_id: "u-2" }], verification_required: true, verification_status: "pending" };
+    const merged = mergeSelected(compact, detail);
+    expect(merged.task_type).toBe("verification");
+  });
+
+  it("edge case: 'Alokasi unit perencanaan' panel stays visible with detail task_type=null", () => {
+    const shouldInputUnitAllocation = (item: any) =>
+      item?.requires_unit_allocation &&
+      (item.task_type === "verification" ||
+        (item.verification_required !== true && !item.storedAllocation));
+    const merged = mergeSelected(
+      { task_type: "verification", requires_unit_allocation: true },
+      { task_type: null, verification_required: true, verification_status: "pending" },
+    );
+    expect(shouldInputUnitAllocation(merged)).toBe(true);
+  });
+
+  it("edge case: 'Simpan & lanjutkan' button stays visible with detail task_type=null", () => {
+    const isVerificationTask = (item: any) => item?.task_type === "verification";
+    const merged = mergeSelected(
+      { task_type: "verification" },
+      { task_type: null, user_id: "u-1" },
+    );
+    expect(isVerificationTask(merged)).toBe(true);
+  });
 
   it("compact verification + detail without task_type stays in verification mode", () => {
     // Viewer is the verifier ("u-2"); the signature's assigned signer is "u-1".

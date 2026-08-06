@@ -299,12 +299,17 @@ export default function InboxPage() {
 
   // Merge, do not replace: preserve the canonical task_type from the compact
   // item (which carries the authoritative "approval"/"verification" value) and
-  // fill in the richer detail fields. Detail payload historically omits
-  // task_type; without this merge verification tasks lose their mode and the
+  // fill in the richer detail fields. Detail payload may omit task_type or
+  // return task_type: null (e.g. stale runtime/cache), which must NOT overwrite
+  // the compact value — otherwise verification tasks lose their mode and the
   // "Alokasi unit perencanaan" panel plus "Simpan & lanjutkan" disappear.
   const selectedDetailItem = selectedDetail || detailCache[selectedSignatureId || ""];
   const selectedItem = selectedCompactItem
-    ? { ...selectedCompactItem, ...(selectedDetailItem || {}) }
+    ? {
+        ...selectedCompactItem,
+        ...(selectedDetailItem || {}),
+        task_type: selectedDetailItem?.task_type ?? selectedCompactItem.task_type,
+      }
     : selectedDetailItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
 
