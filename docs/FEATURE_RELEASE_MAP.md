@@ -237,6 +237,7 @@ Temuan keamanan outbound:
 | OPS-01 | Deploy staging app-only dan full stack yang eksplisit | Staging candidate | Panduan deploy, aturan restart PDF/sync worker, smoke test readiness | Docker context `ubuntu-server`, Compose staging, health routes | Dokumentasi operasional; pertahankan agar deploy app tidak merestart worker tanpa sengaja |
 | OPS-02 | Identitas revision runtime | Staging candidate | OCI image revision label, build arg `GIT_SHA`, `/health/version` | Docker build dan Fastify health routes | Read-only metadata; pertahankan agar runtime dapat dicocokkan dengan commit tanpa membaca file container |
 | DB-01 | Rekonsiliasi riwayat migration staging | Local filename collision resolved; remote staging verification pending | Migration filename tests dan runbook staging | Staging DB identity, migration history, catalog evidence, backup | Tidak boleh dipromosikan sebagai repair production; production memerlukan audit dan izin tersendiri |
+| BKND-01 | Domain runtime characterization & refactor baseline | Staging candidate (test-only PR, tidak deploy) | 26 characterization test Fastify inject atas 9 route protected + fail-closed no-network; `docs/DOMAIN_RUNTIME_REFACTOR_BASELINE.md` memetakan 5,523 baris `domain-runtime.ts`, urutan PR-A..F, state/helper tak terpisah, kandidat ekstrak, risiko `@ts-nocheck` | OPS-02, route contract `domain.routes.ts` | Test-only; safety net sebelum memecah `domain-runtime.ts`. Tidak ada perubahan produksi, migration, atau deployment |
 
 ## 5. Dependensi Utama
 
