@@ -5,6 +5,11 @@ import autoTable from "jspdf-autotable";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
+import {
+  buildRegistrationAttachmentRows,
+  classifyRegistrationDraftAttachments,
+  formatCreateRegistrasiError,
+} from "@/lib/registration-draft-attachment-classification";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -424,10 +429,11 @@ export const suratService = {
           file_size: row?.recommendation_attachment_file_size,
           uploaded_at: row?.recommendation_attachment_uploaded_at,
           source: row?.recommendation_attachment_source,
+          attachments: Array.isArray(row?.attachments) ? row.attachments : undefined,
         };
         const hasAttachment = Boolean(String(
           attachmentSource?.draft_file_id || attachmentSource?.file_url || attachmentSource?.file_name || ""
-        ).trim());
+        ).trim()) || (Array.isArray(attachmentSource?.attachments) && attachmentSource.attachments.length > 0);
         const normalized = {
           ...row,
           no: index + 1,
@@ -453,6 +459,9 @@ export const suratService = {
                 file_size: Number(attachmentSource.file_size || 0) || null,
                 uploaded_at: String(attachmentSource.uploaded_at || "").trim() || null,
                 source: String(attachmentSource.source || "").trim() || null,
+                attachments: Array.isArray(attachmentSource.attachments)
+                  ? attachmentSource.attachments
+                  : undefined,
               }
             : null,
         };
@@ -1743,11 +1752,18 @@ export const suratService = {
       const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
         .filter((requirement: any) => Number(requirement.stage_order) === 0);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
+      const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
+        files: persistedDraftAttachments,
+        initialRequirementKeys: new Set(
+          initialRequirements.map((requirement: any) => String(requirement.requirement_key)),
+        ),
+        formInputData: normalizedFormInputData,
+      });
       validateInitialRegistrationAttachments({
         requirements: initialRequirements,
         newFiles: attachmentFiles,
         newFileMetadata: initialAttachmentMeta,
-        persistedFiles: persistedDraftAttachments,
+        persistedFiles: classifiedDraftAttachments.initialAttachments,
       });
 
       const activeSigners = signers.filter(s => s.user_id);
@@ -1884,31 +1900,30 @@ export const suratService = {
         requirements: payload.initial_attachment_meta || {},
       });
       let reusedDraftAttachments: any[] = [];
-      if (persistedDraftAttachments.length > 0) {
+      const draftAttachmentRows = buildRegistrationAttachmentRows({
+        suratId: surat.id,
+        userId: user.id,
+        initialAttachments: classifiedDraftAttachments.initialAttachments,
+        recommendationAttachments: classifiedDraftAttachments.activeRecommendationAttachments,
+      });
+      if (draftAttachmentRows.length > 0) {
         const { data, error } = await supabase
           .from("surat_attachments")
-          .insert(persistedDraftAttachments.map(attachment => ({
-            surat_id: surat.id,
-            file_url: attachment.file_url,
-            file_name: attachment.file_name,
-            file_type: attachment.file_type,
-            file_size: attachment.file_size,
-            created_by: user.id,
-            stage: "initial",
-            requirement_key: attachment.requirement_key,
-            requirement_label: attachment.requirement_label,
-          })))
+          .insert(draftAttachmentRows)
           .select("*");
         if (error) throw error;
         reusedDraftAttachments = data || [];
       }
       uploadedAttachments.push(...reusedDraftAttachments);
-      if (uploadedAttachments[0]?.file_url) {
+      const primaryInitialAttachment = uploadedAttachments.find(
+        (attachment) => attachment.stage !== "recommendation_item",
+      );
+      if (primaryInitialAttachment?.file_url) {
         await supabase
           .from("surat_registrasi")
-          .update({ lampiran_path: uploadedAttachments[0].file_url })
+          .update({ lampiran_path: primaryInitialAttachment.file_url })
           .eq("id", surat.id);
-        surat.lampiran_path = uploadedAttachments[0].file_url;
+        surat.lampiran_path = primaryInitialAttachment.file_url;
       }
       surat.surat_attachments = uploadedAttachments;
 
@@ -1974,12 +1989,7 @@ export const suratService = {
       return surat;
     } catch (error: any) {
       const message = String(error?.message || error?.error || "Gagal menyimpan surat.");
-      console.error("Error in createRegistrasi:", {
-        message,
-        code: error?.code || null,
-        details: error?.details || null,
-        hint: error?.hint || null,
-      });
+      console.error(formatCreateRegistrasiError(error));
       throw new Error(message);
     }
   },
