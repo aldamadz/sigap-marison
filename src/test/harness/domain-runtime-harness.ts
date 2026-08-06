@@ -57,6 +57,7 @@ export const stubRuntimeEnv = (vi: any) => {
 
 export const unstubRuntimeEnv = (vi: any) => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.resetModules();
 };
 
