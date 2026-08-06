@@ -4,6 +4,13 @@ import type { ServerResponse } from "node:http";
 // Pure HTTP response/header/request-size helpers extracted from
 // domain-runtime.ts. This module is a leaf: no session, auth, Supabase,
 // rate-limit state, dispatcher, or domain handler logic.
+//
+// RESIDUAL (documented, intentionally NOT changed in this PR):
+// backend/src/app.ts still carries its own security-header contract with an
+// HSTS value that differs by NODE_ENV (e.g. max-age tuning for local/dev vs
+// production). The headers in this module mirror the raw-dispatcher contract
+// used by domain-runtime.ts. Harmonizing the two headers sets is out of scope
+// for PR #104 and must be done in a dedicated follow-up.
 
 export const securityHeaders: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",

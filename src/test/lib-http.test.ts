@@ -13,24 +13,50 @@ import {
 } from "../../backend/src/lib/http.js";
 
 describe("lib/http security headers", () => {
-  it("securityHeaders contains the security contract", () => {
-    expect(securityHeaders["X-Content-Type-Options"]).toBe("nosniff");
-    expect(securityHeaders["X-Frame-Options"]).toBe("DENY");
-    expect(securityHeaders["Strict-Transport-Security"]).toContain("includeSubDomains");
-    expect(securityHeaders["Content-Security-Policy"]).toContain("default-src 'self'");
-    expect(securityHeaders["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+  it("locks every security header name and value", () => {
+    expect(securityHeaders).toEqual({
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    });
   });
 
-  it("withSecurityHeaders merges extra headers and preserves security defaults", () => {
-    const merged = withSecurityHeaders({ "Content-Type": "application/json" });
+  it("locks every CSP directive", () => {
+    const csp = securityHeaders["Content-Security-Policy"];
+    for (const directive of [
+      "default-src 'self'",
+      "script-src 'self' https://static.cloudflareinsights.com",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "img-src 'self' data: blob: https:",
+      "connect-src 'self' https: wss:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ]) {
+      expect(csp).toContain(directive);
+    }
+  });
+
+  it("withSecurityHeaders gives precedence to extraHeaders", () => {
+    const merged = withSecurityHeaders({
+      "Content-Type": "application/json",
+      "X-Frame-Options": "SAMEORIGIN",
+    });
+    // extraHeaders override security defaults
     expect(merged["Content-Type"]).toBe("application/json");
+    expect(merged["X-Frame-Options"]).toBe("SAMEORIGIN");
+    // untouched security headers still present
     expect(merged["X-Content-Type-Options"]).toBe("nosniff");
-    expect(merged["X-Frame-Options"]).toBe("DENY");
+    expect(merged["Strict-Transport-Security"]).toContain("max-age=31536000");
   });
 
   it("withSecurityHeaders default (no arg) returns only security headers", () => {
     const merged = withSecurityHeaders();
-    expect(merged["X-Frame-Options"]).toBe("DENY");
+    expect(merged).toEqual(securityHeaders);
     expect(merged["Content-Type"]).toBeUndefined();
   });
 });
@@ -72,6 +98,13 @@ describe("lib/http sendJson", () => {
     expect(out.headers["X-Request-Id"]).toBe("req-1");
     expect(JSON.parse(out.body)).toEqual({ error: "Not found" });
   });
+
+  it("sendJson gives precedence to extraHeaders over security defaults", () => {
+    const { out, res } = fakeRes();
+    sendJson(res as any, 200, { ok: true }, { "X-Frame-Options": "SAMEORIGIN" });
+    expect(out.headers["X-Frame-Options"]).toBe("SAMEORIGIN");
+    expect(out.headers["X-Content-Type-Options"]).toBe("nosniff");
+  });
 });
 
 describe("lib/http assertRequestSize", () => {
@@ -79,9 +112,31 @@ describe("lib/http assertRequestSize", () => {
     expect(() => assertRequestSize({ headers: { "content-length": "100" } }, 1024)).not.toThrow();
   });
 
-  it("throws 413 when over the limit", () => {
-    expect(() => assertRequestSize({ headers: { "content-length": "2048" } }, 1024))
-      .toThrow("Ukuran file terlalu besar");
+  it("accepts a request exactly at the limit", () => {
+    expect(() => assertRequestSize({ headers: { "content-length": "1024" } }, 1024)).not.toThrow();
+  });
+
+  it("throws 413 with exact MB message when over the limit", () => {
+    let thrown: any;
+    try {
+      assertRequestSize({ headers: { "content-length": String(2 * 1024 * 1024) } }, 1024 * 1024);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeDefined();
+    expect(thrown.status).toBe(413);
+    expect(thrown.message).toBe("Ukuran file terlalu besar. Maksimal 1 MB.");
+  });
+
+  it("throws 413 with multi-MB message", () => {
+    let thrown: any;
+    try {
+      assertRequestSize({ headers: { "content-length": "30000000" } }, 25 * 1024 * 1024);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown.status).toBe(413);
+    expect(thrown.message).toBe("Ukuran file terlalu besar. Maksimal 25 MB.");
   });
 
   it("accepts missing content-length", () => {
