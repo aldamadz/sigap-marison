@@ -37,38 +37,22 @@ const authErrorClient = () => ({
   realtime: { setAuth: noNetwork("realtime.setAuth"), channel: noNetwork("realtime.channel") },
 });
 
+// Fail-closed global.fetch: any real fetch/vendor network must throw. The
+// tracker records calls so tests can assert that protected routes never reach
+// a vendor fetch.
+export const fetchCalls: string[] = [];
+
 export const stubRuntimeEnv = (vi: any) => {
   vi.mock("@supabase/supabase-js", () => ({
     createClient: authErrorClient,
   }));
+  fetchCalls.length = 0;
+  vi.stubGlobal("fetch", vi.fn((input: any, init?: any) => {
+    const url = typeof input === "string" ? input : (input as any)?.url;
+    fetchCalls.push(String(url));
+    throw new Error(`FAIL-CLOSED: real fetch attempted: ${String(url)}`);
+  }));
   for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
-};
-
-// Track whether protected route 401 paths attempted any data/network call.
-// A user-supplied tracker object is filled by the mock so tests can assert
-// that auth rejects BEFORE any Supabase table/RPC/storage/vendor access.
-export const createNetworkTracker = () => {
-  const calls: string[] = [];
-  return {
-    calls,
-    client: () => ({
-      auth: {
-        getUser: async () => {
-          calls.push("auth.getUser");
-          return { data: { user: null }, error: { message: "Unauthorized" } };
-        },
-        refreshSession: () => { calls.push("auth.refreshSession"); throw new Error("FAIL-CLOSED"); },
-        signInWithPassword: () => { calls.push("auth.signInWithPassword"); throw new Error("FAIL-CLOSED"); },
-      },
-      from: () => { calls.push("supabase.from"); throw new Error("FAIL-CLOSED"); },
-      rpc: () => { calls.push("supabase.rpc"); throw new Error("FAIL-CLOSED"); },
-      storage: { from: () => { calls.push("storage.from"); throw new Error("FAIL-CLOSED"); } },
-      realtime: {
-        setAuth: () => { calls.push("realtime.setAuth"); throw new Error("FAIL-CLOSED"); },
-        channel: () => { calls.push("realtime.channel"); throw new Error("FAIL-CLOSED"); },
-      },
-    }),
-  };
 };
 
 export const unstubRuntimeEnv = (vi: any) => {

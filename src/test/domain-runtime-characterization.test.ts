@@ -4,7 +4,7 @@ import {
   unstubRuntimeEnv,
   bootDomainRuntime,
   closeApp,
-  createNetworkTracker,
+  fetchCalls,
   type BootedRuntime,
 } from "./harness/domain-runtime-harness";
 
@@ -42,22 +42,27 @@ describe("domain-runtime protected route registration (no session)", () => {
       expect(res.headers["x-request-id"]).toBeTruthy();
       const body = res.json();
       expect(typeof body.requestId).toBe("string");
+      // Fail-closed: auth rejects before any real fetch/vendor network.
+      expect(fetchCalls).toEqual([]);
     });
   }
 });
 
 describe("domain-runtime wrong method rejection", () => {
+  // Fastify only registers the exact methods in the route table; a wrong
+  // method on a known path falls through to the notFound handler -> 404.
   const wrongMethodRoutes = [
-    { method: "DELETE", url: "/api/surat/inbox" },
-    { method: "PATCH", url: "/api/integrations/marison/status" },
-    { method: "PUT", url: "/api/attention/state" },
+    { method: "DELETE", url: "/api/surat/inbox", expected: 404 },
+    { method: "PATCH", url: "/api/integrations/marison/status", expected: 404 },
+    { method: "PUT", url: "/api/attention/state", expected: 404 },
   ];
 
   for (const r of wrongMethodRoutes) {
-    it(`${r.method} ${r.url} does not reach business handler (not 200)`, async () => {
+    it(`${r.method} ${r.url} -> ${r.expected} (does not reach business handler)`, async () => {
       const res = await booted!.app.inject({ method: r.method as any, url: r.url });
-      expect(res.statusCode).not.toBe(200);
+      expect(res.statusCode).toBe(r.expected);
       expect(res.headers["x-request-id"]).toBeTruthy();
+      expect(fetchCalls).toEqual([]);
     });
   }
 });
@@ -75,6 +80,7 @@ describe("domain-runtime random route stays 404", () => {
       const res = await booted!.app.inject({ method: "GET", url });
       expect(res.statusCode).toBe(404);
       expect(res.headers["x-request-id"]).toBeTruthy();
+      expect(fetchCalls).toEqual([]);
     });
   }
 });

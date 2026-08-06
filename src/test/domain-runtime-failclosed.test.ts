@@ -1,70 +1,28 @@
 // Fail-closed proof: protected routes with no session must reject via auth
-// (getUser mock) and MUST NOT attempt any real Supabase table/RPC/storage or
-// vendor network. The tracker client throws on any data access, so a test
-// fails if the handler ever calls supabase.from/rpc/storage/realtime.
+// (getUser mock) and MUST NOT attempt any real fetch / Supabase table/RPC/
+// storage/vendor network. The harness stubs global.fetch and the Supabase
+// client to throw on any real network; a test fails if any is attempted.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import Fastify from "fastify";
+import {
+  stubRuntimeEnv,
+  unstubRuntimeEnv,
+  bootDomainRuntime,
+  closeApp,
+  fetchCalls,
+  type BootedRuntime,
+} from "./harness/domain-runtime-harness";
 
-const ENV = {
-  SUPABASE_URL: "https://database.test",
-  VITE_SUPABASE_URL: "https://database.test",
-  SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
-  SUPABASE_PUBLISHABLE_KEY: "publishable-test-key",
-  VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "publishable-test-key",
-  SESSION_SECRET: "test-session-secret-at-least-32-characters-long",
-  STORAGE_MODE: "self_hosted_supabase",
-  STORAGE_SUPABASE_URL: "https://storage.test",
-  STORAGE_SUPABASE_SERVICE_ROLE_KEY: "storage-service-role-key",
-  STORAGE_PUBLIC_BASE_URL: "https://storage.test/storage/v1/object/public",
-  MARISON_DEPLOYMENT_ENVIRONMENT: "staging",
-  MARISON_OUTBOUND_INTERNAL_TOKEN: "test-outbound-internal-token-32-characters-min",
-};
-
-let trackerCalls: string[] = [];
-
-const makeMockClient = () => {
-  const record = (name: string) => () => { trackerCalls.push(name); throw new Error(`FAIL-CLOSED: ${name} attempted`); };
-  return {
-    auth: {
-      getUser: async () => { trackerCalls.push("auth.getUser"); return { data: { user: null }, error: { message: "Unauthorized" } }; },
-      refreshSession: record("auth.refreshSession"),
-      signInWithPassword: record("auth.signInWithPassword"),
-    },
-    from: record("supabase.from"),
-    rpc: record("supabase.rpc"),
-    storage: { from: record("storage.from") },
-    realtime: { setAuth: record("realtime.setAuth"), channel: record("realtime.channel") },
-  };
-};
-
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: makeMockClient,
-}));
-
-let app: any;
+let booted: BootedRuntime | null = null;
 
 beforeEach(async () => {
-  trackerCalls = [];
-  for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
-  const routes = await import("../../backend/src/routes/domain.routes.ts");
-  const runtime = await import("../../backend/src/domain-runtime.ts");
-  expect(typeof runtime.handleRequest).toBe("function");
-  app = Fastify({ logger: false });
-  app.addHook("onSend", async (request: any, reply: any, payload: any) => {
-    reply.header("X-Request-Id", request.id);
-    return payload;
-  });
-  app.setNotFoundHandler((request: any, reply: any) => {
-    void reply.code(404).send({ error: "Not found", requestId: request.id });
-  });
-  await routes.registerDomainRoutes(app);
+  stubRuntimeEnv(vi);
+  booted = await bootDomainRuntime();
 });
 
 afterEach(async () => {
-  if (app) { try { await app.close(); } catch { /* ignore */ } }
-  app = null;
-  vi.unstubAllEnvs();
-  vi.resetModules();
+  await closeApp(booted);
+  booted = null;
+  unstubRuntimeEnv(vi);
 });
 
 describe("fail-closed: no real network on unauth protected routes", () => {
@@ -81,16 +39,12 @@ describe("fail-closed: no real network on unauth protected routes", () => {
   ];
 
   for (const r of routes) {
-    it(`${r.method} ${r.url} rejects 401 without data/network access`, async () => {
-      const res = await app.inject({ method: r.method, url: r.url });
+    it(`${r.method} ${r.url} rejects 401 without fetch/network access`, async () => {
+      const res = await booted!.app.inject({ method: r.method as any, url: r.url });
       expect(res.statusCode).toBe(401);
       expect(res.headers["x-request-id"]).toBeTruthy();
-      // Auth rejection must happen before any Supabase table/RPC/storage/vendor call.
-      expect(trackerCalls).toContain("auth.getUser");
-      expect(trackerCalls).not.toContain("supabase.from");
-      expect(trackerCalls).not.toContain("supabase.rpc");
-      expect(trackerCalls).not.toContain("storage.from");
-      expect(trackerCalls).not.toContain("auth.refreshSession");
+      // No real fetch/vendor network may be attempted on the auth path.
+      expect(fetchCalls).toEqual([]);
     });
   }
 });
