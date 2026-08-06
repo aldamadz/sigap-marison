@@ -116,6 +116,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | SUR-08 | Riwayat keterlibatan | Production + Staging | History page | Surat/signatures | UI dapat ditarik terpisah |
 | SUR-09 | Monitoring admin dan pagination server-side | Production + Staging | Admin monitoring, monitoring RPC | Surat, admin role | UI/endpoint dapat ditarik bersama-sama |
 | SUR-10 | Batas waktu proses approval | Production + Staging | SLA fields and calculations | Signatures, department KPI | Perubahan memengaruhi KPI dan status |
+| SUR-11 | Fondasi pure SuratForm tahap pertama | Development branch | Type lokal, parser schema, normalizer, dan formatter pure | SUR-01, characterization tests PR #95 dan #97 | Refactor behavior-preserving; tarik dengan mengembalikan symbol ke `SuratForm.tsx` tanpa perubahan data atau runtime contract |
 
 ### 4.4 Workflow, Verification, Revision, dan Recommendation
 
