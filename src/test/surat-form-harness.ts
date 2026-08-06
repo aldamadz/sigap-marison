@@ -86,6 +86,14 @@ export const supabaseMock = {
   removeChannel: vi.fn(),
 };
 
+// ─── Fetch Call Recording ───────────────────────────────────────
+export const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+
+export function getFetchCalls(urlPattern?: string) {
+  if (!urlPattern) return [...fetchCalls];
+  return fetchCalls.filter(c => c.url.includes(urlPattern));
+}
+
 // ─── Fetch Mock ─────────────────────────────────────────────────
 type FetchRoute = { response: unknown; status?: number };
 const fetchRoutes = new Map<string, FetchRoute>();
@@ -97,6 +105,7 @@ export function registerFetchRoute(url: string, response: unknown, status = 200)
 const originalFetch = global.fetch;
 
 function mockFetch(url: string, _init?: RequestInit): Promise<Response> {
+  fetchCalls.push({ url, init: _init });
   const route = fetchRoutes.get(url);
   if (!route) {
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
@@ -120,6 +129,17 @@ const allowedServiceCalls = new Set<string>();
 
 export function allowServiceCalls(...names: (keyof typeof serviceMock)[]) {
   for (const name of names) allowedServiceCalls.add(name);
+}
+
+// ─── Search Params Override ────────────────────────────────────
+let searchParamsOverride: URLSearchParams | null = null;
+
+export function setSearchParamsOverride(params: URLSearchParams) {
+  searchParamsOverride = params;
+}
+
+export function clearSearchParamsOverride() {
+  searchParamsOverride = null;
 }
 
 // ─── Setup / Teardown ───────────────────────────────────────────
@@ -153,6 +173,7 @@ export function setupTestHarness() {
   // Reset all mocks
   tableHandlers.clear();
   fetchRoutes.clear();
+  fetchCalls.length = 0;
   allowedServiceCalls.clear();
   channelInstance = null;
 
@@ -181,7 +202,7 @@ export function setupTestHarness() {
   vi.mock("react-router", () => {
     const setSearchParams = vi.fn();
     return {
-      useSearchParams: () => [new URLSearchParams(), setSearchParams],
+      useSearchParams: () => [searchParamsOverride || new URLSearchParams(), setSearchParams],
       useNavigate: () => vi.fn(),
       useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "default" }),
       useParams: () => ({}),
@@ -193,6 +214,7 @@ export function setupTestHarness() {
 
 export function teardownTestHarness() {
   global.fetch = originalFetch;
+  searchParamsOverride = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.useRealTimers();
