@@ -110,6 +110,23 @@ describe("durable Marison outbound dispatch", () => {
     expect(routes).toContain('POST", url: "/api/integrations/marison/dispatches/:dispatchId/replacement');
   });
 
+  it("loads the complete surat source before rebuilding a replacement payload", () => {
+    const server = read("backend/src/domain-runtime.ts");
+    const start = server.indexOf("const preflightMarisonOutboundReplacement");
+    const end = server.indexOf("const getAuthorizedSurat", start);
+    const preflight = server.slice(start, end);
+    const suratSelect = preflight.match(/\.from\("surat_registrasi"\)\s*\.select\((["`])([\s\S]*?)\1\)/)?.[2] || "";
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(suratSelect).toContain("no_surat");
+    expect(suratSelect).toContain("created_at");
+    expect(suratSelect).toContain("office_id");
+    expect(suratSelect).toContain("project_id");
+    expect(suratSelect).toContain("surat_signatures");
+    expect(suratSelect).toContain("surat_attachments");
+  });
+
   it("protects the internal build route with a minimum-length constant-time token", () => {
     const server = read("backend/src/domain-runtime.ts");
     const routes = read("backend/src/routes/domain.routes.ts");

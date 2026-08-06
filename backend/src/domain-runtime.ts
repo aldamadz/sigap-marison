@@ -4715,7 +4715,15 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
     try {
       const { data: suratData, error: suratError } = await supabase
         .from("surat_registrasi")
-        .select("id, status, form_input_data, requester_snapshot, location_snapshot, data_snapshot, surat_signatures(id, user_id, step_order, is_signed, signed_at, signer_snapshot, profiles:user_id(id, nik, is_active, deleted_at, marison_employee_id, marison_synced_at))")
+        .select(`
+          id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
+          office_id, project_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
+          surat_signatures (
+            id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
+            profiles:user_id ( id, full_name, nik, job_title, is_active, deleted_at, marison_employee_id, marison_synced_at )
+          ),
+          surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
+        `)
         .eq("id", job.surat_id)
         .maybeSingle();
       if (suratError) throw suratError;
