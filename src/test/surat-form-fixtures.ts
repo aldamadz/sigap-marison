@@ -244,6 +244,8 @@ export const UNIT_FORM_USAGE_RAW = [
       input_schema: JSON.stringify([
         { key: "requested_project", label: "Proyek", type: "external_select", default_source: "manual", external_source_key: "marison_projects", cell: "C11" },
         { key: "requested_unit_count", label: "Jumlah Unit", type: "number", required: true, default_source: "manual", cell: "C12" },
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
       unit_config: JSON.stringify({ request_sentence_cell: "C11" }),
       signature_layout: null,
@@ -271,7 +273,7 @@ export const NON_UNIT_FORM_USAGE_RAW = [
     name: "Permohonan Non Unit",
     form_id: UUID_NON_UNIT.form_a,
     request_category: "non_unit",
-    scope_type: null,
+    scope_type: "cabang",
     recommendation_config: null,
     master_forms: {
       id: UUID_NON_UNIT.form_a,
@@ -287,6 +289,8 @@ export const NON_UNIT_FORM_USAGE_RAW = [
           { key: "status", label: "Status" },
           { key: "keterangan", label: "Keterangan" },
         ]}},
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
       unit_config: null,
       signature_layout: null,
@@ -324,6 +328,8 @@ export const ATTACHMENT_FORM_USAGE_RAW = [
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
       unit_config: null,
       signature_layout: null,
@@ -419,6 +425,8 @@ export const MULTI_ITEM_FORM_USAGE_RAW = [
           { key: "status", label: "Status" },
           { key: "keterangan", label: "Keterangan" },
         ]}},
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
       unit_config: null,
       signature_layout: null,
@@ -483,6 +491,9 @@ export const EXTERNAL_SELECT_FORM_USAGE_RAW = [
       input_schema: JSON.stringify([
         { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
         { key: "unit_kerja", label: "Unit Kerja", type: "external_select", default_source: "manual", external_source_key: "marison_departments", cell: "C12" },
+        { key: "tim_kerja", label: "Tim Kerja", type: "external_select", default_source: "manual", external_source_key: "marison_teams", external_dependency_key: "unit_kerja", cell: "C13" },
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
       unit_config: null,
       signature_layout: null,
@@ -503,3 +514,55 @@ export const MARISON_DEPARTMENTS_RESPONSE = {
     { value: "dept-3", label: "Keuangan" },
   ],
 };
+
+export const MARISON_TEAMS_RESPONSE = {
+  options: [
+    { value: "team-1", label: "Tim Infrastruktur" },
+    { value: "team-2", label: "Tim Pemeliharaan" },
+  ],
+};
+
+// ─── Second Usage (for Flow 15 cascade) ────────────────────────
+
+export const UUID_SECOND_USAGE = {
+  form_usage: "d7eebc99-9c0b-4ef8-bb6d-6bb9bd380a36",
+  form_a: "e8eebc99-9c0b-4ef8-bb6d-6bb9bd380a37",
+  step1: "f9eebc99-9c0b-4ef8-bb6d-6bb9bd380a38",
+  step2: "0aeebc99-9c0b-4ef8-bb6d-6bb9bd380a39",
+} as const;
+
+export const SECOND_FORM_USAGE_RAW = [
+  {
+    id: UUID_SECOND_USAGE.form_usage,
+    name: "Permohonan Perubahan",
+    form_id: UUID_SECOND_USAGE.form_a,
+    request_category: "asset",
+    scope_type: null,
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_SECOND_USAGE.form_a,
+      nama_form: "FORM PERMOHONAN PERUBAHAN",
+      nomor_form: "FP-001",
+      link_form: "https://storage.example.com/change-template.xlsx",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "keterangan_barang", label: "Keterangan Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
+      ]),
+      unit_config: null,
+      signature_layout: null,
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_SECOND_USAGE.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_SECOND_USAGE.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [],
+  },
+];
+
+export const FORM_USAGES_RAW_WITH_DRAFT = [
+  ...FORM_USAGES_RAW,
+  ...SECOND_FORM_USAGE_RAW,
+];

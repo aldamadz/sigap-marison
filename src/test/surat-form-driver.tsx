@@ -81,12 +81,13 @@ export function configureStandardMocks() {
  * inside a common parent div.
  * Falls back to matching combobox text content.
  */
-function findSelectTrigger(labelPattern: RegExp): HTMLElement {
+export function findSelectTrigger(labelPattern: RegExp): HTMLElement {
   const label = screen.getByText(labelPattern);
-  const wrapper = label.parentElement;
-  if (wrapper) {
+  let wrapper = label.parentElement;
+  while (wrapper && wrapper !== document.body) {
     const cb = wrapper.querySelector("[role='combobox']");
     if (cb) return cb as HTMLElement;
+    wrapper = wrapper.parentElement;
   }
   throw new Error(`No Select trigger found for label ${labelPattern}`);
 }
@@ -155,10 +156,21 @@ export async function selectFormAndUsage() {
   await selectUsage();
 }
 
+export async function selectOptionByLabel(labelPattern: RegExp, optionPattern: RegExp) {
+  const trigger = findSelectTrigger(labelPattern);
+  await act(async () => { fireEvent.click(trigger); });
+  const listbox = await screen.findByRole("listbox");
+  const option = within(listbox).getByText(optionPattern);
+  await act(async () => { fireEvent.click(option); });
+}
+
 // ─── Number ─────────────────────────────────────────────────────
 
 export async function clickGetNumber() {
   const btn = screen.getByRole("button", { name: /Dapatkan Nomor Surat/i });
+  await waitFor(() => expect(btn).not.toBeDisabled());
+  const usageTrigger = findSelectTrigger(/^Kegunaan$/i);
+  await waitFor(() => expect(usageTrigger).not.toHaveTextContent(/Pilih kegunaan|Pilih form terlebih dahulu/i));
   await act(async () => { fireEvent.click(btn); });
   await screen.findByText(/Nomor Terdaftar/i);
 }
@@ -225,9 +237,13 @@ export async function selectSigner(stepLabel: string, userName: string) {
 /**
  * Select all signers for the default 2-step usage config.
  * Uses fake timers to complete the 900ms autosave between signer changes.
+ * Accepts optional signer name overrides.
  */
-export async function selectAllSigners() {
-  await selectSigner("Pemohon", "Pemohon Staging");
+export async function selectAllSigners(
+  signer1Name = "Pemohon Staging",
+  signer2Name = "Direktur Utama"
+) {
+  await selectSigner("Pemohon", signer1Name);
 
   // Complete autosave deterministically with fake timers
   vi.useFakeTimers();
@@ -236,13 +252,14 @@ export async function selectAllSigners() {
   vi.useRealTimers();
   serviceMock.saveRegistrationDraft.mockClear();
 
-  await selectSigner("Direktur", "Direktur Utama");
+  await selectSigner("Direktur", signer2Name);
 }
 
 // ─── Dialog ─────────────────────────────────────────────────────
 
 export async function clickConfirmRegistration() {
   const btn = screen.getByRole("button", { name: /Konfirmasi Pendaftaran/i });
+  await waitFor(() => expect(btn).not.toBeDisabled());
   await act(async () => { fireEvent.click(btn); });
   await screen.findByRole("dialog");
 }
@@ -387,43 +404,38 @@ export async function mountFormWithSearchParams(params: Record<string, string>) 
   render(<SuratForm {...defaultProps()} />);
 
   if (params.linked_type === "recommendation") {
-    // In recommendation flow, the component renders RecommendationParentSummary
-    // instead of "Lokasi dan Klasifikasi"
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/Lokasi dan Klasifikasi/i) ||
-        screen.queryByText(/Pengajuan aset/i) ||
-        screen.queryByText(/Permohonan Aset/i)
-      ).toBeTruthy();
-    });
+    if (params.parent_no_surat) await screen.findByText(params.parent_no_surat);
   } else {
     await screen.findByText(/Lokasi dan Klasifikasi/i);
   }
 }
 
-// ─── Table row helpers ──────────────────────────────────────────
+// ─── Mount with usage + search params ────────────────────────────
 
 /**
- * Fill a table row by finding inputs within the table section.
+ * Mount form with custom URL search params AND custom usage data.
+ * Combines setSearchParamsOverride + mountFormWithUsage.
  */
-export async function fillTableRow(rowIndex: number, values: Record<string, string>) {
-  // Find all table row containers
-  const rows = screen.getAllByRole("row");
-  // Skip header row
-  const dataRows = rows.filter(r => !r.querySelector("th"));
-  const targetRow = dataRows[rowIndex];
-  if (!targetRow) throw new Error(`Row ${rowIndex} not found`);
+export async function mountFormWithUsageAndSearchParams(
+  usageData: unknown[],
+  params: Record<string, string>,
+  profileData?: unknown
+) {
+  const { setSearchParamsOverride } = await import("./surat-form-harness");
+  setSearchParamsOverride(new URLSearchParams(params));
+  await mountFormWithUsage(usageData, profileData);
+}
 
-  for (const [colKey, value] of Object.entries(values)) {
-    // Find input by column header or placeholder
-    const inputs = targetRow.querySelectorAll("input");
-    // Try to match by data attribute or position
-    for (const input of inputs) {
-      const placeholder = input.getAttribute("placeholder") || "";
-      if (placeholder.toLowerCase().includes(colKey.toLowerCase())) {
-        fireEvent.change(input, { target: { value } });
-        break;
-      }
-    }
-  }
+// ─── Table input helpers ──────────────────────────────────────────
+
+/**
+ * Fill a table input by row index and column label.
+ * Uses placeholder text "Isi <label>" to locate inputs.
+ * Works with the card-based table layout (not HTML <table>).
+ */
+export function fillTableInput(rowIndex: number, colLabel: string, value: string) {
+  const inputs = screen.getAllByPlaceholderText(new RegExp(`Isi ${colLabel}`, "i"));
+  const input = inputs[rowIndex];
+  if (!input) throw new Error(`Table input for row ${rowIndex}, col "${colLabel}" not found (found ${inputs.length})`);
+  fireEvent.change(input, { target: { value } });
 }

@@ -86,6 +86,14 @@ export const supabaseMock = {
   removeChannel: vi.fn(),
 };
 
+// ─── Fetch Call Recording ───────────────────────────────────────
+export const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+
+export function getFetchCalls(urlPattern?: string) {
+  if (!urlPattern) return [...fetchCalls];
+  return fetchCalls.filter(c => c.url.includes(urlPattern));
+}
+
 // ─── Fetch Mock ─────────────────────────────────────────────────
 type FetchRoute = { response: unknown; status?: number };
 const fetchRoutes = new Map<string, FetchRoute>();
@@ -97,6 +105,7 @@ export function registerFetchRoute(url: string, response: unknown, status = 200)
 const originalFetch = global.fetch;
 
 function mockFetch(url: string, _init?: RequestInit): Promise<Response> {
+  fetchCalls.push({ url, init: _init });
   const route = fetchRoutes.get(url);
   if (!route) {
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
@@ -164,6 +173,7 @@ export function setupTestHarness() {
   // Reset all mocks
   tableHandlers.clear();
   fetchRoutes.clear();
+  fetchCalls.length = 0;
   allowedServiceCalls.clear();
   channelInstance = null;
 

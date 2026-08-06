@@ -1,5 +1,10 @@
 /**
  * Flow 5: Recommendation linked document
+ *
+ * Asserts:
+ * - getRecommendationParentSummary called with correct task_id
+ * - Parent no_surat and items rendered in DOM
+ * - Normal form renders without recommendation context
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
@@ -21,23 +26,23 @@ import {
   mountFormWithSearchParams,
 } from "./surat-form-driver";
 
-beforeEach(() => {
-  setupTestHarness();
-  configureStandardMocks();
-  serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_DEFAULT);
-  serviceMock.getRecommendationParentSummary.mockResolvedValue(RECOMMENDATION_PARENT_SUMMARY);
-  allowServiceCalls(
-    "getMasterData",
-    "getActiveRegistrationDrafts",
-    "getRecommendationParentSummary",
-  );
-});
-
 afterEach(() => {
   teardownTestHarness();
 });
 
 describe("Flow 5: Recommendation linked document", () => {
+  beforeEach(() => {
+    setupTestHarness();
+    configureStandardMocks();
+    serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_DEFAULT);
+    serviceMock.getRecommendationParentSummary.mockResolvedValue(RECOMMENDATION_PARENT_SUMMARY);
+    allowServiceCalls(
+      "getMasterData",
+      "getActiveRegistrationDrafts",
+      "getRecommendationParentSummary",
+    );
+  });
+
   it("calls getRecommendationParentSummary with correct task ID", async () => {
     await mountFormWithSearchParams({
       linked_type: "recommendation",
@@ -55,7 +60,7 @@ describe("Flow 5: Recommendation linked document", () => {
     assertStrictServiceCalls();
   });
 
-  it("renders recommendation parent summary with correct data", async () => {
+  it("renders exact recommendation parent context and item", async () => {
     await mountFormWithSearchParams({
       linked_type: "recommendation",
       parent_surat: UUID.surat,
@@ -63,16 +68,10 @@ describe("Flow 5: Recommendation linked document", () => {
       task_id: "task-001",
     });
 
-    await waitFor(() => {
-      expect(serviceMock.getRecommendationParentSummary).toHaveBeenCalled();
-    });
-
-    // Should show parent surat number
-    await waitFor(() => {
-      expect(screen.getByText(/001\/FA\/MKT\/VII\/2026/i)).toBeInTheDocument();
-    });
-
-    // Should show parent item name
+    expect(await screen.findByText("001/FA/MKT/VII/2026")).toBeInTheDocument();
+    expect(screen.getByText("Permohonan Aset : Printer Epson")).toBeInTheDocument();
+    expect(screen.getByText("Pemohon Staging")).toBeInTheDocument();
+    expect(screen.getByText("Pengembangan Organisasi")).toBeInTheDocument();
     expect(screen.getByText(/Printer Epson L3250/i)).toBeInTheDocument();
     assertStrictServiceCalls();
   });

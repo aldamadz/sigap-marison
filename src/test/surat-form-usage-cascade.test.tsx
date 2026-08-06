@@ -1,8 +1,6 @@
-/**
- * Flow 15: Perubahan usage/form ketika draft sudah ada
- */
+/** Flow 15: restored numbered draft keeps its persisted form/usage and fields locked. */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -12,56 +10,40 @@ import {
 } from "./surat-form-harness";
 import {
   MASTER_DATA_DEFAULT,
+  FORM_USAGES_RAW_WITH_DRAFT,
+  buildDraftForRestore,
+  UUID,
 } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
-  mountForm,
-  selectLetterType,
-  selectEntity,
-  selectCategoryAset,
-  selectFormAndUsage,
-  clickGetNumber,
+  mountFormWithUsageAndSearchParams,
 } from "./surat-form-driver";
 
 beforeEach(() => {
   setupTestHarness();
   configureStandardMocks();
   serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_DEFAULT);
-  allowServiceCalls(
-    "getMasterData",
-    "getActiveRegistrationDrafts",
-    "generateNoSurat",
-    "createRegistrationDraft",
-    "saveRegistrationDraft",
-  );
+  serviceMock.getRegistrationDraft.mockResolvedValue(buildDraftForRestore());
+  allowServiceCalls("getMasterData", "getActiveRegistrationDrafts", "getRegistrationDraft");
 });
 
-afterEach(() => {
-  teardownTestHarness();
-});
+afterEach(() => teardownTestHarness());
 
-describe("Flow 15: Usage/form cascade", () => {
-  it("form and usage auto-select when only one option available", async () => {
-    await mountForm();
-    await selectLetterType();
-    await selectEntity();
-    await selectCategoryAset();
-    await selectFormAndUsage();
+describe("Flow 15: numbered draft form/usage ownership", () => {
+  it("restores persisted values and does not expose a form/usage switch after number reservation", async () => {
+    await mountFormWithUsageAndSearchParams(FORM_USAGES_RAW_WITH_DRAFT, { draft: UUID.draft });
 
-    const btn = screen.getByRole("button", { name: /Dapatkan Nomor Surat/i });
-    expect(btn).not.toBeDisabled();
-    assertStrictServiceCalls();
-  });
-
-  it("number persists after form/usage selection", async () => {
-    await mountForm();
-    await selectLetterType();
-    await selectEntity();
-    await selectCategoryAset();
-    await selectFormAndUsage();
-    await clickGetNumber();
-
-    expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
+    expect(serviceMock.getRegistrationDraft).toHaveBeenCalledWith(UUID.draft);
+    expect(await screen.findByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Printer Epson")).toBeInTheDocument();
+    expect(screen.getByText("FORM PERMOHONAN ASET")).toBeInTheDocument();
+    expect(screen.getByText("Permohonan Aset")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Isi Nama Barang/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Isi Keterangan Barang/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Form Dokumen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Kegunaan/i })).not.toBeInTheDocument();
+    expect(serviceMock.generateNoSurat).not.toHaveBeenCalled();
+    expect(serviceMock.createRegistrationDraft).not.toHaveBeenCalled();
     assertStrictServiceCalls();
   });
 });
