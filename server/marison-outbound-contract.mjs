@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
+export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-08-06";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
@@ -59,14 +60,12 @@ export const marisonNonUnitSubmissionSchema = z.object({
 }).strict();
 
 export const marisonAssetPurchaseRequestSchema = z.object({
-  submission_number: nonEmptyText,
+  request_number: nonEmptyText,
   branch_id: positiveInteger,
   submitted_by: nonEmptyText.optional(),
   submitted_at: dateTime.optional(),
-  category: nonEmptyText,
   description: requiredText.optional(),
   items: z.array(z.object({
-    request_number: nonEmptyText,
     asset_name: nonEmptyText,
     quantity: positiveInteger.optional(),
     estimated_price: nonNegativeInteger.optional(),

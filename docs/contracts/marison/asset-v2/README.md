@@ -1,8 +1,9 @@
 # Marison Asset Contract v2.0.0
 
-Status: vendor staging review required. This contract is documentation only. SIGAP
-does not send this payload and does not change Asset runtime until vendor confirms
-staging readiness.
+Status: superseded by the vendor OpenAPI published on 6 August 2026. This proposal
+is retained as design history and must not be used by the runtime. The active
+vendor contract uses top-level `request_number`, has no top-level `attachments`,
+and accepts only the documented fields inside each item.
 
 ## Endpoint
 
@@ -54,9 +55,9 @@ reused for a different `submission_number` or payload.
 - `approvals[].nik` is the external NIK of each parent-request signer.
 - Requester mapping is never copied to signer fields.
 
-## Rollout gate
+## Rollout outcome
 
-Vendor confirmation must state that staging accepts `vendor-asset-2.0.0`, the new
-item fields, top-level `attachments`, and `Idempotency-Key`. After confirmation,
-SIGAP will submit a separate runtime PR with contract tests and staging
-acceptance. Production remains unchanged.
+The vendor did not publish this proposal verbatim. SIGAP follows the active
+OpenAPI instead and places active request/recommendation documents in
+`items[].attachments`. Internal outbox uniqueness remains inside SIGAP; no
+`Idempotency-Key` header is sent to the vendor. Production remains unchanged.

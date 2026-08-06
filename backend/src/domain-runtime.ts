@@ -25,8 +25,10 @@ import {
 } from "../../storage-path-policy.mjs";
 import {
   assertMarisonOutboundContract,
+  MARISON_ASSET_CONTRACT_VERSION,
   MARISON_OUTBOUND_CONTRACT_VERSION,
 } from "../../server/marison-outbound-contract.mjs";
+import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
 import {
   diagnoseVendorRejection,
@@ -3475,12 +3477,7 @@ const testMarisonEnvironment = async (req) => {
 
 const canReadSurat = async (surat, userId) => {
   if (!surat || !userId) return false;
-  if (surat.created_by === userId) return true;
-  if ((surat.surat_signatures || []).some((sig) => sig.user_id === userId)) return true;
-  if ((surat.surat_signatures || []).some((sig) =>
-    Array.isArray(sig.verifier_snapshot) &&
-    sig.verifier_snapshot.some((verifier) => verifier?.user_id === userId)
-  )) return true;
+  if (hasDirectSuratAccess(surat, userId)) return true;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -3488,6 +3485,35 @@ const canReadSurat = async (surat, userId) => {
     .eq("id", userId)
     .maybeSingle();
   return isActiveAdminProfile(profile);
+};
+
+const canReadActiveRecommendationViaParent = async (childSuratId, userId) => {
+  const { data: links, error: linkError } = await supabase
+    .from("surat_linked_documents")
+    .select("parent_surat_id, link_type, status")
+    .eq("child_surat_id", childSuratId)
+    .eq("link_type", "recommendation")
+    .eq("status", "active");
+  if (linkError) throw linkError;
+  const parentIds = activeRecommendationParentIds(links);
+  if (parentIds.length === 0) return false;
+
+  const [parentsResult, signaturesResult] = await Promise.all([
+    supabase.from("surat_registrasi").select("id, created_by").in("id", parentIds),
+    supabase.from("surat_signatures").select("surat_id, user_id, verifier_snapshot").in("surat_id", parentIds),
+  ]);
+  if (parentsResult.error) throw parentsResult.error;
+  if (signaturesResult.error) throw signaturesResult.error;
+  const signaturesByParent = new Map();
+  for (const signature of signaturesResult.data || []) {
+    const rows = signaturesByParent.get(signature.surat_id) || [];
+    rows.push(signature);
+    signaturesByParent.set(signature.surat_id, rows);
+  }
+  return (parentsResult.data || []).some((parent) => hasDirectSuratAccess({
+    ...parent,
+    surat_signatures: signaturesByParent.get(parent.id) || [],
+  }, userId));
 };
 
 const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
@@ -4182,7 +4208,6 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
 };
 
 const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) => {
-  const requestedProject = getMarisonRequestedProject(surat, input);
   const branchId = requireExternalInteger(
     overrides.branchId ?? (await resolveMarisonOfficeBranch(surat)).branchId,
     "Branch ID"
@@ -4196,6 +4221,12 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 
   const recommendationDocument = await getMarisonRecommendationDocument(surat.id);
   const recommendationRows = getMarisonRecommendationRows(surat, input, recommendationDocument);
+  const sharedRequestAttachments = await buildMarisonAttachmentLinks(surat, actorId);
+  let recommendationDocumentLink = null;
+  if (recommendationDocument) {
+    const recommendationLinks = await buildMarisonAttachmentLinks(recommendationDocument, actorId);
+    recommendationDocumentLink = recommendationLinks.find((item) => item.name === "Dokumen pengajuan") || recommendationLinks[0] || null;
+  }
   const payloadItems = await Promise.all(items.map(async (item, index) => {
     const record = asPlainRecord(item);
     const recommendation = asPlainRecord(findMarisonRecommendationRow(recommendationRows, record, index));
@@ -4217,51 +4248,33 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
       record.nominal ??
       record.nilai
     );
+    const attachments = [...sharedRequestAttachments, ...embeddedAttachments, ...recommendationAttachments];
+    if (recommendationDocumentLink) attachments.push({
+      name: "Dokumen Rekomendasi Aset",
+      link: recommendationDocumentLink.link,
+    });
+    const uniqueAttachments = [...new Map(attachments.map((attachment) => [attachment.link, attachment])).values()];
     return {
-      request_number: firstString(
-        record.request_number,
-        record.no_pengajuan,
-        record.nomor_pengajuan,
-        items.length === 1 ? surat.no_surat : `${surat.no_surat}-${String(index + 1).padStart(2, "0")}`
-      ),
       asset_name: firstString(record.nama_barang, record.item_name, record.nama, record.barang),
       quantity,
       ...(estimatedPrice > 0 ? { estimated_price: estimatedPrice } : {}),
       description: firstString(record.keterangan, record.description),
-      attachments: [...embeddedAttachments, ...recommendationAttachments],
+      attachments: uniqueAttachments,
     };
   }));
-
-  if (recommendationDocument) {
-    const recommendationLinks = await buildMarisonAttachmentLinks(recommendationDocument, actorId);
-    const documentLink = recommendationLinks.find((item) => item.name === "Dokumen pengajuan")?.link ||
-      recommendationLinks[0]?.link || "";
-    if (documentLink) {
-      payloadItems.forEach((item) => {
-        if (!item.attachments.some((attachment) => attachment.link === documentLink)) {
-          item.attachments.push({ name: "Dokumen Rekomendasi Aset", link: documentLink });
-        }
-      });
-    }
-  }
-
-  const location = getMarisonLocation(surat);
   const payload = {
-    submission_number: surat.no_surat,
+    request_number: surat.no_surat,
     branch_id: branchId,
-     submitted_by: overrides.nik,
+    submitted_by: overrides.nik,
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
-    category: firstString(location.office.kedudukan, location.office.position).toLowerCase() === "pusat"
-      ? "Pengajuan Pusat"
-      : "Pengajuan Cabang",
     description: firstString(input.catatan, surat.judul_surat),
     items: payloadItems,
-     approvals: overrides.approvals,
+    approvals: overrides.approvals,
   };
   return {
     endpoint: "/asset-purchase-requests",
     kind: "asset",
-    contractVersion: MARISON_OUTBOUND_CONTRACT_VERSION,
+    contractVersion: MARISON_ASSET_CONTRACT_VERSION,
     payload: assertMarisonOutboundContract("asset", payload),
   };
 };
@@ -4826,7 +4839,11 @@ const getAuthorizedSurat = async (suratId, token) => {
   surat.surat_signatures = signaturesRes.data || [];
   surat.surat_attachments = attachmentsRes.data || [];
 
-  if (!(await canReadSurat(surat, userRes.user.id))) {
+  const directAccess = await canReadSurat(surat, userRes.user.id);
+  const linkedParentAccess = directAccess
+    ? false
+    : await canReadActiveRecommendationViaParent(surat.id, userRes.user.id);
+  if (!directAccess && !linkedParentAccess) {
     const err = new Error("Forbidden");
     err.status = 403;
     throw err;

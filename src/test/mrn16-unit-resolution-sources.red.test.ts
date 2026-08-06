@@ -26,6 +26,19 @@ describe("MRN-16 canonical resolution sources", () => {
     expect(() => normalizePayloadResolutionSources({ requesterNik: "external_source", branchId: "external_source", "approval:1:signer": "external_source" }, { kind: "asset", approvalCount: 2 })).toThrow();
   });
 
+  it("drops projectId from Asset metadata because the vendor Asset contract does not use projects", () => {
+    expect(normalizePayloadResolutionSources({
+      requesterNik: "external_source",
+      branchId: "external_source",
+      projectId: "unavailable",
+      "approval:1:signer": "external_source",
+    }, { kind: "asset", approvalCount: 1 })).toEqual({
+      requesterNik: "external_source",
+      branchId: "external_source",
+      "approval:1:signer": "external_source",
+    });
+  });
+
   it("allows only failed pre-POST staging jobs to recover", () => {
     const base = { environment: "staging", status: "failed_terminal", post_started_at: null, response: null, external_reference: null };
     expect(isPrePostRecoveryEligible(base, "staging")).toBe(true);
