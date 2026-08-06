@@ -148,7 +148,9 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
     requestPlace: String(surat?.request_place || snapshotSurat.request_place || "-"),
     requestDate: String(surat?.request_date || snapshotSurat.request_date || ""),
     fields,
-    attachments: attachments.map((attachment: any, index: number) => ({
+    attachments: attachments
+      .filter((attachment: any) => attachment.stage !== "recommendation_item")
+      .map((attachment: any, index: number) => ({
       id: String(attachment.id || `${surat?.id}-attachment-${index}`),
       name: String(attachment.file_name || `Lampiran ${index + 1}`),
       type: attachment.file_type || null,
