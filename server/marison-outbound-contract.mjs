@@ -22,6 +22,22 @@ const approval = z.object({
   notes: requiredText.optional(),
 }).strict();
 
+export const normalizeMarisonApprovalRole = (kind, role) => {
+  const value = String(role ?? "").trim();
+  if (!["unit", "non_unit"].includes(kind)) return value;
+
+  const normalized = value.toLowerCase();
+  if (normalized.includes("marketing")) return "marketing";
+  if (/\b(direktur|director|direksi|dirut)\b/.test(normalized)) return "director";
+  return "planning";
+};
+
+export const normalizeMarisonSubmissionApprovals = (kind, approvals) =>
+  approvals.map((item) => ({
+    ...item,
+    role: normalizeMarisonApprovalRole(kind, item?.role),
+  }));
+
 export const marisonUnitSubmissionSchema = z.object({
   submission_number: nonEmptyText,
   project_id: positiveInteger,
