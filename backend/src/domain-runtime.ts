@@ -17,6 +17,17 @@ import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
 import { resolveTableHorizontalAlignment } from "../../document-layout-rules.mjs";
 import { buildProductionCode } from "../../production-code.mjs";
 import {
+  assertRequestSize,
+  buildDocumentFilename,
+  contentTypes,
+  contentTypeForFile,
+  filenameHeaderValue,
+  sanitizeDownloadFilename,
+  sanitizeFilenameStem,
+  sendJson,
+  withSecurityHeaders,
+} from "./lib/http.js";
+import {
   applyStoragePathPrefix,
   isStoragePathWithinPrefix,
   normalizeStoragePath,
@@ -167,101 +178,6 @@ const secretMatches = (supplied, expected) => {
   const suppliedHash = createHash("sha256").update(String(supplied || "")).digest();
   const expectedHash = createHash("sha256").update(String(expected || "")).digest();
   return timingSafeEqual(suppliedHash, expectedHash);
-};
-
-const contentTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".map": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".pdf": "application/pdf",
-  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ".xls": "application/vnd.ms-excel",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".doc": "application/msword",
-};
-
-const securityHeaders = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    "script-src 'self' https://static.cloudflareinsights.com",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' data:",
-    "img-src 'self' data: blob: https:",
-    "connect-src 'self' https: wss:",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "frame-ancestors 'none'",
-  ].join("; "),
-};
-
-const withSecurityHeaders = (headers = {}) => ({
-  ...securityHeaders,
-  ...headers,
-});
-
-const sanitizeDownloadFilename = (value) => String(value || "file")
-  .replace(/[\r\n"]/g, "")
-  .replace(/[\\/]+/g, "_")
-  .trim() || "file";
-
-const sanitizeFilenameStem = (value, fallback = "dokumen") => {
-  const sanitized = String(value || fallback)
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 120);
-  return sanitized || fallback;
-};
-
-const filenameHeaderValue = (filename) => {
-  const safe = sanitizeDownloadFilename(filename);
-  return `inline; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
-};
-
-const contentTypeForFile = (file, filename) => {
-  const type = String(file?.type || "").toLowerCase();
-  const extensionType = contentTypes[extname(filename).toLowerCase()];
-  if (!type || type === "application/octet-stream" || type === "binary/octet-stream") {
-    return extensionType || "application/octet-stream";
-  }
-  return type;
-};
-
-const buildDocumentFilename = (surat, fallbackPath, fallback = "dokumen") => {
-  const originalName = sanitizeDownloadFilename(String(fallbackPath || "").split("/").pop() || fallback);
-  const extension = extname(originalName) || ".pdf";
-  const stemSource = surat?.judul_surat || surat?.no_surat || originalName.replace(extname(originalName), "");
-  return `${sanitizeFilenameStem(stemSource, fallback)}${extension.toLowerCase()}`;
-};
-
-const assertRequestSize = (req, maxBytes = MAX_UPLOAD_BYTES) => {
-  const length = Number(req.headers["content-length"] || 0);
-  if (Number.isFinite(length) && length > maxBytes) {
-    const err = new Error(`Ukuran file terlalu besar. Maksimal ${Math.floor(maxBytes / 1024 / 1024)} MB.`);
-    err.status = 413;
-    throw err;
-  }
-};
-
-const sendJson = (res, status, body, extraHeaders = {}) => {
-  res.writeHead(status, withSecurityHeaders({ "Content-Type": "application/json; charset=utf-8", ...extraHeaders }));
-  res.end(JSON.stringify(body));
 };
 
 const getMailTransporter = () => {
@@ -2577,7 +2493,7 @@ const writableStoragePath = (value) => applyStoragePathPrefix(value, storagePath
 const uploadInternalStorageFile = async (token, req) => {
   await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
-  assertRequestSize(req);
+  assertRequestSize(req, MAX_UPLOAD_BYTES);
 
   const form = await parseUploadForm(req);
   const bucket = String(form.get("bucket") || "").trim();
@@ -2652,7 +2568,7 @@ const uploadInternalStorageFile = async (token, req) => {
 const uploadProfileAvatar = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!supabase || !storageSupabase) throw new Error("Storage credentials are not configured.");
-  assertRequestSize(req);
+  assertRequestSize(req, MAX_UPLOAD_BYTES);
 
   const form = await parseUploadForm(req);
   const file = form.get("file");
@@ -2810,7 +2726,7 @@ const getDepartmentAgendaActivity = async (token, url) => {
 const replaceSignatureAttachmentFiles = async (token, req) => {
   const user = await requireSupabaseUser(token);
   if (!uploadStorageClient()) throw new Error("Storage credentials are not configured.");
-  assertRequestSize(req);
+  assertRequestSize(req, MAX_UPLOAD_BYTES);
 
   const form = await parseUploadForm(req);
   const suratId = String(form.get("suratId") || "").trim();
