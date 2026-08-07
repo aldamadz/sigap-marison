@@ -202,6 +202,8 @@ describe("recommendation item image input routes", () => {
       expect.objectContaining({ recommendation_attachment_draft_file_id: "draft-file-picker", recommendation_attachment_file_name: "picker.png", recommendation_attachment_source: "upload" }),
       expect.objectContaining({ recommendation_attachment_draft_file_id: "draft-file-drop", recommendation_attachment_file_name: "drop.png", recommendation_attachment_source: "drop" }),
     ]);
+    const rowsBeforeDelete = structuredClone(savedRows);
+    const saveCountBeforeDelete = serviceMock.saveRegistrationDraft.mock.calls.length;
 
     await openItem("Item Picker");
     const pickerPreview = screen.getByAltText("Lampiran gambar rekomendasi item 2").closest("div")?.parentElement;
@@ -209,6 +211,17 @@ describe("recommendation item image input routes", () => {
     await act(async () => fireEvent.click(within(pickerPreview as HTMLElement).getByRole("button")));
     await waitFor(() => expect(serviceMock.deleteRegistrationDraftFile).toHaveBeenCalledWith("draft-file-picker"));
     expect(screen.queryByText("picker.png")).not.toBeInTheDocument();
+    await waitFor(
+      () => expect(serviceMock.saveRegistrationDraft.mock.calls.length).toBeGreaterThan(saveCountBeforeDelete),
+      { timeout: 5_000 },
+    );
+    const rowsAfterDelete = serviceMock.saveRegistrationDraft.mock.calls.at(-1)?.[1]?.formData?.form_input_data?.recommendation_items;
+    expect(rowsAfterDelete[0]).toEqual(rowsBeforeDelete[0]);
+    expect(rowsAfterDelete[1]).toEqual(expect.objectContaining({
+      recommendation_attachment_draft_file_id: "",
+      recommendation_attachment_source: "",
+    }));
+    expect(rowsAfterDelete[2]).toEqual(rowsBeforeDelete[2]);
 
     await openItem("Item Paste");
     expect(screen.getByText("paste.png")).toBeInTheDocument();
