@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertMarisonOutboundContract,
+  MARISON_ASSET_CONTRACT_VERSION,
   marisonAssetPurchaseRequestSchema,
   marisonNonUnitSubmissionSchema,
   marisonUnitSubmissionSchema,
@@ -14,6 +15,9 @@ const readFixture = (name) => JSON.parse(readFileSync(
 ));
 
 describe("Marison outbound contract v1", () => {
+  it("pins the active Asset OpenAPI revision independently", () => {
+    expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-08-06");
+  });
   it("accepts the canonical Unit payload supplied to the vendor", () => {
     const fixture = readFixture("unit-submission.example.json");
 
@@ -24,7 +28,7 @@ describe("Marison outbound contract v1", () => {
   it("accepts the canonical Asset payload supplied to the vendor", () => {
     const fixture = readFixture("asset-purchase-request.example.json");
 
-    expect(fixture.submission_number).toBe("001/UAI/PBO.1/VII/2026");
+    expect(fixture.request_number).toBe("001/UAI/PBO.1/VII/2026");
     expect(fixture.submitted_by).toBe("A 114");
     expect(marisonAssetPurchaseRequestSchema.parse(fixture)).toEqual(fixture);
     expect(assertMarisonOutboundContract("asset", fixture)).toEqual(fixture);
@@ -47,10 +51,24 @@ describe("Marison outbound contract v1", () => {
     );
   });
 
-  it("requires request_number on every Asset item", () => {
+  it("requires one top-level request_number and rejects the legacy item field", () => {
     const fixture = readFixture("asset-purchase-request.example.json");
-    delete fixture.items[0].request_number;
+    const missingRequestNumber = structuredClone(fixture);
+    delete missingRequestNumber.request_number;
+    expect(() => assertMarisonOutboundContract("asset", missingRequestNumber)).toThrow(
+      "Payload Marison asset tidak sesuai kontrak."
+    );
 
+    const legacyItemRequestNumber = structuredClone(fixture);
+    legacyItemRequestNumber.items[0].request_number = fixture.request_number;
+    expect(() => assertMarisonOutboundContract("asset", legacyItemRequestNumber)).toThrow(
+      "Payload Marison asset tidak sesuai kontrak."
+    );
+  });
+
+  it("rejects fields absent from the active vendor Asset OpenAPI", () => {
+    const fixture = readFixture("asset-purchase-request.example.json");
+    fixture.category = "Pengajuan Pusat";
     expect(() => assertMarisonOutboundContract("asset", fixture)).toThrow(
       "Payload Marison asset tidak sesuai kontrak."
     );

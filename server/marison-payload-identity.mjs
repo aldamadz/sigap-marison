@@ -30,6 +30,7 @@ export const normalizePayloadResolutionSources = (sources, { kind, approvalCount
     normalizedSources.requesterNik = normalizedSources.nik;
   }
   delete normalizedSources.nik;
+  if (kind === 'asset') delete normalizedSources.projectId;
 
   const required = ['requesterNik', 'branchId'];
   if (kind === 'unit' || kind === 'non_unit') required.push('projectId');

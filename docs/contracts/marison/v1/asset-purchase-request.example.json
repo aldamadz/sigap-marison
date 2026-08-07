@@ -1,13 +1,11 @@
 {
-  "submission_number": "001/UAI/PBO.1/VII/2026",
+  "request_number": "001/UAI/PBO.1/VII/2026",
   "branch_id": 1,
   "submitted_by": "A 114",
   "submitted_at": "2026-07-21T14:45:00+07:00",
-  "category": "Pengajuan Pusat",
   "description": "Pengajuan pembelian aset untuk tim operasional",
   "items": [
     {
-      "request_number": "001/UAI/PBO.1/VII/2026",
       "asset_name": "Komputer SET",
       "quantity": 1,
       "estimated_price": 15000000,
