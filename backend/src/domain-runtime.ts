@@ -27,6 +27,7 @@ import {
   assertMarisonOutboundContract,
   MARISON_ASSET_CONTRACT_VERSION,
   MARISON_OUTBOUND_CONTRACT_VERSION,
+  normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
 import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
@@ -4078,7 +4079,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     units,
     attachments: await buildMarisonAttachmentLinks(surat, actorId),
-     approvals: overrides.approvals,
+     approvals: normalizeMarisonSubmissionApprovals("unit", overrides.approvals),
   };
   return {
     endpoint: "/unit-submissions",
@@ -4202,7 +4203,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       notes: firstString(input.catatan, surat.judul_surat),
       items,
       attachments: await buildMarisonAttachmentLinks(surat, actorId),
-     approvals: overrides.approvals,
+     approvals: normalizeMarisonSubmissionApprovals("non_unit", overrides.approvals),
     }),
   };
 };
