@@ -7,6 +7,8 @@ import {
   marisonAssetPurchaseRequestSchema,
   marisonNonUnitSubmissionSchema,
   marisonUnitSubmissionSchema,
+  normalizeMarisonApprovalRole,
+  normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
 
 const readFixture = (name) => JSON.parse(readFileSync(
@@ -15,6 +17,29 @@ const readFixture = (name) => JSON.parse(readFileSync(
 ));
 
 describe("Marison outbound contract v1", () => {
+  it("maps Unit and Non Unit signer labels to vendor approval roles", () => {
+    expect(normalizeMarisonApprovalRole("non_unit", "Spv. Teknik")).toBe("planning");
+    expect(normalizeMarisonApprovalRole("non_unit", "Branch Manager")).toBe("planning");
+    expect(normalizeMarisonApprovalRole("non_unit", "Mgr. Marketing")).toBe("marketing");
+    expect(normalizeMarisonApprovalRole("non_unit", "Direktur Utama")).toBe("director");
+    expect(normalizeMarisonApprovalRole("unit", "Direksi")).toBe("director");
+  });
+
+  it("preserves approval identity data and Asset role labels", () => {
+    const approvals = [{
+      role: "Mgr. Marketing",
+      nik: "I 001",
+      action: "approved",
+      actioned_at: "2026-08-07T03:00:00.000Z",
+    }];
+
+    expect(normalizeMarisonSubmissionApprovals("non_unit", approvals)).toEqual([
+      { ...approvals[0], role: "marketing" },
+    ]);
+    expect(normalizeMarisonSubmissionApprovals("asset", approvals)).toEqual(approvals);
+    expect(approvals[0].role).toBe("Mgr. Marketing");
+  });
+
   it("pins the active Asset OpenAPI revision independently", () => {
     expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-08-06");
   });
