@@ -135,10 +135,11 @@ describe("disposable SQL runner wired into quality gate", () => {
     expect(nodeRunner).not.toContain("IKY-SURAT-001");
   });
 
-  it("node runner reads and executes the integration SQL file as single source of truth", () => {
+  it("node runner executes both integration SQL files in one disposable database", () => {
     expect(nodeRunner).toContain("marison_idempotency_key.integration.sql");
-    expect(nodeRunner).toContain("integrationTest");
-    expect(nodeRunner).toContain("fixtureSql + baseMigration + replacementMigration + fixMigration + integrationTest");
+    expect(nodeRunner).toContain("marison_rpc_retry_storm.integration.sql");
+    expect(nodeRunner).toContain("integrationTests");
+    expect(nodeRunner).toContain("fixtureSql + migrations + integrationTests");
   });
 
   it("package.json quality includes only test:idempotency-key-sql (not outbound-replacement)", () => {
