@@ -32,7 +32,7 @@ describe("SUR-12 compact master data BFF", () => {
     expect(service).toContain('client.from("profiles")');
   });
 
-  it("keeps recommendation picker controls explicit and preview decoding non-blocking", () => {
+  it("keeps recommendation picker hidden without creating desktop horizontal overflow", () => {
     const form = read("src/components/surat/SuratForm.tsx");
     const start = form.indexOf("const inputId = `${field.key}-${rowIndex}-recommendation-image`");
     const end = form.indexOf("{isLinkedRecommendation && rows.length > 1", start);
@@ -40,6 +40,8 @@ describe("SUR-12 compact master data BFF", () => {
 
     expect(picker).not.toContain('role="button"');
     expect(picker).not.toContain("tabIndex={0}");
+    expect(picker).not.toContain('className="sr-only"');
+    expect(picker).toContain('className="hidden"');
     expect(picker).toContain("decoding=\"async\"");
     expect(picker).toContain("loading=\"lazy\"");
     expect(picker).toContain("aria-label={`Hapus lampiran gambar item");
