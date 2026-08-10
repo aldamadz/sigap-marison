@@ -40,6 +40,12 @@ import {
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
+import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
+import {
+  recommendationTokenRequestedBy,
+  resolveFileViewTokenPath,
+  stableRecommendationBearer,
+} from "../../server/file-view-token.mjs";
 import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
 import {
@@ -4010,22 +4016,33 @@ const normalizeMarisonItems = (input) => asArrayValue(input.items).filter((item)
 const getMarisonRecommendationRows = (surat, input, recommendationDocument) => {
   const snapshot = asPlainRecord(surat?.data_snapshot);
   const childInput = asPlainRecord(recommendationDocument?.form_input_data);
+  if (Object.hasOwn(childInput, "recommendation_multi_detail")) return childInput.recommendation_multi_detail;
+  if (Object.hasOwn(input, "recommendation_multi_detail")) return input.recommendation_multi_detail;
+  if (Object.hasOwn(snapshot, "recommendation_multi_detail")) return snapshot.recommendation_multi_detail;
   const candidates = [
+    childInput.recommendation_items,
+    input.recommendation_items,
+    snapshot.recommendation_items,
     input.recommendation_decisions,
     snapshot.recommendation_decisions,
-    childInput.recommendation_items,
   ];
-  return candidates.map(asArrayValue).find((rows) => rows.length > 0) || [];
+  return candidates.find((value) => (
+    asArrayValue(value).length > 0 || asArrayValue(asPlainRecord(value).items).length > 0
+  )) || [];
 };
 
-const findMarisonRecommendationRow = (rows, item, index) => {
-  const itemName = firstString(item.nama_barang, item.item_name, item.nama, item.barang).toLowerCase();
-  return rows.find((candidate) => {
-    const record = asPlainRecord(candidate);
-    const parentIndex = Number(record.parent_item_index || record.item_number || record.no || 0);
-    const parentName = firstString(record.parent_item_name, record.nama_barang).toLowerCase();
-    return parentIndex === index + 1 || (itemName && parentName === itemName);
-  }) || null;
+const buildPersistentRecommendationPdfLink = async (surat, requestedBy = null) => {
+  const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
+  const requested = parseStorageRef(surat?.pdf_path);
+  if (!appUrl || !requested) return null;
+  const purpose = "external_marison_recommendation_pdf";
+  const rawToken = stableRecommendationBearer(sessionSecret, surat.id);
+  const { error } = await supabase.rpc("ensure_recommendation_file_view_token", {
+    p_token_hash: hashFileViewToken(rawToken), p_surat_id: surat.id, p_bucket: requested.bucket,
+    p_object_path: requested.path, p_storage_origin: requested.origin || "primary", p_requested_by: requestedBy,
+  });
+  if (error) throw error;
+  return `${appUrl}/api/files/view/${rawToken}/${encodeURIComponent("Dokumen Rekomendasi Aset.pdf")}`;
 };
 
 const getMarisonRecommendationDocument = async (parentSuratId) => {
@@ -4044,7 +4061,7 @@ const getMarisonRecommendationDocument = async (parentSuratId) => {
   const { data: child, error: childError } = await supabase
     .from("surat_registrasi")
     .select(`
-      id, no_surat, judul_surat, status, file_path, pdf_path, form_input_data,
+      id, no_surat, judul_surat, status, file_path, pdf_path, form_input_data, created_by,
       surat_signatures (
         id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
         profiles:user_id ( id, full_name, nik, job_title )
@@ -4056,33 +4073,6 @@ const getMarisonRecommendationDocument = async (parentSuratId) => {
   if (childError) throw childError;
   return child || null;
 };
-
-const buildMarisonRecommendationItemAttachment = async (document, recommendation, actorId) => {
-  const attachment = asPlainRecord(recommendation?.recommendation_attachment);
-  const rawPath = firstString(
-    attachment.file_url,
-    recommendation?.recommendation_attachment_url
-  );
-  if (!document || !rawPath) return [];
-  const link = await buildPersistentMarisonFileLink(document, rawPath, actorId);
-  if (!link) return [];
-  return [{
-    name: firstString(attachment.file_name, recommendation?.recommendation_attachment_file_name, "Lampiran rekomendasi"),
-    link,
-  }];
-};
-
-const normalizeMarisonEmbeddedLinks = (value) => asArrayValue(value)
-  .map((attachment, index) => {
-    const record = asPlainRecord(attachment);
-    const link = firstString(record.link, record.url);
-    if (!/^https:\/\//i.test(link)) return null;
-    return {
-      name: firstString(record.name, record.title, record.file_name, `Lampiran item ${index + 1}`),
-      link,
-    };
-  })
-  .filter(Boolean);
 
 const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {}) => {
   const requestedProject = getMarisonRequestedProject(surat, input);
@@ -4138,61 +4128,35 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 
   const recommendationDocument = await getMarisonRecommendationDocument(surat.id);
   const recommendationRows = getMarisonRecommendationRows(surat, input, recommendationDocument);
-  const sharedRequestAttachments = await buildMarisonAttachmentLinks(surat, actorId);
   let recommendationDocumentLink = null;
   if (recommendationDocument) {
-    const recommendationLinks = await buildMarisonAttachmentLinks(recommendationDocument, actorId);
-    recommendationDocumentLink = recommendationLinks.find((item) => item.name === "Dokumen pengajuan") || recommendationLinks[0] || null;
-  }
-  const payloadItems = await Promise.all(items.map(async (item, index) => {
-    const record = asPlainRecord(item);
-    const recommendation = asPlainRecord(findMarisonRecommendationRow(recommendationRows, record, index));
-    const embeddedAttachments = normalizeMarisonEmbeddedLinks(record.attachments);
-    const recommendationAttachments = await buildMarisonRecommendationItemAttachment(
+    const link = await buildPersistentRecommendationPdfLink(
       recommendationDocument,
-      recommendation,
-      actorId
+      recommendationTokenRequestedBy(actorId, recommendationDocument.created_by, surat.created_by),
     );
-    const quantity = requireExternalInteger(
-      record.jumlah ?? record.quantity,
-      `Jumlah aset baris ${index + 1}`
-    );
-    const estimatedPrice = parseExternalMoney(
-      record.estimated_price ??
-      record.harga_perkiraan ??
-      record.perkiraan_harga ??
-      record.harga ??
-      record.nominal ??
-      record.nilai
-    );
-    const attachments = [...sharedRequestAttachments, ...embeddedAttachments, ...recommendationAttachments];
-    if (recommendationDocumentLink) attachments.push({
+    recommendationDocumentLink = link ? { name: "Dokumen pengajuan", link } : null;
+  }
+  const payload = mapMarisonAssetRequest({
+    request: {
+      request_number: surat.no_surat,
+      branch_id: branchId,
+      submitted_by: overrides.nik,
+      submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
+      description: firstString(input.catatan, surat.judul_surat),
+      approvals: overrides.approvals,
+    },
+    applicantItems: items,
+    recommendationRows,
+    recommendationPdf: recommendationDocumentLink && {
       name: "Dokumen Rekomendasi Aset",
       link: recommendationDocumentLink.link,
-    });
-    const uniqueAttachments = [...new Map(attachments.map((attachment) => [attachment.link, attachment])).values()];
-    return {
-      asset_name: firstString(record.nama_barang, record.item_name, record.nama, record.barang),
-      quantity,
-      ...(estimatedPrice > 0 ? { estimated_price: estimatedPrice } : {}),
-      description: firstString(record.keterangan, record.description),
-      attachments: uniqueAttachments,
-    };
-  }));
-  const payload = {
-    request_number: surat.no_surat,
-    branch_id: branchId,
-    submitted_by: overrides.nik,
-    submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
-    description: firstString(input.catatan, surat.judul_surat),
-    items: payloadItems,
-    approvals: overrides.approvals,
-  };
+    },
+  });
   return {
     endpoint: "/asset-purchase-requests",
     kind: "asset",
     contractVersion: MARISON_ASSET_CONTRACT_VERSION,
-    payload: assertMarisonOutboundContract("asset", payload),
+    payload: freezeMarisonAssetPayload(assertMarisonOutboundContract("asset", payload)),
   };
 };
 
@@ -4730,7 +4694,7 @@ const getAuthorizedSurat = async (suratId, token) => {
 
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, judul_surat, file_path, pdf_path, lampiran_path, created_by")
+    .select("id, no_surat, judul_surat, status, file_path, pdf_path, lampiran_path, created_by")
     .eq("id", suratId)
     .maybeSingle();
   if (suratError || !surat) {
@@ -4774,6 +4738,14 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
 
   if (!surat.file_path) throw new Error("File Excel dokumen belum tersedia.");
 
+  if (!signatureId && String(surat.status || "").toUpperCase() === "PDF_PENDING") {
+    const { data: job, error } = await supabase.rpc("enqueue_recommendation_pdf_job", {
+      p_surat_id: suratId, p_source_file_path: surat.file_path, p_requested_by: user.id, p_refresh: refresh,
+    });
+    if (error) throw error;
+    return { status: job.status, jobId: job.id, cached: false, refreshed: refresh };
+  }
+
   if (signatureId && !refresh) {
     const signature = (surat.surat_signatures || []).find((sig) => sig.id === signatureId);
     if (signature?.pdf_path_snap) {
@@ -4785,6 +4757,7 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
     .from("document_pdf_jobs")
     .select("id, status, pdf_url, error_message, signature_id")
     .eq("surat_id", suratId)
+    .eq("source_file_path", surat.file_path)
     .in("status", ["queued", "processing"])
     .order("created_at", { ascending: false })
     .limit(1);
@@ -4807,6 +4780,7 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
     .from("document_pdf_jobs")
     .select("id, status, pdf_url, error_message, signature_id")
     .eq("surat_id", suratId)
+    .eq("source_file_path", surat.file_path)
     .eq("status", "done")
     .not("pdf_url", "is", null)
     .order("created_at", { ascending: false })
@@ -4824,10 +4798,6 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
       cached: true,
       signatureId: latestDoneJob.signature_id,
     };
-  }
-
-  if (surat.pdf_path && !refresh) {
-    return { status: "ready", pdfUrl: surat.pdf_path, cached: true };
   }
 
   const { data: job, error } = await supabase
@@ -4938,7 +4908,7 @@ const createFileViewToken = async (suratId, token, rawPath) => {
 const consumeFileViewToken = async (viewToken) => {
   const { data: tokenMeta } = await supabase
     .from("file_view_tokens")
-    .select("surat_id, object_path")
+    .select("surat_id, object_path, purpose")
     .eq("token_hash", hashFileViewToken(viewToken))
     .maybeSingle();
 
@@ -4953,6 +4923,18 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
+  let tokenPath = tokenData.object_path;
+  let logicalSurat = null;
+  if (tokenMeta?.purpose === "external_marison_recommendation_pdf") {
+    const { data } = await supabase.from("surat_registrasi").select("id, no_surat, judul_surat, pdf_path").eq("id", tokenMeta.surat_id).maybeSingle();
+    logicalSurat = data || null;
+    tokenPath = resolveFileViewTokenPath(tokenMeta, logicalSurat);
+    if (!tokenPath) throw Object.assign(new Error("PDF rekomendasi belum tersedia"), { status: 404 });
+    const ref = parseStorageRef(tokenPath);
+    tokenData.bucket = ref?.bucket;
+    tokenData.object_path = ref?.path;
+    tokenData.storage_origin = ref?.origin;
+  }
   const tokenStorageRef = {
     origin: tokenData.storage_origin,
     bucket: tokenData.bucket,
@@ -4965,7 +4947,7 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  let surat = null;
+  let surat = logicalSurat;
   if (tokenMeta?.surat_id) {
     const { data: suratData } = await supabase
       .from("surat_registrasi")
@@ -5447,7 +5429,7 @@ export const handleRequest = async (req, res) => {
 
     await serveStatic(req, res);
   } catch (error) {
-    const status = error.status || 500;
+    const status = error instanceof MarisonAssetItemsError ? 422 : error.status || 500;
     const logMessage = `[api:${requestId}] ${req.method || "UNKNOWN"} ${requestPath} -> ${status}: ${error.message || "Internal server error"}`;
     if (status >= 500) console.error(logMessage);
     else if (status === 429) console.warn(logMessage);

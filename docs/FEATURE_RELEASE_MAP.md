@@ -132,6 +132,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | REV-02 | Tindak lanjut pemohon/tujuan revisi | Production + Staging | Follow-up page and badges | REV-01 | Jangan tarik bila revisi aktif masih terbuka |
 | REC-01 | Rekomendasi PBO dan child document | Production + Staging | Recommendation tasks/RPC | Draft, linked documents, department PBO | Tinggi; cek task aktif sebelum nonaktif |
 | REC-02 | Reopen/finalize recommendation saat revisi | Production + Staging | Recommendation revision RPC | REC-01, REV-01 | Tidak dapat ditarik terpisah dengan aman |
+| REC-03 | Rekomendasi aset multi-detail | Development branch; migration unapplied, staging target only | Canonical v1 contract, PDF_PENDING finalization dan final-status PDF refresh, fingerprinted immutable PDF publication, stable audited external link, pre-POST all-rejected recheck | REC-01, SUR-01, WF-03, MRN-07 | Existing prepared/inflight all-rejected dispatch di-skip atomik sebelum POST tanpa mengubah payload/hash audit; post-started dan terminal tetap immutable; migration belum diterapkan dan production tidak berubah |
 
 ### 4.5 Permohonan Unit, Non-Unit, Aset, dan Marison
 

@@ -6,12 +6,53 @@ import {
   classifyMarisonPostError,
   extractMarisonExternalReference,
   readMarisonOutboundWorkerConfig,
+  createMarisonOutboundWorker,
 } from "../../server/marison-outbound-worker.mjs";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 const migrationPath = "supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql";
 
 describe("durable Marison outbound dispatch", () => {
+  it("does not fetch vendor token or POST when final DB boundary skips all-rejected asset", async () => {
+    const timeout = AbortSignal.timeout;
+    Object.defineProperty(AbortSignal, "timeout", {
+      configurable: true,
+      value: () => new AbortController().signal,
+    });
+    const urls: string[] = [];
+    const worker = createMarisonOutboundWorker({
+      config: {
+        supabaseUrl: "https://database.example.test",
+        serviceRoleKey: "service-role",
+        marisonBaseUrl: "https://vendor.example.test",
+        databaseTimeoutMs: 1_000,
+      },
+      fetchImpl: async (input) => {
+        urls.push(String(input));
+        return new Response(JSON.stringify({ post_started: false, skipped: true, code: "all_recommendations_rejected" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    });
+    try {
+      await worker.processJob({
+        job_id: "70000000-0000-4000-8000-000000000001",
+        lease_token: "71000000-0000-4000-8000-000000000001",
+        kind: "asset",
+        endpoint: "/asset-purchase-requests",
+        contract_version: "v1",
+        payload: {},
+        payload_body: "{}",
+        payload_hash: "a".repeat(64),
+      });
+      expect(urls).toHaveLength(1);
+      expect(urls[0]).toContain("/rest/v1/rpc/mark_marison_outbound_post_started");
+      expect(urls[0]).not.toContain("vendor.example.test");
+    } finally {
+      Object.defineProperty(AbortSignal, "timeout", { configurable: true, value: timeout });
+    }
+  });
   it("uses one stable business job per surat and environment", () => {
     const migration = read(migrationPath);
     expect(migration).toContain("unique (surat_id, environment)");

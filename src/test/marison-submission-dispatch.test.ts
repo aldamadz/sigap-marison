@@ -27,7 +27,7 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("request_number: surat.no_surat");
     expect(server).not.toContain("submission_number: surat.no_surat,\n    branch_id: branchId,\n    submitted_by: overrides.nik");
     expect(server).not.toContain("record.request_number,");
-    expect(server).toContain("sharedRequestAttachments");
+    expect(server).not.toContain("sharedRequestAttachments");
     expect(server).toContain('name: "Dokumen Rekomendasi Aset"');
     expect(server).toContain("p_contract_version: dispatch.contractVersion");
     expect(server).toContain("p_payload_hash: payloadHash");

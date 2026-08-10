@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "item-a",
+      "order": 0,
+      "status": "recommended",
+      "applicant_original": {
+        "name": "Komputer",
+        "quantity": 1,
+        "notes": "Untuk desain"
+      },
+      "location": "Kantor pusat",
+      "pic": "Budi",
+      "rejection_reason": "",
+      "details": [
+        {
+          "id": "detail-a",
+          "order": 0,
+          "name": "Motherboard ATX",
+          "quantity": 1,
+          "action": "replace",
+          "description": "Ganti motherboard rusak",
+          "description_manually_edited": true,
+          "notes": "Socket sesuai CPU",
+          "estimated_price": 2500000,
+          "attachments": [
+            {
+              "id": "attachment-a",
+              "order": 0,
+              "storage_path": "recommendations/motherboard.jpg"
+            }
+          ],
+          "reference_links": [
+            {
+              "id": "reference-a",
+              "order": 0,
+              "url": "https://example.test/motherboard"
+            }
+          ],
+          "location": "Ruang IT",
+          "pic": "Sari"
+        }
+      ]
+    }
+  ]
+}

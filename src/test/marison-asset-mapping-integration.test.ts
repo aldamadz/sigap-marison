@@ -1,0 +1,34 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const runtime = readFileSync(join(process.cwd(), "backend/src/domain-runtime.ts"), "utf8");
+
+describe("REC-03 Marison asset runtime integration", () => {
+  it("prefers active recommendation child canonical data over stale parent data", () => {
+    const start = runtime.indexOf("const getMarisonRecommendationRows");
+    const end = runtime.indexOf("const getMarisonRecommendationDocument", start);
+    const resolver = runtime.slice(start, end);
+
+    expect(resolver.indexOf("childInput.recommendation_multi_detail")).toBeGreaterThan(-1);
+    expect(resolver.indexOf("childInput.recommendation_multi_detail")).toBeLessThan(resolver.indexOf("input.recommendation_multi_detail"));
+    expect(resolver.indexOf("childInput.recommendation_items")).toBeLessThan(resolver.indexOf("snapshot.recommendation_items"));
+  });
+
+  it("maps and validates asset items before durable prepare", () => {
+    const buildStart = runtime.indexOf("const buildMarisonOutboundJob");
+    const buildEnd = runtime.indexOf("const listMarisonOutboundDispatches", buildStart);
+    const build = runtime.slice(buildStart, buildEnd);
+    const mapper = runtime.indexOf("mapMarisonAssetRequest", runtime.indexOf("const buildMarisonAssetPayload"));
+    const prepare = runtime.indexOf('supabase.rpc("prepare_marison_outbound_dispatch_with_sources"', buildStart);
+
+    expect(mapper).toBeGreaterThan(-1);
+    expect(prepare).toBeGreaterThan(mapper);
+    expect(build).toContain("await buildMarisonDispatchPayload");
+  });
+
+  it("maps typed mapper errors to safe HTTP 422 responses", () => {
+    expect(runtime).toContain("error instanceof MarisonAssetItemsError ? 422");
+    expect(runtime).toContain('sendJson(res, status, { error: error.message || "Internal server error", requestId })');
+  });
+});

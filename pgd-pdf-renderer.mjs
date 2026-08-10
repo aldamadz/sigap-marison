@@ -80,10 +80,12 @@ const parseRecommendationItemDecisions = (source = {}) => {
     .filter((row) => row && typeof row === "object" && !Array.isArray(row))
     .map((row) => ({
       index: Number(row.parent_item_index || 0) - 1,
-      parentName: String(row.parent_item_name || "").trim().toLowerCase(),
-      action: String(row.recommendation_action || "").trim(),
-      isRecommended: row.is_recommended !== false && String(row.recommendation_action || "") !== "tidak_direkomendasikan",
-      reason: String(row.keterangan || row.alasan || row.reason || "").trim(),
+      parentName: String(row.parent_item_name || asObject(row.applicant_original).name || "").trim().toLowerCase(),
+      action: String(row.recommendation_action || row.action || row.status || "").trim(),
+      isRecommended: row.is_recommended !== false && ![
+        "not_recommended", "tidak_direkomendasikan", "rejected", "ditolak",
+      ].includes(String(row.recommendation_action || row.action || row.status || "").trim().toLowerCase()),
+      reason: String(row.rejection_reason || row.keterangan || row.alasan || row.reason || "").trim(),
     }))
     .filter((row) => Number.isFinite(row.index) || row.parentName);
 };

@@ -249,14 +249,21 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
           retryable: false,
         });
       }
-      const accessToken = await getAccessToken();
-      await requireRpc(
+      const postBoundary = await requireRpc(
         supabase.rpc("mark_marison_outbound_post_started", {
           p_job_id: job.job_id,
           p_lease_token: job.lease_token,
         }),
         "mark POST started"
       );
+      if (postBoundary?.skipped === true) return;
+      if (postBoundary?.post_started !== true) {
+        throw new PrePostError("Boundary POST outbound tidak valid.", {
+          code: "invalid_post_boundary_response",
+          retryable: true,
+        });
+      }
+      const accessToken = await getAccessToken();
 
       const url = new URL(`${config.marisonBaseUrl}${prepared.endpoint}`);
       const timestamp = new Date().toISOString();
