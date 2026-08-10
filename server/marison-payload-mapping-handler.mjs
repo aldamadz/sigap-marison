@@ -29,5 +29,17 @@ export const executeMarisonPayloadMappingCommand = async ({
     throw error;
   }
 
+  if (data?.conflict === true) {
+    const messages = {
+      EXPECTED_VERSION_REQUIRED: 'Mapping sudah ada. Muat ulang data sebelum mengganti atau mereset mapping.',
+      MAPPING_MISSING: 'Mapping sudah dihapus. Muat ulang data sebelum menyimpan kembali.',
+      STALE_VERSION: 'Mapping sudah berubah. Muat ulang data sebelum menyimpan.',
+    };
+    const conflict = new Error(messages[data.code] || 'Mapping berubah. Muat ulang data sebelum menyimpan.');
+    conflict.status = 409;
+    conflict.code = data.code || 'MAPPING_CONFLICT';
+    throw conflict;
+  }
+
   return { success: true, mapping: data, actorId };
 };
