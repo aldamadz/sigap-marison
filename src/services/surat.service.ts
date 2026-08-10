@@ -2221,20 +2221,23 @@ export const suratService = {
       approvalAttachments?: Array<{ key: string; label: string; file: File }>;
     } = {}
   ): Promise<{ success: boolean }> {
-    const { data: { user } } = await supabase.auth.getUser({ force: true });
-    const { data: suratFresh, error: suratErr } = await supabase
-      .from("surat_registrasi")
-      .select("current_step, file_path, penggunaan_id, form_usage_id, form_input_data, data_snapshot")
-      .eq("id", suratId)
-      .single();
+    const [suratResult, signatureResult] = await Promise.all([
+      supabase
+        .from("surat_registrasi")
+        .select("current_step, file_path, penggunaan_id, form_usage_id, form_input_data, data_snapshot")
+        .eq("id", suratId)
+        .single(),
+      supabase
+        .from("surat_signatures")
+        .select("role_name, requires_unit_allocation, action_type, signature_position_snapshot, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
+        .eq("id", signatureId)
+        .single(),
+    ]);
+    const { data: suratFresh, error: suratErr } = suratResult;
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
     if (suratFresh.current_step !== currentStep) throw new Error("Dokumen sudah diproses. Silakan refresh.");
 
-    const { data: sigInfo } = await supabase
-      .from("surat_signatures")
-      .select("role_name, requires_unit_allocation, action_type, signature_position_snapshot, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
-      .eq("id", signatureId)
-      .single();
+    const { data: sigInfo } = signatureResult;
     if (!sigInfo) throw new Error("Data tanda tangan tidak valid.");
     if ((sigInfo as any).verification_required && (sigInfo as any).verification_status !== "verified") {
       throw new Error("Data pengajuan belum diperiksa tim pemeriksa.");
@@ -2256,6 +2259,15 @@ export const suratService = {
     const existingAllocatedUnits = Array.isArray(formInputData?.allocated_units) ? formInputData.allocated_units : [];
     const hasExistingUnitAllocation = existingAllocatedUnits.length > 0;
     const hasIncomingUnitAllocation = Array.isArray(options.unitAllocation?.units) && options.unitAllocation.units.length > 0;
+    let uploaderId: string | undefined;
+    let uploaderResolved = false;
+    const getUploaderId = async () => {
+      if (uploaderResolved) return uploaderId;
+      const { data: { user } } = await supabase.auth.getUser();
+      uploaderId = user?.id;
+      uploaderResolved = true;
+      return uploaderId;
+    };
     if (!isPreparedByVerifier) {
       approvalRequirements.forEach((requirement: any) => {
         const files = approvalAttachments.filter(item => item.key === requirement.requirement_key);
@@ -2319,7 +2331,7 @@ export const suratService = {
           unitRecapAttachment,
           productionCodeAttachment,
         ],
-        user?.id,
+        await getUploaderId(),
         {
           stage: "unit_allocation",
           signature_id: signatureId,
@@ -2366,7 +2378,7 @@ export const suratService = {
       await this.uploadAttachmentFiles(
         suratId,
         approvalAttachments.map(item => item.file),
-        user?.id,
+        await getUploaderId(),
         {
           stage: "approval",
           signature_id: signatureId,
@@ -2397,18 +2409,21 @@ export const suratService = {
     });
     if (rpcError) throw new Error(rpcError.message);
     if (!rpcResult?.success) throw new Error("Gagal memproses persetujuan.");
-    await this.ensureUnitAllocationPersisted(suratId, formInputData);
+
+    const [updatedSuratResult] = await Promise.all([
+      supabase
+        .from("surat_registrasi")
+        .select("current_step, status, created_by, judul_surat")
+        .eq("id", suratId)
+        .single(),
+      this.ensureUnitAllocationPersisted(suratId, formInputData),
+    ]);
 
     documentPreviewService.enqueuePdf(suratId, { refresh: true, signatureId }).catch((pdfError) => {
       console.error("Gagal enqueue snapshot PDF:", pdfError);
     });
 
-    // Ambil data terbaru untuk notifikasi
-    const { data: updatedSurat } = await supabase
-      .from("surat_registrasi")
-      .select("current_step, status, created_by, judul_surat")
-      .eq("id", suratId)
-      .single();
+    const { data: updatedSurat } = updatedSuratResult;
 
     if (updatedSurat) {
       // 1. Notif ke pembuat surat (yang mengajukan surat)
@@ -2424,12 +2439,14 @@ export const suratService = {
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
       if (updatedSurat.status === 'PROSES' && updatedSurat.current_step > currentStep) {
-        await this.notifyInboxStepTasks(
+        void this.notifyInboxStepTasks(
           suratId,
           updatedSurat.current_step,
           updatedSurat.judul_surat,
           "next_inbox"
-        );
+        ).catch((notificationError) => {
+          console.error("Gagal menyiapkan notifikasi inbox berikutnya:", notificationError);
+        });
       }
 
       if (['SELESAI', 'DONE'].includes(updatedSurat.status)) {
