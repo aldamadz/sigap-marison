@@ -202,6 +202,25 @@ export default function InboxPage() {
     refetchInbox();
   };
 
+  const finishInboxTaskLocally = (taskId: string) => {
+    setInboxAllItems((previous) => previous.filter((item: any) => item.id !== taskId));
+    setInboxTotal((previous) => Math.max(0, previous - 1));
+    setDetailCache((previous) => {
+      const next = { ...previous };
+      delete next[taskId];
+      return next;
+    });
+    queryClient.removeQueries({ queryKey: ['surat-inbox-detail', taskId], exact: true });
+  };
+
+  const refreshInboxAfterAction = () => {
+    void Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
+      queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+      refetchAttention(),
+    ]);
+  };
+
   const { data: kpiDetails = [], isLoading: kpiLoading } = useQuery({
     queryKey: ['surat-inbox-kpi'],
     queryFn: async () => {
@@ -775,12 +794,8 @@ const handleApprove = async (item: any) => {
       });
       return next;
     });
-
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
-      refetchAttention(),
-    ]);
+    finishInboxTaskLocally(item.id);
+    refreshInboxAfterAction();
   } catch (error: any) {
     console.error("Approve Error:", error);
     toast.error(error.message || "Gagal menyetujui dokumen.");
@@ -817,11 +832,8 @@ const handleApprove = async (item: any) => {
       toast.error("Dokumen Ditolak", {
         description: "Alur dokumen telah dihentikan secara permanen.",
       });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
-        refetchAttention(),
-      ]);
+      finishInboxTaskLocally(item.id);
+      refreshInboxAfterAction();
     } catch (error: any) {
       console.error("Reject Error:", error);
       toast.error(error.message || "Gagal menolak dokumen.");
@@ -918,11 +930,8 @@ const handleApprove = async (item: any) => {
         delete next[item.id];
         return next;
       });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
-        queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
-        refetchAttention(),
-      ]);
+      finishInboxTaskLocally(item.id);
+      refreshInboxAfterAction();
     } catch (error: any) {
       toast.error(error.message || "Gagal menyimpan pemeriksaan data.");
     } finally {
