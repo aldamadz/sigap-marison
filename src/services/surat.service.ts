@@ -1513,7 +1513,7 @@ export const suratService = {
     requirement?: { key?: string; label?: string },
     onProgress?: (progress: RegistrationDraftUploadProgress) => void,
   ): Promise<SuratRegistrationDraftFile[]> {
-    const { data: { user } } = await supabase.auth.getUser({ force: true });
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Sesi login tidak tersedia.");
     const rows = [];
     const totalBytes = files.reduce((total, file) => total + file.size, 0);
@@ -2922,20 +2922,21 @@ export const suratService = {
   },
 
   async getMasterData() {
-    const res = await Promise.all([
-      supabase.from("master_entities").select("*"),
-      supabase.from("master_offices").select("*"),
-      supabase.from("master_departments").select("*"),
-      supabase.from("master_letter_types").select("*"),
-      supabase.from("master_dept_letter_types").select("dept_id, letter_type_id, sort_index"),
-      supabase.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
-      supabase.from("master_projects").select("*").order("name"),
-      supabase.from("master_penggunaan_detail").select("*").order("created_at", { ascending: false })
-    ]);
+    const response = await fetch("/api/surat/master-data", {
+      credentials: "same-origin",
+      headers: { "X-SIGAP-Client": "web" },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || payload?.message || "Gagal memuat data awal permohonan."));
+    }
+    const departmentLetterTypes = Array.isArray(payload.departmentLetterTypes)
+      ? payload.departmentLetterTypes
+      : [];
     const typeDepartmentMap = new Map<string, string[]>();
     const typeSortMap = new Map<string, number>();
     const typeDepartmentSortMap = new Map<string, Record<string, number>>();
-    (res[4].data || []).forEach((row: any) => {
+    departmentLetterTypes.forEach((row: any) => {
       if (!row.letter_type_id || !row.dept_id) return;
       const ids = typeDepartmentMap.get(row.letter_type_id) || [];
       ids.push(row.dept_id);
@@ -2946,7 +2947,7 @@ export const suratService = {
         [row.dept_id]: row.sort_index ?? 999,
       });
     });
-    const letterTypes = (res[3].data || [])
+    const letterTypes = (Array.isArray(payload.letterTypes) ? payload.letterTypes : [])
       .map((type: any) => ({
         ...type,
         departmentIds: typeDepartmentMap.get(type.id) || [],
@@ -2957,10 +2958,13 @@ export const suratService = {
       }))
       .sort((a: any, b: any) => (a.department_sort_index ?? 999) - (b.department_sort_index ?? 999) || String(a.name || "").localeCompare(String(b.name || ""), "id"));
     return {
-      entities:   res[0].data || [], offices:    res[1].data || [],
-      depts:      res[2].data || [], types:      letterTypes,
-      users:      res[5].data || [], projects:   res[6].data || [],
-      penggunaan: res[7].data || []
+      entities: Array.isArray(payload.entities) ? payload.entities : [],
+      offices: Array.isArray(payload.offices) ? payload.offices : [],
+      depts: Array.isArray(payload.departments) ? payload.departments : [],
+      types: letterTypes,
+      users: Array.isArray(payload.users) ? payload.users : [],
+      projects: Array.isArray(payload.projects) ? payload.projects : [],
+      penggunaan: Array.isArray(payload.usages) ? payload.usages : [],
     };
   },
 
