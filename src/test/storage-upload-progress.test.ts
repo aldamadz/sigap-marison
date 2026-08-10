@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import { appStorageService } from "@/services/storage.service";
+import { supabase } from "@/lib/supabase";
 
 type Listener = (event: ProgressEvent) => void;
 
@@ -76,5 +77,6 @@ describe("appStorageService upload progress", () => {
 
     expect(percentages).toEqual([0, 50, 100]);
     expect(result.publicUrl).toBe("drafts/test/file.pdf");
+    expect(supabase.auth.getSession).toHaveBeenCalledWith();
   });
 });

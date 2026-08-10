@@ -10,6 +10,7 @@ import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerBffRoutes } from "./routes/bff.routes.js";
 import { registerDomainRoutes } from "./routes/domain.routes.js";
 import { registerHealthRoutes } from "./routes/health.routes.js";
+import { registerSuratRoutes } from "./routes/surat.routes.js";
 
 const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
@@ -59,6 +60,7 @@ export const buildApp = async () => {
   await registerHealthRoutes(app);
   await registerAuthRoutes(app);
   await registerBffRoutes(app);
+  await registerSuratRoutes(app);
   await registerDomainRoutes(app);
 
   await app.register(fastifyStatic, {

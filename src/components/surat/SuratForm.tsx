@@ -2600,13 +2600,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         Lampiran Gambar {notRecommended ? "" : "*"}
                       </Label>
                       <div
-                        role="button"
-                        tabIndex={0}
                         onPaste={(event) => handleRecommendationPaste(event, field.key, rowIndex)}
                         onDragOver={(event) => event.preventDefault()}
                         onDrop={(event) => handleRecommendationDrop(event, field.key, rowIndex)}
                         className={cn(
-                          "group rounded-lg border border-dashed bg-muted/20 p-3 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                          "group rounded-lg border border-dashed bg-muted/20 p-3 transition-colors",
                           attachment ? "border-primary/25" : "border-border hover:border-primary/40 hover:bg-primary/5"
                         )}
                       >
@@ -2616,6 +2614,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               <img
                                 src={attachment.file_url}
                                 alt={`Lampiran gambar rekomendasi item ${rowIndex + 1}`}
+                                loading="lazy"
+                                decoding="async"
                                 className="h-36 w-full object-contain"
                               />
                             </div>
@@ -2629,6 +2629,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 px-2 text-destructive hover:text-destructive"
+                                aria-label={`Hapus lampiran gambar item ${rowIndex + 1}`}
                                 onClick={() => void clearRecommendationItemAttachment(field.key, rowIndex)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -2652,6 +2653,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                           id={inputId}
                           type="file"
                           accept="image/png,image/jpeg,image/jpg,image/webp"
+                          aria-label={attachment ? `Ganti gambar item ${rowIndex + 1}` : `Pilih gambar item ${rowIndex + 1}`}
                           className="sr-only"
                           disabled={isUploading}
                           onChange={(event) => {
