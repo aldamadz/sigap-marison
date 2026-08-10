@@ -2654,7 +2654,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                           type="file"
                           accept="image/png,image/jpeg,image/jpg,image/webp"
                           aria-label={attachment ? `Ganti gambar item ${rowIndex + 1}` : `Pilih gambar item ${rowIndex + 1}`}
-                          className="sr-only"
+                          className="hidden"
                           disabled={isUploading}
                           onChange={(event) => {
                             const selectedFile = event.target.files?.[0];
