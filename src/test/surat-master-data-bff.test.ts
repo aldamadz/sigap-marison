@@ -23,7 +23,9 @@ describe("SUR-12 compact master data BFF", () => {
     const service = read("backend/src/services/surat.service.ts");
 
     expect(app).toContain("registerSuratRoutes(app)");
+    expect(app.indexOf("registerSuratRoutes(app)")).toBeLessThan(app.indexOf("registerDomainRoutes(app)"));
     expect(route).toContain('app.get("/api/surat/master-data"');
+    expect(route).toContain("controller.masterData");
     expect(controller.match(/getSession\(/g)).toHaveLength(1);
     expect(service).toContain("Promise.all([");
     expect(service.match(/client\.from\(/g)).toHaveLength(8);
