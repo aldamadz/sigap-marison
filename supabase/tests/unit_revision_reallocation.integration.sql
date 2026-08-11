@@ -45,6 +45,13 @@ insert into public.surat_revision_events (
   'awaiting_requester'
 );
 
+do $$
+begin
+  if (select status from public.surat_registrasi where id='20000000-0000-4000-8000-000000000001') <> 'MENUNGGU_PERBAIKAN' then
+    raise exception 'open checker revision did not retain revision status';
+  end if;
+end $$;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
 
@@ -140,4 +147,3 @@ begin
 end $$;
 
 rollback;
-
