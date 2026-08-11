@@ -74,6 +74,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       NODE_ENV: production
       SUPABASE_URL: "${SUPABASE_URL}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
@@ -129,6 +130,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       NODE_ENV: production
       SUPABASE_URL: "${SUPABASE_URL}"
       SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY}"
