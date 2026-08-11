@@ -167,7 +167,7 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
           location: text(detail.location, detail.lokasi, detail.detail_location),
           pic: text(detail.pic, detail.detail_pic, detail.person_in_charge),
           rejectionReason: text(detail.rejection_reason, detail.reason, detail.alasan,
-            /not_recommended|tidak_direkomendasikan|rejected|ditolak/i.test(status) ? detail.keterangan : ""),
+            /not[\s_-]*recommended|tidak[\s_-]*direkomendasikan|rejected|ditolak/i.test(status) ? detail.keterangan : ""),
           attachments: collectAttachments(detail),
         };
       }).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id)),

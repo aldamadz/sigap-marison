@@ -1,6 +1,6 @@
 -- REC-03: canonical multi-detail recommendations, durable finalization, and safe publication.
 
-create or replace function public.validate_recommendation_items(p_items jsonb)
+create or replace function public.validate_recommendation_items(p_items jsonb, p_canonical boolean default null)
 returns void
 language plpgsql
 immutable
@@ -26,17 +26,19 @@ begin
     raise exception 'Rekomendasi wajib berupa array yang tidak kosong.' using errcode = '22023';
   end if;
 
-  v_is_canonical := not exists (
+  v_is_canonical := coalesce(p_canonical, exists (
     select 1 from jsonb_array_elements(p_items) item
-    where jsonb_typeof(item) <> 'object'
-       or nullif(btrim(item->>'id'), '') is null
-       or not (item ? 'details')
-       or not (item ? 'status')
-  );
+    where jsonb_typeof(item) = 'object'
+      and (item ? 'id' or item ? 'order' or item ? 'status' or item ? 'applicant_original' or item ? 'details')
+  ));
 
   if v_is_canonical then
     for v_parent in select value from jsonb_array_elements(p_items)
     loop
+      if jsonb_typeof(v_parent) <> 'object' or jsonb_typeof(v_parent->'id') <> 'string'
+         or nullif(btrim(v_parent->>'id'), '') is null then
+        raise exception 'Parent canonical wajib memiliki stable string id.' using errcode = '22023';
+      end if;
       v_parent_id := btrim(v_parent->>'id');
       if v_parent_id = any(v_ids) then
         raise exception 'ID parent rekomendasi duplikat: %', v_parent_id using errcode = '23505';
@@ -46,6 +48,7 @@ begin
          or jsonb_typeof(v_parent->'order') <> 'number'
          or (v_parent->>'order')::numeric < 0
          or trunc((v_parent->>'order')::numeric) <> (v_parent->>'order')::numeric
+         or jsonb_typeof(v_parent->'status') <> 'string'
          or jsonb_typeof(v_parent->'applicant_original') <> 'object'
          or not ((v_parent->'applicant_original') ?& array['name','quantity','notes'])
          or jsonb_typeof(v_parent#>'{applicant_original,name}') <> 'string'
@@ -87,6 +90,9 @@ begin
         if jsonb_typeof(v_detail) <> 'object' then
           raise exception 'Detail rekomendasi wajib berupa object.' using errcode = '22023';
         end if;
+        if jsonb_typeof(v_detail->'id') <> 'string' then
+          raise exception 'Detail canonical wajib memiliki stable string id.' using errcode = '22023';
+        end if;
         v_id := nullif(btrim(v_detail->>'id'), '');
         if v_id is null then
           raise exception 'Detail canonical wajib memiliki stable id.' using errcode = '22023';
@@ -95,13 +101,15 @@ begin
           raise exception 'ID rekomendasi duplikat: %', v_id using errcode = '23505';
         end if;
         v_ids := array_append(v_ids, v_id);
-        if nullif(btrim(coalesce(v_detail->>'parent_item_id', v_parent_id)), '') is distinct from v_parent_id then
+        if (v_detail ? 'parent_item_id' and jsonb_typeof(v_detail->'parent_item_id') <> 'string')
+           or nullif(btrim(coalesce(v_detail->>'parent_item_id', v_parent_id)), '') is distinct from v_parent_id then
           raise exception 'Detail tidak konsisten dengan parent rekomendasi.' using errcode = '22023';
         end if;
         if not (v_detail ?& array['order','name','quantity','action','description','description_manually_edited','notes','attachments','reference_links'])
            or jsonb_typeof(v_detail->'order') <> 'number'
            or (v_detail->>'order')::numeric < 0
            or trunc((v_detail->>'order')::numeric) <> (v_detail->>'order')::numeric
+           or jsonb_typeof(v_detail->'action') <> 'string'
            or jsonb_typeof(v_detail->'name') <> 'string'
            or nullif(btrim(v_detail->>'name'), '') is null
            or jsonb_typeof(v_detail->'description') <> 'string'
@@ -143,10 +151,14 @@ begin
           for v_entry in select value from jsonb_array_elements(v_entry)
           loop
             if jsonb_typeof(v_entry) <> 'object'
+               or jsonb_typeof(v_entry->'id') <> 'string'
                or nullif(btrim(v_entry->>'id'), '') is null
                or jsonb_typeof(v_entry->'order') <> 'number'
                or (v_entry->>'order')::numeric < 0
                or trunc((v_entry->>'order')::numeric) <> (v_entry->>'order')::numeric
+               or (v_entry ? 'storage_path' and jsonb_typeof(v_entry->'storage_path') <> 'string')
+               or (v_entry ? 'path' and jsonb_typeof(v_entry->'path') <> 'string')
+               or (v_entry ? 'url' and jsonb_typeof(v_entry->'url') <> 'string')
                or (nullif(btrim(coalesce(v_entry->>'storage_path', v_entry->>'path', '')), '') is null
                    and nullif(btrim(v_entry->>'url'), '') is null) then
               raise exception 'Attachment/reference wajib memiliki stable id, order, dan path atau URL.' using errcode = '22023';
@@ -178,6 +190,18 @@ begin
       when jsonb_typeof(v_parent->'details') = 'array' then v_parent->'details'
       else jsonb_build_array(v_parent)
     end;
+    if jsonb_array_length(v_details) = 0 then
+      v_action := lower(btrim(coalesce(v_parent->>'recommendation_action', v_parent->>'action', v_parent->>'status', '')));
+      if v_action not in ('not_recommended','tidak_direkomendasikan','tidak direkomendasikan','rejected','ditolak')
+         and lower(coalesce(v_parent->>'is_recommended','true')) <> 'false' then
+        raise exception 'Array detail rekomendasi legacy tidak boleh kosong.' using errcode = '22023';
+      end if;
+      if nullif(btrim(coalesce(v_parent->>'rejection_reason',v_parent->>'reason',v_parent->>'alasan','')),'') is null
+         or nullif(btrim(coalesce(v_parent->>'location',v_parent->>'lokasi','')),'') is null
+         or nullif(btrim(coalesce(v_parent->>'pic',v_parent->>'person_in_charge','')),'') is null then
+        raise exception 'Rekomendasi legacy ditolak wajib memiliki location, PIC, dan alasan.' using errcode = '22023';
+      end if;
+    end if;
     for v_detail in select value from jsonb_array_elements(v_details)
     loop
       v_action := lower(btrim(coalesce(v_detail->>'recommendation_action', v_detail->>'action', v_detail->>'status', '')));
@@ -185,12 +209,12 @@ begin
         raise exception 'Action/status rekomendasi legacy wajib diisi.' using errcode = '22023';
       end if;
       if v_action not in (
-        'purchase_new', 'replace', 'service', 'beli_baru', 'ganti',
-        'not_recommended', 'tidak_direkomendasikan', 'rejected', 'ditolak'
+        'purchase_new', 'beli_baru', 'beli baru', 'replace', 'ganti', 'service', 'servis',
+        'not_recommended', 'tidak_direkomendasikan', 'tidak direkomendasikan', 'rejected', 'ditolak'
       ) then
         raise exception 'Action rekomendasi legacy tidak valid.' using errcode = '22023';
       end if;
-      if v_action in ('not_recommended', 'tidak_direkomendasikan', 'rejected', 'ditolak')
+      if v_action in ('not_recommended', 'tidak_direkomendasikan', 'tidak direkomendasikan', 'rejected', 'ditolak')
          or lower(coalesce(v_detail->>'is_recommended', 'true')) = 'false' then
         if nullif(btrim(coalesce(v_detail->>'rejection_reason', v_detail->>'reason', v_detail->>'alasan', '')), '') is null
            or nullif(btrim(coalesce(v_detail->>'location', v_detail->>'lokasi', '')), '') is null
@@ -238,11 +262,15 @@ declare
   v_rejected integer := 0;
   v_total integer := 0;
   v_now timestamptz;
+  v_affected integer;
 begin
   if v_actor is null then raise exception 'Sesi login tidak tersedia.' using errcode = '28000'; end if;
+  if not exists(select 1 from public.profiles p where p.id=v_actor and p.is_active is true) then
+    raise exception 'Profil aktif tidak tersedia.' using errcode='42501';
+  end if;
   select exists (
     select 1 from public.profiles p where p.id = v_actor
-      and p.role::text in ('admin', 'super_admin') and coalesce(p.is_active, true)
+      and p.role::text in ('admin', 'super_admin') and p.is_active is true
   ) into v_is_admin;
   select * into v_task from public.surat_recommendation_tasks where id = p_task_id for update;
   if not found then raise exception 'Tugas rekomendasi tidak ditemukan.' using errcode = 'P0002'; end if;
@@ -270,25 +298,27 @@ begin
   if v_context_task is not null and v_context_task <> p_task_id::text then
     raise exception 'Task context child tidak sesuai.' using errcode = '22023';
   end if;
-  if v_context_task is null and v_child_reservation is distinct from v_task.reservation_id::text then
+  if v_child_reservation is distinct from v_task.reservation_id::text then
     raise exception 'Child tidak terikat pada reservation tugas.' using errcode = '22023';
   end if;
 
     if v_input ? 'recommendation_multi_detail' then
       if jsonb_typeof(v_input->'recommendation_multi_detail') <> 'object'
-         or v_input#>>'{recommendation_multi_detail,version}' is distinct from '1'
+         or jsonb_typeof(v_input#>'{recommendation_multi_detail,version}') <> 'number'
+         or (v_input#>>'{recommendation_multi_detail,version}')::numeric <> 1
          or not ((v_input->'recommendation_multi_detail') ? 'items') then
       raise exception 'Payload recommendation_multi_detail canonical tidak valid.' using errcode = '22023';
     end if;
     v_items := v_input#>'{recommendation_multi_detail,items}';
+    perform public.validate_recommendation_items(v_items,true);
   else
     v_items := v_input->'recommendation_items';
+    perform public.validate_recommendation_items(v_items,false);
   end if;
-  perform public.validate_recommendation_items(v_items);
   for v_parent in select value from jsonb_array_elements(v_items)
   loop
     v_total := v_total + 1;
-    v_status := lower(coalesce(v_parent->>'status', v_parent->>'recommendation_status', v_parent->>'recommendation_action', ''));
+    v_status := regexp_replace(lower(btrim(coalesce(v_parent->>'status', v_parent->>'recommendation_status', v_parent->>'recommendation_action', ''))),'[[:space:]_-]+','_','g');
     if v_status in ('not_recommended', 'tidak_direkomendasikan', 'rejected', 'ditolak')
        or lower(coalesce(v_parent->>'is_recommended', 'true')) = 'false' then
       v_rejected := v_rejected + 1;
@@ -304,16 +334,11 @@ begin
   set status = 'active', required_before_step = excluded.required_before_step, updated_at = v_now;
   update public.surat_reservations set status = 'USED', reserved_by = coalesce(reserved_by, v_actor)
   where id = v_task.reservation_id and status in ('PENDING', 'USED');
+  get diagnostics v_affected = row_count;
+  if v_affected <> 1 then raise exception 'Reservation tugas tidak tersedia atau tidak dapat digunakan.' using errcode='55000'; end if;
   update public.surat_recommendation_tasks
   set status = 'submitted', submitted_surat_id = p_child_surat_id, submitted_at = v_now
   where id = p_task_id returning * into v_task;
-  update public.surat_registrasi set data_snapshot = jsonb_set(
-    jsonb_set(coalesce(data_snapshot, '{}'::jsonb), '{recommendation}', jsonb_build_object(
-      'task_id', p_task_id, 'child_surat_id', p_child_surat_id, 'items', v_items,
-      'submitted_at', v_now, 'not_recommended_count', v_rejected,
-      'all_not_recommended', v_total > 0 and v_rejected = v_total
-    ), true), '{recommendation_decisions}', v_items, true
-  ), updated_at = v_now where id = v_task.parent_surat_id;
   return v_task;
 end;
 $$;
@@ -347,11 +372,21 @@ begin
   if not found then return false; end if;
   select * into v_parent from public.surat_registrasi where id = v_task.parent_surat_id for update;
   if not found then return false; end if;
-  v_items := coalesce(v_child.form_input_data#>'{recommendation_multi_detail,items}', v_child.form_input_data->'recommendation_items', '[]'::jsonb);
-  perform public.validate_recommendation_items(v_items);
+  if v_child.form_input_data ? 'recommendation_multi_detail' then
+    if jsonb_typeof(v_child.form_input_data->'recommendation_multi_detail') <> 'object'
+       or jsonb_typeof(v_child.form_input_data#>'{recommendation_multi_detail,version}') <> 'number'
+       or (v_child.form_input_data#>>'{recommendation_multi_detail,version}')::numeric <> 1 then
+      raise exception 'Payload recommendation_multi_detail canonical tidak valid.' using errcode='22023';
+    end if;
+    v_items:=v_child.form_input_data#>'{recommendation_multi_detail,items}';
+    perform public.validate_recommendation_items(v_items,true);
+  else
+    v_items:=v_child.form_input_data->'recommendation_items';
+    perform public.validate_recommendation_items(v_items,false);
+  end if;
   for v_item in select value from jsonb_array_elements(v_items)
   loop
-    v_status := lower(coalesce(v_item->>'status', v_item->>'recommendation_status', v_item->>'recommendation_action', ''));
+    v_status := regexp_replace(lower(btrim(coalesce(v_item->>'status', v_item->>'recommendation_status', v_item->>'recommendation_action', ''))),'[[:space:]_-]+','_','g');
     if v_status in ('not_recommended', 'tidak_direkomendasikan', 'rejected', 'ditolak')
        or lower(coalesce(v_item->>'is_recommended', 'true')) = 'false' then
       v_rejections := v_rejections || jsonb_build_array(jsonb_build_object(
@@ -420,13 +455,16 @@ returns boolean language plpgsql security definer set search_path = '' as $$
 declare v_actor uuid := auth.uid();
 begin
   if v_actor is null then raise exception 'Sesi login tidak tersedia.' using errcode='28000'; end if;
+  if not exists(select 1 from public.profiles p where p.id=v_actor and p.is_active is true) then
+    raise exception 'Profil aktif tidak tersedia.' using errcode='42501';
+  end if;
   if not exists (
     select 1 from public.surat_registrasi c
     left join public.surat_recommendation_tasks t on t.submitted_surat_id=c.id
     where c.id=p_child_surat_id and (
       c.created_by=v_actor or t.claimed_by=v_actor
       or exists(select 1 from public.surat_signatures s where s.surat_id=c.id and s.user_id=v_actor)
-      or exists(select 1 from public.profiles p where p.id=v_actor and p.role::text in ('admin','super_admin') and coalesce(p.is_active,true))
+       or exists(select 1 from public.profiles p where p.id=v_actor and p.role::text in ('admin','super_admin') and p.is_active is true)
     )
   ) then raise exception 'Tidak berwenang memfinalisasi rekomendasi ini.' using errcode='42501'; end if;
   return public.finalize_recommendation_revision_internal(p_child_surat_id);
@@ -446,6 +484,76 @@ after update of status on public.surat_registrasi for each row
 when (upper(coalesce(old.status::text,'')) not in ('DONE','SELESAI','COMPLETED') and upper(coalesce(new.status::text,'')) in ('DONE','SELESAI','COMPLETED'))
 execute function public.finalize_recommendation_on_child_completion();
 
+alter table public.document_pdf_jobs add column if not exists recommendation_content_fingerprint text;
+alter table public.document_pdf_jobs add column if not exists render_payload jsonb;
+alter table public.document_pdf_jobs add column if not exists lease_token uuid;
+alter table public.document_pdf_jobs add column if not exists lease_expires_at timestamptz;
+
+create or replace function public.recommendation_pdf_render_payload(p_surat_id uuid,p_source_file_path text)
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'version',1,
+    'workbook_source',jsonb_build_object('bucket','dokumen_surat','path',p_source_file_path),
+    'parent_workbook_source',jsonb_build_object('bucket','dokumen_surat','path',p.file_path),
+    'child_input',coalesce(c.form_input_data,'{}'::jsonb),
+    'child_snapshot_input',coalesce(c.data_snapshot->'input',c.data_snapshot,'{}'::jsonb),
+    'parent_input',coalesce(p.form_input_data,'{}'::jsonb),
+    'parent_snapshot_input',coalesce(p.data_snapshot->'input',p.data_snapshot,'{}'::jsonb),
+    'attachment_refs',coalesce((select jsonb_agg(jsonb_build_object(
+      'id',a.id,'file_url',a.file_url,'file_size',a.file_size,'file_type',a.file_type
+    ) order by a.id) from public.surat_attachments a where a.surat_id=c.id),'[]'::jsonb),
+    'parent_attachment_refs',coalesce((select jsonb_agg(jsonb_build_object(
+      'id',a.id,'file_url',a.file_url,'file_size',a.file_size,'file_type',a.file_type
+    ) order by a.id) from public.surat_attachments a where a.surat_id=p.id),'[]'::jsonb)
+  )
+  from public.surat_registrasi c
+  join public.surat_linked_documents l on l.child_surat_id=c.id and l.link_type='recommendation' and l.status='active'
+  join public.surat_registrasi p on p.id=l.parent_surat_id
+  where c.id=p_surat_id and c.file_path=p_source_file_path
+$$;
+
+create or replace function public.recommendation_content_fingerprint(p_render_payload jsonb)
+returns text language sql immutable security definer set search_path = '' as $$
+  select encode(extensions.digest(p_render_payload::text,'sha256'),'hex')
+$$;
+
+create or replace function public.recommendation_pdf_is_current(p_child_surat_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists(
+    select 1 from public.surat_registrasi c
+    join public.document_pdf_jobs j on j.surat_id=c.id and j.signature_id is null
+    cross join lateral (select public.recommendation_pdf_render_payload(c.id,c.file_path) as render_payload) current_render
+    where c.id=p_child_surat_id and upper(coalesce(c.status::text,'')) in ('DONE','SELESAI','COMPLETED')
+      and nullif(btrim(coalesce(c.pdf_path,'')),'') is not null and j.status='done'
+      and j.source_file_path=c.file_path and j.pdf_url=c.pdf_path
+      and j.render_payload=current_render.render_payload
+      and j.recommendation_content_fingerprint=public.recommendation_content_fingerprint(current_render.render_payload)
+  )
+$$;
+
+create or replace function public.guard_recommendation_child_final_status()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if upper(coalesce(old.status::text,'')) not in ('DONE','SELESAI','COMPLETED')
+     and upper(coalesce(new.status::text,'')) in ('DONE','SELESAI','COMPLETED')
+     and exists(select 1 from public.surat_linked_documents l where l.child_surat_id=new.id and l.link_type='recommendation' and l.status='active')
+     and not exists(
+       select 1 from public.document_pdf_jobs j
+       cross join lateral (select public.recommendation_pdf_render_payload(new.id,new.file_path) as render_payload) current_render
+       where j.surat_id=new.id and j.signature_id is null and j.status='done'
+         and j.source_file_path=new.file_path and j.pdf_url=new.pdf_path
+         and j.render_payload=current_render.render_payload
+         and j.recommendation_content_fingerprint=public.recommendation_content_fingerprint(current_render.render_payload)
+     ) then
+    raise exception 'Dokumen rekomendasi hanya dapat selesai melalui publikasi PDF canonical.' using errcode='55000';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists guard_recommendation_child_final_status on public.surat_registrasi;
+create trigger guard_recommendation_child_final_status before update of status on public.surat_registrasi
+for each row execute function public.guard_recommendation_child_final_status();
+
 create or replace function public.guard_parent_approval_for_recommendation()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -457,7 +565,7 @@ begin
       and t.status<>'cancelled' and new.current_step>=t.required_before_step
       and not exists (select 1 from public.surat_linked_documents l join public.surat_registrasi c on c.id=l.child_surat_id
         where l.parent_surat_id=new.id and l.link_type='recommendation' and l.status='active'
-          and upper(coalesce(c.status::text,'')) in ('DONE','SELESAI','COMPLETED'))
+          and public.recommendation_pdf_is_current(c.id))
   ) then raise exception 'Dokumen rekomendasi wajib selesai sebelum approval tahap ini.' using errcode='55000'; end if;
   return new;
 end;
@@ -474,7 +582,7 @@ begin
     where p.id=new.surat_id and t.status<>'cancelled' and p.current_step>=t.required_before_step
       and not exists (select 1 from public.surat_linked_documents l join public.surat_registrasi c on c.id=l.child_surat_id
         where l.parent_surat_id=p.id and l.link_type='recommendation' and l.status='active'
-          and upper(coalesce(c.status::text,'')) in ('DONE','SELESAI','COMPLETED'))
+          and public.recommendation_pdf_is_current(c.id))
   ) then raise exception 'Dokumen rekomendasi wajib selesai sebelum approval tahap ini.' using errcode='55000'; end if;
   return new;
 end;
@@ -483,24 +591,13 @@ drop trigger if exists guard_parent_signature_for_recommendation on public.surat
 create trigger guard_parent_signature_for_recommendation before update of is_signed on public.surat_signatures
 for each row execute function public.guard_parent_signature_for_recommendation();
 
-alter table public.document_pdf_jobs add column if not exists recommendation_content_fingerprint text;
-
 create unique index if not exists document_pdf_jobs_active_recommendation_idx
 on public.document_pdf_jobs(surat_id,source_file_path,recommendation_content_fingerprint)
 where signature_id is null and recommendation_content_fingerprint is not null and status in ('queued','processing');
 
-create or replace function public.recommendation_content_fingerprint(p_surat_id uuid)
-returns text language sql stable security definer set search_path = '' as $$
-  select encode(extensions.digest(jsonb_build_object(
-    'items',coalesce(c.form_input_data#>'{recommendation_multi_detail,items}',c.form_input_data->'recommendation_items','[]'::jsonb),
-    'attachments',coalesce((select jsonb_agg(jsonb_build_object('id',a.id,'file_url',a.file_url,'file_size',a.file_size,'file_type',a.file_type) order by a.id)
-      from public.surat_attachments a where a.surat_id=c.id),'[]'::jsonb)
-  )::text,'sha256'),'hex') from public.surat_registrasi c where c.id=p_surat_id
-$$;
-
 create or replace function public.enqueue_recommendation_pdf_on_status()
 returns trigger language plpgsql security definer set search_path = '' as $$
-declare v_fingerprint text;
+declare v_fingerprint text; v_payload jsonb;
 begin
   if not exists(select 1 from public.surat_linked_documents l where l.child_surat_id=new.id and l.link_type='recommendation' and l.status='active') then
     return new;
@@ -512,10 +609,11 @@ begin
   if nullif(btrim(coalesce(new.file_path,'')),'') is null then
     raise exception 'File stamped rekomendasi wajib tersedia sebelum PDF_PENDING.' using errcode='22023';
   end if;
-  v_fingerprint:=public.recommendation_content_fingerprint(new.id);
-  if v_fingerprint is null then raise exception 'Konten rekomendasi tidak ditemukan.' using errcode='P0002'; end if;
-  insert into public.document_pdf_jobs(surat_id,signature_id,source_file_path,requested_by,recommendation_content_fingerprint)
-  values(new.id,null,new.file_path,new.created_by,v_fingerprint)
+  v_payload:=public.recommendation_pdf_render_payload(new.id,new.file_path);
+  if v_payload is null then raise exception 'Snapshot render rekomendasi tidak ditemukan.' using errcode='P0002'; end if;
+  v_fingerprint:=public.recommendation_content_fingerprint(v_payload);
+  insert into public.document_pdf_jobs(surat_id,signature_id,source_file_path,requested_by,recommendation_content_fingerprint,render_payload)
+  values(new.id,null,new.file_path,new.created_by,v_fingerprint,v_payload)
   on conflict(surat_id,source_file_path,recommendation_content_fingerprint)
     where signature_id is null and recommendation_content_fingerprint is not null and status in ('queued','processing')
   do nothing;
@@ -533,23 +631,22 @@ execute function public.enqueue_recommendation_pdf_on_status();
 
 create or replace function public.enqueue_recommendation_pdf_job(p_surat_id uuid,p_source_file_path text,p_requested_by uuid,p_refresh boolean default false)
 returns public.document_pdf_jobs language plpgsql security definer set search_path = '' as $$
-declare v_job public.document_pdf_jobs; v_fingerprint text;
+declare v_job public.document_pdf_jobs; v_fingerprint text; v_payload jsonb;
 begin
   if not exists(select 1 from public.surat_registrasi c where c.id=p_surat_id and c.file_path=p_source_file_path
     and upper(coalesce(c.status::text,'')) in ('PDF_PENDING','DONE','SELESAI','COMPLETED')
     and exists(select 1 from public.surat_linked_documents l where l.child_surat_id=c.id and l.link_type='recommendation' and l.status='active')) then
     raise exception 'Surat rekomendasi belum final, tidak tertaut, atau source sudah berubah.' using errcode='55000';
   end if;
-  v_fingerprint:=public.recommendation_content_fingerprint(p_surat_id);
-  if v_fingerprint is null then raise exception 'Konten rekomendasi tidak ditemukan.' using errcode='P0002'; end if;
+  v_payload:=public.recommendation_pdf_render_payload(p_surat_id,p_source_file_path);
+  if v_payload is null then raise exception 'Snapshot render rekomendasi tidak ditemukan.' using errcode='P0002'; end if;
+  v_fingerprint:=public.recommendation_content_fingerprint(v_payload);
   select * into v_job from public.document_pdf_jobs where surat_id=p_surat_id and signature_id is null
     and source_file_path=p_source_file_path and recommendation_content_fingerprint=v_fingerprint
     and status in ('queued','processing') order by created_at desc limit 1 for update;
-  if found and not p_refresh then return v_job; end if;
-  if found then update public.document_pdf_jobs set status='failed',error_message='Invalidated by canonical PDF refresh',locked_by=null,locked_at=null,
-    finished_at=clock_timestamp(),updated_at=clock_timestamp() where id=v_job.id; end if;
-  insert into public.document_pdf_jobs(surat_id,signature_id,source_file_path,status,requested_by,refresh,recommendation_content_fingerprint)
-  values(p_surat_id,null,p_source_file_path,'queued',p_requested_by,p_refresh,v_fingerprint) returning * into v_job;
+  if found then return v_job; end if;
+  insert into public.document_pdf_jobs(surat_id,signature_id,source_file_path,status,requested_by,refresh,recommendation_content_fingerprint,render_payload)
+  values(p_surat_id,null,p_source_file_path,'queued',p_requested_by,p_refresh,v_fingerprint,v_payload) returning * into v_job;
   return v_job;
 exception when unique_violation then
   select * into v_job from public.document_pdf_jobs where surat_id=p_surat_id and signature_id is null
@@ -559,36 +656,122 @@ exception when unique_violation then
 end;
 $$;
 
-create or replace function public.publish_document_pdf_job(p_job_id uuid,p_source_file_path text,p_content_fingerprint text,p_pdf_url text,p_worker_id text)
+create or replace function public.claim_document_pdf_jobs(p_worker_id text,p_limit integer,p_max_attempts integer,p_lock_timeout interval default interval '5 minutes')
+returns setof public.document_pdf_jobs language plpgsql security definer set search_path = '' as $$
+begin
+  if nullif(btrim(coalesce(p_worker_id,'')),'') is null or p_limit<1 or p_max_attempts<1 or p_lock_timeout<=interval '0 seconds' then
+    raise exception 'Parameter claim PDF tidak valid.' using errcode='22023';
+  end if;
+  update public.document_pdf_jobs set status='failed',error_message=coalesce(error_message,'Maximum PDF attempts exhausted'),
+    finished_at=coalesce(finished_at,clock_timestamp()),updated_at=clock_timestamp()
+  where status in ('queued','processing') and attempt_count>=p_max_attempts
+    and (status='queued' or locked_at is null or lease_expires_at is null or lease_expires_at<=clock_timestamp());
+  return query
+  with candidates as (
+    select id from public.document_pdf_jobs
+    where status in ('queued','processing') and attempt_count<p_max_attempts
+      and (status='queued' or locked_at is null or lease_expires_at is null or lease_expires_at<=clock_timestamp())
+    order by created_at for update skip locked limit p_limit
+  ), claimed as (
+    update public.document_pdf_jobs j set status='processing',locked_by=p_worker_id,locked_at=clock_timestamp(),
+      lease_token=gen_random_uuid(),lease_expires_at=clock_timestamp()+p_lock_timeout,
+      attempt_count=j.attempt_count+1,error_message=null,updated_at=clock_timestamp()
+    from candidates c where j.id=c.id returning j.*
+  ) select * from claimed;
+end;
+$$;
+
+create or replace function public.fail_document_pdf_job(p_job_id uuid,p_lease_token uuid,p_error_message text,p_max_attempts integer)
 returns public.document_pdf_jobs language plpgsql security definer set search_path = '' as $$
-declare v_job public.document_pdf_jobs; v_surat public.surat_registrasi%rowtype; v_current_fingerprint text;
+declare v_job public.document_pdf_jobs;
+begin
+  if p_lease_token is null or p_max_attempts<1 then raise exception 'Lease dan batas percobaan wajib diisi.' using errcode='22023'; end if;
+  select * into v_job from public.document_pdf_jobs where id=p_job_id for update;
+  if not found then raise exception 'Job PDF tidak ditemukan.' using errcode='P0002'; end if;
+  if v_job.status in ('queued','failed','done') and v_job.lease_token=p_lease_token then return v_job; end if;
+  if v_job.status<>'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_expires_at is null or v_job.lease_expires_at<=clock_timestamp() then
+    raise exception 'Lease job PDF sudah tidak berlaku.' using errcode='42501';
+  end if;
+  update public.document_pdf_jobs set status=case when attempt_count>=p_max_attempts then 'failed' else 'queued' end,
+    error_message=left(coalesce(nullif(p_error_message,''),'Gagal membuat PDF.'),2000),
+    finished_at=case when attempt_count>=p_max_attempts then clock_timestamp() else null end,updated_at=clock_timestamp()
+  where id=p_job_id returning * into v_job;
+  return v_job;
+end;
+$$;
+
+drop function if exists public.publish_document_pdf_job(uuid,text,text,text,text);
+create function public.publish_document_pdf_job(p_job_id uuid,p_source_file_path text,p_content_fingerprint text,p_pdf_url text,p_lease_token uuid)
+returns public.document_pdf_jobs language plpgsql security definer set search_path = '' as $$
+declare v_job public.document_pdf_jobs; v_surat public.surat_registrasi%rowtype; v_current_payload jsonb; v_current_fingerprint text;
 begin
   if nullif(btrim(coalesce(p_source_file_path,'')),'') is null or nullif(btrim(coalesce(p_pdf_url,'')),'') is null
-     or nullif(btrim(coalesce(p_worker_id,'')),'') is null then raise exception 'Source, URL PDF, dan worker wajib diisi.' using errcode='22023'; end if;
+     or p_lease_token is null then raise exception 'Source, URL PDF, dan lease wajib diisi.' using errcode='22023'; end if;
   select * into v_job from public.document_pdf_jobs where id=p_job_id for update;
   if not found then raise exception 'Job PDF tidak ditemukan.' using errcode='P0002'; end if;
   select * into v_surat from public.surat_registrasi where id=v_job.surat_id for update;
   if not found then raise exception 'Surat sumber PDF tidak ditemukan.' using errcode='P0002'; end if;
   if v_job.status='done' then
-    if v_job.source_file_path=p_source_file_path and v_job.recommendation_content_fingerprint=p_content_fingerprint and v_job.pdf_url=p_pdf_url then return v_job; end if;
+    if v_job.lease_token=p_lease_token and v_job.source_file_path=p_source_file_path
+       and v_job.recommendation_content_fingerprint=p_content_fingerprint and v_job.pdf_url=p_pdf_url then return v_job; end if;
     raise exception 'Job PDF sudah dipublikasikan dengan pointer berbeda.' using errcode='55000';
   end if;
-  if v_job.status<>'processing' or v_job.locked_by is distinct from p_worker_id then
-    raise exception 'Worker tidak memiliki lock job PDF.' using errcode='42501';
+  if v_job.status<>'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_expires_at is null or v_job.lease_expires_at<=clock_timestamp() then
+    raise exception 'Worker tidak memiliki lease job PDF yang aktif.' using errcode='42501';
   end if;
-  v_current_fingerprint:=public.recommendation_content_fingerprint(v_job.surat_id);
+  v_current_payload:=public.recommendation_pdf_render_payload(v_job.surat_id,v_job.source_file_path);
+  v_current_fingerprint:=public.recommendation_content_fingerprint(v_current_payload);
   if v_job.signature_id is not null or v_job.recommendation_content_fingerprint is distinct from p_content_fingerprint
-     or v_current_fingerprint is distinct from p_content_fingerprint
+     or v_job.render_payload is distinct from v_current_payload or v_current_fingerprint is distinct from p_content_fingerprint
      or v_job.source_file_path is distinct from p_source_file_path or v_surat.file_path is distinct from p_source_file_path then
     raise exception 'Sumber PDF sudah berubah; publikasi stale ditolak.' using errcode='40001';
   end if;
-  update public.document_pdf_jobs set status='done',pdf_url=p_pdf_url,error_message=null,locked_by=null,locked_at=null,
+  update public.document_pdf_jobs set status='done',pdf_url=p_pdf_url,error_message=null,
     updated_at=clock_timestamp(),finished_at=clock_timestamp() where id=p_job_id returning * into v_job;
   update public.surat_registrasi set pdf_path=p_pdf_url,
     status=case when upper(coalesce(status::text,''))='PDF_PENDING' then 'DONE' else status end,
     updated_at=clock_timestamp()
   where id=v_job.surat_id and upper(coalesce(status::text,'')) in ('PDF_PENDING','DONE','SELESAI','COMPLETED');
   if not found then raise exception 'Surat rekomendasi tidak lagi final.' using errcode='40001'; end if;
+  return v_job;
+end;
+$$;
+
+create or replace function public.complete_document_pdf_job(p_job_id uuid,p_pdf_url text,p_lease_token uuid)
+returns public.document_pdf_jobs language plpgsql security definer set search_path = '' as $$
+declare v_job public.document_pdf_jobs; v_surat public.surat_registrasi%rowtype; v_signature public.surat_signatures%rowtype;
+begin
+  if nullif(btrim(coalesce(p_pdf_url,'')),'') is null or p_lease_token is null then
+    raise exception 'URL PDF dan lease wajib diisi.' using errcode='22023';
+  end if;
+  select * into v_job from public.document_pdf_jobs where id=p_job_id for update;
+  if not found then raise exception 'Job PDF tidak ditemukan.' using errcode='P0002'; end if;
+  if v_job.signature_id is null and v_job.recommendation_content_fingerprint is not null then
+    raise exception 'Job PDF rekomendasi canonical wajib dipublikasikan melalui publish_document_pdf_job.' using errcode='22023';
+  end if;
+  if v_job.status='done' then
+    if v_job.lease_token=p_lease_token and v_job.pdf_url=p_pdf_url then return v_job; end if;
+    raise exception 'Job PDF sudah diselesaikan dengan pointer berbeda.' using errcode='55000';
+  end if;
+  if v_job.status<>'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_expires_at is null or v_job.lease_expires_at<=clock_timestamp() then
+    raise exception 'Worker tidak memiliki lease job PDF yang aktif.' using errcode='42501';
+  end if;
+  select * into v_surat from public.surat_registrasi where id=v_job.surat_id for update;
+  if not found then raise exception 'Surat sumber PDF tidak ditemukan.' using errcode='P0002'; end if;
+  if v_job.signature_id is not null then
+    select * into v_signature from public.surat_signatures
+    where id=v_job.signature_id and surat_id=v_job.surat_id for update;
+    if not found then raise exception 'Tanda tangan sumber PDF tidak ditemukan.' using errcode='P0002'; end if;
+    update public.surat_signatures set pdf_path_snap=p_pdf_url,file_path_snap=null where id=v_signature.id;
+  else
+    update public.surat_registrasi set pdf_path=p_pdf_url,updated_at=clock_timestamp() where id=v_surat.id;
+  end if;
+  update public.document_pdf_jobs set status='done',pdf_url=p_pdf_url,error_message=null,locked_by=null,locked_at=null,
+    updated_at=clock_timestamp(),finished_at=clock_timestamp()
+  where id=p_job_id returning * into v_job;
   return v_job;
 end;
 $$;
@@ -601,6 +784,9 @@ declare
   v_verification_required boolean:=false; v_verification_status text:='not_required'; v_surat public.surat_registrasi%rowtype; v_is_recommendation boolean:=false;
 begin
   if v_actor is null then raise exception 'Tidak terautentikasi' using errcode='28000'; end if;
+  if not exists(select 1 from public.profiles p where p.id=v_actor and p.is_active is true) then
+    raise exception 'Profil aktif tidak tersedia.' using errcode='42501';
+  end if;
   select sr.* into v_surat from public.surat_registrasi sr where sr.id=p_surat_id and sr.status='PROSES' for update;
   if not found then raise exception 'Surat tidak ditemukan atau sudah selesai'; end if;
   v_current_step:=v_surat.current_step; v_created_by:=v_surat.created_by; v_no_surat:=v_surat.no_surat; v_judul_surat:=v_surat.judul_surat;
@@ -626,7 +812,8 @@ begin
 end;
 $$;
 
-create unique index if not exists file_view_tokens_recommendation_logical_idx
+drop index if exists public.file_view_tokens_recommendation_logical_idx;
+create index if not exists file_view_tokens_recommendation_lookup_idx
 on public.file_view_tokens(surat_id,purpose) where purpose='external_marison_recommendation_pdf';
 
 alter table public.file_view_tokens add column if not exists revoked_at timestamptz;
@@ -635,7 +822,7 @@ alter table public.file_view_tokens add column if not exists revoke_reason text;
 alter table public.file_view_tokens add column if not exists last_accessed_at timestamptz;
 
 create table if not exists public.file_view_token_audit(
-  id bigint generated always as identity primary key, token_hash text not null, surat_id uuid, purpose text not null,
+  id bigint generated always as identity primary key, token_id uuid not null references public.file_view_tokens(id), token_hash text not null, surat_id uuid, purpose text not null,
   action text not null check(action in ('created','resolved','revoked')), actor_id uuid, reason text, created_at timestamptz not null default clock_timestamp()
 );
 alter table public.file_view_token_audit enable row level security;
@@ -646,15 +833,24 @@ returns public.file_view_tokens language plpgsql security definer set search_pat
 declare v_token public.file_view_tokens;
 begin
   if p_token_hash !~ '^[0-9a-f]{64}$' then raise exception 'Hash token tidak valid.' using errcode='22023'; end if;
+  if p_requested_by is null then
+    if coalesce(auth.role(),'') <> 'service_role' and session_user <> 'postgres' then raise exception 'Service role is required' using errcode='42501'; end if;
+  elsif not exists(select 1 from public.profiles p where p.id=p_requested_by and p.role::text='admin' and p.is_active=true and p.deleted_at is null) then
+    raise exception 'Active admin is required' using errcode='42501';
+  end if;
+  if not public.recommendation_pdf_is_current(p_surat_id) then
+    raise exception 'Active final recommendation PDF is required' using errcode='55000';
+  end if;
   insert into public.file_view_tokens(token_hash,bucket,object_path,storage_origin,requested_by,surat_id,purpose,expires_at)
   values(p_token_hash,p_bucket,p_object_path,p_storage_origin,p_requested_by,p_surat_id,'external_marison_recommendation_pdf',null)
-  on conflict(surat_id,purpose) where purpose='external_marison_recommendation_pdf' do nothing;
-  select * into v_token from public.file_view_tokens where surat_id=p_surat_id and purpose='external_marison_recommendation_pdf';
-  if v_token.token_hash is distinct from p_token_hash or v_token.revoked_at is not null then
-    raise exception 'Token rekomendasi sudah dicabut atau memiliki identity berbeda.' using errcode='55000';
+  on conflict(token_hash) do nothing;
+  select * into v_token from public.file_view_tokens where token_hash=p_token_hash;
+  if v_token.id is null or v_token.surat_id is distinct from p_surat_id
+     or v_token.purpose is distinct from 'external_marison_recommendation_pdf' or v_token.revoked_at is not null then
+    raise exception 'Hash token sudah digunakan atau token rekomendasi sudah dicabut.' using errcode='55000';
   end if;
-  insert into public.file_view_token_audit(token_hash,surat_id,purpose,action,actor_id)
-  select v_token.token_hash,p_surat_id,v_token.purpose,'created',p_requested_by
+  insert into public.file_view_token_audit(token_id,token_hash,surat_id,purpose,action,actor_id)
+  select v_token.id,v_token.token_hash,p_surat_id,v_token.purpose,'created',p_requested_by
   where not exists(select 1 from public.file_view_token_audit a where a.token_hash=v_token.token_hash and a.action='created');
   return v_token;
 end;
@@ -662,24 +858,31 @@ $$;
 
 create or replace function public.revoke_recommendation_file_view_token(p_surat_id uuid,p_reason text,p_actor uuid)
 returns boolean language plpgsql security definer set search_path='' as $$
-declare v_hash text;
+declare v_token public.file_view_tokens; v_revoked boolean:=false;
 begin
   if nullif(btrim(coalesce(p_reason,'')),'') is null then raise exception 'Alasan pencabutan wajib diisi.' using errcode='22023'; end if;
-  update public.file_view_tokens set revoked_at=clock_timestamp(),revoked_by=p_actor,revoke_reason=p_reason
-  where surat_id=p_surat_id and purpose='external_marison_recommendation_pdf' and revoked_at is null returning token_hash into v_hash;
-  if v_hash is null then return false; end if;
-  insert into public.file_view_token_audit(token_hash,surat_id,purpose,action,actor_id,reason)
-  values(v_hash,p_surat_id,'external_marison_recommendation_pdf','revoked',p_actor,p_reason);
-  return true;
+  if p_actor is null then
+    if coalesce(auth.role(),'') <> 'service_role' and session_user <> 'postgres' then raise exception 'Service role is required' using errcode='42501'; end if;
+  elsif not exists(select 1 from public.profiles p where p.id=p_actor and p.role::text='admin' and p.is_active=true and p.deleted_at is null) then
+    raise exception 'Active admin is required' using errcode='42501';
+  end if;
+  for v_token in update public.file_view_tokens set revoked_at=clock_timestamp(),revoked_by=p_actor,revoke_reason=p_reason
+    where surat_id=p_surat_id and purpose='external_marison_recommendation_pdf' and revoked_at is null returning * loop
+    v_revoked:=true;
+    insert into public.file_view_token_audit(token_id,token_hash,surat_id,purpose,action,actor_id,reason)
+    values(v_token.id,v_token.token_hash,p_surat_id,'external_marison_recommendation_pdf','revoked',p_actor,p_reason);
+  end loop;
+  return v_revoked;
 end;
 $$;
 
-create or replace function public.consume_file_view_token(p_token_hash text)
-returns table(bucket text,object_path text,storage_origin text)
+drop function if exists public.consume_file_view_token(text);
+create function public.consume_file_view_token(p_token_hash text)
+returns table(token_id uuid,surat_id uuid,bucket text,object_path text,storage_origin text)
 language plpgsql security definer set search_path = '' as $$
 declare v_token public.file_view_tokens%rowtype;
 begin
-  select * into v_token from public.file_view_tokens fvt
+  select fvt.* into v_token from public.file_view_tokens fvt
   where fvt.token_hash=p_token_hash and fvt.revoked_at is null and (fvt.expires_at is null or fvt.expires_at>now())
     and (fvt.consumed_at is null or fvt.purpose in ('email','external_marison','external_marison_recommendation_pdf'))
   order by fvt.created_at desc limit 1;
@@ -688,58 +891,25 @@ begin
     update public.file_view_tokens fvt set consumed_at=now() where fvt.token_hash=p_token_hash;
   end if;
   if v_token.purpose='external_marison_recommendation_pdf' then
-    update public.file_view_tokens set last_accessed_at=clock_timestamp() where token_hash=p_token_hash;
-    insert into public.file_view_token_audit(token_hash,surat_id,purpose,action) values(p_token_hash,v_token.surat_id,v_token.purpose,'resolved');
-  end if;
-  bucket:=v_token.bucket; object_path:=v_token.object_path; storage_origin:=v_token.storage_origin; return next;
-end;
-$$;
-
-create or replace function public.recommendation_all_items_rejected(p_parent_surat_id uuid)
-returns boolean language plpgsql stable security definer set search_path = '' as $$
-declare v_items jsonb; v_item jsonb; v_status text; v_total integer:=0; v_rejected integer:=0;
-begin
-  select coalesce(
-    c.form_input_data#>'{recommendation_multi_detail,items}', c.form_input_data->'recommendation_items',
-    p.data_snapshot#>'{recommendation,items}', p.data_snapshot->'recommendation_decisions',
-    p.form_input_data#>'{recommendation_multi_detail,items}', p.form_input_data->'recommendation_items'
-  ) into v_items
-  from public.surat_registrasi p
-  left join lateral (
-    select child.form_input_data from public.surat_linked_documents l
+    select current_ref.bucket,current_ref.object_path,current_ref.storage_origin
+      into v_token.bucket,v_token.object_path,v_token.storage_origin
+    from public.surat_linked_documents l
     join public.surat_registrasi child on child.id=l.child_surat_id
-    where l.parent_surat_id=p.id and l.link_type='recommendation' and l.status='active'
-    order by l.updated_at desc limit 1
-  ) c on true where p.id=p_parent_surat_id;
-  if jsonb_typeof(v_items) <> 'array' or jsonb_array_length(v_items)=0 then return false; end if;
-  for v_item in select value from jsonb_array_elements(v_items) loop
-    v_total:=v_total+1;
-    v_status:=lower(coalesce(v_item->>'status',v_item->>'recommendation_status',v_item->>'recommendation_action',''));
-    if v_status in ('not_recommended','tidak_direkomendasikan','rejected','ditolak')
-       or lower(coalesce(v_item->>'is_recommended','true'))='false' then v_rejected:=v_rejected+1; end if;
-  end loop;
-  return v_total>0 and v_rejected=v_total;
-end;
-$$;
-
-create or replace function public.skip_all_rejected_asset_dispatch()
-returns trigger language plpgsql security definer set search_path = '' as $$
-declare v_surat public.surat_registrasi%rowtype; v_input jsonb;
-begin
-  select * into v_surat from public.surat_registrasi where id=new.surat_id;
-  v_input:=coalesce(v_surat.data_snapshot->'input','{}'::jsonb)||coalesce(v_surat.form_input_data,'{}'::jsonb);
-   if lower(coalesce(new.kind,v_input->>'request_category',v_input->>'request_mode',''))='asset'
-     and public.recommendation_all_items_rejected(new.surat_id) then
-    new.kind:='asset'; new.status:='skipped'; new.skipped_code:='all_recommendations_rejected';
-    new.skipped_reason:='Seluruh parent rekomendasi aset ditolak; dispatch sengaja dilewati.'; new.completed_at:=coalesce(new.completed_at,clock_timestamp());
-    new.lease_token:=null; new.lease_acquired_at:=null; new.lease_expires_at:=null; new.post_started_at:=null;
+    cross join lateral (select
+      case when split_part(child.pdf_path,'/',1) in ('dokumen_surat','lampiran_surat') then split_part(child.pdf_path,'/',1) else v_token.bucket end as bucket,
+      case when split_part(child.pdf_path,'/',1) in ('dokumen_surat','lampiran_surat') then substring(child.pdf_path from position('/' in child.pdf_path)+1) else child.pdf_path end as object_path,
+      v_token.storage_origin) current_ref
+    where child.id=v_token.surat_id and l.link_type='recommendation' and l.status='active'
+      and public.recommendation_pdf_is_current(child.id)
+    for share of child,l;
+    if not found then return; end if;
+    update public.file_view_tokens set last_accessed_at=clock_timestamp() where id=v_token.id;
+    insert into public.file_view_token_audit(token_id,token_hash,surat_id,purpose,action)
+    values(v_token.id,v_token.token_hash,v_token.surat_id,v_token.purpose,'resolved');
   end if;
-  return new;
+  token_id:=v_token.id; surat_id:=v_token.surat_id; bucket:=v_token.bucket; object_path:=v_token.object_path; storage_origin:=v_token.storage_origin; return next;
 end;
 $$;
-drop trigger if exists skip_all_rejected_asset_dispatch_before_change on public.marison_outbound_dispatches;
-create trigger skip_all_rejected_asset_dispatch_before_change before insert on public.marison_outbound_dispatches
-for each row execute function public.skip_all_rejected_asset_dispatch();
 
 drop function if exists public.mark_marison_outbound_post_started(uuid,uuid);
 create function public.mark_marison_outbound_post_started(p_job_id uuid,p_lease_token uuid)
@@ -765,26 +935,33 @@ begin
 end;
 $$;
 
-revoke all on function public.validate_recommendation_items(jsonb) from public,anon,authenticated;
+revoke all on function public.validate_recommendation_items(jsonb,boolean) from public,anon,authenticated;
 revoke all on function public.complete_recommendation_task(uuid,uuid) from public,anon;
 revoke all on function public.finalize_recommendation_revision_if_needed(uuid) from public,anon;
 revoke all on function public.finalize_recommendation_revision_internal(uuid) from public,anon,authenticated,service_role;
 revoke all on function public.finalize_recommendation_on_child_completion() from public,anon,authenticated;
 revoke all on function public.guard_parent_approval_for_recommendation() from public,anon,authenticated;
 revoke all on function public.guard_parent_signature_for_recommendation() from public,anon,authenticated;
-revoke all on function public.recommendation_content_fingerprint(uuid) from public,anon,authenticated;
+revoke all on function public.recommendation_pdf_is_current(uuid) from public,anon,authenticated;
+revoke all on function public.guard_recommendation_child_final_status() from public,anon,authenticated;
+revoke all on function public.recommendation_pdf_render_payload(uuid,text) from public,anon,authenticated;
+revoke all on function public.recommendation_content_fingerprint(jsonb) from public,anon,authenticated;
 revoke all on function public.enqueue_recommendation_pdf_on_status() from public,anon,authenticated;
 revoke all on function public.enqueue_recommendation_pdf_job(uuid,text,uuid,boolean) from public,anon,authenticated;
-revoke all on function public.publish_document_pdf_job(uuid,text,text,text,text) from public,anon,authenticated;
+revoke all on function public.claim_document_pdf_jobs(text,integer,integer,interval) from public,anon,authenticated;
+revoke all on function public.fail_document_pdf_job(uuid,uuid,text,integer) from public,anon,authenticated;
+revoke all on function public.publish_document_pdf_job(uuid,text,text,text,uuid) from public,anon,authenticated;
+revoke all on function public.complete_document_pdf_job(uuid,text,uuid) from public,anon,authenticated;
 revoke all on function public.ensure_recommendation_file_view_token(text,uuid,text,text,text,uuid) from public,anon,authenticated;
 revoke all on function public.revoke_recommendation_file_view_token(uuid,text,uuid) from public,anon,authenticated;
-revoke all on function public.skip_all_rejected_asset_dispatch() from public,anon,authenticated;
-revoke all on function public.recommendation_all_items_rejected(uuid) from public,anon,authenticated;
 revoke all on function public.mark_marison_outbound_post_started(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.complete_recommendation_task(uuid,uuid) to authenticated,service_role;
 grant execute on function public.finalize_recommendation_revision_if_needed(uuid) to authenticated,service_role;
 grant execute on function public.enqueue_recommendation_pdf_job(uuid,text,uuid,boolean) to service_role;
-grant execute on function public.publish_document_pdf_job(uuid,text,text,text,text) to service_role;
+grant execute on function public.claim_document_pdf_jobs(text,integer,integer,interval) to service_role;
+grant execute on function public.fail_document_pdf_job(uuid,uuid,text,integer) to service_role;
+grant execute on function public.publish_document_pdf_job(uuid,text,text,text,uuid) to service_role;
+grant execute on function public.complete_document_pdf_job(uuid,text,uuid) to service_role;
 grant execute on function public.ensure_recommendation_file_view_token(text,uuid,text,text,text,uuid) to service_role;
 grant execute on function public.revoke_recommendation_file_view_token(uuid,text,uuid) to service_role;
 grant execute on function public.mark_marison_outbound_post_started(uuid,uuid) to service_role;

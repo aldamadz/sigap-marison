@@ -89,33 +89,15 @@ const downloadStorageFile = async (filePath, label, expectedBucket) => {
   return Buffer.from(await data.arrayBuffer());
 };
 
-const loadRecommendationContext = async (suratId) => {
-  const { data: link, error: linkError } = await supabase
-    .from("surat_linked_documents")
-    .select("parent_surat_id")
-    .eq("child_surat_id", suratId)
-    .eq("link_type", "recommendation")
-    .eq("status", "active")
-    .maybeSingle();
-  if (linkError) throw linkError;
-  if (!link) return null;
-
-  const [{ data: child, error: childError }, { data: parent, error: parentError }] = await Promise.all([
-    supabase.from("surat_registrasi").select("id, status, form_input_data, data_snapshot").eq("id", suratId).single(),
-    supabase.from("surat_registrasi").select("id, form_input_data, data_snapshot").eq("id", link.parent_surat_id).single(),
-  ]);
-  if (childError) throw childError;
-  if (parentError) throw parentError;
-  return {
-    finalized: ["PDF_PENDING", "DONE", "SELESAI", "COMPLETED"].includes(String(child.status || "").toUpperCase()),
-    items: resolveRecommendationSource(
-      child.form_input_data,
-      parent.form_input_data,
-      child.data_snapshot?.input || child.data_snapshot,
-      parent.data_snapshot?.input || parent.data_snapshot,
-    ),
-  };
-};
+const recommendationFromSnapshot = (job) => job.render_payload ? ({
+  finalized: true,
+  items: resolveRecommendationSource(
+    job.render_payload.child_input,
+    job.render_payload.parent_input,
+    job.render_payload.child_snapshot_input,
+    job.render_payload.parent_snapshot_input,
+  ),
+}) : null;
 
 const claimJobs = async () => {
   const { data, error } = await supabase.rpc("claim_document_pdf_jobs", {
@@ -128,20 +110,14 @@ const claimJobs = async () => {
 };
 
 const markFailed = async (job, error) => {
-  const isRetryable = Number(job.attempt_count || 0) < maxAttempts;
-  await supabase
-    .from("document_pdf_jobs")
-    .update({
-      status: isRetryable ? "queued" : "failed",
-      error_message: error.message || "Gagal membuat PDF.",
-      locked_by: null,
-      locked_at: null,
-      updated_at: new Date().toISOString(),
-      finished_at: isRetryable ? null : new Date().toISOString(),
-    })
-    .eq("id", job.id)
-    .eq("status", "processing")
-    .eq("locked_by", workerId);
+  const { data, error: transitionError } = await supabase.rpc("fail_document_pdf_job", {
+    p_job_id: job.id,
+    p_lease_token: job.lease_token,
+    p_error_message: error.message || "Gagal membuat PDF.",
+    p_max_attempts: maxAttempts,
+  });
+  if (transitionError) throw transitionError;
+  if (!data?.id) throw new Error(`Failure transition returned no job for ${job.id}.`);
 };
 
 const renderDirectPgdJob = async (job) => {
@@ -189,11 +165,11 @@ const renderDirectPgdJob = async (job) => {
 const processJob = async (job) => {
   const workDir = await mkdtemp(join(tmpdir(), "agenda-doc-"));
   try {
-    const recommendation = await loadRecommendationContext(job.surat_id);
+    const recommendation = recommendationFromSnapshot(job);
     let pdfBuffer = shouldRenderDirectPgd(recommendation, true) ? await renderDirectPgdJob(job) : null;
     if (!pdfBuffer) {
       const sourcePath = join(workDir, "source.xlsx");
-      await writeFile(sourcePath, await downloadStorageFile(job.source_file_path, "File Excel dokumen", "dokumen_surat"));
+      await writeFile(sourcePath, await downloadStorageFile(job.render_payload?.workbook_source?.path || job.source_file_path, "File Excel dokumen", "dokumen_surat"));
       if (recommendation) {
         await appendRecommendationPagesToFile(sourcePath, recommendation.items, (attachment) =>
           downloadStorageFile(attachment.url, `Gambar ${attachment.name || attachment.id}`, "lampiran_surat")
@@ -229,49 +205,28 @@ const processJob = async (job) => {
     const publicUrl = makePublicUrl("dokumen_surat", pdfPath, uploadOrigin);
 
     const publishedUrl = publicUrl;
-    let publishedByRpc = false;
     if (isCanonicalRecommendation) {
-      const { error: publishError } = await supabase.rpc("publish_document_pdf_job", {
+      const { data: publishedJob, error: publishError } = await supabase.rpc("publish_document_pdf_job", {
         p_job_id: job.id,
         p_source_file_path: job.source_file_path,
         p_content_fingerprint: job.recommendation_content_fingerprint,
         p_pdf_url: publishedUrl,
-        p_worker_id: workerId,
+        p_lease_token: job.lease_token,
       });
       if (publishError) throw publishError;
-      publishedByRpc = true;
-    } else if (!recommendation) {
-      await supabase
-        .from("surat_registrasi")
-        .update({ pdf_path: publicUrl })
-        .eq("id", job.surat_id);
+      if (publishedJob?.status !== "done") throw new Error(`Publication transition failed for ${job.id}.`);
+    } else {
+      const { data: completedJob, error: completionError } = await supabase.rpc("complete_document_pdf_job", {
+        p_job_id: job.id,
+        p_pdf_url: publishedUrl,
+        p_lease_token: job.lease_token,
+      });
+      if (completionError || !completedJob) throw completionError || new Error(`PDF completion transition failed for ${job.id}.`);
+      if (completedJob.status !== "done") throw new Error(`PDF completion transition failed for ${job.id}.`);
     }
 
-    if (job.signature_id) {
-      await supabase
-        .from("surat_signatures")
-        .update({ pdf_path_snap: publishedUrl, file_path_snap: null })
-        .eq("id", job.signature_id);
-    }
-
-    if (!publishedByRpc) {
-      await supabase
-        .from("document_pdf_jobs")
-        .update({
-          status: "done",
-          pdf_url: publishedUrl,
-          error_message: null,
-          locked_by: null,
-          locked_at: null,
-          updated_at: new Date().toISOString(),
-          finished_at: new Date().toISOString(),
-        })
-        .eq("id", job.id)
-        .eq("status", "processing")
-        .eq("locked_by", workerId);
-    }
-
-    console.log(`[${workerId}] done ${job.id} -> ${publishedUrl}`);
+    // Uploaded objects are retained when publication outcome is ambiguous; lifecycle cleanup must reconcile unreferenced job versions later.
+    console.log(`[${workerId}] done ${job.id}`);
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
@@ -296,7 +251,7 @@ while (true) {
         console.log(`[${workerId}] processing ${job.id}`);
         await processJob(job);
       } catch (error) {
-        console.error(`[${workerId}] failed ${job.id}:`, error);
+        console.error(`[${workerId}] failed ${job.id}`);
         await markFailed(job, error);
       }
     }));

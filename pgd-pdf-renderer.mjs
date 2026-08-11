@@ -84,7 +84,7 @@ const parseRecommendationItemDecisions = (source = {}) => {
       action: String(row.recommendation_action || row.action || row.status || "").trim(),
       isRecommended: row.is_recommended !== false && ![
         "not_recommended", "tidak_direkomendasikan", "rejected", "ditolak",
-      ].includes(String(row.recommendation_action || row.action || row.status || "").trim().toLowerCase()),
+      ].includes(String(row.recommendation_action || row.action || row.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_")),
       reason: String(row.rejection_reason || row.keterangan || row.alasan || row.reason || "").trim(),
     }))
     .filter((row) => Number.isFinite(row.index) || row.parentName);

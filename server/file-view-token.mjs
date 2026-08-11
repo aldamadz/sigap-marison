@@ -1,10 +1,45 @@
-import { createHmac } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
-export const resolveFileViewTokenPath = (token, surat) =>
-  token?.purpose === "external_marison_recommendation_pdf" ? surat?.pdf_path || null : token?.object_path || null;
+export const RECOMMENDATION_FILE_REFERENCE_TYPE = "sigap_recommendation_pdf";
 
-export const stableRecommendationBearer = (secret, suratId) =>
-  createHmac("sha256", secret).update(`external_marison_recommendation_pdf:${suratId}`).digest("base64url");
+export const generateFileViewBearer = () => randomBytes(32).toString("base64url");
+
+export const hashFileViewBearer = (bearer) => createHash("sha256").update(bearer).digest("hex");
+
+export const recommendationFileReference = (suratId, name = "Dokumen Rekomendasi Aset") => Object.freeze({
+  type: RECOMMENDATION_FILE_REFERENCE_TYPE,
+  surat_id: suratId,
+  name,
+});
+
+export const isRecommendationFileReference = (value) => value?.type === RECOMMENDATION_FILE_REFERENCE_TYPE
+  && typeof value?.surat_id === "string" && value.surat_id.length > 0;
+
+export const expandRecommendationFileReferences = async (logicalPayload, mintUrl) => {
+  const transport = structuredClone(logicalPayload);
+  for (const item of transport?.items || []) {
+    for (const attachment of item?.attachments || []) {
+      if (!isRecommendationFileReference(attachment)) continue;
+      const resolved = await mintUrl(attachment);
+      delete attachment.type;
+      delete attachment.surat_id;
+      attachment.link = resolved;
+    }
+  }
+  return transport;
+};
 
 export const recommendationTokenRequestedBy = (actorId, childCreatorId, parentCreatorId) =>
   actorId || childCreatorId || parentCreatorId || null;
+
+export const consumedFileViewTokenResult = (tokenData, file, surat, buildFilename) => ({
+  tokenId: tokenData.token_id,
+  suratId: tokenData.surat_id,
+  file,
+  ref: {
+    bucket: tokenData.bucket,
+    path: tokenData.object_path,
+    origin: tokenData.storage_origin,
+  },
+  filename: buildFilename(surat, tokenData.object_path),
+});

@@ -42,9 +42,12 @@ import {
 } from "../../server/marison-outbound-contract.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
+  consumedFileViewTokenResult,
+  expandRecommendationFileReferences,
+  generateFileViewBearer,
+  hashFileViewBearer,
+  recommendationFileReference,
   recommendationTokenRequestedBy,
-  resolveFileViewTokenPath,
-  stableRecommendationBearer,
 } from "../../server/file-view-token.mjs";
 import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
@@ -4031,14 +4034,16 @@ const getMarisonRecommendationRows = (surat, input, recommendationDocument) => {
   )) || [];
 };
 
-const buildPersistentRecommendationPdfLink = async (surat, requestedBy = null) => {
+const mintRecommendationPdfLink = async (suratId, requestedBy = null) => {
   const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
+  if (!appUrl) throw new Error("APP_PUBLIC_URL belum dikonfigurasi.");
+  const { data: surat, error: suratError } = await supabase.from("surat_registrasi").select("pdf_path").eq("id", suratId).maybeSingle();
+  if (suratError) throw suratError;
   const requested = parseStorageRef(surat?.pdf_path);
-  if (!appUrl || !requested) return null;
-  const purpose = "external_marison_recommendation_pdf";
-  const rawToken = stableRecommendationBearer(sessionSecret, surat.id);
+  if (!requested) throw new Error("PDF rekomendasi final belum tersedia.");
+  const rawToken = generateFileViewBearer();
   const { error } = await supabase.rpc("ensure_recommendation_file_view_token", {
-    p_token_hash: hashFileViewToken(rawToken), p_surat_id: surat.id, p_bucket: requested.bucket,
+    p_token_hash: hashFileViewBearer(rawToken), p_surat_id: suratId, p_bucket: requested.bucket,
     p_object_path: requested.path, p_storage_origin: requested.origin || "primary", p_requested_by: requestedBy,
   });
   if (error) throw error;
@@ -4128,14 +4133,9 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 
   const recommendationDocument = await getMarisonRecommendationDocument(surat.id);
   const recommendationRows = getMarisonRecommendationRows(surat, input, recommendationDocument);
-  let recommendationDocumentLink = null;
-  if (recommendationDocument) {
-    const link = await buildPersistentRecommendationPdfLink(
-      recommendationDocument,
-      recommendationTokenRequestedBy(actorId, recommendationDocument.created_by, surat.created_by),
-    );
-    recommendationDocumentLink = link ? { name: "Dokumen pengajuan", link } : null;
-  }
+  const recommendationDocumentLink = recommendationDocument
+    ? recommendationFileReference(recommendationDocument.id)
+    : null;
   const payload = mapMarisonAssetRequest({
     request: {
       request_number: surat.no_surat,
@@ -4148,15 +4148,14 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
     applicantItems: items,
     recommendationRows,
     recommendationPdf: recommendationDocumentLink && {
-      name: "Dokumen Rekomendasi Aset",
-      link: recommendationDocumentLink.link,
+      ...recommendationDocumentLink,
     },
   });
   return {
     endpoint: "/asset-purchase-requests",
     kind: "asset",
     contractVersion: MARISON_ASSET_CONTRACT_VERSION,
-    payload: freezeMarisonAssetPayload(assertMarisonOutboundContract("asset", payload)),
+    payload: freezeMarisonAssetPayload(payload),
   };
 };
 
@@ -4254,6 +4253,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
   }
   const payload = await readJsonBody(req, 4096);
   const leaseToken = String(payload?.leaseToken || "");
+  const transport = payload?.transport === true;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leaseToken)) {
     const err = new Error("Lease token tidak valid.");
     err.status = 400;
@@ -4275,6 +4275,8 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     job.environment !== marisonDeploymentEnvironment ||
     job.status !== "processing" ||
     job.lease_token !== leaseToken ||
+    !job.lease_expires_at ||
+    new Date(job.lease_expires_at).getTime() <= Date.now() ||
     job.post_started_at
   ) {
     const err = new Error("Lease job outbound tidak lagi aktif.");
@@ -4282,6 +4284,22 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     throw err;
   }
   if (job.payload_body) {
+    const logicalPayload = typeof job.payload_body === "string" ? JSON.parse(job.payload_body) : job.payload_body;
+    if (transport) {
+      const transportPayload = await expandRecommendationFileReferences(logicalPayload, (reference) => (
+        mintRecommendationPdfLink(reference.surat_id, null)
+      ));
+      const checkedTransport = assertMarisonOutboundContract(job.kind, transportPayload);
+      const transportBody = JSON.stringify(checkedTransport);
+      return {
+        kind: job.kind,
+        endpoint: job.endpoint,
+        contractVersion: job.contract_version,
+        payloadBody: transportBody,
+        transportHash: sha256Hex(Buffer.from(transportBody)),
+        payloadHash: job.payload_hash,
+      };
+    }
     return {
       kind: job.kind,
       endpoint: job.endpoint,
@@ -4291,6 +4309,13 @@ const buildMarisonOutboundJob = async (req, jobId) => {
       payloadHash: job.payload_hash,
     };
   }
+
+  const { data: skipResult, error: skipError } = await supabase.rpc("skip_marison_outbound_if_all_rejected", {
+    p_job_id: job.id,
+    p_lease_token: leaseToken,
+  });
+  if (skipError) throw skipError;
+  if (skipResult?.skipped) return skipResult;
 
   const { data: surat, error } = await supabase
     .from("surat_registrasi")
@@ -4343,6 +4368,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     err.status = 422;
     throw err;
   }
+  if (transport) throw Object.assign(new Error("Payload logical outbound belum disiapkan."), { status: 409 });
   const payloadBody = JSON.stringify(dispatch.payload);
   const payloadHash = sha256Hex(Buffer.from(payloadBody));
    const { data: preparedRows, error: preparedError } = await supabase.rpc("prepare_marison_outbound_dispatch_with_sources", {
@@ -4540,7 +4566,9 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
           : 500;
     throw mapped;
   }
-  return { replacementId: data };
+  return data?.skipped
+    ? { replacementId: null, skipped: true, code: data.code }
+    : { replacementId: data?.dispatch_id || null, skipped: false, code: null };
 };
 
 const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
@@ -4738,12 +4766,22 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
 
   if (!surat.file_path) throw new Error("File Excel dokumen belum tersedia.");
 
-  if (!signatureId && String(surat.status || "").toUpperCase() === "PDF_PENDING") {
+  if (!signatureId && ["PDF_PENDING", "DONE", "SELESAI", "COMPLETED"].includes(String(surat.status || "").toUpperCase())) {
+    const { data: recommendationLink, error: recommendationLinkError } = await supabase
+      .from("surat_linked_documents")
+      .select("child_surat_id")
+      .eq("child_surat_id", suratId)
+      .eq("link_type", "recommendation")
+      .eq("status", "active")
+      .maybeSingle();
+    if (recommendationLinkError) throw recommendationLinkError;
+    if (recommendationLink) {
     const { data: job, error } = await supabase.rpc("enqueue_recommendation_pdf_job", {
       p_surat_id: suratId, p_source_file_path: surat.file_path, p_requested_by: user.id, p_refresh: refresh,
     });
     if (error) throw error;
     return { status: job.status, jobId: job.id, cached: false, refreshed: refresh };
+    }
   }
 
   if (signatureId && !refresh) {
@@ -4906,12 +4944,6 @@ const createFileViewToken = async (suratId, token, rawPath) => {
 };
 
 const consumeFileViewToken = async (viewToken) => {
-  const { data: tokenMeta } = await supabase
-    .from("file_view_tokens")
-    .select("surat_id, object_path, purpose")
-    .eq("token_hash", hashFileViewToken(viewToken))
-    .maybeSingle();
-
   const { data: tokenRows, error: tokenError } = await supabase
     .rpc("consume_file_view_token", { p_token_hash: hashFileViewToken(viewToken) });
   if (tokenError) throw tokenError;
@@ -4923,18 +4955,6 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  let tokenPath = tokenData.object_path;
-  let logicalSurat = null;
-  if (tokenMeta?.purpose === "external_marison_recommendation_pdf") {
-    const { data } = await supabase.from("surat_registrasi").select("id, no_surat, judul_surat, pdf_path").eq("id", tokenMeta.surat_id).maybeSingle();
-    logicalSurat = data || null;
-    tokenPath = resolveFileViewTokenPath(tokenMeta, logicalSurat);
-    if (!tokenPath) throw Object.assign(new Error("PDF rekomendasi belum tersedia"), { status: 404 });
-    const ref = parseStorageRef(tokenPath);
-    tokenData.bucket = ref?.bucket;
-    tokenData.object_path = ref?.path;
-    tokenData.storage_origin = ref?.origin;
-  }
   const tokenStorageRef = {
     origin: tokenData.storage_origin,
     bucket: tokenData.bucket,
@@ -4947,21 +4967,17 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  let surat = logicalSurat;
-  if (tokenMeta?.surat_id) {
+  let surat = null;
+  if (tokenData?.surat_id) {
     const { data: suratData } = await supabase
       .from("surat_registrasi")
       .select("id, no_surat, judul_surat")
-      .eq("id", tokenMeta.surat_id)
+      .eq("id", tokenData.surat_id)
       .maybeSingle();
     surat = suratData || null;
   }
 
-  return {
-    file: data,
-    ref: { bucket: tokenData.bucket, path: tokenData.object_path, origin: tokenData.storage_origin },
-    filename: buildDocumentFilename(surat, tokenData.object_path || tokenMeta?.object_path),
-  };
+  return consumedFileViewTokenResult(tokenData, data, surat, buildDocumentFilename);
 };
 
 const serveStatic = async (req, res) => {

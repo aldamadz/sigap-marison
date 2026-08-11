@@ -67,6 +67,22 @@ describe("recommendation multi-detail contract", () => {
     }])).toThrow("at least one detail");
   });
 
+  it.each([
+    ["service", "service"], ["servis", "service"], ["replace", "replace"], ["ganti", "replace"],
+    ["purchase_new", "purchase_new"], ["beli_baru", "purchase_new"], ["beli baru", "purchase_new"],
+  ] as const)("normalizes legacy action alias %s", (alias, action) => {
+    expect(readLegacyRecommendationItems([{ nama_barang: "Laptop", jumlah: 1, recommendation_action: alias }])
+      .items[0].details[0].action).toBe(action);
+  });
+
+  it.each(["not_recommended", "tidak_direkomendasikan", "tidak direkomendasikan", "ditolak", "rejected"])(
+    "normalizes legacy rejection alias %s", (alias) => {
+      expect(readLegacyRecommendationItems([{
+        parent_item_name: "Laptop", recommendation_action: alias, location: "Gudang", pic: "Budi", alasan: "Tidak ekonomis",
+      }]).items[0].status).toBe("not_recommended");
+    },
+  );
+
   it("allows rejected parents without details and flattens one preserved legacy decision row", () => {
     const model = readLegacyRecommendationItems([{
       parent_item_id: "asset-1",

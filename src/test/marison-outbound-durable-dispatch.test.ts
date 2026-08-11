@@ -13,7 +13,37 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 const migrationPath = "supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql";
 
 describe("durable Marison outbound dispatch", () => {
-  it("does not fetch vendor token or POST when final DB boundary skips all-rejected asset", async () => {
+  it("skips token and business POST when builder reports all rejected", async () => {
+    const timeout = AbortSignal.timeout;
+    Object.defineProperty(AbortSignal, "timeout", { configurable: true, value: () => new AbortController().signal });
+    const urls: string[] = [];
+    const worker = createMarisonOutboundWorker({
+      config: {
+        supabaseUrl: "https://database.example.test",
+        serviceRoleKey: "service-role",
+        marisonBaseUrl: "https://vendor.example.test",
+        bffBaseUrl: "https://bff.example.test",
+        internalToken: "i".repeat(32),
+        databaseTimeoutMs: 1_000,
+        buildTimeoutMs: 1_000,
+      },
+      fetchImpl: async (input) => {
+        urls.push(String(input));
+        return new Response(JSON.stringify({ skipped: true, code: "all_recommendations_rejected", no_dispatch: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    });
+    try {
+      await worker.processJob({ job_id: "job-1", lease_token: "lease-1" });
+      expect(urls).toEqual(["https://bff.example.test/api/internal/marison/outbound/job-1/build"]);
+    } finally {
+      Object.defineProperty(AbortSignal, "timeout", { configurable: true, value: timeout });
+    }
+  });
+
+  it("fetches token before final DB marker and does not business-fetch when boundary skips", async () => {
     const timeout = AbortSignal.timeout;
     Object.defineProperty(AbortSignal, "timeout", {
       configurable: true,
@@ -25,11 +55,21 @@ describe("durable Marison outbound dispatch", () => {
         supabaseUrl: "https://database.example.test",
         serviceRoleKey: "service-role",
         marisonBaseUrl: "https://vendor.example.test",
+        bffBaseUrl: "https://bff.example.test",
+        internalToken: "i".repeat(32),
         databaseTimeoutMs: 1_000,
+        tokenTimeoutMs: 1_000,
+        buildTimeoutMs: 1_000,
       },
       fetchImpl: async (input) => {
         urls.push(String(input));
-        return new Response(JSON.stringify({ post_started: false, skipped: true, code: "all_recommendations_rejected" }), {
+        const url = String(input);
+        const body = url === "https://vendor.example.test/access-token"
+          ? { data: { access_token: "vendor-token", expires_in: 900 } }
+          : url.includes("bff.example.test")
+            ? { kind: "asset", endpoint: "/asset-purchase-requests", contractVersion: "v1", payloadBody: "{}", payloadHash: "a".repeat(64) }
+            : { post_started: false, skipped: true, code: "all_recommendations_rejected" };
+        return new Response(JSON.stringify(body), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
@@ -46,9 +86,11 @@ describe("durable Marison outbound dispatch", () => {
         payload_body: "{}",
         payload_hash: "a".repeat(64),
       });
-      expect(urls).toHaveLength(1);
-      expect(urls[0]).toContain("/rest/v1/rpc/mark_marison_outbound_post_started");
-      expect(urls[0]).not.toContain("vendor.example.test");
+      expect(urls).toHaveLength(3);
+      expect(urls[0]).toBe("https://vendor.example.test/access-token");
+      expect(urls[1]).toContain("/api/internal/marison/outbound/");
+      expect(urls[2]).toContain("/rest/v1/rpc/mark_marison_outbound_post_started");
+      expect(urls).not.toContain("https://vendor.example.test/asset-purchase-requests");
     } finally {
       Object.defineProperty(AbortSignal, "timeout", { configurable: true, value: timeout });
     }

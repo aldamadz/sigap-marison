@@ -85,6 +85,24 @@ test("canonical rejected parent emits no details even when children are recommen
   }), MarisonAssetItemsError);
 });
 
+test("legacy nested and flat rejection aliases emit no outbound items", () => {
+  for (const recommendationRows of [
+    [{ parent_item_id: "item-a", details: [{ name: "RAM", quantity: 1, status: "ditolak" }] }],
+    [{ parent_item_id: "item-a", name: "RAM", quantity: 1, recommendation_action: "tidak direkomendasikan" }],
+  ]) {
+    assert.throws(() => mapMarisonAssetItems({ applicantItems: parents, recommendationRows, recommendationPdf: pdf }), MarisonAssetItemsError);
+  }
+});
+
+test("legacy false rejection marker remains recommended", () => {
+  const items = mapMarisonAssetItems({
+    applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", name: "RAM", quantity: 1, action: "service", tidak_direkomendasikan: "false" }],
+    recommendationPdf: pdf,
+  });
+  assert.equal(items.length, 1);
+});
+
 test("canonical mixed parents emit every valid detail only from recommended parents", () => {
   const items = mapMarisonAssetItems({
     applicantItems: parents,
@@ -130,6 +148,25 @@ test("uses only same combined recommendation PDF link for every outgoing item", 
   });
   assert.deepEqual(items.map(({ attachments }) => attachments), [[pdf], [pdf]]);
   assert.strictEqual(items[0].attachments[0], items[1].attachments[0]);
+});
+
+test("keeps bearer-free logical attachment reference in immutable payload", () => {
+  const reference = { type: "sigap_recommendation_pdf", surat_id: "child-1", name: "Dokumen Rekomendasi Aset" };
+  const items = mapMarisonAssetItems({
+    applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", detail_name: "RAM", quantity: 1 }],
+    recommendationPdf: reference,
+  });
+  assert.deepEqual(items[0].attachments, [reference]);
+  assert.equal(JSON.stringify(items).includes("/api/files/view/"), false);
+});
+
+test("rejects logical attachment reference without recommendation ID", () => {
+  assert.throws(() => mapMarisonAssetItems({
+    applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", detail_name: "RAM", quantity: 1 }],
+    recommendationPdf: { type: "sigap_recommendation_pdf", surat_id: "", name: "Dokumen Rekomendasi Aset" },
+  }), MarisonAssetItemsError);
 });
 
 test("supports unambiguous legacy index and name matching", () => {

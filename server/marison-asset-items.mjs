@@ -2,6 +2,7 @@ const asRecord = (value) => value && typeof value === "object" && !Array.isArray
 const asArray = (value) => Array.isArray(value) ? value : [];
 const text = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
 const normalizedText = (...values) => text(...values).toLocaleLowerCase("id-ID");
+const normalizedStatus = (...values) => normalizedText(...values).replace(/[\s-]+/g, "_");
 
 const deepFreeze = (value) => {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -47,17 +48,18 @@ const matchParentIndex = (items, row) => {
 };
 
 const isNotRecommended = (detail) => {
-  const action = normalizedText(detail.recommendation_action, detail.action, detail.status);
+  const action = normalizedStatus(detail.recommendation_action, detail.action, detail.status);
+  const marker = normalizedText(detail.tidak_direkomendasikan);
   return detail.is_recommended === false || [
     "not_recommended",
     "tidak_direkomendasikan",
-    "tidak direkomendasikan",
     "rejected",
-  ].includes(action) || Boolean(text(detail.tidak_direkomendasikan));
+    "ditolak",
+  ].includes(action) || (Boolean(marker) && !["false", "0", "no", "tidak", "-"].includes(marker));
 };
 
 const isRecommended = (item) => {
-  const status = normalizedText(item.recommendation_status, item.status);
+  const status = normalizedStatus(item.recommendation_status, item.status);
   return [
     "recommended",
     "direkomendasikan",
@@ -103,8 +105,13 @@ export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recom
     ? recommendationRows
     : asArray(asRecord(recommendationRows).items);
   const pdf = asRecord(recommendationPdf);
-  if (!text(pdf.name) || !/^https:\/\//i.test(text(pdf.link))) throw new MarisonAssetItemsError("PDF rekomendasi gabungan belum tersedia.");
-  const sharedPdf = { name: text(pdf.name), link: text(pdf.link) };
+  if (!text(pdf.name) || (!/^https:\/\//i.test(text(pdf.link))
+    && (pdf.type !== "sigap_recommendation_pdf" || !text(pdf.surat_id)))) {
+    throw new MarisonAssetItemsError("PDF rekomendasi gabungan belum tersedia.");
+  }
+  const sharedPdf = pdf.type === "sigap_recommendation_pdf"
+    ? { type: pdf.type, surat_id: text(pdf.surat_id), name: text(pdf.name) }
+    : { name: text(pdf.name), link: text(pdf.link) };
 
   const outgoing = recommendations.flatMap((value) => {
     const row = asRecord(value);

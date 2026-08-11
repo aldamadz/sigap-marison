@@ -72,6 +72,7 @@ export const RECOMMENDATION_DESCRIPTION_DEFAULTS: Readonly<Record<Recommendation
 const ACTION_ALIASES: Record<string, RecommendationAction | undefined> = {
   purchase_new: "purchase_new",
   beli_baru: "purchase_new",
+  "beli baru": "purchase_new",
   replace: "replace",
   ganti: "replace",
   service: "service",
@@ -158,10 +159,10 @@ function checked(row: LegacyRow, key: string): boolean {
 }
 
 function normalizeStatus(row: LegacyRow): RecommendationStatus {
-  const explicit = text(row.recommendation_status ?? row.status).toLowerCase();
-  const action = text(row.recommendation_action ?? row.action).toLowerCase();
+  const explicit = text(row.recommendation_status ?? row.status).toLowerCase().replace(/[\s-]+/g, "_");
+  const action = text(row.recommendation_action ?? row.action).toLowerCase().replace(/[\s-]+/g, "_");
   const rejectionMarker = text(row.tidak_direkomendasikan).toLowerCase();
-  return row.is_recommended === false || ["not_recommended", "tidak_direkomendasikan", "tidak direkomendasikan", "rejected"]
+  return row.is_recommended === false || ["not_recommended", "tidak_direkomendasikan", "rejected", "ditolak"]
     .includes(explicit || action) || (Boolean(rejectionMarker) && !["false", "0", "no", "tidak", "-"].includes(rejectionMarker))
     ? "not_recommended" : "recommended";
 }
