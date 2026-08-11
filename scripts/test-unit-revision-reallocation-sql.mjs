@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 
 const migration = readFileSync("supabase/migrations/20260811170000_unit_revision_reallocation_guard.sql", "utf8");
 const statusMigration = readFileSync("supabase/migrations/20260811173000_keep_open_checker_revision_in_revision_status.sql", "utf8");
+const notificationMigration = readFileSync("supabase/migrations/20260811174500_notify_signed_users_on_checker_revision.sql", "utf8");
 const assertions = readFileSync("supabase/tests/unit_revision_reallocation.integration.sql", "utf8");
 
 const fixture = `
@@ -73,7 +74,7 @@ try {
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
-  process.stdout.write(run(["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + statusMigration + assertions));
+  process.stdout.write(run(["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + statusMigration + notificationMigration + assertions));
 } finally {
   run(["rm", "-f", id]);
 }
