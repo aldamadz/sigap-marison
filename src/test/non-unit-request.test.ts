@@ -99,4 +99,22 @@ describe("Non Unit request normalization", () => {
       [{ id: "project-office", marison_branch_id: null }],
     ).ready).toBe(false);
   });
+
+  it("fails closed only when sync reports that the external project branch is unavailable", () => {
+    const office = [{ id: "project-office", marison_branch_id: 14 }];
+
+    expect(resolveNonUnitProjectMapping({
+      office_id: "project-office",
+      marison_project_id: 19,
+      marison_review_required: true,
+      marison_review_reasons: ["Branch proyek external belum tersedia"],
+    }, office).ready).toBe(false);
+
+    expect(resolveNonUnitProjectMapping({
+      office_id: "project-office",
+      marison_project_id: 19,
+      marison_review_required: true,
+      marison_review_reasons: ["Entitas proyek belum dipilih"],
+    }, office).ready).toBe(true);
+  });
 });

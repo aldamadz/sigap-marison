@@ -22,6 +22,7 @@ export type MasterRecord = {
   job_title?: string | null;
   marison_project_id?: number | null;
   marison_branch_id?: number | null;
+  marison_review_reasons?: unknown;
   branch?: { name?: string } | null;
 };
 
