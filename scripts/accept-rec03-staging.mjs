@@ -188,14 +188,11 @@ try {
   for (const [kind, role] of [["requester", "user"], ["signer", "user"], ["admin", "admin"]]) {
     const created = expectNoError(await admin.auth.admin.createUser({ id: ids[kind], email: emails[kind], password, email_confirm: true, user_metadata: { full_name: `${marker} ${kind}` } }), `create auth ${kind}`);
     assert.equal(created.user.id, ids[kind]);
-    await waitFor(`profile ${kind}`, async () => {
-      const response = await admin.from("profiles").select("id").eq("id", ids[kind]).maybeSingle();
-      return expectNoError(response, `wait profile ${kind}`);
-    }, Boolean, 30000);
-    expectNoError(await admin.from("profiles").update({
+    expectNoError(await admin.from("profiles").upsert({
+      id: ids[kind],
       nik: `${marker}-${kind}`.slice(0, 60), full_name: `${marker} ${kind}`, job_title: kind === "signer" ? "Approver" : "Tester", role,
       department_id: null, office_id: null, is_active: true, deleted_at: null, marison_employee_id: 910000 + ["requester", "signer", "admin"].indexOf(kind), marison_synced_at: new Date().toISOString(),
-    }).eq("id", ids[kind]), `update profile ${kind}`);
+    }, { onConflict: "id" }), `upsert profile ${kind}`);
   }
 
   expectNoError(await admin.from("master_entities").insert({ id: ids.entity, code: `R3E${runId.slice(-6)}`, name: marker }), "entity");
