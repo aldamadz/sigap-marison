@@ -50,7 +50,7 @@ import {
   recommendationFileReference,
   recommendationTokenRequestedBy,
 } from "../../server/file-view-token.mjs";
-import { parseStorageCoordinate } from "../../server/storage-coordinate.mjs";
+import { normalizeLegacyStorageCoordinate, parseStorageCoordinate } from "../../server/storage-coordinate.mjs";
 import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
 import {
@@ -1697,8 +1697,7 @@ const createEmailFileToken = async ({ suratId, bucket, path, origin = "primary",
 const parseStorageRef = (value) => {
   if (!value) return null;
   try {
-    const raw = String(value);
-    const canonicalInput = raw.startsWith("lampiran_") ? `lampiran_surat/${raw}` : raw.startsWith("dokumen_") ? `dokumen_surat/${raw}` : raw;
+    const canonicalInput = normalizeLegacyStorageCoordinate(value);
     const coordinate = parseStorageCoordinate(canonicalInput, {
       origins: { primary: supabaseUrl, external: storageSupabaseUrl },
       defaultOrigin: "primary",
