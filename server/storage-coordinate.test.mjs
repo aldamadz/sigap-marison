@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseStorageCoordinate } from "./storage-coordinate.mjs";
+import { normalizeLegacyStorageCoordinate, parseStorageCoordinate } from "./storage-coordinate.mjs";
 
 const options = { origins: { external: "https://storage.test", primary: "https://database.test" } };
 
@@ -20,4 +20,17 @@ test("rejects unknown origins, traversal, and encoded separators", () => {
   assert.throws(() => parseStorageCoordinate("https://evil.test/storage/v1/object/public/bucket/file.pdf", options));
   assert.throws(() => parseStorageCoordinate("bucket/a/%2e%2e/file.pdf", options));
   assert.throws(() => parseStorageCoordinate("bucket/a%2Fb.pdf", options));
+});
+
+test("preserves canonical buckets and prefixes only legacy filenames", () => {
+  assert.equal(
+    normalizeLegacyStorageCoordinate("dokumen_surat/acceptance/fund.pdf"),
+    "dokumen_surat/acceptance/fund.pdf",
+  );
+  assert.equal(
+    normalizeLegacyStorageCoordinate("lampiran_surat/acceptance/support.pdf"),
+    "lampiran_surat/acceptance/support.pdf",
+  );
+  assert.equal(normalizeLegacyStorageCoordinate("dokumen_legacy.pdf"), "dokumen_surat/dokumen_legacy.pdf");
+  assert.equal(normalizeLegacyStorageCoordinate("lampiran_legacy.pdf"), "lampiran_surat/lampiran_legacy.pdf");
 });

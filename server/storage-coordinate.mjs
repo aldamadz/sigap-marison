@@ -23,6 +23,14 @@ const cleanObjectPath = (value) => {
   return parts.join("/");
 };
 
+export const normalizeLegacyStorageCoordinate = (value) => {
+  const raw = String(value || "").trim();
+  if (raw.startsWith("dokumen_surat/") || raw.startsWith("lampiran_surat/")) return raw;
+  if (raw.startsWith("dokumen_")) return `dokumen_surat/${raw}`;
+  if (raw.startsWith("lampiran_")) return `lampiran_surat/${raw}`;
+  return raw;
+};
+
 export const parseStorageCoordinate = (value, { origins, defaultOrigin = "primary" } = {}) => {
   const raw = String(value || "").trim();
   if (!raw) throw new Error("Storage coordinate is required.");
