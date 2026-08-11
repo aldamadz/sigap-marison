@@ -827,6 +827,8 @@ drop index if exists public.file_view_tokens_recommendation_logical_idx;
 create index if not exists file_view_tokens_recommendation_lookup_idx
 on public.file_view_tokens(surat_id,purpose) where purpose='external_marison_recommendation_pdf';
 
+alter table public.file_view_tokens add column if not exists id uuid not null default gen_random_uuid();
+create unique index if not exists idx_file_view_tokens_id on public.file_view_tokens(id);
 alter table public.file_view_tokens add column if not exists revoked_at timestamptz;
 alter table public.file_view_tokens add column if not exists revoked_by uuid;
 alter table public.file_view_tokens add column if not exists revoke_reason text;
