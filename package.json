@@ -25,6 +25,7 @@
     "staging:normalize-emails": "node --env-file=.env.local scripts/normalize-staging-emails.mjs",
     "staging:prepare-users": "node --env-file=.env.local scripts/prepare-staging-users.mjs",
     "staging:migrate-storage": "node scripts/migrate-staging-storage-namespace.mjs",
+    "staging:accept-rec03": "node scripts/accept-rec03-staging.mjs",
     "build": "npm run build:shared && vite build",
     "build:shared": "npm run build --workspace @sigap/shared",
     "build:backend": "npm run build:shared && npm run build --workspace @sigap/backend",
