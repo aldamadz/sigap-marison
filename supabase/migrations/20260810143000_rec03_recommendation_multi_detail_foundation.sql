@@ -665,7 +665,9 @@ exception when unique_violation then
 end;
 $$;
 
-create or replace function public.claim_document_pdf_jobs(p_worker_id text,p_limit integer,p_max_attempts integer,p_lock_timeout interval default interval '5 minutes')
+drop function public.claim_document_pdf_jobs(text,integer,integer,interval);
+
+create function public.claim_document_pdf_jobs(p_worker_id text,p_limit integer,p_max_attempts integer,p_lock_timeout interval default interval '5 minutes')
 returns setof public.document_pdf_jobs language plpgsql security definer set search_path = '' as $$
 begin
   if nullif(btrim(coalesce(p_worker_id,'')),'') is null or p_limit<1 or p_max_attempts<1 or p_lock_timeout<=interval '0 seconds' then
