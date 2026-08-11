@@ -62,6 +62,7 @@ COPY recommendation-pdf.mjs ./recommendation-pdf.mjs
 COPY production-code.mjs ./production-code.mjs
 COPY storage-path-policy.mjs ./storage-path-policy.mjs
 COPY server/marison-outbound-contract.mjs ./server/marison-outbound-contract.mjs
+COPY server/marison-fund-submission.mjs ./server/marison-fund-submission.mjs
 COPY server/marison-asset-items.mjs ./server/marison-asset-items.mjs
 COPY server/file-view-token.mjs ./server/file-view-token.mjs
 COPY server/storage-coordinate.mjs ./server/storage-coordinate.mjs

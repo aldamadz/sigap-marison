@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   assertMarisonOutboundContract,
   MARISON_ASSET_CONTRACT_VERSION,
+  MARISON_FUND_CONTRACT_VERSION,
   marisonAssetPurchaseRequestSchema,
+  marisonFundSubmissionSchema,
   marisonNonUnitSubmissionSchema,
   marisonUnitSubmissionSchema,
   normalizeMarisonApprovalRole,
@@ -42,6 +44,21 @@ describe("Marison outbound contract v1", () => {
 
   it("pins the active Asset OpenAPI revision independently", () => {
     expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-08-11-no-estimated-price");
+  });
+
+  it("accepts the active Fund Submission contract and applicant-selected type", () => {
+    const fixture = readFixture("fund-submission.example.json");
+
+    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-08-11");
+    expect(marisonFundSubmissionSchema.parse(fixture)).toEqual(fixture);
+    expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
+  });
+
+  it("rejects invalid Fund type, missing project, and unsupported fields", () => {
+    const fixture = readFixture("fund-submission.example.json");
+    expect(() => assertMarisonOutboundContract("fund", { ...fixture, type: "other" })).toThrow();
+    expect(() => assertMarisonOutboundContract("fund", { ...fixture, project_id: 0 })).toThrow();
+    expect(() => assertMarisonOutboundContract("fund", { ...fixture, submitted_by: "A 114" })).toThrow();
   });
   it("accepts the canonical Unit payload supplied to the vendor", () => {
     const fixture = readFixture("unit-submission.example.json");

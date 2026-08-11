@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
 export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-08-11-no-estimated-price";
+export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-08-11";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
@@ -90,10 +91,22 @@ export const marisonAssetPurchaseRequestSchema = z.object({
   approvals: z.array(approval).min(1),
 }).strict();
 
+export const marisonFundSubmissionSchema = z.object({
+  submission_number: nonEmptyText,
+  type: z.enum(["production_cost", "operational"]),
+  project_id: positiveInteger,
+  division: nonEmptyText,
+  title: nonEmptyText,
+  description: requiredText.optional(),
+  attachments: z.array(externalLink).optional(),
+  approvals: z.array(approval).min(1),
+}).strict();
+
 const schemas = {
   unit: marisonUnitSubmissionSchema,
   non_unit: marisonNonUnitSubmissionSchema,
   asset: marisonAssetPurchaseRequestSchema,
+  fund: marisonFundSubmissionSchema,
 };
 
 export const assertMarisonOutboundContract = (kind, payload) => {

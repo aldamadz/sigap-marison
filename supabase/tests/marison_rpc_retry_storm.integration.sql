@@ -30,6 +30,7 @@ insert into public.surat_registrasi (
 do $$
 declare
   v_original uuid;
+  v_ensure_result jsonb;
   v_first uuid;
   v_repeat uuid;
   v_count integer;
@@ -47,9 +48,10 @@ begin
     'service_role', 'public.configure_marison_payload_mapping_strict(uuid,text,text,uuid,uuid,text,timestamptz)', 'execute'
   ), 'service_role can bypass mapping wrapper';
 
-  v_original := public.ensure_marison_outbound_dispatch(
+  v_ensure_result := public.ensure_marison_outbound_dispatch(
     '10000000-0000-4000-8000-000000000001', 'staging'
   );
+  v_original := (v_ensure_result->>'dispatch_id')::uuid;
   update public.marison_outbound_dispatches
   set status = 'failed_terminal', attempt_count = 1, contract_version = 'test',
       payload = '{}'::jsonb, payload_body = '{}', payload_hash = repeat('a', 64),

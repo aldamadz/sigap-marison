@@ -18,6 +18,7 @@ describe("Docker runtime modules", () => {
     for (const runtimeModule of [
       "storage-path-policy.mjs",
       "server/marison-outbound-contract.mjs",
+      "server/marison-fund-submission.mjs",
       "server/marison-outbound-identity.mjs",
       "server/marison-branch-resolution.mjs",
       "server/marison-payload-identity.mjs",

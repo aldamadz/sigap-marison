@@ -267,6 +267,7 @@ describe("durable Marison outbound dispatch", () => {
     expect(extractMarisonExternalReference("non_unit", { data: { submission_id: "51" } })).toBe("51");
     expect(extractMarisonExternalReference("asset", { data: { asset_purchase_request_id: 9 } })).toBe("9");
     expect(extractMarisonExternalReference("asset", { data: { asset_purchase_request_ids: [9, 10] } })).toBe("9,10");
+    expect(extractMarisonExternalReference("fund", { data: { fund_submission_id: 77 } })).toBe("77");
     expect(extractMarisonExternalReference("unit", { data: { submission_id: { unsafe: true } } })).toBeNull();
   });
 

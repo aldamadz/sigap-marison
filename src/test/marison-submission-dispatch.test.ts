@@ -76,4 +76,21 @@ describe("Marison outbound submission dispatch", () => {
     expect(migration).toContain("fvt.expires_at is null or fvt.expires_at > now()");
     expect(migration).toContain("v_token.purpose not in ('email', 'external_marison')");
   });
+
+  it("routes Non Aset through the strict Fund Submission contract", () => {
+    const server = read("backend/src/domain-runtime.ts");
+    const worker = read("server/marison-outbound-worker.mjs");
+    const form = read("src/components/surat/SuratForm.tsx");
+    const migration = read("supabase/migrations/20260811153000_fund_submission_outbound.sql");
+
+    expect(server).toContain("buildMarisonFundPayload");
+    expect(server).toContain('category === "non_asset" || category === "nonasset"');
+    expect(server).toContain('.from("master_departments")');
+    expect(worker).toContain('fund: "/fund-submissions"');
+    expect(form).toContain('setInputValue("fund_type", value)');
+    expect(form).toContain('<SelectItem value="operational">Biaya Operasional</SelectItem>');
+    expect(form).toContain('<SelectItem value="production_cost">Biaya Produksi</SelectItem>');
+    expect(migration).toContain("v_kind := 'fund'; v_endpoint := '/fund-submissions';");
+    expect(migration).not.toContain("update public.surat_registrasi");
+  });
 });

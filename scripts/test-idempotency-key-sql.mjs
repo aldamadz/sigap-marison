@@ -3,17 +3,20 @@ import { spawnSync } from "node:child_process";
 
 const migrations = [
   "supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql",
+  "supabase/migrations/20260730120000_marison_outbound_identity_overrides.sql",
   "supabase/migrations/20260731100000_marison_outbound_payload_mappings.sql",
   "supabase/migrations/20260731145000_fix_marison_payload_mapping_audit_action.sql",
   "supabase/migrations/20260731170000_mrn16_external_identity_readiness.sql",
   "supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql",
   "supabase/migrations/20260805090000_fix_generation_aware_idempotency_key.sql",
   "supabase/migrations/20260810090000_stop_marison_rpc_retry_storm.sql",
+  "supabase/migrations/20260811153000_fund_submission_outbound.sql",
 ].map((path) => readFileSync(path, "utf8")).join("\n");
 
 const integrationTests = [
   "supabase/tests/marison_idempotency_key.integration.sql",
   "supabase/tests/marison_rpc_retry_storm.integration.sql",
+  "supabase/tests/marison_fund_submission.integration.sql",
 ].map((path) => readFileSync(path, "utf8")).join("\n");
 
 const fixtureSql = `
@@ -75,6 +78,8 @@ create table public.surat_linked_documents (
   link_type text,
   status text
 );
+create or replace function public.recommendation_all_items_rejected(uuid) returns boolean
+language sql stable as 'select false';
 create table public.master_offices (
   id uuid primary key,
   name text,
@@ -105,8 +110,6 @@ create table public.activity_logs (
 );
 create or replace function public.is_current_user_admin() returns boolean
 language sql as 'select false';
-create or replace function public.mask_marison_override_nik(value text) returns text
-language sql immutable as 'select case when value is null then null else left(value, 2) || ''***'' || right(value, 2) end';
 `;
 
 const run = (args, input = "") => {
