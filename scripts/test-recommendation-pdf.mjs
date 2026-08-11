@@ -91,6 +91,12 @@ test("preserves bucket and origin for real attachment storage refs", () => {
   assert.deepEqual(parseStorageRef("dokumen_surat/staging/source.xlsx"), {
     bucket: "dokumen_surat", path: "staging/source.xlsx", origin: "primary",
   });
+  assert.deepEqual(parseStorageRef({
+    bucket: "dokumen_surat",
+    path: "staging/rec03-accept/source.xlsx",
+  }, { defaultOrigin: "external" }), {
+    bucket: "dokumen_surat", path: "staging/rec03-accept/source.xlsx", origin: "external",
+  });
   assert.equal(parseStorageRef({ bucket: "lampiran_surat" }), null);
 });
 
