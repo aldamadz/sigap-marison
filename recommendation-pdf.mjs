@@ -9,10 +9,12 @@ const imageExtension = /\.(png|jpe?g|webp|gif|tiff?|avif)(?:$|[?#])/i;
 const imageMime = /^image\//i;
 
 export const parseStorageRef = (value, options = {}) => {
+  const record = asRecord(value);
   const raw = text(
-    asRecord(value).storage_path,
-    asRecord(value).file_url,
-    asRecord(value).url,
+    record.storage_path,
+    record.file_url,
+    record.url,
+    record.path,
     typeof value === "string" ? value : "",
   );
   if (!raw) return null;
@@ -29,12 +31,12 @@ export const parseStorageRef = (value, options = {}) => {
   const decoded = decodeURIComponent(clean).replace(/^\/+/, "");
   const [first, ...rest] = decoded.split("/");
   if (["dokumen_surat", "lampiran_surat"].includes(first) && rest.length) {
-    return { bucket: first, path: rest.join("/"), origin: text(asRecord(value).origin, options.defaultOrigin, "primary") };
+    return { bucket: first, path: rest.join("/"), origin: text(record.origin, options.defaultOrigin, "primary") };
   }
   return {
-    bucket: text(asRecord(value).bucket, options.defaultBucket),
+    bucket: text(record.bucket, options.defaultBucket),
     path: decoded,
-    origin: text(asRecord(value).origin, options.defaultOrigin, "primary"),
+    origin: text(record.origin, options.defaultOrigin, "primary"),
   };
 };
 
