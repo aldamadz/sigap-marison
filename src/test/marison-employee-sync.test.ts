@@ -192,6 +192,9 @@ describe("Marison employee sync", () => {
     expect(dockerfile).toContain(
       "COPY server/marison-employee-sync.mjs ./server/marison-employee-sync.mjs"
     );
+    expect(dockerfile).toContain("COPY server/marison-asset-items.mjs ./server/marison-asset-items.mjs");
+    expect(dockerfile).toContain("COPY server/file-view-token.mjs ./server/file-view-token.mjs");
+    expect(dockerfile).toContain("COPY server/storage-coordinate.mjs ./server/storage-coordinate.mjs");
   });
 
   it("uses the synced office branch mapping for asset dispatch", () => {
