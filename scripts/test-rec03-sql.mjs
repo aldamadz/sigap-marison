@@ -31,10 +31,10 @@ create table public.surat_signatures(id uuid primary key,surat_id uuid,user_id u
 create table public.surat_attachments(id uuid primary key default gen_random_uuid(),surat_id uuid,file_url text,file_size bigint,file_type text);
 create table public.document_pdf_jobs(id uuid primary key default gen_random_uuid(),surat_id uuid,signature_id uuid,source_file_path text,status text default 'queued',pdf_url text,error_message text,requested_by uuid,refresh boolean default false,locked_by text,locked_at timestamptz,attempt_count integer default 0,created_at timestamptz default now(),updated_at timestamptz default now(),finished_at timestamptz);
 create function public.claim_document_pdf_jobs(p_worker_id text,p_limit integer default 1,p_max_attempts integer default 3,p_stale_after interval default interval '10 minutes') returns setof public.document_pdf_jobs language sql as $$select * from public.document_pdf_jobs where false$$;
-create table public.file_view_tokens(id uuid primary key default gen_random_uuid(),token_hash text unique,bucket text,object_path text,storage_origin text,requested_by uuid,surat_id uuid,purpose text,expires_at timestamptz,consumed_at timestamptz,created_at timestamptz default now());
+create table public.file_view_tokens(token_hash text primary key,bucket text,object_path text,storage_origin text,requested_by uuid,surat_id uuid,purpose text,expires_at timestamptz,consumed_at timestamptz,created_at timestamptz default now());
 create function public.consume_file_view_token(p_token_hash text)
-returns table(token_id uuid,surat_id uuid,bucket text,object_path text,storage_origin text) language sql security definer set search_path='' as $$
- select f.id,f.surat_id,f.bucket,f.object_path,f.storage_origin from public.file_view_tokens f
+returns table(bucket text,object_path text,storage_origin text) language sql security definer set search_path='' as $$
+ select f.bucket,f.object_path,f.storage_origin from public.file_view_tokens f
  where f.token_hash=p_token_hash and (f.expires_at is null or f.expires_at>now())
 $$;
 create type public.marison_outbound_dispatch_status as enum('pending','processing','succeeded','failed_retryable','failed_terminal','outcome_unknown','skipped');
