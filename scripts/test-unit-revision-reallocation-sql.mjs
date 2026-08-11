@@ -58,15 +58,22 @@ const run = (args, input = "") => {
   return result.stdout;
 };
 
-const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
+const id = run([
+  "run", "-d", "-e", "POSTGRES_PASSWORD=test",
+  "--health-cmd", "pg_isready -U postgres",
+  "--health-interval", "1s", "--health-timeout", "5s", "--health-retries", "30",
+  "postgres:17-alpine",
+]).trim();
 try {
   let ready = false;
-  for (let attempt = 0; attempt < 30 && !ready; attempt += 1) {
-    ready = spawnSync("docker", ["exec", id, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
+  for (let attempt = 0; attempt < 40 && !ready; attempt += 1) {
+    const health = spawnSync("docker", ["inspect", "--format", "{{.State.Health.Status}}", id], { encoding: "utf8" });
+    ready = health.status === 0 && health.stdout.trim() === "healthy";
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + statusMigration + assertions));
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+  process.stdout.write(run(["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + statusMigration + assertions));
 } finally {
   run(["rm", "-f", id]);
 }
