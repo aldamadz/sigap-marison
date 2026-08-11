@@ -58,6 +58,7 @@ COPY pdf-worker.mjs ./pdf-worker.mjs
 COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
+COPY recommendation-pdf.mjs ./recommendation-pdf.mjs
 COPY production-code.mjs ./production-code.mjs
 COPY storage-path-policy.mjs ./storage-path-policy.mjs
 COPY server/marison-outbound-contract.mjs ./server/marison-outbound-contract.mjs

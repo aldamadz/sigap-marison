@@ -23,7 +23,6 @@
     {
       "asset_name": "Laptop operasional",
       "quantity": 2,
-      "estimated_price": 14000000,
       "description": "Laptop untuk pekerjaan administrasi dan layanan lapangan.",
       "recommendation_action": "buy_new",
       "recommendation_description": "Perangkat lama tidak memenuhi kebutuhan aplikasi.",
@@ -46,7 +45,6 @@
     {
       "asset_name": "Printer jaringan",
       "quantity": 1,
-      "estimated_price": 6500000,
       "description": "Printer pengganti untuk kebutuhan cetak dokumen kantor.",
       "recommendation_action": "replace_component",
       "recommendation_description": "Printhead printer rusak; penggantian printhead lebih efisien daripada mengganti seluruh perangkat.",

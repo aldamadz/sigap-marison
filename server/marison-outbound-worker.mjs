@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -146,7 +146,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
     return token;
   };
 
-  const buildPayload = async (job) => {
+  const buildPayload = async (job, transport = false, materializationAttemptId = null) => {
     let response;
     try {
       response = await fetchImpl(`${config.bffBaseUrl}/api/internal/marison/outbound/${job.job_id}/build`, {
@@ -155,7 +155,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
           "Content-Type": "application/json",
           "X-Internal-Outbound-Token": config.internalToken,
         },
-        body: JSON.stringify({ leaseToken: job.lease_token }),
+        body: JSON.stringify({ leaseToken: job.lease_token, transport, materializationAttemptId }),
         redirect: "error",
         signal: AbortSignal.timeout(config.buildTimeoutMs),
       });
@@ -168,6 +168,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
     }
 
     const body = await response.json().catch(() => null);
+    if (response.ok && body?.skipped === true) return body;
     if (!response.ok) {
       throw new PrePostError(String(body?.error || "Payload outbound tidak dapat dibangun."), {
         code: String(body?.code || `payload_build_http_${response.status}`),
@@ -200,6 +201,14 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
     );
   };
 
+  const cleanupMaterialization = async (prepared, reason) => {
+    if (!prepared?.materializationAttemptId) return;
+    await requireRpc(supabase.rpc("cleanup_recommendation_file_view_tokens", {
+      p_attempt_id: prepared.materializationAttemptId,
+      p_reason: reason,
+    }), "cleanup materialized recommendation links");
+  };
+
   const completeAfterPost = async (job, outcome, response = null) => {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -227,6 +236,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
   };
 
   const processJob = async (job) => {
+    let postStarted = false;
     let prepared = job.payload_body ? {
       kind: job.kind,
       endpoint: job.endpoint,
@@ -238,6 +248,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
 
     try {
       if (!prepared) prepared = await buildPayload(job);
+      if (prepared?.skipped === true) return;
       const expectedEndpoint = {
         unit: "/unit-submissions",
         non_unit: "/non-unit-submissions",
@@ -249,18 +260,48 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
           retryable: false,
         });
       }
-      const accessToken = await getAccessToken();
       await requireRpc(
-        supabase.rpc("mark_marison_outbound_post_started", {
-          p_job_id: job.job_id,
-          p_lease_token: job.lease_token,
-        }),
-        "mark POST started"
+        supabase.rpc("cleanup_stale_recommendation_file_view_tokens", { p_stale_after: "15 minutes" }),
+        "cleanup stale recommendation links"
       );
-
+      const accessToken = await getAccessToken();
+      const materializationAttemptId = randomUUID();
+      try {
+        prepared = await buildPayload(job, true, materializationAttemptId);
+      } catch (error) {
+        await cleanupMaterialization({ materializationAttemptId }, "transport_build_failed");
+        throw error;
+      }
+      if (prepared?.skipped === true) return;
       const url = new URL(`${config.marisonBaseUrl}${prepared.endpoint}`);
       const timestamp = new Date().toISOString();
-      const canonical = ["POST", url.pathname, accessToken, prepared.payloadHash, timestamp].join(":");
+      const canonical = ["POST", url.pathname, accessToken, prepared.transportHash || prepared.payloadHash, timestamp].join(":");
+      let postBoundary;
+      try {
+        postBoundary = await requireRpc(
+          supabase.rpc("mark_marison_outbound_post_started", {
+            p_job_id: job.job_id,
+            p_lease_token: job.lease_token,
+            p_materialization_attempt_id: prepared.materializationAttemptId,
+          }),
+          "mark POST started"
+        );
+      } catch (error) {
+        await cleanupMaterialization(prepared, "post_marker_failed");
+        throw error;
+      }
+      if (postBoundary?.skipped === true) {
+        await cleanupMaterialization(prepared, "post_marker_skipped");
+        return;
+      }
+      if (postBoundary?.post_started !== true) {
+        await cleanupMaterialization(prepared, "post_marker_invalid");
+        throw new PrePostError("Boundary POST outbound tidak valid.", {
+          code: "invalid_post_boundary_response",
+          retryable: true,
+        });
+      }
+      postStarted = true;
       let response;
       try {
         response = await fetchImpl(url, {
@@ -299,7 +340,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
       });
       await completeAfterPost(job, outcome, responseValid ? responseBody : null);
     } catch (error) {
-      if (prepared && error instanceof Error && error.message.startsWith("complete after POST")) throw error;
+      if (postStarted || (prepared && error instanceof Error && error.message.startsWith("complete after POST"))) throw error;
       try {
         await failBeforePost(job, error);
       } catch (completionError) {

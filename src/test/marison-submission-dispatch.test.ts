@@ -11,13 +11,13 @@ describe("Marison outbound submission dispatch", () => {
     const client = read("src/services/surat.service.ts");
 
     expect(server).toContain("MARISON_SUBMISSION_DISPATCH_ENABLED");
-    expect(worker).toContain('["POST", url.pathname, accessToken, prepared.payloadHash, timestamp].join(":")');
+    expect(worker).toContain('["POST", url.pathname, accessToken, prepared.transportHash || prepared.payloadHash, timestamp].join(":")');
     expect(worker).toContain("mark_marison_outbound_post_started");
     expect(worker).toContain("complete_marison_outbound_after_post");
     expect(server).not.toContain("postMarisonProtectedJson");
     expect(server).toContain('assertMarisonOutboundContract("unit", payload)');
     expect(server).toContain('assertMarisonOutboundContract("non_unit", {');
-    expect(server).toContain('assertMarisonOutboundContract("asset", payload)');
+    expect(server).toContain("assertMarisonOutboundContract(job.kind, materialized.payload)");
     expect(server).toContain('normalizeMarisonSubmissionApprovals("unit", overrides.approvals)');
     expect(server).toContain('normalizeMarisonSubmissionApprovals("non_unit", overrides.approvals)');
     expect(server).not.toContain('normalizeMarisonSubmissionApprovals("asset", overrides.approvals)');
@@ -27,8 +27,8 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("request_number: surat.no_surat");
     expect(server).not.toContain("submission_number: surat.no_surat,\n    branch_id: branchId,\n    submitted_by: overrides.nik");
     expect(server).not.toContain("record.request_number,");
-    expect(server).toContain("sharedRequestAttachments");
-    expect(server).toContain('name: "Dokumen Rekomendasi Aset"');
+    expect(server).not.toContain("sharedRequestAttachments");
+    expect(server).toContain("recommendationFileReference(recommendationDocument.id)");
     expect(server).toContain("p_contract_version: dispatch.contractVersion");
     expect(server).toContain("p_payload_hash: payloadHash");
     expect(server).toContain("submitted_by: overrides.nik");

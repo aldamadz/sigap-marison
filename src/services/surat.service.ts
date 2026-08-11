@@ -2419,11 +2419,18 @@ export const suratService = {
       this.ensureUnitAllocationPersisted(suratId, formInputData),
     ]);
 
+    const { data: updatedSurat } = updatedSuratResult;
+
+    if (updatedSurat?.status === "PDF_PENDING") {
+      documentPreviewService.enqueuePdf(suratId).catch((pdfError) => {
+        console.error("Gagal enqueue PDF final rekomendasi; dokumen tetap PDF_PENDING:", pdfError);
+      });
+      return { success: true };
+    }
+
     documentPreviewService.enqueuePdf(suratId, { refresh: true, signatureId }).catch((pdfError) => {
       console.error("Gagal enqueue snapshot PDF:", pdfError);
     });
-
-    const { data: updatedSurat } = updatedSuratResult;
 
     if (updatedSurat) {
       // 1. Notif ke pembuat surat (yang mengajukan surat)

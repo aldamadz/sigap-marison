@@ -274,7 +274,7 @@ export const marisonIntegrationService = {
     `/api/integrations/marison/dispatches/${dispatchId}/preflight`
   ),
   preflightReplacement: (dispatchId: string) => request<ReplacementPreflight>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
-  createReplacement: (dispatchId: string, reason: string) => request<{ replacementId: string }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
+  createReplacement: (dispatchId: string, reason: string) => request<{ replacementId: string | null; skipped?: boolean; code?: string | null }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   }),
