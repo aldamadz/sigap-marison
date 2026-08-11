@@ -40,6 +40,7 @@ import {
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
+import { mapMarisonFundSubmission } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
   consumedFileViewTokenResult,
@@ -3904,7 +3905,7 @@ const buildMarisonApprovals = async (surat, resolveIdentity) => {
   return { approvals, sources };
 };
 
-const resolveMarisonOutboundIdentity = async (surat) => {
+const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true } = {}) => {
   const requesterProfileId = getCanonicalRequesterProfileId(surat);
   const signatures = asArrayValue(surat?.surat_signatures)
     .filter((signature) => signature?.is_signed && signature?.signed_at);
@@ -3912,16 +3913,16 @@ const resolveMarisonOutboundIdentity = async (surat) => {
     requesterProfileId,
     ...signatures.map((signature) => firstString(signature.user_id, asPlainRecord(signature.profiles).id)),
   ]);
-  const requester = resolveIdentity(
+  const requester = requireRequester ? resolveIdentity(
     requesterProfileId,
     firstString(surat?.requester_snapshot?.nik, surat?.data_snapshot?.requester?.nik),
     "Pemohon",
-  );
+  ) : null;
   const approvalResult = await buildMarisonApprovals(surat, resolveIdentity);
   return {
     requester,
     approvals: approvalResult.approvals,
-    sources: { requesterNik: requester.source, ...approvalResult.sources },
+    sources: { ...(requester ? { requesterNik: requester.source } : {}), ...approvalResult.sources },
   };
 };
 
@@ -4162,20 +4163,56 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
   };
 };
 
+const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) => {
+  const projectId = requireExternalInteger(overrides.projectId, "Project ID");
+  const fundType = firstString(input.fund_type, input.fund_submission_type);
+  if (!surat.dept_id) {
+    const err = new Error("Departemen pengajuan wajib tersedia untuk Fund Submission.");
+    err.status = 422;
+    throw err;
+  }
+  const { data: department, error: departmentError } = await supabase
+    .from("master_departments")
+    .select("name")
+    .eq("id", surat.dept_id)
+    .maybeSingle();
+  if (departmentError) throw departmentError;
+  if (!firstString(department?.name)) {
+    const err = new Error("Nama departemen pengajuan tidak tersedia untuk division Marison.");
+    err.status = 422;
+    throw err;
+  }
+
+  return mapMarisonFundSubmission({
+    request: {
+      submissionNumber: surat.no_surat,
+      type: fundType,
+      title: surat.judul_surat,
+      description: firstString(input.catatan, input.description, surat.judul_surat),
+    },
+    projectId,
+    division: department.name,
+    attachments: await buildMarisonAttachmentLinks(surat, actorId),
+    approvals: overrides.approvals,
+  });
+};
+
 const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
-  const identity = await resolveMarisonOutboundIdentity(surat);
+  const input = getMarisonDispatchInput(surat);
+  const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
+  const isFund = category === "non_asset" || category === "nonasset";
+  const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: !isFund });
   const resolvedOverrides = {
     ...overrides,
-    nik: identity.requester.nik,
+    ...(identity.requester ? { nik: identity.requester.nik } : {}),
     approvals: identity.approvals,
     sources: mergePayloadResolutionSources(overrides.sources, identity.sources),
   };
-  const input = getMarisonDispatchInput(surat);
-  const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
   let dispatch;
   if (category === "unit") dispatch = await buildMarisonUnitPayload(surat, input, actorId, resolvedOverrides);
   else if (category === "non_unit" || category === "nonunit") dispatch = await buildMarisonNonUnitPayload(surat, input, actorId, resolvedOverrides);
   else if (category === "asset") dispatch = await buildMarisonAssetPayload(surat, input, actorId, resolvedOverrides);
+  else if (isFund) dispatch = await buildMarisonFundPayload(surat, input, actorId, resolvedOverrides);
   else {
     const err = new Error(`Kategori ${category || "-"} belum memiliki endpoint outbound Marison.`);
     err.status = 422;
@@ -4341,7 +4378,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     .from("surat_registrasi")
     .select(`
       id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
-      office_id, project_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
+      office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
       surat_signatures (
         id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
         profiles:user_id ( id, full_name, nik, job_title )
@@ -4481,7 +4518,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
   try {
-    const identity = await resolveMarisonOutboundIdentity(surat);
+    const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund" });
      const mappings = await getMarisonOutboundMappings(surat, job.kind);
     normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
     return { eligible: true, reasonCode: null, reason: null };
@@ -4659,7 +4696,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
         .from("surat_registrasi")
         .select(`
           id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
-          office_id, project_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
+          office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
           surat_signatures (
             id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
             profiles:user_id ( id, full_name, nik, job_title, is_active, deleted_at, marison_employee_id, marison_synced_at )
@@ -4690,9 +4727,14 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
 
       if (!localValidationIssues) {
         try {
-          const identity = await resolveMarisonOutboundIdentity(surat);
+          const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund" });
           const mappings = await getMarisonOutboundMappings(surat, job.kind);
-          const overrides = { ...mappings, nik: identity.requester.nik, approvals: identity.approvals, sources: mergePayloadResolutionSources(mappings.sources, identity.sources) };
+          const overrides = {
+            ...mappings,
+            ...(identity.requester ? { nik: identity.requester.nik } : {}),
+            approvals: identity.approvals,
+            sources: mergePayloadResolutionSources(mappings.sources, identity.sources),
+          };
           const dispatch = await buildMarisonDispatchPayload(surat, null, overrides);
           localValidationIssues = null;
           if (failedPayload) {

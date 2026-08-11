@@ -21,6 +21,7 @@ const normalizeExternalReference = (value) => {
 export const extractMarisonExternalReference = (kind, response) => {
   const data = response?.data;
   if (kind === "unit" || kind === "non_unit") return normalizeExternalReference(data?.submission_id);
+  if (kind === "fund") return normalizeExternalReference(data?.fund_submission_id ?? data?.submission_id);
   if (kind === "asset") {
     const single = normalizeExternalReference(data?.asset_purchase_request_id);
     if (single) return single;
@@ -253,6 +254,7 @@ export const createMarisonOutboundWorker = ({ config, fetchImpl = fetch, logger 
         unit: "/unit-submissions",
         non_unit: "/non-unit-submissions",
         asset: "/asset-purchase-requests",
+        fund: "/fund-submissions",
       }[prepared.kind];
       if (!expectedEndpoint || prepared.endpoint !== expectedEndpoint) {
         throw new PrePostError("Endpoint payload outbound tidak valid.", {

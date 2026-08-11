@@ -26,6 +26,21 @@ describe("MRN-16 canonical resolution sources", () => {
     expect(() => normalizePayloadResolutionSources({ requesterNik: "external_source", branchId: "external_source", "approval:1:signer": "external_source" }, { kind: "asset", approvalCount: 2 })).toThrow();
   });
 
+  it("requires only project and signer sources for Fund Submission", () => {
+    expect(normalizePayloadResolutionSources({
+      projectId: "external_source",
+      requesterNik: "unavailable",
+      branchId: "unavailable",
+      "approval:1:signer": "staging_mapping",
+    }, { kind: "fund", approvalCount: 1 })).toEqual({
+      projectId: "external_source",
+      "approval:1:signer": "staging_mapping",
+    });
+    expect(() => normalizePayloadResolutionSources({
+      "approval:1:signer": "external_source",
+    }, { kind: "fund", approvalCount: 1 })).toThrow("Metadata sumber payload belum lengkap");
+  });
+
   it("drops projectId from Asset metadata because the vendor Asset contract does not use projects", () => {
     expect(normalizePayloadResolutionSources({
       requesterNik: "external_source",

@@ -366,8 +366,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
           }
         : clearRecommendationInput(baseInput);
+      if (category !== "non_asset") delete nextInput.fund_type;
       return {
         ...prev,
+        project_id: prev.form_input_data.request_category === category ? prev.project_id : "",
         is_aset: category === "asset",
         form_input_data: nextInput,
       };
@@ -960,8 +962,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const isBranchOfficeSelected = Boolean(formData.office_id && !isPusatSelected);
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
-  const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects && getRequestCategory() !== "unit";
+  const isFundMode = getRequestCategory() === "non_asset";
   const isNonUnitMode = getRequestCategory() === "non_unit";
+  const requiresMarisonProject = isNonUnitMode || isFundMode;
+  const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects
+    && getRequestCategory() !== "unit" && !isFundMode;
   const nonUnitProjectCandidates = useMemo(
     () => isPusatSelected ? (master.projects || []) : filteredProjects,
     [filteredProjects, isPusatSelected, master.projects],
@@ -973,7 +978,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [master.offices, nonUnitProjectCandidates],
   );
   const unavailableNonUnitProjectCount = nonUnitProjectCandidates.length - readyNonUnitProjects.length;
-  const projectSelectionOptions = isNonUnitMode ? readyNonUnitProjects : filteredProjects;
+  const projectSelectionOptions = requiresMarisonProject ? readyNonUnitProjects : filteredProjects;
   const selectedNonUnitProjectMapping = useMemo(
     () => resolveNonUnitProjectMapping(selectedProject, master.offices),
     [master.offices, selectedProject],
@@ -981,17 +986,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const selectedMarisonProjectId = selectedNonUnitProjectMapping.projectId || 0;
   const selectedMarisonBranchId = selectedNonUnitProjectMapping.branchId || 0;
   const selectedProjectOffice = selectedNonUnitProjectMapping.projectOffice as MasterRecord | null;
-  const isNonUnitProjectReady = isNonUnitMode && selectedNonUnitProjectMapping.ready;
+  const isMarisonProjectReady = requiresMarisonProject && selectedNonUnitProjectMapping.ready;
   const shouldShowProjectSelector = Boolean(
-    formData.office_id && (!isPusatSelected || isNonUnitMode)
+    formData.office_id && (!isPusatSelected || requiresMarisonProject)
   );
-  const hasRegisteredProjectCandidates = isNonUnitMode
+  const hasRegisteredProjectCandidates = requiresMarisonProject
     ? nonUnitProjectCandidates.length > 0
     : branchHasRegisteredProjects;
 
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
-    if (isNonUnitMode && isNonUnitProjectReady && selectedProject) {
+    if (requiresMarisonProject && isMarisonProjectReady && selectedProject) {
       input.requested_project = {
         id: selectedMarisonProjectId,
         value: String(selectedMarisonProjectId),
@@ -1016,7 +1021,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           },
         },
       };
-    } else if (isNonUnitMode) {
+    } else if (requiresMarisonProject) {
       delete input.requested_project;
     }
     if (shouldUseDefaultBranchProject) {
@@ -1035,8 +1040,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return input;
   }, [
     formData.form_input_data,
-    isNonUnitMode,
-    isNonUnitProjectReady,
+    requiresMarisonProject,
+    isMarisonProjectReady,
     selectedMarisonProjectId,
     selectedMarisonBranchId,
     selectedProject,
@@ -1051,14 +1056,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }), [formData, shouldUseDefaultBranchProject, effectiveFormInputData]);
 
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
-    project_id: isNonUnitMode ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
+    project_id: requiresMarisonProject ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
     project_code: shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
     project_name: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
     office_id: formData.office_id,
     entity_id: formData.entity_id,
     dept_id: formData.dept_id,
     ...effectiveFormInputData,
-  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, isNonUnitMode, selectedMarisonProjectId]);
+  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, requiresMarisonProject, selectedMarisonProjectId]);
 
   const isDirty = useMemo(
     () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
@@ -1506,7 +1511,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setNonUnitLoading(false);
       return;
     }
-    if (!isNonUnitProjectReady) {
+    if (!isMarisonProjectReady) {
       setNonUnitOptions([]);
       setNonUnitError(null);
       setNonUnitLoading(false);
@@ -1538,7 +1543,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         if (!cancelled) setNonUnitLoading(false);
       });
     return () => { cancelled = true; };
-  }, [isNonUnitMode, isNonUnitProjectReady, selectedMarisonProjectId, nonUnitReloadKey, selectedUsage?.id, generatedNoSurat]);
+  }, [isNonUnitMode, isMarisonProjectReady, selectedMarisonProjectId, nonUnitReloadKey, selectedUsage?.id, generatedNoSurat]);
 
   useEffect(() => {
     if (getRequestCategory() !== "unit") return;
@@ -1701,7 +1706,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return toast({
         variant: "destructive",
         title: "Klasifikasi Belum Dipilih",
-        description: "Pilih Aset, Unit, atau Non Unit sebelum mendapatkan nomor surat.",
+        description: "Pilih Aset, Unit, Non Aset, atau Non Unit sebelum mendapatkan nomor surat.",
       });
     }
     if (!selectedUsage) {
@@ -1741,11 +1746,32 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         description: "Pilih proyek yang sudah terhubung ke Marison untuk melanjutkan pengajuan Non Unit.",
       });
     }
-    if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !isNonUnitProjectReady) {
+    if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !isMarisonProjectReady) {
       return toast({
         variant: "destructive",
         title: "Proyek Belum Terhubung",
         description: "Mapping proyek atau kantor proyek belum lengkap. Minta admin meninjau Master Proyek.",
+      });
+    }
+    if (requestCategory === "non_asset" && !formData.project_id) {
+      return toast({
+        variant: "destructive",
+        title: "Proyek Tujuan Wajib Dipilih",
+        description: "Fund Submission selalu membutuhkan proyek external, termasuk pengajuan Kantor Pusat.",
+      });
+    }
+    if (requestCategory === "non_asset" && !isMarisonProjectReady) {
+      return toast({
+        variant: "destructive",
+        title: "Proyek Belum Terhubung",
+        description: "Pilih proyek yang memiliki ID proyek dan kantor external yang valid.",
+      });
+    }
+    if (requestCategory === "non_asset" && !["operational", "production_cost"].includes(String(getFormFieldValue("fund_type") || ""))) {
+      return toast({
+        variant: "destructive",
+        title: "Jenis Pengajuan Dana Wajib Dipilih",
+        description: "Pilih Biaya Operasional atau Biaya Produksi.",
       });
     }
     setIsProcessingNumber(true);
@@ -2029,7 +2055,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       }
     }
     if (isNonUnitMode && !shouldUseDefaultBranchProject) {
-      if (!isNonUnitProjectReady) {
+      if (!isMarisonProjectReady) {
         toast({
           variant: "destructive",
           title: "Proyek Belum Terhubung",
@@ -2043,6 +2069,24 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           variant: "destructive",
           title: "Data Non Unit Belum Lengkap",
           description: firstError.message,
+        });
+        return false;
+      }
+    }
+    if (isFundMode) {
+      if (!isMarisonProjectReady) {
+        toast({
+          variant: "destructive",
+          title: "Proyek Belum Terhubung",
+          description: "Fund Submission membutuhkan proyek external yang valid.",
+        });
+        return false;
+      }
+      if (!["operational", "production_cost"].includes(String(getFormFieldValue("fund_type") || ""))) {
+        toast({
+          variant: "destructive",
+          title: "Jenis Pengajuan Dana Wajib Dipilih",
+          description: "Pilih Biaya Operasional atau Biaya Produksi.",
         });
         return false;
       }
@@ -2067,7 +2111,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const mappedKeys = new Set(formFields.map((field) => field.key));
     const hiddenKeys = new Set([
       "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
-      "recommendation_template_name", "requires_recommendation", "project_code", "project_name", "project_is_default",
+      "recommendation_template_name", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type",
     ]);
     const fields: RegistrationSummaryField[] = formFields
       .filter((field) => !hiddenKeys.has(field.key))
@@ -2080,6 +2124,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         value: effectiveFormInputData[field.key],
       }))
       .filter((field) => Array.isArray(field.value) ? field.value.length > 0 : formatSummaryValue(field.value) !== "-");
+
+    if (isFundMode) {
+      fields.push({
+        key: "fund_type",
+        label: "Jenis Pengajuan Dana",
+        value: getFormFieldValue("fund_type") === "production_cost" ? "Biaya Produksi" : "Biaya Operasional",
+      });
+    }
 
     Object.entries(effectiveFormInputData).forEach(([key, value]) => {
       if (mappedKeys.has(key) || hiddenKeys.has(key) || formatSummaryValue(value) === "-") return;
@@ -2726,7 +2778,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           options={nonUnitOptions}
           loading={nonUnitLoading}
           error={nonUnitError}
-          projectReady={isNonUnitProjectReady}
+          projectReady={isMarisonProjectReady}
           projectName={selectedProject?.name || ""}
           onChange={(rows) => setTableRows(field.key, rows)}
           onRetry={() => setNonUnitReloadKey((current) => current + 1)}
@@ -3145,6 +3197,31 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             })()
           ))}
         </div>
+      </div>
+    );
+  };
+
+  const renderFundTypeStep = () => {
+    if (!isFundMode) return null;
+    return (
+      <div className="space-y-2 rounded-lg border border-border bg-card p-4 md:p-5">
+        <Label className="text-sm font-semibold text-foreground">Jenis Pengajuan Dana</Label>
+        <p className="text-xs text-muted-foreground">
+          Pilihan ini dikirim sebagai tipe Fund Submission ke Marison.
+        </p>
+        <Select
+          disabled={!!generatedNoSurat}
+          value={String(getFormFieldValue("fund_type") || "")}
+          onValueChange={(value) => setInputValue("fund_type", value)}
+        >
+          <SelectTrigger className="h-11">
+            <SelectValue placeholder="Pilih jenis pengajuan dana..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="operational">Biaya Operasional</SelectItem>
+            <SelectItem value="production_cost">Biaya Produksi</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     );
   };
@@ -3654,12 +3731,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               </Select>
             </div>
 
-            {/* Proyek cabang, serta proyek tujuan untuk Non Unit dari pusat. */}
+            {/* Proyek cabang, serta proyek external wajib untuk Non Unit dan Non Aset. */}
             {shouldShowProjectSelector && (
               <div className="space-y-2 animate-in slide-in-from-top-2">
                 <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
                   <Briefcase className="w-3 h-3" />
-                  {isNonUnitMode ? "Proyek Tujuan" : "Proyek Cabang"}
+                  {requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
                 </Label>
                 {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
                   <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
@@ -3672,7 +3749,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
                         return (
                           <SelectItem key={p.id} value={p.id}>
-                            {isNonUnitMode && isPusatSelected && projectOffice?.name
+                            {requiresMarisonProject && isPusatSelected && projectOffice?.name
                               ? `${projectLabel} · ${projectOffice.name}`
                               : projectLabel}
                           </SelectItem>
@@ -3680,11 +3757,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       })}
                     </SelectContent>
                   </Select>
-                ) : hasRegisteredProjectCandidates && isNonUnitMode ? (
+                ) : requiresMarisonProject ? (
                   <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                     <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
                     <div className="mt-1 text-xs">
-                      Mapping proyek dan kantor proyek perlu dilengkapi di Master Proyek.
+                      {hasRegisteredProjectCandidates
+                        ? "Mapping proyek dan kantor proyek perlu dilengkapi di Master Proyek."
+                        : "Belum ada proyek external yang tersedia untuk kantor ini."}
                     </div>
                   </div>
                 ) : (
@@ -3693,7 +3772,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
                   </div>
                 )}
-                {isNonUnitMode && unavailableNonUnitProjectCount > 0 && (
+                {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
                   <p className="px-1 text-xs text-muted-foreground">
                     {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison belum lengkap.
                   </p>
@@ -3768,6 +3847,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {!isRecommendationFlow && !generatedNoSurat && !!formData.letter_type_id && (
             <>
               {renderRequestClassificationStep()}
+              {renderFundTypeStep()}
               {renderRecommendationOptionStep()}
               {isUnitMode && renderUnitRequestPanel()}
             </>

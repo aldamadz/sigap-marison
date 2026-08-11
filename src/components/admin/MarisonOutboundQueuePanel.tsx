@@ -45,7 +45,7 @@ const statusTone: Record<MarisonDispatchStatus, string> = {
   skipped: "border-slate-300 bg-muted text-muted-foreground",
 };
 
-const kindLabels = { unit: "Unit", non_unit: "Non Unit", asset: "Aset" };
+const kindLabels = { unit: "Unit", non_unit: "Non Unit", asset: "Aset", fund: "Non Aset" };
 const formatDateTime = (value: string | null) => value
   ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
   : "-";

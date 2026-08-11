@@ -40,7 +40,8 @@ describe('MRN-16 staging payload mappings', () => {
     expect(backend).toContain('signature.user_id');
     expect(backend).toContain('staging_mapping');
     expect(backend).toContain('buildApprovalResolutionKey(signature.step_order');
-    expect(backend).toContain('const identity = await resolveMarisonOutboundIdentity(surat)');
+    expect(backend).toContain('const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: !isFund })');
+    expect(backend).toContain('const requester = requireRequester ? resolveIdentity(');
     expect(backend).toContain('submitted_by: overrides.nik');
     expect(backend).toContain('approvals: overrides.approvals');
   });

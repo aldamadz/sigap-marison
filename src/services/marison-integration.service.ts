@@ -177,7 +177,7 @@ export type MarisonDispatchRow = {
   environment: MarisonEnvironment;
   generation: number;
   replacementOfDispatchId: string | null;
-  kind: "unit" | "non_unit" | "asset" | null;
+  kind: "unit" | "non_unit" | "asset" | "fund" | null;
   status: MarisonDispatchStatus;
   attemptCount: number;
   nextAttemptAt: string | null;
