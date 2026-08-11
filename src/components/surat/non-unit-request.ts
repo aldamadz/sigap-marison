@@ -1,3 +1,5 @@
+import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
+
 export type NonUnitExternalOption = {
   value: string;
   label: string;
@@ -48,11 +50,14 @@ export const resolveNonUnitProjectMapping = (
     : null;
   const projectId = asPositiveSafeInteger(projectRecord.marison_project_id);
   const branchId = asPositiveSafeInteger(projectOffice?.marison_branch_id);
+  const branchUnavailable = hasUnavailableMarisonProjectBranch(
+    projectRecord.marison_review_reasons,
+  );
   return {
     projectId,
     branchId,
     projectOffice,
-    ready: projectId !== null && branchId !== null,
+    ready: projectId !== null && branchId !== null && !branchUnavailable,
   };
 };
 
