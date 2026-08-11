@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { mapMarisonAssetItems, mapMarisonAssetRequest, MarisonAssetItemsError } from "./marison-asset-items.mjs";
+import {
+  mapMarisonApplicantAssetItems,
+  mapMarisonAssetItems,
+  mapMarisonAssetRequest,
+  MarisonAssetItemsError,
+} from "./marison-asset-items.mjs";
 
 const pdf = { name: "Dokumen Rekomendasi Aset", link: "https://sigap.test/recommendation.pdf" };
 const parents = [
@@ -31,6 +36,39 @@ test("expands one applicant item into many recommended details", () => {
   assert.deepEqual(items.map(({ asset_name }) => asset_name), ["RAM 32 GB", "SSD NVMe 1 TB"]);
   assert.equal("estimated_price" in items[0], false);
   assert.ok(Object.isFrozen(items) && Object.isFrozen(items[0]) && Object.isFrozen(items[0].attachments));
+});
+
+test("maps applicant items directly when recommendation is not required", () => {
+  const requestAttachment = { name: "Dokumen Pengajuan Final", link: "https://sigap.test/request.pdf" };
+  const items = mapMarisonApplicantAssetItems({
+    applicantItems: [
+      { nama_barang: "Laptop operasional", jumlah: "2", keterangan: "Untuk tim lapangan" },
+      { item_name: "Printer" },
+    ],
+    attachments: [requestAttachment],
+  });
+
+  assert.deepEqual(items, [
+    {
+      asset_name: "Laptop operasional",
+      quantity: 2,
+      description: "Untuk tim lapangan",
+      attachments: [requestAttachment],
+    },
+    { asset_name: "Printer", attachments: [requestAttachment] },
+  ]);
+  assert.ok(Object.isFrozen(items) && Object.isFrozen(items[0].attachments));
+});
+
+test("asset request without recommendation does not require recommendation rows or PDF", () => {
+  const approvals = [{ role: "Director", nik: "EMP-1", action: "approved", actioned_at: "2026-08-10T07:00:00.000Z" }];
+  const payload = mapMarisonAssetRequest({
+    request: { request_number: "REQ-NO-REC", branch_id: 1, approvals },
+    applicantItems: [{ nama_barang: "Meja kerja", jumlah: 1 }],
+    recommendationRequired: false,
+  });
+
+  assert.deepEqual(payload.items, [{ asset_name: "Meja kerja", quantity: 1 }]);
 });
 
 test("maps many parents to many details by stable parent_item_id", () => {

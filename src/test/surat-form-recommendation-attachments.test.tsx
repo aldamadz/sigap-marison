@@ -152,6 +152,16 @@ beforeEach(() => {
 afterEach(() => teardownTestHarness());
 
 describe("recommendation item image input routes", () => {
+  it("defaults each editable recommendation name from its applicant item", async () => {
+    await mountFormWithUsageAndSearchParams(recommendationUsage, { draft: draft.id });
+
+    expect(await screen.findByDisplayValue("Item Paste")).toBeInTheDocument();
+    await openItem("Item Picker");
+    expect(screen.getByDisplayValue("Item Picker")).toBeInTheDocument();
+    await openItem("Item Drop");
+    expect(screen.getByDisplayValue("Item Drop")).toBeInTheDocument();
+  });
+
   it("keeps paste, picker, and drop files bound to their own item and deletes only selected item", async () => {
     await mountFormWithUsageAndSearchParams(recommendationUsage, { draft: draft.id });
     await screen.findByRole("button", { name: /Item Paste/ });

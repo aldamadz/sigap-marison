@@ -30,6 +30,7 @@ import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliati
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import {
   RegistrationSummaryDialog,
@@ -448,11 +449,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (linkedDocumentContext?.type !== "recommendation" || parentRecommendationItems.length === 0) return;
     setFormData((previous) => {
       const currentRows = normalizeTableRows(previous.form_input_data[RECOMMENDATION_ITEMS_KEY]);
-      const nextRows = parentRecommendationItems.map((parentItem, index) => ({
-        ...(currentRows[index] || {}),
-        parent_item_index: index + 1,
-        parent_item_name: String(parentItem.parent_item_name || "").trim(),
-      }));
+      const nextRows = parentRecommendationItems.map((parentItem, index) => {
+        const currentRow = currentRows[index] || {};
+        const parentName = String(parentItem.parent_item_name || "").trim();
+        return {
+          ...currentRow,
+          parent_item_index: index + 1,
+          parent_item_name: parentName,
+          nama_barang: String(currentRow.nama_barang || "").trim() || parentName,
+        };
+      });
       if (JSON.stringify(currentRows) === JSON.stringify(nextRows)) return previous;
       return {
         ...previous,
@@ -733,9 +739,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (linkedDocumentContext?.type === "recommendation") return false;
     const departmentId = formData.dept_id || requesterDepartmentId;
     const department = master.depts.find((dept: MasterRecord) => dept.id === departmentId);
-    const code = String(department?.code || "").trim().toUpperCase();
-    const name = String(department?.name || "").trim().toLowerCase();
-    return code === "PBO" || name === "pengembangan organisasi" || name === "po";
+    return canUseAssetRecommendation(department);
   }, [formData.dept_id, requesterDepartmentId, master.depts, linkedDocumentContext]);
 
   const filteredUsage = useMemo(() => {
@@ -783,10 +787,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const canRequesterChooseUnit = useMemo(
     () => usageDetails.some(item =>
-      item.is_cabang === !isPusatSelected &&
-      canDepartmentRequestUnit(item, requesterDepartmentId)
+      getWorkflowCategories(item).includes("unit") &&
+      (item.scope_type === "all" ||
+        (item.scope_type === "pusat" && isPusatSelected) ||
+        (item.scope_type === "cabang" && !isPusatSelected) ||
+        (!item.scope_type && item.is_cabang === !isPusatSelected)) &&
+      canDepartmentRequestUnit(item, formData.dept_id || requesterDepartmentId)
     ),
-    [usageDetails, isPusatSelected, requesterDepartmentId]
+    [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id]
   );
 
   const filteredDepts = useMemo(() => {
