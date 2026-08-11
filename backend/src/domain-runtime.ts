@@ -4137,11 +4137,19 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
     throw err;
   }
 
-  const recommendationDocument = await getMarisonRecommendationDocument(surat.id);
-  const recommendationRows = getMarisonRecommendationRows(surat, input, recommendationDocument);
+  const recommendationRequired = input.requires_recommendation === true;
+  const recommendationDocument = recommendationRequired
+    ? await getMarisonRecommendationDocument(surat.id)
+    : null;
+  const recommendationRows = recommendationRequired
+    ? getMarisonRecommendationRows(surat, input, recommendationDocument)
+    : [];
   const recommendationDocumentLink = recommendationDocument
     ? recommendationFileReference(recommendationDocument.id)
     : null;
+  const applicantAttachments = recommendationRequired
+    ? []
+    : await buildMarisonAttachmentLinks(surat, actorId);
   const payload = mapMarisonAssetRequest({
     request: {
       request_number: surat.no_surat,
@@ -4156,6 +4164,8 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
     recommendationPdf: recommendationDocumentLink && {
       ...recommendationDocumentLink,
     },
+    recommendationRequired,
+    applicantAttachments,
   });
   return {
     endpoint: "/asset-purchase-requests",

@@ -81,6 +81,13 @@ const detailRows = (row) => {
   return nested.length > 0 ? nested.map(asRecord) : [row];
 };
 
+const externalAttachments = (value) => asArray(value).flatMap((entry) => {
+  const attachment = asRecord(entry);
+  const name = text(attachment.name);
+  const link = text(attachment.link);
+  return name && /^https:\/\//i.test(link) ? [{ name, link }] : [];
+});
+
 export class MarisonAssetItemsError extends Error {
   constructor(message = "Tidak ada detail rekomendasi aset valid untuk dikirim.") {
     super(message);
@@ -140,7 +147,38 @@ export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recom
   return deepFreeze(outgoing);
 };
 
-export const mapMarisonAssetRequest = ({ request, applicantItems, recommendationRows, recommendationPdf }) => deepFreeze({
+export const mapMarisonApplicantAssetItems = ({ applicantItems, attachments }) => {
+  const sharedAttachments = externalAttachments(attachments);
+  const outgoing = asArray(applicantItems).flatMap((value) => {
+    const item = asRecord(value);
+    const assetName = text(item.asset_name, item.nama_barang, item.item_name, item.nama, item.barang, item.name);
+    const quantity = positiveInteger(item.quantity ?? item.jumlah);
+    if (!assetName) return [];
+    const description = text(item.description, item.keterangan, item.notes, item.catatan);
+    return [{
+      asset_name: assetName,
+      ...(quantity ? { quantity } : {}),
+      ...(description ? { description } : {}),
+      ...(sharedAttachments.length > 0 ? { attachments: sharedAttachments } : {}),
+    }];
+  });
+
+  if (outgoing.length === 0) {
+    throw new MarisonAssetItemsError("Item aset pemohon belum valid untuk dikirim.");
+  }
+  return deepFreeze(outgoing);
+};
+
+export const mapMarisonAssetRequest = ({
+  request,
+  applicantItems,
+  recommendationRows,
+  recommendationPdf,
+  recommendationRequired = true,
+  applicantAttachments = [],
+}) => deepFreeze({
   ...structuredClone(asRecord(request)),
-  items: mapMarisonAssetItems({ applicantItems, recommendationRows, recommendationPdf }),
+  items: recommendationRequired
+    ? mapMarisonAssetItems({ applicantItems, recommendationRows, recommendationPdf })
+    : mapMarisonApplicantAssetItems({ applicantItems, attachments: applicantAttachments }),
 });

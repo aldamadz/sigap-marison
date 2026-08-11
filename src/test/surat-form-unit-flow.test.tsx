@@ -8,7 +8,7 @@ import {
   allowServiceCalls,
   assertStrictServiceCalls,
 } from "./surat-form-harness";
-import { MASTER_DATA_WITH_PROJECTS, UNIT_FORM_USAGE_RAW } from "./surat-form-fixtures";
+import { FORM_USAGES_RAW, MASTER_DATA_WITH_PROJECTS, UNIT_FORM_USAGE_RAW } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
   selectLetterType,
@@ -36,6 +36,15 @@ beforeEach(() => {
 afterEach(() => teardownTestHarness());
 
 describe("Flow 3: Unit pusat", () => {
+  it("does not treat an Asset workflow as permission to request Unit", async () => {
+    await mountFormWithUsage(FORM_USAGES_RAW);
+    await selectLetterType();
+    await selectEntity();
+
+    expect(screen.getByRole("button", { name: /Unit Permohonan\/order bangun unit/i })).toBeDisabled();
+    assertStrictServiceCalls();
+  });
+
   it("sends selected Marison project and requested unit count when reserving number", async () => {
     await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
     await selectLetterType();

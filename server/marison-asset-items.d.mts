@@ -13,9 +13,16 @@ export function mapMarisonAssetItems(input: {
   recommendationPdf: unknown;
 }): ReadonlyArray<Readonly<Record<string, unknown>>>;
 
+export function mapMarisonApplicantAssetItems(input: {
+  applicantItems: unknown;
+  attachments?: unknown;
+}): ReadonlyArray<Readonly<Record<string, unknown>>>;
+
 export function mapMarisonAssetRequest<T extends Record<string, unknown>>(input: {
   request: T;
   applicantItems: unknown;
   recommendationRows: unknown;
   recommendationPdf: unknown;
+  recommendationRequired?: boolean;
+  applicantAttachments?: unknown;
 }): Readonly<T & { items: ReadonlyArray<Readonly<Record<string, unknown>>> }>;

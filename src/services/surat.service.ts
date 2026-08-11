@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
+import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import {
   buildRegistrationAttachmentRows,
@@ -513,11 +514,10 @@ export const suratService = {
       delete normalized.allocated_units;
       delete normalized.allocated_unit_count;
     }
-    const requesterDepartmentCode = String(context?.requesterDepartmentCode || "").trim().toUpperCase();
-    const requesterDepartmentName = String(context?.requesterDepartmentName || "").trim().toLowerCase();
-    const canUseRecommendation = requesterDepartmentCode === "PBO" ||
-      requesterDepartmentName === "pengembangan organisasi" ||
-      requesterDepartmentName === "po";
+    const canUseRecommendation = canUseAssetRecommendation({
+      code: context?.requesterDepartmentCode,
+      name: context?.requesterDepartmentName,
+    });
     if (normalized.request_category === "asset" && canUseRecommendation) {
       normalized.requires_recommendation = normalized.requires_recommendation === true;
       normalized.recommendation_template_name = normalized.recommendation_template_name || "Rekomendasi Peremajaan Alat";
