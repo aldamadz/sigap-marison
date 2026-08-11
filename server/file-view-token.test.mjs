@@ -43,10 +43,25 @@ test("bearers contain 32 random bytes and are non-deterministic", () => {
 test("durable logical payload expands without mutation only at transport boundary", async () => {
   const reference = recommendationFileReference("child-1");
   const logical = { items: [{ attachments: [reference] }] };
-  const transport = await expandRecommendationFileReferences(logical, async ({ surat_id }) => `https://sigap.test/api/files/view/secret-${surat_id}`);
+  const { payload: transport, mintedTokens } = await expandRecommendationFileReferences(logical, async ({ surat_id }) => ({
+    url: `https://sigap.test/api/files/view/secret-${surat_id}`, tokenId: "token-1", attemptId: "attempt-1", minted: true,
+  }));
   assert.deepEqual(logical, { items: [{ attachments: [{ type: "sigap_recommendation_pdf", surat_id: "child-1", name: "Dokumen Rekomendasi Aset" }] }] });
   assert.deepEqual(transport, { items: [{ attachments: [{ name: "Dokumen Rekomendasi Aset", link: "https://sigap.test/api/files/view/secret-child-1" }] }] });
   assert.equal(JSON.stringify(logical).includes("secret-"), false);
+  assert.deepEqual(mintedTokens, [{ tokenId: "token-1", suratId: "child-1", attemptId: "attempt-1" }]);
+});
+
+test("one expansion caches identical recommendation references", async () => {
+  let calls = 0;
+  const logical = { items: [1, 2].map(() => ({ attachments: [recommendationFileReference("child-1")] })) };
+  const { payload, mintedTokens } = await expandRecommendationFileReferences(logical, async () => {
+    calls += 1;
+    return { url: "https://sigap.test/api/files/view/random", tokenId: "token-1", attemptId: "attempt-1", minted: true };
+  });
+  assert.equal(calls, 1);
+  assert.equal(payload.items[0].attachments[0].link, payload.items[1].attachments[0].link);
+  assert.equal(mintedTokens.length, 1);
 });
 
 test("actor-null service flow keeps attributable fallback optional", () => {

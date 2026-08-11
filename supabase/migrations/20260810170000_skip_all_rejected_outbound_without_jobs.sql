@@ -10,7 +10,7 @@ begin
   select coalesce(c.form_input_data#>'{recommendation_multi_detail,items}',c.form_input_data->'recommendation_items',p.data_snapshot#>'{recommendation,items}',p.data_snapshot->'recommendation_decisions',p.form_input_data#>'{recommendation_multi_detail,items}',p.form_input_data->'recommendation_items') into v_items
   from public.surat_registrasi p left join lateral (
     select child.form_input_data from public.surat_linked_documents l join public.surat_registrasi child on child.id=l.child_surat_id
-    where l.parent_surat_id=p.id and l.link_type='recommendation' and l.status='active' order by l.updated_at desc limit 1
+    where l.parent_surat_id=p.id and l.link_type='recommendation' and l.status='active' order by l.updated_at desc,l.id desc limit 1
   ) c on true where p.id=p_parent_surat_id;
   if jsonb_typeof(v_items)<>'array' or jsonb_array_length(v_items)=0 then return false; end if;
   for v_item in select value from jsonb_array_elements(v_items) loop
@@ -85,7 +85,10 @@ end;
 $$;
 
 update public.marison_outbound_dispatches d set status='skipped',skipped_code='all_recommendations_rejected',skipped_reason='Seluruh parent rekomendasi aset ditolak sebelum POST; dispatch sengaja dilewati.',completed_at=clock_timestamp(),lease_token=null,lease_acquired_at=null,lease_expires_at=null,updated_at=clock_timestamp()
-where d.kind='asset' and d.status in ('pending','failed_retryable','processing') and d.post_started_at is null and public.recommendation_all_items_rejected(d.surat_id);
+where d.kind='asset'
+  and (d.status in ('pending','failed_retryable') or (d.status='processing' and (d.lease_expires_at is null or d.lease_expires_at<=clock_timestamp())))
+  and d.response is null and d.external_reference is null and d.post_started_at is null
+  and public.recommendation_all_items_rejected(d.surat_id);
 
 create function public.skip_marison_outbound_if_all_rejected(p_job_id uuid,p_lease_token uuid)
 returns jsonb language plpgsql security definer set search_path='' as $$

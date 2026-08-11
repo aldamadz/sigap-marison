@@ -29,7 +29,7 @@ test("expands one applicant item into many recommended details", () => {
   });
 
   assert.deepEqual(items.map(({ asset_name }) => asset_name), ["RAM 32 GB", "SSD NVMe 1 TB"]);
-  assert.equal(items[0].estimated_price, 1_500_000);
+  assert.equal("estimated_price" in items[0], false);
   assert.ok(Object.isFrozen(items) && Object.isFrozen(items[0]) && Object.isFrozen(items[0].attachments));
 });
 
@@ -67,7 +67,6 @@ test("maps canonical parent items and detail fields", () => {
   assert.deepEqual(items[0], {
     asset_name: "Motherboard ATX",
     quantity: 1,
-    estimated_price: 2_500_000,
     description: "Pengganti motherboard rusak",
     attachments: [pdf],
   });
@@ -159,6 +158,15 @@ test("keeps bearer-free logical attachment reference in immutable payload", () =
   });
   assert.deepEqual(items[0].attachments, [reference]);
   assert.equal(JSON.stringify(items).includes("/api/files/view/"), false);
+});
+
+test("outbound mapper omits internal estimated_price", () => {
+  const items = mapMarisonAssetItems({
+    applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", detail_name: "RAM", quantity: 1, estimated_price: 2_500_000 }],
+    recommendationPdf: pdf,
+  });
+  assert.equal("estimated_price" in items[0], false);
 });
 
 test("rejects logical attachment reference without recommendation ID", () => {

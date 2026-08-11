@@ -17,7 +17,7 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).not.toContain("postMarisonProtectedJson");
     expect(server).toContain('assertMarisonOutboundContract("unit", payload)');
     expect(server).toContain('assertMarisonOutboundContract("non_unit", {');
-    expect(server).toContain("assertMarisonOutboundContract(job.kind, transportPayload)");
+    expect(server).toContain("assertMarisonOutboundContract(job.kind, materialized.payload)");
     expect(server).toContain('normalizeMarisonSubmissionApprovals("unit", overrides.approvals)');
     expect(server).toContain('normalizeMarisonSubmissionApprovals("non_unit", overrides.approvals)');
     expect(server).not.toContain('normalizeMarisonSubmissionApprovals("asset", overrides.approvals)');

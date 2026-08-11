@@ -96,7 +96,7 @@ test("preserves bucket and origin for real attachment storage refs", () => {
 
 test("worker enforces source buckets and immutable RPC publication", async () => {
   const worker = await readFile(new URL("../pdf-worker.mjs", import.meta.url), "utf8");
-  assert.match(worker, /job\.render_payload\?\.workbook_source\?\.path \|\| job\.source_file_path/);
+  assert.match(worker, /const workbookSource = recommendation \? job\.render_payload\.workbook_source : job\.source_file_path/);
   assert.match(worker, /downloadStorageFile\(attachment\.url, `Gambar \$\{attachment\.name \|\| attachment\.id\}`, "lampiran_surat"\)/);
   assert.match(worker, /\.upload\(pdfPath, pdfBuffer, \{ contentType: "application\/pdf", upsert: false \}\)/);
   assert.match(worker, /supabase\.rpc\("publish_document_pdf_job"/);
@@ -104,6 +104,8 @@ test("worker enforces source buckets and immutable RPC publication", async () =>
   assert.match(worker, /p_lease_token: job\.lease_token/);
   assert.match(worker, /supabase\.rpc\("fail_document_pdf_job"/);
   assert.match(worker, /recommendationFromSnapshot/);
+  assert.doesNotMatch(worker, /parent_snapshot_input/);
+  assert.doesNotMatch(worker, /workbook_source\?\.path \|\| job\.source_file_path/);
   assert.doesNotMatch(worker, /loadRecommendationContext/);
   assert.doesNotMatch(worker, /PDF final rekomendasi hanya dapat dibuat setelah surat selesai/);
   assert.doesNotMatch(worker, /final\.pdf/);

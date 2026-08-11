@@ -28,6 +28,7 @@ const routes: DomainRoute[] = [
   { method: "POST", url: "/api/integrations/marison/dispatches/:dispatchId/replacement" },
   { method: "POST", url: "/api/integrations/marison/surat/:suratId/dispatch" },
   { method: "POST", url: "/api/internal/marison/outbound/:jobId/build" },
+  { method: "POST", url: "/api/admin/recommendation-file-links/:suratId/revoke" },
   { method: "POST", url: "/api/admin/template-preview" },
   { method: "GET", url: "/api/admin/marison-payload-mappings" },
   { method: "GET", url: "/api/admin/marison-payload-mapping-catalog" },

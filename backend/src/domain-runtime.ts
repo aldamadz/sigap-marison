@@ -49,6 +49,7 @@ import {
   recommendationFileReference,
   recommendationTokenRequestedBy,
 } from "../../server/file-view-token.mjs";
+import { parseStorageCoordinate } from "../../server/storage-coordinate.mjs";
 import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
 import {
@@ -96,7 +97,7 @@ if (!supabaseUrl || !supabasePublishableKey || !sessionSecret || sessionSecret.l
   throw new Error("SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and SESSION_SECRET (minimum 32 characters) are required.");
 }
 
-const supabase = supabaseUrl && serviceRoleKey
+let supabase = supabaseUrl && serviceRoleKey
   ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
   : null;
 
@@ -109,7 +110,7 @@ const storagePublicBaseUrl = String(
 ).replace(/\/+$/, "");
 const storagePathPrefix = normalizeStoragePathPrefix(process.env.STORAGE_PATH_PREFIX || "");
 
-const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
+let storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
   : null;
 
@@ -187,6 +188,12 @@ const secretMatches = (supplied, expected) => {
   const suppliedHash = createHash("sha256").update(String(supplied || "")).digest();
   const expectedHash = createHash("sha256").update(String(expected || "")).digest();
   return timingSafeEqual(suppliedHash, expectedHash);
+};
+
+export const setDomainRuntimeDependenciesForTest = (dependencies) => {
+  if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
+  if (dependencies.supabase) supabase = dependencies.supabase;
+  if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
 };
 
 const getMailTransporter = () => {
@@ -1688,28 +1695,17 @@ const createEmailFileToken = async ({ suratId, bucket, path, origin = "primary",
 
 const parseStorageRef = (value) => {
   if (!value) return null;
-  const raw = String(value);
-  const clean = raw.split("?")[0];
-  if (clean.includes("/storage/v1/object/public/")) {
-    const [left, ...rest] = clean.split("/storage/v1/object/public/");
-    const path = rest.join("/storage/v1/object/public/");
-    const baseBucket = path.split("/")[0];
-    const externalStorageBases = [storageSupabaseUrl, storagePublicBaseUrl]
-      .filter(Boolean)
-      .map((base) => String(base).replace(/\/+$/, ""));
-    return {
-      bucket: baseBucket,
-      path: path.slice(baseBucket.length + 1),
-      origin: externalStorageBases.some((base) => left.startsWith(base)) ? "external" : "primary",
-    };
+  try {
+    const raw = String(value);
+    const canonicalInput = raw.startsWith("lampiran_") ? `lampiran_surat/${raw}` : raw.startsWith("dokumen_") ? `dokumen_surat/${raw}` : raw;
+    const coordinate = parseStorageCoordinate(canonicalInput, {
+      origins: { primary: supabaseUrl, external: storageSupabaseUrl },
+      defaultOrigin: "primary",
+    });
+    return { bucket: coordinate.bucket, path: coordinate.objectPath, origin: coordinate.origin };
+  } catch {
+    return null;
   }
-  if (clean.startsWith("lampiran_")) return { bucket: "lampiran_surat", path: clean, origin: "primary" };
-  if (clean.startsWith("dokumen_")) return { bucket: "dokumen_surat", path: clean, origin: "primary" };
-  const parts = clean.split("/");
-  if (parts.length >= 2) {
-    return { bucket: parts[0], path: parts.slice(1).join("/"), origin: "primary" };
-  }
-  return null;
 };
 
 const buildEmailFileLink = async (suratId, rawPath, config, requestedBy = null) => {
@@ -4034,20 +4030,26 @@ const getMarisonRecommendationRows = (surat, input, recommendationDocument) => {
   )) || [];
 };
 
-const mintRecommendationPdfLink = async (suratId, requestedBy = null) => {
+const mintRecommendationPdfLink = async (suratId, dispatchId, leaseToken, attemptId, requestedBy = null) => {
   const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
   if (!appUrl) throw new Error("APP_PUBLIC_URL belum dikonfigurasi.");
-  const { data: surat, error: suratError } = await supabase.from("surat_registrasi").select("pdf_path").eq("id", suratId).maybeSingle();
+  const { data: surat, error: suratError } = await supabase.from("surat_registrasi").select("pdf_bucket,pdf_object_path,pdf_storage_origin").eq("id", suratId).maybeSingle();
   if (suratError) throw suratError;
-  const requested = parseStorageRef(surat?.pdf_path);
-  if (!requested) throw new Error("PDF rekomendasi final belum tersedia.");
+  if (!surat?.pdf_bucket || !surat?.pdf_object_path || !surat?.pdf_storage_origin) throw new Error("PDF rekomendasi final belum memiliki koordinat canonical.");
   const rawToken = generateFileViewBearer();
-  const { error } = await supabase.rpc("ensure_recommendation_file_view_token", {
-    p_token_hash: hashFileViewBearer(rawToken), p_surat_id: suratId, p_bucket: requested.bucket,
-    p_object_path: requested.path, p_storage_origin: requested.origin || "primary", p_requested_by: requestedBy,
+  const { data, error } = await supabase.rpc("mint_recommendation_file_view_token", {
+    p_token_hash: hashFileViewBearer(rawToken), p_surat_id: suratId, p_dispatch_id: dispatchId, p_lease_token: leaseToken,
+    p_attempt_id: attemptId, p_requested_by: requestedBy,
   });
   if (error) throw error;
-  return `${appUrl}/api/files/view/${rawToken}/${encodeURIComponent("Dokumen Rekomendasi Aset.pdf")}`;
+  const token = Array.isArray(data) ? data[0] : data;
+  if (!token?.token_id || token.minted !== true) throw new Error("Bearer recommendation token collision detected.");
+  return {
+    url: `${appUrl}/api/files/view/${rawToken}/${encodeURIComponent("Dokumen Rekomendasi Aset.pdf")}`,
+    tokenId: token.token_id,
+    attemptId,
+    minted: true,
+  };
 };
 
 const getMarisonRecommendationDocument = async (parentSuratId) => {
@@ -4057,7 +4059,8 @@ const getMarisonRecommendationDocument = async (parentSuratId) => {
     .eq("parent_surat_id", parentSuratId)
     .eq("link_type", "recommendation")
     .eq("status", "active")
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (linkError) throw linkError;
@@ -4254,8 +4257,15 @@ const buildMarisonOutboundJob = async (req, jobId) => {
   const payload = await readJsonBody(req, 4096);
   const leaseToken = String(payload?.leaseToken || "");
   const transport = payload?.transport === true;
+  const suppliedAttemptId = String(payload?.materializationAttemptId || "");
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leaseToken)) {
     const err = new Error("Lease token tidak valid.");
+    err.status = 400;
+    throw err;
+  }
+
+  if (transport && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedAttemptId)) {
+    const err = new Error("Materialization attempt ID tidak valid.");
     err.status = 400;
     throw err;
   }
@@ -4286,19 +4296,29 @@ const buildMarisonOutboundJob = async (req, jobId) => {
   if (job.payload_body) {
     const logicalPayload = typeof job.payload_body === "string" ? JSON.parse(job.payload_body) : job.payload_body;
     if (transport) {
-      const transportPayload = await expandRecommendationFileReferences(logicalPayload, (reference) => (
-        mintRecommendationPdfLink(reference.surat_id, null)
-      ));
-      const checkedTransport = assertMarisonOutboundContract(job.kind, transportPayload);
-      const transportBody = JSON.stringify(checkedTransport);
-      return {
-        kind: job.kind,
-        endpoint: job.endpoint,
-        contractVersion: job.contract_version,
-        payloadBody: transportBody,
-        transportHash: sha256Hex(Buffer.from(transportBody)),
-        payloadHash: job.payload_hash,
-      };
+      const attemptId = suppliedAttemptId;
+      try {
+        const materialized = await expandRecommendationFileReferences(logicalPayload, (reference) => (
+          mintRecommendationPdfLink(reference.surat_id, job.id, leaseToken, attemptId, null)
+        ));
+        const checkedTransport = assertMarisonOutboundContract(job.kind, materialized.payload);
+        const transportBody = JSON.stringify(checkedTransport);
+        return {
+          kind: job.kind,
+          endpoint: job.endpoint,
+          contractVersion: job.contract_version,
+          payloadBody: transportBody,
+          transportHash: sha256Hex(Buffer.from(transportBody)),
+          payloadHash: job.payload_hash,
+          materializationAttemptId: attemptId,
+          mintedTokens: materialized.mintedTokens,
+        };
+      } catch (error) {
+        await supabase.rpc("cleanup_recommendation_file_view_tokens", {
+          p_attempt_id: attemptId, p_reason: "transport_materialization_failed",
+        });
+        throw error;
+      }
     }
     return {
       kind: job.kind,
@@ -4980,6 +5000,22 @@ const consumeFileViewToken = async (viewToken) => {
   return consumedFileViewTokenResult(tokenData, data, surat, buildDocumentFilename);
 };
 
+const revokeRecommendationFileLinks = async (req, suratId) => {
+  const actor = await requireAdminUser(getBearerToken(req));
+  const payload = await readJsonBody(req, 2048);
+  const reason = String(payload?.reason || "").trim();
+  if (!reason) {
+    const err = new Error("Alasan pencabutan wajib diisi.");
+    err.status = 400;
+    throw err;
+  }
+  const { data, error } = await supabase.rpc("revoke_recommendation_file_view_token", {
+    p_surat_id: suratId, p_reason: reason, p_actor: actor.id,
+  });
+  if (error) throw error;
+  return { revoked: data === true };
+};
+
 const serveStatic = async (req, res) => {
   if (!["GET", "HEAD"].includes(req.method || "")) {
     res.writeHead(405, withSecurityHeaders({
@@ -5319,6 +5355,11 @@ export const handleRequest = async (req, res) => {
       if (req.method === "POST" && marisonBuildMatch) {
         const result = await buildMarisonOutboundJob(req, marisonBuildMatch[1]);
         return sendJson(res, 200, result);
+      }
+
+      const recommendationRevokeMatch = url.pathname.match(/^\/api\/admin\/recommendation-file-links\/([0-9a-f-]+)\/revoke$/i);
+      if (req.method === "POST" && recommendationRevokeMatch) {
+        return sendJson(res, 200, await revokeRecommendationFileLinks(req, recommendationRevokeMatch[1]));
       }
 
       if (req.method === "POST" && url.pathname === "/api/bff/query") {

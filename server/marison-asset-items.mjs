@@ -72,14 +72,6 @@ const positiveInteger = (value) => {
   return Number.isInteger(number) && number > 0 ? number : null;
 };
 
-const money = (value) => {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "number") return Number.isInteger(value) && value >= 0 ? value : null;
-  const digits = String(value).replace(/[^\d-]/g, "");
-  const number = Number(digits);
-  return digits && Number.isInteger(number) && number >= 0 ? number : null;
-};
-
 const detailRows = (row) => {
   const nested = asArray(row.details).length > 0
     ? asArray(row.details)
@@ -134,14 +126,10 @@ export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recom
         detail.uraian,
       );
       if (!quantity || !assetName) return [];
-      const estimatedPrice = money(
-        detail.estimated_price ?? detail.harga_perkiraan ?? detail.perkiraan_harga ?? detail.harga ?? detail.nominal ?? detail.nilai,
-      );
       const description = text(detail.description, detail.detail_description, detail.keterangan, detail.notes, detail.catatan);
       return [{
         asset_name: assetName,
         quantity,
-        ...(estimatedPrice === null ? {} : { estimated_price: estimatedPrice }),
         ...(description ? { description } : {}),
         attachments: [sharedPdf],
       }];

@@ -69,23 +69,24 @@ do $$begin assert(select count(*)=1 from public.document_pdf_jobs where surat_id
 select * from public.claim_document_pdf_jobs('worker-a',1,3,interval '5 minutes');
 do $$declare j uuid; f text; lease uuid;begin
  select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing';
- begin perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/bad.pdf',gen_random_uuid());raise exception 'foreign lease accepted';exception when insufficient_privilege then null;end;
+ begin perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/bad.pdf',gen_random_uuid(),'dokumen_surat','pdf/bad.pdf','external');raise exception 'foreign lease accepted';exception when insufficient_privilege then null;end;
  update public.surat_registrasi set form_input_data=jsonb_set(form_input_data,'{recommendation_multi_detail,items,1,details,0,quantity}','3') where id='10000000-0000-4000-8000-000000000002';
- begin perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stale.pdf',lease);raise exception 'stale fingerprint accepted';exception when serialization_failure then null;end;
+ begin perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stale.pdf',lease,'dokumen_surat','pdf/stale.pdf','external');raise exception 'stale fingerprint accepted';exception when serialization_failure then null;end;
  assert(select status='PDF_PENDING' and pdf_path is null from public.surat_registrasi where id='10000000-0000-4000-8000-000000000002'),'stale publication finalized child';
  perform public.fail_document_pdf_job(j,lease,'stale snapshot',1);
 end$$;
 select public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,true);
 select * from public.claim_document_pdf_jobs('worker-a',1,3,interval '5 minutes');
-do $$declare j uuid; f text; lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stable.pdf',lease);perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stable.pdf',lease);end$$;
+do $$declare j uuid; f text; lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stable.pdf',lease,'dokumen_surat','pdf/stable.pdf','external');perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stable.pdf',lease,'dokumen_surat','pdf/stable.pdf','external');end$$;
 reset role;
-do $$begin assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent finalization JSONB mutation remained current';end$$;
-set role service_role;
-select public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,true);
-select * from public.claim_document_pdf_jobs('worker-a',1,3,interval '5 minutes');
-do $$declare j uuid; f text; lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stable.pdf',lease);end$$;
-reset role;
-update public.surat_registrasi set current_step=3 where id='10000000-0000-4000-8000-000000000001';
+do $$begin
+ assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'first publication became stale after parent finalization';
+ perform public.ensure_recommendation_file_view_token(repeat('f',64),'10000000-0000-4000-8000-000000000002','dokumen_surat','pdf/stable.pdf','external',null);
+ update public.surat_registrasi set current_step=3 where id='10000000-0000-4000-8000-000000000001';
+ update public.surat_signatures set is_signed=true where id='60000000-0000-4000-8000-000000000001';
+ update public.surat_signatures set is_signed=false where id='60000000-0000-4000-8000-000000000001';
+ perform public.revoke_recommendation_file_view_token('10000000-0000-4000-8000-000000000002','first publication assertion complete',null);
+end$$;
 do $$begin
  assert(select status='DONE' and pdf_path='pdf/stable.pdf' from public.surat_registrasi where id='10000000-0000-4000-8000-000000000002'),'publish did not atomically finalize child';
  assert(select count(*)=1 from public.notifications where data->>'event_type'='recommendation_initial_finalized'),'DONE trigger did not notify';
@@ -100,13 +101,13 @@ do $$declare j uuid; f text; lease uuid; active_id uuid;begin
  select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing';
  select id into active_id from public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,true);
  assert active_id=j,'duplicate refresh replaced healthy active job';
- perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/final-refresh.pdf',lease);
+ perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/final-refresh.pdf',lease,'dokumen_surat','pdf/final-refresh.pdf','external');
  assert(select status='DONE' and pdf_path='pdf/final-refresh.pdf' from public.surat_registrasi where id='10000000-0000-4000-8000-000000000002'),'DONE recommendation refresh failed';
  perform public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,true);
  perform public.claim_document_pdf_jobs('worker-a',1,3,interval '5 minutes');
  select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing';
  update public.surat_registrasi set form_input_data=jsonb_set(form_input_data,'{recommendation_multi_detail,items,1,details,0,quantity}','5') where id='10000000-0000-4000-8000-000000000002';
- begin perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stale-final-refresh.pdf',lease);raise exception 'stale final fingerprint accepted';exception when serialization_failure then null;end;
+ begin perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/stale-final-refresh.pdf',lease,'dokumen_surat','pdf/stale-final-refresh.pdf','external');raise exception 'stale final fingerprint accepted';exception when serialization_failure then null;end;
  assert(select status='DONE' and pdf_path='pdf/final-refresh.pdf' from public.surat_registrasi where id='10000000-0000-4000-8000-000000000002'),'stale refresh changed final recommendation';
 end$$;
 reset role;
@@ -160,7 +161,7 @@ end$$;
 set role service_role;
 select public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,true);
 select * from public.claim_document_pdf_jobs('worker-currentness',1,3,interval '5 minutes');
-do $$declare j uuid;f text;lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing' and locked_by='worker-currentness';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/child-jsonb-refresh.pdf',lease);end$$;
+do $$declare j uuid;f text;lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing' and locked_by='worker-currentness';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/child-jsonb-refresh.pdf',lease,'dokumen_surat','pdf/child-jsonb-refresh.pdf','external');end$$;
 reset role;
 select public.ensure_recommendation_file_view_token(repeat('a',64),'10000000-0000-4000-8000-000000000002','dokumen_surat','pdf/child-jsonb-refresh.pdf','external',null);
 do $$begin
@@ -177,17 +178,17 @@ end$$;
 set role service_role;
 select public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,true);
 select * from public.claim_document_pdf_jobs('worker-currentness',1,3,interval '5 minutes');
-do $$declare j uuid;f text;lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing' and locked_by='worker-currentness';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/parent-jsonb-refresh.pdf',lease);end$$;
+do $$declare j uuid;f text;lease uuid;begin select id,recommendation_content_fingerprint,lease_token into j,f,lease from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='processing' and locked_by='worker-currentness';perform public.publish_document_pdf_job(j,'child-stamped-v2.xlsx',f,'pdf/parent-jsonb-refresh.pdf',lease,'dokumen_surat','pdf/parent-jsonb-refresh.pdf','external');end$$;
 reset role;
 do $$declare child_form jsonb;child_snapshot jsonb;parent_form jsonb;parent_snapshot jsonb;child_source text;parent_source text;child_attachment uuid;parent_attachment uuid;begin
  assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent JSONB refresh did not restore current PDF';
  select form_input_data,data_snapshot,file_path into child_form,child_snapshot,child_source from public.surat_registrasi where id='10000000-0000-4000-8000-000000000002';
  select form_input_data,data_snapshot,file_path into parent_form,parent_snapshot,parent_source from public.surat_registrasi where id='10000000-0000-4000-8000-000000000001';
- update public.surat_registrasi set data_snapshot=data_snapshot||'{"render_revision":1}'::jsonb where id='10000000-0000-4000-8000-000000000002';
+ update public.surat_registrasi set data_snapshot=data_snapshot||'{"input":{"recommendation_items":[{"id":"snapshot-render-input"}]}}'::jsonb where id='10000000-0000-4000-8000-000000000002';
  assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'child snapshot mutation remained current';
  update public.surat_registrasi set data_snapshot=child_snapshot where id='10000000-0000-4000-8000-000000000002';
- update public.surat_registrasi set data_snapshot=data_snapshot||'{"render_revision":1}'::jsonb where id='10000000-0000-4000-8000-000000000001';
- assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent snapshot mutation remained current';
+ update public.surat_registrasi set data_snapshot=data_snapshot||'{"recommendation":{"items":[{"id":"derived"}]},"recommendation_decisions":[{"id":"derived"}],"finalized_at":"2099-01-01T00:00:00Z"}'::jsonb where id='10000000-0000-4000-8000-000000000001';
+ assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'derived parent recommendation snapshot staled PDF';
  update public.surat_registrasi set data_snapshot=parent_snapshot where id='10000000-0000-4000-8000-000000000001';
  insert into public.surat_attachments(surat_id,file_url,file_size,file_type) values('10000000-0000-4000-8000-000000000002','child-proof.jpg',1,'image/jpeg') returning id into child_attachment;
  assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'child attachment mutation remained current';
@@ -204,23 +205,26 @@ do $$declare child_form jsonb;child_snapshot jsonb;parent_form jsonb;parent_snap
  assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'restored render inputs did not restore current PDF';
 end$$;
 
-select public.ensure_recommendation_file_view_token(repeat('a',64),'10000000-0000-4000-8000-000000000002','dokumen_surat','pdf/changed.pdf','external','00000000-0000-4000-8000-000000000003');
-do $$declare v_revoked boolean;v_revoke_audit_count integer;v_revoked_token_count integer;v_revoke_ids_valid boolean;begin
- assert(select count(*)=1 and bool_and(token_hash=repeat('a',64)) from public.file_view_tokens where surat_id='10000000-0000-4000-8000-000000000002' and purpose='external_marison_recommendation_pdf'),'token hash was not stored safely';
- assert(select count(*)=1 and bool_and(token_id is not null and token_hash=repeat('a',64)) from public.file_view_token_audit where action='created'),'creation audit leaked or omitted token identity';
- begin perform public.ensure_recommendation_file_view_token(repeat('b',64),'10000000-0000-4000-8000-000000000002','dokumen_surat','pdf/stable.pdf','external','00000000-0000-4000-8000-000000000001');raise exception 'non-admin token creation accepted';exception when insufficient_privilege then null;end;
- perform public.ensure_recommendation_file_view_token(repeat('b',64),'10000000-0000-4000-8000-000000000002','dokumen_surat','pdf/stable.pdf','external',null);
- assert(select count(*)=2 and count(distinct token_hash)=2 from public.file_view_tokens where surat_id='10000000-0000-4000-8000-000000000002' and purpose='external_marison_recommendation_pdf'),'concurrent-safe bearer identities collapsed';
- select public.revoke_recommendation_file_view_token('10000000-0000-4000-8000-000000000002','vendor access removed',null) into v_revoked;
- assert v_revoked,'token revoke failed';
- select count(*),coalesce(bool_and(token_id is not null),false) into v_revoke_audit_count,v_revoke_ids_valid
- from public.file_view_token_audit where action='revoked' and reason='vendor access removed';
- select count(*) into v_revoked_token_count from public.file_view_tokens
- where surat_id='10000000-0000-4000-8000-000000000002' and purpose='external_marison_recommendation_pdf' and revoked_at is not null;
- assert v_revoke_audit_count=v_revoked_token_count and v_revoke_ids_valid,'revoke audit missing';
- assert(select count(*)=0 from public.consume_file_view_token(repeat('a',64))),'revoked token resolved';
+-- Last pre-POST fence validates attempt-owned links against durable logical references.
+insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,payload,payload_body,payload_hash,payload_built_at,contract_version,lease_token,lease_acquired_at,lease_expires_at)
+values('70000000-0000-4000-8000-000000000007','10000000-0000-4000-8000-000000000001','staging','asset','/asset-purchase-requests','rec03-marker-fence','processing','{"items":[{"attachments":[{"type":"sigap_recommendation_pdf","surat_id":"10000000-0000-4000-8000-000000000002"}]},{"attachments":[{"type":"sigap_recommendation_pdf","surat_id":"10000000-0000-4000-8000-000000000002"}]}]}','{}',repeat('7',64),now(),'v1','71000000-0000-4000-8000-000000000007',now(),now()+interval '5 minutes');
+set role service_role;
+select * from public.mint_recommendation_file_view_token(repeat('7',64),'10000000-0000-4000-8000-000000000002','70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000007',null);
+do $$begin
+ begin perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000099');raise exception 'attempt mismatch passed marker';exception when sqlstate '55000' then null;end;
+ begin update public.file_view_tokens set revoked_at=now() where token_hash=repeat('7',64);perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000007');raise exception 'revoked token passed marker';exception when sqlstate '55000' then null;end;
+ begin update public.surat_linked_documents set status='cancelled' where child_surat_id='10000000-0000-4000-8000-000000000002';perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000007');raise exception 'cancelled link passed marker';exception when sqlstate '55000' then null;end;
+ begin update public.surat_registrasi set form_input_data=jsonb_set(form_input_data,'{recommendation_multi_detail,items,1,details,0,quantity}','6') where id='10000000-0000-4000-8000-000000000002';perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000007');raise exception 'stale PDF passed marker';exception when sqlstate '55000' then null;end;
+ begin update public.surat_registrasi set pdf_object_path='pdf/marker-moved.pdf' where id='10000000-0000-4000-8000-000000000002';perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000007');raise exception 'changed coordinates passed marker';exception when sqlstate '55000' then null;end;
+ assert(select post_started_at is null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000007'),'rejected marker set POST evidence';
+ assert(select count(*)=1 from public.file_view_tokens where transport_attempt_id='72000000-0000-4000-8000-000000000007' and revoked_at is null),'same-link cache minted more than one token';
+ perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000007','71000000-0000-4000-8000-000000000007','72000000-0000-4000-8000-000000000007');
+ assert(select post_started_at is not null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000007'),'valid cached token did not pass marker';
 end$$;
 reset role;
+delete from public.file_view_token_audit where token_hash=repeat('7',64);
+delete from public.file_view_tokens where token_hash=repeat('7',64);
+delete from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000007';
 
 update public.surat_registrasi set status='DONE' where id='10000000-0000-4000-8000-000000000001';
 update public.surat_registrasi set form_input_data=jsonb_set(form_input_data,'{recommendation_multi_detail,items}','[{"id":"asset-1","status":"not_recommended","rejection_reason":"No stock","details":[]}]') where id='10000000-0000-4000-8000-000000000002';
@@ -229,6 +233,7 @@ do $$declare r jsonb;begin
  assert r->>'skipped'='true' and r->>'no_dispatch'='true' and r->>'code'='all_recommendations_rejected','all rejected ensure result not structured';
  assert(select count(*)=0 from public.marison_outbound_dispatches where surat_id='10000000-0000-4000-8000-000000000001'),'new all rejected created dispatch row';
  assert(select status='skipped' and payload='{}'::jsonb and payload_hash=repeat('e',64) and lease_token is null and post_started_at is null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000099'),'existing pre-POST row not swept while retaining audit';
+ assert(select count(*)=4 and bool_and(status<>'skipped') from public.marison_outbound_dispatches where id in ('70000000-0000-4000-8000-000000000091','70000000-0000-4000-8000-000000000092','70000000-0000-4000-8000-000000000093','70000000-0000-4000-8000-000000000094')),'sweep changed live or post-evidence dispatch';
 end$$;
 
 insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,payload,payload_body,payload_hash,payload_built_at,contract_version,post_started_at,error_code)
@@ -246,10 +251,10 @@ update public.surat_registrasi set data_snapshot='{"recommendation_decisions":[{
 insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,payload,payload_body,payload_hash,payload_built_at,contract_version,lease_token,lease_acquired_at,lease_expires_at)
 values('70000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','staging','asset','/asset-purchase-requests','rec03-prepared','processing','{}','{}',repeat('c',64),now(),'v1','71000000-0000-4000-8000-000000000001',now(),now()+interval '1 minute');
 update public.surat_registrasi set data_snapshot='{"recommendation_decisions":[{"recommendation_action":"rejected"}]}' where id='10000000-0000-4000-8000-000000000001';
-do $$declare r jsonb;begin select public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-000000000001') into r;assert r->>'skipped'='true','legacy all-rejected was not skipped';assert(select status='skipped' and payload='{}'::jsonb and payload_hash=repeat('c',64) and lease_token is null and post_started_at is null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000001'),'prepared audit changed while skipping';end$$;
+do $$declare r jsonb;begin select public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-000000000001','72000000-0000-4000-8000-000000000001') into r;assert r->>'skipped'='true','legacy all-rejected was not skipped';assert(select status='skipped' and payload='{}'::jsonb and payload_hash=repeat('c',64) and lease_token is null and post_started_at is null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000001'),'prepared audit changed while skipping';end$$;
 update public.surat_registrasi set data_snapshot='{"recommendation_decisions":[{"recommendation_action":"rejected"},{"recommendation_action":"service"}]}' where id='10000000-0000-4000-8000-000000000001';
 insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,payload,payload_body,payload_hash,payload_built_at,contract_version,lease_token,lease_acquired_at,lease_expires_at)
 values('70000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','staging','asset','/asset-purchase-requests','rec03-mixed','processing','{}','{}',repeat('d',64),now(),'v1','71000000-0000-4000-8000-000000000002',now(),now()+interval '1 minute');
-do $$declare r jsonb;begin select public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000002','71000000-0000-4000-8000-000000000002') into r;assert r->>'post_started'='true','mixed recommendation did not proceed';assert(select post_started_at is not null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000002'),'POST boundary missing';update public.surat_registrasi set data_snapshot='{"recommendation_decisions":[{"recommendation_action":"rejected"}]}' where id='10000000-0000-4000-8000-000000000001';begin perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000002','71000000-0000-4000-8000-000000000002');raise exception 'post-started row rewritten';exception when sqlstate '55000' then null;end;assert(select status='processing' and post_started_at is not null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000002'),'post-started audit evidence changed';update public.marison_outbound_dispatches set status='outcome_unknown',lease_token=null,lease_acquired_at=null,lease_expires_at=null where id='70000000-0000-4000-8000-000000000002';begin perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000002','71000000-0000-4000-8000-000000000002');raise exception 'outcome_unknown row rewritten';exception when sqlstate '55000' then null;end;assert(select status='outcome_unknown' and post_started_at is not null and payload_hash=repeat('d',64) from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000002'),'outcome_unknown audit evidence changed';end$$;
+do $$declare r jsonb;begin select public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000002','71000000-0000-4000-8000-000000000002','72000000-0000-4000-8000-000000000002') into r;assert r->>'post_started'='true','mixed recommendation did not proceed';assert(select post_started_at is not null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000002'),'POST boundary missing';update public.surat_registrasi set data_snapshot='{"recommendation_decisions":[{"recommendation_action":"rejected"}]}' where id='10000000-0000-4000-8000-000000000001';begin perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000002','71000000-0000-4000-8000-000000000002','72000000-0000-4000-8000-000000000002');raise exception 'post-started row rewritten';exception when sqlstate '55000' then null;end;assert(select status='processing' and post_started_at is not null from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000002'),'post-started audit evidence changed';update public.marison_outbound_dispatches set status='outcome_unknown',lease_token=null,lease_acquired_at=null,lease_expires_at=null where id='70000000-0000-4000-8000-000000000002';begin perform public.mark_marison_outbound_post_started('70000000-0000-4000-8000-000000000002','71000000-0000-4000-8000-000000000002','72000000-0000-4000-8000-000000000002');raise exception 'outcome_unknown row rewritten';exception when sqlstate '55000' then null;end;assert(select status='outcome_unknown' and post_started_at is not null and payload_hash=repeat('d',64) from public.marison_outbound_dispatches where id='70000000-0000-4000-8000-000000000002'),'outcome_unknown audit evidence changed';end$$;
 
 select 'REC-03 recommendation SQL integration passed' as result;

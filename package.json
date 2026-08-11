@@ -16,6 +16,7 @@
     "test:mrn16-sql": "node scripts/test-mrn16-sql.mjs",
     "test:mrn17-sql": "node scripts/test-mrn17-resolution-source-sql.mjs",
     "test:rec03-sql": "node scripts/test-rec03-sql.mjs",
+    "test:rec03-file-link-sql": "node scripts/test-rec03-file-link-sql.mjs",
     "test:outbound-replacement-sql": "node scripts/test-outbound-replacement-sql.mjs",
     "test:idempotency-key-sql": "node scripts/test-idempotency-key-sql.mjs",
     "dev": "node scripts/dev.mjs",

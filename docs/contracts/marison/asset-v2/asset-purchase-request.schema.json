@@ -61,7 +61,6 @@
       "properties": {
         "asset_name": { "type": "string", "minLength": 1 },
         "quantity": { "type": "integer", "exclusiveMinimum": 0 },
-        "estimated_price": { "type": "integer", "minimum": 0 },
         "description": { "type": "string" },
         "recommendation_action": { "enum": ["service", "replace_component", "buy_new"] },
         "recommendation_description": { "type": "string" },

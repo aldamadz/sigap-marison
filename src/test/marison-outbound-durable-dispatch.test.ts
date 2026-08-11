@@ -86,10 +86,11 @@ describe("durable Marison outbound dispatch", () => {
         payload_body: "{}",
         payload_hash: "a".repeat(64),
       });
-      expect(urls).toHaveLength(3);
-      expect(urls[0]).toBe("https://vendor.example.test/access-token");
-      expect(urls[1]).toContain("/api/internal/marison/outbound/");
-      expect(urls[2]).toContain("/rest/v1/rpc/mark_marison_outbound_post_started");
+      expect(urls).toHaveLength(4);
+      expect(urls[0]).toContain("/rest/v1/rpc/cleanup_stale_recommendation_file_view_tokens");
+      expect(urls[1]).toBe("https://vendor.example.test/access-token");
+      expect(urls[2]).toContain("/api/internal/marison/outbound/");
+      expect(urls[3]).toContain("/rest/v1/rpc/mark_marison_outbound_post_started");
       expect(urls).not.toContain("https://vendor.example.test/asset-purchase-requests");
     } finally {
       Object.defineProperty(AbortSignal, "timeout", { configurable: true, value: timeout });

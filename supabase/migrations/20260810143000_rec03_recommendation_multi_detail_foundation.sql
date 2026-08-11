@@ -495,10 +495,19 @@ returns jsonb language sql stable security definer set search_path = '' as $$
     'version',1,
     'workbook_source',jsonb_build_object('bucket','dokumen_surat','path',p_source_file_path),
     'parent_workbook_source',jsonb_build_object('bucket','dokumen_surat','path',p.file_path),
-    'child_input',coalesce(c.form_input_data,'{}'::jsonb),
-    'child_snapshot_input',coalesce(c.data_snapshot->'input',c.data_snapshot,'{}'::jsonb),
+    'child_input',jsonb_strip_nulls(jsonb_build_object(
+      'recommendation_multi_detail',c.form_input_data->'recommendation_multi_detail',
+      'recommendation_items',c.form_input_data->'recommendation_items',
+      'recommendation',c.form_input_data->'recommendation',
+      'items',c.form_input_data->'items'
+    )),
+    'child_snapshot_input',jsonb_strip_nulls(jsonb_build_object(
+      'recommendation_multi_detail',c.data_snapshot#>'{input,recommendation_multi_detail}',
+      'recommendation_items',c.data_snapshot#>'{input,recommendation_items}',
+      'recommendation',c.data_snapshot#>'{input,recommendation}',
+      'items',c.data_snapshot#>'{input,items}'
+    )),
     'parent_input',coalesce(p.form_input_data,'{}'::jsonb),
-    'parent_snapshot_input',coalesce(p.data_snapshot->'input',p.data_snapshot,'{}'::jsonb),
     'attachment_refs',coalesce((select jsonb_agg(jsonb_build_object(
       'id',a.id,'file_url',a.file_url,'file_size',a.file_size,'file_type',a.file_type
     ) order by a.id) from public.surat_attachments a where a.surat_id=c.id),'[]'::jsonb),

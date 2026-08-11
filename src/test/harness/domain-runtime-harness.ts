@@ -19,6 +19,8 @@ const ENV = {
   STORAGE_PUBLIC_BASE_URL: "https://storage.test/storage/v1/object/public",
   MARISON_DEPLOYMENT_ENVIRONMENT: "staging",
   MARISON_OUTBOUND_INTERNAL_TOKEN: "test-outbound-internal-token-32-characters-min",
+  APP_PUBLIC_URL: "https://sigap.test",
+  NODE_ENV: "test",
 };
 
 const noNetwork = (name: string) => () => {

@@ -41,7 +41,7 @@ describe("Marison outbound contract v1", () => {
   });
 
   it("pins the active Asset OpenAPI revision independently", () => {
-    expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-08-06");
+    expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-08-11-no-estimated-price");
   });
   it("accepts the canonical Unit payload supplied to the vendor", () => {
     const fixture = readFixture("unit-submission.example.json");
@@ -94,6 +94,14 @@ describe("Marison outbound contract v1", () => {
   it("rejects fields absent from the active vendor Asset OpenAPI", () => {
     const fixture = readFixture("asset-purchase-request.example.json");
     fixture.category = "Pengajuan Pusat";
+    expect(() => assertMarisonOutboundContract("asset", fixture)).toThrow(
+      "Payload Marison asset tidak sesuai kontrak."
+    );
+  });
+
+  it("strictly rejects estimated_price from Asset items", () => {
+    const fixture = readFixture("asset-purchase-request.example.json");
+    fixture.items[0].estimated_price = 1;
     expect(() => assertMarisonOutboundContract("asset", fixture)).toThrow(
       "Payload Marison asset tidak sesuai kontrak."
     );

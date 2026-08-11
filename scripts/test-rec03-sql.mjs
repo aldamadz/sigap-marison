@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 
 const migration = readFileSync("supabase/migrations/20260810143000_rec03_recommendation_multi_detail_foundation.sql", "utf8");
 const noDispatchMigration = readFileSync("supabase/migrations/20260810170000_skip_all_rejected_outbound_without_jobs.sql", "utf8");
+const fileLinkMigration = readFileSync("supabase/migrations/20260811140000_rec03_file_link_blockers.sql", "utf8");
 const assertions = readFileSync("supabase/tests/recommendation_multi_detail.integration.sql", "utf8");
 const canonicalFixture = readFileSync("fixtures/recommendation-multi-detail-v1.json", "utf8").replaceAll("'", "''");
 const fixture = `
@@ -23,7 +24,7 @@ create table public.surat_recommendation_tasks(
  submitted_at timestamptz,updated_at timestamptz default now());
 create function public.touch_surat_recommendation_task() returns trigger language plpgsql set search_path='' as $$begin new.updated_at=now();return new;end$$;
 create trigger trg_touch_surat_recommendation_task before update on public.surat_recommendation_tasks for each row execute function public.touch_surat_recommendation_task();
-create table public.surat_linked_documents(parent_surat_id uuid,child_surat_id uuid,link_type text,required_before_step integer,created_by uuid,status text default 'active',updated_at timestamptz default now(),unique(parent_surat_id,child_surat_id,link_type));
+create table public.surat_linked_documents(id uuid primary key default gen_random_uuid(),parent_surat_id uuid,child_surat_id uuid,link_type text,required_before_step integer,created_by uuid,status text default 'active',updated_at timestamptz default now(),unique(parent_surat_id,child_surat_id,link_type));
 create table public.surat_revision_events(id uuid primary key default gen_random_uuid(),surat_id uuid,target_type text,status text,target_user_ids uuid[],reason text,changes jsonb default '{}',created_at timestamptz default now());
 create table public.notifications(id uuid primary key default gen_random_uuid(),user_id uuid,type text,title text,message text,data jsonb default '{}',link text);
 create table public.surat_signatures(id uuid primary key,surat_id uuid,user_id uuid,is_signed boolean default false,signed_at timestamptz,step_order integer,status text,catatan text,pdf_path_snap text,file_path_snap text,verification_required boolean default false,verification_status text default 'not_required',available_at timestamptz);
@@ -39,7 +40,7 @@ create type public.marison_outbound_dispatch_status as enum('pending','processin
 create table public.marison_outbound_dispatches(
  id uuid primary key default gen_random_uuid(),surat_id uuid not null,environment text not null,generation integer default 1,replacement_of_dispatch_id uuid,kind text,endpoint text,contract_version text,
  payload jsonb,payload_body text,payload_hash text,payload_built_at timestamptz,idempotency_key text not null,status public.marison_outbound_dispatch_status default 'pending',
- lease_token uuid,lease_acquired_at timestamptz,lease_expires_at timestamptz,post_started_at timestamptz,last_attempt_at timestamptz,completed_at timestamptz,skipped_code text,skipped_reason text,error_code text,external_reference text,created_at timestamptz default now(),updated_at timestamptz default now(),
+  lease_token uuid,lease_acquired_at timestamptz,lease_expires_at timestamptz,post_started_at timestamptz,last_attempt_at timestamptz,completed_at timestamptz,skipped_code text,skipped_reason text,error_code text,response jsonb,external_reference text,created_at timestamptz default now(),updated_at timestamptz default now(),
  constraint fixture_payload check((payload is null and payload_body is null and payload_hash is null and payload_built_at is null and contract_version is null) or payload is not null),
  constraint fixture_skip check((status='skipped' and skipped_code is not null and skipped_reason is not null and completed_at is not null) or status<>'skipped'));
 create function public.mark_marison_outbound_post_started(uuid,uuid) returns boolean language sql as $$select true$$;
@@ -55,12 +56,17 @@ const beforeNoDispatchMigration = `
 insert into public.surat_registrasi(id,status,form_input_data,data_snapshot) values
 ('10000000-0000-4000-8000-000000000099','DONE','{"request_category":"asset"}','{"recommendation_decisions":[{"recommendation_action":"ditolak"}]}');
 insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,payload,payload_body,payload_hash,payload_built_at,contract_version,lease_token,lease_acquired_at,lease_expires_at)
-values('70000000-0000-4000-8000-000000000099','10000000-0000-4000-8000-000000000099','staging','asset','/asset-purchase-requests','rec03-existing-pending','processing','{}','{}',repeat('e',64),now(),'v1','71000000-0000-4000-8000-000000000099',now(),now()+interval '1 minute');
+values('70000000-0000-4000-8000-000000000099','10000000-0000-4000-8000-000000000099','staging','asset','/asset-purchase-requests','rec03-existing-pending','processing','{}','{}',repeat('e',64),now(),'v1','71000000-0000-4000-8000-000000000099',now()-interval '2 minutes',now()-interval '1 minute');
+insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,lease_token,lease_expires_at,response,external_reference,post_started_at) values
+('70000000-0000-4000-8000-000000000091','10000000-0000-4000-8000-000000000099','staging','asset','/asset-purchase-requests','rec03-live','processing',gen_random_uuid(),now()+interval '5 minutes',null,null,null),
+('70000000-0000-4000-8000-000000000092','10000000-0000-4000-8000-000000000099','staging','asset','/asset-purchase-requests','rec03-response','failed_retryable',null,null,'{}',null,null),
+('70000000-0000-4000-8000-000000000093','10000000-0000-4000-8000-000000000099','staging','asset','/asset-purchase-requests','rec03-reference','failed_retryable',null,null,null,'vendor-1',null),
+('70000000-0000-4000-8000-000000000094','10000000-0000-4000-8000-000000000099','staging','asset','/asset-purchase-requests','rec03-post','processing',gen_random_uuid(),now()-interval '1 minute',null,null,now());
 `;
 const run=(args,input="")=>{const result=spawnSync("docker",args,{input,encoding:"utf8",timeout:120000});if(result.status!==0)throw new Error(`${result.stderr||""}\n${result.stdout||""}`.trim()||"Docker command failed");return result.stdout;};
 const id=run(["run","-d","-e","POSTGRES_PASSWORD=test","postgres:17-alpine"]).trim();
 try{
  let ready=false;for(let attempt=0;attempt<30&&!ready;attempt+=1){ready=spawnSync("docker",["exec",id,"pg_isready","-U","postgres"],{encoding:"utf8"}).status===0;if(!ready)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw new Error("Disposable PostgreSQL did not become ready");
- process.stdout.write(run(["exec","-i",id,"psql","-U","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
+ process.stdout.write(run(["exec","-i",id,"psql","-U","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
 }finally{run(["rm","-f",id]);}

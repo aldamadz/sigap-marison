@@ -95,7 +95,6 @@ const recommendationFromSnapshot = (job) => job.render_payload ? ({
     job.render_payload.child_input,
     job.render_payload.parent_input,
     job.render_payload.child_snapshot_input,
-    job.render_payload.parent_snapshot_input,
   ),
 }) : null;
 
@@ -169,7 +168,8 @@ const processJob = async (job) => {
     let pdfBuffer = shouldRenderDirectPgd(recommendation, true) ? await renderDirectPgdJob(job) : null;
     if (!pdfBuffer) {
       const sourcePath = join(workDir, "source.xlsx");
-      await writeFile(sourcePath, await downloadStorageFile(job.render_payload?.workbook_source?.path || job.source_file_path, "File Excel dokumen", "dokumen_surat"));
+      const workbookSource = recommendation ? job.render_payload.workbook_source : job.source_file_path;
+      await writeFile(sourcePath, await downloadStorageFile(workbookSource, "File Excel dokumen", "dokumen_surat"));
       if (recommendation) {
         await appendRecommendationPagesToFile(sourcePath, recommendation.items, (attachment) =>
           downloadStorageFile(attachment.url, `Gambar ${attachment.name || attachment.id}`, "lampiran_surat")
@@ -212,6 +212,9 @@ const processJob = async (job) => {
         p_content_fingerprint: job.recommendation_content_fingerprint,
         p_pdf_url: publishedUrl,
         p_lease_token: job.lease_token,
+        p_pdf_bucket: "dokumen_surat",
+        p_pdf_object_path: pdfPath,
+        p_pdf_storage_origin: uploadOrigin,
       });
       if (publishError) throw publishError;
       if (publishedJob?.status !== "done") throw new Error(`Publication transition failed for ${job.id}.`);
