@@ -6,6 +6,7 @@ const approval = {
   nik: "EMP001",
   action: "approved",
   actioned_at: "2026-08-11T10:00:00+07:00",
+  notes: "Disetujui",
 };
 
 describe("Marison Fund Submission mapper", () => {
@@ -47,5 +48,40 @@ describe("Marison Fund Submission mapper", () => {
       approvals: [approval],
       attachments: [],
     })).toThrow("Payload Marison fund tidak sesuai kontrak");
+  });
+
+  it("always sends optional vendor fields with explicit empty values", () => {
+    const result = mapMarisonFundSubmission({
+      request: {
+        submissionNumber: "011/UAI/PBO.1/VIII/2026",
+        type: "operational",
+        title: "Dana operasional",
+      },
+      projectId: 12,
+      division: "Finance",
+      approvals: [{
+        role: "manager",
+        nik: "EMP001",
+        action: "approved",
+        actioned_at: "2026-08-12T10:00:00+07:00",
+      }],
+    });
+
+    expect(result.payload).toEqual({
+      submission_number: "011/UAI/PBO.1/VIII/2026",
+      type: "operational",
+      project_id: 12,
+      division: "Finance",
+      title: "Dana operasional",
+      description: null,
+      attachments: [],
+      approvals: [{
+        role: "manager",
+        nik: "EMP001",
+        action: "approved",
+        actioned_at: "2026-08-12T10:00:00+07:00",
+        notes: null,
+      }],
+    });
   });
 });
