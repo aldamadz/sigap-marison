@@ -57,7 +57,17 @@ const changesGlobalTestInfrastructure = changedFiles.some((file) => [
 if (changesGlobalTestInfrastructure) {
   run(npm, ["test", "--", "--hookTimeout", "30000", "--testTimeout", "30000"]);
 } else {
-  run(npx, ["vitest", "run", "--changed", mergeBase, "--passWithNoTests"]);
+  run(npx, [
+    "vitest",
+    "run",
+    "--changed",
+    mergeBase,
+    "--passWithNoTests",
+    "--hookTimeout",
+    "30000",
+    "--testTimeout",
+    "30000",
+  ]);
 }
 
 const gates = new Set();
