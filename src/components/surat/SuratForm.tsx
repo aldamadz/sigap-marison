@@ -60,6 +60,7 @@ import {
   hasPlaceDateMapping,
   hasUnitRequestFields,
   isMultiSelectField,
+  isProfileLocationReady,
   isUnitExternalField,
   isUnitField,
   normalizeTableRows,
@@ -735,6 +736,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const lockProfileLocation = Boolean(currentProfile) && !isCurrentUserAdmin;
   const profileOfficeId = currentProfile?.office_id || "";
   const profileDepartmentId = currentProfile?.department_id || requesterDepartmentId;
+  const profileLocationReady = isProfileLocationReady(currentProfile, formData, isCurrentUserAdmin);
   const canRequesterUseRecommendation = useMemo(() => {
     if (linkedDocumentContext?.type === "recommendation") return false;
     const departmentId = formData.dept_id || requesterDepartmentId;
@@ -1709,6 +1711,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [generatedNoSurat, selectedFormId, selectedUsage?.id, usagesForSelectedForm, formData.form_input_data.request_category]);
 
   const handleGetNumber = async () => {
+    if (!profileLocationReady) {
+      return toast({
+        variant: "destructive",
+        title: "Profil Sedang Diselaraskan",
+        description: "Tunggu hingga kantor dan departemen pengajuan sesuai dengan profil Anda.",
+      });
+    }
     const requestCategory = getRequestCategory();
     if (!requestCategory) {
       return toast({
@@ -3996,7 +4005,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {!generatedNoSurat ? (
             <Button
               onClick={handleGetNumber}
-              disabled={isProcessingNumber || !formData.entity_id || !formData.dept_id || !formData.letter_type_id}
+              disabled={isProcessingNumber || !profileLocationReady || !formData.entity_id || !formData.dept_id || !formData.letter_type_id}
               className="h-12 w-full font-semibold"
             >
               {isProcessingNumber
