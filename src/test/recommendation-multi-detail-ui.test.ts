@@ -49,6 +49,25 @@ describe("recommendation multi-detail UI model", () => {
     ]);
   });
 
+  it("keeps an incomplete rejection editable without running final legacy validation", () => {
+    const model = buildRecommendationMultiDetail([
+      { id: "request-a", nama_barang: "Komputer SPV", jumlah: 1 },
+    ], undefined, idFactory);
+    const previousLegacy = [{ nama_barang: "Komputer SPV", recommendation_action: "beli_baru" }];
+    model.items[0] = {
+      ...model.items[0],
+      status: "not_recommended",
+      location: "Kantor Pusat",
+      pic: "Aldama",
+      rejection_reason: "",
+    };
+
+    expect(() => syncRecommendationMultiDetailInput({ recommendation_items: previousLegacy }, model)).not.toThrow();
+    const input = syncRecommendationMultiDetailInput({ recommendation_items: previousLegacy }, model);
+    expect(input.recommendation_multi_detail).toEqual(model);
+    expect(input.recommendation_items).toEqual(previousLegacy);
+  });
+
   it("reports operational validation errors per parent and detail", () => {
     const model = buildRecommendationMultiDetail([
       { id: "request-a", nama_barang: "Komputer SPV", jumlah: 1 },

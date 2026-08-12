@@ -168,11 +168,22 @@ export function syncRecommendationMultiDetailInput(
   current: InputRecord,
   model: RecommendationMultiDetail,
 ): InputRecord {
-  return {
+  const nextInput: InputRecord = {
     ...current,
     recommendation_multi_detail: model,
-    recommendation_items: flattenRecommendationItems(model),
   };
+
+  // The canonical draft may be temporarily incomplete while the user edits it.
+  // Keep the last valid legacy projection when the strict serializer rejects
+  // that transient state; final submission still rebuilds it fail-closed.
+  try {
+    return {
+      ...nextInput,
+      recommendation_items: flattenRecommendationItems(model),
+    };
+  } catch {
+    return nextInput;
+  }
 }
 
 export function recommendationMultiDetailErrors(model: RecommendationMultiDetail): string[] {
