@@ -105,6 +105,7 @@ services:
       agenda-flow-staging:
         condition: service_healthy
     environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       MARISON_SYNC_ENABLED: "true"
       MARISON_SYNC_INTERNAL_URL: "http://agenda-flow-staging/api/internal/marison/directory-sync"
       MARISON_SYNC_CRON_TOKEN: "${MARISON_SYNC_CRON_TOKEN:-}"
