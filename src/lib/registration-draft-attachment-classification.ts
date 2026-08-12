@@ -16,7 +16,7 @@ type ClassificationInput = {
   formInputData: unknown;
 };
 
-const LEGACY_RECOMMENDATION_KEY = /^recommendation_item_\d+$/;
+const RECOMMENDATION_KEY = /^recommendation_(?:item_\d+|detail_[A-Za-z0-9_-]+)$/;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -60,6 +60,30 @@ export function getActiveRecommendationDraftFileIds(formInputData: unknown): Set
     if (Array.isArray(nested?.attachments)) nested.attachments.forEach(addId);
   });
 
+  const canonical = asRecord(input?.recommendation_multi_detail);
+  const parents = Array.isArray(canonical?.items) ? canonical.items : [];
+  parents.forEach((parentValue) => {
+    const parent = asRecord(parentValue);
+    if (parent?.status === "not_recommended") return;
+    const details = Array.isArray(parent?.details) ? parent.details : [];
+    details.forEach((detailValue) => {
+      const detail = asRecord(detailValue);
+      const attachments = Array.isArray(detail?.attachments) ? detail.attachments : [];
+      attachments.forEach((attachmentValue) => {
+        const attachment = asRecord(attachmentValue);
+        const metadata = asRecord(attachment?.metadata);
+        const legacy = asRecord(attachment?.legacy_fields);
+        const id = String(
+          metadata?.draft_file_id
+          ?? legacy?.draft_file_id
+          ?? attachment?.draft_file_id
+          ?? "",
+        ).trim();
+        if (id) ids.add(id);
+      });
+    });
+  });
+
   return ids;
 }
 
@@ -98,7 +122,7 @@ export function classifyRegistrationDraftAttachments({
       initialAttachments.push(file);
       return;
     }
-    if (file.requirement_key && LEGACY_RECOMMENDATION_KEY.test(file.requirement_key)) {
+    if (file.requirement_key && RECOMMENDATION_KEY.test(file.requirement_key)) {
       orphanRecommendationAttachments.push(file);
       return;
     }

@@ -39,6 +39,13 @@ import {
 } from "@/components/surat/RegistrationSummaryDialog";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { RecommendationParentSummary } from "@/components/surat/RecommendationParentSummary";
+import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
+import {
+  buildRecommendationMultiDetail,
+  recommendationMultiDetailErrors,
+  syncRecommendationMultiDetailInput,
+} from "@/components/surat/recommendation-multi-detail";
+import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
 import {
   normalizeNonUnitOption,
@@ -151,6 +158,7 @@ const buildSignerAssignments = (detail: UsageDetailRecord): SignerAssignment[] =
 
 const RECOMMENDATION_TEMPLATE_NAME = "Rekomendasi Peremajaan Alat";
 const RECOMMENDATION_ITEMS_KEY = "recommendation_items";
+const RECOMMENDATION_MULTI_DETAIL_KEY = "recommendation_multi_detail";
 const RECOMMENDATION_CHECK_MARK = "✓";
 const RECOMMENDATION_ACTIONS = [
   { value: "service", label: "Service" },
@@ -446,31 +454,162 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       .filter((row) => Boolean(row.parent_item_name));
   }, [recommendationParentSummary]);
 
+  const recommendationMultiDetail = useMemo(() => {
+    if (linkedDocumentContext?.type !== "recommendation" || parentRecommendationItems.length === 0) return null;
+    return buildRecommendationMultiDetail(parentRecommendationItems, formData.form_input_data);
+  }, [
+    linkedDocumentContext?.type,
+    parentRecommendationItems,
+    formData.form_input_data[RECOMMENDATION_MULTI_DETAIL_KEY],
+    formData.form_input_data[RECOMMENDATION_ITEMS_KEY],
+  ]);
+
   useEffect(() => {
-    if (linkedDocumentContext?.type !== "recommendation" || parentRecommendationItems.length === 0) return;
+    if (!recommendationMultiDetail) return;
     setFormData((previous) => {
-      const currentRows = normalizeTableRows(previous.form_input_data[RECOMMENDATION_ITEMS_KEY]);
-      const nextRows = parentRecommendationItems.map((parentItem, index) => {
-        const currentRow = currentRows[index] || {};
-        const parentName = String(parentItem.parent_item_name || "").trim();
-        return {
-          ...currentRow,
-          parent_item_index: index + 1,
-          parent_item_name: parentName,
-          nama_barang: String(currentRow.nama_barang || "").trim() || parentName,
-        };
-      });
-      if (JSON.stringify(currentRows) === JSON.stringify(nextRows)) return previous;
+      const nextInput = syncRecommendationMultiDetailInput(previous.form_input_data, recommendationMultiDetail);
+      if (
+        JSON.stringify(previous.form_input_data[RECOMMENDATION_MULTI_DETAIL_KEY]) === JSON.stringify(nextInput[RECOMMENDATION_MULTI_DETAIL_KEY])
+        && JSON.stringify(previous.form_input_data[RECOMMENDATION_ITEMS_KEY]) === JSON.stringify(nextInput[RECOMMENDATION_ITEMS_KEY])
+      ) return previous;
       return {
         ...previous,
-        form_input_data: {
-          ...previous.form_input_data,
-          [RECOMMENDATION_ITEMS_KEY]: nextRows,
-        },
+        form_input_data: nextInput,
       };
     });
-    setActiveRecommendationItem((current) => Math.min(current, parentRecommendationItems.length - 1));
-  }, [linkedDocumentContext?.type, parentRecommendationItems]);
+  }, [recommendationMultiDetail]);
+
+  const setRecommendationMultiDetail = (model: RecommendationMultiDetail) => {
+    setFormData((previous) => ({
+      ...previous,
+      form_input_data: syncRecommendationMultiDetailInput(previous.form_input_data, model),
+    }));
+  };
+
+  const uploadRecommendationDetailAttachments = async (
+    parentId: string,
+    detailId: string,
+    files: File[],
+    source: "upload" | "paste" | "drop",
+  ) => {
+    const validFiles = files.filter((file) => file.type.startsWith("image/") && file.size <= 5 * 1024 * 1024);
+    if (validFiles.length !== files.length) {
+      toast({
+        variant: "destructive",
+        title: "Sebagian gambar tidak dapat digunakan",
+        description: "Gunakan PNG, JPG, JPEG, atau WebP dengan ukuran maksimal 5 MB per gambar.",
+      });
+    }
+    if (validFiles.length === 0) return;
+    if (!activeDraftId || !recommendationMultiDetail) {
+      toast({ variant: "destructive", title: "Draft belum siap", description: "Muat ulang rekomendasi lalu coba lagi." });
+      return;
+    }
+
+    const uploadKey = `${parentId}:${detailId}`;
+    setUploadingRecommendationAttachment(uploadKey);
+    try {
+      const uploaded = await suratService.uploadRegistrationDraftFiles(activeDraftId, validFiles, {
+        key: `recommendation_detail_${detailId}`,
+        label: "Lampiran gambar detail rekomendasi",
+      });
+      const currentDetail = recommendationMultiDetail.items
+        .find((parent) => parent.id === parentId)?.details.find((detail) => detail.id === detailId);
+      const startOrder = currentDetail?.attachments.length || 0;
+      const nextAttachments: RecommendationAttachment[] = uploaded.map((file, index) => ({
+        id: file.id,
+        order: startOrder + index,
+        caption: file.file_name,
+        source,
+        storage_path: file.file_url,
+        metadata: {
+          draft_file_id: file.id,
+          file_name: file.file_name,
+          file_type: file.file_type,
+          file_size: file.file_size,
+        },
+      }));
+      setDraftAttachments((previous) => [
+        ...previous.filter((item) => !uploaded.some((file) => file.id === item.id)),
+        ...uploaded,
+      ]);
+      setRecommendationMultiDetail({
+        ...recommendationMultiDetail,
+        items: recommendationMultiDetail.items.map((parent) => parent.id !== parentId ? parent : ({
+          ...parent,
+          details: parent.details.map((detail) => detail.id !== detailId ? detail : ({
+            ...detail,
+            attachments: [...detail.attachments, ...nextAttachments],
+          })),
+        })),
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Lampiran gagal disimpan",
+        description: error instanceof Error ? error.message : "Coba unggah ulang gambar.",
+      });
+    } finally {
+      setUploadingRecommendationAttachment(null);
+    }
+  };
+
+  const deleteRecommendationDetailAttachment = async (
+    parentId: string,
+    detailId: string,
+    attachment: RecommendationAttachment,
+  ) => {
+    if (!recommendationMultiDetail) return;
+    const draftFileId = String(attachment.metadata?.draft_file_id || attachment.id || "").trim();
+    try {
+      if (draftFileId) await suratService.deleteRegistrationDraftFile(draftFileId);
+      setDraftAttachments((previous) => previous.filter((file) => file.id !== draftFileId));
+      setRecommendationMultiDetail({
+        ...recommendationMultiDetail,
+        items: recommendationMultiDetail.items.map((parent) => parent.id !== parentId ? parent : ({
+          ...parent,
+          details: parent.details.map((detail) => detail.id !== detailId ? detail : ({
+            ...detail,
+            attachments: detail.attachments
+              .filter((item) => item.id !== attachment.id)
+              .map((item, order) => ({ ...item, order })),
+          })),
+        })),
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Lampiran gagal dihapus",
+        description: error instanceof Error ? error.message : "Coba hapus ulang lampiran.",
+      });
+    }
+  };
+
+  const deleteRecommendationDetail = async (parentId: string, detail: RecommendationMultiDetail["items"][number]["details"][number]) => {
+    if (!recommendationMultiDetail) return;
+    try {
+      const draftFileIds = detail.attachments
+        .map((attachment) => String(attachment.metadata?.draft_file_id || attachment.id || "").trim())
+        .filter(Boolean);
+      await Promise.all(draftFileIds.map((id) => suratService.deleteRegistrationDraftFile(id)));
+      setDraftAttachments((previous) => previous.filter((file) => !draftFileIds.includes(file.id)));
+      setRecommendationMultiDetail({
+        ...recommendationMultiDetail,
+        items: recommendationMultiDetail.items.map((parent) => parent.id !== parentId ? parent : ({
+          ...parent,
+          details: parent.details
+            .filter((item) => item.id !== detail.id)
+            .map((item, order) => ({ ...item, order })),
+        })),
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Detail gagal dihapus",
+        description: error instanceof Error ? error.message : "Coba hapus ulang detail.",
+      });
+    }
+  };
 
   const setTableRows = (key: string, rows: TableRow[]) => {
     setInputValue(key, rows);
@@ -681,6 +820,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const isRecommendationItemsComplete = (field: TemplateField) => {
+    if (recommendationMultiDetail) {
+      return recommendationMultiDetail.items.length > 0
+        && recommendationMultiDetailErrors(recommendationMultiDetail).length === 0;
+    }
     const rows = getTableRows(field.key).filter((row: TableRow) =>
       hasMeaningfulRecommendationRowValue(row)
     );
@@ -2128,7 +2271,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const mappedKeys = new Set(formFields.map((field) => field.key));
     const hiddenKeys = new Set([
       "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
-      "recommendation_template_name", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type",
+      "recommendation_template_name", "recommendation_multi_detail", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type",
     ]);
     const fields: RegistrationSummaryField[] = formFields
       .filter((field) => !hiddenKeys.has(field.key))
@@ -2362,6 +2505,21 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   );
 
   const renderRecommendationItemsField = (field: TemplateField) => {
+    if (recommendationMultiDetail) {
+      return (
+        <RecommendationMultiDetailEditor
+          model={recommendationMultiDetail}
+          onChange={setRecommendationMultiDetail}
+          users={master.users}
+          offices={master.offices}
+          departments={master.depts}
+          uploadingKey={uploadingRecommendationAttachment}
+          onUpload={uploadRecommendationDetailAttachments}
+          onDeleteAttachment={deleteRecommendationDetailAttachment}
+          onDeleteDetail={deleteRecommendationDetail}
+        />
+      );
+    }
     const rows = getTableRows(field.key);
     const isLinkedRecommendation =
       linkedDocumentContext?.type === "recommendation" && parentRecommendationItems.length > 0;

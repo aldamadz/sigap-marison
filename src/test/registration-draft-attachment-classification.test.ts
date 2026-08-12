@@ -160,6 +160,57 @@ describe("registration draft attachment classification", () => {
     ]));
   });
 
+  it("restores multiple canonical attachments by stable detail identity", () => {
+    const front = draftFile("canonical-front", "recommendation_detail_detail-cpu");
+    const socket = draftFile("canonical-socket", "recommendation_detail_detail-cpu");
+    const input = {
+      recommendation_multi_detail: {
+        version: 1,
+        items: [{
+          id: "parent-computer",
+          details: [{
+            id: "detail-cpu",
+            attachments: [
+              { id: front.id, metadata: { draft_file_id: front.id } },
+              { id: socket.id, metadata: { draft_file_id: socket.id } },
+            ],
+          }],
+        }],
+      },
+    };
+
+    expect(getActiveRecommendationDraftFileIds(input)).toEqual(new Set([front.id, socket.id]));
+    expect(classifyRegistrationDraftAttachments({
+      files: [front, socket],
+      initialRequirementKeys: new Set(),
+      formInputData: input,
+    }).activeRecommendationAttachments).toEqual([front, socket]);
+  });
+
+  it("does not copy hidden canonical attachments from a rejected parent", () => {
+    const hidden = draftFile("canonical-rejected", "recommendation_detail_detail-old");
+    const input = {
+      recommendation_multi_detail: {
+        version: 1,
+        items: [{
+          id: "parent-rejected",
+          status: "not_recommended",
+          details: [{
+            id: "detail-old",
+            attachments: [{ id: hidden.id, metadata: { draft_file_id: hidden.id } }],
+          }],
+        }],
+      },
+    };
+
+    expect(getActiveRecommendationDraftFileIds(input)).toEqual(new Set());
+    expect(classifyRegistrationDraftAttachments({
+      files: [hidden],
+      initialRequirementKeys: new Set(),
+      formInputData: input,
+    }).orphanRecommendationAttachments).toEqual([hidden]);
+  });
+
   it("preserves future attachments arrays during recommendation normalization", () => {
     const attachments = [
       { draft_file_id: "component-front" },
