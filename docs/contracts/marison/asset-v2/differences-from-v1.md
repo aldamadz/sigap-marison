@@ -17,9 +17,10 @@
 
 The canonical example uses `branch_id: 1` for `Pengajuan Pusat`. Approval
 `notes` is optional. Item `recommendation_description` is required; item
-`description` and `recommendation_notes` are optional. `estimated_price` remains
-internal SIGAP audit/UI/PDF data and is omitted from outbound payloads because
-latest vendor documentation no longer lists it. Vendor confirmation remains pending.
+`description` and `recommendation_notes` are optional. `estimated_price` is not
+collected by the active recommendation flow and remains omitted from outbound
+payloads because the latest vendor documentation no longer lists it. Historical
+draft values are ignored. Vendor confirmation remains pending.
 Every example item has at least one item attachment, and
 top-level attachments include the final request PDF, combined recommendation PDF,
 and general requester attachment only.

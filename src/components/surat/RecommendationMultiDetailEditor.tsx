@@ -25,7 +25,6 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { formatCurrencyInput, parseCurrencyInput } from "@/lib/rupiah";
 import {
   createRecommendationDetail,
   createRecommendationClientId,
@@ -423,7 +422,7 @@ function RecommendationMultiDetailEditorContent({
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="mt-4 space-y-2">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Uraian *</Label>
                       <Input
@@ -435,25 +434,6 @@ function RecommendationMultiDetailEditorContent({
                         }))}
                         placeholder="Contoh: Pembelian baru / service adaptor / ganti unit"
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold">Estimasi harga</Label>
-                      <div className="flex">
-                        <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">Rp</span>
-                        <Input
-                          inputMode="numeric"
-                          value={detail.estimated_price === undefined ? "" : formatCurrencyInput(detail.estimated_price)}
-                          onChange={(event) => setDetail(detail.id, (item) => {
-                            const value = parseCurrencyInput(event.target.value);
-                            const next = { ...item };
-                            if (value === null) delete next.estimated_price;
-                            else next.estimated_price = value;
-                            return next;
-                          })}
-                          className="rounded-l-none"
-                          placeholder="0"
-                        />
-                      </div>
                     </div>
                   </div>
 

@@ -27,4 +27,38 @@ describe("Asset recommendation department policy", () => {
     expect(normalized.recommendation_template_name).toBe("Rekomendasi Peremajaan Alat");
     expect(normalized.recommendation_attachment_note).toBe("Harus dibuat");
   });
+
+  it("removes historical recommendation prices at the submission boundary", () => {
+    const normalized = suratService.normalizeFormInputData({
+      request_category: "asset",
+      recommendation_multi_detail: {
+        version: 1,
+        items: [{
+          id: "parent-1",
+          order: 0,
+          status: "recommended",
+          rejection_reason: "",
+          applicant_original: { name: "Laptop", quantity: 1, notes: "" },
+          location: "Kantor Pusat",
+          pic: "Aldama",
+          details: [{
+            id: "detail-1",
+            order: 0,
+            action: "purchase_new",
+            name: "Laptop operasional",
+            quantity: 1,
+            description: "Pembelian baru",
+            description_manually_edited: false,
+            notes: "Penggantian perangkat",
+            estimated_price: 20_000_000,
+            attachments: [],
+            reference_links: [],
+          }],
+        }],
+      },
+    });
+
+    expect(normalized.recommendation_multi_detail.items[0].details[0]).not.toHaveProperty("estimated_price");
+    expect(normalized.recommendation_items[0]).not.toHaveProperty("estimated_price");
+  });
 });

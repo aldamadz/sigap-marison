@@ -235,6 +235,13 @@ describe("recommendation multi-detail contract", () => {
   it("creates injected IDs and rejects invalid required values", () => {
     expect(createRecommendationId(() => "detail-fixed")).toBe("detail-fixed");
     expect(() => readLegacyRecommendationItems([{ nama_barang: "Printer", jumlah: 0, service: true }])).toThrow("positive integer");
-    expect(() => readLegacyRecommendationItems([{ nama_barang: "Printer", jumlah: 1, harga_estimasi: -1, service: true }])).toThrow("nonnegative");
+    const historical = readLegacyRecommendationItems([{
+      nama_barang: "Printer",
+      jumlah: 1,
+      harga_estimasi: -1,
+      service: true,
+    }]);
+    expect(historical.items[0].details[0]).not.toHaveProperty("estimated_price");
+    expect(flattenRecommendationItems(historical)[0]).not.toHaveProperty("estimated_price");
   });
 });

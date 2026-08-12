@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { RecommendationMultiDetail } from "@sigap/shared";
 import {
   buildRecommendationMultiDetail,
   recommendationMultiDetailErrors,
@@ -78,5 +79,57 @@ describe("recommendation multi-detail UI model", () => {
       "Item 1: PIC wajib dipilih.",
       "Item 1.1: lampiran gambar wajib ditambahkan.",
     ]));
+  });
+
+  it("removes historical estimated prices from canonical and legacy drafts", () => {
+    const historical = {
+      version: 1,
+      items: [{
+        id: "request-a",
+        order: 0,
+        status: "recommended",
+        rejection_reason: "",
+        applicant_original: { name: "Komputer SPV", quantity: 1, notes: "" },
+        location: "Kantor Pusat",
+        pic: "Aldama",
+        details: [{
+          id: "detail-a",
+          order: 0,
+          action: "purchase_new",
+          name: "Komputer SPV",
+          quantity: 1,
+          description: "Pembelian baru",
+          description_manually_edited: false,
+          notes: "Perangkat baru",
+          estimated_price: 15_000_000,
+          attachments: [],
+          reference_links: [],
+        }],
+      }],
+    };
+
+    const model = buildRecommendationMultiDetail([], { recommendation_multi_detail: historical });
+    const input = syncRecommendationMultiDetailInput({}, model);
+
+    expect(model.items[0].details[0]).not.toHaveProperty("estimated_price");
+    const canonical = input.recommendation_multi_detail as RecommendationMultiDetail;
+    expect(canonical.items[0].details[0]).not.toHaveProperty("estimated_price");
+    expect(input.recommendation_items[0]).not.toHaveProperty("estimated_price");
+  });
+
+  it("ignores estimated prices from legacy recommendation rows", () => {
+    const model = buildRecommendationMultiDetail(
+      [{ id: "request-a", nama_barang: "Komputer SPV", jumlah: 1 }],
+      { recommendation_items: [{
+        parent_item_id: "request-a",
+        nama_barang: "Komputer SPV",
+        jumlah: 1,
+        recommendation_action: "beli_baru",
+        estimated_price: 15_000_000,
+      }] },
+      idFactory,
+    );
+
+    expect(model.items[0].details[0]).not.toHaveProperty("estimated_price");
   });
 });

@@ -1,5 +1,6 @@
 import {
   flattenRecommendationItems,
+  withoutRecommendationEstimatedPrices,
   type RecommendationAction,
   type RecommendationAttachment,
   type RecommendationDetail,
@@ -113,7 +114,7 @@ export function buildRecommendationMultiDetail(
   idFactory: IdFactory = createRecommendationClientId,
 ): RecommendationMultiDetail {
   if (isCanonicalModel(existingInput?.recommendation_multi_detail)) {
-    return existingInput.recommendation_multi_detail;
+    return withoutRecommendationEstimatedPrices(existingInput.recommendation_multi_detail);
   }
 
   const parents = Array.isArray(applicantItems) ? applicantItems.map(asRecord) : [];
@@ -147,9 +148,6 @@ export function buildRecommendationMultiDetail(
         attachments: legacyAttachment(legacy, detailId),
         reference_links: legacyLinks(legacy, detailId),
       };
-      const estimatedPrice = Number(legacy.estimated_price ?? legacy.harga_estimasi);
-      if (Number.isFinite(estimatedPrice) && estimatedPrice >= 0) detail.estimated_price = estimatedPrice;
-
       return {
         id: parentId,
         order,
@@ -168,9 +166,10 @@ export function syncRecommendationMultiDetailInput(
   current: InputRecord,
   model: RecommendationMultiDetail,
 ): InputRecord {
+  const cleanModel = withoutRecommendationEstimatedPrices(model);
   const nextInput: InputRecord = {
     ...current,
-    recommendation_multi_detail: model,
+    recommendation_multi_detail: cleanModel,
   };
 
   // The canonical draft may be temporarily incomplete while the user edits it.
@@ -179,7 +178,7 @@ export function syncRecommendationMultiDetailInput(
   try {
     return {
       ...nextInput,
-      recommendation_items: flattenRecommendationItems(model),
+      recommendation_items: flattenRecommendationItems(cleanModel),
     };
   } catch {
     return nextInput;
