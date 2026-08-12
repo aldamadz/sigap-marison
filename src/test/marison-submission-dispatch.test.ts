@@ -85,7 +85,9 @@ describe("Marison outbound submission dispatch", () => {
 
     expect(server).toContain("buildMarisonFundPayload");
     expect(server).toContain('category === "non_asset" || category === "nonasset"');
-    expect(server).toContain('.from("master_departments")');
+    expect(server).toContain('/employees?search=${encodeURIComponent(overrides.nik)}');
+    expect(server).toContain("resolveMarisonFundDivision");
+    expect(server).not.toContain("division: department.name");
     expect(worker).toContain('fund: "/fund-submissions"');
     expect(form).toContain('setInputValue("fund_type", value)');
     expect(form).toContain('<SelectItem value="operational">Biaya Operasional</SelectItem>');
