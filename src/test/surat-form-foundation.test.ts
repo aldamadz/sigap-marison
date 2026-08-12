@@ -7,6 +7,7 @@ import {
   getScalarFieldValue,
   getWorkflowCategories,
   isMultiSelectField,
+  isProfileLocationReady,
   isUnitExternalField,
   normalizeTableRows,
 } from "@/components/surat/form/surat-form-schema";
@@ -59,6 +60,14 @@ describe("SuratForm pure schema adapters", () => {
     expect(clearUnitInput(input)).toEqual({ keep: "yes" });
     expect(input.requested_project).toBe("P1");
     expect(clearRecommendationInput({ requires_recommendation: true, recommendation_template_name: "x", recommendation_attachment_note: "y", keep: 1 })).toEqual({ keep: 1 });
+  });
+
+  it("blocks number reservation until a non-admin form matches the loaded profile", () => {
+    const profile = { office_id: "office-1", department_id: "dept-1" };
+    expect(isProfileLocationReady(null, { office_id: "office-1", dept_id: "dept-1" }, false)).toBe(false);
+    expect(isProfileLocationReady(profile, { office_id: "office-1", dept_id: "dept-2" }, false)).toBe(false);
+    expect(isProfileLocationReady(profile, { office_id: "office-1", dept_id: "dept-1" }, false)).toBe(true);
+    expect(isProfileLocationReady(profile, { office_id: "office-2", dept_id: "dept-2" }, true)).toBe(true);
   });
 });
 
