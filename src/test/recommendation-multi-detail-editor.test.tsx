@@ -65,6 +65,21 @@ describe("RecommendationMultiDetailEditor", () => {
     expect(screen.queryByText("1.1")).not.toBeInTheDocument();
   });
 
+  it("stays rendered when rejection is reversed and another detail is added", () => {
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Tidak Direkomendasikan" }));
+    expect(screen.getByTestId("recommendation-multi-detail-editor")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Jelaskan alasan/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Direkomendasikan" }));
+    expect(screen.getByTestId("recommendation-multi-detail-editor")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tambah detail untuk item 1" }));
+
+    expect(screen.getByTestId("recommendation-multi-detail-editor")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument();
+  });
+
   it("passes every selected image in one upload action without blanking the editor", () => {
     const onUpload = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<Harness onUpload={onUpload} />);

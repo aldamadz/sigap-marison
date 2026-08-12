@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Component, useMemo, useState, type ErrorInfo, type ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/rupiah";
 import {
   createRecommendationDetail,
+  createRecommendationClientId,
   recommendationActionDescription,
   recommendationMultiDetailErrors,
 } from "@/components/surat/recommendation-multi-detail";
@@ -55,6 +56,43 @@ type Props = {
   onDeleteDetail: (parentId: string, detail: RecommendationDetail) => Promise<void>;
 };
 
+class RecommendationEditorBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Recommendation multi-detail editor failed", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="border-l-4 border-l-red-500 bg-red-500/5 p-4" role="alert">
+          <p className="text-sm font-semibold text-red-800 dark:text-red-300">Editor rekomendasi perlu dimuat ulang</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Draft tetap tersimpan. Muat ulang editor untuk melanjutkan tanpa mengulang data sebelumnya.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3"
+            onClick={() => this.setState({ failed: false })}
+          >
+            Muat Ulang Editor
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const ACTIONS: Array<{ value: RecommendationAction; label: string }> = [
   { value: "purchase_new", label: "Beli Baru" },
   { value: "replace", label: "Ganti Komponen" },
@@ -81,7 +119,7 @@ const updateDetail = (
 
 const attachmentMetadata = (attachment: RecommendationAttachment) => attachment.metadata || {};
 
-export function RecommendationMultiDetailEditor({
+function RecommendationMultiDetailEditorContent({
   model,
   onChange,
   users,
@@ -440,7 +478,7 @@ export function RecommendationMultiDetailEditor({
                           onClick={() => setDetail(detail.id, (item) => ({
                             ...item,
                             reference_links: [...item.reference_links, {
-                              id: crypto.randomUUID(),
+                              id: createRecommendationClientId(),
                               order: item.reference_links.length,
                               url: "",
                             }],
@@ -591,5 +629,13 @@ export function RecommendationMultiDetailEditor({
         )}
       </section>
     </div>
+  );
+}
+
+export function RecommendationMultiDetailEditor(props: Props) {
+  return (
+    <RecommendationEditorBoundary>
+      <RecommendationMultiDetailEditorContent {...props} />
+    </RecommendationEditorBoundary>
   );
 }
