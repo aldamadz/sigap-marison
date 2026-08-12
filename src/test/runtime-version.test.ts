@@ -40,6 +40,8 @@ describe("runtime revision metadata", () => {
     ]) {
        expect(read(composePath)).toContain('GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"');
     }
-    expect(read("docker-compose.staging.yml")).toContain('GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"');
+    const stagingCompose = read("docker-compose.staging.yml");
+    const syncService = stagingCompose.split("  agenda-marison-sync-staging:")[1]?.split("  agenda-marison-outbound-staging:")[0];
+    expect(syncService).toContain('GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"');
   });
 });
