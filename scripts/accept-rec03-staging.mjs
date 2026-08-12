@@ -17,7 +17,7 @@ const runId = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${ran
 const marker = `REC03-ACCEPT-${runId}`;
 const ids = Object.fromEntries([
   "requester", "signer", "admin", "entity", "office", "department", "letterType", "form", "usage", "usageStep",
-  "parent", "child", "rejectedParent", "rejectedChild", "reservation", "rejectedReservation", "task", "rejectedTask",
+  "parent", "child", "rejectedParent", "rejectedChild", "reservation", "rejectedReservation", "draft", "task", "rejectedTask",
   "childSignature", "parentSignature", "link", "dispatch", "transportAttempt",
 ].map((name) => [name, randomUUID()]));
 const objectPrefix = `staging/rec03-accept/${runId}`;
@@ -110,7 +110,7 @@ const appJson = async (path, { method = "GET", token, body, internal = false } =
 
 const manifest = {
   runId, marker, ids, emails, objectPrefix, createdAt: new Date().toISOString(),
-  tables: ["auth.users", "profiles", "master_entities", "master_offices", "master_departments", "master_letter_types", "master_forms", "form_usages", "form_usage_steps", "form_usage_departments", "form_usage_step_users", "surat_registrasi", "surat_reservations", "surat_recommendation_tasks", "surat_signatures", "surat_attachments", "document_pdf_jobs", "surat_linked_documents", "file_view_tokens", "file_view_token_audit", "marison_outbound_dispatches"],
+  tables: ["auth.users", "profiles", "master_entities", "master_offices", "master_departments", "master_letter_types", "master_forms", "form_usages", "form_usage_steps", "form_usage_departments", "form_usage_step_users", "surat_registrasi", "surat_reservations", "surat_registration_drafts", "surat_recommendation_tasks", "surat_signatures", "surat_attachments", "document_pdf_jobs", "surat_linked_documents", "file_view_tokens", "file_view_token_audit", "marison_outbound_dispatches"],
 };
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: "wx" });
 console.log(JSON.stringify({ phase: "manifest", path: manifestPath, runId, marker, ids, objectPrefix }));
@@ -124,10 +124,10 @@ const cleanup = async () => {
   });
   await attempt("tokens", () => exactDelete("file_view_tokens", "surat_id", [ids.child, ids.rejectedChild]));
   await attempt("replacement events", async () => {
-    await exactDelete("marison_outbound_replacement_events", "surat_id", [ids.parent, ids.rejectedParent]);
-    await exactDelete("marison_outbound_reconciliation_events", "surat_id", [ids.parent, ids.rejectedParent]);
+    await exactDelete("marison_outbound_replacement_events", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]);
+    await exactDelete("marison_outbound_reconciliation_events", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]);
   });
-  await attempt("dispatches", () => exactDelete("marison_outbound_dispatches", "surat_id", [ids.parent, ids.rejectedParent]));
+  await attempt("dispatches", () => exactDelete("marison_outbound_dispatches", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]));
   await attempt("notifications", () => exactDelete("notifications", "user_id", [ids.requester, ids.signer, ids.admin]));
   await attempt("pdf jobs", () => exactDelete("document_pdf_jobs", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]));
   await attempt("attachments", () => exactDelete("surat_attachments", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]));
@@ -137,6 +137,7 @@ const cleanup = async () => {
   await attempt("tasks", () => exactDelete("surat_recommendation_tasks", "id", [ids.task, ids.rejectedTask]));
   await attempt("signatures", () => exactDelete("surat_signatures", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]));
   await attempt("surat", () => exactDelete("surat_registrasi", "id", [ids.child, ids.rejectedChild, ids.parent, ids.rejectedParent]));
+  await attempt("drafts", () => exactDelete("surat_registration_drafts", "id", [ids.draft]));
   await attempt("reservations", () => exactDelete("surat_reservations", "id", [ids.reservation, ids.rejectedReservation]));
   await attempt("usage candidates", () => exactDelete("form_usage_step_users", "usage_step_id", [ids.usageStep]));
   await attempt("usage departments", () => exactDelete("form_usage_departments", "usage_id", [ids.usage]));
@@ -165,13 +166,14 @@ const cleanup = async () => {
     forms: await countExact("master_forms", "id", [ids.form]),
     usages: await countExact("form_usages", "id", [ids.usage]),
     surat: await countExact("surat_registrasi", "id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]),
+    drafts: await countExact("surat_registration_drafts", "id", [ids.draft]),
     reservations: await countExact("surat_reservations", "id", [ids.reservation, ids.rejectedReservation]),
     tasks: await countExact("surat_recommendation_tasks", "id", [ids.task, ids.rejectedTask]),
     signatures: await countExact("surat_signatures", "id", [ids.childSignature, ids.parentSignature]),
     links: await countExact("surat_linked_documents", "parent_surat_id", [ids.parent, ids.rejectedParent]),
     pdfJobs: await countExact("document_pdf_jobs", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]),
     tokens: await countExact("file_view_tokens", "surat_id", [ids.child, ids.rejectedChild]),
-    dispatches: await countExact("marison_outbound_dispatches", "surat_id", [ids.parent, ids.rejectedParent]),
+    dispatches: await countExact("marison_outbound_dispatches", "surat_id", [ids.parent, ids.child, ids.rejectedParent, ids.rejectedChild]),
     activityLogs: await countExact("activity_logs", "record_id", Object.values(ids)),
   };
   assert.equal(Object.values(residue).reduce((sum, count) => sum + count, 0), 0, `Fixture residue: ${JSON.stringify(residue)}`);
@@ -232,6 +234,7 @@ try {
   const parentBase = { entity_id: ids.entity, office_id: ids.office, dept_id: ids.department, letter_type_id: ids.letterType, form_usage_id: ids.usage, created_by: ids.requester, current_step: 1, status: "PROSES", requester_snapshot: { profile_id: ids.requester, nik: `${marker}-requester` }, location_snapshot: { office: { id: ids.office } }, policy_snapshot: {} };
   expectNoError(await admin.from("surat_registrasi").insert({ ...parentBase, id: ids.parent, no_surat: `${marker}/PARENT`, judul_surat: marker, file_path: parentPath, form_input_data: { request_category: "asset", items: recommendedItems, catatan: marker } }), "parent surat");
   expectNoError(await admin.from("surat_reservations").insert({ id: ids.reservation, entity_id: ids.entity, type_id: ids.letterType, year: new Date().getUTCFullYear(), no_urut: 900000 + Number.parseInt(runId.slice(-3), 16), status: "PENDING", reserved_by: ids.signer, office_id: ids.office, dept_id: ids.department }), "reservation");
+  expectNoError(await admin.from("surat_registration_drafts").insert({ id: ids.draft, reservation_id: ids.reservation, created_by: ids.signer, no_surat: `${marker}/CHILD`, status: "DRAFT", payload: {}, signer_assignments: [] }), "recommendation draft");
   expectNoError(await admin.from("surat_recommendation_tasks").insert({ id: ids.task, parent_surat_id: ids.parent, reservation_id: ids.reservation, no_surat: `${marker}/REC`, no_urut: 1, entity_id: ids.entity, office_id: ids.office, department_id: ids.department, letter_type_id: ids.letterType, form_id: ids.form, usage_id: ids.usage, required_before_step: 2, status: "claimed", candidate_snapshot: [{ user_id: ids.signer, marker }], claimed_by: ids.signer, claimed_at: new Date().toISOString(), created_by: ids.requester }), "task");
   expectNoError(await admin.from("surat_registrasi").insert({ ...parentBase, id: ids.child, no_surat: `${marker}/CHILD`, judul_surat: `${marker} child`, created_by: ids.signer, file_path: childPath, form_input_data: { linked_document_type: "recommendation", linked_parent_surat_id: ids.parent, task_id: ids.task, reservation_id: ids.reservation, recommendation_multi_detail: recommendation } }), "child surat");
   expectNoError(await admin.from("surat_signatures").insert({ id: ids.childSignature, surat_id: ids.child, user_id: ids.signer, form_usage_step_id: ids.usageStep, is_signed: false, status: "PENDING" }), "child signature");

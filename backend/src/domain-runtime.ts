@@ -4137,10 +4137,8 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
     throw err;
   }
 
-  const recommendationRequired = input.requires_recommendation === true;
-  const recommendationDocument = recommendationRequired
-    ? await getMarisonRecommendationDocument(surat.id)
-    : null;
+  const recommendationDocument = await getMarisonRecommendationDocument(surat.id);
+  const recommendationRequired = input.requires_recommendation === true || Boolean(recommendationDocument);
   const recommendationRows = recommendationRequired
     ? getMarisonRecommendationRows(surat, input, recommendationDocument)
     : [];
