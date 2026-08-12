@@ -64,7 +64,7 @@ export type RecommendationMultiDetail = {
 type LegacyRow = Record<string, unknown>;
 
 export const RECOMMENDATION_DESCRIPTION_DEFAULTS: Readonly<Record<RecommendationAction, string>> = Object.freeze({
-  purchase_new: "Beli baru",
+  purchase_new: "Pembelian baru",
   replace: "Ganti komponen",
   service: "Servis",
 });

@@ -188,11 +188,18 @@ describe("recommendation item image input routes", () => {
     });
     expect(await screen.findByText("drop.png")).toBeInTheDocument();
 
-    expect(serviceMock.uploadRegistrationDraftFiles.mock.calls).toEqual([
-      [draft.id, [pasteFile], { key: "recommendation_item_1", label: "Lampiran gambar rekomendasi item 1" }],
-      [draft.id, [pickerFile], { key: "recommendation_item_2", label: "Lampiran gambar rekomendasi item 2" }],
-      [draft.id, [dropFile], { key: "recommendation_item_3", label: "Lampiran gambar rekomendasi item 3" }],
+    expect(serviceMock.uploadRegistrationDraftFiles).toHaveBeenCalledTimes(3);
+    expect(serviceMock.uploadRegistrationDraftFiles.mock.calls.map((call) => ({
+      draftId: call[0],
+      file: call[1][0],
+      key: call[2].key,
+      label: call[2].label,
+    }))).toEqual([
+      expect.objectContaining({ draftId: draft.id, file: pasteFile, key: expect.stringMatching(/^recommendation_detail_.+/), label: "Lampiran gambar detail rekomendasi" }),
+      expect.objectContaining({ draftId: draft.id, file: pickerFile, key: expect.stringMatching(/^recommendation_detail_.+/), label: "Lampiran gambar detail rekomendasi" }),
+      expect.objectContaining({ draftId: draft.id, file: dropFile, key: expect.stringMatching(/^recommendation_detail_.+/), label: "Lampiran gambar detail rekomendasi" }),
     ]);
+    expect(new Set(serviceMock.uploadRegistrationDraftFiles.mock.calls.map((call) => call[2].key)).size).toBe(3);
 
     await openItem("Item Paste");
     expect(screen.getByText("paste.png")).toBeInTheDocument();
@@ -209,10 +216,14 @@ describe("recommendation item image input routes", () => {
       { timeout: 5_000 },
     );
     const savedRows = serviceMock.saveRegistrationDraft.mock.calls.at(-1)?.[1]?.formData?.form_input_data?.recommendation_items;
-    expect(savedRows).toEqual([
-      expect.objectContaining({ recommendation_attachment_draft_file_id: "draft-file-paste", recommendation_attachment_file_name: "paste.png", recommendation_attachment_source: "paste" }),
-      expect.objectContaining({ recommendation_attachment_draft_file_id: "draft-file-picker", recommendation_attachment_file_name: "picker.png", recommendation_attachment_source: "upload" }),
-      expect.objectContaining({ recommendation_attachment_draft_file_id: "draft-file-drop", recommendation_attachment_file_name: "drop.png", recommendation_attachment_source: "drop" }),
+    expect(savedRows.map((row: Record<string, any>) => ({
+      id: row.attachments[0]?.metadata?.draft_file_id,
+      name: row.attachments[0]?.metadata?.file_name,
+      source: row.attachments[0]?.source,
+    }))).toEqual([
+      { id: "draft-file-paste", source: "paste", name: "paste.png" },
+      { id: "draft-file-picker", source: "upload", name: "picker.png" },
+      { id: "draft-file-drop", source: "drop", name: "drop.png" },
     ]);
     const rowsBeforeDelete = structuredClone(savedRows);
     const saveCountBeforeDelete = serviceMock.saveRegistrationDraft.mock.calls.length;
@@ -227,10 +238,7 @@ describe("recommendation item image input routes", () => {
     );
     const rowsAfterDelete = serviceMock.saveRegistrationDraft.mock.calls.at(-1)?.[1]?.formData?.form_input_data?.recommendation_items;
     expect(rowsAfterDelete[0]).toEqual(rowsBeforeDelete[0]);
-    expect(rowsAfterDelete[1]).toEqual(expect.objectContaining({
-      recommendation_attachment_draft_file_id: "",
-      recommendation_attachment_source: "",
-    }));
+    expect(rowsAfterDelete[1]).toEqual(expect.objectContaining({ attachments: [] }));
     expect(rowsAfterDelete[2]).toEqual(rowsBeforeDelete[2]);
 
     await openItem("Item Paste");
@@ -287,10 +295,10 @@ describe("recommendation item image input routes", () => {
     });
     await waitFor(() => expect(serviceMock.saveRegistrationDraft).toHaveBeenCalled(), { timeout: 5_000 });
     const savedRows = serviceMock.saveRegistrationDraft.mock.calls.at(-1)?.[1]?.formData?.form_input_data?.recommendation_items;
-    expect(savedRows.map((row: Record<string, unknown>) => ({
-      id: row.recommendation_attachment_draft_file_id,
-      source: row.recommendation_attachment_source,
-      name: row.recommendation_attachment_file_name,
+    expect(savedRows.map((row: Record<string, any>) => ({
+      id: row.attachments[0]?.metadata?.draft_file_id,
+      source: row.attachments[0]?.source,
+      name: row.attachments[0]?.metadata?.file_name,
     }))).toEqual([
       { id: "draft-file-paste", source: "paste", name: "paste.png" },
       { id: "draft-file-picker", source: "upload", name: "picker.png" },

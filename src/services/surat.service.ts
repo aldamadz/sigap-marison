@@ -5,6 +5,7 @@ import autoTable from "jspdf-autotable";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
 import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
+import { flattenRecommendationItems, type RecommendationMultiDetail } from "@sigap/shared";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import {
   buildRegistrationAttachmentRows,
@@ -535,7 +536,14 @@ export const suratService = {
         Object.values(row ?? {}).some((value) => String(value ?? "").trim())
       );
     }
-    if (Array.isArray(normalized.recommendation_items)) {
+    if (
+      normalized.recommendation_multi_detail?.version === 1
+      && Array.isArray(normalized.recommendation_multi_detail?.items)
+    ) {
+      normalized.recommendation_items = flattenRecommendationItems(
+        normalized.recommendation_multi_detail as RecommendationMultiDetail,
+      );
+    } else if (Array.isArray(normalized.recommendation_items)) {
       normalized.recommendation_items = this.normalizeRecommendationItems(normalized.recommendation_items);
     }
     return normalized;
