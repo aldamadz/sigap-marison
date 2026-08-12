@@ -68,7 +68,7 @@ bukan hanya waktu pembuatan image.
 | `staging` | Sudah ada; 88 commit di depan `main` saat snapshot | Gunakan hanya sebagai target PR pengujian staging |
 | `feature/*` | Belum menjadi alur baku historis | Wajib untuk fitur baru |
 | `fix/*` | Belum menjadi alur baku historis | Wajib untuk perbaikan rutin |
-| GitHub Actions | Quality workflow tersedia pada PR #42 dan belum merged | Merge setelah checks hijau; deploy tetap manual |
+| GitHub Actions | Quality workflow aktif; Node.js 24 dan affected-test PR candidate | PR menjalankan lint, typecheck, dan test terdampak; push staging/main tetap full quality sebelum deploy manual |
 | Branch protection | Tidak tersedia untuk repository private pada paket GitHub saat ini | Gunakan review/check PR secara manual atau upgrade paket |
 | Selective release | Belum dapat diandalkan dari branch staging | Promosikan branch fitur langsung ke `main` |
 
