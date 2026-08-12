@@ -11,6 +11,17 @@ import {
 type InputRecord = Record<string, unknown>;
 type IdFactory = () => string;
 
+export function createRecommendationClientId(): string {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return randomUuid;
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  if (bytes.some(Boolean)) {
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return `rec-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 const asRecord = (value: unknown): InputRecord =>
   value && typeof value === "object" && !Array.isArray(value) ? value as InputRecord : {};
 
@@ -99,7 +110,7 @@ const isCanonicalModel = (value: unknown): value is RecommendationMultiDetail =>
 export function buildRecommendationMultiDetail(
   applicantItems: unknown,
   existingInput?: InputRecord,
-  idFactory: IdFactory = () => crypto.randomUUID(),
+  idFactory: IdFactory = createRecommendationClientId,
 ): RecommendationMultiDetail {
   if (isCanonicalModel(existingInput?.recommendation_multi_detail)) {
     return existingInput.recommendation_multi_detail;
@@ -197,7 +208,7 @@ export function recommendationMultiDetailErrors(model: RecommendationMultiDetail
 
 export function createRecommendationDetail(
   parent: RecommendationParentItem,
-  idFactory: IdFactory = () => crypto.randomUUID(),
+  idFactory: IdFactory = createRecommendationClientId,
 ): RecommendationDetail {
   return {
     id: createId(idFactory),
