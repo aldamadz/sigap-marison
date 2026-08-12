@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
 export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-08-11-no-estimated-price";
-export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-08-11";
+export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-08-12-complete-fields";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
@@ -22,6 +22,10 @@ const approval = z.object({
   actioned_at: dateTime,
   notes: requiredText.optional(),
 }).strict();
+
+const fundApproval = approval.extend({
+  notes: requiredText.nullable(),
+});
 
 export const normalizeMarisonApprovalRole = (kind, role) => {
   const value = String(role ?? "").trim();
@@ -97,9 +101,9 @@ export const marisonFundSubmissionSchema = z.object({
   project_id: positiveInteger,
   division: nonEmptyText,
   title: nonEmptyText,
-  description: requiredText.optional(),
-  attachments: z.array(externalLink).optional(),
-  approvals: z.array(approval).min(1),
+  description: requiredText.nullable(),
+  attachments: z.array(externalLink),
+  approvals: z.array(fundApproval).min(1),
 }).strict();
 
 const schemas = {
