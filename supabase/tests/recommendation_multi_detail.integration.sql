@@ -2,15 +2,19 @@
 insert into public.profiles(id,role,is_active) values
 ('00000000-0000-4000-8000-000000000001','user',true),('00000000-0000-4000-8000-000000000002','user',true),
 ('00000000-0000-4000-8000-000000000003','admin',true),('00000000-0000-4000-8000-000000000004','admin',false);
-insert into public.surat_reservations(id,status) values('20000000-0000-4000-8000-000000000001','PENDING'),('20000000-0000-4000-8000-000000000002','PENDING');
-insert into public.surat_registrasi(id,created_by,judul_surat,status,file_path,current_step,reservation_id,form_input_data) values
-('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','Parent','PROSES','parent.xlsx',2,null,'{"request_category":"asset"}'),
-('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','Canonical child','PROSES','child-v1.xlsx',1,'20000000-0000-4000-8000-000000000001',
+insert into public.surat_reservations(id,status,reserved_by) values
+('20000000-0000-4000-8000-000000000001','PENDING','00000000-0000-4000-8000-000000000001'),
+('20000000-0000-4000-8000-000000000002','PENDING','00000000-0000-4000-8000-000000000001');
+insert into public.surat_registrasi(id,created_by,no_surat,judul_surat,status,file_path,current_step,reservation_id,form_input_data) values
+('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','PARENT-001','Parent','PROSES','parent.xlsx',2,null,'{"request_category":"asset"}'),
+('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','REC-001','Canonical child','PROSES','child-v1.xlsx',1,'20000000-0000-4000-8000-000000000001',
 '{"linked_document_type":"recommendation","linked_parent_surat_id":"10000000-0000-4000-8000-000000000001","task_id":"30000000-0000-4000-8000-000000000001","recommendation_multi_detail":{"version":1,"items":[{"id":"asset-1","order":0,"status":"not_recommended","applicant_original":{"name":"Server","quantity":1,"notes":""},"location":"Gudang","pic":"Budi","rejection_reason":"Tidak ekonomis","details":[]},{"id":"asset-2","order":1,"status":"recommended","applicant_original":{"name":"Komputer","quantity":2,"notes":""},"location":"","pic":"","rejection_reason":"","details":[{"id":"detail-1","order":0,"parent_item_id":"asset-2","name":"RAM 32 GB","quantity":2,"action":"service","description":"Servis","description_manually_edited":false,"notes":"","estimated_price":0,"attachments":[{"id":"photo-1","order":0,"storage_path":"recommendation/photo.jpg"}],"reference_links":[{"id":"ref-1","order":0,"url":"https://example.test/item"}]}]}]}}'),
-('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','Wrong child','PROSES','wrong.xlsx',1,'20000000-0000-4000-8000-000000000002',
+('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','REC-002','Wrong child','PROSES','wrong.xlsx',1,'20000000-0000-4000-8000-000000000002',
 '{"linked_document_type":"recommendation","linked_parent_surat_id":"10000000-0000-4000-8000-000000000099","recommendation_items":[{"nama_barang":"Legacy","jumlah":1,"recommendation_action":"service"}]}'),
-('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','All rejected','PROSES','reject.xlsx',1,'20000000-0000-4000-8000-000000000002',
+('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','REC-003','All rejected','PROSES','reject.xlsx',1,'20000000-0000-4000-8000-000000000002',
 '{"linked_document_type":"recommendation","linked_parent_surat_id":"10000000-0000-4000-8000-000000000001","task_id":"30000000-0000-4000-8000-000000000001","recommendation_multi_detail":{"version":1,"items":[{"id":"asset-x","status":"not_recommended","location":"Site","pic":"Ani","rejection_reason":"Rusak total","details":[]}]}}');
+insert into public.surat_registration_drafts(id,reservation_id,created_by,no_surat,status) values
+('40000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','REC-001','DRAFT');
 insert into public.surat_recommendation_tasks(id,parent_surat_id,reservation_id,required_before_step,status,claimed_by)
 values('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',2,'claimed','00000000-0000-4000-8000-000000000001');
 insert into public.surat_signatures(id,surat_id,user_id,is_signed,step_order,status)
@@ -40,13 +44,20 @@ select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002'
 do $$begin begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');raise exception 'unauthorized accepted';exception when insufficient_privilege then null;end;end$$;
 do $$begin begin perform public.finalize_recommendation_revision_if_needed('10000000-0000-4000-8000-000000000002');raise exception 'unauthorized direct finalize accepted';exception when insufficient_privilege then null;end;end$$;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
-update public.surat_registrasi set reservation_id='20000000-0000-4000-8000-000000000002' where id='10000000-0000-4000-8000-000000000002';
+update public.surat_registration_drafts set reservation_id='20000000-0000-4000-8000-000000000002' where id='40000000-0000-4000-8000-000000000001';
 do $$begin begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');raise exception 'task context bypassed reservation';exception when invalid_parameter_value then null;end;end$$;
-update public.surat_registrasi set reservation_id='20000000-0000-4000-8000-000000000001' where id='10000000-0000-4000-8000-000000000002';
+update public.surat_registration_drafts set reservation_id='20000000-0000-4000-8000-000000000001' where id='40000000-0000-4000-8000-000000000001';
 update public.surat_registrasi set form_input_data=form_input_data||'{"recommendation_multi_detail":{"broken":true},"recommendation_items":[{"nama_barang":"Legacy","jumlah":1}]}'::jsonb where id='10000000-0000-4000-8000-000000000004';
 do $$begin begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004');raise exception 'malformed canonical downgraded to legacy';exception when invalid_parameter_value then null;end;end$$;
 do $$begin begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003');raise exception 'wrong linkage accepted';exception when invalid_parameter_value then null;end;end$$;
 select public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');
+do $$declare recovered public.surat_registrasi; before_count integer;begin
+ select count(*) into before_count from public.surat_registrasi;
+ select * into recovered from public.create_surat_registrasi(jsonb_build_object(
+   'draft_id','40000000-0000-4000-8000-000000000001','reservation_id','20000000-0000-4000-8000-000000000001','no_surat','REC-001'));
+ assert recovered.id='10000000-0000-4000-8000-000000000002','partial registration retry did not reuse existing surat';
+ assert(select count(*)=before_count from public.surat_registrasi),'partial registration retry duplicated surat';
+end$$;
 do $$begin assert(select not (data_snapshot ? 'recommendation') from public.surat_registrasi where id='10000000-0000-4000-8000-000000000001'),'parent snapshot published before PDF';end$$;
 do $$declare t timestamptz;begin select submitted_at into t from public.surat_recommendation_tasks where id='30000000-0000-4000-8000-000000000001';perform pg_sleep(.01);perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');assert(select submitted_at=t from public.surat_recommendation_tasks where id='30000000-0000-4000-8000-000000000001'),'same child not idempotent';begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003');raise exception 'different child accepted';exception when sqlstate '55000' then null;end;end$$;
 

@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 const migration = readFileSync("supabase/migrations/20260810143000_rec03_recommendation_multi_detail_foundation.sql", "utf8");
 const noDispatchMigration = readFileSync("supabase/migrations/20260810170000_skip_all_rejected_outbound_without_jobs.sql", "utf8");
 const fileLinkMigration = readFileSync("supabase/migrations/20260811140000_rec03_file_link_blockers.sql", "utf8");
+const partialRecoveryMigration = readFileSync("supabase/migrations/20260812090000_recover_partial_recommendation_submission.sql", "utf8");
 const assertions = readFileSync("supabase/tests/recommendation_multi_detail.integration.sql", "utf8");
 const canonicalFixture = readFileSync("fixtures/recommendation-multi-detail-v1.json", "utf8").replaceAll("'", "''");
 const fixture = `
@@ -15,9 +16,12 @@ create function auth.uid() returns uuid language sql stable set search_path='' a
 create function auth.role() returns text language sql stable set search_path='' as $$select current_user::text$$;
 create table public.profiles(id uuid primary key,role text not null,is_active boolean default true,deleted_at timestamptz);
 create table public.surat_registrasi(
- id uuid primary key,created_by uuid references public.profiles(id),no_surat text,judul_surat text,status text,file_path text,pdf_path text,
+ id uuid primary key,created_by uuid references public.profiles(id),no_surat text unique,judul_surat text,status text,file_path text,pdf_path text,
  current_step integer default 1,reservation_id uuid,form_input_data jsonb default '{}',data_snapshot jsonb default '{}',updated_at timestamptz default now());
 create table public.surat_reservations(id uuid primary key,status text,reserved_by uuid references public.profiles(id));
+create table public.surat_registration_drafts(
+ id uuid primary key,reservation_id uuid unique references public.surat_reservations(id),created_by uuid references public.profiles(id),
+ no_surat text,status text,updated_at timestamptz default now());
 create table public.surat_recommendation_tasks(
  id uuid primary key,parent_surat_id uuid references public.surat_registrasi(id),submitted_surat_id uuid references public.surat_registrasi(id),
  reservation_id uuid references public.surat_reservations(id),required_before_step integer default 3,status text,claimed_by uuid references public.profiles(id),
@@ -51,6 +55,13 @@ insert into public.marison_outbound_settings values(true,'staging',true);
 create table public.marison_outbound_replacement_events(id uuid primary key default gen_random_uuid(),old_dispatch_id uuid,new_dispatch_id uuid);
 create function public.create_marison_outbound_replacement_strict(uuid,uuid,text) returns uuid language sql as $$select gen_random_uuid()$$;
 create function public.create_marison_outbound_replacement(uuid,uuid,text) returns uuid language sql as $$select gen_random_uuid()$$;
+create function public.create_surat_registrasi(p_payload jsonb) returns public.surat_registrasi language plpgsql security definer set search_path='' as $$
+declare v_row public.surat_registrasi%rowtype;
+begin
+ insert into public.surat_registrasi(id,created_by,no_surat,judul_surat,status)
+ values(gen_random_uuid(),auth.uid(),p_payload->>'no_surat','new','PROSES') returning * into v_row;
+ return v_row;
+end$$;
 grant all on all tables in schema public to authenticated,service_role;
 `;
 const beforeNoDispatchMigration = `
@@ -69,5 +80,5 @@ const id=run(["run","-d","-e","POSTGRES_PASSWORD=test","postgres:17-alpine"]).tr
 try{
  let ready=false;for(let attempt=0;attempt<30&&!ready;attempt+=1){ready=spawnSync("docker",["exec",id,"pg_isready","-U","postgres"],{encoding:"utf8"}).status===0;if(!ready)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw new Error("Disposable PostgreSQL did not become ready");
- process.stdout.write(run(["exec","-i",id,"psql","-U","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
+ process.stdout.write(run(["exec","-i",id,"psql","-U","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+partialRecoveryMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
 }finally{run(["rm","-f",id]);}

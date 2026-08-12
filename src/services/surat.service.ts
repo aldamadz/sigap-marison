@@ -1895,6 +1895,18 @@ export const suratService = {
       if (suratError) throw suratError;
       if (!surat?.id) throw new Error("Surat gagal dibuat.");
 
+      // A previous attempt may have committed the registration before a later
+      // recommendation-link step failed. In that case the RPC returns the same
+      // surat; do not duplicate its attachments, snapshots, or signatures.
+      if (payloadDraftId) {
+        const { count: existingSignatureCount, error: existingSignatureError } = await supabase
+          .from("surat_signatures")
+          .select("id", { count: "exact", head: true })
+          .eq("surat_id", surat.id);
+        if (existingSignatureError) throw existingSignatureError;
+        if ((existingSignatureCount || 0) > 0) return surat;
+      }
+
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
         stage: "initial",
         requirements: payload.initial_attachment_meta || {},
