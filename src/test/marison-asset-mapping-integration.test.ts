@@ -38,6 +38,17 @@ describe("REC-03 Marison asset runtime integration", () => {
     expect(builder).toContain("applicantAttachments,");
   });
 
+  it("treats an active recommendation child as authoritative even when the parent flag is absent", () => {
+    const start = runtime.indexOf("const buildMarisonAssetPayload");
+    const end = runtime.indexOf("const buildMarisonFundPayload", start);
+    const builder = runtime.slice(start, end);
+    const documentLookup = builder.indexOf("await getMarisonRecommendationDocument(surat.id)");
+    const requirementDecision = builder.indexOf("Boolean(recommendationDocument)");
+
+    expect(documentLookup).toBeGreaterThan(-1);
+    expect(requirementDecision).toBeGreaterThan(documentLookup);
+  });
+
   it("maps typed mapper errors to safe HTTP 422 responses", () => {
     expect(runtime).toContain("error instanceof MarisonAssetItemsError ? 422");
     expect(runtime).toContain('sendJson(res, status, { error: error.message || "Internal server error", requestId })');
