@@ -50,6 +50,7 @@ describe("RecommendationMultiDetailEditor", () => {
   it("splits one applicant item into stable numbered details", () => {
     render(<Harness />);
     expect(screen.getByText("1.1")).toBeInTheDocument();
+    expect(screen.queryByText(/Estimasi harga/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Tambah detail untuk item 1" }));
 

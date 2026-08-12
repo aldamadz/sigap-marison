@@ -32,7 +32,6 @@ export type RecommendationDetail = {
   description: string;
   description_manually_edited: boolean;
   notes: string;
-  estimated_price?: number;
   location?: string;
   pic?: string;
   attachments: RecommendationAttachment[];
@@ -120,13 +119,6 @@ function positiveInteger(value: unknown, field: string): number {
 function nonnegativeInteger(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function optionalPrice(value: unknown): number | undefined {
-  if (value === undefined || value === null || value === "") return undefined;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("estimated_price must be nonnegative.");
-  return parsed;
 }
 
 function unknownFields(row: LegacyRow, knownKeys: Set<string>): Record<string, unknown> | undefined {
@@ -256,7 +248,6 @@ function validateParent(parent: RecommendationParentItem): void {
     if (!text(detail.name)) throw new Error("Recommendation detail name/spec is required.");
     positiveInteger(detail.quantity, "detail.quantity");
     normalizeAction({ recommendation_action: detail.action });
-    optionalPrice(detail.estimated_price);
   });
 }
 
@@ -304,7 +295,6 @@ export function readLegacyRecommendationItems(rows: unknown): RecommendationMult
         deterministicId(`${parentId}_detail`, { ...candidate, order: undefined, no: undefined });
       const action = normalizeAction(detailRow);
       const description = text(detailRow.description ?? detailRow.uraian) || RECOMMENDATION_DESCRIPTION_DEFAULTS[action];
-      const estimatedPrice = optionalPrice(detailRow.estimated_price ?? detailRow.harga_estimasi);
       parent!.details.push({
         id: detailId,
         order: nonnegativeInteger(detailRow.order ?? detailRow.no, parent!.details.length),
@@ -314,7 +304,6 @@ export function readLegacyRecommendationItems(rows: unknown): RecommendationMult
         description,
         description_manually_edited: detailRow.description_manually_edited === true,
         notes: text(detailRow.notes ?? detailRow.catatan),
-        ...(estimatedPrice !== undefined && { estimated_price: estimatedPrice }),
         ...(text(detailRow.detail_location ?? detailRow.location) && { location: text(detailRow.detail_location ?? detailRow.location) }),
         ...(text(detailRow.detail_pic ?? detailRow.pic) && { pic: text(detailRow.detail_pic ?? detailRow.pic) }),
         attachments: orderedAttachments(detailRow, detailId),
@@ -345,7 +334,7 @@ function parentFields(parent: RecommendationParentItem, parentIndex: number): Le
 }
 
 export function flattenRecommendationItems(model: RecommendationMultiDetail): LegacyRow[] {
-  return model.items.flatMap<LegacyRow>((parent, parentIndex): LegacyRow[] => {
+  return withoutRecommendationEstimatedPrices(model).items.flatMap<LegacyRow>((parent, parentIndex): LegacyRow[] => {
     validateParent(parent);
     if (parent.status === "not_recommended") {
       return [{
@@ -386,7 +375,6 @@ export function flattenRecommendationItems(model: RecommendationMultiDetail): Le
         tidak_direkomendasikan: "",
         uraian: detail.description,
         description_manually_edited: detail.description_manually_edited,
-        ...(detail.estimated_price !== undefined && { estimated_price: detail.estimated_price }),
         ...(detail.location && { detail_location: detail.location }),
         ...(detail.pic && { detail_pic: detail.pic }),
         attachments: detail.attachments.map(({ legacy_fields, ...attachment }) => ({ ...legacy_fields, ...attachment })),
@@ -395,6 +383,23 @@ export function flattenRecommendationItems(model: RecommendationMultiDetail): Le
       };
     });
   });
+}
+
+export function withoutRecommendationEstimatedPrices(model: RecommendationMultiDetail): RecommendationMultiDetail {
+  return {
+    ...model,
+    items: model.items.map((parent) => ({
+      ...parent,
+      details: parent.details.map((detail) => {
+        const {
+          estimated_price: _estimatedPrice,
+          harga_estimasi: _legacyEstimatedPrice,
+          ...cleanDetail
+        } = detail as RecommendationDetail & Record<string, unknown>;
+        return cleanDetail as RecommendationDetail;
+      }),
+    })),
+  };
 }
 
 export function applyRecommendationDescriptionDefault(detail: RecommendationDetail, action: RecommendationAction): RecommendationDetail {
