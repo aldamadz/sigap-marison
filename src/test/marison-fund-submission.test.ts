@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mapMarisonFundSubmission } from "../../server/marison-fund-submission.mjs";
+import {
+  mapMarisonFundSubmission,
+  normalizeMarisonFundApprovalRole,
+  resolveMarisonFundDivision,
+} from "../../server/marison-fund-submission.mjs";
 
 const approval = {
   role: "Manager HRD & GA",
@@ -10,6 +14,37 @@ const approval = {
 };
 
 describe("Marison Fund Submission mapper", () => {
+  it.each([
+    ["Staff IT", "staff"],
+    ["Manager Pengembangan Organisasi", "manager"],
+    ["Kepala Cabang", "manager"],
+    ["Direktur Utama", "director"],
+  ])("maps SIGAP approval role %s to vendor role %s", (source, expected) => {
+    expect(normalizeMarisonFundApprovalRole(source)).toBe(expected);
+  });
+
+  it("fails closed for an unknown approval role", () => {
+    expect(() => normalizeMarisonFundApprovalRole("Penandatangan Khusus"))
+      .toThrow("Role approval Fund Submission tidak dikenali");
+  });
+
+  it("uses the exact external employee division for the mapped requester NIK", () => {
+    expect(resolveMarisonFundDivision({
+      requesterNik: "A 114",
+      employees: [
+        { nik: "A 115", division: "5" },
+        { nik: " a   114 ", division: "4" },
+      ],
+    })).toBe("4");
+  });
+
+  it("fails closed when the requester has no external division", () => {
+    expect(() => resolveMarisonFundDivision({
+      requesterNik: "A 114",
+      employees: [{ nik: "A 114", division: null }],
+    })).toThrow("Division external pemohon tidak tersedia");
+  });
+
   it("maps the exact vendor contract without requester, branch, or items", () => {
     const result = mapMarisonFundSubmission({
       request: {
@@ -33,7 +68,7 @@ describe("Marison Fund Submission mapper", () => {
       title: "Permohonan biaya operasional",
       description: "Pembelian kebutuhan kantor",
       attachments: [{ name: "Dokumen final", link: "https://sigap.example.test/file.pdf" }],
-      approvals: [approval],
+      approvals: [{ ...approval, role: "manager" }],
     });
     expect(result.payload).not.toHaveProperty("submitted_by");
     expect(result.payload).not.toHaveProperty("branch_id");

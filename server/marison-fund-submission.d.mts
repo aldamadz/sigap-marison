@@ -14,6 +14,13 @@ export interface MarisonFundSubmissionInput {
 export function mapMarisonFundSubmission(input: MarisonFundSubmissionInput): {
   endpoint: "/fund-submissions";
   kind: "fund";
-  contractVersion: "vendor-openapi-fund-2026-08-11";
+  contractVersion: "vendor-openapi-fund-2026-08-12-complete-fields";
   payload: Record<string, unknown>;
 };
+
+export function resolveMarisonFundDivision(input: {
+  employees?: Array<{ nik?: unknown; division?: unknown }>;
+  requesterNik?: unknown;
+}): string;
+
+export function normalizeMarisonFundApprovalRole(value: unknown): "staff" | "manager" | "director";

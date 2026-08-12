@@ -41,7 +41,7 @@ import {
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
-import { mapMarisonFundSubmission } from "../../server/marison-fund-submission.mjs";
+import { mapMarisonFundSubmission, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
   consumedFileViewTokenResult,
@@ -4178,22 +4178,14 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) => {
   const projectId = requireExternalInteger(overrides.projectId, "Project ID");
   const fundType = firstString(input.fund_type, input.fund_submission_type);
-  if (!surat.dept_id) {
-    const err = new Error("Departemen pengajuan wajib tersedia untuk Fund Submission.");
-    err.status = 422;
-    throw err;
-  }
-  const { data: department, error: departmentError } = await supabase
-    .from("master_departments")
-    .select("name")
-    .eq("id", surat.dept_id)
-    .maybeSingle();
-  if (departmentError) throw departmentError;
-  if (!firstString(department?.name)) {
-    const err = new Error("Nama departemen pengajuan tidak tersedia untuk division Marison.");
-    err.status = 422;
-    throw err;
-  }
+  const employeePayload = await getMarisonProtectedJson(
+    marisonDeploymentEnvironment,
+    `/employees?search=${encodeURIComponent(overrides.nik)}&per_page=20&page=1`,
+  );
+  const division = resolveMarisonFundDivision({
+    employees: Array.isArray(employeePayload?.data) ? employeePayload.data : [],
+    requesterNik: overrides.nik,
+  });
 
   return mapMarisonFundSubmission({
     request: {
@@ -4203,7 +4195,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
       description: firstString(input.catatan, input.description, surat.judul_surat),
     },
     projectId,
-    division: department.name,
+    division,
     attachments: await buildMarisonAttachmentLinks(surat, actorId),
     approvals: overrides.approvals,
   });
@@ -4213,7 +4205,7 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
   const input = getMarisonDispatchInput(surat);
   const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
   const isFund = category === "non_asset" || category === "nonasset";
-  const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: !isFund });
+  const identity = await resolveMarisonOutboundIdentity(surat);
   const resolvedOverrides = {
     ...overrides,
     ...(identity.requester ? { nik: identity.requester.nik } : {}),
