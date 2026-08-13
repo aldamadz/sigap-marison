@@ -58,6 +58,24 @@ describe("recommendation multi-detail contract", () => {
     });
   });
 
+  it("projects canonical head-office location and PIC to the legacy template field", () => {
+    const model = readLegacyRecommendationItems([{
+      parent_item_id: "asset-1",
+      detail_id: "detail-1",
+      parent_item_name: "Laptop",
+      nama_barang: "Laptop HP",
+      recommendation_action: "purchase_new",
+      location: "Kantor Pusat / Marketing",
+      pic: "Andreas Bayu Darmawan",
+    }]);
+
+    expect(flattenRecommendationItems(model)[0]).toMatchObject({
+      location: "Kantor Pusat / Marketing",
+      pic: "Andreas Bayu Darmawan",
+      lokasi_pic: "Marketing / Andreas",
+    });
+  });
+
   it("requires recommended parents to contain details", () => {
     expect(() => readLegacyRecommendationItems([{
       id: "asset-1",

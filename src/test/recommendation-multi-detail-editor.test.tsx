@@ -4,6 +4,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { RecommendationMultiDetail } from "@sigap/shared";
 import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
 
+vi.stubGlobal("ResizeObserver", class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+});
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+  configurable: true,
+  value: vi.fn(),
+});
+
 const model: RecommendationMultiDetail = {
   version: 1,
   items: [{
@@ -29,15 +39,25 @@ const model: RecommendationMultiDetail = {
   }],
 };
 
-function Harness({ onUpload = vi.fn() }: { onUpload?: ReturnType<typeof vi.fn> }) {
+function Harness({
+  onUpload = vi.fn(),
+  users = [],
+  offices = [],
+  departments = [],
+}: {
+  onUpload?: ReturnType<typeof vi.fn>;
+  users?: Array<{ id: string; full_name: string; office_id: string; department_id: string }>;
+  offices?: Array<{ id: string; name: string; kedudukan: string }>;
+  departments?: Array<{ id: string; name: string }>;
+}) {
   const [value, setValue] = useState(model);
   return (
     <RecommendationMultiDetailEditor
       model={value}
       onChange={setValue}
-      users={[]}
-      offices={[]}
-      departments={[]}
+      users={users}
+      offices={offices}
+      departments={departments}
       uploadingKey={null}
       onUpload={onUpload}
       onDeleteAttachment={vi.fn()}
@@ -95,5 +115,19 @@ describe("RecommendationMultiDetailEditor", () => {
 
     expect(onUpload).toHaveBeenCalledWith("parent-computer", "detail-cpu", files, "upload");
     expect(screen.getByTestId("recommendation-multi-detail-editor")).toBeInTheDocument();
+  });
+
+  it("uses department as the head-office recommendation location", () => {
+    render(<Harness
+      users={[{ id: "user-andreas", full_name: "Andreas Bayu Darmawan", office_id: "office-pusat", department_id: "dept-marketing" }]}
+      offices={[{ id: "office-pusat", name: "Kantor Pusat", kedudukan: "Pusat" }]}
+      departments={[{ id: "dept-marketing", name: "Marketing" }]}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Aldama" }));
+    fireEvent.click(screen.getByText("Andreas Bayu Darmawan"));
+
+    expect(screen.getByPlaceholderText(/Contoh: Kantor Pusat/i)).toHaveValue("Marketing");
+    expect(screen.getByRole("button", { name: "Andreas Bayu Darmawan" })).toBeInTheDocument();
   });
 });

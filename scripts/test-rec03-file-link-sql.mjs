@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const blockers = readFileSync("supabase/migrations/20260811140000_rec03_file_link_blockers.sql", "utf8");
+const readiness = readFileSync("supabase/migrations/20260813163000_fix_recommendation_pdf_readiness.sql", "utf8");
 const acceptance = readFileSync("supabase/tests/recommendation_file_link.integration.sql", "utf8");
 const fixture = `
 create schema extensions;
@@ -12,7 +13,8 @@ create function auth.role() returns text language sql stable set search_path='' 
 create table public.profiles(id uuid primary key,role text,is_active boolean,deleted_at timestamptz);
 create table public.surat_registrasi(id uuid primary key,created_by uuid,no_surat text,judul_surat text,status text,file_path text,pdf_path text,form_input_data jsonb default '{}',data_snapshot jsonb default '{}',updated_at timestamptz default now());
 create table public.surat_linked_documents(id uuid primary key default gen_random_uuid(),parent_surat_id uuid,child_surat_id uuid,link_type text,status text,updated_at timestamptz default now());
-create table public.document_pdf_jobs(id uuid primary key default gen_random_uuid(),surat_id uuid,signature_id uuid,source_file_path text,status text,pdf_url text,recommendation_content_fingerprint text,render_payload jsonb,lease_token uuid,lease_expires_at timestamptz,error_message text,updated_at timestamptz,finished_at timestamptz);
+create table public.surat_attachments(id uuid primary key default gen_random_uuid(),surat_id uuid,file_url text,file_size bigint,file_type text);
+create table public.document_pdf_jobs(id uuid primary key default gen_random_uuid(),surat_id uuid,signature_id uuid,source_file_path text,status text default 'queued',pdf_url text,recommendation_content_fingerprint text,render_payload jsonb,lease_token uuid,lease_expires_at timestamptz,error_message text,updated_at timestamptz,finished_at timestamptz,requested_by uuid,refresh boolean default false,created_at timestamptz default now());
 create type public.marison_outbound_dispatch_status as enum('pending','processing','succeeded','failed_retryable','failed_terminal','outcome_unknown','skipped');
 create table public.marison_outbound_dispatches(id uuid primary key,surat_id uuid,environment text,kind text,endpoint text,idempotency_key text,status public.marison_outbound_dispatch_status,lease_token uuid,lease_acquired_at timestamptz,lease_expires_at timestamptz,post_started_at timestamptz,response jsonb,external_reference text,completed_at timestamptz,skipped_code text,skipped_reason text,updated_at timestamptz default now());
 create table public.file_view_tokens(id uuid primary key default gen_random_uuid(),token_hash text not null unique,bucket text not null,object_path text not null,storage_origin text not null,requested_by uuid,surat_id uuid,purpose text not null,expires_at timestamptz,consumed_at timestamptz,created_at timestamptz default now(),revoked_at timestamptz,revoked_by uuid,revoke_reason text,last_accessed_at timestamptz);
@@ -41,7 +43,7 @@ try {
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"], fixture + blockers + acceptance));
+  process.stdout.write(run(["exec", "-i", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"], fixture + blockers + readiness + acceptance));
 } finally {
   run(["rm", "-f", id]);
 }

@@ -179,6 +179,7 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
 
 export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((item, itemIndex) =>
   asArray(item.details).flatMap((detail, detailIndex) => {
+    const showDetailNumber = asArray(item.details).length > 1;
     const images = detail.attachments.filter((attachment) => attachment.isImage);
     const documents = detail.attachments.filter((attachment) => !attachment.isImage);
     const chunks = images.length
@@ -187,6 +188,7 @@ export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((it
     return chunks.map((pageImages, continuationIndex) => ({
       itemNumber: itemIndex + 1,
       detailNumber: detailIndex + 1,
+      showDetailNumber,
       itemId: item.id,
       detailId: detail.id,
       applicantName: item.applicantName,
@@ -245,7 +247,10 @@ export const appendRecommendationPages = async (workbook, items, downloadImage) 
     sheet.getCell("A1").alignment = { vertical: "middle", wrapText: true };
     sheet.getRow(1).height = 28;
     sheet.mergeCells("A2:L2");
-    sheet.getCell("A2").value = `DETAIL ${page.itemNumber}.${page.detailNumber}${page.continuation ? " (LANJUTAN)" : ""} - ${page.detailHeading}`;
+    const continuationLabel = page.continuation ? " (LANJUTAN)" : "";
+    sheet.getCell("A2").value = page.showDetailNumber
+      ? `DETAIL ${page.itemNumber}.${page.detailNumber}${continuationLabel} - ${page.detailHeading}`
+      : `${page.detailHeading}${continuationLabel}`;
     sheet.getCell("A2").font = { name: "Arial", size: 12, bold: true, color: { argb: "FFFFFFFF" } };
     sheet.getCell("A2").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF245B78" } };
     sheet.getCell("A2").alignment = { vertical: "middle", wrapText: true };

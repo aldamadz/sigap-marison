@@ -318,6 +318,12 @@ export function readLegacyRecommendationItems(rows: unknown): RecommendationMult
 }
 
 function parentFields(parent: RecommendationParentItem, parentIndex: number): LegacyRow {
+  const location = parent.location.trim();
+  const templateLocation = /^kantor pusat\s*\/\s*/i.test(location)
+    ? location.replace(/^kantor pusat\s*\/\s*/i, "").trim()
+    : location;
+  const templatePic = parent.pic.trim().split(/\s+/)[0] ?? "";
+  const locationPic = [templateLocation, templatePic].filter(Boolean).join(" / ");
   return {
     ...parent.legacy_fields,
     parent_item_id: parent.id,
@@ -330,6 +336,7 @@ function parentFields(parent: RecommendationParentItem, parentIndex: number): Le
     is_recommended: parent.status === "recommended",
     ...(parent.location && { location: parent.location }),
     ...(parent.pic && { pic: parent.pic }),
+    ...(locationPic && { lokasi_pic: locationPic }),
   };
 }
 

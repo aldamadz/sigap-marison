@@ -39,6 +39,7 @@ type DirectoryRecord = {
   job_title?: string;
   office_id?: string;
   department_id?: string;
+  kedudukan?: string;
 };
 
 type UploadSource = "upload" | "paste" | "drop";
@@ -138,6 +139,7 @@ function RecommendationMultiDetailEditorContent({
     : [];
 
   const officeNames = useMemo(() => new Map(offices.map((office) => [office.id, office.name || ""])), [offices]);
+  const officePositions = useMemo(() => new Map(offices.map((office) => [office.id, office.kedudukan || ""])), [offices]);
   const departmentNames = useMemo(
     () => new Map(departments.map((department) => [department.id, department.name || ""])),
     [departments],
@@ -154,9 +156,11 @@ function RecommendationMultiDetailEditorContent({
   };
 
   const selectPic = (user: DirectoryRecord) => {
-    const location = [officeNames.get(user.office_id || ""), departmentNames.get(user.department_id || "")]
-      .filter(Boolean)
-      .join(" / ");
+    const officeName = officeNames.get(user.office_id || "") || "";
+    const departmentName = departmentNames.get(user.department_id || "") || "";
+    const location = officePositions.get(user.office_id || "") === "Pusat"
+      ? departmentName
+      : officeName || departmentName;
     setParent((parent) => ({
       ...parent,
       pic: user.full_name || user.name || "",
