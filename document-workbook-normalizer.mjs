@@ -62,6 +62,48 @@ const isRecommendationSheet = (worksheet) => {
   return heading.includes("REKOMENDASI PEREMAJAAN BARANG / ALAT KERJA");
 };
 
+const recommendationLocationPic = (location, pic) => {
+  const rawLocation = String(location || "").trim();
+  const templateLocation = /^kantor pusat\s*\/\s*/i.test(rawLocation)
+    ? rawLocation.replace(/^kantor pusat\s*\/\s*/i, "").trim()
+    : rawLocation;
+  const templatePic = String(pic || "").trim().split(/\s+/)[0] || "";
+  return [templateLocation, templatePic].filter(Boolean).join(" / ");
+};
+
+const recommendationSummaryRows = (items) => (Array.isArray(items) ? items : []).flatMap((item) => {
+  const details = Array.isArray(item?.details) ? item.details : [];
+  if (details.length === 0) return [item];
+  return details.map((detail) => ({
+    location: detail?.location || item?.location,
+    pic: detail?.pic || item?.pic,
+  }));
+});
+
+const projectRecommendationMainTable = (worksheet, items) => {
+  const sourceRows = recommendationSummaryRows(items);
+  if (sourceRows.length === 0) return false;
+  const tableRows = [];
+  for (let row = 8; row <= 16; row += 1) {
+    const sequence = Number(worksheet.getCell(row, 1).value);
+    const itemName = String(worksheet.getCell(row, 2).value || "").trim();
+    if (Number.isInteger(sequence) && sequence > 0 && itemName) tableRows.push(row);
+  }
+  let changed = false;
+  tableRows.forEach((row, index) => {
+    const source = sourceRows[index];
+    if (!source) return;
+    const value = recommendationLocationPic(source.location, source.pic);
+    if (!value) return;
+    const cell = worksheet.getCell(row, 5);
+    if (cell.value === value) return;
+    cell.value = value;
+    cell.alignment = { ...(cell.alignment || {}), horizontal: "left", vertical: "middle", wrapText: true };
+    changed = true;
+  });
+  return changed;
+};
+
 const isGoodsServicesSheet = (worksheet) =>
   String(worksheet.getCell("C9").value || "").toUpperCase().includes("NAMA BARANG") &&
   String(worksheet.getCell("J9").value || "").toUpperCase().includes("SAT");
@@ -185,7 +227,7 @@ const normalizeRecommendationSignatureArea = (worksheet) => {
   return true;
 };
 
-export const normalizeWorkbookForPdf = async (sourcePath) => {
+export const normalizeWorkbookForPdf = async (sourcePath, options = {}) => {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(sourcePath);
   const worksheet = workbook.worksheets[0];
@@ -200,9 +242,10 @@ export const normalizeWorkbookForPdf = async (sourcePath) => {
 
   const logoChanged = normalizeLogo(workbook, worksheet);
   const tableChanged = normalizeRecommendationTableMerges(worksheet);
+  const locationPicChanged = projectRecommendationMainTable(worksheet, options.recommendationItems);
   const notesChanged = normalizeRecommendationNotes(worksheet);
   const signatureChanged = normalizeRecommendationSignatureArea(worksheet);
-  const changed = logoChanged || tableChanged || notesChanged || signatureChanged;
+  const changed = logoChanged || tableChanged || locationPicChanged || notesChanged || signatureChanged;
   if (changed) await workbook.xlsx.writeFile(sourcePath);
   return changed;
 };
