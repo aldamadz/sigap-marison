@@ -66,6 +66,38 @@ function Harness({
   );
 }
 
+function TwoItemHarness() {
+  const [value, setValue] = useState<RecommendationMultiDetail>({
+    ...model,
+    items: [
+      model.items[0],
+      {
+        ...model.items[0],
+        id: "parent-chair",
+        order: 1,
+        applicant_original: { name: "Kursi Gaming", quantity: 2, notes: "" },
+        details: [{ ...model.items[0].details[0], id: "detail-chair", name: "Kursi Gaming", quantity: 2 }],
+      },
+    ],
+  });
+  return (
+    <>
+      <RecommendationMultiDetailEditor
+        model={value}
+        onChange={setValue}
+        users={[]}
+        offices={[]}
+        departments={[]}
+        uploadingKey={null}
+        onUpload={vi.fn()}
+        onDeleteAttachment={vi.fn()}
+        onDeleteDetail={vi.fn()}
+      />
+      <output data-testid="quantities">{value.items.map((item) => item.details[0].quantity).join(",")}</output>
+    </>
+  );
+}
+
 describe("RecommendationMultiDetailEditor", () => {
   it("splits one applicant item into stable numbered details", () => {
     render(<Harness />);
@@ -129,5 +161,18 @@ describe("RecommendationMultiDetailEditor", () => {
 
     expect(screen.getByPlaceholderText(/Contoh: Kantor Pusat/i)).toHaveValue("Marketing");
     expect(screen.getByRole("button", { name: "Andreas Bayu Darmawan" })).toBeInTheDocument();
+  });
+
+  it("edits quantity only on the visibly active parent item", () => {
+    render(<TwoItemHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Komputer SPV/ }));
+    fireEvent.change(screen.getByLabelText("Jumlah detail 1.1"), { target: { value: "1" } });
+    expect(screen.getByTestId("quantities")).toHaveTextContent("1,2");
+
+    fireEvent.click(screen.getByRole("button", { name: /Kursi Gaming/ }));
+    expect(screen.getByText("Item permohonan 2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Jumlah detail 2.1")).toHaveValue(2);
+    expect(screen.getByTestId("quantities")).toHaveTextContent("1,2");
   });
 });

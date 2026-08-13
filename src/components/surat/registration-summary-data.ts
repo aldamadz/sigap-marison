@@ -41,14 +41,43 @@ const applyRecommendationDecisionsToItems = (
     const row = item as Record<string, unknown>;
     const rowName = String(row.nama_barang || row.nama || row.barang || "").trim().toLowerCase();
     const decision = decisions.find((candidate) => {
-      const parentIndex = Number(candidate.parent_item_index || 0);
-      const parentName = String(candidate.parent_item_name || "").trim().toLowerCase();
+      const applicantOriginal = asRecord(candidate.applicant_original);
+      const explicitIndex = Number(candidate.parent_item_index || 0);
+      const canonicalOrder = Number(candidate.order);
+      const parentIndex = explicitIndex > 0
+        ? explicitIndex
+        : Number.isInteger(canonicalOrder) && canonicalOrder >= 0
+          ? canonicalOrder + 1
+          : 0;
+      const parentName = String(candidate.parent_item_name || applicantOriginal.name || "").trim().toLowerCase();
       return parentIndex === index + 1 || (parentName && parentName === rowName);
     });
+    const recommendationStatus = String(decision?.recommendation_status || decision?.status || "")
+      .trim().toLowerCase().replace(/[\s-]+/g, "_");
     const notRecommended = !decision ||
+      ["not_recommended", "tidak_direkomendasikan", "rejected", "ditolak"].includes(recommendationStatus) ||
       decision.recommendation_action === "tidak_direkomendasikan" ||
       decision.is_recommended === false;
     if (!notRecommended) {
+      const details = Array.isArray(decision.details)
+        ? decision.details.filter((detail) => detail && typeof detail === "object" && !Array.isArray(detail)) as Record<string, unknown>[]
+        : [];
+      const requestedQuantity = Number(row.jumlah ?? row.quantity);
+      const approvedQuantity = details.length === 1 ? Number(details[0].quantity ?? details[0].jumlah) : NaN;
+      if (Number.isFinite(requestedQuantity) && Number.isFinite(approvedQuantity) && requestedQuantity !== approvedQuantity) {
+        return {
+          ...row,
+          __recommendation_decision: decision,
+          __revision: {
+            action: "adjust",
+            nilai_diajukan: requestedQuantity,
+            nilai_disetujui: approvedQuantity,
+            value_type: "number",
+            alasan: String(details[0].notes || details[0].keterangan || "Jumlah disesuaikan oleh tim rekomendasi.").trim(),
+            source: "recommendation",
+          },
+        };
+      }
       return {
         ...row,
         __recommendation_decision: decision,
@@ -58,7 +87,7 @@ const applyRecommendationDecisionsToItems = (
       ...row,
       __revision: {
         action: "reject",
-        alasan: String(decision?.keterangan || decision?.alasan || decision?.reason || "Belum ada rekomendasi untuk item ini.").trim(),
+        alasan: String(decision?.rejection_reason || decision?.keterangan || decision?.alasan || decision?.reason || "Belum ada rekomendasi untuk item ini.").trim(),
         source: "recommendation",
       },
     };

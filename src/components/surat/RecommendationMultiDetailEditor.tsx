@@ -395,6 +395,7 @@ function RecommendationMultiDetailEditorContent({
                         type="number"
                         min={1}
                         step={1}
+                        aria-label={`Jumlah detail ${activeParent.order + 1}.${detailIndex + 1}`}
                         value={detail.quantity}
                         onChange={(event) => setDetail(detail.id, (item) => ({ ...item, quantity: Math.max(1, Number(event.target.value) || 1) }))}
                       />
