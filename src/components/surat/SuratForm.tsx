@@ -2253,6 +2253,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
     const missingField = getManualInputFields(selectedUsage).find((field: TemplateField) => !isManualFieldComplete(field));
     if (missingField) {
+      if (missingField.key === RECOMMENDATION_ITEMS_KEY && recommendationMultiDetail) {
+        const firstRecommendationError = recommendationMultiDetailErrors(recommendationMultiDetail)[0];
+        toast({
+          variant: "destructive",
+          title: "Daftar Rekomendasi Belum Lengkap",
+          description: firstRecommendationError || `${missingField.label} wajib diisi.`,
+        });
+        return false;
+      }
       toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
       return false;
     }
