@@ -6,9 +6,10 @@ const read = (path: string) => readFileSync(path, "utf8");
 describe("PostgREST egress guardrails", () => {
   it("keeps monitoring lists paginated and details on demand", () => {
     const service = read("src/services/surat-monitoring.service.ts");
-    expect(service).toContain(".range(from, to)");
-    expect(service).toContain("LIST_COLUMNS");
-    expect(service).toContain("DETAIL_COLUMNS");
+    expect(service).toContain('rpc("get_surat_monitoring_page"');
+    expect(service).toContain("p_limit: pageSize");
+    expect(service).toContain("p_offset: from");
+    expect(service).toContain('rpc("get_surat_monitoring_detail"');
     expect(service).toContain("get_my_surat_monitoring_stats");
   });
 
