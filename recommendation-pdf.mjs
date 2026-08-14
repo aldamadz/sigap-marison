@@ -259,7 +259,7 @@ export const appendRecommendationPages = async (workbook, items, downloadImage) 
     const sheet = workbook.addWorksheet(`Rekomendasi ${pageIndex + 1}`, {
       pageSetup: {
         paperSize: 9,
-        orientation: "portrait",
+        orientation: "landscape",
         fitToPage: true,
         fitToWidth: 1,
         fitToHeight: 1,
