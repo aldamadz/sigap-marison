@@ -7,7 +7,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select auth.uid() is not null and exists (
     select 1
@@ -51,7 +51,7 @@ returns jsonb
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   with filtered as materialized (
     select surat.*
@@ -131,7 +131,7 @@ returns jsonb
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select to_jsonb(surat)
     || jsonb_build_object(
@@ -173,7 +173,7 @@ returns table(total bigint, selesai bigint, proses bigint, ditolak bigint)
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   with classified as (
     select case
@@ -210,7 +210,7 @@ grant execute on function public.get_my_surat_monitoring_stats(timestamptz, time
 create or replace function public.enforce_surat_reservation_number_scope()
 returns trigger
 language plpgsql
-set search_path = public
+set search_path = ''
 as $$
 declare
   v_kedudukan text;
@@ -247,7 +247,7 @@ for each row execute function public.enforce_surat_reservation_number_scope();
 create or replace function public.enforce_surat_registration_branch_project()
 returns trigger
 language plpgsql
-set search_path = public
+set search_path = ''
 as $$
 declare
   v_kedudukan text;

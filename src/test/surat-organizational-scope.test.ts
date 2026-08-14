@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 const migration = read(
-  "supabase/migrations/20260813150000_surat_organizational_scope_and_auto_approval.sql",
+  "supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql",
 );
 const suratService = read("src/services/surat.service.ts");
 const monitoringService = read("src/services/surat-monitoring.service.ts");
