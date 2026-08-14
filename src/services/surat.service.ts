@@ -203,6 +203,7 @@ export interface LinkedSuratDocument {
   child_pdf_path: string | null;
   child_created_at: string | null;
   child_created_by: string | null;
+  child_recommendation_multi_detail: unknown | null;
 }
 
 export interface SuratRegistrationDraftFile {

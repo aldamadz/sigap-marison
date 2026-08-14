@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
+import { RecommendationDecisionSummary } from "@/components/surat/RecommendationDecisionSummary";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { formatCurrencyInput, parseCurrencyInput, formatRupiah as formatRupiahCanonical, normalizeRupiahDigits } from "@/lib/rupiah";
@@ -2326,25 +2327,28 @@ const handleApprove = async (item: any) => {
             const opening = isOpening(operationKey);
 
             return (
-            <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-              <div className="min-w-0">
-                <p className="truncate font-mono text-xs font-semibold text-primary">{document.child_no_surat || "Nomor diproses"}</p>
-                <p className="mt-1 truncate text-sm font-semibold">{document.child_judul_surat || "Dokumen rekomendasi"}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Status {document.child_status || "-"}
-                  {document.child_created_at ? ` · ${new Date(document.child_created_at).toLocaleString("id-ID")}` : ""}
-                </p>
+            <div key={document.id} className="rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs font-semibold text-primary">{document.child_no_surat || "Nomor diproses"}</p>
+                  <p className="mt-1 truncate text-sm font-semibold">{document.child_judul_surat || "Dokumen rekomendasi"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Status {document.child_status || "-"}
+                    {document.child_created_at ? ` · ${new Date(document.child_created_at).toLocaleString("id-ID")}` : ""}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={opening || !document.child_surat_id}
+                  onClick={() => void openPdf(document.child_surat_id, operationKey)}
+                >
+                  {opening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                  {opening ? "Menyiapkan PDF" : "Buka PDF"}
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={opening || !document.child_surat_id}
-                onClick={() => void openPdf(document.child_surat_id, operationKey)}
-              >
-                {opening ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
-                {opening ? "Menyiapkan PDF" : "Buka"}
-              </Button>
+              <RecommendationDecisionSummary value={document.child_recommendation_multi_detail} />
             </div>
             );
           })}

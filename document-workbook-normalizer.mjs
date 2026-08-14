@@ -72,13 +72,21 @@ const recommendationLocationPic = (location, pic) => {
 };
 
 const recommendationSummaryRows = (items) => (Array.isArray(items) ? items : []).flatMap((item) => {
+  if (String(item?.status || "").toLowerCase() === "not_recommended") return [item];
   const details = Array.isArray(item?.details) ? item.details : [];
   if (details.length === 0) return [item];
   return details.map((detail) => ({
+    ...detail,
+    applicantName: item?.applicantName,
+    status: item?.status,
+    rejectionReason: item?.rejectionReason,
     location: detail?.location || item?.location,
     pic: detail?.pic || item?.pic,
   }));
 });
+
+const isRejectedRecommendation = (value) =>
+  /not[\s_-]*recommended|tidak[\s_-]*direkomendasikan|rejected|ditolak/i.test(String(value || ""));
 
 const projectRecommendationMainTable = (worksheet, items) => {
   const sourceRows = recommendationSummaryRows(items);
@@ -93,12 +101,24 @@ const projectRecommendationMainTable = (worksheet, items) => {
   tableRows.forEach((row, index) => {
     const source = sourceRows[index];
     if (!source) return;
+    const rejected = isRejectedRecommendation(source.status);
+    const action = String(source.action || "").trim().toLowerCase();
+    const name = String(rejected ? source.applicantName : source.heading || source.applicantName || "").trim();
+    if (name) worksheet.getCell(row, 2).value = name;
     const value = recommendationLocationPic(source.location, source.pic);
-    if (!value) return;
-    const cell = worksheet.getCell(row, 5);
-    if (cell.value === value) return;
-    cell.value = value;
-    cell.alignment = { ...(cell.alignment || {}), horizontal: "left", vertical: "middle", wrapText: true };
+    if (value) {
+      const cell = worksheet.getCell(row, 5);
+      cell.value = value;
+      cell.alignment = { ...(cell.alignment || {}), horizontal: "left", vertical: "middle", wrapText: true };
+    }
+    worksheet.getCell(row, 7).value = !rejected && ["service", "servis"].includes(action) ? "✓" : null;
+    worksheet.getCell(row, 8).value = !rejected && ["replace", "replacement", "ganti"].includes(action) ? "✓" : null;
+    worksheet.getCell(row, 9).value = rejected
+      ? "TIDAK DIREKOMENDASIKAN"
+      : String(source.description || "").trim() || null;
+    worksheet.getCell(row, 10).value = rejected
+      ? String(source.rejectionReason || "").trim() || null
+      : String(source.notes || "").trim() || worksheet.getCell(row, 10).value;
     changed = true;
   });
   return changed;
