@@ -185,7 +185,6 @@ const MonitoringPage = () => {
         page,
         search: deferredSearch,
         status: statusFilter,
-        createdBy: user.id,
       });
     },
     enabled: Boolean(user?.id),
