@@ -198,8 +198,12 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
   }).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
 };
 
-export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((item, itemIndex) =>
-  asArray(item.details).flatMap((detail, detailIndex) => {
+export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((item, itemIndex) => {
+  // The main worksheet already contains the final rejection and its reason.
+  // A rejected item has no recommendation attachment to explain, so an extra
+  // mostly-empty page adds noise instead of evidence.
+  if (isNotRecommended(item.status)) return [];
+  return asArray(item.details).flatMap((detail, detailIndex) => {
     const showDetailNumber = asArray(item.details).length > 1;
     const images = detail.attachments.filter((attachment) => attachment.isImage);
     const documents = detail.attachments.filter((attachment) => !attachment.isImage);
@@ -229,8 +233,8 @@ export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((it
       continuation: continuationIndex > 0,
       continuationIndex,
     }));
-  })
-);
+  });
+});
 
 export const recommendationVersionPath = (suratId, jobId) => `pdf/recommendations/${suratId}/versions/${jobId}.pdf`;
 
@@ -310,12 +314,11 @@ export const appendRecommendationPages = async (workbook, items, downloadImage) 
       const startCol = singleImage ? 1 : slotCol === 0 ? 1 : 7;
       const endCol = singleImage ? 12 : startCol + 5;
       const endRow = singleImage ? 20 : startRow + 8;
-      for (let row = startRow; row <= endRow; row += 1) {
-        sheet.getRow(row).height = 15;
-        for (let col = startCol; col <= endCol; col += 1) {
-          sheet.getCell(row, col).border = { top: border, left: border, bottom: border, right: border };
-        }
-      }
+      for (let row = startRow; row <= endRow; row += 1) sheet.getRow(row).height = 15;
+      sheet.mergeCells(startRow, startCol, endRow, endCol);
+      const imageCard = sheet.getCell(startRow, startCol);
+      imageCard.border = { top: border, left: border, bottom: border, right: border };
+      imageCard.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
       const attachment = page.images[slot];
       if (!attachment.url) throw new Error(`Sumber gambar ${attachment.name || attachment.id} tidak tersedia.`);
       let downloaded;
