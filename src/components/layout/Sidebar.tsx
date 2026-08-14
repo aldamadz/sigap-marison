@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 import { useAttention } from '@/providers/AttentionProvider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getSuratNavigationTone, type SuratNavigationTone } from './surat-navigation-tone'
 
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated'
 
@@ -48,6 +49,11 @@ const attentionToneClasses: Record<SidebarAttentionTone, {
     badge: 'bg-amber-600 text-white shadow-sm shadow-amber-500/30',
     dot: 'bg-amber-500',
   },
+}
+
+const suratNavigationToneClasses: Record<SuratNavigationTone, string> = {
+  safe: 'border border-emerald-500/35 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300',
+  overdue: 'border border-rose-500/40 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-300',
 }
 
 const SidebarCountBadge = ({ count, tone }: { count: number; tone: SidebarAttentionTone }) => (
@@ -86,6 +92,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const projectReviewCount = attentionState.masterProjectReviewCount || 0
   const masterReviewCount = officeReviewCount + profileReviewCount + projectReviewCount
   const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
+  const suratNavigationTone = getSuratNavigationTone(attentionState.overdueSlaCount)
   const isUserAdmin = user?.role === 'admin'
   const badgeOnlyAttentionLabels = new Set([
     'User Organization',
@@ -184,6 +191,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => {
     const attention = getNavAttention(label)
     const badgeOnlyAttention = attention && badgeOnlyAttentionLabels.has(label)
+    const isSuratSubItem = isSubItem && path.startsWith('/surat/')
     return (
     <NavLink to={path} end={path === '/dashboard' || path === '/admin/users' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
       {({ isActive }) => (
@@ -196,15 +204,24 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 ? "pl-9 pr-3"
                 : "px-3",
             isActive
-              ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
+              ? isSuratSubItem
+                ? cn(suratNavigationToneClasses[suratNavigationTone], suratNavigationTone === 'overdue'
+                  ? 'shadow-[inset_3px_0_0_rgb(244_63_94)]'
+                  : 'shadow-[inset_3px_0_0_rgb(16_185_129)]')
+                : "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            attention && !badgeOnlyAttention && 'sidebar-attention-row',
-            attention && !badgeOnlyAttention && attentionToneClasses[attention.tone].row,
+            attention && !badgeOnlyAttention && !isSuratSubItem && 'sidebar-attention-row',
+            attention && !badgeOnlyAttention && !isSuratSubItem && attentionToneClasses[attention.tone].row,
           )}
           whileTap={{ scale: 0.98 }}
         >
           <div className="relative shrink-0">
-            <Icon className={cn(isSubItem ? "w-4 h-4" : "w-5 h-5", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+            <Icon className={cn(
+              isSubItem ? "w-4 h-4" : "w-5 h-5",
+              isActive && isSuratSubItem
+                ? suratNavigationTone === 'overdue' ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'
+                : isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+            )} />
             {!isMobile && collapsed && attention && (
               <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
                 <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-50", attentionToneClasses[attention.tone].dot)} />
@@ -298,14 +315,14 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           <div className="space-y-1">
             <button
               onClick={() => setIsSuratOpen(!isSuratOpen)}
+              aria-label={`Layanan Surat - ${suratNavigationTone === 'overdue' ? 'ada tugas melewati SLA' : 'SLA aman'}`}
               className={cn(
                 "group relative flex w-full items-center rounded-md border border-transparent py-2.5 transition-colors",
                 isDesktopCollapsed ? "justify-center px-0" : "justify-between px-4",
-                location.pathname.includes('/surat')
-                  ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
-                  : "text-muted-foreground hover:bg-accent",
-                suratAttentionCount > 0 && 'sidebar-attention-row',
-                suratAttentionCount > 0 && attentionToneClasses.task.row,
+                suratNavigationToneClasses[suratNavigationTone],
+                suratNavigationTone === 'overdue'
+                  ? 'shadow-[inset_3px_0_0_rgb(244_63_94)]'
+                  : 'shadow-[inset_3px_0_0_rgb(16_185_129)]',
               )}
             >
               <div className={cn("flex items-center min-w-0", isDesktopCollapsed ? "gap-0" : "gap-3")}>

@@ -11,6 +11,7 @@ export type AttentionState = {
   masterOfficeReviewCount: number;
   profileReviewCount: number;
   masterProjectReviewCount: number;
+  overdueSlaCount: number;
   generatedAt?: string;
 };
 
@@ -25,6 +26,7 @@ type RawAttentionState = Partial<AttentionState> & {
   master_office_review_count?: unknown;
   profile_review_count?: unknown;
   master_project_review_count?: unknown;
+  overdue_sla_count?: unknown;
   generated_at?: unknown;
 };
 
@@ -39,6 +41,7 @@ const emptyState: AttentionState = {
   masterOfficeReviewCount: 0,
   profileReviewCount: 0,
   masterProjectReviewCount: 0,
+  overdueSlaCount: 0,
 };
 
 const toCount = (value: unknown) => {
@@ -59,6 +62,7 @@ export const normalizeAttentionState = (raw: RawAttentionState | null | undefine
     masterOfficeReviewCount: toCount(source.masterOfficeReviewCount ?? source.master_office_review_count),
     profileReviewCount: toCount(source.profileReviewCount ?? source.profile_review_count),
     masterProjectReviewCount: toCount(source.masterProjectReviewCount ?? source.master_project_review_count),
+    overdueSlaCount: toCount(source.overdueSlaCount ?? source.overdue_sla_count),
     generatedAt: String(source.generatedAt ?? source.generated_at ?? "").trim() || undefined,
   };
 };

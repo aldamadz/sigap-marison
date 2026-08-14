@@ -1498,12 +1498,14 @@ const getAttentionStateForUser = async (userId) => {
     throw err;
   }
 
-  const [attentionRes, compactCountRes] = await Promise.all([
+  const [attentionRes, compactCountRes, overdueSlaRes] = await Promise.all([
     supabase.rpc("get_attention_state_for_user", { p_user_id: userId }),
     supabase.rpc("get_compact_inbox_count", { p_user_id: userId }),
+    supabase.rpc("get_user_active_sla_breach_count", { p_user_id: userId }),
   ]);
   if (attentionRes.error) throw attentionRes.error;
   if (compactCountRes.error) throw compactCountRes.error;
+  if (overdueSlaRes.error) throw overdueSlaRes.error;
   const row = Array.isArray(attentionRes.data) ? attentionRes.data[0] : attentionRes.data;
   const approvalCount = Number(row?.approval_count || 0);
   const verificationCount = Number(row?.verification_count || 0);
@@ -1525,6 +1527,7 @@ const getAttentionStateForUser = async (userId) => {
     masterOfficeReviewCount: Number(row?.master_office_review_count || 0),
     profileReviewCount: Number(row?.profile_review_count || 0),
     masterProjectReviewCount: Number(row?.master_project_review_count || 0),
+    overdueSlaCount: Number(overdueSlaRes.data || 0),
     generatedAt: new Date().toISOString(),
   };
 };
