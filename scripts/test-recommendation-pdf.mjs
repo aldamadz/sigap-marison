@@ -257,6 +257,7 @@ test("renders one attachment as one large image without five empty grid placehol
   const sheet = workbook.worksheets.find((candidate) => candidate.getImages().length === 1);
   assert.ok(sheet);
   assert.equal(sheet.pageSetup.printArea, "A1:L22");
+  assert.equal(sheet.pageSetup.orientation, "landscape");
   assert.equal(sheet.getImages().length, 1);
   assert.ok(sheet.getImages()[0].range.ext.width > 500);
   assert.ok(sheet.model.merges.includes("A5:L20"));
