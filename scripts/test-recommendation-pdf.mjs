@@ -213,16 +213,15 @@ test("uses stable canonical path and isolated regeneration version path", () => 
   assert.notEqual(recommendationVersionPath("surat-1", "stale-job"), recommendationVersionPath("surat-1", "fresh-job"));
 });
 
-test("keeps not-recommended parent with no explicit details in combined PDF", () => {
+test("keeps a rejected decision in normalized data without creating an empty attachment page", () => {
   const items = resolveRecommendationSource({ recommendation_multi_detail: { items: [{
     id: "rejected-parent", applicant_original: { name: "Server lama" }, status: "not_recommended",
     location: "Ruang IT", pic: "Sari", rejection_reason: "Tidak ekonomis", details: [],
   }] } });
   const pages = buildRecommendationPagePlan(items);
-  assert.equal(pages.length, 1);
-  assert.equal(pages[0].detailStatus, "not_recommended");
-  assert.equal(pages[0].rejectionReason, "Tidak ekonomis");
-  assert.equal(pages[0].showDetailNumber, false);
+  assert.equal(items[0].status, "not_recommended");
+  assert.equal(items[0].rejectionReason, "Tidak ekonomis");
+  assert.equal(pages.length, 0);
 });
 
 test("treats a rejected parent as authoritative over stale recommended details", async () => {
@@ -248,15 +247,8 @@ test("treats a rejected parent as authoritative over stale recommended details",
   assert.equal(items[0].details[0].status, "not_recommended");
   assert.equal(items[0].details[0].description, "");
 
-  const workbook = new ExcelJS.Workbook();
-  const pages = await appendRecommendationPages(workbook, items, async () => image(100, 100));
-  assert.equal(pages.length, 1);
-  const sheet = workbook.worksheets[0];
-  assert.match(String(sheet.getCell("A3").value), /Status: Tidak direkomendasikan/);
-  assert.match(String(sheet.getCell("A3").value), /Alasan: Kondisi masih layak/);
-  assert.doesNotMatch(String(sheet.getCell("A3").value), /Pembelian baru|Status: recommended/);
-  assert.equal(sheet.getImages().length, 0);
-  assert.equal(sheet.pageSetup.printArea, "A1:L7");
+  const pages = buildRecommendationPagePlan(items);
+  assert.equal(pages.length, 0);
 });
 
 test("renders one attachment as one large image without five empty grid placeholders", async () => {
@@ -267,4 +259,6 @@ test("renders one attachment as one large image without five empty grid placehol
   assert.equal(sheet.pageSetup.printArea, "A1:L22");
   assert.equal(sheet.getImages().length, 1);
   assert.ok(sheet.getImages()[0].range.ext.width > 500);
+  assert.ok(sheet.model.merges.includes("A5:L20"));
+  assert.deepEqual(sheet.model.merges.filter((range) => /(?:A5|G5)/.test(range)), ["A5:L20"]);
 });
