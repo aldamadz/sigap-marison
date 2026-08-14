@@ -152,18 +152,19 @@ const MonitoringPage = () => {
   const deferredSearch = useDeferredValue(search);
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
   const selectedSuratId = selectedSurat?.id || "";
+  const canReadSelectedDocument = selectedSurat?.can_read_document !== false;
 
   const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
     queryKey: ['surat-linked-documents', selectedSuratId],
     queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
-    enabled: Boolean(selectedSuratId && isDetailOpen),
+    enabled: Boolean(selectedSuratId && isDetailOpen && canReadSelectedDocument),
     staleTime: 15_000,
   });
 
   const { data: selectedRevisionHistory = [] } = useQuery({
     queryKey: ['surat-revision-history', selectedSuratId],
     queryFn: () => suratService.getRevisionHistory(selectedSuratId),
-    enabled: Boolean(selectedSuratId && isDetailOpen),
+    enabled: Boolean(selectedSuratId && isDetailOpen && canReadSelectedDocument),
     staleTime: 10_000,
   });
 
@@ -400,7 +401,7 @@ const MonitoringPage = () => {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={cn("grid gap-2", surat.can_read_document === false ? "grid-cols-1" : "grid-cols-2")}>
                     <button
                       onClick={() => {
                         setSelectedSurat(surat);
@@ -411,14 +412,16 @@ const MonitoringPage = () => {
                       <Info size={16} />
                       <span>Detail</span>
                     </button>
-                    <button
-                      onClick={() => void openPdf(surat.id)}
-                      disabled={isOpening(documentOperationKey.pdf(surat.id))}
-                      className="h-11 flex items-center justify-center gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-sm"
-                    >
-                      {isOpening(documentOperationKey.pdf(surat.id)) ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
-                      <span>{isOpening(documentOperationKey.pdf(surat.id)) ? "Menyiapkan" : "Preview"}</span>
-                    </button>
+                    {surat.can_read_document !== false && (
+                      <button
+                        onClick={() => void openPdf(surat.id)}
+                        disabled={isOpening(documentOperationKey.pdf(surat.id))}
+                        className="h-11 flex items-center justify-center gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-sm"
+                      >
+                        {isOpening(documentOperationKey.pdf(surat.id)) ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                        <span>{isOpening(documentOperationKey.pdf(surat.id)) ? "Menyiapkan" : "Preview"}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -471,6 +474,12 @@ const MonitoringPage = () => {
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/10 p-3 sm:p-6">
 
             {selectedSurat && <RegistrationSummaryDocument data={buildMonitoringSummary(selectedSurat)} />}
+
+            {selectedSurat?.can_read_document === false && (
+              <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                Anda dapat memantau status pengajuan ini karena berada dalam lingkup organisasi yang sama. Isi dokumen dan lampiran hanya tersedia untuk pemohon, signer, verifier, dan admin.
+              </div>
+            )}
 
             {/* Status badge */}
             {selectedSurat && (() => {

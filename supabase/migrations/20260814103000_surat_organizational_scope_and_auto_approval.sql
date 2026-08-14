@@ -92,8 +92,9 @@ as $$
           'created_at', surat.created_at,
           'updated_at', surat.updated_at,
           'created_by', surat.created_by,
-          'file_path', surat.file_path,
-          'lampiran_path', surat.lampiran_path,
+          'can_read_document', public.can_read_surat(surat.id),
+          'file_path', case when public.can_read_surat(surat.id) then surat.file_path else null end,
+          'lampiran_path', case when public.can_read_surat(surat.id) then surat.lampiran_path else null end,
           'surat_signatures', coalesce((
             select jsonb_agg(
               jsonb_build_object(
@@ -133,8 +134,21 @@ stable
 security definer
 set search_path = ''
 as $$
-  select to_jsonb(surat)
+  select case
+      when public.can_read_surat(surat.id) then to_jsonb(surat)
+      else jsonb_build_object(
+        'id', surat.id,
+        'no_surat', surat.no_surat,
+        'judul_surat', surat.judul_surat,
+        'status', surat.status,
+        'current_step', surat.current_step,
+        'created_at', surat.created_at,
+        'updated_at', surat.updated_at,
+        'created_by', surat.created_by
+      )
+    end
     || jsonb_build_object(
+      'can_read_document', public.can_read_surat(surat.id),
       'surat_signatures', coalesce((
         select jsonb_agg(
           to_jsonb(signature)
@@ -151,11 +165,14 @@ as $$
         left join public.profiles signer on signer.id = signature.user_id
         where signature.surat_id = surat.id
       ), '[]'::jsonb),
-      'surat_attachments', coalesce((
-        select jsonb_agg(to_jsonb(attachment) order by attachment.created_at, attachment.id)
-        from public.surat_attachments attachment
-        where attachment.surat_id = surat.id
-      ), '[]'::jsonb)
+      'surat_attachments', case
+        when public.can_read_surat(surat.id) then coalesce((
+          select jsonb_agg(to_jsonb(attachment) order by attachment.created_at, attachment.id)
+          from public.surat_attachments attachment
+          where attachment.surat_id = surat.id
+        ), '[]'::jsonb)
+        else '[]'::jsonb
+      end
     )
   from public.surat_registrasi surat
   where surat.id = p_surat_id
