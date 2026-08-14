@@ -35,6 +35,15 @@ do $$begin begin perform public.recommendation_all_items_rejected('10000000-0000
 reset role;
 set role service_role;
 
+-- Browser preview tokens are one-time bearers. A consumed token must not replay.
+insert into public.file_view_tokens(token_hash,bucket,object_path,storage_origin,surat_id,purpose,expires_at)
+values(repeat('8',64),'dokumen_surat','pdf/preview.pdf','external','10000000-0000-4000-8000-000000000002','preview',now()+interval '2 minutes');
+do $$begin
+ assert(select count(*)=1 from public.consume_file_view_token(repeat('8',64))),'fresh preview token did not resolve';
+ assert(select consumed_at is not null from public.file_view_tokens where token_hash=repeat('8',64)),'preview token was not marked consumed';
+ assert(select count(*)=0 from public.consume_file_view_token(repeat('8',64))),'consumed preview token replayed';
+end$$;
+
 select * from public.mint_recommendation_file_view_token(repeat('a',64),'10000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',null);
 do $$begin
  assert(select count(*)=1 and bool_and(token_hash=repeat('a',64) and bucket='dokumen_surat' and object_path='pdf/current.pdf') from public.file_view_tokens where transport_attempt_id='50000000-0000-4000-8000-000000000001'),'hash-only coordinate token missing';
