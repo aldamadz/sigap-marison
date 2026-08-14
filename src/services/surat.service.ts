@@ -5,6 +5,7 @@ import autoTable from "jspdf-autotable";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
 import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
+import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import {
   flattenRecommendationItems,
   withoutRecommendationEstimatedPrices,
@@ -1491,35 +1492,57 @@ export const suratService = {
     return Boolean(data);
   },
 
-  async autoApproveRecommendationFirstStep(suratId: string): Promise<void> {
+  async autoApproveRequesterFirstStep(suratId: string): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Sesi login tidak tersedia.");
 
-    const { data: signature, error: signatureError } = await supabase
-      .from("surat_signatures")
-      .select("id, surat_id, step_order, user_id, is_signed, surat_registrasi!inner(current_step)")
-      .eq("surat_id", suratId)
-      .eq("step_order", 1)
-      .eq("user_id", user.id)
-      .eq("is_signed", false)
-      .maybeSingle();
+    const [suratResult, signatureResult, profileResult] = await Promise.all([
+      supabase
+        .from("surat_registrasi")
+        .select("created_by, current_step, status")
+        .eq("id", suratId)
+        .maybeSingle(),
+      supabase
+        .from("surat_signatures")
+        .select("id, surat_id, step_order, user_id, is_signed, action_type, verification_required, requires_unit_allocation")
+        .eq("surat_id", suratId)
+        .eq("step_order", 1)
+        .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]);
 
-    if (signatureError) throw signatureError;
-    if (!signature) throw new Error("Signer pertama rekomendasi tidak ditemukan untuk akun ini.");
+    if (suratResult.error) throw suratResult.error;
+    if (signatureResult.error) throw signatureResult.error;
+    const surat = suratResult.data;
+    const signature = signatureResult.data;
+    if (!surat || !signature) return false;
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .maybeSingle();
+    const isOrdinaryRequesterApproval = canAutoApproveRequesterFirstStep({
+      actorId: user.id,
+      surat,
+      signature,
+    });
+    if (!isOrdinaryRequesterApproval) return false;
 
     await this.approveSurat(
       signature.id,
       suratId,
       1,
-      profile?.full_name || user.email || "Pembuat Rekomendasi",
-      "Dikonfirmasi oleh pembuat rekomendasi"
+      profileResult.data?.full_name || user.email || "Pemohon",
+      "Disetujui otomatis karena pemohon adalah penandatangan tahap pertama"
     );
+    return true;
+  },
+
+  async autoApproveRecommendationFirstStep(suratId: string): Promise<void> {
+    const autoApproved = await this.autoApproveRequesterFirstStep(suratId);
+    if (!autoApproved) {
+      throw new Error("Signer pertama rekomendasi tidak cocok dengan akun pembuat atau membutuhkan tindakan khusus.");
+    }
   },
 
   async uploadRegistrationDraftFiles(
@@ -1623,15 +1646,8 @@ export const suratService = {
         }
       }
 
-      if (!isPusat && !isUnitRequest && !projectIdClean) {
-        const { count, error: projectCountError } = await supabase
-          .from("master_projects")
-          .select("id", { count: "exact", head: true })
-          .eq("office_id", officeIdClean);
-        if (projectCountError) throw new Error("Gagal memeriksa proyek cabang.");
-        if ((count ?? 0) > 0) {
-          throw new Error("Pilih proyek cabang untuk kantor ini.");
-        }
+      if (!isPusat && !projectIdClean) {
+        throw new Error("Pilih proyek cabang sebelum mengambil nomor surat.");
       }
 
       // PERUBAHAN UTAMA: tambah p_dept_id agar nomor urut dimulai dari 001 per dept/project
@@ -1919,7 +1935,14 @@ export const suratService = {
           .select("id", { count: "exact", head: true })
           .eq("surat_id", surat.id);
         if (existingSignatureError) throw existingSignatureError;
-        if ((existingSignatureCount || 0) > 0) return surat;
+        if ((existingSignatureCount || 0) > 0) {
+          if (!normalizedFormInputData?.linked_parent_surat_id) {
+            await this.autoApproveRequesterFirstStep(surat.id).catch((autoApproveError) => {
+              console.error("Gagal melanjutkan auto-approval pemohon:", autoApproveError);
+            });
+          }
+          return surat;
+        }
       }
 
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
@@ -1993,6 +2016,7 @@ export const suratService = {
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
 
+      let requesterAutoApproved = false;
       if (signerPayload.length > 0) {
         const { error: signerInsertError } = await supabase.from("surat_signatures").insert(signerPayload);
         if (signerInsertError) {
@@ -2001,17 +2025,27 @@ export const suratService = {
         }
         
         const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
-        await this.notifyInboxStepTasks(
-          surat.id,
-          firstStepOrd,
-          cleanPayload.judul_surat,
-          "new_inbox"
-        );
+        if (!normalizedFormInputData?.linked_parent_surat_id) {
+          requesterAutoApproved = await this.autoApproveRequesterFirstStep(surat.id).catch((autoApproveError) => {
+            console.error("Auto-approval pemohon gagal; tahap pertama tetap tersedia secara manual:", autoApproveError);
+            return false;
+          });
+        }
+        if (!requesterAutoApproved) {
+          await this.notifyInboxStepTasks(
+            surat.id,
+            firstStepOrd,
+            cleanPayload.judul_surat,
+            "new_inbox"
+          );
+        }
       }
 
-      documentPreviewService.enqueuePdf(surat.id).catch((pdfError) => {
-        console.error("Gagal enqueue PDF awal:", pdfError);
-      });
+      if (!requesterAutoApproved) {
+        documentPreviewService.enqueuePdf(surat.id).catch((pdfError) => {
+          console.error("Gagal enqueue PDF awal:", pdfError);
+        });
+      }
 
       return surat;
     } catch (error: any) {

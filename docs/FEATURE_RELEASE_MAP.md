@@ -118,6 +118,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | SUR-10 | Batas waktu proses approval | Production + Staging | SLA fields and calculations | Signatures, department KPI | Perubahan memengaruhi KPI dan status |
 | SUR-11 | Fondasi pure SuratForm tahap pertama | Development branch | Type lokal, parser schema, normalizer, dan formatter pure | SUR-01, characterization tests PR #95 dan #97 | Refactor behavior-preserving; tarik dengan mengembalikan symbol ke `SuratForm.tsx` tanpa perubahan data atau runtime contract |
 | SUR-12 | Performa data awal permohonan dan upload gambar rekomendasi | Staging deployed; koreksi overflow picker desktop dalam review | Endpoint master data khusus BFF, session reuse upload, file picker rekomendasi | SUR-01, SUR-04, AUTH-02 | Input file harus benar-benar hidden agar fokus native picker tidak menggeser container desktop; production belum disentuh |
+| SUR-13 | Auto-approval pemohon, status scope organisasi, dan counter tahunan | Development branch | Signer initialization, monitoring RPC/RLS, letter number reservation | SUR-01, SUR-03, SUR-07, AUTH-02 | Signer pertama yang sama dengan pemohon hanya dilewati untuk approval biasa; cabang wajib proyek dan pusat memakai departemen; production belum disentuh |
 
 ### 4.4 Workflow, Verification, Revision, dan Recommendation
 
