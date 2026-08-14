@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 
 const blockers = readFileSync("supabase/migrations/20260811140000_rec03_file_link_blockers.sql", "utf8");
 const readiness = readFileSync("supabase/migrations/20260813163000_fix_recommendation_pdf_readiness.sql", "utf8");
+const singleUse = readFileSync("supabase/migrations/20260814165000_restore_file_view_token_single_use.sql", "utf8");
 const acceptance = readFileSync("supabase/tests/recommendation_file_link.integration.sql", "utf8");
 const fixture = `
 create schema extensions;
@@ -39,11 +40,11 @@ const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine
 try {
   let ready = false;
   for (let attempt = 0; attempt < 30 && !ready; attempt += 1) {
-    ready = spawnSync("docker", ["exec", id, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
+    ready = spawnSync("docker", ["exec", id, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres"], { encoding: "utf8" }).status === 0;
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"], fixture + blockers + readiness + acceptance));
+  process.stdout.write(run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"], fixture + blockers + readiness + singleUse + acceptance));
 } finally {
   run(["rm", "-f", id]);
 }
