@@ -21,12 +21,13 @@ describe("sidebar attention indicators", () => {
     expect(sidebar).toContain("await refetchAttention()");
   });
 
-  it("highlights operational rows but keeps master review rows as blinking count badges", () => {
+  it("keeps task counts as badges while SLA controls surat row colors", () => {
     const sidebar = read("src/components/layout/Sidebar.tsx");
 
     expect(sidebar).toContain("badgeOnlyAttentionLabels");
-    expect(sidebar).toContain("attention && !badgeOnlyAttention && 'sidebar-attention-row'");
-    expect(sidebar).toContain("suratAttentionCount > 0 && 'sidebar-attention-row'");
+    expect(sidebar).toContain("attention && !badgeOnlyAttention && !isSuratSubItem && 'sidebar-attention-row'");
+    expect(sidebar).toContain("suratNavigationToneClasses[suratNavigationTone]");
+    expect(sidebar).not.toContain("suratAttentionCount > 0 && 'sidebar-attention-row'");
     expect(sidebar).not.toContain("masterReviewCount > 0 && 'sidebar-attention-row'");
     expect(sidebar).toContain("collapsed && attention");
   });
