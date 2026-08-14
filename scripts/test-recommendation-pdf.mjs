@@ -29,6 +29,26 @@ const canonical = (count) => resolveRecommendationSource({ recommendation_items:
   details: [{ id: "detail-a", order: 1, title: "Pemeriksaan", attachments: [attachment("b", 2), attachment("a", 1)] }],
 }] }, { items: [{ nama_barang: "Printer Pemohon" }, { nama_barang: "Laptop Pemohon" }] });
 
+const canonicalMultiDetail = () => resolveRecommendationSource({ recommendation_multi_detail: {
+  version: 1,
+  items: [{
+    id: "item-computer",
+    order: 0,
+    applicant_original: { name: "Komputer SPV" },
+    details: [{
+      id: "detail-cpu",
+      order: 0,
+      name: "CPU Intel Core i9",
+      attachments: [attachment("cpu")],
+    }, {
+      id: "detail-memory",
+      order: 1,
+      name: "RAM 32 GB",
+      attachments: [attachment("memory")],
+    }],
+  }],
+} });
+
 test("resolves canonical nested attachments with stable item, detail, and attachment ordering", () => {
   const items = canonical(3);
   assert.deepEqual(items.map((item) => item.id), ["item-a", "item-b"]);
@@ -146,7 +166,7 @@ test("plans one page for 1 through 6 images and continuation pages above 6", () 
   assert.equal(itemPages[1].continuation, true);
 });
 
-test("appends printable pages with headings, continuation, and uncropped aspect ratios", async () => {
+test("omits detail numbering when an applicant item only has one detail", async () => {
   const workbook = new ExcelJS.Workbook();
   workbook.addWorksheet("Dokumen").getCell("A1").value = "Dokumen utama";
   const wide = await image(400, 100);
@@ -155,13 +175,25 @@ test("appends printable pages with headings, continuation, and uncropped aspect 
   assert.equal(workbook.worksheets.length, pages.length + 1);
   const firstItemSheet = workbook.worksheets[1];
   assert.match(String(firstItemSheet.getCell("A1").value), /^ITEM 1 - Laptop Pemohon$/);
-  assert.match(String(firstItemSheet.getCell("A2").value), /^DETAIL 1\.1/);
+  assert.equal(String(firstItemSheet.getCell("A2").value), "Pemeriksaan");
+  assert.doesNotMatch(String(firstItemSheet.getCell("A2").value), /DETAIL|1\.1/);
   const continuationSheet = workbook.worksheets.at(-1);
-  assert.match(String(continuationSheet.getCell("A2").value), /\(LANJUTAN\)/);
+  assert.equal(String(continuationSheet.getCell("A2").value), "Kondisi alat (LANJUTAN)");
   assert.equal(continuationSheet.pageSetup.printArea, "A1:L33");
   const ranges = workbook.worksheets.flatMap((sheet) => sheet.getImages().map((entry) => entry.range));
   assert.ok(ranges.some((range) => Math.abs(range.ext.width / range.ext.height - 4) < 0.05));
   assert.ok(ranges.some((range) => Math.abs(range.ext.width / range.ext.height - 0.25) < 0.05));
+});
+
+test("uses hierarchical numbering only when one applicant item has multiple details", async () => {
+  const workbook = new ExcelJS.Workbook();
+  const pages = await appendRecommendationPages(workbook, canonicalMultiDetail(), async () => image(100, 100));
+
+  assert.equal(pages.length, 2);
+  assert.equal(pages[0].showDetailNumber, true);
+  assert.equal(pages[1].showDetailNumber, true);
+  assert.equal(String(workbook.worksheets[0].getCell("A2").value), "DETAIL 1.1 - CPU Intel Core i9");
+  assert.equal(String(workbook.worksheets[1].getCell("A2").value), "DETAIL 1.2 - RAM 32 GB");
 });
 
 test("fails rendering when required image download or decoding fails", async () => {
@@ -190,4 +222,5 @@ test("keeps not-recommended parent with no explicit details in combined PDF", ()
   assert.equal(pages.length, 1);
   assert.equal(pages[0].detailStatus, "not_recommended");
   assert.equal(pages[0].rejectionReason, "Tidak ekonomis");
+  assert.equal(pages[0].showDetailNumber, false);
 });

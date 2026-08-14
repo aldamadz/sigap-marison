@@ -175,7 +175,9 @@ const processJob = async (job) => {
           downloadStorageFile(attachment.url, `Gambar ${attachment.name || attachment.id}`, "lampiran_surat")
         );
       }
-      await normalizeWorkbookForPdf(sourcePath);
+      await normalizeWorkbookForPdf(sourcePath, {
+        recommendationItems: recommendation?.items,
+      });
       await execFileAsync("soffice", [
         "--headless",
         "--nologo",

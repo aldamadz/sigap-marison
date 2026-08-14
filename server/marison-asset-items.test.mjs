@@ -230,6 +230,51 @@ test("supports unambiguous legacy index and name matching", () => {
   ]);
 });
 
+test("maps canonical generated parent IDs to applicant rows without stable IDs", () => {
+  const items = mapMarisonAssetItems({
+    applicantItems: [
+      { nama_barang: "Meja Gaming", jumlah: 2 },
+      { nama_barang: "Kursi Gaming", jumlah: 2 },
+    ],
+    recommendationRows: { version: 1, items: [
+      {
+        id: "generated-parent-meja",
+        order: 0,
+        status: "recommended",
+        applicant_original: { name: "Meja Gaming", quantity: 2 },
+        details: [{ id: "detail-meja", order: 0, name: "Meja Gaming", quantity: 1, notes: "Disetujui satu" }],
+      },
+      {
+        id: "generated-parent-kursi",
+        order: 1,
+        status: "recommended",
+        applicant_original: { name: "Kursi Gaming", quantity: 2 },
+        details: [{ id: "detail-kursi", order: 0, name: "Kursi Gaming", quantity: 2, notes: "Disetujui dua" }],
+      },
+    ] },
+    recommendationPdf: pdf,
+  });
+
+  assert.deepEqual(items.map(({ asset_name, quantity }) => ({ asset_name, quantity })), [
+    { asset_name: "Meja Gaming", quantity: 1 },
+    { asset_name: "Kursi Gaming", quantity: 2 },
+  ]);
+});
+
+test("does not fall back when applicant rows have stable IDs that conflict", () => {
+  assert.throws(() => mapMarisonAssetItems({
+    applicantItems: parents,
+    recommendationRows: { version: 1, items: [{
+      id: "unknown-parent",
+      order: 0,
+      status: "recommended",
+      applicant_original: { name: "Komputer", quantity: 1 },
+      details: [{ name: "RAM", quantity: 1 }],
+    }] },
+    recommendationPdf: pdf,
+  }), MarisonAssetItemsError);
+});
+
 test("rejects ambiguous legacy name matching", () => {
   assert.throws(() => mapMarisonAssetItems({
     applicantItems: [{ nama_barang: "Laptop" }, { nama_barang: "Laptop" }],

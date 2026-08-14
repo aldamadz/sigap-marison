@@ -35,11 +35,22 @@ const matchParentIndex = (items, row) => {
   const parentId = rowParentId(row);
   if (parentId) {
     const matches = items.flatMap((item, index) => itemId(item) === parentId ? [index] : []);
-    return matches.length === 1 ? matches[0] : null;
+    if (matches.length === 1) return matches[0];
+    // Canonical recommendation parents receive generated IDs when historical
+    // applicant rows have no stable IDs. Only then may identity fall back to
+    // the immutable order/name snapshot.
+    if (items.some((item) => Boolean(itemId(item)))) return null;
   }
 
   const index = legacyIndex(row);
   if (index !== null && index < items.length) return index;
+
+  const canonicalOrder = Number(row.order);
+  if ((Array.isArray(row.details) || row.applicant_original)
+    && Number.isInteger(canonicalOrder) && canonicalOrder >= 0 && canonicalOrder < items.length) {
+    const expectedName = rowParentName(row);
+    if (!expectedName || itemName(items[canonicalOrder]) === expectedName) return canonicalOrder;
+  }
 
   const name = rowParentName(row) || itemName(row);
   if (!name) return null;
