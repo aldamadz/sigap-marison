@@ -4777,14 +4777,18 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
   return result;
 };
 
-const getAuthorizedSurat = async (suratId, token) => {
+const getAuthorizedSurat = async (suratId, token, authenticatedUser = null) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
 
-  const { data: userRes, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userRes?.user) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
+  let userRes = authenticatedUser ? { user: authenticatedUser } : null;
+  if (!userRes?.user) {
+    const { data, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !data?.user) {
+      const err = new Error("Unauthorized");
+      err.status = 401;
+      throw err;
+    }
+    userRes = data;
   }
 
   const { data: surat, error: suratError } = await supabase
@@ -4828,6 +4832,36 @@ const getAuthorizedSurat = async (suratId, token) => {
   return { surat, user: userRes.user };
 };
 
+const mintAuthorizedFileViewToken = async (surat, user, requested) => {
+  const viewToken = randomBytes(32).toString("base64url");
+  const { error } = await supabase
+    .from("file_view_tokens")
+    .insert({
+      token_hash: hashFileViewToken(viewToken),
+      bucket: requested.bucket,
+      object_path: requested.path,
+      storage_origin: requested.origin || "primary",
+      requested_by: user.id,
+      surat_id: surat.id,
+      expires_at: new Date(Date.now() + FILE_VIEW_TOKEN_TTL_MS).toISOString(),
+    });
+  if (error) throw error;
+
+  return {
+    token: viewToken,
+    viewUrl: `/api/files/view/${viewToken}/${encodeURIComponent(buildDocumentFilename(surat, requested.path))}`,
+    expiresIn: Math.floor(FILE_VIEW_TOKEN_TTL_MS / 1000),
+  };
+};
+
+const addPdfViewerAccess = async (result, surat, user) => {
+  if (!["done", "ready"].includes(String(result?.status || "").toLowerCase()) || !result?.pdfUrl) return result;
+  const requested = parseStorageRef(result.pdfUrl);
+  if (!requested) return result;
+  const viewer = await mintAuthorizedFileViewToken(surat, user, requested);
+  return { ...result, viewUrl: viewer.viewUrl, expiresIn: viewer.expiresIn };
+};
+
 const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = null } = {}) => {
   const { surat, user } = await getAuthorizedSurat(suratId, token);
 
@@ -4854,7 +4888,7 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
   if (signatureId && !refresh) {
     const signature = (surat.surat_signatures || []).find((sig) => sig.id === signatureId);
     if (signature?.pdf_path_snap) {
-      return { status: "ready", pdfUrl: signature.pdf_path_snap, cached: true, signatureId };
+      return addPdfViewerAccess({ status: "ready", pdfUrl: signature.pdf_path_snap, cached: true, signatureId }, surat, user);
     }
   }
 
@@ -4896,13 +4930,13 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
   const { data: latestDoneJob, error: latestDoneJobError } = await latestDoneJobQuery.maybeSingle();
   if (latestDoneJobError) throw latestDoneJobError;
   if (latestDoneJob?.pdf_url && !refresh) {
-    return {
+    return addPdfViewerAccess({
       status: "ready",
       jobId: latestDoneJob.id,
       pdfUrl: latestDoneJob.pdf_url,
       cached: true,
       signatureId: latestDoneJob.signature_id,
-    };
+    }, surat, user);
   }
 
   const { data: job, error } = await supabase
@@ -4945,8 +4979,8 @@ const getPdfJobStatus = async (jobId, token) => {
     throw err;
   }
 
-  await getAuthorizedSurat(job.surat_id, token);
-  return { status: job.status, jobId: job.id, signatureId: job.signature_id, pdfUrl: job.pdf_url, error: job.error_message };
+  const { surat, user } = await getAuthorizedSurat(job.surat_id, token, userRes.user);
+  return addPdfViewerAccess({ status: job.status, jobId: job.id, signatureId: job.signature_id, pdfUrl: job.pdf_url, error: job.error_message }, surat, user);
 };
 
 const getAuthorizedStorageFile = async (suratId, token, rawPath) => {
@@ -4989,25 +5023,7 @@ const createFileViewToken = async (suratId, token, rawPath) => {
     throw err;
   }
 
-  const viewToken = randomBytes(32).toString("base64url");
-  const { error } = await supabase
-    .from("file_view_tokens")
-    .insert({
-      token_hash: hashFileViewToken(viewToken),
-      bucket: requested.bucket,
-      object_path: requested.path,
-      storage_origin: requested.origin || "primary",
-      requested_by: user.id,
-      surat_id: surat.id,
-      expires_at: new Date(Date.now() + FILE_VIEW_TOKEN_TTL_MS).toISOString(),
-    });
-  if (error) throw error;
-
-  return {
-    token: viewToken,
-    viewUrl: `/api/files/view/${viewToken}/${encodeURIComponent(buildDocumentFilename(surat, requested.path))}`,
-    expiresIn: Math.floor(FILE_VIEW_TOKEN_TTL_MS / 1000),
-  };
+  return mintAuthorizedFileViewToken(surat, user, requested);
 };
 
 const consumeFileViewToken = async (viewToken) => {

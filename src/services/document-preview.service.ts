@@ -4,6 +4,7 @@ type PdfJobResponse = {
   status?: "ready" | "queued" | "processing" | "done" | "failed";
   jobId?: string;
   pdfUrl?: string;
+  viewUrl?: string;
   error?: string;
   requestId?: string;
 };
@@ -14,6 +15,7 @@ const normalizeJobResponse = (payload: Record<string, unknown>): PdfJobResponse 
   status: payload.status as PdfJobResponse["status"],
   jobId: String(payload.jobId || payload.job_id || "") || undefined,
   pdfUrl: String(payload.pdfUrl || payload.pdf_url || "") || undefined,
+  viewUrl: String(payload.viewUrl || payload.view_url || "") || undefined,
   error: String(payload.error || payload.error_message || "") || undefined,
   requestId: String(payload.requestId || payload.request_id || "") || undefined,
 });
@@ -105,13 +107,13 @@ export const documentPreviewService = {
     return this.requestPdfJob(suratId, options);
   },
 
-  async getPdfUrl(
+  async getReadyPdf(
     suratId: string,
     options: { refresh?: boolean; signatureId?: string | null; pollIntervalMs?: number; timeoutMs?: number } = {}
-  ) {
+  ): Promise<PdfJobResponse> {
     const initial = await this.requestPdfJob(suratId, options);
     if ((initial.status === "ready" || initial.status === "done") && initial.pdfUrl) {
-      return initial.pdfUrl;
+      return initial;
     }
 
     if (!initial.jobId) throw new Error("Job PDF tidak tersedia.");
@@ -124,7 +126,7 @@ export const documentPreviewService = {
       await sleep(pollIntervalMs);
       const status = await this.getJobStatus(initial.jobId);
       if ((status.status === "done" || status.status === "ready") && status.pdfUrl) {
-        return status.pdfUrl;
+        return status;
       }
       if (status.status === "failed") {
         throw new Error(status.error || "Gagal membuat PDF dokumen.");
@@ -132,6 +134,15 @@ export const documentPreviewService = {
     }
 
     throw new Error("PDF masih diproses. Coba buka lagi beberapa saat lagi.");
+  },
+
+  async getPdfUrl(
+    suratId: string,
+    options: { refresh?: boolean; signatureId?: string | null; pollIntervalMs?: number; timeoutMs?: number } = {}
+  ) {
+    const ready = await this.getReadyPdf(suratId, options);
+    if (!ready.pdfUrl) throw new Error("URL PDF tidak tersedia.");
+    return ready.pdfUrl;
   },
 
   openPdfInNewTab(pdfUrl: string) {
@@ -182,8 +193,8 @@ export const documentPreviewService = {
   ) {
     const target = openLoadingTab();
     try {
-      const pdfUrl = await this.getPdfUrl(suratId, options);
-      const viewUrl = await this.createStoredFileViewUrl(suratId, pdfUrl);
+      const ready = await this.getReadyPdf(suratId, options);
+      const viewUrl = ready.viewUrl || await this.createStoredFileViewUrl(suratId, String(ready.pdfUrl || ""));
       navigatePreviewTab(target, viewUrl);
     } catch (error) {
       target?.close();

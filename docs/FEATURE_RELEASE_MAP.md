@@ -200,6 +200,7 @@ Temuan keamanan outbound:
 | DOC-06 | Renderer PGD dan buat ulang PDF | Production + Staging, production drift risk | PGD renderer, rebuild action | DOC-05, snapshots | Jangan rilis renderer tanpa worker seversi |
 | DOC-07 | Private storage dan authorized download | Production + Staging; perbaikan token staging siap diuji | BFF storage/file token | Self-hosted Supabase storage | Kontrol keamanan; token harus memvalidasi bucket dan object path aktual, jangan tarik parsial |
 | DOC-08 | Shared storage dengan namespace environment | Staging candidate; referensi legacy staging sudah dimigrasikan | Storage path policy, BFF upload, PDF worker, migrator namespace | DOC-05, DOC-07, env deployment | Production tetap tanpa prefix; staging wajib memakai `staging/`; migrator tidak menghapus object sumber |
+| DOC-09 | Fast path preview PDF privat | Development branch | PDF job response, polling status, one-time file viewer token | DOC-05, DOC-07, SUR-05 | Optimasi wajib mempertahankan otorisasi dokumen, token sekali pakai, namespace storage, dan `Cache-Control: no-store`; jangan mengganti dengan public URL atau cache lintas pencabutan akses |
 
 ### 4.7 Notification, Realtime, Email, dan Audit
 
