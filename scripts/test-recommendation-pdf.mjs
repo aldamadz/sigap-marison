@@ -179,7 +179,7 @@ test("omits detail numbering when an applicant item only has one detail", async 
   assert.doesNotMatch(String(firstItemSheet.getCell("A2").value), /DETAIL|1\.1/);
   const continuationSheet = workbook.worksheets.at(-1);
   assert.equal(String(continuationSheet.getCell("A2").value), "Kondisi alat (LANJUTAN)");
-  assert.equal(continuationSheet.pageSetup.printArea, "A1:L33");
+  assert.equal(continuationSheet.pageSetup.printArea, "A1:L16");
   const ranges = workbook.worksheets.flatMap((sheet) => sheet.getImages().map((entry) => entry.range));
   assert.ok(ranges.some((range) => Math.abs(range.ext.width / range.ext.height - 4) < 0.05));
   assert.ok(ranges.some((range) => Math.abs(range.ext.width / range.ext.height - 0.25) < 0.05));
@@ -223,4 +223,48 @@ test("keeps not-recommended parent with no explicit details in combined PDF", ()
   assert.equal(pages[0].detailStatus, "not_recommended");
   assert.equal(pages[0].rejectionReason, "Tidak ekonomis");
   assert.equal(pages[0].showDetailNumber, false);
+});
+
+test("treats a rejected parent as authoritative over stale recommended details", async () => {
+  const items = resolveRecommendationSource({ recommendation_multi_detail: { items: [{
+    id: "rejected-parent",
+    applicant_original: { name: "Headset lama" },
+    status: "not_recommended",
+    location: "Marketing",
+    pic: "Andreas",
+    rejection_reason: "Kondisi masih layak",
+    details: [{
+      id: "stale-detail",
+      name: "Headset baru",
+      action: "purchase_new",
+      description: "Pembelian baru",
+      status: "recommended",
+      attachments: [],
+    }],
+  }] } });
+
+  assert.equal(items[0].details.length, 1);
+  assert.equal(items[0].details[0].heading, "Headset lama");
+  assert.equal(items[0].details[0].status, "not_recommended");
+  assert.equal(items[0].details[0].description, "");
+
+  const workbook = new ExcelJS.Workbook();
+  const pages = await appendRecommendationPages(workbook, items, async () => image(100, 100));
+  assert.equal(pages.length, 1);
+  const sheet = workbook.worksheets[0];
+  assert.match(String(sheet.getCell("A3").value), /Status: Tidak direkomendasikan/);
+  assert.match(String(sheet.getCell("A3").value), /Alasan: Kondisi masih layak/);
+  assert.doesNotMatch(String(sheet.getCell("A3").value), /Pembelian baru|Status: recommended/);
+  assert.equal(sheet.getImages().length, 0);
+  assert.equal(sheet.pageSetup.printArea, "A1:L7");
+});
+
+test("renders one attachment as one large image without five empty grid placeholders", async () => {
+  const workbook = new ExcelJS.Workbook();
+  await appendRecommendationPages(workbook, canonical(1), async () => image(1200, 400));
+  const sheet = workbook.worksheets.find((candidate) => candidate.getImages().length === 1);
+  assert.ok(sheet);
+  assert.equal(sheet.pageSetup.printArea, "A1:L22");
+  assert.equal(sheet.getImages().length, 1);
+  assert.ok(sheet.getImages()[0].range.ext.width > 500);
 });

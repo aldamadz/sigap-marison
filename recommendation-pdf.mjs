@@ -7,6 +7,16 @@ const text = (...values) => values.map((value) => String(value ?? "").trim()).fi
 const orderNumber = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const imageExtension = /\.(png|jpe?g|webp|gif|tiff?|avif)(?:$|[?#])/i;
 const imageMime = /^image\//i;
+const notRecommendedPattern = /not[\s_-]*recommended|tidak[\s_-]*direkomendasikan|rejected|ditolak/i;
+const isNotRecommended = (value) => notRecommendedPattern.test(String(value || ""));
+const recommendationStatusLabel = (value) => isNotRecommended(value) ? "Tidak direkomendasikan" : "Direkomendasikan";
+const recommendationActionLabel = (value) => {
+  const action = String(value || "").trim().toLowerCase();
+  if (["service", "servis"].includes(action)) return "Servis";
+  if (["replace", "replacement", "ganti"].includes(action)) return "Ganti";
+  if (["purchase_new", "beli_baru", "beli baru"].includes(action)) return "Pembelian baru";
+  return "";
+};
 
 export const parseStorageRef = (value, options = {}) => {
   const record = asRecord(value);
@@ -132,12 +142,22 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
     const item = asRecord(rawItem);
     const parentIndex = Math.max(orderNumber(item.parent_item_index, itemIndex + 1) - 1, 0);
     const parentItem = asRecord(parentItems[parentIndex]);
+    const itemStatus = text(item.status, item.recommendation_status, item.recommendation_action);
+    const rejected = isNotRecommended(itemStatus) || item.is_recommended === false;
     const explicitDetails = [
       ...asArray(item.details),
       ...asArray(item.recommendation_details),
       ...asArray(item.detail_items),
     ];
-    const details = explicitDetails.length ? explicitDetails : [item];
+    // A parent decision is canonical. Old drafts can retain a previously
+    // recommended detail after the parent is changed to not recommended.
+    // Never let that stale detail reverse the final decision in the PDF.
+    const details = rejected ? [{
+      id: `${text(item.id, `item-${itemIndex + 1}`)}-decision`,
+      heading: text(asRecord(item.applicant_original).name, item.parent_item_name, item.nama_barang, item.name),
+      status: "not_recommended",
+      rejection_reason: text(item.rejection_reason, item.reason, item.alasan),
+    }] : explicitDetails.length ? explicitDetails : [item];
     return {
       id: text(item.id, item.item_id, item.parent_item_id, `item-${itemIndex + 1}`),
       order: orderNumber(item.order ?? item.item_order ?? item.parent_item_index, itemIndex + 1),
@@ -152,13 +172,13 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
         item.name,
         `Item ${itemIndex + 1}`,
       ),
-      status: text(item.status, item.recommendation_status, item.recommendation_action),
+      status: rejected ? "not_recommended" : itemStatus,
       location: text(item.location, item.lokasi, item.lokasi_pic, parentItem.location, parentItem.lokasi),
       pic: text(item.pic, item.person_in_charge, parentItem.pic, parentItem.person_in_charge),
-      rejectionReason: text(item.rejection_reason, item.reason, item.alasan, item.keterangan),
+      rejectionReason: rejected ? text(item.rejection_reason, item.reason, item.alasan, item.keterangan) : "",
       details: details.map((rawDetail, detailIndex) => {
         const detail = asRecord(rawDetail);
-        const status = text(detail.status, detail.recommendation_status, detail.recommendation_action,
+        const status = rejected ? "not_recommended" : text(detail.status, detail.recommendation_status, detail.recommendation_action,
           detail.is_recommended === false ? "not_recommended" : "recommended");
         return {
           id: text(detail.id, detail.detail_id, `${text(item.id, `item-${itemIndex + 1}`)}-detail-${detailIndex + 1}`),
@@ -166,10 +186,11 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
           heading: text(detail.heading, detail.title, detail.name, detail.nama_detail, detail.nama_barang, detail.uraian, `Detail ${itemIndex + 1}.${detailIndex + 1}`),
           description: text(detail.description, detail.keterangan, detail.notes, detail.catatan, detail.uraian),
           status,
+          action: text(detail.action, detail.recommendation_action),
           location: text(detail.location, detail.lokasi, detail.detail_location),
           pic: text(detail.pic, detail.detail_pic, detail.person_in_charge),
           rejectionReason: text(detail.rejection_reason, detail.reason, detail.alasan,
-            /not[\s_-]*recommended|tidak[\s_-]*direkomendasikan|rejected|ditolak/i.test(status) ? detail.keterangan : ""),
+            isNotRecommended(status) ? detail.keterangan : ""),
           attachments: collectAttachments(detail),
         };
       }).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id)),
@@ -199,6 +220,7 @@ export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((it
       detailHeading: detail.heading,
       description: detail.description,
       detailStatus: detail.status,
+      detailAction: detail.action,
       detailLocation: detail.location,
       detailPic: detail.pic,
       detailRejectionReason: detail.rejectionReason,
@@ -257,32 +279,44 @@ export const appendRecommendationPages = async (workbook, items, downloadImage) 
     sheet.getRow(2).height = 25;
     sheet.mergeCells("A3:L4");
     const documentText = page.documents.map((item) => `${item.name || "Dokumen"}${item.url ? `: ${item.url}` : ""}`).join(" | ");
+    const rejected = isNotRecommended(page.status);
     const metadata = [
-      `Status: ${text(page.detailStatus, page.status, "-")}`,
+      `Status: ${recommendationStatusLabel(page.status || page.detailStatus)}`,
+      !rejected && recommendationActionLabel(page.detailAction) ? `Tindakan: ${recommendationActionLabel(page.detailAction)}` : "",
       `Lokasi: ${text(page.detailLocation, page.location, "-")}`,
       `PIC: ${text(page.detailPic, page.pic, "-")}`,
-      `Alasan penolakan: ${text(page.detailRejectionReason, page.rejectionReason, "-")}`,
-    ].join(" | ");
-    sheet.getCell("A3").value = [metadata, page.description, documentText].filter(Boolean).join("\n");
+      rejected ? `Alasan: ${text(page.rejectionReason, page.detailRejectionReason, "-")}` : "",
+    ].filter(Boolean).join(" | ");
+    sheet.getCell("A3").value = [metadata, rejected ? "" : page.description, documentText].filter(Boolean).join("\n");
     sheet.getCell("A3").alignment = { vertical: "top", wrapText: true };
     sheet.getCell("A3").font = { name: "Arial", size: 9, color: { argb: "FF334155" } };
     sheet.getRow(3).height = 25;
     sheet.getRow(4).height = 25;
 
-    for (let slot = 0; slot < 6; slot += 1) {
+    if (page.images.length === 0) {
+      sheet.mergeCells("A5:L6");
+      sheet.getCell("A5").value = "Tidak ada lampiran gambar.";
+      sheet.getCell("A5").font = { name: "Arial", size: 9, italic: true, color: { argb: "FF64748B" } };
+      sheet.getCell("A5").alignment = { horizontal: "center", vertical: "middle" };
+      sheet.pageSetup.printArea = "A1:L7";
+      continue;
+    }
+
+    for (let slot = 0; slot < page.images.length; slot += 1) {
+      const singleImage = page.images.length === 1;
       const slotRow = Math.floor(slot / 2);
       const slotCol = slot % 2;
       const startRow = 5 + slotRow * 10;
-      const startCol = slotCol === 0 ? 1 : 7;
-      const endCol = startCol + 5;
-      for (let row = startRow; row <= startRow + 8; row += 1) {
+      const startCol = singleImage ? 1 : slotCol === 0 ? 1 : 7;
+      const endCol = singleImage ? 12 : startCol + 5;
+      const endRow = singleImage ? 20 : startRow + 8;
+      for (let row = startRow; row <= endRow; row += 1) {
         sheet.getRow(row).height = 15;
         for (let col = startCol; col <= endCol; col += 1) {
           sheet.getCell(row, col).border = { top: border, left: border, bottom: border, right: border };
         }
       }
       const attachment = page.images[slot];
-      if (!attachment) continue;
       if (!attachment.url) throw new Error(`Sumber gambar ${attachment.name || attachment.id} tidak tersedia.`);
       let downloaded;
       try {
@@ -292,16 +326,19 @@ export const appendRecommendationPages = async (workbook, items, downloadImage) 
       }
       let image;
       try {
-        image = await prepareImage(downloaded, 310, 125);
+        image = await prepareImage(downloaded, singleImage ? 620 : 310, singleImage ? 230 : 125);
       } catch (error) {
         throw new Error(`Gagal membaca gambar ${attachment.name || attachment.id}: ${error.message}`);
       }
       const imageId = workbook.addImage({ buffer: image.buffer, extension: "png" });
-      const left = startCol - 1 + Math.max((310 - image.width) / 64, 0);
-      const top = startRow - 1 + Math.max((125 - image.height) / 20, 0);
+      const boxWidth = singleImage ? 620 : 310;
+      const boxHeight = singleImage ? 230 : 125;
+      const left = startCol - 1 + Math.max((boxWidth - image.width) / 64, 0);
+      const top = startRow - 1 + Math.max((boxHeight - image.height) / 20, 0);
       sheet.addImage(imageId, { tl: { col: left, row: top }, ext: { width: image.width, height: image.height }, editAs: "oneCell" });
     }
-    sheet.pageSetup.printArea = "A1:L33";
+    const usedImageRows = page.images.length === 1 ? 20 : 4 + Math.ceil(page.images.length / 2) * 10;
+    sheet.pageSetup.printArea = `A1:L${Math.min(usedImageRows + 2, 33)}`;
   }
   return pages;
 };

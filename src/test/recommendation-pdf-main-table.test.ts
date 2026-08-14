@@ -83,4 +83,42 @@ describe("recommendation PDF main table", () => {
     await normalized.xlsx.load(await readFile(path));
     expect(normalized.worksheets[0].getCell("E9").value).toBe("Cabang Lama / PIC Lama");
   });
+
+  it("projects an explicit rejected decision and clears stale recommendation output", async () => {
+    const path = await createRecommendationWorkbook();
+    const original = new ExcelJS.Workbook();
+    await original.xlsx.readFile(path);
+    original.worksheets[0].getCell("G9").value = "✓";
+    original.worksheets[0].getCell("I9").value = "Pembelian baru";
+    await original.xlsx.writeFile(path);
+
+    await normalizeWorkbookForPdf(path, {
+      recommendationItems: [{
+        id: "item-1",
+        order: 1,
+        applicantName: "Headset",
+        status: "not_recommended",
+        location: "Marketing",
+        pic: "Andreas Bayu Darmawan",
+        rejectionReason: "Kondisi masih layak",
+        details: [{
+          id: "stale-detail",
+          order: 1,
+          heading: "Headset baru",
+          status: "recommended",
+          action: "purchase_new",
+          description: "Pembelian baru",
+        }],
+      }],
+    });
+
+    const normalized = new ExcelJS.Workbook();
+    await normalized.xlsx.readFile(path);
+    const sheet = normalized.worksheets[0];
+    expect(sheet.getCell("B9").value).toBe("Headset");
+    expect(sheet.getCell("G9").value).toBeNull();
+    expect(sheet.getCell("H9").value).toBeNull();
+    expect(sheet.getCell("I9").value).toBe("TIDAK DIREKOMENDASIKAN");
+    expect(sheet.getCell("J9").value).toBe("Kondisi masih layak");
+  });
 });
