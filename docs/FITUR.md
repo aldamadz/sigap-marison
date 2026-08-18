@@ -666,7 +666,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Dropdown konfigurasi memindahkan admin di antara `Kegunaan Form`, `Integrasi`, `SLA Departemen`, `Penomoran Surat`, `Label Jabatan`, dan konfigurasi aktif lain.
 - Dropdown konfigurasi juga menyediakan `Email Notification` untuk penerima email, privasi, dan mode file.
 - Kegunaan Form mengatur schema input, kategori, lampiran, urutan penandatangan, dan matrix Unit per departemen.
-- Layout PDF dimiliki renderer sistem dan mendukung 3-8 penandatangan tanpa koordinat workbook.
+- Layout PDF dimiliki renderer sistem dan mendukung 2-8 penandatangan sesuai konfigurasi tanpa koordinat workbook.
 - SLA Departemen mengatur target SLA, jam kerja, waktu istirahat, hari kerja, dan timezone.
 - Penomoran Surat mengatur counter awal per tahun untuk scope pusat atau cabang/proyek.
 - Label Jabatan mengatur alias jabatan untuk tampilan dokumen, misalnya `Manager Pengembangan Bisnis` ditampilkan sebagai `Mgr. PO`.
@@ -1046,11 +1046,11 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Preview kandidat pada konfigurasi kegunaan tetap menampilkan kandidat relevan untuk scope dinamis walaupun departemen tetap belum dipilih.
 - Konfigurasi lampiran lama di luar Kegunaan Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
 - Saat signer memilih lampiran approval, UI menampilkan jumlah file, nama file, ukuran file, status siap unggah, dan status mengunggah ketika approval sedang diproses.
-- Setiap role `Membuat`, `Memeriksa`, dan `Menyetujui` wajib memiliki 1-3 signer. Jumlah keseluruhan signer yang didukung adalah 3-8.
+- Jumlah penandatangan mengikuti langkah aktif pada Kegunaan Form. Dokumen mendukung 2-8 penandatangan; role yang tidak digunakan tidak perlu diisi.
 - Pembagian baris preset PGD adalah: 3 kotak memakai grid 3, 4 kotak `4`, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`. Jika baris kedua lebih pendek, slotnya diratakan ke kanan terhadap grid baris pertama.
 - Ukuran vertikal satu blok tidak berubah berdasarkan jumlah baris. Formasi 3/4 memakai blok atas saja, sedangkan blok bawah hanya digunakan oleh formasi 5-8.
-- Pada preset PGD, urutan tahap wajib `Membuat`, `Memeriksa`, lalu `Menyetujui`; kombinasi di luar aturan 3-8 signer ditolak agar dokumen tidak rusak.
-- Saat PDF dibuat, renderer native membangun kotak 3-8 signer langsung dari snapshot workflow.
+- Pada preset PGD, urutan tahap mengikuti konfigurasi Kegunaan Form; kombinasi di luar aturan 2-8 signer ditolak agar dokumen tidak rusak.
+- Saat PDF dibuat, renderer native membangun kotak 2-8 signer langsung dari snapshot workflow.
 - Baris pertama area tanda tangan dipakai untuk `Tempat, Tanggal`, misalnya `Magelang, 20 Juli 2026`; nilainya di-merge, diberi border, rata tengah, dan selebar kotak tanda tangan paling kanan tepat di bawahnya.
 - Lebar, border, dan pembagian baris kotak pada preset PGD mengikuti aturan renderer sistem, bukan merge Excel lama.
 - Label yang sama dan berdampingan dalam satu baris tanda tangan digabung pada area label, sedangkan area tanda tangan, nama, dan jabatan tetap per signer.
@@ -1103,7 +1103,7 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Registrasi baru tidak membuat file XLSX. `file_path` menyimpan versi logis `native://document/...` untuk invalidasi cache dan audit.
 - Approval hanya menyimpan keputusan, waktu, catatan, lampiran, dan versi logis baru. Approval tidak mengunduh atau memodifikasi workbook.
 - PDF dibuat oleh worker langsung dari snapshot database ketika user membuka/mengunduh dokumen atau ketika dokumen final dibutuhkan outbound.
-- Dokumen final mendukung 3 sampai 8 signer sesuai Kegunaan Form.
+- Dokumen final mendukung 2 sampai 8 signer sesuai Kegunaan Form.
 - Form Permintaan Barang & Jasa serta Rekomendasi Peremajaan memakai renderer PDF-native. Lampiran rekomendasi disusun maksimal enam gambar per halaman.
 - Route konfigurasi Forms dan Workflows lama dialihkan ke `Kegunaan Form`. Konfigurasi aktif dokumen dan alur tetap dikelola melalui Kegunaan Form.
 - Data template dan mapping lama dipertahankan sebagai kompatibilitas histori, tetapi tidak digunakan untuk membuat dokumen transaksi baru.

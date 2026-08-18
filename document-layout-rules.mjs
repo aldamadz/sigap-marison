@@ -33,6 +33,13 @@ export const buildSignatureLayoutPlan = (total, maxPerRow = 4) => {
 };
 
 const PGD_SIGNATURE_REFERENCE = {
+  2: {
+    groupSizes: [2],
+    dateRange: [4, 10],
+    groupSlotRanges: [
+      [[7, 9], [10, 10]],
+    ],
+  },
   3: {
     groupSizes: [3],
     dateRange: [4, 10],
@@ -85,7 +92,7 @@ export const buildPgdSignatureSlotPlan = (total) => {
   const count = Number(total);
   const reference = PGD_SIGNATURE_REFERENCE[count];
   if (!reference) {
-    throw new Error("Preset PGD hanya mendukung 3 sampai 8 tahap tanda tangan.");
+    throw new Error("Preset PGD hanya mendukung 2 sampai 8 tahap tanda tangan.");
   }
 
   return {

@@ -19,6 +19,9 @@ test("signature rows use first-row grid and align shorter rows right", () => {
 });
 
 test("PGD reference signature slots match native PDF geometry", () => {
+  assert.deepEqual(buildPgdSignatureSlotPlan(2).groupSlotRanges, [
+    [[7, 9], [10, 10]],
+  ]);
   assert.deepEqual(buildPgdSignatureSlotPlan(3).groupSlotRanges, [
     [[4, 6], [7, 9], [10, 10]],
   ]);
@@ -33,6 +36,6 @@ test("PGD reference signature slots match native PDF geometry", () => {
 });
 
 test("native signature layout rejects unsupported signer counts", () => {
-  assert.throws(() => buildPgdSignatureSlotPlan(2), /3 sampai 8/);
-  assert.throws(() => buildPgdSignatureSlotPlan(9), /3 sampai 8/);
+  assert.throws(() => buildPgdSignatureSlotPlan(1), /2 sampai 8/);
+  assert.throws(() => buildPgdSignatureSlotPlan(9), /2 sampai 8/);
 });

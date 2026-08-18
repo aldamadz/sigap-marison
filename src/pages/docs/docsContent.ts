@@ -2291,7 +2291,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, dan kebutuhan lampiran.",
     whenToUse: [
       "Membuat kegunaan dokumen baru untuk departemen tertentu.",
-      "Mengatur alur tanda tangan 3 sampai 8 tahap.",
+      "Mengatur alur tanda tangan 2 sampai 8 tahap sesuai konfigurasi.",
       "Menambahkan tim pemeriksa sebelum penandatangan boleh aksi.",
       "Mengatur dokumen rekomendasi atau prasyarat yang harus selesai sebelum surat induk lanjut.",
     ],
@@ -2818,7 +2818,7 @@ export const DOCS_CHANGELOG = [
     changes: [
       "Mengubah registrasi dan approval dokumen menjadi database-native tanpa membuat atau memodifikasi XLSX.",
       "Membuat PDF secara asinkron dari snapshot database saat dibutuhkan atau setelah dokumen final.",
-      "Menambahkan renderer native untuk rekomendasi, lampiran enam gambar per halaman, dan tanda tangan dinamis 3-8 signer.",
+      "Menambahkan renderer native untuk rekomendasi, lampiran enam gambar per halaman, dan tanda tangan dinamis 2-8 signer.",
       "Menginvalidasi cache PDF secara atomik setiap kali versi dokumen berubah.",
       "Menahan outbound sebelum POST sampai PDF final tersedia dan mencegah marker native menjadi tautan lampiran.",
       "Mengalihkan halaman Forms dan Workflows lama ke Kegunaan Form.",
@@ -3138,7 +3138,7 @@ export const DOCS_CHANGELOG = [
       "Menjaga item Nama Barang tetap rata kiri meskipun field menggunakan kontrol pilihan/select.",
       "Menyatukan aturan formasi tanda tangan dan alignment tabel antara Uji PDF dan generator dokumen transaksi.",
       "Mengubah baris kedua yang lebih pendek menjadi rata kanan dan memastikan baris tiga kotak menggunakan grid 3.",
-      "Memperbarui Form dan Template dengan formasi tanda tangan konsisten untuk 3 sampai 8 signer.",
+      "Memperbarui Form dan Template dengan formasi tanda tangan konsisten untuk 2 sampai 8 signer.",
       "Menjelaskan bahwa Uji PDF dan dokumen transaksi memakai aturan pembagian kotak yang sama.",
       "Menambahkan panduan perbedaan Buka Dokumen dan Buat Ulang PDF.",
       "Mendokumentasikan regenerasi surat lama dari template aktif tanpa mengulang atau mengubah histori approval.",
