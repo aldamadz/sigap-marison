@@ -79,7 +79,7 @@ insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endp
 const run=(args,input="")=>{const result=spawnSync("docker",args,{input,encoding:"utf8",timeout:120000});if(result.status!==0)throw new Error(`${result.stderr||""}\n${result.stdout||""}`.trim()||"Docker command failed");return result.stdout;};
 const id=run(["run","-d","-e","POSTGRES_PASSWORD=test","postgres:17-alpine"]).trim();
 try{
- let ready=false;for(let attempt=0;attempt<30&&!ready;attempt+=1){ready=spawnSync("docker",["exec",id,"pg_isready","-U","postgres"],{encoding:"utf8"}).status===0;if(!ready)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
+ let ready=false;for(let attempt=0;attempt<30&&!ready;attempt+=1){ready=spawnSync("docker",["exec",id,"pg_isready","-h","127.0.0.1","-U","postgres","-d","postgres"],{encoding:"utf8"}).status===0;if(!ready)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw new Error("Disposable PostgreSQL did not become ready");
- process.stdout.write(run(["exec","-i",id,"psql","-U","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+partialRecoveryMigration+pdfCacheMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
+ process.stdout.write(run(["exec","-i",id,"psql","-h","127.0.0.1","-U","postgres","-d","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+partialRecoveryMigration+pdfCacheMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
 }finally{run(["rm","-f",id]);}
