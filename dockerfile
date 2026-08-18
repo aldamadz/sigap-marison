@@ -35,7 +35,6 @@ FROM node:22.23.1-alpine
 WORKDIR /app
 
 RUN apk add --no-cache \
-    libreoffice \
     font-noto \
     font-noto-cjk \
     ttf-dejavu
@@ -55,7 +54,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY pdf-worker.mjs ./pdf-worker.mjs
-COPY document-workbook-normalizer.mjs ./document-workbook-normalizer.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
 COPY recommendation-pdf.mjs ./recommendation-pdf.mjs

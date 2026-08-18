@@ -34,11 +34,14 @@ describe("native document pipeline", () => {
   });
 
   it("renders worker output directly as PDF without LibreOffice or XLSX sources", () => {
+    const dockerfile = read("dockerfile");
     expect(worker).toContain("renderDirectPgdJob");
     expect(worker).toContain("renderDirectRecommendationJob");
     expect(worker).not.toContain("soffice");
     expect(worker).not.toContain("source.xlsx");
     expect(worker).not.toContain("appendRecommendationPagesToFile");
+    expect(dockerfile).not.toContain("libreoffice");
+    expect(dockerfile).not.toContain("document-workbook-normalizer.mjs");
   });
 
   it("never exposes a native source marker as an outbound attachment", () => {
