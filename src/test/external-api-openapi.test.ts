@@ -11,6 +11,10 @@ describe("external API OpenAPI document", () => {
     expect(document.info.version).toBe("1.0.0");
     expect(document.servers).toEqual([{ url: "https://external.marison-testing.biz.id", description: "SIGAP External API staging" }]);
     expect(operation.security).toEqual([{ submissionDecisionBearer: [] }]);
+    expect(document.info.description).toContain("Authorization: Bearer <token>");
+    expect(document.info.description).toContain("Content-Type: application/json");
+    expect(operation.description).toContain("Header wajib");
+    expect(document.components.securitySchemes.submissionDecisionBearer.description).toContain("Masukkan token saja");
     expect(schema.required).toEqual(["event_id", "document_number", "decision", "reason", "decided_at"]);
     expect(Object.keys(schema.properties)).toEqual(schema.required);
     expect(schema.properties.decision.enum).toEqual(["rejected", "revision_required"]);

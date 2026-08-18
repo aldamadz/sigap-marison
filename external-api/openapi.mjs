@@ -52,6 +52,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
     description: [
       "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
       "Gunakan tombol **Authorize** untuk memasukkan bearer token, lalu **Try it out** untuk menguji request.",
+      "### Header wajib\n- `Authorization: Bearer <token>` — pada dialog Authorize, masukkan nilai token saja; Swagger menambahkan awalan `Bearer` secara otomatis.\n- `Content-Type: application/json` — ditambahkan otomatis saat request dijalankan dari Swagger.",
       "Request hanya menerima lima field yang tercantum pada schema.",
     ].join("\n\n"),
   },
@@ -63,7 +64,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
         type: "http",
         scheme: "bearer",
         bearerFormat: "opaque",
-        description: "Token machine-to-machine khusus submission decisions.",
+        description: "Token machine-to-machine khusus submission decisions. Masukkan token saja; Swagger otomatis mengirim header `Authorization: Bearer <token>`.",
       },
     },
   },
@@ -75,6 +76,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
         description: [
           "Gunakan `rejected` untuk menolak secara terminal atau `revision_required` untuk mengembalikan pengajuan kepada pemohon.",
           "`event_id` adalah kunci idempotensi: replay payload identik berhasil, sedangkan payload berbeda dengan event yang sama ditolak HTTP 409.",
+          "### Header wajib\n`Authorization: Bearer <token>` dan `Content-Type: application/json`. Klik **Authorize** dan masukkan token tanpa menulis kata `Bearer`.",
         ].join("\n\n"),
         tags: ["Submission Decisions"],
         security: [{ submissionDecisionBearer: [] }],
