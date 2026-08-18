@@ -51,10 +51,14 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
 
   if (hasRejectedSig || surat.status === 'REJECTED') {
     const rejectedSig = sigs.find(s => s.status === 'REJECTED');
+    const externalDecision = surat.data_snapshot?.external_decision;
+    const rejectedByDepartmentSystem = externalDecision?.decision === 'rejected';
     return {
       type: 'DITOLAK',
-      label: 'Ditolak',
-      sublabel: rejectedSig ? `Ditolak pada tahap: ${rejectedSig.role_name}` : 'Ditolak',
+      label: rejectedByDepartmentSystem ? 'Ditolak sistem departemen' : 'Ditolak',
+      sublabel: rejectedByDepartmentSystem
+        ? String(externalDecision?.reason || 'Ditolak oleh sistem departemen')
+        : rejectedSig ? `Ditolak pada tahap: ${rejectedSig.role_name}` : 'Ditolak',
       barColor: 'bg-red-500',
       badgeClass: 'bg-red-500/10 text-red-400 border-red-500/20',
       accentClass: 'bg-red-500',

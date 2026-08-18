@@ -58,7 +58,8 @@ export interface SuratRegistrasi {
 
 export interface SuratRegistrationDraft {
   id: string;
-  reservation_id: string;
+  reservation_id: string | null;
+  revision_event_id?: string | null;
   created_by: string;
   no_surat: string;
   status: "DRAFT" | "SUBMITTED" | "VOID" | "EXPIRED";
@@ -779,6 +780,7 @@ export const suratService = {
       .from("surat_registration_drafts")
       .select("*, surat_registration_draft_files(*)")
       .eq("status", "DRAFT")
+      .is("revision_event_id", null)
       .gt("expires_at", new Date().toISOString())
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -795,6 +797,30 @@ export const suratService = {
       .single();
     if (error) throw error;
     return data as SuratRegistrationDraft;
+  },
+
+  async createExternalSubmissionRevisionDraft(revisionEventId: string): Promise<SuratRegistrationDraft> {
+    const { data, error } = await supabase.rpc("create_external_submission_revision_draft", {
+      p_revision_event_id: revisionEventId,
+    });
+    if (error) throw error;
+    return data as SuratRegistrationDraft;
+  },
+
+  async submitExternalSubmissionRevision(args: {
+    revisionEventId: string;
+    draftId: string;
+    formData: Record<string, any>;
+    requesterNote?: string;
+  }): Promise<{ success: boolean; next_step: string; surat_id: string; revision_event_id: string }> {
+    const { data, error } = await supabase.rpc("submit_external_submission_revision", {
+      p_revision_event_id: args.revisionEventId,
+      p_draft_id: args.draftId,
+      p_form_data: args.formData,
+      p_requester_note: args.requesterNote || null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; next_step: string; surat_id: string; revision_event_id: string };
   },
 
   async createRegistrationDraft(args: {

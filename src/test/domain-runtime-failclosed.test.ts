@@ -36,6 +36,7 @@ describe("fail-closed: no real network on unauth protected routes", () => {
     { method: "GET", url: "/api/surat/inbox" },
     { method: "GET", url: "/api/surat/inbox/123e4567-e89b-12d3-a456-426614174000/detail" },
     { method: "POST", url: "/api/surat/rejections" },
+    { method: "POST", url: "/api/v1/submission-decisions" },
     { method: "GET", url: "/api/attention/state" },
   ];
 

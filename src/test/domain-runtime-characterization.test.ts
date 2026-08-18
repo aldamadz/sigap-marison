@@ -32,6 +32,7 @@ describe("domain-runtime protected route registration (no session)", () => {
     { name: "surat inbox", method: "GET", url: "/api/surat/inbox", expected: 401 },
     { name: "surat inbox detail", method: "GET", url: "/api/surat/inbox/123e4567-e89b-12d3-a456-426614174000/detail", expected: 401 },
     { name: "surat rejection by document number", method: "POST", url: "/api/surat/rejections", expected: 401 },
+    { name: "external submission decision", method: "POST", url: "/api/v1/submission-decisions", expected: 401 },
     { name: "attention state", method: "GET", url: "/api/attention/state", expected: 401 },
   ];
 
