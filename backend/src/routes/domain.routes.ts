@@ -37,6 +37,7 @@ const routes: DomainRoute[] = [
   { method: "GET", url: "/api/surat/inbox" },
   { method: "GET", url: "/api/surat/inbox/:signatureId/detail" },
   { method: "POST", url: "/api/surat/rejections" },
+  { method: "POST", url: "/api/v1/submission-decisions" },
   { method: "GET", url: "/api/attention/state" },
   { method: "GET", url: "/api/push/public-key" },
   { method: "POST", url: "/api/push/subscribe" },

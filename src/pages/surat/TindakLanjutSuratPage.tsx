@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, FileText, Loader2, RotateCcw, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileText, Loader2, Pencil, RotateCcw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,6 +69,7 @@ export default function TindakLanjutSuratPage() {
   const selected = useMemo(() => rows.find((row) => row.id === selectedId) || rows[0] || null, [rows, selectedId]);
   const activeRevision = getOpenRequesterRevision(selected);
   const revisionChanges = getRevisionItemChanges(activeRevision);
+  const isExternalRevision = activeRevision?.changes?.external_submission_revision === true;
 
   const mutation = useMutation({
     mutationFn: async ({ action, eventId, note }: { action: "accept" | "cancel"; eventId: string; note: string }) => {
@@ -90,6 +91,12 @@ export default function TindakLanjutSuratPage() {
       ]);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Gagal memproses tindak lanjut."),
+  });
+
+  const openRevisionMutation = useMutation({
+    mutationFn: async (eventId: string) => suratService.createExternalSubmissionRevisionDraft(eventId),
+    onSuccess: (draft) => navigate(`/surat/registrasi?draft=${encodeURIComponent(draft.id)}&revision=${encodeURIComponent(draft.revision_event_id || "")}`),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft perbaikan gagal dibuka."),
   });
 
   const openActionDialog = (action: "accept" | "cancel") => {
@@ -196,13 +203,27 @@ export default function TindakLanjutSuratPage() {
                 <section className="sigap-panel border-amber-500/25 bg-amber-500/5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Menunggu keputusan pemohon</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                        {isExternalRevision ? "Perlu diperbaiki oleh pemohon" : "Menunggu keputusan pemohon"}
+                      </p>
                       <h2 className="mt-2 text-base font-semibold">{selected.judul_surat}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Perubahan dari {formatRevisionTarget(activeRevision)} perlu Anda tinjau sebelum proses dilanjutkan.
+                        {isExternalRevision
+                          ? `Sistem departemen meminta perbaikan: ${activeRevision?.reason || "Alasan belum tersedia."}`
+                          : `Perubahan dari ${formatRevisionTarget(activeRevision)} perlu Anda tinjau sebelum proses dilanjutkan.`}
                       </p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row">
+                      {isExternalRevision ? (
+                        <Button
+                          onClick={() => activeRevision?.event_id && openRevisionMutation.mutate(activeRevision.event_id)}
+                          disabled={openRevisionMutation.isPending}
+                        >
+                          {openRevisionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
+                          Perbaiki Pengajuan
+                        </Button>
+                      ) : (
+                        <>
                       <Button variant="outline" onClick={() => openActionDialog("cancel")}>
                         <XCircle className="mr-2 h-4 w-4" />
                         Batalkan
@@ -211,6 +232,8 @@ export default function TindakLanjutSuratPage() {
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         Lanjutkan
                       </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </section>

@@ -166,6 +166,12 @@ const RECOMMENDATION_ACTIONS = [
   { value: "tidak_direkomendasikan", label: "Tidak Direkomendasikan" },
 ] as const;
 type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]["value"];
+type ExternalRevisionContext = {
+  eventId: string;
+  generation?: number;
+  category?: RequestCategory;
+  reason?: string;
+};
 
 const parseLinkedDocumentContext = (params: URLSearchParams): LinkedDocumentContext | null => {
   const type = params.get("linked_type");
@@ -202,6 +208,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [selectedUsage, setSelectedUsage]         = useState<UsageDetailRecord | null>(null);
   const [selectedFormId, setSelectedFormId]       = useState("");
   const [generatedNoSurat, setGeneratedNoSurat]   = useState<string | null>(null);
+  const [externalRevision, setExternalRevision] = useState<ExternalRevisionContext | null>(null);
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
@@ -1500,6 +1507,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const usageId = String(payload.selectedUsageId || restoredFormData.form_usage_id || restoredFormData.penggunaan_id || "");
     const usage = usageDetails.find(item => item.id === usageId) || null;
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
+    const restoredExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
     if (restoredLinkedContext?.type === "recommendation" && restoredLinkedContext.parentSuratId) {
       setLinkedDocumentContext(restoredLinkedContext);
     }
@@ -1526,6 +1534,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       ? reconcileSignerAssignments(configuredSigners, persistedSigners)
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
+    setExternalRevision(restoredExternalRevision?.eventId ? restoredExternalRevision : null);
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
@@ -2099,6 +2108,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setDraftModalOpen(false);
     setDraftSaveState("idle");
     setLinkedDocumentContext(null);
+    setExternalRevision(null);
     setSearchParams({}, { replace: true });
     setJudulForDisplay("");
   };
@@ -2388,6 +2398,30 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     submitLockRef.current = true;
     setIsLoading(true);
     try {
+      if (externalRevision?.eventId && activeDraftId) {
+        const result = await suratService.submitExternalSubmissionRevision({
+          revisionEventId: externalRevision.eventId,
+          draftId: activeDraftId,
+          formData: effectiveFormData,
+          requesterNote: String(effectiveFormInputData.requester_revision_note || "").trim(),
+        });
+        if (result.next_step !== "recommendation") {
+          await suratService.autoApproveRequesterFirstStep(result.surat_id).catch((autoApproveError) => {
+            console.error("Gagal melanjutkan auto-approval revisi pemohon:", autoApproveError);
+          });
+        }
+        toast({
+          title: "Perbaikan berhasil dikirim",
+          description: result.next_step === "recommendation"
+            ? "Rekomendasi lama dibuka kembali dan menunggu penyesuaian tim rekomendasi."
+            : result.next_step === "unit_allocation_or_approval"
+              ? "Jumlah unit diperbarui. Alokasi akan diperiksa kembali sebelum approval."
+              : "Approval dimulai ulang menggunakan data revisi terbaru.",
+        });
+        onSuccess(generatedNoSurat || "", formData.judul_surat);
+        resetForm();
+        return;
+      }
       const initialAttachmentMeta = Object.fromEntries(
         getInitialAttachmentRequirements().flatMap(rule =>
           (initialAttachmentFiles[rule.requirement_key] || []).map(file => [
@@ -3303,7 +3337,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               min={1}
               value={String(getFormFieldValue("requested_unit_count") ?? "")}
               onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
-              disabled={!!generatedNoSurat}
+              disabled={!!generatedNoSurat && !(externalRevision && getRequestCategory() === "unit")}
               className="h-12 bg-background/70 text-sm"
               placeholder="Contoh: 10"
             />
@@ -4208,6 +4242,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+              ) : externalRevision ? (
+                <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                  <Lock className="h-4 w-4" />
+                  Nomor dan identitas dokumen dipertahankan untuk revisi generasi {externalRevision.generation || "berikutnya"}.
+                </div>
               ) : (
                 <Button
                   type="button"
@@ -4252,6 +4291,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       className="min-h-[92px] resize-none bg-background text-sm leading-relaxed"
                       placeholder="Contoh: Permohonan Pembelian Inventaris Kantor"
                       value={formData.judul_surat}
+                      disabled={Boolean(externalRevision && getRequestCategory() === "unit")}
                       onChange={e => {
                         const nextValue = e.target.value;
                         setManualTitleOverride(Boolean(nextValue.trim()));
@@ -4272,6 +4312,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       <Label className="text-xs font-semibold text-muted-foreground">Tempat</Label>
                       <Input
                         value={formData.request_place}
+                        disabled={Boolean(externalRevision && getRequestCategory() === "unit")}
                         onChange={e => {
                           const nextValue = e.target.value;
                           setManualPlaceOverride(Boolean(nextValue.trim()));
@@ -4288,6 +4329,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         value: formData.request_date,
                         onChange: (value) => setFormData({ ...formData, request_date: value }),
                         placeholder: "dd/mm/yyyy",
+                        disabled: Boolean(externalRevision && getRequestCategory() === "unit"),
                       })}
                     </div>
                   </div>
@@ -4305,7 +4347,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
               )}
 
-              {renderAttachmentUploader()}
+              {externalRevision && getRequestCategory() === "unit" && (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-4">
+                  <Label htmlFor="requester-revision-note" className="text-sm font-semibold">Catatan perbaikan pemohon (opsional)</Label>
+                  <Textarea
+                    id="requester-revision-note"
+                    value={String(getFormFieldValue("requester_revision_note") || "")}
+                    onChange={(event) => setInputValue("requester_revision_note", event.target.value)}
+                    placeholder="Jelaskan perubahan jumlah unit bila diperlukan"
+                    className="min-h-20 resize-y bg-background"
+                  />
+                </div>
+              )}
+
+              {!(externalRevision && getRequestCategory() === "unit") && renderAttachmentUploader()}
             </section>
 
             {/* ══ SECTION 3: SIGNERS ═══════════════════════════════════════ */}
@@ -4333,6 +4388,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               <Button
                                 type="button"
                                 variant="outline"
+                                disabled={Boolean(externalRevision)}
                                 className="h-10 w-full justify-between bg-muted/20 border-none ring-1 ring-border rounded-lg font-medium text-left"
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
@@ -4396,7 +4452,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   >
                     {uploadingRequirement || uploadingRecommendationAttachment
                       ? <div className="flex items-center gap-3"><Loader2 className="h-5 w-5 animate-spin" /><span>Menyimpan Lampiran...</span></div>
-                      : "Konfirmasi Pendaftaran"
+                      : externalRevision ? "Tinjau dan Kirim Perbaikan" : "Konfirmasi Pendaftaran"
                     }
                   </Button>
                   <p className="mt-3 text-center text-xs font-medium text-muted-foreground">

@@ -29,6 +29,11 @@ import {
   normalizeSuratRejectionRequest,
 } from "./lib/surat-rejection.js";
 import {
+  isValidSubmissionDecisionToken,
+  mapSubmissionDecisionRpcError,
+  normalizeSubmissionDecision,
+} from "./lib/submission-decision.js";
+import {
   applyStoragePathPrefix,
   isStoragePathWithinPrefix,
   normalizeStoragePath,
@@ -162,6 +167,7 @@ const marisonOutboundInternalToken = String(process.env.MARISON_OUTBOUND_INTERNA
 if (marisonSubmissionDispatchEnabled && marisonOutboundInternalToken.length < 32) {
   throw new Error("MARISON_OUTBOUND_INTERNAL_TOKEN minimal 32 karakter saat outbound Marison aktif.");
 }
+const submissionDecisionsApiToken = String(process.env.SUBMISSION_DECISIONS_API_TOKEN || "");
 const marisonSyncCronToken = String(
   process.env.MARISON_SYNC_CRON_TOKEN
   || createHash("sha256").update(`marison-directory-sync:${sessionSecret}`).digest("hex")
@@ -939,6 +945,47 @@ const rejectSuratByDocumentNumber = async (req) => {
   });
   if (error) {
     const mapped = mapSuratRejectionRpcError(error);
+    const responseError = new Error(mapped.message);
+    responseError.status = mapped.status;
+    throw responseError;
+  }
+  return data;
+};
+
+const applyExternalSubmissionDecision = async (req) => {
+  assertRequestSize(req, 4096);
+  const authorization = String(req.headers.authorization || "");
+  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  if (!isValidSubmissionDecisionToken(bearer, submissionDecisionsApiToken)) {
+    const error = new Error("Unauthorized");
+    error.status = 401;
+    throw error;
+  }
+  if (!supabase) {
+    const error = new Error("Layanan database belum dikonfigurasi.");
+    error.status = 503;
+    throw error;
+  }
+
+  let input;
+  try {
+    input = normalizeSubmissionDecision(await readJsonBody(req, 4096));
+  } catch (error) {
+    error.status = error.status || 400;
+    throw error;
+  }
+
+  const { data, error } = await supabase.rpc("apply_external_submission_decision", {
+    p_event_id: input.eventId,
+    p_document_number: input.documentNumber,
+    p_decision: input.decision,
+    p_reason: input.reason,
+    p_decided_at: input.decidedAt,
+    p_payload_hash: input.payloadHash,
+    p_environment: marisonDeploymentEnvironment,
+  });
+  if (error) {
+    const mapped = mapSubmissionDecisionRpcError(error);
     const responseError = new Error(mapped.message);
     responseError.status = mapped.status;
     throw responseError;
@@ -5283,6 +5330,10 @@ export const handleRequest = async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/surat/rejections") {
         return sendJson(res, 200, await rejectSuratByDocumentNumber(req));
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/v1/submission-decisions") {
+        return sendJson(res, 200, await applyExternalSubmissionDecision(req), { "Cache-Control": "no-store" });
       }
 
       if (req.method === "GET" && url.pathname === "/api/attention/state") {
