@@ -1,9 +1,8 @@
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
-import swagger from "@fastify/swagger";
-import swaggerUi from "@fastify/swagger-ui";
 import { createClient } from "@supabase/supabase-js";
+import { buildDocsHtml, docsClientScript } from "./docs-page.mjs";
 import { buildExternalOpenApi } from "./openapi.mjs";
 
 const port = Number(process.env.PORT || 80);
@@ -301,39 +300,17 @@ const app = Fastify({
   trustProxy: true,
 });
 await app.register(rateLimit, { global: false });
-await app.register(swagger, {
-  openapi: {
-    openapi: "3.1.0",
-    info: {
-      title: "SIGAP External Surat API",
-      version: "2.1.0",
-      description: [
-        "API read-only untuk integrasi data surat SIGAP.",
-        "Request data wajib membawa `Authorization: Bearer <access_token>`, `X-Timestamp`, dan `X-Signature`.",
-        "Signature: `HMAC_SHA512(access_token, METHOD:PATH_WITH_QUERY:ACCESS_TOKEN:BODY_SHA256:TIMESTAMP)`.",
-        "Gunakan timestamp RFC3339 dan minta access token baru setiap 15 menit.",
-      ].join("\n\n"),
-    },
-    servers: [{ url: `${publicUrl}/api`, description: "Live" }],
-    components: {
-      securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque" },
-        timestamp: { type: "apiKey", in: "header", name: "X-Timestamp" },
-        signature: { type: "apiKey", in: "header", name: "X-Signature" },
-      },
-    },
-  },
-});
-await app.register(swaggerUi, {
-  routePrefix: "/docs",
-  uiConfig: {
-    docExpansion: "list",
-    deepLinking: true,
-    persistAuthorization: false,
-  },
-  transformSpecification: () => buildExternalOpenApi(publicUrl),
-});
 
+app.get("/docs", { schema: { hide: true } }, async (_request, reply) => reply
+  .header("Cache-Control", "no-store")
+  .header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+  .type("text/html; charset=utf-8")
+  .send(buildDocsHtml()));
+app.get("/docs/", { schema: { hide: true } }, async (_request, reply) => reply.redirect("/docs"));
+app.get("/docs/app.js", { schema: { hide: true } }, async (_request, reply) => reply
+  .header("Cache-Control", "public, max-age=300")
+  .type("application/javascript; charset=utf-8")
+  .send(docsClientScript));
 app.get("/openapi.json", { schema: { hide: true } }, async () => buildExternalOpenApi(publicUrl));
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
 
