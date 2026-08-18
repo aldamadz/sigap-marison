@@ -6,6 +6,7 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY server.mjs ./server.mjs
+COPY openapi.mjs ./openapi.mjs
 
 EXPOSE 80
 

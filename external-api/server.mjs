@@ -3,11 +3,13 @@ import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import { createClient } from "@supabase/supabase-js";
+import { augmentExternalOpenApi } from "./openapi.mjs";
 
 const port = Number(process.env.PORT || 80);
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const publicUrl = String(process.env.EXTERNAL_API_PUBLIC_URL || "https://external.marison-testing.biz.id").replace(/\/+$/, "");
+const appPublicUrl = String(process.env.APP_PUBLIC_URL || "https://sigap.marison-testing.biz.id").replace(/\/+$/, "");
 const maxSkewMs = Number(process.env.EXTERNAL_API_MAX_SKEW_MS || 5 * 60 * 1000);
 const maxLimit = Number(process.env.EXTERNAL_API_MAX_LIMIT || 100);
 const accessTokenTtlSeconds = Number(process.env.EXTERNAL_API_ACCESS_TOKEN_TTL_SECONDS || 15 * 60);
@@ -300,7 +302,7 @@ await app.register(swagger, {
     openapi: "3.1.0",
     info: {
       title: "SIGAP External Surat API",
-      version: "2.0.0",
+      version: "2.1.0",
       description: [
         "API read-only untuk integrasi data surat SIGAP.",
         "Request data wajib membawa `Authorization: Bearer <access_token>`, `X-Timestamp`, dan `X-Signature`.",
@@ -330,6 +332,8 @@ app.get("/docs", { schema: { hide: true } }, async (request, reply) => {
     code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
     pre { background: #f4f4f4; padding: 16px; border-radius: 8px; overflow-x: auto; }
     .endpoint { margin: 16px 0; padding: 12px; background: #fafafa; border-left: 3px solid #007cba; }
+    .write { border-left-color: #b45309; }
+    .muted { color: #555; }
   </style>
 </head>
 <body>
@@ -350,11 +354,27 @@ app.get("/docs", { schema: { hide: true } }, async (request, reply) => {
   <p>Gunakan timestamp RFC3339 dan minta access token baru setiap 15 menit.</p>
   
   <h2>Endpoints</h2>
+  <p class="muted">External Surat API base URL: <code>${publicUrl}</code></p>
   <div class="endpoint">
     <strong>POST /api/access-token</strong>
     <p>Generate access token baru. Rate limit: 10 request per menit.</p>
   </div>
-  
+
+  <div class="endpoint">
+    <strong>GET /api/master/offices</strong>
+    <p>Daftar kantor untuk onboarding dan pemetaan organisasi.</p>
+  </div>
+
+  <div class="endpoint">
+    <strong>GET /api/master/departments</strong>
+    <p>Daftar departemen pusat dan cabang.</p>
+  </div>
+
+  <div class="endpoint">
+    <strong>GET /api/onboarding/options</strong>
+    <p>Opsi kantor dan departemen untuk onboarding akun.</p>
+  </div>
+
   <div class="endpoint">
     <strong>GET /api/surat</strong>
     <p>List semua surat dengan pagination.</p>
@@ -366,8 +386,16 @@ app.get("/docs", { schema: { hide: true } }, async (request, reply) => {
   </div>
   
   <div class="endpoint">
-    <strong>GET /api/surat/:id/file</strong>
+    <strong>GET /api/surat/:suratId/files/:type</strong>
     <p>Download file surat (document, pdf, attachment, signature-pdf).</p>
+  </div>
+
+  <h2>Keputusan Pengajuan</h2>
+  <p class="muted">SIGAP application API base URL: <code>${appPublicUrl}</code></p>
+  <div class="endpoint write">
+    <strong>POST ${appPublicUrl}/api/v1/submission-decisions</strong>
+    <p>Mengirim keputusan <code>rejected</code> atau <code>revision_required</code> berdasarkan nomor dokumen.</p>
+    <p>Gunakan <code>Authorization: Bearer &lt;submission_decisions_token&gt;</code>. Body hanya menerima <code>event_id</code>, <code>document_number</code>, <code>decision</code>, <code>reason</code>, dan <code>decided_at</code>.</p>
   </div>
   
   <p>Untuk dokumentasi lengkap OpenAPI, akses <a href="/openapi.json">/openapi.json</a>.</p>
@@ -375,7 +403,7 @@ app.get("/docs", { schema: { hide: true } }, async (request, reply) => {
 </html>`);
 });
 
-app.get("/openapi.json", { schema: { hide: true } }, async () => app.swagger());
+app.get("/openapi.json", { schema: { hide: true } }, async () => augmentExternalOpenApi(app.swagger(), appPublicUrl));
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
 
 app.post("/api/access-token", {
