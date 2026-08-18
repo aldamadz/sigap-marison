@@ -25,6 +25,8 @@ describe("legacy document templates are retired", () => {
     ];
 
     removed.forEach((path) => expect(existsSync(resolve(path)), path).toBe(false));
+    expect(existsSync(resolve("public/template excel"))).toBe(false);
+    expect(existsSync(resolve("employeeList (2).xlsx"))).toBe(false);
     expect(read("src/App.tsx")).not.toContain("template-designer");
     expect(read("src/components/configuration/ConfigurationLayout.tsx")).not.toContain("Template Builder");
   });

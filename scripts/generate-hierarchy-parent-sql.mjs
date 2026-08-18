@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import ExcelJS from "exceljs";
 
-const inputFile = process.argv[2] || "employeeList (2).xlsx";
+const inputFile = process.argv[2];
+if (!inputFile) {
+  throw new Error("Usage: node scripts/generate-hierarchy-parent-sql.mjs <employee.xlsx> [output.sql] [preview.csv]");
+}
 const outputFile = process.argv[3] || "hierarchy-parent-update.sql";
 const previewFile = process.argv[4] || "hierarchy-mapping-preview.csv";
 

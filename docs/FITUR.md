@@ -166,8 +166,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Service, Ganti Komponen, dan Beli Baru mewajibkan lampiran gambar; Tidak Direkomendasikan hanya mewajibkan alasan.
 - Keputusan rekomendasi disalin ke snapshot surat induk saat task rekomendasi selesai, sehingga item yang tidak direkomendasikan dapat tampil tercoret pada detail surat dan PDF PGD tanpa membuka lampiran rekomendasi.
 - Item `not_recommended` tidak wajib memiliki detail, tetapi detail lama boleh tetap disimpan; payload outbound selalu mengabaikan seluruh detail item tersebut.
-- Admin dapat memilih preset konfigurasi template saat upload Excel agar mapping input, kode form, departemen, dan area tanda tangan terisi otomatis.
-- Template `Rekomendasi Peremajaan Barang / Alat Kerja` memakai file Excel terbaru user `Form Rekomendasi Peremajaan Alat Template 20260629.xlsx` sebagai form rekomendasi/prasyarat PBO dengan nomor dokumen di `C4:J4`, tabel rekomendasi row `9-15`, catatan `B18:H24`, tempat/tanggal `I17:J17`, dan tanda tangan dinamis `I17:J24`.
+- Dokumen `Rekomendasi Peremajaan Barang / Alat Kerja` dirender langsung dari data terstruktur dan snapshot tanda tangan; tidak memakai template Excel atau preset layout.
 - Tabel rekomendasi berisi `No.` otomatis, `Nama Barang / Alat Kerja`, `No Registrasi` opsional, `Lokasi / PIC` dari pilihan user, `Kerusakan` opsional, pilihan `Service`, `Ganti`, atau `Beli Baru`, `Uraian`, dan `Keterangan` opsional.
 - Item rekomendasi dibuat dari konteks permohonan induk, tetapi `Nama Barang / Alat Kerja` diisi manual oleh tim IT/PO agar spesifikasi, tipe, dan pilihan barang dapat ditentukan berdasarkan hasil pemeriksaan.
 - Navigator item rekomendasi menampilkan nama item dari permohonan induk sebagai konteks pekerjaan, sedangkan input `Nama Barang / Alat Kerja` tetap manual dan tidak mengikuti nama item induk.
