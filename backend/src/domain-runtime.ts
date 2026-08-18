@@ -4893,15 +4893,12 @@ const serveStatic = async (req, res) => {
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
   const isHtml = extname(filePath) === ".html";
   const isServiceWorker = requested === "/sigap-sw.js";
-  const isTemplateFile = requested.startsWith("/template excel/");
   res.writeHead(200, withSecurityHeaders({
     "Content-Type": type,
     "Cache-Control": isHtml
       ? "private, no-cache, must-revalidate"
       : isServiceWorker
         ? "no-cache, must-revalidate"
-      : isTemplateFile
-        ? "private, no-cache, must-revalidate"
       : requested.startsWith("/assets/")
         ? "public, max-age=31536000, immutable"
         : "public, max-age=3600",
