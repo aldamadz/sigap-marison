@@ -30,6 +30,7 @@ describe("native document pipeline", () => {
     expect(approveBody).toContain("native://document/${suratId}/approval/${signatureId}");
     expect(approveBody).not.toContain("transformApprovalExcel(");
     expect(approveBody).not.toContain("signatureId })");
+    expect(approveBody).not.toContain("Gagal enqueue PDF final rekomendasi");
     expect(approveBody).toContain("Gagal enqueue PDF final dokumen");
   });
 
