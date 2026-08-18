@@ -15,17 +15,3 @@ export interface PgdSignatureSlotPlan {
 
 export function buildSignatureLayoutPlan(total: number, maxPerRow?: number): SignatureLayoutPlan;
 export function buildPgdSignatureSlotPlan(total: number): PgdSignatureSlotPlan;
-export function clearGoodsServicesLegacySignatureArea(worksheet: unknown): void;
-export function resolveTableHorizontalAlignment(
-  key: string,
-  type: string,
-): "left" | "center";
-export function applyGoodsServicesTableAlignment(
-  worksheet: import("exceljs").Worksheet,
-  startRow?: number,
-  endRow?: number,
-): boolean;
-export function normalizeGoodsServicesWorksheet(
-  worksheet: import("exceljs").Worksheet,
-  options?: { noteRange?: string },
-): boolean;

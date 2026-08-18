@@ -39,8 +39,6 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Admin | `/admin/master-projects` | Master Proyek |
 | Admin | `/admin/monitoring` | All Status Monitoring |
 | Admin | `/admin/kpi-departments` | SLA Departemen |
-| Admin | `/admin/configuration/template-designer` | Configuration: Template Builder |
-| Admin | `/admin/configuration/workflows` | Configuration: Dokumentasi Matrix Lama |
 | Admin | `/admin/configuration/form-usages` | Configuration: Kegunaan Form |
 | Admin | `/admin/configuration/kpi` | Configuration: SLA Departemen |
 | Admin | `/admin/configuration/job-title-labels` | Configuration: Label Jabatan |
@@ -240,7 +238,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Validasi registrasi menghitung gabungan file baru dan lampiran draft yang sudah tersimpan berdasarkan persyaratan masing-masing. Lampiran draft dibaca ulang dari database saat submit agar batas minimum/maksimum tidak bergantung pada state browser.
 - Upload lampiran pemohon menampilkan nama file aktif, urutan file, persentase byte yang sudah terkirim, fase penyimpanan metadata, serta status berhasil atau gagal. Ringkasan dan pendaftaran dikunci sampai proses selesai.
 - Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
-- User mengisi detail template berdasarkan Master Form.
+- User mengisi detail sesuai schema form dari Kegunaan Form.
 - Jika user memilih `Aset` atau `Non Unit`, field teknis Unit tidak ditampilkan dan tidak ditulis ke dokumen.
 - User memilih pejabat penandatangan berdasarkan matrix.
 - Jika tahap dikonfigurasi mengikuti kantor pemohon, daftar pejabat otomatis dibatasi ke kandidat pada kantor/cabang surat yang sama.
@@ -334,7 +332,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai tabel satu baris per kavling dengan header sticky, sehingga tim pemeriksa tetap melihat kolom `Struktur Atas`, `Struktur Bawah`, `Nomor`, `Blok`, dan `Tanggal` saat daftar discroll.
 - Tipe Unit tetap berupa teks dan memakai contoh `60`, sehingga nilai lain seperti `60/72` tetap dapat dicatat tanpa dibulatkan.
 - Datepicker Tanggal Produksi membuka bulan berjalan untuk data kosong dan menandai hari ini tanpa mengisi nilai otomatis. Tanggal baru disimpan setelah tim pemeriksa memilihnya.
-- Setelah memilih kavling, tim pemeriksa dapat mengunduh template Excel alokasi unit, mengisi struktur atas/bawah, nomor, blok, dan tanggal produksi secara massal, lalu import kembali ke tabel pemeriksaan.
+- Setelah memilih kavling, tim pemeriksa dapat memakai spreadsheet impor data alokasi untuk pengisian massal. File ini hanya alat input data dan bukan dokumen surat atau sumber PDF.
 - Template Excel alokasi unit memiliki keterangan cell yang memberi contoh Tipe Unit `60`, input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
 - Nomor kode produksi pada template Excel memakai format tiga digit. Input `1` maupun `001` ditampilkan, diimport, disimpan, dan diekspor sebagai `001`.
 - Import alokasi unit menerima `.xlsx`, `.xls`, dan `.csv`, hanya memperbarui kavling yang sudah dipilih, serta memberi informasi jika ada baris yang dilewati.
@@ -349,11 +347,11 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - Mode unit tidak boleh bercampur dengan input barang biasa.
 - Mapping field Unit hanya aktif saat kategori registrasi adalah `Unit`.
-- Kategori `Aset`, `Unit`, dan `Non Unit` harus berada pada matrix alur, bukan pada Master Form.
+- Kategori `Aset`, `Unit`, dan `Non Unit` harus berada pada Kegunaan Form, bukan pada renderer dokumen.
 - Izin Unit mengikuti departemen profil akun yang login, bukan departemen yang dipilih user pada form registrasi.
 - Matrix Unit tanpa departemen terpilih tidak dapat dipakai oleh departemen mana pun.
 - Frontend menyaring pilihan Unit dan RPC registrasi memvalidasi ulang izin yang sama di database.
-- `unit_config` pada Master Form hanya menyimpan mapping teknis template, aturan lampiran, dan cell unit.
+- Konfigurasi Unit aktif berada pada Kegunaan Form dan data alokasi tersimpan langsung di database; tidak ada mapping cell pada Master Form.
 - Unit terpilih, proyek alokasi, detail struktur, kode produksi, lampiran, waktu, dan signature harus terekam di database.
 - Lampiran otomatis Unit harus tersimpan sebagai `stage = unit_allocation`.
 - Saat tim pemeriksa menekan `Simpan & lanjutkan`, alokasi Unit disimpan lewat RPC database atomik agar data kavling tidak hanya tersimpan di draft/autosave. Jika ada data lama yang sudah diverifikasi tetapi alokasi masih hanya ada di draft, migration melakukan backfill ke `form_input_data` dan snapshot detail.
@@ -505,39 +503,29 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kode entitas harus unik dan stabil.
 - Perubahan entitas harus menjaga histori surat lama.
 
-## 16. Master Form
+## 16. Schema Form Native
 
 ### Fungsional
 
-- Admin mengelola template form.
-- Admin mengatur mapping cell Excel.
-- Admin membuat konfigurasi permohonan biasa.
-- Admin membuat mapping teknis template unit tanpa menentukan kategori registrasi.
-- Admin menyimpan dan menerapkan quick preset.
-- Admin mengatur field manual, field sistem, tabel, textarea, external select, merge range, alignment, font, dan row height.
+- Admin mengelola pemakaian form, field input, lampiran, dan signer melalui Kegunaan Form.
+- Data registrasi, approval, revisi, dan tanda tangan disimpan sebagai data terstruktur serta snapshot transaksi di database.
+- Renderer dokumen native membaca snapshot database; tidak ada mapping cell, workbook, quick preset, atau template file per tahap.
 - Admin dapat memilih setiap form yang tersimpan lalu menghasilkan PDF uji tanpa membuat surat, nomor dokumen, tanda tangan, maupun data database. Form baru otomatis ikut tersedia pada pilihan uji.
 - Uji PDF Form Permintaan Barang & Jasa mengisi contoh nomor, identitas pengaju, tiga item, catatan, tempat/tanggal, dan kotak tanda tangan berdasarkan jumlah serta distribusi role yang dipilih admin.
 - Kolom nama barang selalu diratakan ke kiri berdasarkan fungsi datanya, termasuk ketika input UI menggunakan pilihan/select. Tipe kontrol tidak boleh mengubahnya menjadi rata tengah.
 - Form Permintaan Barang & Jasa memakai generator PDF-native deklaratif dan tidak memakai Excel atau LibreOffice sebagai sumber tata letak PDF.
 - Uji PDF, surat baru, snapshot approval, dan `Buat Ulang PDF` memakai renderer PGD tunggal. Data diambil dari snapshot transaksi database sehingga tabel, identitas, catatan, tempat/tanggal, dan tanda tangan tidak berbeda antarjalur.
 - Stamp tanda tangan diseragamkan menjadi `DISETUJUI SISTEM` dengan tanggal-jam WIB, tanpa emoji dan tanpa label bahasa Inggris.
-- Excel PGD hanya dipertahankan sebagai sumber historis/kompatibilitas; perubahan merge, border, atau print area Excel tidak memengaruhi PDF PGD baru.
 - Renderer PGD menampilkan header Marison, metadata Cabang/Departemen dan Proyek, pilihan aset/non-aset, maksimal 15 baris barang, catatan, dan kotak tanda tangan dinamis pada satu halaman A4 landscape.
 - Uji PDF dan dokumen transaksi memakai aturan pembagian tanda tangan yang sama: 3 kotak memakai tiga slot kanan dari grid 4, 4 kotak memakai grid 4, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`.
 - Tinggi setiap baris kotak tanda tangan bersifat tetap. Formasi satu baris 3/4 signer memakai tinggi yang sama dengan baris pertama formasi dua baris; area bawah dibiarkan kosong tanpa border.
 - Tempat/tanggal hanya membentang selebar kotak aktif pada baris pertama.
-- Area cetak dokumen dengan tanda tangan dinamis dipaksa satu halaman melalui `fitToWidth = 1` dan `fitToHeight = 1`.
 
 ### Non-Fungsional
 
-- Mapping cell harus tervalidasi.
-- Merge range harus tetap dianggap mapping valid.
-- Preset tidak boleh hanya menjadi placeholder tanpa cell.
-- Master Form tidak menentukan apakah registrasi termasuk Aset, Unit, atau Non Unit.
-- Mapping teknis biasa dan unit harus terpisah jelas.
-- Template baru harus bisa ditangani tanpa mengubah kode selama formatnya sesuai konfigurasi.
-- Konfirmasi hapus template dan quick preset memakai dialog reusable aplikasi, bukan dialog browser bawaan.
-- PDF uji hanya dapat dibuat oleh admin, mengambil template berdasarkan `form_id` dari database, membatasi host file template, dibatasi enam kali per menit, dan dibuka melalui URL sekali pakai yang kedaluwarsa dalam dua menit.
+- Kategori Aset, Unit, Non Unit, dan Non Aset ditentukan oleh Kegunaan Form, bukan oleh layout dokumen.
+- Perubahan renderer wajib dikunci oleh test layout dan snapshot; tidak ada editor layout runtime alternatif.
+- PDF uji hanya dapat dibuat oleh admin, dibatasi enam kali per menit, dan dibuka melalui URL sekali pakai yang kedaluwarsa dalam dua menit.
 
 ## 17. Master Jenis Surat
 
@@ -609,7 +597,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Urutan step harus deterministik.
 - Matrix harus tersimpan sebagai konfigurasi yang dapat diaudit.
 - Daftar matrix pada registrasi harus difilter berdasarkan kategori yang dipilih user sebelum form diketahui.
-- Izin departemen Unit disimpan pada relasi `workflow_allowed_departments` dan tidak boleh bergantung pada konfigurasi Master Form.
+- Izin departemen Unit disimpan pada relasi `workflow_allowed_departments` dan tidak boleh bergantung pada layout dokumen.
 - Editor Alur Persetujuan tidak menjadi tempat mengatur izin departemen agar konfigurasi matrix dan akses departemen tetap terpisah.
 - Perubahan matrix tidak boleh mengubah surat yang sudah berjalan kecuali memang diproses ulang dengan aturan baru.
 
@@ -676,22 +664,14 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Fungsional
 
 - Admin mengakses konfigurasi sistem dari satu menu `Configuration`.
-- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Template Builder`, `Alur Persetujuan`, `Pengajuan Unit`, `SLA Departemen`, `Penomoran Surat`, dan `Label Jabatan`.
+- Dropdown konfigurasi memindahkan admin di antara `Kegunaan Form`, `Integrasi`, `SLA Departemen`, `Penomoran Surat`, `Label Jabatan`, dan konfigurasi aktif lain.
 - Dropdown konfigurasi juga menyediakan `Email Notification` untuk penerima email, privasi, dan mode file.
-- Form & Template mengatur konfigurasi form, mapping input, mode unit, dan lampiran. Untuk form non-PGD seperti rekomendasi, template Excel tetap aktif. Untuk PGD, template Excel dinonaktifkan dari UI karena PDF dibuat oleh renderer sistem.
-- Template Builder mengatur template dokumen native dari nol. Admin dapat membuat canvas A4/F4 portrait atau landscape, menambahkan logo, teks, field data, tabel berulang, catatan, kotak, garis, dan area tanda tangan.
-- Template Builder mendukung data berulang melalui elemen `Tabel Berulang`. Admin memilih sumber data seperti `Daftar Barang`, `Daftar Unit`, `Daftar Rekomendasi`, `Daftar Lampiran`, atau `Penandatangan`, lalu mengatur kolom, binding, format, jumlah baris minimum, jumlah baris maksimum, dan tinggi baris.
-- Untuk template kompleks, AI tetap dipakai sebagai pendamping konfigurasi: membantu menyusun struktur form input, binding field, tabel berulang, dan variasi kotak tanda tangan dinamis 2-8 slot sebelum admin merapikan desain akhir di Template Builder.
-- Area tanda tangan mendukung tinggi otomatis berdasarkan lebar area cetak, jumlah slot, dan jumlah baris. Aksi `Sesuaikan area cetak` memenuhi lebar halaman di dalam margin dan menjaga seluruh kotak tetap berada pada halaman; mode tinggi tetap tersedia untuk kebutuhan khusus.
-- Canvas menampilkan batas area cetak dan mendeteksi elemen yang melewati margin. Tombol `Sesuaikan Semua` menata ulang posisi, memperkecil layout secara proporsional, lalu memusatkan keseluruhan layout secara horizontal dan vertikal di dalam area cetak.
-- Template Builder menyimpan definisi layout sebagai JSON berversi pada tabel `document_template_builders` dan `document_template_builder_versions`. Versioning menjaga dokumen lama tetap dapat dirender dengan layout yang sama walaupun template baru sudah dipublish.
-- Template Builder saat ini menjadi fondasi native renderer dan belum mengganti seluruh alur produksi PGD/rekomendasi yang sudah berjalan. Integrasi berikutnya adalah membuat generator PDF membaca JSON builder yang sama untuk Uji PDF, Buat Ulang PDF, dan surat baru.
-- Alur Persetujuan mengatur urutan penandatangan serta koordinat tanda tangan.
-- Pengajuan Unit mengatur matrix Unit yang diizinkan untuk setiap departemen.
+- Kegunaan Form mengatur schema input, kategori, lampiran, urutan penandatangan, dan matrix Unit per departemen.
+- Layout PDF dimiliki renderer sistem dan mendukung 3-8 penandatangan tanpa koordinat workbook.
 - SLA Departemen mengatur target SLA, jam kerja, waktu istirahat, hari kerja, dan timezone.
 - Penomoran Surat mengatur counter awal per tahun untuk scope pusat atau cabang/proyek.
 - Label Jabatan mengatur alias jabatan untuk tampilan dokumen, misalnya `Manager Pengembangan Bisnis` ditampilkan sebagai `Mgr. PO`.
-- Route lama `/admin/forms` dan `/admin/workflow-details` dialihkan ke route Configuration yang baru.
+- Route konfigurasi form dan workflow lama telah dihapus; seluruh konfigurasi aktif berada pada Kegunaan Form.
 
 ### Non-Fungsional
 
@@ -911,7 +891,7 @@ Fallback data lama:
 - PDF worker dapat dipisah di server lain.
 - Cloudflare Tunnel hanya dipakai oleh staging dan layanan testing lain; hostname production SIGAP tidak terdaftar pada ingress Tunnel.
 - Deploy aplikasi utama dilakukan dari host/workstation yang memiliki Docker context `ubuntu-server`.
-- Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, LibreOffice/font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
+- Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
 - PDF worker hanya diredeploy ketika ada perubahan worker, dependency/runtime PDF, atau konfigurasi worker.
 - External API dideploy terpisah melalui `docker-compose.external.yml`.
 
@@ -946,7 +926,7 @@ docker --context ubuntu-server compose -p agenda-flow-production -f docker-compo
 - Jangan hilangkan `--env-file`; staging wajib memakai `.env.staging` dan production wajib memakai `.env.production`.
 - Deploy aplikasi utama saja tidak merestart PDF worker atau sync worker yang sudah berjalan.
 - Jika hanya mengubah frontend, halaman dokumentasi, atau backend aplikasi utama di `backend/src`, gunakan command aplikasi utama staging di atas.
-- Redeploy PDF worker staging hanya jika `pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font, atau konfigurasi worker berubah:
+- Redeploy PDF worker staging hanya jika `pdf-worker.mjs`, dependency/runtime PDF, font, atau konfigurasi worker berubah:
 
 ```powershell
 docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging
@@ -1065,15 +1045,13 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Semua lampiran pemohon dan approval hanya dikonfigurasi melalui Kegunaan Form berdasarkan `stage_order`.
 - Departemen penanda tangan hanya wajib pada scope kandidat manual; scope dinamis seperti kantor pusat, kantor pemohon, departemen pemohon, BM cabang/departemen pusat, dan lintas kantor dapat menyimpan kandidat tanpa departemen tetap.
 - Preview kandidat pada konfigurasi kegunaan tetap menampilkan kandidat relevan untuk scope dinamis walaupun departemen tetap belum dipilih.
-- Konfigurasi lampiran lama pada Master Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
+- Konfigurasi lampiran lama di luar Kegunaan Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
 - Saat signer memilih lampiran approval, UI menampilkan jumlah file, nama file, ukuran file, status siap unggah, dan status mengunggah ketika approval sedang diproses.
-- Form menyimpan satu `signature_layout` berupa sheet dan area persegi panjang yang dikelola sistem.
-- Konfigurasi layout menyediakan preset `PGD` untuk aturan tanda tangan renderer sistem 3-8 kotak; mode `Adaptif` tetap tersedia untuk form lain.
 - Setiap role `Membuat`, `Memeriksa`, dan `Menyetujui` wajib memiliki 1-3 signer. Jumlah keseluruhan signer yang didukung adalah 3-8.
 - Pembagian baris preset PGD adalah: 3 kotak memakai grid 3, 4 kotak `4`, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`. Jika baris kedua lebih pendek, slotnya diratakan ke kanan terhadap grid baris pertama.
 - Ukuran vertikal satu blok tidak berubah berdasarkan jumlah baris. Formasi 3/4 memakai blok atas saja, sedangkan blok bawah hanya digunakan oleh formasi 5-8.
 - Pada preset PGD, urutan tahap wajib `Membuat`, `Memeriksa`, lalu `Menyetujui`; kombinasi di luar aturan 3-8 signer ditolak agar dokumen tidak rusak.
-- Saat dokumen dibuat, sistem membuka merge hanya di area tanda tangan, lalu membangun kotak 2-8 signer secara otomatis tanpa mengubah matrix tanda tangan lama.
+- Saat PDF dibuat, renderer native membangun kotak 3-8 signer langsung dari snapshot workflow.
 - Baris pertama area tanda tangan dipakai untuk `Tempat, Tanggal`, misalnya `Magelang, 20 Juli 2026`; nilainya di-merge, diberi border, rata tengah, dan selebar kotak tanda tangan paling kanan tepat di bawahnya.
 - Lebar, border, dan pembagian baris kotak pada preset PGD mengikuti aturan renderer sistem, bukan merge Excel lama.
 - Label yang sama dan berdampingan dalam satu baris tanda tangan digabung pada area label, sedangkan area tanda tangan, nama, dan jabatan tetap per signer.

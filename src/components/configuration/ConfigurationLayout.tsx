@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { BriefcaseBusiness, FileCode2, Hash, Mail, Route, Timer, Server } from "lucide-react";
+import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -10,12 +10,6 @@ import {
 } from "@/components/ui/select";
 
 const configurationOptions = [
-  {
-    value: "/admin/configuration/template-designer",
-    label: "Template Builder",
-    description: "Rancang dokumen native dari nol dengan elemen, binding, dan tabel berulang.",
-    icon: FileCode2,
-  },
   {
     value: "/admin/configuration/integration",
     label: "Integration",

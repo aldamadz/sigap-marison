@@ -23,7 +23,7 @@ type CandidateSort = "name_asc" | "job_asc" | "office_asc";
 type Department = { id: string; name: string; code?: string | null };
 type Office = { id: string; name: string; code?: string | null; kedudukan?: string | null };
 type Profile = { id: string; full_name: string; job_title?: string | null; department_id?: string | null; office_id?: string | null };
-type MasterForm = { id: string; nama_form?: string | null; signature_layout?: { enabled?: boolean; region?: string } | null };
+type MasterForm = { id: string; nama_form?: string | null };
 type RouteStep = {
   id?: string;
   step_order: number;
@@ -180,7 +180,7 @@ export default function FormUsageManagementPage() {
       const [usageResult, formResult, departmentResult, officeResult, profileResult, routeResult] = await Promise.all([
         supabase.from("form_usages").select(`
           *,
-          master_forms(id, nama_form, signature_layout),
+          master_forms(id, nama_form),
           form_usage_departments(department_id),
           form_usage_steps(
             id, step_order, role_name, label, action_type, signer_department_id,
@@ -190,7 +190,7 @@ export default function FormUsageManagementPage() {
           ),
           form_usage_attachment_requirements(*)
         `).order("sort_order").order("created_at", { ascending: false }),
-        supabase.from("master_forms").select("id, nama_form, signature_layout").order("nama_form"),
+        supabase.from("master_forms").select("id, nama_form").order("nama_form"),
         supabase.from("master_departments").select("id, name, code").order("name"),
         supabase.from("master_offices").select("id, name, code, kedudukan").order("name"),
         supabase.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
@@ -578,13 +578,6 @@ export default function FormUsageManagementPage() {
       }
       if (step.eligible_user_ids.length === 0) missing.push("kandidat signer");
       if (missing.length > 0) return `Tahap ${step.step_order} belum memiliki ${missing.join(", ")}.`;
-    }
-    if (formData.status === "active") {
-      const selectedForm = forms.find(item => item.id === formData.form_id);
-      const layout = selectedForm?.signature_layout;
-      if (!layout?.enabled || !layout.region) {
-        return "Form belum memiliki Signature Region aktif sehingga kegunaan belum dapat diaktifkan.";
-      }
     }
     return null;
   };

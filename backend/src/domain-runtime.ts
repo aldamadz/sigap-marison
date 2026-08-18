@@ -960,7 +960,7 @@ const generateTemplatePreviewPdf = async (formId, options = {}) => {
 
   const { data: form, error: formError } = await supabase
     .from("master_forms")
-    .select("id, nama_form, nomor_form, link_form, input_schema, signature_layout")
+    .select("id, nama_form, nomor_form, input_schema")
     .eq("id", formId)
     .maybeSingle();
   if (formError) throw formError;
@@ -1065,7 +1065,7 @@ const consumeTemplatePreview = (token) => {
 const INBOX_DETAIL_SELECT = `
   id, surat_id, user_id, role_name, label_jabatan, step_order, is_signed, action_type,
   requires_unit_allocation, available_at, signer_snapshot,
-  attachment_requirements_snapshot, signature_position_snapshot,
+  attachment_requirements_snapshot,
   verification_required, verification_status, verified_at, verified_by,
   verification_note, verifier_snapshot,
   surat_registrasi!inner (

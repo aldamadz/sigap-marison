@@ -12,16 +12,8 @@ describe("ExcelJS security boundary", () => {
     const sourceFiles = [
       "src/lib/excel.ts",
       "src/services/export.service.ts",
-      "src/services/surat.service.ts",
-      "src/services/signature-layout.service.ts",
-      "document-workbook-normalizer.mjs",
-      "document-layout-rules.mjs",
-      "scripts/test-document-layout-rules.mjs",
       "scripts/generate-hierarchy-parent-sql.mjs",
       "scripts/apply-hierarchy-parent-from-preview.mjs",
-      "backend/src/domain-runtime.ts",
-      "recommendation-native-pdf.mjs",
-      "src/test/signature-layout.test.ts",
     ];
 
     const source = await Promise.all(

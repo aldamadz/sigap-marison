@@ -8,7 +8,7 @@ describe("SUR-12 compact master data BFF", () => {
   it("loads initial form data through one dedicated authenticated endpoint", () => {
     const frontend = read("src/services/surat.service.ts");
     const start = frontend.indexOf("async getMasterData()");
-    const end = frontend.indexOf("async downloadFilledTemplate", start);
+    const end = frontend.indexOf("\n  },", start) + 5;
     const method = frontend.slice(start, end);
 
     expect(method).toContain('fetch("/api/surat/master-data"');

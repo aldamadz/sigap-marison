@@ -29,7 +29,6 @@ const recommendationUsage = [{
     id: UUID.form_a,
     nama_form: "FORM REKOMENDASI ASET",
     nomor_form: "REC-001",
-    link_form: "https://storage.example.com/recommendation.xlsx",
     department_id: UUID.dept_pbo,
     input_schema: JSON.stringify([
       {
@@ -42,8 +41,6 @@ const recommendationUsage = [{
       { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
       { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
     ]),
-    unit_config: null,
-    signature_layout: null,
   },
   form_usage_departments: [{ department_id: UUID.dept_pbo }],
   form_usage_steps: [],
