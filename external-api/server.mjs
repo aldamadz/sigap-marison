@@ -2,8 +2,9 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import { createClient } from "@supabase/supabase-js";
-import { augmentExternalOpenApi } from "./openapi.mjs";
+import { buildExternalOpenApi } from "./openapi.mjs";
 
 const port = Number(process.env.PORT || 80);
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -295,7 +296,10 @@ const resolveFileRef = async (suratId, type, query) => {
   return null;
 };
 
-const app = Fastify({ logger: true, trustProxy: true });
+const app = Fastify({
+  logger: { redact: ["req.headers.authorization"] },
+  trustProxy: true,
+});
 await app.register(rateLimit, { global: false });
 await app.register(swagger, {
   openapi: {
@@ -320,91 +324,49 @@ await app.register(swagger, {
     },
   },
 });
-app.get("/docs", { schema: { hide: true } }, async (request, reply) => {
-  reply.type("text/html").send(`<!DOCTYPE html>
-<html>
-<head>
-  <title>SIGAP External Surat API Docs</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }
-    h1 { color: #1a1a1a; }
-    h2 { color: #333; margin-top: 32px; }
-    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
-    pre { background: #f4f4f4; padding: 16px; border-radius: 8px; overflow-x: auto; }
-    .endpoint { margin: 16px 0; padding: 12px; background: #fafafa; border-left: 3px solid #007cba; }
-    .write { border-left-color: #b45309; }
-    .muted { color: #555; }
-  </style>
-</head>
-<body>
-  <h1>SIGAP External Surat API</h1>
-  <p>API read-only untuk integrasi data surat SIGAP.</p>
-  
-  <h2>Authentication</h2>
-  <p>Request data wajib membawa:</p>
-  <ul>
-    <li><code>Authorization: Bearer &lt;access_token&gt;</code></li>
-    <li><code>X-Timestamp: &lt;RFC3339 timestamp&gt;</code></li>
-    <li><code>X-Signature: &lt;HMAC_SHA512 signature&gt;</code></li>
-  </ul>
-  
-  <h2>Signature Calculation</h2>
-  <pre>HMAC_SHA512(access_token, METHOD:PATH_WITH_QUERY:ACCESS_TOKEN:BODY_SHA256:TIMESTAMP)</pre>
-  
-  <p>Gunakan timestamp RFC3339 dan minta access token baru setiap 15 menit.</p>
-  
-  <h2>Endpoints</h2>
-  <p class="muted">External Surat API base URL: <code>${publicUrl}</code></p>
-  <div class="endpoint">
-    <strong>POST /api/access-token</strong>
-    <p>Generate access token baru. Rate limit: 10 request per menit.</p>
-  </div>
-
-  <div class="endpoint">
-    <strong>GET /api/master/offices</strong>
-    <p>Daftar kantor untuk onboarding dan pemetaan organisasi.</p>
-  </div>
-
-  <div class="endpoint">
-    <strong>GET /api/master/departments</strong>
-    <p>Daftar departemen pusat dan cabang.</p>
-  </div>
-
-  <div class="endpoint">
-    <strong>GET /api/onboarding/options</strong>
-    <p>Opsi kantor dan departemen untuk onboarding akun.</p>
-  </div>
-
-  <div class="endpoint">
-    <strong>GET /api/surat</strong>
-    <p>List semua surat dengan pagination.</p>
-  </div>
-  
-  <div class="endpoint">
-    <strong>GET /api/surat/:id</strong>
-    <p>Detail surat berdasarkan ID.</p>
-  </div>
-  
-  <div class="endpoint">
-    <strong>GET /api/surat/:suratId/files/:type</strong>
-    <p>Download file surat (document, pdf, attachment, signature-pdf).</p>
-  </div>
-
-  <h2>Keputusan Pengajuan</h2>
-  <p class="muted">SIGAP application API base URL: <code>${appPublicUrl}</code></p>
-  <div class="endpoint write">
-    <strong>POST ${appPublicUrl}/api/v1/submission-decisions</strong>
-    <p>Mengirim keputusan <code>rejected</code> atau <code>revision_required</code> berdasarkan nomor dokumen.</p>
-    <p>Gunakan <code>Authorization: Bearer &lt;submission_decisions_token&gt;</code>. Body hanya menerima <code>event_id</code>, <code>document_number</code>, <code>decision</code>, <code>reason</code>, dan <code>decided_at</code>.</p>
-  </div>
-  
-  <p>Untuk dokumentasi lengkap OpenAPI, akses <a href="/openapi.json">/openapi.json</a>.</p>
-</body>
-</html>`);
+await app.register(swaggerUi, {
+  routePrefix: "/docs",
+  uiConfig: {
+    docExpansion: "list",
+    deepLinking: true,
+    persistAuthorization: false,
+  },
+  transformSpecification: () => buildExternalOpenApi(publicUrl),
 });
 
-app.get("/openapi.json", { schema: { hide: true } }, async () => augmentExternalOpenApi(app.swagger(), appPublicUrl));
+app.get("/openapi.json", { schema: { hide: true } }, async () => buildExternalOpenApi(publicUrl));
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
+
+app.post("/api/v1/submission-decisions", {
+  bodyLimit: 4096,
+  schema: { hide: true },
+}, async (request, reply) => {
+  const upstream = await fetch(`${appPublicUrl}/api/v1/submission-decisions`, {
+    method: "POST",
+    headers: {
+      authorization: String(request.headers.authorization || ""),
+      "content-type": "application/json",
+      "x-request-id": request.id,
+    },
+    body: JSON.stringify(request.body),
+    signal: AbortSignal.timeout(15_000),
+  }).catch((error) => {
+    request.log.error({ err: error }, "submission decision upstream failed");
+    return null;
+  });
+
+  if (!upstream) {
+    return reply.code(502).header("Cache-Control", "no-store").send({ message: "Backend SIGAP tidak dapat dihubungi." });
+  }
+
+  const responseBody = await upstream.text();
+  const responseType = upstream.headers.get("content-type") || "application/json; charset=utf-8";
+  return reply
+    .code(upstream.status)
+    .type(responseType)
+    .header("Cache-Control", "no-store")
+    .send(responseBody);
+});
 
 app.post("/api/access-token", {
   config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
