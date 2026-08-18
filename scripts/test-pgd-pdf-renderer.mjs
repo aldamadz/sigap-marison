@@ -54,7 +54,7 @@ test("renders canonical parent rejection status and reason on PGD item", () => {
 });
 
 test("builds and renders every supported dynamic signature formation", async () => {
-  for (let count = 3; count <= 8; count += 1) {
+  for (let count = 2; count <= 8; count += 1) {
     const data = createPgdPreviewData({ signature_count: count });
     const definition = buildPgdDocumentDefinition(data);
     assert.equal(definition.pageSize, "A4");

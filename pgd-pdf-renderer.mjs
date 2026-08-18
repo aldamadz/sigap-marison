@@ -192,7 +192,7 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
 };
 
 export const createPgdPreviewData = (options = {}) => {
-  const total = Math.min(Math.max(Number(options.signature_count || 5), 3), 8);
+  const total = Math.min(Math.max(Number(options.signature_count || 5), 2), 8);
   const roles = Array.isArray(options.signature_roles) ? options.signature_roles : [1, Math.max(total - 2, 1), 1];
   const roleNames = ["Membuat", "Memeriksa", "Menyetujui"];
   const jobs = {

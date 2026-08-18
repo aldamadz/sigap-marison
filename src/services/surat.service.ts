@@ -1195,8 +1195,8 @@ export const suratService = {
       });
 
       const activeSigners = signers.filter(s => s.user_id);
-      if (activeSigners.length < 3 || activeSigners.length > 8) {
-        throw new Error("Penandatangan harus berjumlah 3 sampai 8 tahap.");
+      if (activeSigners.length < 2 || activeSigners.length > 8) {
+        throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap sesuai konfigurasi.");
       }
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
       const totalSteps = activeSigners.length;

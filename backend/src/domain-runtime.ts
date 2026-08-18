@@ -25,6 +25,10 @@ import {
   withSecurityHeaders,
 } from "./lib/http.js";
 import {
+  mapSuratRejectionRpcError,
+  normalizeSuratRejectionRequest,
+} from "./lib/surat-rejection.js";
+import {
   applyStoragePathPrefix,
   isStoragePathWithinPrefix,
   normalizeStoragePath,
@@ -915,7 +919,35 @@ const requireAdminUser = async (token) => {
   return user;
 };
 
+const rejectSuratByDocumentNumber = async (req) => {
+  assertSameOrigin(req);
+  const token = getBearerToken(req);
+  await requireSupabaseUser(token);
+  let input;
+  try {
+    input = normalizeSuratRejectionRequest(await readJsonBody(req, 4096));
+  } catch (error) {
+    error.status = 400;
+    throw error;
+  }
+
+  const client = createUserSupabaseClient(token);
+  const { data, error } = await client.rpc("reject_surat_by_document_number", {
+    p_document_number: input.documentNumber,
+    p_reason: input.reason,
+    p_note: input.note,
+  });
+  if (error) {
+    const mapped = mapSuratRejectionRpcError(error);
+    const responseError = new Error(mapped.message);
+    responseError.status = mapped.status;
+    throw responseError;
+  }
+  return data;
+};
+
 const buildBoundedSignatureRoleCounts = (total) => {
+  if (total === 2) return [1, 0, 1];
   for (let membuat = 1; membuat <= Math.min(3, total - 2); membuat += 1) {
     for (let memeriksa = 1; memeriksa <= Math.min(3, total - membuat - 1); memeriksa += 1) {
       const menyetujui = total - membuat - memeriksa;
@@ -938,14 +970,14 @@ const enforceTemplatePreviewRateLimit = (userId) => {
 };
 
 const normalizeTemplatePreviewOptions = (payload = {}) => {
-  const signatureCount = Math.min(Math.max(Number(payload.signature_count || payload.signatureCount || 3), 3), 8);
+  const signatureCount = Math.min(Math.max(Number(payload.signature_count || payload.signatureCount || 3), 2), 8);
   const signatureRoles = Array.isArray(payload.signature_roles || payload.signatureRoles)
     ? (payload.signature_roles || payload.signatureRoles).slice(0, 3).map((value) => Number(value || 0))
     : [1, Math.max(signatureCount - 2, 1), 1];
   const roleTotal = signatureRoles.reduce((total, value) => total + value, 0);
   return {
     signature_count: signatureCount,
-    signature_roles: roleTotal === signatureCount && signatureRoles.every((value) => value > 0 && value <= 3)
+    signature_roles: roleTotal === signatureCount && signatureRoles.every((value) => value >= 0 && value <= 3)
       ? signatureRoles
       : buildBoundedSignatureRoleCounts(signatureCount),
   };
@@ -5247,6 +5279,10 @@ export const handleRequest = async (req, res) => {
         const signatureId = url.pathname.split("/").at(-2);
         const result = await getInboxDetail(token, signatureId);
         return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/surat/rejections") {
+        return sendJson(res, 200, await rejectSuratByDocumentNumber(req));
       }
 
       if (req.method === "GET" && url.pathname === "/api/attention/state") {
