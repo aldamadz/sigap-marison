@@ -11,6 +11,10 @@ import {
   resolveRecommendationSource,
   shouldRenderDirectPgd,
 } from "../recommendation-pdf.mjs";
+import {
+  normalizeRecommendationDocumentData,
+  renderRecommendationPdf,
+} from "../recommendation-native-pdf.mjs";
 
 const image = async (width, height) => sharp({
   create: { width, height, channels: 3, background: "#245b78" },
@@ -120,10 +124,11 @@ test("preserves bucket and origin for real attachment storage refs", () => {
   assert.equal(parseStorageRef({ bucket: "lampiran_surat" }), null);
 });
 
-test("worker enforces source buckets and immutable RPC publication", async () => {
+test("worker renders every document natively and keeps immutable RPC publication", async () => {
   const worker = await readFile(new URL("../pdf-worker.mjs", import.meta.url), "utf8");
-  assert.match(worker, /const workbookSource = recommendation \? job\.render_payload\.workbook_source : job\.source_file_path/);
-  assert.match(worker, /downloadStorageFile\(attachment\.url, `Gambar \$\{attachment\.name \|\| attachment\.id\}`, "lampiran_surat"\)/);
+  assert.match(worker, /renderDirectRecommendationJob/);
+  assert.match(worker, /renderRecommendationPdf/);
+  assert.match(worker, /renderDirectPgdJob/);
   assert.match(worker, /\.upload\(pdfPath, pdfBuffer, \{ contentType: "application\/pdf", upsert: false \}\)/);
   assert.match(worker, /supabase\.rpc\("publish_document_pdf_job"/);
   assert.match(worker, /supabase\.rpc\("complete_document_pdf_job"/);
@@ -133,6 +138,10 @@ test("worker enforces source buckets and immutable RPC publication", async () =>
   assert.doesNotMatch(worker, /parent_snapshot_input/);
   assert.doesNotMatch(worker, /workbook_source\?\.path \|\| job\.source_file_path/);
   assert.doesNotMatch(worker, /loadRecommendationContext/);
+  assert.doesNotMatch(worker, /soffice/);
+  assert.doesNotMatch(worker, /source\.xlsx/);
+  assert.doesNotMatch(worker, /appendRecommendationPagesToFile/);
+  assert.doesNotMatch(worker, /normalizeWorkbookForPdf/);
   assert.doesNotMatch(worker, /PDF final rekomendasi hanya dapat dibuat setelah surat selesai/);
   assert.doesNotMatch(worker, /final\.pdf/);
   assert.doesNotMatch(worker, /\.from\("document_pdf_jobs"\)\s*\.update/);
@@ -140,18 +149,39 @@ test("worker enforces source buckets and immutable RPC publication", async () =>
   assert.doesNotMatch(worker, /\.from\("surat_signatures"\)\s*\.update/);
 });
 
-test("PGD-looking recommendation still uses workbook pages instead of direct PGD rendering", async () => {
+test("PGD-looking recommendation is still identified as recommendation without an Excel source", async () => {
   const fixture = JSON.parse(await readFile(new URL("../fixtures/recommendation-multi-detail-v1.json", import.meta.url), "utf8"));
   const items = resolveRecommendationSource({
     recommendation_multi_detail: fixture,
     form_name: "FORM PERMINTAAN BARANG & JASA",
   });
-  const workbook = new ExcelJS.Workbook();
-  workbook.addWorksheet("PGD");
-  const pages = await appendRecommendationPages(workbook, items, async () => image(100, 100));
   assert.equal(shouldRenderDirectPgd(items, true), false);
+  const pages = buildRecommendationPagePlan(items);
   assert.equal(pages.length, 1);
-  assert.equal(workbook.worksheets[1].name, "Rekomendasi 1");
+});
+
+test("renders the recommendation main form, details, images, and 3-8 signatures as native PDF", async () => {
+  for (const count of [3, 5, 8]) {
+    const data = normalizeRecommendationDocumentData({
+      no_surat: "010/UAI/PBO.4/VIII/2026",
+      request_place: "Magelang",
+      request_date: "2026-08-18",
+      location_snapshot: { form: { nomor_form: "FM-UAI.HRD-30-00" } },
+    }, {
+      items: canonical(2),
+      signatures: Array.from({ length: count }, (_, index) => ({
+        id: `signature-${index + 1}`,
+        step_order: index + 1,
+        role_name: index === 0 ? "Membuat" : index === count - 1 ? "Menyetujui" : "Memeriksa",
+        is_signed: index < 2,
+        signed_at: index < 2 ? "2026-08-18T10:00:00+07:00" : null,
+        signer_snapshot: { full_name: `Signer ${index + 1}`, job_title: `Jabatan ${index + 1}` },
+      })),
+    });
+    const pdf = await renderRecommendationPdf(data, { downloadImage: () => image(320, 180) });
+    assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+    assert.ok(pdf.length > 2_000);
+  }
 });
 
 test("plans one page for 1 through 6 images and continuation pages above 6", () => {

@@ -30,11 +30,12 @@ describe("approval action latency", () => {
     expect(approveBody).toContain("await this.finalizeRecommendationRevisionIfNeeded(suratId)");
   });
 
-  it("combines allocation changes and the signer stamp in one Excel transform", () => {
-    expect(approveBody.match(/this\.transformApprovalExcel\(/g)).toHaveLength(1);
+  it("keeps approval database-native without Excel or PDF work on the critical path", () => {
+    expect(approveBody).not.toContain("this.transformApprovalExcel(");
     expect(approveBody).not.toContain("this.applyFormInputDataToExcel(");
     expect(approveBody).not.toContain("this.stampApprovalExcel(");
-    expect(approveBody).toContain("...(shouldApplyAllocationToExcel ? { formInputData } : {})");
+    expect(approveBody).not.toContain("documentPreviewService.enqueuePdf(suratId, { refresh: true, signatureId })");
+    expect(approveBody).toContain("native://document/${suratId}/approval/${signatureId}");
   });
 
   it("uploads attachment files concurrently while preserving input order", () => {

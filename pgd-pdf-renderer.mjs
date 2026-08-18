@@ -131,14 +131,8 @@ export const isPgdDocument = (source = {}) => {
   return names.some((name) => name.includes("PERMINTAAN BARANG"));
 };
 
-export const normalizePgdDocumentData = (source = {}, options = {}) => {
-  const input = source.form_input_data || source?.data_snapshot?.input || {};
-  const location = source.location_snapshot || {};
-  const items = Array.isArray(input.items) ? input.items : [];
-  const revisionChanges = parseRevisionItemChanges(source);
-  const recommendationDecisions = parseRecommendationItemDecisions(source);
-  const targetStep = Number(options.targetStep || 0);
-  const signatures = (Array.isArray(options.signatures) ? options.signatures : [])
+export const normalizeNativeSignatures = (signatures = [], targetStep = 0) =>
+  (Array.isArray(signatures) ? signatures : [])
     .slice()
     .sort((left, right) => Number(left.step_order || 0) - Number(right.step_order || 0))
     .map((signature, index) => {
@@ -154,6 +148,15 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
         signedAt: signed ? signature.signed_at : null,
       };
     });
+
+export const normalizePgdDocumentData = (source = {}, options = {}) => {
+  const input = source.form_input_data || source?.data_snapshot?.input || {};
+  const location = source.location_snapshot || {};
+  const items = Array.isArray(input.items) ? input.items : [];
+  const revisionChanges = parseRevisionItemChanges(source);
+  const recommendationDecisions = parseRecommendationItemDecisions(source);
+  const targetStep = Number(options.targetStep || 0);
+  const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.PGD-01-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
@@ -281,7 +284,7 @@ const signatureRow = (signers, topCount) => {
   };
 };
 
-const buildSignatureBlock = (signatures) => {
+export const buildNativeSignatureBlock = (signatures) => {
   const safeSignatures = signatures.length >= 3 ? signatures.slice(0, 8) : createPgdPreviewData({ signature_count: 3, signature_roles: [1, 1, 1] }).signatures;
   const plan = buildPgdSignatureSlotPlan(safeSignatures.length);
   let cursor = 0;
@@ -425,7 +428,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
                 table: { widths: ["*"], body: [[{ text: data.placeDate, alignment: "center" }]] },
                 layout: compactBorderLayout,
               },
-              buildSignatureBlock(data.signatures),
+              buildNativeSignatureBlock(data.signatures),
             ],
           },
         ],

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
@@ -349,11 +349,8 @@ export const suratService = {
       const config = typeof usageDetail.ttd_config === "string"
         ? JSON.parse(usageDetail.ttd_config) : usageDetail.ttd_config;
       if (!Array.isArray(config)) return [];
-      const matched = config.filter((_item: any, index: number) => (index + 1) === Number(stepOrder));
-      console.log(`Stamp Match Found for Step ${stepOrder}:`, matched);
-      return matched;
-    } catch (e) {
-      console.error("Error parsing ttd_config:", e);
+      return config.filter((_item: any, index: number) => (index + 1) === Number(stepOrder));
+    } catch {
       return [];
     }
   },
@@ -1269,7 +1266,8 @@ export const suratService = {
     const response = await fetch(templateUrl, { cache: "no-store" });
     if (!response.ok) throw new Error("Gagal mengambil template Excel.");
 
-    const workbook = new ExcelJS.Workbook();
+    const { default: ExcelJSRuntime } = await import("exceljs");
+    const workbook = new ExcelJSRuntime.Workbook();
     await workbook.xlsx.load(await response.arrayBuffer());
     const worksheet = workbook.worksheets[0];
 
@@ -1764,8 +1762,8 @@ export const suratService = {
       });
 
       const activeSigners = signers.filter(s => s.user_id);
-      if (activeSigners.length < 2 || activeSigners.length > 8) {
-        throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap.");
+      if (activeSigners.length < 3 || activeSigners.length > 8) {
+        throw new Error("Penandatangan harus berjumlah 3 sampai 8 tahap.");
       }
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
       const totalSteps = activeSigners.length;
@@ -1829,9 +1827,11 @@ export const suratService = {
         payload.policy_validation = validation;
       }
 
-      const generated = file ? null : await this.buildFilledTemplateFile(payload);
-      const context = generated?.context ?? configContext;
-      const signaturePositions = generated?.signaturePositions || [];
+      if (file) {
+        throw new Error("Dokumen sumber tidak lagi menerima file Excel. Data permohonan akan dirender sebagai PDF-native.");
+      }
+      const context = configContext;
+      const signaturePositions: SignaturePosition[] = [];
 
       const cleanPayload = {
         ...payload,
@@ -1883,8 +1883,7 @@ export const suratService = {
         data_snapshot: this.buildDataSnapshot(context, payload, snapshotSigners, normalizedFormInputData),
       };
 
-      if (file)         cleanPayload.file_path     = await this.uploadFile(file);
-      if (!file)        cleanPayload.file_path     = generated?.publicUrl;
+      cleanPayload.file_path = `native://document/${payloadDraftId || payloadReservationId || encodeURIComponent(String(payload.no_surat || "draft"))}`;
 
       const { data: surat, error: suratError } = await supabase
         .rpc("create_surat_registrasi", { p_payload: cleanPayload });
@@ -2007,12 +2006,6 @@ export const suratService = {
         }
       }
 
-      if (!requesterAutoApproved) {
-        documentPreviewService.enqueuePdf(surat.id).catch((pdfError) => {
-          console.error("Gagal enqueue PDF awal:", pdfError);
-        });
-      }
-
       return surat;
     } catch (error: any) {
       const message = String(error?.message || error?.error || "Gagal menyimpan surat.");
@@ -2033,30 +2026,6 @@ export const suratService = {
     return true;
   },
 
-  async stampApprovalExcel(
-    suratId: string,
-    currentFilePath: string,
-    userName: string,
-    roleName: string,
-    usageId: string | null,
-    stepOrder: number,
-    positionSnapshot?: Record<string, any> | null,
-    signerJobTitle: string = "",
-    signedAt?: string | null
-  ): Promise<string> {
-    return this.transformApprovalExcel({
-      suratId,
-      currentFilePath,
-      userName,
-      roleName,
-      usageId,
-      stepOrder,
-      positionSnapshot,
-      signerJobTitle,
-      signedAt,
-    });
-  },
-
   async rebuildDocumentSource(suratId: string): Promise<string> {
     const { data: actor } = await supabase.auth.getUser({ force: true });
     if (!actor.user) throw new Error("Tidak terautentikasi.");
@@ -2070,87 +2039,8 @@ export const suratService = {
       throw new Error("Hanya admin yang dapat membangun ulang sumber dokumen.");
     }
 
-    const { data: surat, error } = await supabase
-      .from("surat_registrasi")
-      .select(`
-        *,
-        surat_signatures (
-          id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at,
-          signer_snapshot, signature_position_snapshot,
-          profiles:user_id (full_name, job_title)
-        )
-      `)
-      .eq("id", suratId)
-      .single();
-    if (error || !surat) throw error || new Error("Surat tidak ditemukan.");
-    const { data: requesterProfile, error: requesterError } = surat.created_by
-      ? await supabase
-          .from("profiles")
-          .select("id, full_name, nik, job_title, email, department_id, office_id")
-          .eq("id", surat.created_by)
-          .maybeSingle()
-      : { data: null, error: null };
-    if (requesterError) throw requesterError;
-
-    const signatures = [...(surat.surat_signatures || [])].sort(
-      (left: any, right: any) => Number(left.step_order) - Number(right.step_order)
-    );
-    const signatureSteps = signatures.map((signature: any) => ({
-      step_order: Number(signature.step_order),
-      role_name: signature.role_name,
-      label: signature.label_jabatan || signature.signer_snapshot?.job_title || signature.profiles?.job_title || "",
-      job_title: signature.signer_snapshot?.job_title_display || signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
-      user_name: signature.signer_snapshot?.full_name || signature.profiles?.full_name || "",
-    }));
-    const generated = await this.buildFilledTemplateFile({
-      ...surat,
-      dept_id: surat.dept_id,
-      penggunaan_id: surat.penggunaan_id,
-      form_usage_id: surat.form_usage_id,
-      form_input_data: surat.form_input_data || {},
-      signature_steps: signatureSteps,
-      _requester_profile_override: requesterProfile || surat.requester_snapshot || {},
-    });
-
-    let rebuiltPath = generated.publicUrl;
-    for (const signature of signatures) {
-      const position = generated.signaturePositions.find(
-        item => item.step_order === Number(signature.step_order)
-      ) || {};
-      const { error: positionError } = await supabase
-        .from("surat_signatures")
-        .update({ signature_position_snapshot: position })
-        .eq("id", signature.id);
-      if (positionError) throw positionError;
-      if (!signature.is_signed) continue;
-      rebuiltPath = await this.stampApprovalExcel(
-        surat.id,
-        rebuiltPath,
-        signature.signer_snapshot?.full_name || signature.profiles?.full_name || "",
-        signature.role_name,
-        surat.penggunaan_id,
-        Number(signature.step_order),
-        position,
-        signature.signer_snapshot?.job_title_display || signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
-        signature.signed_at
-      );
-    }
-
-    const { error: updateError } = await supabase
-      .from("surat_registrasi")
-      .update({ file_path: rebuiltPath, pdf_path: null })
-      .eq("id", suratId);
-    if (updateError) throw updateError;
-    return rebuiltPath;
-  },
-
-  async applyFormInputDataToExcel(currentFilePath: string, usageId: string, formInputData: any): Promise<string> {
-    return this.transformApprovalExcel({
-      suratId: "input",
-      currentFilePath,
-      usageId,
-      formInputData,
-    });
+    await documentPreviewService.enqueuePdf(suratId, { refresh: true });
+    return suratId;
   },
 
   async transformApprovalExcel(options: {
@@ -2200,7 +2090,8 @@ export const suratService = {
 
     const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
 
-    const workbook = new ExcelJS.Workbook();
+    const { default: ExcelJSRuntime } = await import("exceljs");
+    const workbook = new ExcelJSRuntime.Workbook();
     await workbook.xlsx.load(await fileData.arrayBuffer());
     const worksheet = workbook.worksheets[0];
     if (shouldApplyInput) {
@@ -2300,15 +2191,7 @@ export const suratService = {
     if ((sigInfo as any).verification_required && (sigInfo as any).verification_status !== "verified") {
       throw new Error("Data pengajuan belum diperiksa tim pemeriksa.");
     }
-    const signerJobTitle = String(
-      (sigInfo as any).signer_snapshot?.job_title_display ||
-      (sigInfo as any).signer_snapshot?.job_title ||
-      ""
-    ).trim();
-
-    const workingFilePath = suratFresh.file_path;
     let formInputData = suratFresh.form_input_data ?? {};
-    let shouldApplyAllocationToExcel = false;
     let uploadedAllocationAttachments: any[] = [];
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
@@ -2375,8 +2258,6 @@ export const suratService = {
         allocated_by_signature_id: signatureId,
         allocated_at: new Date().toISOString(),
       };
-      shouldApplyAllocationToExcel = true;
-
       const unitRecapAttachment = this.createUnitRecapAttachment(project, units);
       const productionCodeAttachment = this.createProductionCodeAttachment(project, units);
       uploadedAllocationAttachments = await this.uploadAttachmentFiles(
@@ -2443,20 +2324,7 @@ export const suratService = {
       );
     }
 
-    let finalUrl = workingFilePath ?? "";
-    if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx")) {
-      finalUrl = await this.transformApprovalExcel({
-        suratId,
-        currentFilePath: workingFilePath,
-        userName,
-        roleName: sigInfo.role_name,
-        usageId: suratFresh.penggunaan_id,
-        stepOrder: currentStep,
-        positionSnapshot: sigInfo.signature_position_snapshot,
-        signerJobTitle,
-        ...(shouldApplyAllocationToExcel ? { formInputData } : {}),
-      });
-    }
+    const finalUrl = `native://document/${suratId}/approval/${signatureId}/${Date.now()}`;
 
     const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_approve_surat_v2", {
       p_sig_id: signatureId, p_surat_id: suratId, p_note: note, p_file_path: finalUrl
@@ -2478,10 +2346,6 @@ export const suratService = {
       });
       return { success: true };
     }
-
-    documentPreviewService.enqueuePdf(suratId, { refresh: true, signatureId }).catch((pdfError) => {
-      console.error("Gagal enqueue snapshot PDF:", pdfError);
-    });
 
     if (updatedSurat) {
       // 1. Notif ke pembuat surat (yang mengajukan surat)
@@ -2509,6 +2373,9 @@ export const suratService = {
 
       if (['SELESAI', 'DONE'].includes(updatedSurat.status)) {
         await this.finalizeRecommendationRevisionIfNeeded(suratId);
+        documentPreviewService.enqueuePdf(suratId).catch((pdfError) => {
+          console.error("Gagal enqueue PDF final dokumen:", pdfError);
+        });
       }
     }
 
@@ -2559,13 +2426,12 @@ export const suratService = {
     const suratId = options.suratId || sigInfo.surat_id;
     const { data: suratFresh, error: suratErr } = await supabase
       .from("surat_registrasi")
-      .select("file_path, penggunaan_id, judul_surat, form_input_data, data_snapshot, status")
+      .select("judul_surat, form_input_data, data_snapshot, status")
       .eq("id", suratId)
       .single();
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
 
     let formInputData = suratFresh.form_input_data ?? {};
-    let workingFilePath = suratFresh.file_path;
     const persistedVerificationDraft =
       (suratFresh.data_snapshot as any)?.verification_drafts?.[signatureId]?.input || {};
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
@@ -2649,9 +2515,6 @@ export const suratService = {
         ]
       );
 
-      if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
-        workingFilePath = await this.applyFormInputDataToExcel(workingFilePath, suratFresh.penggunaan_id, formInputData);
-      }
     }
 
     const rpcPayload =
@@ -3047,7 +2910,8 @@ export const suratService = {
       supabase.from("master_departments").select("name").eq("id", payload.dept_id).maybeSingle()
     ]);
     const response = await fetch(templateLink);
-    const workbook  = new ExcelJS.Workbook();
+    const { default: ExcelJSRuntime } = await import("exceljs");
+    const workbook = new ExcelJSRuntime.Workbook();
     await workbook.xlsx.load(await response.arrayBuffer());
     const worksheet = workbook.worksheets[0];
     worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";

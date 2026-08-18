@@ -39,11 +39,9 @@ const UserManagementPage = lazy(() => import("@/pages/admin/UserManagementPage")
 const OrganizationHierarchyPage = lazy(() => import("@/pages/admin/OrganizationHierarchyPage"));
 const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentManagementPage"));
 const EntityManagementPage = lazy(() => import("./pages/admin/EntityManagementPage"));
-const FormManagementPage = lazy(() => import("./pages/admin/FormManagementPage"));
 const TemplateDesignerPage = lazy(() => import("./pages/admin/TemplateDesignerPage"));
 const LetterTypeManagementPage = lazy(() => import("./pages/admin/LetterTypeManagementPage"));
 const OfficeManagementPage = lazy(() => import("./pages/admin/OfficeManagementPage"));
-const WorkflowDetailManagementPage = lazy(() => import("./pages/admin/WorkflowDetailManagementPage"));
 const FormUsageManagementPage = lazy(() => import("./pages/admin/FormUsageManagementPage"));
 const MasterProjectManagementPage = lazy(() => import("./pages/admin/ProjectManagementPage"));
 const AdminMonitoringPage = lazy(() => import("./pages/admin/AdminMonitoringPage"));
@@ -213,19 +211,18 @@ const App = () => {
           <Route path="/admin/users/hierarchy" element={<AdminOnlyRoute><OrganizationHierarchyPage /></AdminOnlyRoute>} />
           <Route path="/admin/departments" element={<AdminOnlyRoute><DepartmentManagementPage /></AdminOnlyRoute>} />
           <Route path="/admin/entities" element={<AdminOnlyRoute><EntityManagementPage /></AdminOnlyRoute>} />
-          <Route path="/admin/forms" element={<Navigate to="/admin/configuration/forms" replace />} />
+          <Route path="/admin/forms" element={<Navigate to="/admin/configuration/form-usages" replace />} />
           <Route path="/admin/letter-types" element={<AdminOnlyRoute><LetterTypeManagementPage /></AdminOnlyRoute>} />
           <Route path="/admin/offices" element={<AdminOnlyRoute><OfficeManagementPage /></AdminOnlyRoute>} />
-          <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/workflows" replace />} />
+          <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/form-usages" replace />} />
           <Route path="/admin/master-projects" element={<AdminOnlyRoute><MasterProjectManagementPage /></AdminOnlyRoute>} />
           <Route path="/admin/monitoring" element={<AdminOnlyRoute><AdminMonitoringPage /></AdminOnlyRoute>} />
           <Route path="/admin/kpi-departments" element={<AdminOnlyRoute><DepartmentKPIPage /></AdminOnlyRoute>} />
 <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
-  <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
-
-  <Route path="forms" element={<FormManagementPage embedded />} />
+  <Route index element={<Navigate to="/admin/configuration/form-usages" replace />} />
+  <Route path="forms" element={<Navigate to="/admin/configuration/form-usages" replace />} />
   <Route path="template-designer" element={<TemplateDesignerPage />} />
-  <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
+  <Route path="workflows" element={<Navigate to="/admin/configuration/form-usages" replace />} />
   <Route path="form-usages" element={<FormUsageManagementPage />} />
 
   {/* Halaman baru */}

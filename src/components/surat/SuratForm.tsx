@@ -64,7 +64,6 @@ import {
   getManualInputFields,
   getScalarFieldValue,
   getWorkflowCategories,
-  hasPlaceDateMapping,
   hasUnitRequestFields,
   isMultiSelectField,
   isProfileLocationReady,
@@ -2165,24 +2164,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       toast({ variant: "destructive", title: "Nomor Surat Belum Siap", description: "Pesan nomor surat terlebih dahulu." });
       return false;
     }
-    if (!selectedUsage?.master_forms?.link_form) {
-      toast({ variant: "destructive", title: "Template Belum Tersedia" });
-      return false;
-    }
     if (!formData.request_place.trim()) {
       toast({ variant: "destructive", title: "Tempat Wajib Diisi" });
       return false;
     }
     if (!formData.request_date) {
       toast({ variant: "destructive", title: "Tanggal Wajib Diisi" });
-      return false;
-    }
-    if (!hasPlaceDateMapping(selectedUsage)) {
-      toast({
-      variant: "destructive",
-      title: "Mapping Tempat/Tanggal Belum Ada",
-      description: "Admin harus mapping field Tempat, Tanggal ke cell Excel di Master Template.",
-      });
       return false;
     }
     const missingInitialAttachments = getMissingInitialAttachmentLabels();

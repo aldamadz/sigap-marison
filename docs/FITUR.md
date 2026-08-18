@@ -39,7 +39,6 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Admin | `/admin/master-projects` | Master Proyek |
 | Admin | `/admin/monitoring` | All Status Monitoring |
 | Admin | `/admin/kpi-departments` | SLA Departemen |
-| Admin | `/admin/configuration/forms` | Configuration: Form & Template |
 | Admin | `/admin/configuration/template-designer` | Configuration: Template Builder |
 | Admin | `/admin/configuration/workflows` | Configuration: Dokumentasi Matrix Lama |
 | Admin | `/admin/configuration/form-usages` | Configuration: Kegunaan Form |
@@ -1118,3 +1117,24 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Dispatch aset dengan seluruh parent rekomendasi ditolak selalu menjadi `skipped` di setiap environment. Migration REC-03 tetap belum diterapkan; target hanya staging setelah review dan disposable test lulus. Production tidak berubah.
 - Index parsial disediakan untuk signature pending, notifikasi belum dibaca, revision aktif, status surat, dan urutan histori.
 - Dependency transitif `brace-expansion` dikunci ke patch aman `1.1.16` dan `2.1.2` tanpa mengubah major version yang dipakai tooling maupun ExcelJS; `js-yaml` milik tooling juga diperbarui ke patch aman `4.3.0`.
+
+## 33. Pipeline Dokumen Native
+
+### Fungsional
+
+- Data permohonan, alur signer, keputusan, lampiran, dan histori persetujuan di database menjadi sumber kebenaran dokumen.
+- Registrasi baru tidak membuat file XLSX. `file_path` menyimpan versi logis `native://document/...` untuk invalidasi cache dan audit.
+- Approval hanya menyimpan keputusan, waktu, catatan, lampiran, dan versi logis baru. Approval tidak mengunduh atau memodifikasi workbook.
+- PDF dibuat oleh worker langsung dari snapshot database ketika user membuka/mengunduh dokumen atau ketika dokumen final dibutuhkan outbound.
+- Dokumen final mendukung 3 sampai 8 signer sesuai Kegunaan Form.
+- Form Permintaan Barang & Jasa serta Rekomendasi Peremajaan memakai renderer PDF-native. Lampiran rekomendasi disusun maksimal enam gambar per halaman.
+- Route konfigurasi Forms dan Workflows lama dialihkan ke `Kegunaan Form`. Konfigurasi aktif dokumen dan alur tetap dikelola melalui Kegunaan Form.
+- Data template dan mapping lama dipertahankan sebagai kompatibilitas histori, tetapi tidak digunakan untuk membuat dokumen transaksi baru.
+
+### Non-Fungsional
+
+- Setiap perubahan approval mengosongkan cache `pdf_path` dalam transaksi yang sama dengan perubahan `file_path`.
+- PDF final dibuat asinkron setelah dokumen selesai sehingga respons approval tidak menunggu render atau upload PDF.
+- Outbound tidak pernah mengirim marker `native://`. Jika PDF final belum tersedia, builder membuat job PDF dan mengembalikan kegagalan retryable sebelum batas POST.
+- Cache PDF terikat pada versi logis sumber. PDF lama tidak boleh dipakai setelah data atau tanda tangan berubah.
+- App dan PDF worker wajib menggunakan revision image yang sama saat deployment renderer berubah.
