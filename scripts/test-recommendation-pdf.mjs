@@ -15,6 +15,7 @@ import {
   normalizeRecommendationDocumentData,
   renderRecommendationPdf,
 } from "../recommendation-native-pdf.mjs";
+import { buildNativeSignatureBlock } from "../pgd-pdf-renderer.mjs";
 
 const image = async (width, height) => sharp({
   create: { width, height, channels: 3, background: "#245b78" },
@@ -182,6 +183,19 @@ test("renders the recommendation main form, details, images, and 3-8 signatures 
     assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
     assert.ok(pdf.length > 2_000);
   }
+});
+
+test("preserves actual legacy two-signer identities instead of rendering placeholders", () => {
+  const signatures = [
+    { role: "Membuat", name: "Signer Legacy 1", job: "Staff", signed: true },
+    { role: "Menyetujui", name: "Signer Legacy 2", job: "Manager", signed: false },
+  ];
+  const block = buildNativeSignatureBlock(signatures);
+  const serialized = JSON.stringify(block);
+
+  assert.match(serialized, /SIGNER LEGACY 1/);
+  assert.match(serialized, /SIGNER LEGACY 2/);
+  assert.doesNotMatch(serialized, /Belum ditentukan/);
 });
 
 test("plans one page for 1 through 6 images and continuation pages above 6", () => {
