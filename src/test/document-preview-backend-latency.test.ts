@@ -8,7 +8,7 @@ const jobId = "10000000-0000-4000-8000-000000000001";
 const userId = "40000000-0000-4000-8000-000000000004";
 const pdfUrl = "https://storage.test/storage/v1/object/public/dokumen_surat/staging/pdf/cached.pdf";
 
-const createQuery = (table: string, tokenInserts: unknown[]) => {
+const createQuery = (table: string, tokenInserts: unknown[], recommendation = false) => {
   const equal = new Map<string, unknown>();
   const included = new Map<string, unknown[]>();
   const builder: any = {
@@ -43,6 +43,10 @@ const createQuery = (table: string, tokenInserts: unknown[]) => {
           error: null,
         };
       }
+      if (table === "surat_linked_documents" && recommendation) return {
+        data: { child_surat_id: suratId },
+        error: null,
+      };
       return { data: null, error: null };
     },
     single: async () => {
@@ -57,11 +61,18 @@ const createQuery = (table: string, tokenInserts: unknown[]) => {
   return builder;
 };
 
-const createClients = () => {
+const createClients = ({ recommendation = false } = {}) => {
   const tokenInserts: unknown[] = [];
   const supabase = {
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: userId } }, error: null })) },
-    from: vi.fn((table: string) => createQuery(table, tokenInserts)),
+    from: vi.fn((table: string) => createQuery(table, tokenInserts, recommendation)),
+    rpc: vi.fn(async (name: string) => {
+      if (name === "enqueue_recommendation_pdf_job" && recommendation) return {
+        data: { id: jobId, status: "done", pdf_url: pdfUrl },
+        error: null,
+      };
+      throw new Error(`Unexpected RPC: ${name}`);
+    }),
   };
   return { supabase, storageSupabase: { storage: { from: vi.fn() } }, tokenInserts };
 };
@@ -113,6 +124,34 @@ describe("PDF job preview fast path", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ status: "done", jobId, viewUrl: expect.stringMatching(/^\/api\/files\/view\//) });
     expect(clients.supabase.auth.getUser).toHaveBeenCalledTimes(1);
+    expect(clients.tokenInserts).toHaveLength(1);
+  });
+
+  it("returns the current recommendation PDF without queueing another render", async () => {
+    const clients = createClients({ recommendation: true });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+
+    const response = await booted!.app.inject({
+      method: "GET",
+      url: `/api/documents/${suratId}/pdf`,
+      headers: { authorization: "Bearer session-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: "ready",
+      jobId,
+      pdfUrl,
+      cached: true,
+      refreshed: false,
+      viewUrl: expect.stringMatching(/^\/api\/files\/view\//),
+    });
+    expect(clients.supabase.rpc).toHaveBeenCalledWith("enqueue_recommendation_pdf_job", {
+      p_surat_id: suratId,
+      p_source_file_path: "dokumen_surat/staging/source.xlsx",
+      p_requested_by: userId,
+      p_refresh: false,
+    });
     expect(clients.tokenInserts).toHaveLength(1);
   });
 });

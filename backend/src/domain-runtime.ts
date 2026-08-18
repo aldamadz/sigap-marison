@@ -4737,11 +4737,21 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
       .maybeSingle();
     if (recommendationLinkError) throw recommendationLinkError;
     if (recommendationLink) {
-    const { data: job, error } = await supabase.rpc("enqueue_recommendation_pdf_job", {
-      p_surat_id: suratId, p_source_file_path: surat.file_path, p_requested_by: user.id, p_refresh: refresh,
-    });
-    if (error) throw error;
-    return { status: job.status, jobId: job.id, cached: false, refreshed: refresh };
+      const { data: job, error } = await supabase.rpc("enqueue_recommendation_pdf_job", {
+        p_surat_id: suratId, p_source_file_path: surat.file_path, p_requested_by: user.id, p_refresh: refresh,
+      });
+      if (error) throw error;
+      const pdfUrl = job?.pdf_url || null;
+      if (String(job?.status || "").toLowerCase() === "done" && pdfUrl && !refresh) {
+        return addPdfViewerAccess({
+          status: "ready",
+          jobId: job.id,
+          pdfUrl,
+          cached: true,
+          refreshed: false,
+        }, surat, user);
+      }
+      return { status: job.status, jobId: job.id, cached: false, refreshed: refresh };
     }
   }
 
