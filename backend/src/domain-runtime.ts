@@ -1,21 +1,17 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck -- Domain handlers are migrated verbatim; route contracts provide regression coverage during typing.
 import { createReadStream, existsSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
-import { tmpdir } from "node:os";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
 import webpush from "web-push";
 import sharp from "sharp";
 import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
-import { normalizeWorkbookForPdf } from "../../document-workbook-normalizer.mjs";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
-import { resolveTableHorizontalAlignment } from "../../document-layout-rules.mjs";
+import { resolveRecommendationSource } from "../../recommendation-pdf.mjs";
+import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "../../recommendation-native-pdf.mjs";
 import { buildProductionCode } from "../../production-code.mjs";
 import {
   assertRequestSize,
@@ -87,7 +83,6 @@ import { createSessionCookieHelpers } from "./domain/session-cookie.js";
 import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
 import { isActiveAdminProfile, isActiveProfile } from "./domain/profile-authorization.js";
 
-const execFileAsync = promisify(execFile);
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -920,121 +915,6 @@ const requireAdminUser = async (token) => {
   return user;
 };
 
-const formatTemplatePreviewDate = (date = new Date()) => date.toLocaleDateString("id-ID", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: "Asia/Jakarta",
-});
-
-const setPreviewCell = (worksheet, address, value, options = {}) => {
-  const cell = worksheet.getCell(address);
-  cell.value = value;
-  cell.alignment = {
-    ...(cell.alignment || {}),
-    horizontal: options.horizontal || cell.alignment?.horizontal || "left",
-    vertical: options.vertical || cell.alignment?.vertical || "middle",
-    wrapText: options.wrap ?? true,
-    ...(options.horizontal === "center" ? {} : { indent: Math.max(Number(cell.alignment?.indent || 0), 1) }),
-  };
-};
-
-const columnNameToNumber = (columnName) => {
-  let value = 0;
-  for (const character of String(columnName || "").toUpperCase()) {
-    value = value * 26 + character.charCodeAt(0) - 64;
-  }
-  return value;
-};
-
-const columnNumberToName = (columnNumber) => {
-  let value = columnNumber;
-  let result = "";
-  while (value > 0) {
-    const remainder = (value - 1) % 26;
-    result = String.fromCharCode(65 + remainder) + result;
-    value = Math.floor((value - 1) / 26);
-  }
-  return result;
-};
-
-const parsePreviewRange = (range) => {
-  const match = String(range || "").trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-  if (!match) return null;
-  return {
-    startCol: columnNameToNumber(match[1]),
-    startRow: Number(match[2]),
-    endCol: columnNameToNumber(match[3]),
-    endRow: Number(match[4]),
-  };
-};
-
-const formatPreviewRange = (startCol, startRow, endCol, endRow) =>
-  `${columnNumberToName(startCol)}${startRow}:${columnNumberToName(endCol)}${endRow}`;
-
-const previewRangesOverlap = (left, right) =>
-  left.startCol <= right.endCol && left.endCol >= right.startCol &&
-  left.startRow <= right.endRow && left.endRow >= right.startRow;
-
-const mergePreviewRange = (worksheet, range) => {
-  const parsed = parsePreviewRange(range);
-  if (!parsed) return;
-  const existingMerges = Array.isArray(worksheet.model?.merges) ? [...worksheet.model.merges] : [];
-  existingMerges.forEach((existingRange) => {
-    const existing = parsePreviewRange(existingRange);
-    if (existing && previewRangesOverlap(existing, parsed)) worksheet.unMergeCells(existingRange);
-  });
-  worksheet.mergeCells(range);
-};
-
-const stylePreviewBox = (worksheet, range, options = {}) => {
-  const parsed = parsePreviewRange(range);
-  if (!parsed) return;
-  const cell = worksheet.getCell(parsed.startRow, parsed.startCol);
-  cell.border = {
-    top: { style: "thin", color: { argb: "FF000000" } },
-    bottom: { style: "thin", color: { argb: "FF000000" } },
-    left: { style: "thin", color: { argb: "FF000000" } },
-    right: { style: "thin", color: { argb: "FF000000" } },
-  };
-  cell.alignment = {
-    horizontal: options.horizontal || "center",
-    vertical: options.vertical || "middle",
-    wrapText: true,
-    ...(options.horizontal === "left" ? { indent: 1 } : {}),
-  };
-  if (options.bold) cell.font = { ...(cell.font || {}), bold: true };
-};
-
-const stylePreviewRange = (worksheet, range, options = {}) => {
-  const parsed = parsePreviewRange(range);
-  if (!parsed) return;
-  for (let row = parsed.startRow; row <= parsed.endRow; row += 1) {
-    for (let col = parsed.startCol; col <= parsed.endCol; col += 1) {
-      const cell = worksheet.getCell(row, col);
-      if (options.fill) cell.fill = options.fill;
-      if (options.font) cell.font = { ...(cell.font || {}), ...options.font };
-      if (options.alignment) cell.alignment = { ...(cell.alignment || {}), ...options.alignment };
-      if (options.border) cell.border = { ...(cell.border || {}), ...options.border };
-    }
-  }
-};
-
-const clearPreviewRange = (worksheet, range, options = {}) => {
-  const parsed = parsePreviewRange(range);
-  if (!parsed) return;
-  for (let row = parsed.startRow; row <= parsed.endRow; row += 1) {
-    for (let col = parsed.startCol; col <= parsed.endCol; col += 1) {
-      const cell = worksheet.getCell(row, col);
-      if (options.values) cell.value = null;
-      if (options.fill) cell.fill = { type: "pattern", pattern: "none" };
-    }
-  }
-};
-
-const previewGreenFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7FAF5" } };
-const previewGreenFont = { color: { argb: "FF111827" }, bold: true };
-
 const buildBoundedSignatureRoleCounts = (total) => {
   for (let membuat = 1; membuat <= Math.min(3, total - 2); membuat += 1) {
     for (let memeriksa = 1; memeriksa <= Math.min(3, total - membuat - 1); memeriksa += 1) {
@@ -1043,150 +923,6 @@ const buildBoundedSignatureRoleCounts = (total) => {
     }
   }
   return [1, 1, 1];
-};
-
-const fillRecommendationPreview = (worksheet) => {
-  stylePreviewRange(worksheet, "I18:J18", {
-    fill: previewGreenFill,
-    font: previewGreenFont,
-    alignment: { horizontal: "center", vertical: "middle", wrapText: true },
-  });
-  setPreviewCell(worksheet, "C4", "TEST/UAI/PBO.4/VI/2026");
-  setPreviewCell(worksheet, "A9", 1, { horizontal: "center" });
-  setPreviewCell(worksheet, "B9", "Laptop kerja");
-  setPreviewCell(worksheet, "D9", "REG-001");
-  setPreviewCell(worksheet, "E9", "PO / Pengguna Contoh");
-  setPreviewCell(worksheet, "F9", "Performa menurun");
-  setPreviewCell(worksheet, "G9", "V", { horizontal: "center" });
-  setPreviewCell(worksheet, "I9", "Service dan penggantian komponen");
-  setPreviewCell(worksheet, "J9", "Prioritas operasional");
-  setPreviewCell(worksheet, "B18", "Dokumen uji template rekomendasi. Data ini tidak disimpan sebagai surat.");
-  setPreviewCell(worksheet, "I17", `Magelang, ${formatTemplatePreviewDate()}`);
-  setPreviewCell(worksheet, "I18", "Membuat", { horizontal: "center" });
-  setPreviewCell(worksheet, "J18", "Memeriksa", { horizontal: "center" });
-  setPreviewCell(worksheet, "I19", "Preview Sistem\nTanggal pengujian", { horizontal: "center" });
-  setPreviewCell(worksheet, "I23", "PENGGUNA CONTOH", { horizontal: "center" });
-  setPreviewCell(worksheet, "J23", "MANAGER PO", { horizontal: "center" });
-  setPreviewCell(worksheet, "I24", "Staff IT", { horizontal: "center" });
-  setPreviewCell(worksheet, "J24", "Mgr. PO", { horizontal: "center" });
-};
-
-const getGenericPreviewValue = (field) => {
-  const source = String(field.default_source || field.defaultSource || "manual").toLowerCase();
-  const systemValues = {
-    requester_name: "Pengguna Contoh",
-    requester_nik: "TEST-001",
-    requester_job_title: "Staff",
-    department_name: "Departemen Contoh",
-    office_name: "Kantor Pusat",
-    project_name: "Proyek Contoh",
-    entity_name: "PT Usaha Adi Karya",
-    letter_number: "TEST/UAI/FORM.1/VI/2026",
-    letter_title: "Dokumen Pengujian Template",
-    request_place: "Magelang",
-    request_date: new Date().toISOString().slice(0, 10),
-    request_place_date: `Magelang, ${formatTemplatePreviewDate()}`,
-  };
-  if (systemValues[source] !== undefined) return systemValues[source];
-  if (field.type === "date") return new Date().toISOString().slice(0, 10);
-  if (field.type === "number" || field.type === "currency") return 1;
-  if (field.type === "textarea") return "Catatan pengujian template. Data ini tidak disimpan sebagai surat.";
-  return `Contoh ${String(field.label || field.key || "isian")}`;
-};
-
-const getGenericTableValue = (column) => {
-  const key = String(column.key || "").toLowerCase();
-  if (key.includes("kode")) return "TEST-001";
-  if (key.includes("nama")) return "Barang atau layanan contoh";
-  if (key === "sat" || key.includes("satuan")) return "Unit";
-  if (key.includes("jumlah")) return 1;
-  if (key === "status") return "2";
-  if (key === "service") return "V";
-  if (key === "ganti") return "";
-  if (key.includes("tanggal")) return new Date().toISOString().slice(0, 10);
-  return `Contoh ${String(column.label || column.key || "data")}`;
-};
-
-const fillGenericTemplatePreview = (workbook, inputSchema) => {
-  const fields = Array.isArray(inputSchema) ? inputSchema : [];
-  fields.forEach((field) => {
-    const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-    const worksheet = workbook.worksheets[sheetIndex] || workbook.worksheets[0];
-    if (!worksheet) return;
-
-    if (field.type === "table") {
-      const config = field.table_config || field.tableConfig;
-      const startRow = Number(config?.start_row || config?.startRow || 0);
-      if (!startRow) return;
-      const noColumn = String(config?.no_column || config?.noColumn || "").toUpperCase();
-      if (noColumn) setPreviewCell(worksheet, `${noColumn}${startRow}`, 1, { horizontal: "center" });
-      (config?.columns || []).forEach((column) => {
-        const columnName = String(column.column || "").trim().toUpperCase();
-        if (!columnName) return;
-        const horizontal = resolveTableHorizontalAlignment(column.key, column.type);
-        setPreviewCell(worksheet, `${columnName}${startRow}`, getGenericTableValue(column), {
-          horizontal,
-        });
-      });
-      return;
-    }
-
-    const range = String(field.merge_range || field.mergeRange || field.cell || "").trim().toUpperCase();
-    const address = range.split(":")[0];
-    if (!address) return;
-    setPreviewCell(worksheet, address, getGenericPreviewValue(field), {
-      horizontal: field.horizontal || "left",
-      vertical: field.vertical || "middle",
-      wrap: field.wrap !== false,
-    });
-  });
-};
-
-const readTemplatePreviewSource = async (templateLink) => {
-  const rawLink = String(templateLink || "").trim();
-  if (!rawLink) {
-    const err = new Error("File template belum tersedia.");
-    err.status = 404;
-    throw err;
-  }
-
-  if (rawLink.startsWith("/")) {
-    const templatePath = resolve(join(distDir, decodeURIComponent(rawLink).replace(/^\/+/, "")));
-    const relativeTemplatePath = relative(distDir, templatePath);
-    if (relativeTemplatePath.startsWith("..") || !existsSync(templatePath)) {
-      const err = new Error("Template uji tidak tersedia.");
-      err.status = 404;
-      throw err;
-    }
-    return await readFile(templatePath);
-  }
-
-  let templateUrl;
-  try {
-    templateUrl = new URL(rawLink);
-  } catch {
-    const err = new Error("Alamat template tidak valid.");
-    err.status = 400;
-    throw err;
-  }
-  const allowedHosts = new Set([supabaseUrl, storageSupabaseUrl, storagePublicBaseUrl]
-    .filter(Boolean)
-    .map((value) => new URL(value).host));
-  if (templateUrl.protocol !== "https:" || !allowedHosts.has(templateUrl.host)) {
-    const err = new Error("Host template tidak diizinkan.");
-    err.status = 403;
-    throw err;
-  }
-
-  const response = await fetch(templateUrl, { redirect: "error", signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) throw new Error("Gagal mengambil file template.");
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length > 20 * 1024 * 1024) {
-    const err = new Error("Ukuran template melebihi batas 20 MB.");
-    err.status = 413;
-    throw err;
-  }
-  return buffer;
 };
 
 const enforceTemplatePreviewRateLimit = (userId) => {
@@ -1243,35 +979,56 @@ const generateTemplatePreviewPdf = async (formId, options = {}) => {
     });
   }
 
-  const workDir = await mkdtemp(join(tmpdir(), "agenda-template-preview-"));
-  try {
-    const sourcePath = join(workDir, "preview.xlsx");
-    const sourceBuffer = await readTemplatePreviewSource(form.link_form);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(sourceBuffer);
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) throw new Error("Sheet template tidak tersedia.");
-
-    const formName = String(form.nama_form || "").toUpperCase();
-    fillGenericTemplatePreview(workbook, form.input_schema);
-    if (formName.includes("REKOMENDASI PEREMAJAAN")) fillRecommendationPreview(worksheet);
-    await workbook.xlsx.writeFile(sourcePath);
-    await normalizeWorkbookForPdf(sourcePath);
-
-    await execFileAsync("soffice", [
-      "--headless",
-      "--nologo",
-      "--nofirststartwizard",
-      "--convert-to",
-      "pdf",
-      "--outdir",
-      workDir,
-      sourcePath,
-    ], { timeout: 120_000 });
-    return await readFile(join(workDir, "preview.pdf"));
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
+  if (formName.includes("REKOMENDASI PEREMAJAAN")) {
+    const previewItems = resolveRecommendationSource({
+      recommendation_multi_detail: {
+        version: 1,
+        items: [{
+          id: "preview-parent-1",
+          order: 0,
+          applicant_original: { name: "Komputer kerja", quantity: 1, notes: "Contoh data" },
+          status: "recommended",
+          location: "Kantor Pusat",
+          pic: "PIC Pengguna",
+          rejection_reason: "",
+          details: [{
+            id: "preview-detail-1",
+            order: 0,
+            parent_item_id: "preview-parent-1",
+            name: "Komputer kerja spesifikasi operasional",
+            quantity: 1,
+            action: "purchase_new",
+            description: "Pembelian baru",
+            description_manually_edited: false,
+            notes: "Contoh hasil rekomendasi",
+            attachments: [],
+            reference_links: [],
+          }],
+        }],
+      },
+    });
+    const signatures = createPgdPreviewData(options).signatures.map((signature) => ({
+      step_order: signature.stepOrder,
+      role_name: signature.role,
+      is_signed: signature.signed,
+      signed_at: signature.signedAt,
+      signer_snapshot: { full_name: signature.name, job_title: signature.job },
+    }));
+    const previewData = normalizeRecommendationDocumentData({
+      no_surat: "001/UAI/REK/VIII/2026",
+      request_place: "Magelang",
+      request_date: new Date().toISOString(),
+      location_snapshot: { form: { nomor_form: form.nomor_form } },
+    }, { items: previewItems, signatures });
+    return renderRecommendationPdf(previewData, {
+      logoPath: join(distDir, "logo-marison-regency-group.png"),
+      downloadImage: async () => { throw new Error("Preview tidak memiliki gambar."); },
+    });
   }
+
+  const err = new Error("Renderer PDF-native belum tersedia untuk form ini.");
+  err.status = 422;
+  throw err;
 };
 
 const createTemplatePreview = async (token, payload) => {
@@ -3932,9 +3689,33 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true }
 };
 
 const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
+  if (!surat?.pdf_path && String(surat?.file_path || "").startsWith("native://document/")) {
+    const { data: existingJob, error: existingJobError } = await supabase
+      .from("document_pdf_jobs")
+      .select("id")
+      .eq("surat_id", surat.id)
+      .eq("source_file_path", surat.file_path)
+      .in("status", ["queued", "processing", "done"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingJobError) throw existingJobError;
+    if (!existingJob) {
+      const { error: enqueueError } = await supabase.from("document_pdf_jobs").insert({
+        surat_id: surat.id,
+        source_file_path: surat.file_path,
+        requested_by: actorId,
+      });
+      if (enqueueError) throw enqueueError;
+    }
+    const err = new Error("PDF final sedang disiapkan. Pengiriman outbound akan dicoba kembali otomatis.");
+    err.status = 503;
+    err.code = "final_pdf_pending";
+    throw err;
+  }
   const rows = [
-    ...(surat?.pdf_path || surat?.file_path
-      ? [{ file_url: surat.pdf_path || surat.file_path, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
+    ...(surat?.pdf_path
+      ? [{ file_url: surat.pdf_path, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
       : []),
     ...asArrayValue(surat?.surat_attachments),
   ];
@@ -4865,7 +4646,7 @@ const addPdfViewerAccess = async (result, surat, user) => {
 const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = null } = {}) => {
   const { surat, user } = await getAuthorizedSurat(suratId, token);
 
-  if (!surat.file_path) throw new Error("File Excel dokumen belum tersedia.");
+  if (!surat.file_path) throw new Error("Sumber dokumen belum tersedia.");
 
   if (!signatureId && ["PDF_PENDING", "DONE", "SELESAI", "COMPLETED"].includes(String(surat.status || "").toUpperCase())) {
     const { data: recommendationLink, error: recommendationLinkError } = await supabase

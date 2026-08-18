@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-08-18] DOC-10: Database-native document pipeline
+
+### Changed
+- Registrasi dan approval baru tidak lagi membuat, mengunduh, atau memodifikasi XLSX.
+- PDF PGD dan rekomendasi dirender langsung dari snapshot database oleh worker.
+- Approval hanya menulis transaksi bisnis dan menjadwalkan PDF final secara asinkron.
+- Route konfigurasi Forms dan Workflows lama dialihkan ke Kegunaan Form.
+
+### Safety
+- Cache PDF lama dihapus atomik saat versi logis dokumen berubah.
+- Outbound menunggu PDF final dan tidak dapat mengirim marker `native://` sebagai attachment.
+- Migration hanya mengubah fungsi approval secara forward-only; data historis dan template lama tidak dihapus.
+
 ## [2026-08-04] INBOX-01: Compact Approval Inbox — server-side filter, lazy detail, pagination
 
 ### Added

@@ -92,8 +92,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.24.0";
-export const DOCS_UPDATED_AT = "3 Agustus 2026";
+export const DOCS_VERSION = "v1.25.0";
+export const DOCS_UPDATED_AT = "18 Agustus 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -3016,6 +3016,18 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.25.0",
+    date: "18 Agustus 2026",
+    changes: [
+      "Mengubah registrasi dan approval dokumen menjadi database-native tanpa membuat atau memodifikasi XLSX.",
+      "Membuat PDF secara asinkron dari snapshot database saat dibutuhkan atau setelah dokumen final.",
+      "Menambahkan renderer native untuk rekomendasi, lampiran enam gambar per halaman, dan tanda tangan dinamis 3-8 signer.",
+      "Menginvalidasi cache PDF secara atomik setiap kali versi dokumen berubah.",
+      "Menahan outbound sebelum POST sampai PDF final tersedia dan mencegah marker native menjadi tautan lampiran.",
+      "Mengalihkan halaman Forms dan Workflows lama ke Kegunaan Form.",
+    ],
+  },
   {
     version: "v1.24.0",
     date: "3 Agustus 2026",

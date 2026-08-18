@@ -569,7 +569,7 @@ export default function FormUsageManagementPage() {
   const validate = () => {
     if (!formData.name.trim() || !formData.form_id) return "Nama kegunaan dan form wajib diisi.";
     if (formData.department_ids.length === 0) return "Pilih minimal satu departemen pengaju.";
-    if (formData.steps.length < 2 || formData.steps.length > 8) return "Tahap approval harus berjumlah 2 sampai 8.";
+    if (formData.steps.length < 3 || formData.steps.length > 8) return "Tahap approval harus berjumlah 3 sampai 8.";
     for (const step of formData.steps) {
       const missing: string[] = [];
       if (!step.label.trim()) missing.push("label tahap");

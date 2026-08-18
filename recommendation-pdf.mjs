@@ -1,6 +1,3 @@
-import ExcelJS from "exceljs";
-import sharp from "sharp";
-
 const asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const asArray = (value) => Array.isArray(value) ? value : [];
 const text = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
@@ -243,6 +240,7 @@ export const shouldRenderDirectPgd = (recommendation, pgdDocument) => !recommend
 const border = { style: "thin", color: { argb: "FFCBD5E1" } };
 
 const prepareImage = async (buffer, maxWidth, maxHeight) => {
+  const { default: sharp } = await import("sharp");
   const source = sharp(buffer, { failOn: "error" }).autoOrient();
   const metadata = await source.metadata();
   if (!metadata.width || !metadata.height) throw new Error("Dimensi gambar tidak dapat dibaca.");
@@ -347,6 +345,7 @@ export const appendRecommendationPages = async (workbook, items, downloadImage) 
 };
 
 export const appendRecommendationPagesToFile = async (filePath, items, downloadImage) => {
+  const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const pages = await appendRecommendationPages(workbook, items, downloadImage);
