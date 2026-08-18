@@ -628,41 +628,6 @@ export const suratService = {
     return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
   },
 
-  async ensureUnitAllocationPersisted(suratId: string, formInputData: any) {
-    if (!Array.isArray(formInputData?.allocated_units) || formInputData.allocated_units.length === 0) return;
-
-    const { data: current } = await supabase
-      .from("surat_registrasi")
-      .select("data_snapshot")
-      .eq("id", suratId)
-      .maybeSingle();
-
-    const { data: attachments } = await supabase
-      .from("surat_attachments")
-      .select("*")
-      .eq("surat_id", suratId)
-      .order("created_at", { ascending: true });
-
-    const { error } = await supabase
-      .from("surat_registrasi")
-      .update({
-        form_input_data: formInputData,
-        data_snapshot: {
-          ...(current?.data_snapshot || {}),
-          input: formInputData,
-          requested_project: formInputData?.requested_project ?? null,
-          allocated_project: formInputData?.allocated_project ?? null,
-          requested_unit_count: formInputData?.requested_unit_count ?? null,
-          allocated_units: formInputData?.allocated_units ?? [],
-          allocated_unit_count: formInputData?.allocated_unit_count ?? null,
-          attachments: attachments || current?.data_snapshot?.attachments || [],
-        },
-      })
-      .eq("id", suratId);
-
-    if (error) throw error;
-  },
-
   createUnitRecapAttachment(project: any, units: any[]) {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 15;
@@ -2079,64 +2044,17 @@ export const suratService = {
     signerJobTitle: string = "",
     signedAt?: string | null
   ): Promise<string> {
-    const { data: usageDetail } = usageId
-      ? await supabase.from("master_penggunaan_detail").select("*").eq("id", usageId).maybeSingle()
-      : { data: null };
-
-    const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await fileData.arrayBuffer());
-    const positions = positionSnapshot?.ttd
-      ? [{
-          ...positionSnapshot,
-          labelJabatan: positionSnapshot.job_title || positionSnapshot.label || positionSnapshot.role_name || roleName,
-          sheet: Number(positionSnapshot.sheet || 1),
-        }]
-      : usageDetail
-        ? this.resolveStampPositions(usageDetail, roleName, stepOrder)
-        : [];
-
-    if (positions && positions.length > 0) {
-      positions.forEach((pos: any) => {
-          const worksheet = workbook.worksheets[Math.max(Number(pos.sheet || 1) - 1, 0)] || workbook.worksheets[0];
-          const ttdCell = worksheet.getCell(pos.ttd);
-          ttdCell.value = `DISETUJUI SISTEM\n${formatSignatureStampDateTime(signedAt)} WIB`;
-          ttdCell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
-          const rowNum = parseInt(pos.ttd.match(/\d+/)?.[0] || "35");
-          worksheet.getRow(rowNum).height = 65;
-          if (pos.nama) {
-            const nameCell = worksheet.getCell(pos.nama);
-            nameCell.value = userName.toUpperCase();
-            nameCell.alignment = {
-              ...(nameCell.alignment || {}),
-              horizontal: "center",
-              vertical: "middle",
-              wrapText: true,
-            };
-          }
-          if (pos.jabatan) {
-            const jobCell = worksheet.getCell(pos.jabatan);
-            jobCell.value = signerJobTitle || pos.signer_job_title || pos.jobTitle || pos.labelJabatan || "";
-            jobCell.alignment = {
-              ...(jobCell.alignment || {}),
-              horizontal: "center",
-              vertical: "middle",
-              wrapText: true,
-            };
-          }
-      });
-      const buffer  = await workbook.xlsx.writeBuffer();
-      const newPath = `dokumen/signed_${suratId}_step${stepOrder}_${Date.now()}.xlsx`;
-      const uploaded = await appStorageService.upload({
-        bucket: "dokumen_surat",
-        path: newPath,
-        file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-        upsert: true,
-      });
-      return uploaded.publicUrl;
-    }
-    return currentFilePath;
+    return this.transformApprovalExcel({
+      suratId,
+      currentFilePath,
+      userName,
+      roleName,
+      usageId,
+      stepOrder,
+      positionSnapshot,
+      signerJobTitle,
+      signedAt,
+    });
   },
 
   async rebuildDocumentSource(suratId: string): Promise<string> {
@@ -2227,42 +2145,120 @@ export const suratService = {
   },
 
   async applyFormInputDataToExcel(currentFilePath: string, usageId: string, formInputData: any): Promise<string> {
-    const { data: usageDetail } = await supabase
-      .from("master_penggunaan_detail")
-      .select("*, master_forms!fk_master_forms(input_schema, unit_config)")
-      .eq("id", usageId)
-      .single();
+    return this.transformApprovalExcel({
+      suratId: "input",
+      currentFilePath,
+      usageId,
+      formInputData,
+    });
+  },
+
+  async transformApprovalExcel(options: {
+    suratId: string;
+    currentFilePath: string;
+    usageId: string | null;
+    formInputData?: any;
+    userName?: string;
+    roleName?: string;
+    stepOrder?: number;
+    positionSnapshot?: Record<string, any> | null;
+    signerJobTitle?: string;
+    signedAt?: string | null;
+  }): Promise<string> {
+    const {
+      suratId,
+      currentFilePath,
+      usageId,
+      formInputData,
+      userName = "",
+      roleName = "",
+      stepOrder = 0,
+      positionSnapshot,
+      signerJobTitle = "",
+      signedAt,
+    } = options;
+    const { data: usageDetail, error: usageError } = usageId
+      ? await supabase
+          .from("master_penggunaan_detail")
+          .select("*, master_forms!fk_master_forms(input_schema, unit_config)")
+          .eq("id", usageId)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (usageError) throw usageError;
     const schema = this.parseInputSchema((usageDetail as any)?.master_forms?.input_schema);
-    if (!usageDetail || schema.length === 0) return currentFilePath;
+    const positions = positionSnapshot?.ttd
+      ? [{
+          ...positionSnapshot,
+          labelJabatan: positionSnapshot.job_title || positionSnapshot.label || positionSnapshot.role_name || roleName,
+          sheet: Number(positionSnapshot.sheet || 1),
+        }]
+      : usageDetail && stepOrder > 0
+        ? this.resolveStampPositions(usageDetail, roleName, stepOrder)
+        : [];
+    const shouldApplyInput = formInputData !== undefined && schema.length > 0;
+    if (!shouldApplyInput && positions.length === 0) return currentFilePath;
 
     const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await fileData.arrayBuffer());
     const worksheet = workbook.worksheets[0];
-    if (formInputData?.request_mode === "unit" && formInputData?.requested_project?.name) {
-      worksheet.getCell("L5").value = `: ${formInputData.requested_project.name}`;
+    if (shouldApplyInput) {
+      if (formInputData?.request_mode === "unit" && formInputData?.requested_project?.name) {
+        worksheet.getCell("L5").value = `: ${formInputData.requested_project.name}`;
+      }
+      schema.forEach((field) => {
+        const source = field.default_source || field.defaultSource || "manual";
+        if (source !== "manual") return;
+        if (formInputData?.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
+        if (field.type === "table") {
+          this.writeTableField(workbook, field, formInputData?.[field.key]);
+          return;
+        }
+        if (!field.cell && !(field.merge_range || field.mergeRange)) return;
+        const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
+        const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
+        this.writeWrappedField(sheet, field, formInputData?.[field.key]);
+      });
+      const isGoodsServicesSheet =
+        String(worksheet.getCell("C9").value || "").toUpperCase().includes("NAMA BARANG") &&
+        String(worksheet.getCell("J9").value || "").toUpperCase().includes("SAT");
+      if (isGoodsServicesSheet) normalizeGoodsServicesWorksheet(worksheet);
     }
 
-    schema.forEach((field) => {
-      const source = field.default_source || field.defaultSource || "manual";
-      if (source !== "manual") return;
-      if (formInputData?.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
-      if (field.type === "table") {
-        this.writeTableField(workbook, field, formInputData?.[field.key]);
-        return;
+    positions.forEach((position: any) => {
+      const sheet = workbook.worksheets[Math.max(Number(position.sheet || 1) - 1, 0)] || worksheet;
+      const signatureCell = sheet.getCell(position.ttd);
+      signatureCell.value = `DISETUJUI SISTEM\n${formatSignatureStampDateTime(signedAt)} WIB`;
+      signatureCell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
+      const rowNumber = parseInt(position.ttd.match(/\d+/)?.[0] || "35");
+      sheet.getRow(rowNumber).height = 65;
+      if (position.nama) {
+        const nameCell = sheet.getCell(position.nama);
+        nameCell.value = userName.toUpperCase();
+        nameCell.alignment = {
+          ...(nameCell.alignment || {}),
+          horizontal: "center",
+          vertical: "middle",
+          wrapText: true,
+        };
       }
-      if (!field.cell && !(field.merge_range || field.mergeRange)) return;
-      const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-      const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
-      this.writeWrappedField(sheet, field, formInputData?.[field.key]);
+      if (position.jabatan) {
+        const jobCell = sheet.getCell(position.jabatan);
+        jobCell.value = signerJobTitle || position.signer_job_title || position.jobTitle || position.labelJabatan || "";
+        jobCell.alignment = {
+          ...(jobCell.alignment || {}),
+          horizontal: "center",
+          vertical: "middle",
+          wrapText: true,
+        };
+      }
     });
-    const isGoodsServicesSheet =
-      String(worksheet.getCell("C9").value || "").toUpperCase().includes("NAMA BARANG") &&
-      String(worksheet.getCell("J9").value || "").toUpperCase().includes("SAT");
-    if (isGoodsServicesSheet) normalizeGoodsServicesWorksheet(worksheet);
+
     const buffer = await workbook.xlsx.writeBuffer();
-    const path = `dokumen/updated_input_${Date.now()}.xlsx`;
+    const path = stepOrder > 0
+      ? `dokumen/signed_${suratId}_step${stepOrder}_${Date.now()}.xlsx`
+      : `dokumen/updated_input_${Date.now()}.xlsx`;
     const uploaded = await appStorageService.upload({
       bucket: "dokumen_surat",
       path,
@@ -2310,8 +2306,9 @@ export const suratService = {
       ""
     ).trim();
 
-    let workingFilePath = suratFresh.file_path;
+    const workingFilePath = suratFresh.file_path;
     let formInputData = suratFresh.form_input_data ?? {};
+    let shouldApplyAllocationToExcel = false;
     let uploadedAllocationAttachments: any[] = [];
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
@@ -2378,12 +2375,7 @@ export const suratService = {
         allocated_by_signature_id: signatureId,
         allocated_at: new Date().toISOString(),
       };
-
-      const { error: updateInputError } = await supabase
-        .from("surat_registrasi")
-        .update({ form_input_data: formInputData })
-        .eq("id", suratId);
-      if (updateInputError) throw updateInputError;
+      shouldApplyAllocationToExcel = true;
 
       const unitRecapAttachment = this.createUnitRecapAttachment(project, units);
       const productionCodeAttachment = this.createProductionCodeAttachment(project, units);
@@ -2410,14 +2402,16 @@ export const suratService = {
         }
       );
 
-      const { data: allAttachments } = await supabase
+      const { data: allAttachments, error: attachmentsError } = await supabase
         .from("surat_attachments")
         .select("*")
         .eq("surat_id", suratId)
         .order("created_at", { ascending: true });
-      await supabase
+      if (attachmentsError) throw attachmentsError;
+      const { error: allocationPersistError } = await supabase
         .from("surat_registrasi")
         .update({
+          form_input_data: formInputData,
           data_snapshot: {
             ...(suratFresh.data_snapshot || {}),
             input: formInputData,
@@ -2430,10 +2424,7 @@ export const suratService = {
           },
         })
         .eq("id", suratId);
-
-      if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
-        workingFilePath = await this.applyFormInputDataToExcel(workingFilePath, suratFresh.penggunaan_id, formInputData);
-      }
+      if (allocationPersistError) throw allocationPersistError;
     }
 
     if (approvalAttachments.length > 0) {
@@ -2454,16 +2445,17 @@ export const suratService = {
 
     let finalUrl = workingFilePath ?? "";
     if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx")) {
-      finalUrl = await this.stampApprovalExcel(
+      finalUrl = await this.transformApprovalExcel({
         suratId,
-        workingFilePath,
+        currentFilePath: workingFilePath,
         userName,
-        sigInfo.role_name,
-        suratFresh.penggunaan_id,
-        currentStep,
-        sigInfo.signature_position_snapshot,
-        signerJobTitle
-      );
+        roleName: sigInfo.role_name,
+        usageId: suratFresh.penggunaan_id,
+        stepOrder: currentStep,
+        positionSnapshot: sigInfo.signature_position_snapshot,
+        signerJobTitle,
+        ...(shouldApplyAllocationToExcel ? { formInputData } : {}),
+      });
     }
 
     const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_approve_surat_v2", {
@@ -2472,14 +2464,11 @@ export const suratService = {
     if (rpcError) throw new Error(rpcError.message);
     if (!rpcResult?.success) throw new Error("Gagal memproses persetujuan.");
 
-    const [updatedSuratResult] = await Promise.all([
-      supabase
-        .from("surat_registrasi")
-        .select("current_step, status, created_by, judul_surat")
-        .eq("id", suratId)
-        .single(),
-      this.ensureUnitAllocationPersisted(suratId, formInputData),
-    ]);
+    const updatedSuratResult = await supabase
+      .from("surat_registrasi")
+      .select("current_step, status, created_by, judul_surat")
+      .eq("id", suratId)
+      .single();
 
     const { data: updatedSurat } = updatedSuratResult;
 
@@ -2497,7 +2486,7 @@ export const suratService = {
     if (updatedSurat) {
       // 1. Notif ke pembuat surat (yang mengajukan surat)
       if (updatedSurat.created_by) {
-        this.sendNotification(
+        void this.sendNotification(
           [updatedSurat.created_by],
           'Surat Ditandatangani',
           `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
@@ -2965,15 +2954,12 @@ export const suratService = {
       requirements?: Record<string, { key?: string; label?: string }>;
     } = {}
   ) {
-    const rows = [];
-
-    for (const file of files) {
-      if (!file) continue;
+    const rows = await Promise.all(files.filter(Boolean).map(async (file, index) => {
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
-      const filePath = `lampiran_${suratId}/${Date.now()}_${safeName}`;
+      const filePath = `lampiran_${suratId}/${Date.now()}_${index}_${safeName}`;
       const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file });
       const requirement = meta.requirements?.[file.name] || {};
-      rows.push({
+      return {
         surat_id: suratId,
         file_url: uploaded.publicUrl,
         file_name: file.name,
@@ -2984,8 +2970,8 @@ export const suratService = {
         requirement_key: requirement.key || null,
         requirement_label: requirement.label || null,
         signature_id: meta.signature_id || null,
-      });
-    }
+      };
+    }));
 
     if (rows.length === 0) return [];
 
