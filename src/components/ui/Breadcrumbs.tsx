@@ -29,7 +29,6 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/users': 'Manajemen User',
   '/admin/users/hierarchy': 'Hirarki Organisasi',
   '/admin/configuration': 'Configuration',
-  '/admin/configuration/template-designer': 'Template Builder',
   '/admin/configuration/integration': 'Integrasi Marison',
   '/admin/configuration/kpi': 'SLA Departemen',
   '/admin/settings': 'Pengaturan',

@@ -1,10 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import ExcelJS from "exceljs";
 import sharp from "sharp";
 import {
-  appendRecommendationPages,
   buildRecommendationPagePlan,
   parseStorageRef,
   recommendationVersionPath,
@@ -210,48 +208,6 @@ test("plans one page for 1 through 6 images and continuation pages above 6", () 
   assert.equal(itemPages[1].continuation, true);
 });
 
-test("omits detail numbering when an applicant item only has one detail", async () => {
-  const workbook = new ExcelJS.Workbook();
-  workbook.addWorksheet("Dokumen").getCell("A1").value = "Dokumen utama";
-  const wide = await image(400, 100);
-  const tall = await image(100, 400);
-  const pages = await appendRecommendationPages(workbook, canonical(8), async (source) => source.id.endsWith("1") ? wide : tall);
-  assert.equal(workbook.worksheets.length, pages.length + 1);
-  const firstItemSheet = workbook.worksheets[1];
-  assert.match(String(firstItemSheet.getCell("A1").value), /^ITEM 1 - Laptop Pemohon$/);
-  assert.equal(String(firstItemSheet.getCell("A2").value), "Pemeriksaan");
-  assert.doesNotMatch(String(firstItemSheet.getCell("A2").value), /DETAIL|1\.1/);
-  const continuationSheet = workbook.worksheets.at(-1);
-  assert.equal(String(continuationSheet.getCell("A2").value), "Kondisi alat (LANJUTAN)");
-  assert.equal(continuationSheet.pageSetup.printArea, "A1:L16");
-  const ranges = workbook.worksheets.flatMap((sheet) => sheet.getImages().map((entry) => entry.range));
-  assert.ok(ranges.some((range) => Math.abs(range.ext.width / range.ext.height - 4) < 0.05));
-  assert.ok(ranges.some((range) => Math.abs(range.ext.width / range.ext.height - 0.25) < 0.05));
-});
-
-test("uses hierarchical numbering only when one applicant item has multiple details", async () => {
-  const workbook = new ExcelJS.Workbook();
-  const pages = await appendRecommendationPages(workbook, canonicalMultiDetail(), async () => image(100, 100));
-
-  assert.equal(pages.length, 2);
-  assert.equal(pages[0].showDetailNumber, true);
-  assert.equal(pages[1].showDetailNumber, true);
-  assert.equal(String(workbook.worksheets[0].getCell("A2").value), "DETAIL 1.1 - CPU Intel Core i9");
-  assert.equal(String(workbook.worksheets[1].getCell("A2").value), "DETAIL 1.2 - RAM 32 GB");
-});
-
-test("fails rendering when required image download or decoding fails", async () => {
-  const workbook = new ExcelJS.Workbook();
-  await assert.rejects(
-    appendRecommendationPages(workbook, canonical(1), async () => { throw new Error("offline"); }),
-    /Gagal mengunduh gambar/,
-  );
-  await assert.rejects(
-    appendRecommendationPages(new ExcelJS.Workbook(), canonical(1), async () => Buffer.from("not-image")),
-    /Gagal membaca gambar/,
-  );
-});
-
 test("uses stable canonical path and isolated regeneration version path", () => {
   assert.equal(recommendationVersionPath("surat-1", "job-2"), "pdf/recommendations/surat-1/versions/job-2.pdf");
   assert.notEqual(recommendationVersionPath("surat-1", "stale-job"), recommendationVersionPath("surat-1", "fresh-job"));
@@ -293,17 +249,4 @@ test("treats a rejected parent as authoritative over stale recommended details",
 
   const pages = buildRecommendationPagePlan(items);
   assert.equal(pages.length, 0);
-});
-
-test("renders one attachment as one large image without five empty grid placeholders", async () => {
-  const workbook = new ExcelJS.Workbook();
-  await appendRecommendationPages(workbook, canonical(1), async () => image(1200, 400));
-  const sheet = workbook.worksheets.find((candidate) => candidate.getImages().length === 1);
-  assert.ok(sheet);
-  assert.equal(sheet.pageSetup.printArea, "A1:L22");
-  assert.equal(sheet.pageSetup.orientation, "landscape");
-  assert.equal(sheet.getImages().length, 1);
-  assert.ok(sheet.getImages()[0].range.ext.width > 500);
-  assert.ok(sheet.model.merges.includes("A5:L20"));
-  assert.deepEqual(sheet.model.merges.filter((range) => /(?:A5|G5)/.test(range)), ["A5:L20"]);
 });

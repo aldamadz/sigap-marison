@@ -1383,7 +1383,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const { data, error } = await supabase.from("form_usages")
       .select(`
         id, name, form_id, request_category, scope_type, recommendation_config,
-        master_forms(id, nama_form, nomor_form, link_form, department_id, input_schema, unit_config, signature_layout),
+        master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(
           id, step_order, role_name, label, action_type, candidate_scope, signer_department_id,
@@ -1426,7 +1426,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         .from("master_penggunaan_detail")
         .select(`
           *,
-          master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, department_id, input_schema, unit_config),
+          master_forms!fk_master_forms(id, nama_form, nomor_form, department_id, input_schema),
           workflow_allowed_departments(department_id)
         `)
         .order("created_at", { ascending: false });

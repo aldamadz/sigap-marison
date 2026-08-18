@@ -105,15 +105,12 @@ export const USAGE_DETAIL_DEFAULT = {
     id: UUID.form_a,
     nama_form: "FORM PERMOHONAN ASET",
     nomor_form: "FA-001",
-    link_form: "https://storage.example.com/template.xlsx",
     department_id: UUID.dept_pbo,
     input_schema: JSON.stringify([
       { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
       { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
       { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
     ]),
-    unit_config: null,
-    signature_layout: null,
   },
   ttd_config: [
     { form_usage_step_id: UUID.step1, roleName: "membuat",    labelJabatan: "Pemohon",  jabatan: "Pemohon",  candidate_scope: "manual", eligible_user_ids: [UUID.user, UUID.user2, UUID.user3], verifier_user_ids: [], action_type: "approval" },
@@ -136,15 +133,12 @@ export const FORM_USAGES_RAW = [
       id: UUID.form_a,
       nama_form: "FORM PERMOHONAN ASET",
       nomor_form: "FA-001",
-      link_form: "https://storage.example.com/template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: null,
-      signature_layout: null,
     },
     form_usage_departments: [
       { department_id: UUID.dept_pbo },
@@ -239,7 +233,6 @@ export const UNIT_FORM_USAGE_RAW = [
       id: UUID_UNIT.form_a,
       nama_form: "FORM PERMOHONAN UNIT",
       nomor_form: "FU-001",
-      link_form: "https://storage.example.com/unit-template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "requested_project", label: "Proyek", type: "external_select", default_source: "manual", external_source_key: "marison_projects", cell: "C11" },
@@ -247,8 +240,6 @@ export const UNIT_FORM_USAGE_RAW = [
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: JSON.stringify({ request_sentence_cell: "C11" }),
-      signature_layout: null,
     },
     form_usage_departments: [{ department_id: UUID.dept_pbo }],
     form_usage_steps: [
@@ -279,7 +270,6 @@ export const NON_UNIT_FORM_USAGE_RAW = [
       id: UUID_NON_UNIT.form_a,
       nama_form: "FORM PERMOHONAN NON UNIT",
       nomor_form: "FNU-001",
-      link_form: "https://storage.example.com/non-unit-template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "items", label: "Items", type: "table", required: true, default_source: "manual", cell: "C11", table_config: { columns: [
@@ -292,8 +282,6 @@ export const NON_UNIT_FORM_USAGE_RAW = [
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: null,
-      signature_layout: null,
     },
     form_usage_departments: [{ department_id: UUID.dept_pbo }],
     form_usage_steps: [
@@ -324,15 +312,12 @@ export const ATTACHMENT_FORM_USAGE_RAW = [
       id: UUID_ATTACH.form_a,
       nama_form: "FORM PERMOHONAN ASET LAMPIRAN",
       nomor_form: "FAL-001",
-      link_form: "https://storage.example.com/attach-template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: null,
-      signature_layout: null,
     },
     form_usage_departments: [{ department_id: UUID.dept_pbo }],
     form_usage_steps: [
@@ -415,7 +400,6 @@ export const MULTI_ITEM_FORM_USAGE_RAW = [
       id: UUID_MULTI.form_a,
       nama_form: "FORM PERMOHONAN MULTI",
       nomor_form: "FM-001",
-      link_form: "https://storage.example.com/multi-template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "items", label: "Items", type: "table", required: true, default_source: "manual", cell: "C11", table_config: { columns: [
@@ -428,8 +412,6 @@ export const MULTI_ITEM_FORM_USAGE_RAW = [
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: null,
-      signature_layout: null,
     },
     form_usage_departments: [{ department_id: UUID.dept_pbo }],
     form_usage_steps: [
@@ -486,7 +468,6 @@ export const EXTERNAL_SELECT_FORM_USAGE_RAW = [
       id: UUID_EXTERNAL.form_a,
       nama_form: "FORM PERMOHONAN EXTERNAL",
       nomor_form: "FE-001",
-      link_form: "https://storage.example.com/external-template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "nama_barang", label: "Nama Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
@@ -495,8 +476,6 @@ export const EXTERNAL_SELECT_FORM_USAGE_RAW = [
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: null,
-      signature_layout: null,
     },
     form_usage_departments: [{ department_id: UUID.dept_pbo }],
     form_usage_steps: [
@@ -543,15 +522,12 @@ export const SECOND_FORM_USAGE_RAW = [
       id: UUID_SECOND_USAGE.form_a,
       nama_form: "FORM PERMOHONAN PERUBAHAN",
       nomor_form: "FP-001",
-      link_form: "https://storage.example.com/change-template.xlsx",
       department_id: UUID.dept_pbo,
       input_schema: JSON.stringify([
         { key: "keterangan_barang", label: "Keterangan Barang", type: "text", required: true, default_source: "manual", cell: "C11" },
         { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
         { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
       ]),
-      unit_config: null,
-      signature_layout: null,
     },
     form_usage_departments: [{ department_id: UUID.dept_pbo }],
     form_usage_steps: [

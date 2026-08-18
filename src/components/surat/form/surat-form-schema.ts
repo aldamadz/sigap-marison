@@ -118,16 +118,6 @@ export function isProfileLocationReady(
   );
 }
 
-export function hasPlaceDateMapping(item: UsageDetailRecord): boolean {
-  const mappedSources = new Set(
-    getInputSchema(item)
-      .filter((field) => Boolean(String(field.cell || field.merge_range || field.mergeRange || "").trim()))
-      .map((field) => field.default_source || field.defaultSource || "manual"),
-  );
-  return mappedSources.has("request_place_date") ||
-    (mappedSources.has("request_place") && mappedSources.has("request_date"));
-}
-
 export function normalizeTableRows(value: unknown): TableRow[] {
   if (!Array.isArray(value) || value.length === 0) return [{}];
   return value

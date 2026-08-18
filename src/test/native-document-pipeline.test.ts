@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -56,9 +56,13 @@ describe("native document pipeline", () => {
   });
 
   it("retires the legacy Forms and Workflows screens in favor of Form Usages", () => {
-    expect(app).toContain('<Route path="/admin/forms" element={<Navigate to="/admin/configuration/form-usages" replace />} />');
-    expect(app).toContain('<Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/form-usages" replace />} />');
-    expect(app).toContain('<Route path="forms" element={<Navigate to="/admin/configuration/form-usages" replace />} />');
-    expect(app).toContain('<Route path="workflows" element={<Navigate to="/admin/configuration/form-usages" replace />} />');
+    expect(app).not.toContain('path="/admin/forms"');
+    expect(app).not.toContain('path="/admin/workflow-details"');
+    expect(app).not.toContain('path="forms"');
+    expect(app).not.toContain('path="workflows"');
+    expect(app).not.toContain("TemplateDesignerPage");
+    expect(existsSync(resolve("src/pages/admin/FormManagementPage.tsx"))).toBe(false);
+    expect(existsSync(resolve("src/pages/admin/TemplateDesignerPage.tsx"))).toBe(false);
+    expect(existsSync(resolve("document-workbook-normalizer.mjs"))).toBe(false);
   });
 });

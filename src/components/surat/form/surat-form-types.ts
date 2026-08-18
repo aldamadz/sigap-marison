@@ -87,10 +87,8 @@ export type UsageDetailRecord = {
     id?: string;
     nama_form?: string;
     nomor_form?: string;
-    link_form?: string;
     department_id?: string;
     input_schema?: unknown;
-    unit_config?: unknown;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -104,9 +102,6 @@ export type TemplateField = {
   required?: boolean;
   default_source?: string;
   defaultSource?: string;
-  cell?: string;
-  merge_range?: string;
-  mergeRange?: string;
   multiple?: boolean;
   is_multiple?: boolean;
   external_source_key?: string;

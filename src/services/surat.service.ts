@@ -1,5 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import type ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
@@ -19,75 +18,6 @@ import {
 } from "@/lib/registration-draft-attachment-classification";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
-import {
-  buildDynamicSignatureLayout,
-  normalizeSignatureLayoutConfig,
-  type SignaturePosition,
-} from "./signature-layout.service";
-import {
-  normalizeGoodsServicesWorksheet,
-  resolveTableHorizontalAlignment,
-} from "../../document-layout-rules.mjs";
-
-type TableInputColumn = {
-  key: string;
-  label: string;
-  column: string;
-  required?: boolean;
-  type?: "text" | "number" | "date" | "select";
-  options?: Array<{ label?: string; value: string | number } | string | number>;
-  helper_text?: string;
-};
-
-type TemplateInputField = {
-  key: string;
-  label: string;
-  type?: "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
-  required?: boolean;
-  cell?: string;
-  sheet?: number;
-  defaultSource?: string;
-  default_source?: string;
-  merge_range?: string;
-  mergeRange?: string;
-  horizontal?: "left" | "center" | "right";
-  vertical?: "top" | "middle" | "bottom";
-  wrap?: boolean;
-  shrink?: boolean;
-  font_name?: string;
-  fontName?: string;
-  font_size?: number;
-  fontSize?: number;
-  row_height?: number;
-  rowHeight?: number;
-  prefix?: string;
-  suffix?: string;
-  table_config?: {
-    start_row: number;
-    end_row: number;
-    no_column?: string;
-    columns: TableInputColumn[];
-  };
-  tableConfig?: {
-    startRow: number;
-    endRow: number;
-    noColumn?: string;
-    columns: TableInputColumn[];
-  };
-};
-
-const formatSignatureStampDateTime = (value?: string | null) => {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Jakarta",
-  }).format(date).replace(".", ":");
-};
 
 export interface SuratRegistrasi {
   id: string;
@@ -229,16 +159,6 @@ export interface RegistrationDraftUploadProgress {
 }
 
 export const suratService = {
-  getUnitConfigFromForm(form: any) {
-    const raw = form?.unit_config;
-    const parsed = typeof raw === "string" ? (() => {
-      try { return JSON.parse(raw || "{}"); } catch { return {}; }
-    })() : (raw || {});
-    return {
-      request_sentence_cell: String(parsed.request_sentence_cell || "C11").trim().toUpperCase(),
-    };
-  },
-
   async sendNotification(userIds: string[], title: string, message: string, link?: string, meta: Record<string, any> = {}) {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (ids.length === 0) return;
@@ -325,83 +245,11 @@ export const suratService = {
     return "memeriksa";
   },
 
-  getRelativePath(url: string): string {
-    if (!url) return "";
-    const parts = url.split("/dokumen_surat/");
-    const path = parts.length < 2 ? url : parts[1];
-    return decodeURIComponent(path.split("?")[0]);
-  },
-
-  async downloadStorageFile(pathOrUrl: string, bucket = "dokumen_surat") {
-    if (/^https?:\/\//i.test(pathOrUrl)) {
-      const response = await fetch(pathOrUrl);
-      if (!response.ok) throw new Error("Gagal download file.");
-      return response.blob();
-    }
-    const relativePath = this.getRelativePath(pathOrUrl);
-    const { data, error } = await supabase.storage.from(bucket).download(relativePath);
-    if (error || !data) throw new Error(error?.message || "Gagal download file.");
-    return data;
-  },
-
-  resolveStampPositions(usageDetail: any, roleName: string, stepOrder: number): any[] {
-    try {
-      const config = typeof usageDetail.ttd_config === "string"
-        ? JSON.parse(usageDetail.ttd_config) : usageDetail.ttd_config;
-      if (!Array.isArray(config)) return [];
-      return config.filter((_item: any, index: number) => (index + 1) === Number(stepOrder));
-    } catch {
-      return [];
-    }
-  },
-
-  parseInputSchema(schema: any): TemplateInputField[] {
-    if (!schema) return [];
-    if (Array.isArray(schema)) return schema;
-    if (typeof schema === "string") {
-      try {
-        const parsed = JSON.parse(schema || "[]");
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  },
-
   formatDateForDocument(value: string | Date | null | undefined): string {
     if (!value) return "";
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-  },
-
-  formatInputValue(value: any, type?: string): any {
-    if (value === null || value === undefined) return "";
-    if (Array.isArray(value)) {
-      return value.map((item) => this.formatInputValue(item, type)).filter(Boolean).join(", ");
-    }
-    if (typeof value === "object" && !Array.isArray(value)) {
-      return value.label ?? value.name ?? value.code ?? value.value ?? "";
-    }
-    if (type === "date") return this.formatDateForDocument(value);
-    if (type === "currency") {
-      const n = Number(value);
-      if (Number.isNaN(n)) return value;
-      return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
-    }
-    return value;
-  },
-
-  getTableConfig(field: TemplateInputField) {
-    const raw = field.table_config || field.tableConfig;
-    if (!raw) return null;
-    return {
-      startRow: Number((raw as any).start_row || (raw as any).startRow || 1),
-      endRow: Number((raw as any).end_row || (raw as any).endRow || 1),
-      noColumn: (raw as any).no_column || (raw as any).noColumn || "A",
-      columns: Array.isArray((raw as any).columns) ? (raw as any).columns : [],
-    };
   },
 
   normalizeRecommendationItems(value: any[]) {
@@ -553,19 +401,6 @@ export const suratService = {
       normalized.recommendation_items = this.normalizeRecommendationItems(normalized.recommendation_items);
     }
     return normalized;
-  },
-
-  isUnitTemplateField(field: TemplateInputField) {
-    return [
-      "unit",
-      "requested_project",
-      "requested_unit_count",
-      "unit_request_sentence",
-      "unit_config_snapshot",
-      "allocated_project",
-      "allocated_units",
-      "allocated_unit_count",
-    ].includes(field.key);
   },
 
   getUnitCode(unit: any) {
@@ -855,325 +690,7 @@ export const suratService = {
     };
   },
 
-  applyGeneratedCellPadding(cell: ExcelJS.Cell, options: { horizontal?: "left" | "center" | "right"; vertical?: "top" | "middle" | "bottom"; wrap?: boolean } = {}) {
-    const horizontal = options.horizontal || (cell.alignment?.horizontal as "left" | "center" | "right" | undefined) || "left";
-    cell.alignment = {
-      ...(cell.alignment || {}),
-      horizontal,
-      vertical: options.vertical || (cell.alignment?.vertical as "top" | "middle" | "bottom" | undefined) || "middle",
-      wrapText: options.wrap ?? cell.alignment?.wrapText ?? true,
-      shrinkToFit: cell.alignment?.shrinkToFit ?? false,
-      ...(horizontal === "left" ? { indent: Math.max(Number(cell.alignment?.indent || 0), 1) } : {}),
-    };
-  },
-
-  normalizeRecommendationTemplate(workbook: ExcelJS.Workbook, worksheet: ExcelJS.Worksheet) {
-    // Excel "Place in Cell" images are stored as a #VALUE! fallback that LibreOffice
-    // cannot render. Replace that fallback with the embedded PNG as a normal image.
-    worksheet.getCell("A1").value = null;
-    if (worksheet.getImages().length > 0) return;
-
-    const workbookMedia = (workbook as ExcelJS.Workbook & { media: ExcelJS.Media[] }).media || [];
-    const embeddedLogo = workbookMedia.find((media) =>
-      media.type === "image" && media.extension.toLowerCase() === "png" && media.buffer
-    );
-    if (!embeddedLogo) return;
-
-    const imageId = workbook.addImage({
-      buffer: embeddedLogo.buffer,
-      extension: "png",
-    });
-    worksheet.addImage(imageId, {
-      tl: { col: 0.1, row: 0.12 },
-      ext: { width: 170, height: 60 },
-      editAs: "oneCell",
-    });
-  },
-
-  writeTableField(workbook: ExcelJS.Workbook, field: TemplateInputField, value: any[]) {
-    const config = this.getTableConfig(field);
-    if (!config) return;
-
-    const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-    const sheet = workbook.worksheets[sheetIndex] ?? workbook.worksheets[0];
-    const rows = Array.isArray(value)
-      ? value.filter((row) => Object.values(row ?? {}).some((cellValue) => String(cellValue ?? "").trim()))
-      : [];
-    const maxRows = Math.max(config.endRow - config.startRow + 1, 0);
-
-    for (let index = 0; index < maxRows; index += 1) {
-      const excelRow = config.startRow + index;
-      if (config.noColumn) {
-        sheet.getCell(`${config.noColumn}${excelRow}`).value = null;
-      }
-      config.columns.forEach((column: TableInputColumn) => {
-        sheet.getCell(`${column.column}${excelRow}`).value = null;
-      });
-    }
-
-    rows.slice(0, maxRows).forEach((row, index) => {
-      const excelRow = config.startRow + index;
-      if (config.noColumn) {
-        const noCell = sheet.getCell(`${config.noColumn}${excelRow}`);
-        noCell.value = index + 1;
-        this.applyGeneratedCellPadding(noCell, { horizontal: "center", vertical: "middle", wrap: true });
-      }
-      config.columns.forEach((column: TableInputColumn) => {
-        const rawValue = row?.[column.key];
-        const cell = sheet.getCell(`${column.column}${excelRow}`);
-        cell.value = this.formatInputValue(rawValue, column.type);
-        this.applyGeneratedCellPadding(cell, {
-          horizontal: resolveTableHorizontalAlignment(column.key, column.type),
-          vertical: "middle",
-          wrap: true,
-        });
-      });
-      const rowRef = sheet.getRow(excelRow);
-      rowRef.height = Math.max(Number(rowRef.height || 0), 28);
-    });
-  },
-
-  fitTextForBox(value: any, maxCharsPerLine = 115, maxLines = 5) {
-    const words = String(value ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-    const lines: string[] = [];
-    let current = "";
-
-    for (const word of words) {
-      const chunks = word.length > maxCharsPerLine
-        ? word.match(new RegExp(`.{1,${maxCharsPerLine}}`, "g")) || [word]
-        : [word];
-
-      for (const chunk of chunks) {
-        const next = current ? `${current} ${chunk}` : chunk;
-        if (next.length > maxCharsPerLine) {
-          if (current) lines.push(current);
-          current = chunk;
-        } else {
-          current = next;
-        }
-
-        if (lines.length >= maxLines) break;
-      }
-
-      if (lines.length >= maxLines) break;
-    }
-
-    if (current && lines.length < maxLines) lines.push(current);
-    const original = String(value ?? "").trim();
-    let fitted = lines.slice(0, maxLines).join("\n");
-    if (fitted.length < original.length && fitted) {
-      fitted = `${fitted.slice(0, Math.max(fitted.length - 3, 0))}...`;
-    }
-    return fitted;
-  },
-
-  getTopLeftCell(range: string, fallback: string) {
-    return String(range || fallback || "").split(":")[0].trim().toUpperCase();
-  },
-
-  getRowsForField(field: TemplateInputField, range: string) {
-    const source = range || field.cell || "";
-    const rowNumbers = String(source).match(/\d+/g)?.map(Number).filter(Boolean) || [];
-    if (rowNumbers.length >= 2) {
-      const start = Math.min(rowNumbers[0], rowNumbers[1]);
-      const end = Math.max(rowNumbers[0], rowNumbers[1]);
-      return Array.from({ length: end - start + 1 }, (_item, index) => start + index);
-    }
-    return rowNumbers.length === 1 ? [rowNumbers[0]] : [];
-  },
-
-  applyFieldFormatting(sheet: ExcelJS.Worksheet, field: TemplateInputField, target: ExcelJS.Cell, range: string) {
-    const fontName = field.font_name || field.fontName;
-    const fontSize = Number(field.font_size || field.fontSize || 0);
-    if (fontName || fontSize > 0) {
-      target.font = {
-        ...(target.font || {}),
-        ...(fontName ? { name: fontName } : {}),
-        ...(fontSize > 0 ? { size: fontSize } : {}),
-      };
-    }
-
-    const source = String(field.default_source || field.defaultSource || "").trim().toLowerCase();
-    const isPlaceDateField = field.key === "request_place_date" || source === "request_place_date";
-    const horizontal = isPlaceDateField
-      ? "left"
-      : field.horizontal || (field.type === "number" || field.type === "currency" ? "right" : "left");
-    const shouldWrap = field.wrap === true || field.type === "textarea" || isPlaceDateField;
-    const shouldShrink = field.shrink === true;
-    if (horizontal || field.vertical || shouldWrap || shouldShrink) {
-      target.alignment = {
-        ...(target.alignment || {}),
-        horizontal,
-        ...(field.vertical ? { vertical: field.vertical } : {}),
-        ...(shouldWrap ? { wrapText: true } : {}),
-        ...(shouldShrink ? { shrinkToFit: true } : {}),
-      };
-    }
-    this.applyGeneratedCellPadding(target, {
-      horizontal,
-      vertical: field.vertical || (field.type === "textarea" ? "top" : "middle"),
-      wrap: isPlaceDateField ? true : field.wrap !== false,
-    });
-
-    const rowHeight = Number(field.row_height || field.rowHeight || 0);
-    if (rowHeight > 0) {
-      this.getRowsForField(field, range).forEach((rowNumber) => {
-        sheet.getRow(rowNumber).height = rowHeight;
-      });
-    }
-  },
-
-  writeWrappedField(sheet: ExcelJS.Worksheet, field: TemplateInputField, value: any) {
-    const formatted = this.formatInputValue(value, field.type);
-    const baseText = String(formatted ?? "");
-    const text = baseText
-      ? `${field.prefix || ""}${baseText}${field.suffix || ""}`
-      : "";
-    const configuredRange = String(field.merge_range || field.mergeRange || "").trim().toUpperCase();
-    const mergeRange = configuredRange;
-    const cellAddress = this.getTopLeftCell(mergeRange, field.cell || "");
-    if (!cellAddress) return;
-
-    if (field.key === "catatan") {
-      const [configuredStartAddress, configuredEndAddress] = mergeRange.split(":");
-      const configuredStart = configuredStartAddress ? sheet.getCell(configuredStartAddress) : null;
-      const configuredEnd = configuredEndAddress ? sheet.getCell(configuredEndAddress) : configuredStart;
-      const rowWiseMerges = configuredStart && configuredEnd
-        ? ((sheet.model as { merges?: string[] }).merges || [])
-            .map((rangeValue) => {
-              const [startAddress, endAddress] = rangeValue.split(":");
-              const start = sheet.getCell(startAddress);
-              const end = sheet.getCell(endAddress || startAddress);
-              return { rangeValue, start, end };
-            })
-            .filter(({ start, end }) =>
-              start.row === end.row &&
-              start.col === configuredStart.col &&
-              end.col === configuredEnd.col &&
-              Number(start.row) >= Number(configuredStart.row) &&
-              Number(end.row) <= Number(configuredEnd.row)
-            )
-            .sort((left, right) => Number(left.start.row) - Number(right.start.row))
-        : [];
-      const hasCompleteRowWiseMerges = Boolean(
-        configuredStart &&
-        configuredEnd &&
-        rowWiseMerges.length === Number(configuredEnd.row) - Number(configuredStart.row) + 1
-      );
-
-      if (hasCompleteRowWiseMerges) {
-        const lines = this.fitTextForBox(text, 115, rowWiseMerges.length).split("\n");
-        rowWiseMerges.forEach(({ start }, index) => {
-          start.value = lines[index] || null;
-          start.font = {
-            ...(start.font || {}),
-            name: field.font_name || field.fontName || "Arial",
-            size: Number(field.font_size || field.fontSize || 11),
-          };
-          start.alignment = {
-            ...(start.alignment || {}),
-            wrapText: false,
-            shrinkToFit: false,
-            vertical: "middle",
-            horizontal: field.horizontal || "left",
-            indent: Math.max(Number(start.alignment?.indent || 0), 1),
-          };
-          const rowHeight = Number(field.row_height || field.rowHeight || 15);
-          sheet.getRow(Number(start.row)).height = rowHeight;
-        });
-        return;
-      }
-
-      if (mergeRange) {
-        const [startAddress, endAddress] = mergeRange.split(":");
-        const startCell = sheet.getCell(startAddress);
-        const endCell = sheet.getCell(endAddress || startAddress);
-        for (let row = startCell.row; row <= endCell.row; row += 1) {
-          for (let col = startCell.col; col <= endCell.col; col += 1) {
-            const cell = sheet.getCell(row, col);
-            if (cell.isMerged) {
-              try {
-                sheet.unMergeCells(cell.master.address);
-              } catch {
-                // Some templates merge the note area row by row. Ignore already-unmerged cells.
-              }
-            }
-          }
-        }
-        sheet.mergeCells(mergeRange);
-      }
-      const target = sheet.getCell(cellAddress);
-      target.value = this.fitTextForBox(text, 115, 4);
-      target.font = { ...(target.font || {}), name: field.font_name || field.fontName || "Arial", size: Number(field.font_size || field.fontSize || 11) };
-      target.border = {
-        ...(target.border || {}),
-        top: target.border?.top || { style: "thin", color: { argb: "FF000000" } },
-        left: target.border?.left || { style: "thin", color: { argb: "FF000000" } },
-        right: target.border?.right || { style: "thin", color: { argb: "FF000000" } },
-        bottom: { style: "medium", color: { argb: "FF000000" } },
-      };
-      target.alignment = {
-        ...(target.alignment || {}),
-        wrapText: field.wrap !== false,
-        shrinkToFit: field.shrink !== false,
-        vertical: field.vertical || "top",
-        horizontal: field.horizontal || "left",
-        indent: Math.max(Number(target.alignment?.indent || 0), 1),
-      };
-      const rowHeight = Number(field.row_height || field.rowHeight || 15);
-      this.getRowsForField(field, mergeRange).forEach((rowNumber) => {
-        sheet.getRow(rowNumber).height = rowHeight;
-      });
-      return;
-    }
-
-    if (mergeRange && !sheet.getCell(cellAddress).isMerged) {
-      sheet.mergeCells(mergeRange);
-    }
-
-    const cell = sheet.getCell(cellAddress);
-    cell.value = text;
-    this.applyFieldFormatting(sheet, field, cell, mergeRange);
-    if (field.type === "textarea") {
-      cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: "top" };
-      const rowNumber = Number(String(cellAddress).match(/\d+/)?.[0] || 0);
-      if (rowNumber > 0 && !field.row_height && !field.rowHeight) sheet.getRow(rowNumber).height = Math.max(sheet.getRow(rowNumber).height || 15, 45);
-    }
-  },
-
-  getSystemFieldValue(source: string, context: any) {
-    switch (source) {
-      case "requester_name": return context.profile?.full_name ?? "";
-      case "requester_nik": return context.profile?.nik ?? "";
-      case "requester_job_title": return context.profile?.job_title ?? "";
-      case "department_name": return context.department?.name ?? "";
-      case "office_name": return context.office?.name ?? "";
-      case "project_name": return context.project?.name ?? context.payload?.form_input_data?.project_name ?? "";
-      case "entity_name": return context.entity?.name ?? "";
-      case "letter_number": return context.payload?.no_surat ?? "";
-      case "letter_title": return context.payload?.judul_surat ?? "";
-      case "request_place": return context.payload?.request_place ?? "";
-      case "request_date": return this.formatDateForDocument(context.payload?.request_date);
-      case "request_place_date": {
-        const place = String(context.payload?.request_place ?? "").trim();
-        const date = this.formatDateForDocument(context.payload?.request_date);
-        return [place, date].filter(Boolean).join(", ");
-      }
-      default: return undefined;
-    }
-  },
-
-  hasPlaceDateMapping(schema: TemplateInputField[]) {
-    const mappedSources = new Set(
-      schema
-        .filter((field) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
-        .map((field) => field.default_source || field.defaultSource || "manual")
-    );
-    return mappedSources.has("request_place_date") ||
-      (mappedSources.has("request_place") && mappedSources.has("request_date"));
-  },
-
-  async getTemplateContext(payload: any) {
+  async getRegistrationContext(payload: any) {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Tidak terautentikasi");
 
@@ -1215,14 +732,14 @@ export const suratService = {
                 form_usage_step_users(user_id)
               ),
               form_usage_attachment_requirements(*),
-              master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id, signature_layout)
+              master_forms(id, nama_form, nomor_form, input_schema, department_id)
             `)
             .eq("id", effectivePayload.form_usage_id)
             .single()
         : effectivePayload.penggunaan_id
         ? supabase
             .from("master_penggunaan_detail")
-            .select("*, workflow_allowed_departments(department_id), master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id)")
+            .select("*, workflow_allowed_departments(department_id), master_forms!fk_master_forms(id, nama_form, nomor_form, input_schema, department_id)")
             .eq("id", effectivePayload.penggunaan_id)
             .single()
         : Promise.resolve({ data: null }),
@@ -1255,87 +772,6 @@ export const suratService = {
       form: usage?.master_forms ?? null,
       payload: effectivePayload,
     };
-  },
-
-  async buildFilledTemplateFile(payload: any): Promise<{ publicUrl: string; context: any; signaturePositions: SignaturePosition[] }> {
-    const context = await this.getTemplateContext(payload);
-    const templateLink = context.form?.link_form;
-    if (!templateLink) throw new Error("Template Excel belum tersedia untuk matrix ini.");
-
-    const templateUrl = `${templateLink}${templateLink.includes("?") ? "&" : "?"}v=${Date.now()}`;
-    const response = await fetch(templateUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error("Gagal mengambil template Excel.");
-
-    const { default: ExcelJSRuntime } = await import("exceljs");
-    const workbook = new ExcelJSRuntime.Workbook();
-    await workbook.xlsx.load(await response.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-
-    const isRecommendationTemplate = String(context.form?.nama_form || "").toUpperCase().includes("REKOMENDASI");
-    if (isRecommendationTemplate) {
-      this.normalizeRecommendationTemplate(workbook, worksheet);
-    }
-
-    const inputData = payload.form_input_data ?? {};
-    const requestedProject = inputData?.request_mode === "unit" ? inputData?.requested_project : null;
-    const isPgdTemplate = String(context.form?.nama_form || "").toUpperCase().includes("PERMINTAAN BARANG");
-    if (isPgdTemplate) {
-      worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
-      worksheet.getCell("D5").value = `: ${payload.no_surat}`;
-      worksheet.getCell("L4").value = ":";
-      worksheet.getCell("L5").value = ":";
-      if (payload.office_id && context.office?.name !== "Kantor Pusat") {
-        worksheet.getCell("M4").value = `KC. ${context.office?.name || ""}`;
-        worksheet.getCell("M5").value = context.project?.name || inputData.project_name || "";
-      } else if (requestedProject?.name) {
-        worksheet.getCell("M4").value = context.department?.name || "";
-        worksheet.getCell("M5").value = requestedProject.name;
-      } else {
-        worksheet.getCell("M4").value = context.department?.name || "";
-        worksheet.getCell("M5").value = inputData.project_name || "-";
-      }
-    }
-
-    const schema = this.parseInputSchema(context.form?.input_schema);
-    if (!this.hasPlaceDateMapping(schema)) {
-      throw new Error("Template belum memiliki mapping cell untuk Tempat, Tanggal.");
-    }
-    schema.forEach((field) => {
-      if (inputData.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
-      if (field.type === "table") {
-        this.writeTableField(workbook, field, inputData[field.key]);
-        return;
-      }
-      if (!field.cell && !(field.merge_range || field.mergeRange)) return;
-      const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-      const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
-      const source = field.default_source || field.defaultSource || "manual";
-      const systemValue = this.getSystemFieldValue(source, context);
-      const rawValue = systemValue !== undefined ? systemValue : inputData[field.key];
-      this.writeWrappedField(sheet, field, rawValue);
-    });
-    const signaturePositions = buildDynamicSignatureLayout(
-      workbook,
-      normalizeSignatureLayoutConfig(context.form?.signature_layout),
-      Array.isArray(payload.signature_steps) ? payload.signature_steps : [],
-      {
-        requestPlaceDate: [
-          String(payload.request_place || "").trim(),
-          this.formatDateForDocument(payload.request_date),
-        ].filter(Boolean).join(", "),
-      }
-    );
-    if (isPgdTemplate) normalizeGoodsServicesWorksheet(worksheet);
-    const buffer = await workbook.xlsx.writeBuffer();
-    const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
-    const path = `dokumen/system_${safeNumber}_${Date.now()}.xlsx`;
-    const uploaded = await appStorageService.upload({
-      bucket: "dokumen_surat",
-      path,
-      file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      upsert: true,
-    });
-    return { publicUrl: uploaded.publicUrl, context, signaturePositions };
   },
 
   async getActiveRegistrationDrafts(): Promise<SuratRegistrationDraft[]> {
@@ -1598,7 +1034,7 @@ export const suratService = {
       const requestCategory = payload.form_input_data?.request_category;
       const isUnitRequest = requestCategory === "unit" || payload.form_input_data?.request_mode === "unit";
       if (isUnitRequest) {
-        const context = await this.getTemplateContext(payload);
+        const context = await this.getRegistrationContext(payload);
         const actorDepartmentId = context.profile?.department_id;
         const allowedDepartments = Array.isArray(context.usage?.workflow_allowed_departments)
           ? context.usage.workflow_allowed_departments
@@ -1715,14 +1151,13 @@ export const suratService = {
       const noUrut      = parseInt(payload.no_surat.split("/")[0]);
       const currentYear = new Date().getFullYear();
       // Recommendation authorization depends on the requester's department.
-      // Normalize only after getTemplateContext has resolved that trusted context.
-      const configContext = await this.getTemplateContext(payload);
+      // Normalize only after the trusted registration context is resolved.
+      const configContext = await this.getRegistrationContext(payload);
       const normalizedFormInputData = this.normalizeFormInputData(configContext.payload.form_input_data, {
         requesterDepartmentCode: configContext.department?.code,
         requesterDepartmentName: configContext.department?.name,
       });
       payload = { ...configContext.payload, form_input_data: normalizedFormInputData };
-      const unitConfig = this.getUnitConfigFromForm(configContext.form);
       const isUnitMode = normalizedFormInputData?.request_mode === "unit";
       if (isUnitMode) {
         const workflowCategories = Array.isArray(configContext.usage?.request_categories)
@@ -1740,8 +1175,6 @@ export const suratService = {
         )) {
           throw new Error("Departemen akun Anda tidak diizinkan membuat permohonan Unit pada matrix ini.");
         }
-        normalizedFormInputData.unit_config_snapshot = unitConfig;
-        payload = { ...payload, form_input_data: normalizedFormInputData };
       }
 
       const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
@@ -1831,7 +1264,6 @@ export const suratService = {
         throw new Error("Dokumen sumber tidak lagi menerima file Excel. Data permohonan akan dirender sebagai PDF-native.");
       }
       const context = configContext;
-      const signaturePositions: SignaturePosition[] = [];
 
       const cleanPayload = {
         ...payload,
@@ -1975,9 +1407,6 @@ export const suratService = {
         form_usage_step_id: this.cleanUuid(s.form_usage_step_id),
         action_type: s.action_type || (s.requires_unit_allocation ? "unit_allocation" : "approval"),
         attachment_requirements_snapshot: s.attachment_requirements || [],
-        signature_position_snapshot: signaturePositions.find(position =>
-          position.step_order === Number(s.step_order || idx + 1)
-        ) || {},
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
 
@@ -2043,122 +1472,6 @@ export const suratService = {
     return suratId;
   },
 
-  async transformApprovalExcel(options: {
-    suratId: string;
-    currentFilePath: string;
-    usageId: string | null;
-    formInputData?: any;
-    userName?: string;
-    roleName?: string;
-    stepOrder?: number;
-    positionSnapshot?: Record<string, any> | null;
-    signerJobTitle?: string;
-    signedAt?: string | null;
-  }): Promise<string> {
-    const {
-      suratId,
-      currentFilePath,
-      usageId,
-      formInputData,
-      userName = "",
-      roleName = "",
-      stepOrder = 0,
-      positionSnapshot,
-      signerJobTitle = "",
-      signedAt,
-    } = options;
-    const { data: usageDetail, error: usageError } = usageId
-      ? await supabase
-          .from("master_penggunaan_detail")
-          .select("*, master_forms!fk_master_forms(input_schema, unit_config)")
-          .eq("id", usageId)
-          .maybeSingle()
-      : { data: null, error: null };
-    if (usageError) throw usageError;
-    const schema = this.parseInputSchema((usageDetail as any)?.master_forms?.input_schema);
-    const positions = positionSnapshot?.ttd
-      ? [{
-          ...positionSnapshot,
-          labelJabatan: positionSnapshot.job_title || positionSnapshot.label || positionSnapshot.role_name || roleName,
-          sheet: Number(positionSnapshot.sheet || 1),
-        }]
-      : usageDetail && stepOrder > 0
-        ? this.resolveStampPositions(usageDetail, roleName, stepOrder)
-        : [];
-    const shouldApplyInput = formInputData !== undefined && schema.length > 0;
-    if (!shouldApplyInput && positions.length === 0) return currentFilePath;
-
-    const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
-
-    const { default: ExcelJSRuntime } = await import("exceljs");
-    const workbook = new ExcelJSRuntime.Workbook();
-    await workbook.xlsx.load(await fileData.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-    if (shouldApplyInput) {
-      if (formInputData?.request_mode === "unit" && formInputData?.requested_project?.name) {
-        worksheet.getCell("L5").value = `: ${formInputData.requested_project.name}`;
-      }
-      schema.forEach((field) => {
-        const source = field.default_source || field.defaultSource || "manual";
-        if (source !== "manual") return;
-        if (formInputData?.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
-        if (field.type === "table") {
-          this.writeTableField(workbook, field, formInputData?.[field.key]);
-          return;
-        }
-        if (!field.cell && !(field.merge_range || field.mergeRange)) return;
-        const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-        const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
-        this.writeWrappedField(sheet, field, formInputData?.[field.key]);
-      });
-      const isGoodsServicesSheet =
-        String(worksheet.getCell("C9").value || "").toUpperCase().includes("NAMA BARANG") &&
-        String(worksheet.getCell("J9").value || "").toUpperCase().includes("SAT");
-      if (isGoodsServicesSheet) normalizeGoodsServicesWorksheet(worksheet);
-    }
-
-    positions.forEach((position: any) => {
-      const sheet = workbook.worksheets[Math.max(Number(position.sheet || 1) - 1, 0)] || worksheet;
-      const signatureCell = sheet.getCell(position.ttd);
-      signatureCell.value = `DISETUJUI SISTEM\n${formatSignatureStampDateTime(signedAt)} WIB`;
-      signatureCell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
-      const rowNumber = parseInt(position.ttd.match(/\d+/)?.[0] || "35");
-      sheet.getRow(rowNumber).height = 65;
-      if (position.nama) {
-        const nameCell = sheet.getCell(position.nama);
-        nameCell.value = userName.toUpperCase();
-        nameCell.alignment = {
-          ...(nameCell.alignment || {}),
-          horizontal: "center",
-          vertical: "middle",
-          wrapText: true,
-        };
-      }
-      if (position.jabatan) {
-        const jobCell = sheet.getCell(position.jabatan);
-        jobCell.value = signerJobTitle || position.signer_job_title || position.jobTitle || position.labelJabatan || "";
-        jobCell.alignment = {
-          ...(jobCell.alignment || {}),
-          horizontal: "center",
-          vertical: "middle",
-          wrapText: true,
-        };
-      }
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const path = stepOrder > 0
-      ? `dokumen/signed_${suratId}_step${stepOrder}_${Date.now()}.xlsx`
-      : `dokumen/updated_input_${Date.now()}.xlsx`;
-    const uploaded = await appStorageService.upload({
-      bucket: "dokumen_surat",
-      path,
-      file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      upsert: true,
-    });
-    return uploaded.publicUrl;
-  },
-
   async approveSurat(
     signatureId: string,
     suratId: string,
@@ -2178,7 +1491,7 @@ export const suratService = {
         .single(),
       supabase
         .from("surat_signatures")
-        .select("role_name, requires_unit_allocation, action_type, signature_position_snapshot, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
+        .select("role_name, requires_unit_allocation, action_type, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
         .eq("id", signatureId)
         .single(),
     ]);
@@ -2632,7 +1945,7 @@ export const suratService = {
   async getMyInbox(userId: string) {
     const selectQuery = `
         id, role_name, label_jabatan, step_order, is_signed, surat_id, user_id, requires_unit_allocation, action_type,
-        attachment_requirements_snapshot, signature_position_snapshot, available_at, signer_snapshot,
+        attachment_requirements_snapshot, available_at, signer_snapshot,
         verification_required, verification_status, verified_at, verified_by, verification_note, verifier_snapshot,
         surat_registrasi!inner (
           *,
@@ -2903,38 +2216,6 @@ export const suratService = {
     };
   },
 
-  async downloadFilledTemplate(payload: any, templateLink: string) {
-    const [officeRes, projectRes, deptRes] = await Promise.all([
-      payload.office_id  ? supabase.from("master_offices").select("name").eq("id", payload.office_id).maybeSingle()  : Promise.resolve({ data: null }),
-      payload.project_id ? supabase.from("master_projects").select("name").eq("id", payload.project_id).maybeSingle() : Promise.resolve({ data: null }),
-      supabase.from("master_departments").select("name").eq("id", payload.dept_id).maybeSingle()
-    ]);
-    const response = await fetch(templateLink);
-    const { default: ExcelJSRuntime } = await import("exceljs");
-    const workbook = new ExcelJSRuntime.Workbook();
-    await workbook.xlsx.load(await response.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-    worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
-    worksheet.getCell("D5").value = `: ${payload.no_surat}`;
-    if (payload.office_id && officeRes?.data?.name !== "Kantor Pusat") {
-      worksheet.getCell("L4").value = `: KC. ${officeRes?.data?.name || ""}`;
-      worksheet.getCell("L5").value = `: ${projectRes?.data?.name || ""}`;
-    } else {
-      worksheet.getCell("L4").value = `: ${deptRes?.data?.name || ""}`;
-      worksheet.getCell("L5").value = ": -";
-    }
-    const buffer = await workbook.xlsx.writeBuffer();
-    const a = document.createElement("a");
-    a.href = window.URL.createObjectURL(new Blob([buffer]));
-    a.download = `Form_${payload.no_surat?.replace(/\//g, "_")}.xlsx`;
-    a.click();
-    return true;
-  },
 
-  getPreviewUrl(publicUrl: string) {
-    if (!publicUrl) return "";
-    const stripped = publicUrl.split("?")[0];
-    const decoded  = decodeURIComponent(stripped);
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(decoded)}&wdPrint=0&wdEmbedCode=0`;
-  },
+
 };
