@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
-import { buildPgdSignatureSlotPlan } from "./document-layout-rules.mjs";
+import { buildPgdSignatureSlotPlan, buildSignatureLayoutPlan } from "./document-layout-rules.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -285,8 +285,11 @@ const signatureRow = (signers, topCount) => {
 };
 
 export const buildNativeSignatureBlock = (signatures) => {
-  const safeSignatures = signatures.length >= 3 ? signatures.slice(0, 8) : createPgdPreviewData({ signature_count: 3, signature_roles: [1, 1, 1] }).signatures;
-  const plan = buildPgdSignatureSlotPlan(safeSignatures.length);
+  const providedSignatures = Array.isArray(signatures) ? signatures.slice(0, 8) : [];
+  const safeSignatures = providedSignatures.length > 0
+    ? providedSignatures
+    : createPgdPreviewData({ signature_count: 3, signature_roles: [1, 1, 1] }).signatures;
+  const plan = buildSignatureLayoutPlan(safeSignatures.length);
   let cursor = 0;
   const groups = plan.groupSizes.map((size) => {
     const group = safeSignatures.slice(cursor, cursor + size);
