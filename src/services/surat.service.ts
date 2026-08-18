@@ -1680,9 +1680,7 @@ export const suratService = {
     const { data: updatedSurat } = updatedSuratResult;
 
     if (updatedSurat?.status === "PDF_PENDING") {
-      documentPreviewService.enqueuePdf(suratId).catch((pdfError) => {
-        console.error("Gagal enqueue PDF final rekomendasi; dokumen tetap PDF_PENDING:", pdfError);
-      });
+      // The database transition enqueues the immutable recommendation render job.
       return { success: true };
     }
 
