@@ -98,6 +98,14 @@ do $$begin
  update public.surat_signatures set is_signed=false where id='60000000-0000-4000-8000-000000000001';
  perform public.revoke_recommendation_file_view_token('10000000-0000-4000-8000-000000000002','first publication assertion complete',null);
 end$$;
+set role service_role;
+do $$declare cached_id uuid; before_count integer;begin
+ select count(*) into before_count from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002';
+ select id into cached_id from public.enqueue_recommendation_pdf_job('10000000-0000-4000-8000-000000000002','child-stamped-v2.xlsx',null,false);
+ assert cached_id=(select id from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002' and status='done' and pdf_url='pdf/stable.pdf'),'normal open did not reuse current PDF';
+ assert(select count(*)=before_count from public.document_pdf_jobs where surat_id='10000000-0000-4000-8000-000000000002'),'normal open created a duplicate PDF job';
+end$$;
+reset role;
 do $$begin
  assert(select status='DONE' and pdf_path='pdf/stable.pdf' from public.surat_registrasi where id='10000000-0000-4000-8000-000000000002'),'publish did not atomically finalize child';
  assert(select count(*)=1 from public.notifications where data->>'event_type'='recommendation_initial_finalized'),'DONE trigger did not notify';
