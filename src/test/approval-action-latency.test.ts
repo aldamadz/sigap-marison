@@ -24,12 +24,31 @@ describe("approval action latency", () => {
     expect(approveBody).toContain("await supabase.auth.getUser()");
   });
 
-  it("keeps durable post-approval persistence awaited", () => {
-    expect(approveBody).toContain("this.ensureUnitAllocationPersisted(suratId, formInputData)");
+  it("persists unit allocation once before approval and removes the redundant post-RPC write", () => {
+    expect(approveBody).toContain("if (allocationPersistError) throw allocationPersistError");
+    expect(approveBody).not.toContain("ensureUnitAllocationPersisted");
     expect(approveBody).toContain("await this.finalizeRecommendationRevisionIfNeeded(suratId)");
   });
 
+  it("combines allocation changes and the signer stamp in one Excel transform", () => {
+    expect(approveBody.match(/this\.transformApprovalExcel\(/g)).toHaveLength(1);
+    expect(approveBody).not.toContain("this.applyFormInputDataToExcel(");
+    expect(approveBody).not.toContain("this.stampApprovalExcel(");
+    expect(approveBody).toContain("...(shouldApplyAllocationToExcel ? { formInputData } : {})");
+  });
+
+  it("uploads attachment files concurrently while preserving input order", () => {
+    const uploadBody = service.slice(
+      service.indexOf("async uploadAttachmentFiles("),
+      service.indexOf("async getAllSurat(", service.indexOf("async uploadAttachmentFiles(")),
+    );
+    expect(uploadBody).toContain("await Promise.all(files.filter(Boolean).map(async (file, index) =>");
+    expect(uploadBody).not.toContain("for (const file of files)");
+    expect(uploadBody).toContain("${index}_${safeName}");
+  });
+
   it("does not hold approval completion on notification target lookup", () => {
+    expect(approveBody).toContain("void this.sendNotification(");
     expect(approveBody).toContain("void this.notifyInboxStepTasks(");
     expect(approveBody).not.toContain("await this.notifyInboxStepTasks(");
   });
