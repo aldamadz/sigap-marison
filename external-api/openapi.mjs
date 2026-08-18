@@ -1,4 +1,4 @@
-const submissionDecisionRequestSchema = {
+export const submissionDecisionRequestSchema = {
   type: "object",
   additionalProperties: false,
   required: ["event_id", "document_number", "decision", "reason", "decided_at"],
@@ -7,6 +7,7 @@ const submissionDecisionRequestSchema = {
       type: "string",
       format: "uuid",
       description: "Kunci idempotensi. Gunakan UUID baru untuk setiap keputusan bisnis.",
+      example: "b03a2bcd-83ea-4ff8-8bb9-02829192ed85",
     },
     document_number: {
       type: "string",
@@ -18,6 +19,7 @@ const submissionDecisionRequestSchema = {
     decision: {
       type: "string",
       enum: ["rejected", "revision_required"],
+      example: "revision_required",
     },
     reason: {
       type: "string",
@@ -42,24 +44,21 @@ const messageSchema = {
   },
 };
 
-export const augmentExternalOpenApi = (document, appPublicUrl) => ({
-  ...document,
+export const buildExternalOpenApi = (publicUrl) => ({
+  openapi: "3.1.0",
   info: {
-    ...document.info,
-    version: "2.1.0",
+    title: "SIGAP Submission Decisions API",
+    version: "1.0.0",
     description: [
-      document.info?.description,
-      "Dokumentasi ini juga memuat callback keputusan pengajuan pada domain aplikasi SIGAP.",
-    ].filter(Boolean).join("\n\n"),
+      "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
+      "Gunakan tombol **Authorize** untuk memasukkan bearer token, lalu **Try it out** untuk menguji request.",
+      "Request hanya menerima lima field yang tercantum pada schema.",
+    ].join("\n\n"),
   },
-  tags: [
-    ...(Array.isArray(document.tags) ? document.tags : []),
-    { name: "Submission Decisions", description: "Callback keputusan dari sistem departemen ke SIGAP." },
-  ],
+  servers: [{ url: publicUrl, description: "SIGAP External API staging" }],
+  tags: [{ name: "Submission Decisions", description: "Keputusan pengajuan dari sistem departemen." }],
   components: {
-    ...document.components,
     securitySchemes: {
-      ...document.components?.securitySchemes,
       submissionDecisionBearer: {
         type: "http",
         scheme: "bearer",
@@ -69,18 +68,15 @@ export const augmentExternalOpenApi = (document, appPublicUrl) => ({
     },
   },
   paths: {
-    ...document.paths,
     "/api/v1/submission-decisions": {
       post: {
         operationId: "applySubmissionDecision",
         summary: "Kirim keputusan pengajuan",
         description: [
-          "Mengirim keputusan terminal atau permintaan revisi berdasarkan nomor dokumen.",
+          "Gunakan `rejected` untuk menolak secara terminal atau `revision_required` untuk mengembalikan pengajuan kepada pemohon.",
           "`event_id` adalah kunci idempotensi: replay payload identik berhasil, sedangkan payload berbeda dengan event yang sama ditolak HTTP 409.",
-          "Field selain lima field yang didokumentasikan akan ditolak.",
         ].join("\n\n"),
         tags: ["Submission Decisions"],
-        servers: [{ url: appPublicUrl, description: "SIGAP application API" }],
         security: [{ submissionDecisionBearer: [] }],
         requestBody: {
           required: true,
@@ -95,6 +91,7 @@ export const augmentExternalOpenApi = (document, appPublicUrl) => ({
           404: { description: "Nomor dokumen tidak ditemukan.", content: { "application/json": { schema: messageSchema } } },
           409: { description: "Konflik event idempotensi atau state dokumen.", content: { "application/json": { schema: messageSchema } } },
           422: { description: "Dokumen belum memenuhi prasyarat keputusan.", content: { "application/json": { schema: messageSchema } } },
+          502: { description: "Backend SIGAP tidak dapat dihubungi.", content: { "application/json": { schema: messageSchema } } },
         },
       },
     },
