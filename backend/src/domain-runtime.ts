@@ -3850,7 +3850,10 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
       addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
       addendum_bawah_label: "Struktur Bawah",
       addendum_bawah_nominal: parseExternalMoney(detail.struktur_bawah),
-      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan),
+      // Vendor OpenAPI unit mewajibkan "keterangan pengajuan" non-kosong per unit.
+      // Form tidak selalu menyediakan catatan; judul surat dipakai sebagai
+      // keterangan akhir agar permohonan tidak ditolak 422 oleh vendor.
+      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan, surat?.judul_surat),
     };
   });
   if (units.length === 0) {
@@ -3962,7 +3965,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       ),
       item_name: firstString(record.item_name, record.nama_barang, record.nama, record.barang, raw.name),
       subtotal: parseExternalMoney(record.subtotal ?? record.keterangan ?? record.nilai ?? record.nominal),
-      planning_notes: firstString(record.planning_notes, record.catatan, record.keterangan, input.catatan),
+      planning_notes: firstString(record.planning_notes, record.catatan, record.keterangan, input.catatan, surat?.judul_surat),
     };
   });
   if (items.length === 0) {

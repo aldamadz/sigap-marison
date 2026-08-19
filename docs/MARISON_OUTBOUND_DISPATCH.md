@@ -188,6 +188,14 @@ Unit dan Non Unit mewajibkan resolution source `projectId`. Migration
 `20260803170000_fix_marison_resolution_source_array.sql` memakai `array_append`
 agar penambahan key tersebut tidak ditafsirkan PostgreSQL sebagai array literal.
 
+Vendor mewajibkan `planning_notes` (keterangan pengajuan) non-kosong pada tiap
+unit `/unit-submissions`; permohonan tanpa keterangan ditolak HTTP 422
+("Keterangan pengajuan wajib diisi."). Form tidak selalu menangkap catatan
+perencanaan, sehingga builder Unit dan Non Unit memakai `judul_surat` sebagai
+keterangan akhir sebelum POST. Kontrak lokal (`server/marison-outbound-contract.mjs`)
+menolak payload unit tanpa `planning_notes` atau dengan nilai kosong agar
+kegagalan terdeteksi pre-POST, bukan oleh vendor.
+
 ## Override Identitas Outbound Staging
 
 Admin dapat mengisi override NIK, ID kantor/cabang vendor, dan ID proyek vendor
