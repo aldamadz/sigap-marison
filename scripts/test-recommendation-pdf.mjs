@@ -10,6 +10,7 @@ import {
   shouldRenderDirectPgd,
 } from "../recommendation-pdf.mjs";
 import {
+  buildRecommendationDocumentDefinition,
   normalizeRecommendationDocumentData,
   renderRecommendationPdf,
 } from "../recommendation-native-pdf.mjs";
@@ -183,6 +184,64 @@ test("renders the recommendation main form, details, images, and 3-8 signatures 
   }
 });
 
+test("keeps the FM-UAI.HRD-30-00 first-page table, reserved rows, notes, and lower-right signatures", () => {
+  const items = resolveRecommendationSource({ recommendation_multi_detail: {
+    version: 1,
+    items: [{
+      id: "speaker",
+      order: 0,
+      status: "recommended",
+      applicant_original: { name: "Speaker", quantity: 1, notes: "Suara pecah" },
+      location: "Marketing",
+      pic: "Andreas",
+      rejection_reason: "",
+      details: [{
+        id: "speaker-new",
+        order: 0,
+        name: "Speaker",
+        quantity: 1,
+        action: "purchase_new",
+        description: "Pembelian baru",
+        notes: "Sesuaikan kebutuhan ruang",
+        attachments: [],
+      }],
+    }],
+  } });
+  const data = normalizeRecommendationDocumentData({
+    no_surat: "001/UAI/PBO.4/VIII/2026",
+    request_place: "Magelang",
+    request_date: "2026-08-18",
+    location_snapshot: { form: { nomor_form: "FM-UAI.HRD-30-00" } },
+  }, {
+    items,
+    signatures: [
+      { step_order: 1, role_name: "Membuat", signer_snapshot: { full_name: "Aldama", job_title: "Staff IT" } },
+      { step_order: 2, role_name: "Memeriksa", signer_snapshot: { full_name: "Igi", job_title: "Mgr. PO" } },
+    ],
+  });
+  const definition = buildRecommendationDocumentDefinition(data, [], null);
+  const serialized = JSON.stringify(definition);
+  const mainTable = definition.content[3].table;
+  const footer = definition.content[4].table;
+
+  assert.match(serialized, /NAMA BARANG \/ ALAT KERJA/);
+  assert.match(serialized, /NO\\nREGISTRASI/);
+  assert.match(serialized, /KERUSAKAN/);
+  assert.match(serialized, /HASIL REKOMENDASI/);
+  assert.match(serialized, /SERVICE/);
+  assert.match(serialized, /GANTI/);
+  assert.match(serialized, /URAIAN/);
+  assert.match(serialized, /KETERANGAN/);
+  assert.match(serialized, /Suara pecah/);
+  assert.match(serialized, /Pembelian baru/);
+  assert.match(serialized, /Sesuaikan kebutuhan ruang/);
+  assert.equal(mainTable.body.length, 10);
+  assert.deepEqual(footer.widths, ["72%", "28%"]);
+  assert.match(serialized, /Catatan :/);
+  assert.match(serialized, /1 dari 1/);
+  assert.doesNotMatch(serialized, /Dinamis/);
+});
+
 test("preserves actual legacy two-signer identities instead of rendering placeholders", () => {
   const signatures = [
     { role: "Membuat", name: "Signer Legacy 1", job: "Staff", signed: true },
@@ -206,6 +265,21 @@ test("plans one page for 1 through 6 images and continuation pages above 6", () 
   const itemPages = pages.filter((page) => page.itemId === "item-b");
   assert.deepEqual(itemPages.map((page) => page.images.length), [6, 2]);
   assert.equal(itemPages[1].continuation, true);
+});
+
+test("does not add an empty attachment page when a detail has no files", () => {
+  const items = resolveRecommendationSource({ recommendation_multi_detail: {
+    version: 1,
+    items: [{
+      id: "speaker",
+      applicant_original: { name: "Speaker" },
+      status: "recommended",
+      location: "Marketing",
+      pic: "Andreas",
+      details: [{ id: "speaker-new", name: "Speaker", action: "purchase_new", description: "Pembelian baru", attachments: [] }],
+    }],
+  } });
+  assert.equal(buildRecommendationPagePlan(items).length, 0);
 });
 
 test("uses stable canonical path and isolated regeneration version path", () => {
