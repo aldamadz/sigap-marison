@@ -117,4 +117,74 @@ describe("Non Unit request normalization", () => {
       marison_review_reasons: ["Entitas proyek belum dipilih"],
     }, office).ready).toBe(true);
   });
+
+  it("uses the staging-mapping identity when the BFF enriches the project (trial project)", () => {
+    const mapping = resolveNonUnitProjectMapping(
+      {
+        id: "pku",
+        office_id: "bandung",
+        code: "PKU",
+        name: "Marison Cipaku",
+        // tanpa identitas external langsung
+        marison_project_id: null,
+        // hasil enrich BFF staging
+        marison_effective_project_id: 12,
+        marison_effective_branch_id: 1,
+        marison_mapping_ready: true,
+        marison_mapping_source: "staging_mapping",
+        marison_effective_project_code: "NKMZ7",
+        marison_effective_project_name: "Nusantara Prime",
+        marison_effective_branch_name: "Kantor Pusat",
+      },
+      [{ id: "bandung", marison_branch_id: null, name: "KC Bandung" }],
+    );
+
+    expect(mapping).toMatchObject({
+      projectId: 12,
+      branchId: 1,
+      ready: true,
+      code: "NKMZ7",
+      name: "Nusantara Prime",
+      branchName: "Kantor Pusat",
+      mappingSource: "staging_mapping",
+    });
+  });
+
+  it("fails closed on the BFF verdict even when direct columns look complete", () => {
+    const mapping = resolveNonUnitProjectMapping(
+      {
+        id: "pku",
+        office_id: "bandung",
+        marison_project_id: 19,
+        marison_mapping_ready: false,
+        marison_mapping_source: null,
+      },
+      [{ id: "bandung", marison_branch_id: 14 }],
+    );
+
+    expect(mapping.ready).toBe(false);
+  });
+
+  it("falls back to direct columns and names when the response is not enriched", () => {
+    const mapping = resolveNonUnitProjectMapping(
+      {
+        id: "direct",
+        office_id: "project-office",
+        code: "SMP-01",
+        name: "Sample Project",
+        marison_project_id: 19,
+      },
+      [{ id: "project-office", marison_branch_id: 14, name: "Cabang Seed Sample" }],
+    );
+
+    expect(mapping).toMatchObject({
+      projectId: 19,
+      branchId: 14,
+      ready: true,
+      code: "SMP-01",
+      name: "Sample Project",
+      branchName: "Cabang Seed Sample",
+      mappingSource: "external_source",
+    });
+  });
 });

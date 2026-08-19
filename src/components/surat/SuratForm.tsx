@@ -1144,7 +1144,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   );
   const selectedMarisonProjectId = selectedNonUnitProjectMapping.projectId || 0;
   const selectedMarisonBranchId = selectedNonUnitProjectMapping.branchId || 0;
-  const selectedProjectOffice = selectedNonUnitProjectMapping.projectOffice as MasterRecord | null;
   const isMarisonProjectReady = requiresMarisonProject && selectedNonUnitProjectMapping.ready;
   const shouldShowProjectSelector = Boolean(
     formData.office_id && (!isPusatSelected || requiresMarisonProject)
@@ -1156,27 +1155,30 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
     if (requiresMarisonProject && isMarisonProjectReady && selectedProject) {
+      const snapshotCode = selectedNonUnitProjectMapping.code || "";
+      const snapshotName = selectedNonUnitProjectMapping.name || "";
+      const snapshotBranchName = selectedNonUnitProjectMapping.branchName || "";
       input.requested_project = {
         id: selectedMarisonProjectId,
         value: String(selectedMarisonProjectId),
         external_id: selectedMarisonProjectId,
-        code: selectedProject.code || "",
-        name: selectedProject.name || "",
-        label: selectedProject.name || selectedProject.code || "",
+        code: snapshotCode,
+        name: snapshotName,
+        label: snapshotName || snapshotCode,
         branch_id: selectedMarisonBranchId,
         branch: {
           id: selectedMarisonBranchId,
-          name: selectedProjectOffice?.name || "",
+          name: snapshotBranchName,
         },
         raw: {
           id: selectedMarisonProjectId,
           project_id: selectedMarisonProjectId,
-          code: selectedProject.code || "",
-          name: selectedProject.name || "",
+          code: snapshotCode,
+          name: snapshotName,
           branch_id: selectedMarisonBranchId,
           branch: {
             id: selectedMarisonBranchId,
-            name: selectedProjectOffice?.name || "",
+            name: snapshotBranchName,
           },
         },
       };
@@ -1204,7 +1206,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedMarisonProjectId,
     selectedMarisonBranchId,
     selectedProject,
-    selectedProjectOffice?.name,
+    selectedNonUnitProjectMapping,
     shouldUseDefaultBranchProject,
   ]);
 
@@ -3967,7 +3969,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
                     <div className="mt-1 text-xs">
                       {hasRegisteredProjectCandidates
-                        ? "Mapping proyek dan kantor proyek perlu dilengkapi di Master Proyek."
+                        ? "Mapping proyek/kantor Marison (termasuk mapping staging trial) perlu dilengkapi admin di Master Proyek."
                         : "Belum ada proyek external yang tersedia untuk kantor ini."}
                     </div>
                   </div>
@@ -3979,7 +3981,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 )}
                 {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
                   <p className="px-1 text-xs text-muted-foreground">
-                    {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison belum lengkap.
+                    {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
                   </p>
                 )}
               </div>
