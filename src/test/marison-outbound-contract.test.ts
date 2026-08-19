@@ -67,6 +67,28 @@ describe("Marison outbound contract v1", () => {
     expect(assertMarisonOutboundContract("unit", fixture)).toEqual(fixture);
   });
 
+  it("rejects Unit payloads with missing or blank description (keterangan pengajuan)", () => {
+    const missingDescription = readFixture("unit-submission.example.json");
+    delete missingDescription.description;
+    expect(() => assertMarisonOutboundContract("unit", missingDescription)).toThrow(
+      "Payload Marison unit tidak sesuai kontrak."
+    );
+
+    const blankDescription = readFixture("unit-submission.example.json");
+    blankDescription.description = "   ";
+    expect(() => assertMarisonOutboundContract("unit", blankDescription)).toThrow(
+      "Payload Marison unit tidak sesuai kontrak."
+    );
+  });
+
+  it("rejects Non Unit payloads with missing description (keterangan pengajuan)", () => {
+    const missingDescription = readFixture("non-unit-submission.example.json");
+    delete missingDescription.description;
+    expect(() => assertMarisonOutboundContract("non_unit", missingDescription)).toThrow(
+      "Payload Marison non_unit tidak sesuai kontrak."
+    );
+  });
+
   it("accepts the canonical Asset payload supplied to the vendor", () => {
     const fixture = readFixture("asset-purchase-request.example.json");
 

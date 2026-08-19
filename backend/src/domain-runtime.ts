@@ -3850,7 +3850,10 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
       addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
       addendum_bawah_label: "Struktur Bawah",
       addendum_bawah_nominal: parseExternalMoney(detail.struktur_bawah),
-      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan),
+      // planning_notes bersifat opsional pada OpenAPI vendor; diisi sebagai
+      // keterangan perencanaan unit bila tersedia di sumber data. Keterangan
+      // pengajuan yang wajib adalah field top-level `description`.
+      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan, surat?.judul_surat),
     };
   });
   if (units.length === 0) {
@@ -3862,6 +3865,10 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     submission_number: surat.no_surat,
     project_id: projectId,
     branch_id: branchId,
+    // Vendor mewajibkan "Keterangan pengajuan" (description) — dipakai vendor
+    // untuk penamaan dokumen SPK dan BAP. Form tidak selalu menangkap catatan,
+    // jadi judul surat dipakai sebagai keterangan akhir.
+    description: firstString(input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan, surat?.judul_surat),
      submitted_by: overrides.nik,
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     units,
@@ -3962,7 +3969,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       ),
       item_name: firstString(record.item_name, record.nama_barang, record.nama, record.barang, raw.name),
       subtotal: parseExternalMoney(record.subtotal ?? record.keterangan ?? record.nilai ?? record.nominal),
-      planning_notes: firstString(record.planning_notes, record.catatan, record.keterangan, input.catatan),
+      planning_notes: firstString(record.planning_notes, record.catatan, record.keterangan, input.catatan, surat?.judul_surat),
     };
   });
   if (items.length === 0) {
@@ -3978,6 +3985,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
+      description: firstString(input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan, surat?.judul_surat),
      submitted_by: overrides.nik,
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),

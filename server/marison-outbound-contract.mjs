@@ -47,6 +47,7 @@ export const marisonUnitSubmissionSchema = z.object({
   submission_number: nonEmptyText,
   project_id: positiveInteger,
   branch_id: positiveInteger,
+  description: nonEmptyText,
   submitted_by: nonEmptyText.optional(),
   submitted_at: dateTime.optional(),
   units: z.array(z.object({
@@ -67,6 +68,7 @@ export const marisonNonUnitSubmissionSchema = z.object({
   submission_number: nonEmptyText,
   project_id: positiveInteger,
   branch_id: positiveInteger,
+  description: nonEmptyText,
   submitted_by: nonEmptyText.optional(),
   submitted_at: dateTime.optional(),
   notes: requiredText.optional(),
