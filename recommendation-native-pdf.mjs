@@ -59,9 +59,9 @@ const imageDataUrl = async (buffer) => {
   return `data:image/png;base64,${png.toString("base64")}`;
 };
 
-const buildHeader = (data, logoDataUrl) => ({
+const buildHeader = (data, logoDataUrl, totalPages) => ({
   table: {
-    widths: ["18%", "60%", "22%"],
+    widths: ["13%", "59%", "28%"],
     body: [[
       logoDataUrl
         ? { image: logoDataUrl, fit: [82, 30], alignment: "center", margin: [0, 6, 0, 0] }
@@ -71,9 +71,9 @@ const buildHeader = (data, logoDataUrl) => ({
         table: {
           widths: ["48%", "52%"],
           body: [
-            [{ text: "No. Form", bold: true }, { text: data.formNumber, bold: true, alignment: "center" }],
-            [{ text: "Berlaku", bold: true }, { text: "1 Januari 2024", alignment: "center" }],
-            [{ text: "Halaman", bold: true }, { text: "Dinamis", alignment: "center" }],
+            [{ text: "No form", bold: true }, { text: data.formNumber, bold: true, alignment: "center" }],
+            [{ text: "Berlaku tanggal", bold: true }, { text: "01 Januari 2024", alignment: "center" }],
+            [{ text: "Halaman", bold: true }, { text: `1 dari ${totalPages}`, alignment: "center" }],
           ],
         },
         layout: borderLayout,
@@ -86,58 +86,111 @@ const buildHeader = (data, logoDataUrl) => ({
 const detailSummary = (item) => {
   if (isRejected(item.status)) return `Tidak direkomendasikan: ${text(item.rejectionReason, "Tanpa alasan")}`;
   return item.details.map((detail, index) => {
+    const action = actionLabel(detail.action);
+    const heading = text(detail.heading, "");
+    const description = text(detail.description, "");
     const prefix = item.details.length > 1 ? `${index + 1}. ` : "";
-    return `${prefix}${text(detail.heading)} - ${actionLabel(detail.action)}${detail.description ? `: ${detail.description}` : ""}`;
+    const sameAsParent = heading.localeCompare(text(item.applicantName, ""), "id", { sensitivity: "base" }) === 0;
+    const repeatedDefault = description.localeCompare(action, "id", { sensitivity: "base" }) === 0;
+    const subject = sameAsParent ? "" : `${heading}${heading && action ? " - " : ""}`;
+    return `${prefix}${subject}${action}${description && !repeatedDefault ? `${action ? ": " : ""}${description}` : ""}`;
   }).join("\n");
 };
 
-const buildMainPage = (data, logoDataUrl) => {
+const recommendationMarkers = (item) => {
+  if (isRejected(item.status)) return { service: "", replace: "" };
+  const actions = new Set(item.details.map((detail) => String(detail.action || "").trim().toLowerCase()));
+  return {
+    service: actions.has("service") || actions.has("servis") ? "V" : "",
+    replace: actions.has("replace") || actions.has("replacement") || actions.has("ganti") ? "V" : "",
+  };
+};
+
+const itemNotes = (item) => {
+  if (isRejected(item.status)) return text(item.rejectionReason, "Tanpa alasan");
+  return item.details.map((detail) => text(detail.notes, "")).filter(Boolean).join("\n");
+};
+
+const buildMainPage = (data, logoDataUrl, totalPages) => {
   const rows = data.items.map((item, index) => {
     const rejected = isRejected(item.status);
+    const markers = recommendationMarkers(item);
     return [
       { text: String(index + 1), alignment: "center" },
       { text: item.applicantName, bold: true, decoration: rejected ? "lineThrough" : undefined, color: rejected ? MUTED : BORDER },
+      { text: text(item.registrationNumber, ""), alignment: "center" },
       { text: [item.location, item.pic].filter(Boolean).join(" / ") || "-" },
-      { text: rejected ? "Tidak direkomendasikan" : "Direkomendasikan", bold: true, color: rejected ? REJECTED : "#166534" },
+      { text: text(item.applicantNotes, "") },
+      { text: markers.service, bold: true, alignment: "center", color: "#166534" },
+      { text: markers.replace, bold: true, alignment: "center", color: "#166534" },
       { text: detailSummary(item), color: rejected ? REJECTED : BORDER },
+      { text: itemNotes(item), color: rejected ? REJECTED : BORDER },
     ];
   });
+  const minimumRows = 8;
+  while (rows.length < minimumRows) {
+    rows.push([
+      { text: String(rows.length + 1), alignment: "center" },
+      ...Array.from({ length: 8 }, () => ({ text: "" })),
+    ]);
+  }
 
   return [
-    buildHeader(data, logoDataUrl),
+    buildHeader(data, logoDataUrl, totalPages),
     {
       table: {
-        widths: ["22%", "78%"],
-        body: [
-          [{ text: "Nomor Dokumen", bold: true }, { text: data.noSurat, bold: true }],
-          [{ text: "Tempat, tanggal", bold: true }, { text: data.placeDate }],
-        ],
+        widths: ["20%", "80%"],
+        body: [[{ text: "Nomor Dokumen :", bold: true }, { text: data.noSurat, bold: true }]],
       },
       layout: borderLayout,
-      margin: [0, 4, 0, 4],
-    },
-    {
-      text: "Menindaklanjuti hasil pemeriksaan, berikut rekomendasi peremajaan barang / alat kerja:",
-      margin: [0, 0, 0, 4],
+      margin: [0, 4, 0, 0],
     },
     {
       table: {
-        headerRows: 1,
-        widths: ["4%", "22%", "18%", "16%", "40%"],
+        widths: ["*"],
+        body: [[{ text: "Menindaklanjuti hasil perbaikan kami rekomendasikan dilakukan peremajaan barang / alat kerja sebagai berikut :" }]],
+      },
+      layout: borderLayout,
+    },
+    {
+      table: {
+        headerRows: 2,
+        widths: ["3%", "23%", "8%", "16%", "13%", "5%", "5%", "14%", "13%"],
+        heights: (row) => row < 2 ? 15 : 22,
         body: [
-          ["No.", "Barang / alat kerja", "Lokasi / PIC", "Status", "Hasil rekomendasi"].map((label) => ({
-            text: label,
-            bold: true,
-            alignment: "center",
-            fillColor: GREEN,
-          })),
+          [
+            { text: "NO.", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
+            { text: "NAMA BARANG / ALAT KERJA", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
+            { text: "NO\nREGISTRASI", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN },
+            { text: "LOKASI / PIC", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
+            { text: "KERUSAKAN", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
+            { text: "HASIL REKOMENDASI", colSpan: 3, bold: true, alignment: "center", fillColor: GREEN }, {}, {},
+            { text: "KETERANGAN", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
+          ],
+          [{}, {}, {}, {}, {}, "SERVICE", "GANTI", "URAIAN", {}].map((cell) => typeof cell === "string"
+            ? { text: cell, bold: true, alignment: "center", fillColor: GREEN }
+            : cell),
           ...rows,
         ],
       },
       layout: borderLayout,
     },
-    { text: "", margin: [0, 4] },
-    buildNativeSignatureBlock(data.signatures),
+    {
+      table: {
+        widths: ["72%", "28%"],
+        heights: [112],
+        body: [[
+          { text: [{ text: "Catatan :\n", bold: true }, { text: data.notes || "" }], margin: [4, 2, 4, 2] },
+          {
+            stack: [
+              { text: data.placeDate, alignment: "center", margin: [0, 0, 0, 2] },
+              buildNativeSignatureBlock(data.signatures),
+            ],
+          },
+        ]],
+      },
+      layout: borderLayout,
+    },
   ];
 };
 
@@ -160,10 +213,12 @@ const buildImageGrid = (images) => {
 
 export const normalizeRecommendationDocumentData = (source = {}, options = {}) => {
   const location = source.location_snapshot || {};
+  const input = source.form_input_data || source?.data_snapshot?.input || {};
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.HRD-30-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/REKOMENDASI"),
     placeDate: [text(source.request_place, ""), formatDateId(source.request_date)].filter(Boolean).join(", ") || "-",
+    notes: text(input.catatan || source.notes, ""),
     items: Array.isArray(options.items) ? options.items : [],
     signatures: normalizeNativeSignatures(options.signatures, Number(options.targetStep || 0)),
   };
@@ -175,7 +230,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
   pageMargins: [18, 14, 18, 14],
   defaultStyle: { font: "Roboto", fontSize: 8, color: BORDER },
   content: [
-    ...buildMainPage(data, logoDataUrl),
+    ...buildMainPage(data, logoDataUrl, 1 + pages.length),
     ...pages.flatMap((page) => {
       const rejected = isRejected(page.status || page.detailStatus);
       const detailLabel = page.showDetailNumber

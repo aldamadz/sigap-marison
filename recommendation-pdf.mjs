@@ -169,6 +169,19 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
         item.name,
         `Item ${itemIndex + 1}`,
       ),
+      applicantNotes: text(
+        asRecord(item.applicant_original).notes,
+        item.original_applicant_notes,
+        item.parent_item_notes,
+        parentItem.keterangan,
+        parentItem.notes,
+      ),
+      registrationNumber: text(
+        item.registration_number,
+        item.no_registrasi,
+        parentItem.registration_number,
+        parentItem.no_registrasi,
+      ),
       status: rejected ? "not_recommended" : itemStatus,
       location: text(item.location, item.lokasi, item.lokasi_pic, parentItem.location, parentItem.lokasi),
       pic: text(item.pic, item.person_in_charge, parentItem.pic, parentItem.person_in_charge),
@@ -182,6 +195,7 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
           order: orderNumber(detail.order ?? detail.detail_order, detailIndex + 1),
           heading: text(detail.heading, detail.title, detail.name, detail.nama_detail, detail.nama_barang, detail.uraian, `Detail ${itemIndex + 1}.${detailIndex + 1}`),
           description: text(detail.description, detail.keterangan, detail.notes, detail.catatan, detail.uraian),
+          notes: text(detail.notes, detail.catatan),
           status,
           action: text(detail.action, detail.recommendation_action),
           location: text(detail.location, detail.lokasi, detail.detail_location),
@@ -204,6 +218,7 @@ export const buildRecommendationPagePlan = (items) => asArray(items).flatMap((it
     const showDetailNumber = asArray(item.details).length > 1;
     const images = detail.attachments.filter((attachment) => attachment.isImage);
     const documents = detail.attachments.filter((attachment) => !attachment.isImage);
+    if (images.length === 0 && documents.length === 0) return [];
     const chunks = images.length
       ? Array.from({ length: Math.ceil(images.length / 6) }, (_, index) => images.slice(index * 6, index * 6 + 6))
       : [[]];
