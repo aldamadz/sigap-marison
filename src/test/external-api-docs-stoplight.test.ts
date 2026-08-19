@@ -33,11 +33,25 @@ describe("external API Zudoku docs portal", () => {
     expect(response.headers["content-type"]).toContain("text/html");
     // Zudoku SPA markers.
     expect(response.body).toContain("SIGAP External API Docs");
+    // Local favicon + logo (no CDN, no double logo).
+    expect(response.body).toContain(`rel="icon" href="/docs/favicon.png"`);
+    expect(response.body).not.toContain("cdn.zudoku.dev/logos/favicon.svg");
+    expect(response.body).toContain(`src="/docs/favicon.png"`);
+    expect(response.body).not.toContain("/docs/logo.png");
+    // Tab title without the default " - Zudoku" suffix.
+    expect(response.body).toContain("<title>SIGAP External API Docs</title>");
     // No old portal markers.
     expect(response.body).not.toContain("swagger-ui");
     expect(response.body).not.toContain("cdn.jsdelivr.net");
     expect(response.body).not.toContain("Scalar.createApiReference");
     expect(response.body).not.toContain("elements-api");
+  });
+
+  it("serves the local favicon asset on /docs/favicon.png", async () => {
+    const response = await app.inject({ method: "GET", url: "/docs/favicon.png" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/png");
   });
 
   it("serves the Zudoku SPA on /docs/ (index fallback)", async () => {
