@@ -34,11 +34,11 @@ Arti status:
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
 | Domain | `sigap.marisoncloud.com` | `sigap.marison-testing.biz.id` | Sudah terpisah |
-| App container | `agenda-flow-prod` | `agenda-flow-staging` SHA `b368fd6` (healthy) | Keempat service staging sehat; production tidak diubah |
-| PDF worker | `agenda-pdf-worker` | `agenda-pdf-worker-staging` (up, started) | Staging sudah ikut image terbaru |
-| Marison outbound worker | `agenda-marison-outbound-staging` | Up 20+ hours (healthy) | Tidak diubah deployment ini; sehat |
-| Marison sync | — | `agenda-marison-sync-staging` (started) | Cron sync aktif |
-| Git source | `main` @ `aca7cfc` | `staging` @ `b368fd6` | staging 97+ commit di depan main |
+| App container | `agenda-flow-prod` | `agenda-flow-staging` SHA `ac58c83` (healthy) | Deploy 19 Agu 2026: PR #190 + #191 + #192 merged; GIT_SHA terverifikasi via `/health/version`; production tidak diubah |
+| PDF worker | `agenda-pdf-worker` | `agenda-pdf-worker-staging` (up, started) | Image ac58c83; concurrency 3, idle poll 5 detik (PR #191) |
+| Marison outbound worker | `agenda-marison-outbound-staging` | Up (healthy) | Image ac58c83; replacement dispatch surat 043/UAI/MKT.1.WSVJ9/VIII/2026 berhasil (PR #190) |
+| Marison sync | — | `agenda-marison-sync-staging` (started) | Image ac58c83; cron sync aktif |
+| Git source | `main` @ `aca7cfc` | `staging` @ `ac58c83` | staging di depan main (termasuk PR #189, #190, #191, #192) |
 | Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` | Database sudah terpisah |
 | PostgREST objects | 48 table/view | 48 table/view | Tidak ada perbedaan object |
 | RPC | 51 RPC | 51 RPC | Tidak ada perbedaan RPC |
