@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 const blockers = readFileSync("supabase/migrations/20260811140000_rec03_file_link_blockers.sql", "utf8");
 const readiness = readFileSync("supabase/migrations/20260813163000_fix_recommendation_pdf_readiness.sql", "utf8");
 const singleUse = readFileSync("supabase/migrations/20260814165000_restore_file_view_token_single_use.sql", "utf8");
+const parentApprovalGate = readFileSync("supabase/migrations/20260819090000_fix_recommendation_parent_approval_gate.sql", "utf8");
 const acceptance = readFileSync("supabase/tests/recommendation_file_link.integration.sql", "utf8");
 const fixture = `
 create schema extensions;
@@ -44,7 +45,7 @@ try {
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"], fixture + blockers + readiness + singleUse + acceptance));
+  process.stdout.write(run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"], fixture + blockers + readiness + singleUse + parentApprovalGate + acceptance));
 } finally {
   run(["rm", "-f", id]);
 }

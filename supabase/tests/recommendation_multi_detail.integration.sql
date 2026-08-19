@@ -213,13 +213,13 @@ do $$declare child_form jsonb;child_snapshot jsonb;parent_form jsonb;parent_snap
  assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'child attachment mutation remained current';
  delete from public.surat_attachments where id=child_attachment;
  insert into public.surat_attachments(surat_id,file_url,file_size,file_type) values('10000000-0000-4000-8000-000000000001','parent-proof.jpg',1,'image/jpeg') returning id into parent_attachment;
- assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent attachment mutation remained current';
+ assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent approval attachment invalidated recommendation PDF';
  delete from public.surat_attachments where id=parent_attachment;
  update public.surat_registrasi set file_path='child-mutated.xlsx' where id='10000000-0000-4000-8000-000000000002';
  assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'child source mutation remained current';
  update public.surat_registrasi set file_path=child_source where id='10000000-0000-4000-8000-000000000002';
  update public.surat_registrasi set file_path='parent-mutated.xlsx' where id='10000000-0000-4000-8000-000000000001';
- assert not public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent source mutation remained current';
+ assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent approval source invalidated recommendation PDF';
  update public.surat_registrasi set file_path=parent_source where id='10000000-0000-4000-8000-000000000001';
  assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'restored render inputs did not restore current PDF';
 end$$;

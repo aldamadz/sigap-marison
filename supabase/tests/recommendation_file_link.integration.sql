@@ -10,13 +10,28 @@ insert into public.surat_linked_documents(id,parent_surat_id,child_surat_id,link
 insert into public.document_pdf_jobs(surat_id,source_file_path,status,pdf_url,pdf_bucket,pdf_object_path,pdf_storage_origin,recommendation_content_fingerprint,render_payload)
 select '10000000-0000-4000-8000-000000000002','child.xlsx','done','ignored-public-url','dokumen_surat','pdf/current.pdf','external',public.recommendation_content_fingerprint(payload),payload
 from (select public.recommendation_pdf_render_payload('10000000-0000-4000-8000-000000000002','child.xlsx') payload) source;
+-- Simulate a PDF published before the parent approval path was removed from the
+-- canonical payload. Existing final PDFs remain valid after the forward fix.
+update public.document_pdf_jobs
+set render_payload = render_payload || jsonb_build_object(
+      'parent_workbook_source', jsonb_build_object('bucket','dokumen_surat','path','parent.xlsx')
+    ),
+    recommendation_content_fingerprint = public.recommendation_content_fingerprint(
+      render_payload || jsonb_build_object(
+        'parent_workbook_source', jsonb_build_object('bucket','dokumen_surat','path','parent.xlsx')
+      )
+    )
+where surat_id='10000000-0000-4000-8000-000000000002';
 insert into public.surat_attachments(surat_id,file_url,file_size,file_type)
 values('10000000-0000-4000-8000-000000000001','approval-stage.pdf',100,'application/pdf');
+update public.surat_registrasi set file_path='parent-approval-step-2.xlsx'
+where id='10000000-0000-4000-8000-000000000001';
 insert into public.marison_outbound_dispatches(id,surat_id,environment,kind,endpoint,idempotency_key,status,lease_token,lease_acquired_at,lease_expires_at) values
  ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','staging','asset','/asset-purchase-requests','file-link-dispatch','processing','40000000-0000-4000-8000-000000000001',now(),now()+interval '5 minutes');
 
 do $$begin
  assert not (public.recommendation_pdf_render_payload('10000000-0000-4000-8000-000000000002','child.xlsx') ? 'parent_attachment_refs'),'parent approval attachments remain in recommendation fingerprint';
+ assert not (public.recommendation_pdf_render_payload('10000000-0000-4000-8000-000000000002','child.xlsx') ? 'parent_workbook_source'),'parent approval source remains in recommendation fingerprint';
  assert public.recommendation_pdf_is_current('10000000-0000-4000-8000-000000000002'),'parent approval attachment invalidated recommendation PDF';
  begin update public.surat_registrasi set pdf_object_path='https://example.test/file.pdf' where id='10000000-0000-4000-8000-000000000002';raise exception 'lowercase URL accepted';exception when check_violation then null;end;
  begin update public.surat_registrasi set pdf_object_path='HTTPS://example.test/file.pdf' where id='10000000-0000-4000-8000-000000000002';raise exception 'uppercase URL accepted';exception when check_violation then null;end;
