@@ -4,8 +4,9 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 
 # Copy Zudoku project files
-COPY docs-zudoku/package.json docs-zudoku/.npmrc docs-zudoku/tsconfig.json docs-zudoku/zudoku.config.ts ./docs-zudoku/
+COPY docs-zudoku/package.json docs-zudoku/.npmrc docs-zudoku/tsconfig.json docs-zudoku/zudoku.config.ts docs-zudoku/docs-custom.css ./docs-zudoku/
 COPY docs-zudoku/apis/ ./docs-zudoku/apis/
+COPY docs-zudoku/public/ ./docs-zudoku/public/
 
 # Install Zudoku deps (nested strategy untuk isolasi dari workspace)
 RUN cd docs-zudoku && npm install

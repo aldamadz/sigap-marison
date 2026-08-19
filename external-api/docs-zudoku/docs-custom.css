@@ -1,0 +1,60 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   SIGAP External API Docs — Custom CSS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Sidebar position & layout ── */
+:root {
+  --side-nav-width: 300px;
+}
+
+/* Sidebar container: full height, proper position */
+[data-sidebar-toggle] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 2. Move sidebar toggle button to top (near header/logo) ── */
+[data-sidebar-toggle="true"] {
+  /* Position at the top of the sidebar */
+  --sidebar-toggle-y: 32px !important;
+  top: var(--sidebar-toggle-y);
+  z-index: 30;
+}
+
+/* ── 3. Header/logo area ── */
+header img,
+header svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* ── 4. Dropdown scroll fix (modal test / playground) ── */
+[data-radix-select-content],
+[role="listbox"],
+[role="menu"],
+[data-slot="select-content"],
+[data-radix-menu-content] {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* ── 5. Test modal / playground dropdown ── */
+[role="dialog"] [role="combobox"],
+[role="dialog"] select,
+[data-slot="select-trigger"] {
+  cursor: pointer;
+}
+
+/* ── 6. Responsive ── */
+@media (max-width: 1024px) {
+  [data-sidebar-toggle="true"] {
+    --sidebar-toggle-y: 60px;
+  }
+}
+
+/* ── 7. Sidebar width ── */
+.lg\:grid-cols-\[var\(--side-nav-width\)_1fr\] {
+  --side-nav-width: 300px;
+}
