@@ -4,6 +4,7 @@ const config: ZudokuConfig = {
   site: {
     title: "SIGAP External API Docs",
   },
+  basePath: "/docs",
   navigation: [
     {
       type: "link",

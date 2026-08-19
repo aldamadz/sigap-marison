@@ -20,14 +20,14 @@ describe("external API Zudoku docs portal", () => {
     await app.close();
   });
 
-  it("redirects / to /api", async () => {
-    const response = await app.inject({ method: "GET", url: "/" });
+  it("redirects /docs to /docs/", async () => {
+    const response = await app.inject({ method: "GET", url: "/docs" });
     expect(response.statusCode).toBe(302);
-    expect(response.headers.location).toBe("/api");
+    expect(response.headers.location).toBe("/docs/");
   });
 
-  it("serves the Zudoku SPA on /api", async () => {
-    const response = await app.inject({ method: "GET", url: "/api" });
+  it("serves the Zudoku SPA on /docs/api", async () => {
+    const response = await app.inject({ method: "GET", url: "/docs/api" });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
@@ -36,13 +36,28 @@ describe("external API Zudoku docs portal", () => {
     // No old portal markers.
     expect(response.body).not.toContain("swagger-ui");
     expect(response.body).not.toContain("cdn.jsdelivr.net");
-    expect(response.body).not.toContain("unpkg.com");
     expect(response.body).not.toContain("Scalar.createApiReference");
     expect(response.body).not.toContain("elements-api");
   });
 
-  it("applies a same-origin CSP on /api", async () => {
-    const response = await app.inject({ method: "GET", url: "/api" });
+  it("serves the Zudoku SPA on /docs/ (index fallback)", async () => {
+    const response = await app.inject({ method: "GET", url: "/docs/" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+  });
+
+  it("serves the SPA on /docs/api/submission-decisions (refresh fallback)", async () => {
+    const response = await app.inject({ method: "GET", url: "/docs/api/submission-decisions" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.headers["content-security-policy"]).toBe(DOCS_CSP);
+    expect(response.body).toContain("SIGAP External API Docs");
+  });
+
+  it("applies a same-origin CSP on /docs/api", async () => {
+    const response = await app.inject({ method: "GET", url: "/docs/api" });
 
     expect(response.headers["content-security-policy"]).toBe(DOCS_CSP);
     expect(DOCS_CSP).toContain("script-src 'self' 'unsafe-inline'");

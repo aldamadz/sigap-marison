@@ -1,7 +1,6 @@
 import fastifyStatic from "@fastify/static";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildExternalOpenApi } from "./openapi.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -22,44 +21,61 @@ export const DOCS_CSP = [
 ].join("; ");
 
 /**
- * Daftarkan route dokumentasi Zudoku pada Fastify.
+ * Daftarkan route dokumentasi Zudoku pada Fastify di path `/docs`.
  *
- * Zudoku SPA di-serve di root path `/`:
- * - GET `/` → redirect ke `/api` (Zudoku index.html)
- * - GET `/api` → Zudoku SPA (api.html)
- * - GET `/assets/*` → JS/CSS bundles
- * - GET `/openapi.json` → OpenAPI spec
+ * Struktur build Zudoku (dengan basePath: "/docs"):
+ * - dist/docs/index.html → redirect ke /docs/api
+ * - dist/docs/api.html → API reference
+ * - dist/docs/api/submission-decisions.html → sub-routes (prerender)
+ * - dist/docs/assets/* → JS/CSS bundles
  *
- * Route `/health` dan `/api/v1/submission-decisions` tetap di server.mjs.
+ * Server:
+ * - GET /docs → redirect ke /docs/
+ * - GET /docs/* → static files dari dist/docs/ (dengan SPA fallback)
+ * - SPA fallback: route /docs/* yang tidak match file → serve api.html
  *
  * @param {import("fastify").FastifyInstance} app
  * @param {{ publicUrl: string }} options
  */
 export const registerDocsRoute = async (app, { publicUrl }) => {
-  const distDir = join(here, "docs-zudoku", "dist");
+  const distDir = join(here, "docs-zudoku", "dist", "docs");
 
-  // Serve static files dari Zudoku build output di root `/`.
+  // Serve static files dari Zudoku build output.
   await app.register(fastifyStatic, {
     root: distDir,
-    prefix: "/",
+    prefix: "/docs/",
     wildcard: false,
-    index: false,
+    index: ["api.html"],
     setHeaders: (reply) => {
       reply.header("Content-Security-Policy", DOCS_CSP);
     },
   });
 
-  // Redirect / → /api (Zudoku SPA entry point).
-  app.get("/", { schema: { hide: true } }, async (_request, reply) =>
-    reply.redirect("/api", 302)
+  // Redirect /docs → /docs/ (trailing slash untuk static file serving).
+  app.get("/docs", { schema: { hide: true } }, async (_request, reply) =>
+    reply.redirect("/docs/", 302)
   );
 
-  // Serve api.html untuk /api (Zudoku SPA).
-  app.get("/api", { schema: { hide: true } }, async (_request, reply) =>
+  // Serve api.html untuk /docs/api (Zudoku SPA entry point).
+  app.get("/docs/api", { schema: { hide: true } }, async (_request, reply) =>
     reply
       .header("Content-Type", "text/html; charset=utf-8")
       .header("Cache-Control", "no-store")
       .header("Content-Security-Policy", DOCS_CSP)
       .sendFile("api.html", distDir)
   );
+
+  // SPA fallback: route /docs/* yang tidak match file → serve api.html.
+  // Ini memastikan refresh di URL client-side (mis. /docs/api/submission-decisions)
+  // tidak 404 dan Zudoku SPA dapat menangani routing.
+  app.setNotFoundHandler((request, reply) => {
+    if (request.method === "GET" && request.url.startsWith("/docs/")) {
+      return reply
+        .header("Content-Type", "text/html; charset=utf-8")
+        .header("Cache-Control", "no-store")
+        .header("Content-Security-Policy", DOCS_CSP)
+        .sendFile("api.html", distDir);
+    }
+    return reply.code(404).send({ message: "Not Found" });
+  });
 };
