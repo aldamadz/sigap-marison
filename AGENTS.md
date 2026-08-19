@@ -97,6 +97,56 @@ membawa seluruh isi staging ke production.
 7. Setelah deployment, lakukan smoke test terhadap domain dan environment yang
    benar. Jangan menyimpulkan deployment berhasil hanya dari status container.
 
+## External API Documentation Portal
+
+Portal dokumentasi External API SIGAP menggunakan **Stoplight Elements** yang
+di-serve secara self-hosted (tanpa CDN pihak ketiga).
+
+### Arsitektur
+
+- `@stoplight/elements` terdaftar sebagai **devDependency** pada
+  `external-api/package.json`. Dependency tree lengkap (lodash, react,
+  postman-collection, dll.) hanya ada saat development; **tidak masuk Docker
+  production image**.
+- Bundle statis (`web-components.min.js` dan `styles.min.css`) disalin ke
+  `external-api/public/stoplight/` oleh script `scripts/sync-stoplight-assets.mjs`.
+- File bundle di-commit ke repository sehingga tersedia saat Docker build.
+- Fastify menyajikan bundle dari `external-api/public/stoplight/` pada path
+  `/docs/stoplight/*` (same-origin, tanpa CDN).
+- Halaman `/docs` me-render HTML yang memuat `<elements-api>` web component
+  dengan `apiDescriptionUrl="/docs/openapi.json"`.
+- `persistAuth` dinonaktifkan via override `localStorage.setItem` /
+  `sessionStorage.setItem` (Stoplight tidak punya opsi bawaan).
+
+### Cara Update Stoplight Elements
+
+1. Update versi di `external-api/package.json` field `devDependencies`.
+2. Jalankan `npm install` dari root workspace.
+3. Jalankan `npm run sync:stoplight --workspace agenda-flow-external-api`
+   (atau `node scripts/sync-stoplight-assets.mjs`).
+4. Periksa diff file di `external-api/public/stoplight/` — pastikan bundle
+   baru tidak mengandung referensi CDN eksternal.
+5. Jalankan `npm run check --workspace agenda-flow-external-api`.
+6. Jalankan targeted tests: `npx vitest run src/test/external-api-docs-*.test.ts
+   src/test/external-api-openapi.test.ts src/test/submission-decision-contract.test.ts`.
+6. Jalankan `npm audit --omit=dev --audit-level=high` (audit production deps
+   saja; devDependency Stoplight tidak relevan untuk production image).
+7. Build Docker dan smoke test: `/health` → 200, `/docs` → 200,
+   `/openapi.json` → 200, token salah → 401.
+8. Commit perubahan termasuk file di `external-api/public/stoplight/`.
+
+### File Terkait
+
+| File | Fungsi |
+| --- | --- |
+| `external-api/package.json` | devDependencies `@stoplight/elements` |
+| `external-api/docs-route.mjs` | Register route `/docs`, serve bundle, CSP |
+| `external-api/public/stoplight/` | Bundle statis (di-commit) |
+| `scripts/sync-stoplight-assets.mjs` | Script sync bundle dari node_modules |
+| `external-api/Dockerfile` | COPY `public/stoplight/` ke image |
+| `src/test/external-api-docs-stoplight.test.ts` | Test Fastify inject |
+| `external-api/openapi.mjs` | OpenAPI spec builder |
+
 ## Kondisi Repository Saat Ini
 
 Branch remote `staging` sudah tersedia dan menjadi target integrasi PR untuk

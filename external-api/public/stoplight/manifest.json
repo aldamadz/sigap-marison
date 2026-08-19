@@ -1,0 +1,9 @@
+{
+  "package": "@stoplight/elements",
+  "version": "9.0.24",
+  "files": [
+    "web-components.min.js",
+    "styles.min.css"
+  ],
+  "syncedAt": "2026-08-19T03:26:07.026Z"
+}

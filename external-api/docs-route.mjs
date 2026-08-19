@@ -1,16 +1,21 @@
-import scalarApiReference from "@scalar/fastify-api-reference";
-import { renderApiReference } from "@scalar/client-side-rendering";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildExternalOpenApi } from "./openapi.mjs";
 
+const here = dirname(fileURLToPath(import.meta.url));
+
 /**
- * Content-Security-Policy khusus route dokumentasi Scalar.
+ * Content-Security-Policy khusus route dokumentasi Stoplight Elements.
  *
- * Scalar self-hosted memerlukan:
- * - `script-src 'self' 'unsafe-inline'`: bundle lokal (`/docs/js/scalar.js`) dan
- *   inline `<script>` inisialisasi `Scalar.createApiReference(...)`.
+ * Stoplight Elements self-hosted memerlukan:
+ * - `script-src 'self' 'unsafe-inline'`: bundle lokal (`/docs/stoplight/web-components.min.js`)
+ *   dan inline `<script>` inisialisasi.
  * - `style-src 'self' 'unsafe-inline'`: stylesheet dan atribut style inline.
  * - `connect-src 'self'`: fetch OpenAPI (`/docs/openapi.json`) dan request
  *   Try It ke server yang sama.
+ * - `img-src 'self' data:`: ikon dan gambar inline.
+ * - `font-src 'self' data:`: font yang di-embed dalam CSS.
  *
  * Tidak ada resource dari domain pihak ketiga; semua di-serve same-origin.
  */
@@ -27,64 +32,102 @@ export const DOCS_CSP = [
   "form-action 'self'",
 ].join("; ");
 
-const buildDocsConfiguration = (publicUrl) => ({
-  content: () => buildExternalOpenApi(publicUrl),
-  pageTitle: "SIGAP External API Docs",
-  layout: "modern",
-  theme: "moon",
-  darkMode: true,
-  forceDarkModeState: "dark",
-  persistAuth: false,
-  withDefaultFonts: false,
-  hideDarkModeToggle: true,
-  hideClientButton: false,
-  showSidebar: true,
-});
-
-const renderDocsHtml = (publicUrl) => renderApiReference({
-  config: {
-    ...buildDocsConfiguration(publicUrl),
-    url: "/docs/openapi.json",
-  },
-  pageTitle: "SIGAP External API Docs",
-  cdn: "/docs/js/scalar.js",
-});
+/**
+ * Baca bundle Stoplight Elements dari folder public/stoplight/.
+ * File ini di-sync dari node_modules/@stoplight/elements oleh
+ * `scripts/sync-stoplight-assets.mjs` sebelum build Docker.
+ */
+const stoplightDir = join(here, "public", "stoplight");
+const readStoplightFile = (filename) => readFileSync(join(stoplightDir, filename));
 
 /**
- * Daftarkan Scalar API Reference pada route `/docs`.
+ * Bangun HTML halaman dokumentasi dengan Stoplight Elements web component.
  *
- * - Konten OpenAPI diambil dari `buildExternalOpenApi(publicUrl)` sehingga
- *   hanya memuat path publik `/api/v1/submission-decisions`.
- * - Bundle Scalar disajikan lokal oleh plugin (`/docs/js/scalar.js`), tanpa CDN
- *   pihak ketiga.
- * - `persistAuth: false` menonaktifkan penyimpanan token di localStorage.
- * - GET `/docs` (tanpa trailing slash) dirender langsung agar response 200;
- *   plugin Scalar hanya menyediakan `/docs/` dan me-redirect `/docs` ke sana.
+ * - `router="hash"`: navigasi client-side tanpa server-side routing.
+ * - `layout="sidebar"`: sidebar kiri + konten kanan (gaya Stripe/Stoplight).
+ * - `hideTryIt="false"`: aktifkan Try It / API Client.
+ * - Script `clearAuth` mencegah penyimpanan token di localStorage.
+ */
+const buildDocsHtml = (publicUrl) => `<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SIGAP External API Docs</title>
+  <link rel="stylesheet" href="/docs/stoplight/styles.min.css">
+</head>
+<body>
+  <elements-api
+    apiDescriptionUrl="/docs/openapi.json"
+    router="hash"
+    layout="sidebar"
+    hideTryIt="false"
+  />
+  <script src="/docs/stoplight/web-components.min.js"></script>
+  <script>
+    // Cegah penyimpanan token auth di localStorage/sessionStorage.
+    // Stoplight Elements tidak memiliki opsi persistAuth bawaan, jadi kita
+    // override metode storage untuk key yang berisi data auth.
+    (function() {
+      var origSetItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = function(key, value) {
+        if (/auth|token|bearer|secret/i.test(key)) return;
+        origSetItem(key, value);
+      };
+      var origSSSetItem = sessionStorage.setItem.bind(sessionStorage);
+      sessionStorage.setItem = function(key, value) {
+        if (/auth|token|bearer|secret/i.test(key)) return;
+        origSSSetItem(key, value);
+      };
+    })();
+  </script>
+</body>
+</html>`;
+
+/**
+ * Daftarkan route dokumentasi Stoplight Elements pada Fastify.
+ *
+ * - GET `/docs` → halaman HTML Stoplight Elements (200, bukan redirect).
+ * - GET `/docs/stoplight/*` → bundle JS dan CSS statis (self-hosted, tanpa CDN).
+ * - GET `/docs/openapi.json` → OpenAPI spec dari buildExternalOpenApi().
+ *
+ * @param {import("fastify").FastifyInstance} app
+ * @param {{ publicUrl: string }} options
  */
 export const registerDocsRoute = async (app, { publicUrl }) => {
-  await app.register(scalarApiReference, {
-    routePrefix: "/docs",
-    logLevel: "warn",
-    configuration: buildDocsConfiguration(publicUrl),
-  });
-
-  app.addHook("onRequest", async (request, reply) => {
-    if (request.method !== "GET") return;
-    const pathname = new URL(request.url, "http://internal.local").pathname;
-    if (pathname !== "/docs") return;
-    return reply
+  // Halaman dokumentasi utama.
+  app.get("/docs", { schema: { hide: true } }, async (_request, reply) =>
+    reply
       .header("Content-Type", "text/html; charset=utf-8")
       .header("Cache-Control", "no-store")
       .header("Content-Security-Policy", DOCS_CSP)
-      .send(renderDocsHtml(publicUrl));
-  });
+      .send(buildDocsHtml(publicUrl))
+  );
 
-  app.addHook("onSend", async (request, reply, payload) => {
-    const pathname = new URL(request.url, "http://internal.local").pathname;
-    if (pathname === "/docs" || pathname.startsWith("/docs/")) {
-      reply.header("Cache-Control", "no-store");
-      reply.header("Content-Security-Policy", DOCS_CSP);
-    }
-    return payload;
-  });
+  // Redirect /docs/ → /docs agar konsisten.
+  app.get("/docs/", { schema: { hide: true } }, async (_request, reply) =>
+    reply.redirect("/docs", 301)
+  );
+
+  // Bundle statis Stoplight Elements (self-hosted).
+  app.get("/docs/stoplight/web-components.min.js", { schema: { hide: true } }, async (_request, reply) =>
+    reply
+      .header("Content-Type", "application/javascript; charset=utf-8")
+      .header("Cache-Control", "public, max-age=86400")
+      .header("Content-Security-Policy", DOCS_CSP)
+      .send(readStoplightFile("web-components.min.js"))
+  );
+
+  app.get("/docs/stoplight/styles.min.css", { schema: { hide: true } }, async (_request, reply) =>
+    reply
+      .header("Content-Type", "text/css; charset=utf-8")
+      .header("Cache-Control", "public, max-age=86400")
+      .header("Content-Security-Policy", DOCS_CSP)
+      .send(readStoplightFile("styles.min.css"))
+  );
+
+  // OpenAPI spec untuk Stoplight Elements (di-fetch client-side).
+  app.get("/docs/openapi.json", { schema: { hide: true } }, async () =>
+    buildExternalOpenApi(publicUrl)
+  );
 };

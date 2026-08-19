@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs"
+    "check": "node --check server.mjs",
+    "sync:stoplight": "node ../../scripts/sync-stoplight-assets.mjs"
   },
   "dependencies": {
     "@fastify/rate-limit": "^10.3.0",
-    "@scalar/client-side-rendering": "^0.3.7",
-    "@scalar/fastify-api-reference": "^1.65.1",
     "@supabase/supabase-js": "^2.94.0",
     "fastify": "^5.6.1"
+  },
+  "devDependencies": {
+    "@stoplight/elements": "^9.0.24"
   }
 }
