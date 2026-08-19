@@ -41,11 +41,26 @@ const config: ZudokuConfig = {
       ":root": {
         "--side-nav-width": "300px !important",
       },
+      // Layout: hilangkan centering max-w-screen-2xl (1536px) agar sidebar
+      // dan logo menempel tepi kiri viewport — tanpa space kosong di kiri
+      // saat layar lebih lebar dari 1536px.
+      ".max-w-screen-2xl": {
+        "max-width": "none !important",
+      },
+      // Kurangi padding default header (lg:px-8 = 32px) jadi 16px agar logo
+      // tidak tampak "maju ke kanan".
+      "header .max-w-screen-2xl": {
+        "padding-left": "1rem !important",
+        "padding-right": "1rem !important",
+      },
       // Sidebar: hapus fade mask di tepi atas/bawah nav agar item pertama
-      // tidak tampak transparan saat sidebar pendek (tidak scroll).
+      // tidak tampak transparan saat sidebar pendek (tidak scroll), dan
+      // kurangi padding kiri (default lg:ps-8 = 32px) agar item lebih dekat
+      // ke tepi.
       'nav[class*="side-nav-width"]': {
         "mask-image": "none !important",
         "-webkit-mask-image": "none !important",
+        "padding-left": "1.25rem !important",
       },
       // Tombol minimize sidebar tetap di posisi atas (native togglePosition: top).
       "[data-sidebar-toggle='true']": {
