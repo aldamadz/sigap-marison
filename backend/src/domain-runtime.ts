@@ -3850,9 +3850,9 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
       addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
       addendum_bawah_label: "Struktur Bawah",
       addendum_bawah_nominal: parseExternalMoney(detail.struktur_bawah),
-      // Vendor OpenAPI unit mewajibkan "keterangan pengajuan" non-kosong per unit.
-      // Form tidak selalu menyediakan catatan; judul surat dipakai sebagai
-      // keterangan akhir agar permohonan tidak ditolak 422 oleh vendor.
+      // planning_notes bersifat opsional pada OpenAPI vendor; diisi sebagai
+      // keterangan perencanaan unit bila tersedia di sumber data. Keterangan
+      // pengajuan yang wajib adalah field top-level `description`.
       planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan, surat?.judul_surat),
     };
   });
@@ -3865,6 +3865,10 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     submission_number: surat.no_surat,
     project_id: projectId,
     branch_id: branchId,
+    // Vendor mewajibkan "Keterangan pengajuan" (description) — dipakai vendor
+    // untuk penamaan dokumen SPK dan BAP. Form tidak selalu menangkap catatan,
+    // jadi judul surat dipakai sebagai keterangan akhir.
+    description: firstString(input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan, surat?.judul_surat),
      submitted_by: overrides.nik,
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     units,
@@ -3981,6 +3985,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
+      description: firstString(input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan, surat?.judul_surat),
      submitted_by: overrides.nik,
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),

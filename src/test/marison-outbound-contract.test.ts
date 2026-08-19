@@ -67,24 +67,24 @@ describe("Marison outbound contract v1", () => {
     expect(assertMarisonOutboundContract("unit", fixture)).toEqual(fixture);
   });
 
-  it("rejects Unit payloads with missing or blank planning notes", () => {
-    const missingNotes = readFixture("unit-submission.example.json");
-    delete missingNotes.units[0].planning_notes;
-    expect(() => assertMarisonOutboundContract("unit", missingNotes)).toThrow(
+  it("rejects Unit payloads with missing or blank description (keterangan pengajuan)", () => {
+    const missingDescription = readFixture("unit-submission.example.json");
+    delete missingDescription.description;
+    expect(() => assertMarisonOutboundContract("unit", missingDescription)).toThrow(
       "Payload Marison unit tidak sesuai kontrak."
     );
 
-    const blankNotes = readFixture("unit-submission.example.json");
-    blankNotes.units[0].planning_notes = "   ";
-    expect(() => assertMarisonOutboundContract("unit", blankNotes)).toThrow(
+    const blankDescription = readFixture("unit-submission.example.json");
+    blankDescription.description = "   ";
+    expect(() => assertMarisonOutboundContract("unit", blankDescription)).toThrow(
       "Payload Marison unit tidak sesuai kontrak."
     );
   });
 
-  it("rejects Non Unit items with blank planning notes when present", () => {
-    const fixture = readFixture("non-unit-submission.example.json");
-    fixture.items[0].planning_notes = "";
-    expect(() => assertMarisonOutboundContract("non_unit", fixture)).toThrow(
+  it("rejects Non Unit payloads with missing description (keterangan pengajuan)", () => {
+    const missingDescription = readFixture("non-unit-submission.example.json");
+    delete missingDescription.description;
+    expect(() => assertMarisonOutboundContract("non_unit", missingDescription)).toThrow(
       "Payload Marison non_unit tidak sesuai kontrak."
     );
   });
