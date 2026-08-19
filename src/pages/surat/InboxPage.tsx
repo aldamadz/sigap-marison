@@ -56,6 +56,7 @@ import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components
 import { RecommendationDecisionSummary } from "@/components/surat/RecommendationDecisionSummary";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
+import { NominalInput } from "@/components/surat/NominalInput";
 import { formatCurrencyInput, parseCurrencyInput, formatRupiah as formatRupiahCanonical, normalizeRupiahDigits } from "@/lib/rupiah";
 import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/components/surat/revision-utils";
 import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
@@ -1717,16 +1718,11 @@ const handleApprove = async (item: any) => {
                         <td className="border-r border-border px-2 py-2">
                           <div className="flex h-11 items-center overflow-hidden rounded-md border border-input focus-within:ring-1 focus-within:ring-ring">
                             <span className="flex h-full select-none items-center border-r border-input bg-muted/60 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">Rp</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={formatCurrencyInput(detail.struktur_atas)}
-                              onChange={(event) => {
-                                const raw = parseCurrencyInput(event.target.value);
-                                updateAllocationDetail(item.id, unit.value, "struktur_atas", raw !== null ? String(raw) : "");
-                              }}
+                            <NominalInput
+                              value={detail.struktur_atas}
+                              onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_atas", canonical)}
                               placeholder="1.000.000"
-                              aria-label={`Struktur atas kavling ${unit.label}`}
+                              ariaLabel={`Struktur atas kavling ${unit.label}`}
                               className="h-full w-full bg-transparent px-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
                             />
                           </div>
@@ -1734,16 +1730,11 @@ const handleApprove = async (item: any) => {
                         <td className="border-r border-border px-2 py-2">
                           <div className="flex h-11 items-center overflow-hidden rounded-md border border-input focus-within:ring-1 focus-within:ring-ring">
                             <span className="flex h-full select-none items-center border-r border-input bg-muted/60 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">Rp</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={formatCurrencyInput(detail.struktur_bawah)}
-                              onChange={(event) => {
-                                const raw = parseCurrencyInput(event.target.value);
-                                updateAllocationDetail(item.id, unit.value, "struktur_bawah", raw !== null ? String(raw) : "");
-                              }}
+                            <NominalInput
+                              value={detail.struktur_bawah}
+                              onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_bawah", canonical)}
                               placeholder="1.000.000"
-                              aria-label={`Struktur bawah kavling ${unit.label}`}
+                              ariaLabel={`Struktur bawah kavling ${unit.label}`}
                               className="h-full w-full bg-transparent px-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
                             />
                           </div>
@@ -2791,13 +2782,13 @@ const handleApprove = async (item: any) => {
                           </div>
                           <div>
                             <Label className="text-xs">{revisionDialogItem ? getRevisionApprovedLabel(revisionDialogItem) : "Nilai disetujui"}</Label>
-                            <Input
+                            <NominalInput
                               value={row.nilai_disetujui}
-                              onChange={(event) => revisionDialogItem
-                                ? updateApprovedRevisionValue(revisionDialogItem, row, event.target.value)
-                                : updateRevisionRow(row.index, { nilai_disetujui: formatCurrencyInput(event.target.value) })}
+                              onCommit={(canonical) => revisionDialogItem
+                                ? updateApprovedRevisionValue(revisionDialogItem, row, canonical)
+                                : updateRevisionRow(row.index, { nilai_disetujui: canonical })}
                               placeholder={revisionDialogItem ? getApprovedValuePlaceholder(revisionDialogItem, row) : "Isi nilai yang disetujui"}
-                              className="mt-1"
+                              className="mt-1 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background transition-[border-color,box-shadow,background-color] placeholder:text-muted-foreground/75 focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:opacity-70"
                             />
                           </div>
                         </>
