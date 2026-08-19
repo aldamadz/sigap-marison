@@ -239,6 +239,7 @@ Temuan keamanan outbound:
 | DOCS-01 | Dokumentasi publik dalam aplikasi | Production + Staging | `/docs` routes | Aman ditarik sebagai UI |
 | DOCS-02 | Protokol koordinasi manusia dan AI | Staging only | Root `AGENTS.md`, `docs/AI_COLLABORATION.md`, GitHub Issue/draft PR | Dokumentasi operasional; pertahankan selama pekerjaan paralel diizinkan |
 | EXT-01 | External API read-only surat milik SIGAP | Dormant | Source dan schema ada, container tidak berjalan | Audit consumer sebelum menghapus source/schema |
+| EXT-02 | Portal docs External API memakai Scalar API Reference | Staging only | `external-api/docs-route.mjs`, `@scalar/fastify-api-reference`, OpenAPI hanya `POST /api/v1/submission-decisions`; bundle Scalar self-hosted, `persistAuth: false`, CSP same-origin | DOCS-01, external-api staging container; target staging saja, production tidak disentuh |
 | PIC-01 | Monitoring/PIC/chat/payment lama | Removed dari alur aktif | Riwayat commit lama; route/service aktif tidak ada | Jangan hidupkan kembali tanpa desain baru |
 | ENV-01 | Switch environment Marison lewat UI/OTP | Removed, diganti environment lock | Provider/status locked | Jangan hidupkan; bertentangan dengan isolasi deployment |
 

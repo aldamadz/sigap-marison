@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import { createClient } from "@supabase/supabase-js";
-import { buildDocsHtml, docsClientScript } from "./docs-page.mjs";
+import { registerDocsRoute } from "./docs-route.mjs";
 import { buildExternalOpenApi } from "./openapi.mjs";
 
 const port = Number(process.env.PORT || 80);
@@ -301,16 +301,8 @@ const app = Fastify({
 });
 await app.register(rateLimit, { global: false });
 
-app.get("/docs", { schema: { hide: true } }, async (_request, reply) => reply
-  .header("Cache-Control", "no-store")
-  .header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
-  .type("text/html; charset=utf-8")
-  .send(buildDocsHtml()));
-app.get("/docs/", { schema: { hide: true } }, async (_request, reply) => reply.redirect("/docs"));
-app.get("/docs/app.js", { schema: { hide: true } }, async (_request, reply) => reply
-  .header("Cache-Control", "public, max-age=300")
-  .type("application/javascript; charset=utf-8")
-  .send(docsClientScript));
+await registerDocsRoute(app, { publicUrl });
+
 app.get("/openapi.json", { schema: { hide: true } }, async () => buildExternalOpenApi(publicUrl));
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
 

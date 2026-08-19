@@ -47,12 +47,12 @@ const messageSchema = {
 export const buildExternalOpenApi = (publicUrl) => ({
   openapi: "3.1.0",
   info: {
-    title: "SIGAP Submission Decisions API",
+    title: "SIGAP External API Docs",
     version: "1.0.0",
     description: [
       "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
-      "Gunakan tombol **Authorize** untuk memasukkan bearer token, lalu **Try it out** untuk menguji request.",
-      "### Header wajib\n- `Authorization: Bearer <token>` — pada dialog Authorize, masukkan nilai token saja; Swagger menambahkan awalan `Bearer` secara otomatis.\n- `Content-Type: application/json` — ditambahkan otomatis saat request dijalankan dari Swagger.",
+      "Gunakan tombol **Authorize** untuk memasukkan bearer token, lalu **Test Request** untuk menguji request dari dokumentasi.",
+      "### Header wajib\n- `Authorization: Bearer <token>` — pada dialog Authorize, masukkan nilai token saja; Scalar menambahkan awalan `Bearer` secara otomatis.\n- `Content-Type: application/json` — ditambahkan otomatis saat request dijalankan dari dokumentasi.",
       "Request hanya menerima lima field yang tercantum pada schema.",
     ].join("\n\n"),
   },
@@ -64,7 +64,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
         type: "http",
         scheme: "bearer",
         bearerFormat: "opaque",
-        description: "Token machine-to-machine khusus submission decisions. Masukkan token saja; Swagger otomatis mengirim header `Authorization: Bearer <token>`.",
+        description: "Token machine-to-machine khusus submission decisions. Masukkan token saja; Scalar otomatis mengirim header `Authorization: Bearer <token>`.",
       },
     },
   },
@@ -76,7 +76,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
         description: [
           "Gunakan `rejected` untuk menolak secara terminal atau `revision_required` untuk mengembalikan pengajuan kepada pemohon.",
           "`event_id` adalah kunci idempotensi: replay payload identik berhasil, sedangkan payload berbeda dengan event yang sama ditolak HTTP 409.",
-          "### Header wajib\n`Authorization: Bearer <token>` dan `Content-Type: application/json`. Klik **Authorize** dan masukkan token tanpa menulis kata `Bearer`.",
+          "### Header wajib\n`Authorization: Bearer <token>` dan `Content-Type: application/json`. Di Scalar, klik tombol **Authorize** dan masukkan token tanpa menulis kata `Bearer`.",
         ].join("\n\n"),
         tags: ["Submission Decisions"],
         security: [{ submissionDecisionBearer: [] }],
