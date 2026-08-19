@@ -21,13 +21,6 @@ const config: ZudokuConfig = {
     favicon: "/favicon.png",
   },
   basePath: "/docs",
-  navigation: [
-    {
-      type: "link",
-      to: "/api",
-      label: "API Reference",
-    },
-  ],
   redirects: [{ from: "/", to: "/api" }],
   apis: [
     {

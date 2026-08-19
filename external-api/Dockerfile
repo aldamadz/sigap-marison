@@ -14,6 +14,10 @@ RUN cd docs-zudoku && npm install
 # Build Zudoku → docs-zudoku/dist/
 RUN cd docs-zudoku && npx zudoku build
 
+# Post-process prerendered HTML: Indonesian lang + drop unused CDN preconnect
+RUN find docs-zudoku/dist/docs -name "*.html" -exec sed -i 's/<html lang="en"/<html lang="id"/' {} + \
+ && find docs-zudoku/dist/docs -name "*.html" -exec sed -i 's#<link rel="preconnect" href="https://cdn.zudoku.dev/">##' {} +
+
 # ── Stage 2: Production server ──
 FROM node:22-alpine
 
