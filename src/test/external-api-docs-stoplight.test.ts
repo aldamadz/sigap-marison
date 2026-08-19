@@ -66,22 +66,23 @@ describe("external API Zudoku docs portal", () => {
     expect(DOCS_CSP).not.toContain("https:");
   });
 
-  it("serves the OpenAPI document with only the public decision endpoint", async () => {
+  it("serves the OpenAPI document with only the public endpoints", async () => {
     const response = await app.inject({ method: "GET", url: "/openapi.json" });
 
     expect(response.statusCode).toBe(200);
     const document = response.json();
     expect(document.info.title).toBe("SIGAP External API Docs");
-    expect(Object.keys(document.paths)).toEqual(["/api/v1/submission-decisions"]);
+    expect(Object.keys(document.paths).sort()).toEqual(["/api/v1/submission-decisions", "/health"].sort());
     expect(document.components.securitySchemes.submissionDecisionBearer.type).toBe("http");
     expect(document.components.securitySchemes.submissionDecisionBearer.scheme).toBe("bearer");
   });
 
   it("matches the standalone OpenAPI builder contract", () => {
     const document = buildExternalOpenApi(PUBLIC_URL);
-    expect(Object.keys(document.paths)).toEqual(["/api/v1/submission-decisions"]);
+    expect(Object.keys(document.paths).sort()).toEqual(["/api/v1/submission-decisions", "/health"].sort());
     expect(document.info.version).toBe("1.0.0");
     expect(document.info.description).toContain("Authorization: Bearer <token>");
     expect(document.info.description).toContain("Content-Type: application/json");
+    expect(document.info.description).not.toContain("machine-to-machine");
   });
 });

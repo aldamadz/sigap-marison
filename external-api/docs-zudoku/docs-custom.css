@@ -2,48 +2,64 @@
    SIGAP External API Docs — Custom CSS
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Sidebar position & layout ── */
+/* ── 1. Sidebar width & layout ── */
 :root {
-  --side-nav-width: 300px;
+  --side-nav-width: 300px !important;
+  --padding-content-top: 1.5rem;
 }
 
-/* Sidebar container: full height, proper position */
+/* Sidebar container: ensure proper grid column */
 [data-sidebar-toggle] {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* ── 2. Move sidebar toggle button to top (near header/logo) ── */
+/* ── 2. Sidebar minimize toggle button at top ── */
 [data-sidebar-toggle="true"] {
-  /* Position at the top of the sidebar */
-  --sidebar-toggle-y: 32px !important;
+  --sidebar-toggle-y: 36px !important;
   top: var(--sidebar-toggle-y);
-  z-index: 30;
+  z-index: 40;
+  margin-top: 0;
 }
 
-/* ── 3. Header/logo area ── */
-header img,
-header svg {
+/* ── 3. Header logo + title ── */
+header img {
   display: inline-block;
   vertical-align: middle;
+  margin-right: 8px;
 }
 
-/* ── 4. Dropdown scroll fix (modal test / playground) ── */
+/* ── 4. Dropdown scroll fix (Radix UI Select in modal/playground) ── */
+/* Radix renders select content in a portal at body level */
 [data-radix-select-content],
+[data-radix-menu-content],
 [role="listbox"],
-[role="menu"],
 [data-slot="select-content"],
-[data-radix-menu-content] {
-  max-height: 320px;
-  overflow-y: auto;
-  scrollbar-width: thin;
+[data-radix-popper-content-wrapper] [role="listbox"] {
+  max-height: 320px !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #888 transparent !important;
 }
 
-/* ── 5. Test modal / playground dropdown ── */
-[role="dialog"] [role="combobox"],
-[role="dialog"] select,
-[data-slot="select-trigger"] {
+[data-radix-select-content]::-webkit-scrollbar,
+[data-radix-menu-content]::-webkit-scrollbar,
+[role="listbox"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-radix-select-content]::-webkit-scrollbar-thumb,
+[data-radix-menu-content]::-webkit-scrollbar-thumb,
+[role="listbox"]::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+/* ── 5. Combobox / select trigger cursor ── */
+[role="combobox"],
+[data-slot="select-trigger"],
+[data-radix-select-trigger] {
   cursor: pointer;
 }
 
@@ -52,9 +68,7 @@ header svg {
   [data-sidebar-toggle="true"] {
     --sidebar-toggle-y: 60px;
   }
-}
-
-/* ── 7. Sidebar width ── */
-.lg\:grid-cols-\[var\(--side-nav-width\)_1fr\] {
-  --side-nav-width: 300px;
+  :root {
+    --side-nav-width: 260px !important;
+  }
 }

@@ -25,12 +25,21 @@ describe("external API OpenAPI document", () => {
     const document = buildExternalOpenApi("https://external.marison-testing.biz.id");
     const serialized = JSON.stringify(document);
 
-    expect(Object.keys(document.paths)).toEqual(["/api/v1/submission-decisions"]);
+    expect(Object.keys(document.paths).sort()).toEqual(["/api/v1/submission-decisions", "/health"].sort());
     expect(serialized).not.toContain("/api/surat");
     expect(serialized).not.toContain("/master/offices");
     expect(serialized).not.toContain("revision_scope");
     expect(serialized).not.toContain("affected_items");
     expect(serialized).not.toContain("external_reference");
     expect(serialized).not.toContain("/api/surat/rejections");
+  });
+
+  it("publishes a health check endpoint without authentication", () => {
+    const document = buildExternalOpenApi("https://external.marison-testing.biz.id");
+    const health = document.paths["/health"].get;
+
+    expect(health.tags).toEqual(["System"]);
+    expect(health.security).toEqual([]);
+    expect(health.responses[200].content["application/json"].schema.properties.status.example).toBe("ok");
   });
 });

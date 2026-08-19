@@ -50,21 +50,23 @@ export const buildExternalOpenApi = (publicUrl) => ({
     title: "SIGAP External API Docs",
     version: "1.0.0",
     description: [
-      "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
-      "Gunakan tombol **Authorize** untuk memasukkan bearer token, lalu **Test Request** untuk menguji request dari dokumentasi.",
-      "### Header wajib\n- `Authorization: Bearer <token>` — pada dialog Authorize, masukkan nilai token saja; Scalar menambahkan awalan `Bearer` secara otomatis.\n- `Content-Type: application/json` — ditambahkan otomatis saat request dijalankan dari dokumentasi.",
-      "Request hanya menerima lima field yang tercantum pada schema.",
+      "Dokumentasi resmi untuk integrasi sistem departemen dengan SIGAP.",
+      "Gunakan tombol **Authorize** untuk memasukkan token akses, lalu coba kirim permintaan langsung dari dokumentasi ini.",
+      "### Header wajib\n- `Authorization: Bearer <token>` — masukkan token akses pada dialog Authorize.\n- `Content-Type: application/json` — ditambahkan otomatis saat permintaan dijalankan dari dokumentasi.",
     ].join("\n\n"),
   },
   servers: [{ url: publicUrl, description: "SIGAP External API staging" }],
-  tags: [{ name: "Submission Decisions", description: "Keputusan pengajuan dari sistem departemen." }],
+  tags: [
+    { name: "Submission Decisions", description: "Keputusan pengajuan dari sistem departemen." },
+    { name: "System", description: "Endpoint pemantauan sistem." },
+  ],
   components: {
     securitySchemes: {
       submissionDecisionBearer: {
         type: "http",
         scheme: "bearer",
         bearerFormat: "opaque",
-        description: "Token machine-to-machine khusus submission decisions. Masukkan token saja; Scalar otomatis mengirim header `Authorization: Bearer <token>`.",
+        description: "Token akses khusus untuk mengirim keputusan pengajuan. Masukkan token saja; dokumentasi otomatis mengirim header `Authorization: Bearer <token>`.",
       },
     },
   },
@@ -74,9 +76,10 @@ export const buildExternalOpenApi = (publicUrl) => ({
         operationId: "applySubmissionDecision",
         summary: "Kirim keputusan pengajuan",
         description: [
-          "Gunakan `rejected` untuk menolak secara terminal atau `revision_required` untuk mengembalikan pengajuan kepada pemohon.",
-          "`event_id` adalah kunci idempotensi: replay payload identik berhasil, sedangkan payload berbeda dengan event yang sama ditolak HTTP 409.",
-          "### Header wajib\n`Authorization: Bearer <token>` dan `Content-Type: application/json`. Di Scalar, klik tombol **Authorize** dan masukkan token tanpa menulis kata `Bearer`.",
+          "Kirim keputusan untuk sebuah pengajuan. Gunakan `rejected` untuk menolak secara terminal atau `revision_required` untuk mengembalikan pengajuan kepada pemohon.",
+          "`event_id` adalah kunci idempotensi: permintaan ulang dengan data yang sama akan berhasil, sedangkan data berbeda dengan event yang sama ditolak HTTP 409.",
+          "Request hanya menerima lima field yang tercantum pada schema.",
+          "### Header wajib\n`Authorization: Bearer <token>` dan `Content-Type: application/json`. Gunakan tombol **Authorize** dan masukkan token tanpa menulis kata `Bearer`.",
         ].join("\n\n"),
         tags: ["Submission Decisions"],
         security: [{ submissionDecisionBearer: [] }],
@@ -94,6 +97,21 @@ export const buildExternalOpenApi = (publicUrl) => ({
           409: { description: "Konflik event idempotensi atau state dokumen.", content: { "application/json": { schema: messageSchema } } },
           422: { description: "Dokumen belum memenuhi prasyarat keputusan.", content: { "application/json": { schema: messageSchema } } },
           502: { description: "Backend SIGAP tidak dapat dihubungi.", content: { "application/json": { schema: messageSchema } } },
+        },
+      },
+    },
+    "/health": {
+      get: {
+        operationId: "checkHealth",
+        summary: "Cek status layanan",
+        description: "Memeriksa apakah layanan External API aktif dan siap menerima permintaan.",
+        tags: ["System"],
+        security: [],
+        responses: {
+          200: {
+            description: "Layanan aktif.",
+            content: { "application/json": { schema: { type: "object", properties: { status: { type: "string", example: "ok" } } } } },
+          },
         },
       },
     },

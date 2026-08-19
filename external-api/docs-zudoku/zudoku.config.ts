@@ -5,7 +5,7 @@ const config: ZudokuConfig = {
     title: "SIGAP External API Docs",
     logo: {
       src: { light: "/logo.png", dark: "/logo.png" },
-      alt: "SIGAP",
+      alt: "SIGAP External API",
       width: "32px",
     },
   },
@@ -35,23 +35,42 @@ const config: ZudokuConfig = {
   theme: {
     customCss: {
       ":root": {
-        "--side-nav-width": "300px",
+        "--side-nav-width": "300px !important",
+        "--padding-content-top": "1.5rem",
       },
-      '[data-sidebar-toggle="true"]': {
-        "--sidebar-toggle-y": "32px !important",
+      "[data-sidebar-toggle='true']": {
+        "--sidebar-toggle-y": "36px !important",
         top: "var(--sidebar-toggle-y)",
-        "z-index": "30",
-      },
-      "[role='listbox']": {
-        "max-height": "320px",
-        "overflow-y": "auto",
+        "z-index": "40",
       },
       "[data-radix-select-content]": {
-        "max-height": "320px",
-        "overflow-y": "auto",
+        "max-height": "320px !important",
+        "overflow-y": "auto !important",
+        "scrollbar-width": "thin !important",
       },
-      "[role='dialog'] [role='combobox']": {
+      "[data-radix-menu-content]": {
+        "max-height": "320px !important",
+        "overflow-y": "auto !important",
+      },
+      "[role='listbox']": {
+        "max-height": "320px !important",
+        "overflow-y": "auto !important",
+      },
+      "[role='combobox']": {
         cursor: "pointer",
+      },
+      "header img": {
+        "display": "inline-block",
+        "vertical-align": "middle",
+        "margin-right": "8px",
+      },
+      "@media (max-width: 1024px)": {
+        ":root": {
+          "--side-nav-width": "260px !important",
+        },
+        "[data-sidebar-toggle='true']": {
+          "--sidebar-toggle-y": "60px",
+        },
       },
     },
   },
