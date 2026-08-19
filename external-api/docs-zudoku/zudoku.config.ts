@@ -53,6 +53,12 @@ const config: ZudokuConfig = {
         "padding-left": "1rem !important",
         "padding-right": "1rem !important",
       },
+      // Konten utama: kurangi padding kiri (default lg:px-8 = 32px -> 16px)
+      // agar blok konten (judul halaman, deskripsi, kartu endpoint, contoh
+      // request) menempel lebih dekat ke tepi kanan sidebar.
+      main: {
+        "padding-left": "1rem !important",
+      },
       // Sidebar: hapus fade mask di tepi atas/bawah nav agar item pertama
       // tidak tampak transparan saat sidebar pendek (tidak scroll), dan
       // kurangi padding kiri (default lg:ps-8 = 32px) agar item lebih dekat
