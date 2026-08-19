@@ -40,8 +40,9 @@ export const DOCS_CSP = [
  */
 export const registerDocsRoute = async (app, { publicUrl }) => {
   const distDir = join(here, "docs-zudoku", "dist");
+  const assetsDir = join(distDir, "assets");
 
-  // Serve static files dari Zudoku build output.
+  // Serve static files dari Zudoku build output di /docs/.
   await app.register(fastifyStatic, {
     root: distDir,
     prefix: "/docs/",
@@ -50,6 +51,16 @@ export const registerDocsRoute = async (app, { publicUrl }) => {
     setHeaders: (reply) => {
       reply.header("Cache-Control", "no-store");
       reply.header("Content-Security-Policy", DOCS_CSP);
+    },
+  });
+
+  // Serve assets di /assets/ (Zudoku generate path absolut /assets/... di HTML).
+  await app.register(fastifyStatic, {
+    root: assetsDir,
+    prefix: "/assets/",
+    decorateReply: false,
+    setHeaders: (reply) => {
+      reply.header("Cache-Control", "public, max-age=31536000, immutable");
     },
   });
 
