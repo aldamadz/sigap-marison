@@ -58,20 +58,25 @@ const buildDocsHtml = (publicUrl) => `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SIGAP External API Docs</title>
   <link rel="stylesheet" href="/docs/stoplight/styles.min.css">
-  <style>${docsThemeCss}</style>
+  <style>
+    /* ── Layout full viewport ── */
+    html, body, elements-api { height: 100vh; margin: 0; padding: 0; overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+    elements-api { flex: 1; }
+
+    /* ── Dark theme override ── */
+    ${docsThemeCss}
+  </style>
 </head>
 <body>
   <elements-api
     apiDescriptionUrl="/docs/openapi.json"
     router="hash"
     layout="sidebar"
-    hideTryIt="false"
   />
   <script src="/docs/stoplight/web-components.min.js"></script>
   <script>
     // Cegah penyimpanan token auth di localStorage/sessionStorage.
-    // Stoplight Elements tidak memiliki opsi persistAuth bawaan, jadi kita
-    // override metode storage untuk key yang berisi data auth.
     (function() {
       var origSetItem = localStorage.setItem.bind(localStorage);
       localStorage.setItem = function(key, value) {
