@@ -8,6 +8,7 @@ RUN npm install --omit=dev
 COPY server.mjs ./server.mjs
 COPY openapi.mjs ./openapi.mjs
 COPY docs-route.mjs ./docs-route.mjs
+COPY docs-theme.css ./docs-theme.css
 COPY public/stoplight/ ./public/stoplight/
 
 EXPOSE 80

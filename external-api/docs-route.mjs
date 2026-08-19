@@ -40,6 +40,9 @@ export const DOCS_CSP = [
 const stoplightDir = join(here, "public", "stoplight");
 const readStoplightFile = (filename) => readFileSync(join(stoplightDir, filename));
 
+// Baca tema dark yang di-custom. File ini kecil (~2KB) jadi di-inline di HTML.
+const docsThemeCss = readFileSync(join(here, "docs-theme.css"), "utf8");
+
 /**
  * Bangun HTML halaman dokumentasi dengan Stoplight Elements web component.
  *
@@ -55,6 +58,7 @@ const buildDocsHtml = (publicUrl) => `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SIGAP External API Docs</title>
   <link rel="stylesheet" href="/docs/stoplight/styles.min.css">
+  <style>${docsThemeCss}</style>
 </head>
 <body>
   <elements-api

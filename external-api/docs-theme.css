@@ -1,0 +1,89 @@
+/*
+ * Dark theme + method colors untuk Stoplight Elements.
+ *
+ * Stoplight Elements menggunakan CSS variables dari Mosaic design system.
+ * File ini meng-overwrite default light theme menjadi gelap dan menambah
+ * warna untuk HTTP method badges di sidebar dan endpoint header.
+ */
+
+:root {
+  /* ── Canvas (background layers) ── */
+  --canvas-h: 220;
+  --canvas-s: 30%;
+  --canvas-l: 8%;
+
+  --color-canvas: hsla(var(--canvas-h), var(--canvas-s), var(--canvas-l), 1);
+  --color-canvas-dark: #1a212d;
+  --color-canvas-pure: #0b1120;
+  --color-canvas-tint: rgba(99, 130, 180, 0.12);
+  --color-canvas-50: #1a2435;
+  --color-canvas-100: #151e2d;
+  --color-canvas-200: #111924;
+  --color-canvas-300: #0e151e;
+  --color-canvas-400: #0c121a;
+  --color-canvas-500: #0b1018;
+  --color-canvas-dialog: #1a212d;
+
+  /* ── Text ── */
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-text-light: #64748b;
+  --color-text-heading: #f1f5f9;
+  --color-text-paragraph: #cbd5e1;
+
+  /* ── Borders ── */
+  --color-border-light: #1e293b;
+  --color-border-dark: #334155;
+  --color-border-button: #334155;
+  --color-border-input: #334155;
+
+  /* ── Primary (ungu Stoplight) ── */
+  --color-primary: #7c3aed;
+  --color-primary-tint: rgba(124, 58, 237, 0.15);
+  --color-primary-light: #8b5cf6;
+  --color-primary-dark: #6d28d9;
+  --color-primary-darker: #5b21b6;
+
+  /* ── HTTP Method Colors ── */
+  --color-post: #22c55e;
+  --color-get: #3b82f6;
+  --color-put: #f59e0b;
+  --color-delete: #ef4444;
+  --color-patch: #f59e0b;
+  --color-options: #94a3b8;
+  --color-head: #94a3b8;
+
+  /* ── Semantic ── */
+  --color-success: #22c55e;
+  --color-success-tint: rgba(34, 197, 94, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-tint: rgba(245, 158, 11, 0.15);
+  --color-danger: #ef4444;
+  --color-danger-tint: rgba(239, 68, 68, 0.15);
+  --color-link: #60a5fa;
+  --color-link-dark: #93c5fd;
+
+  /* ── Code ── */
+  --color-code: #1e293b;
+  --color-on-code: #e2e8f0;
+}
+
+/* Pastikan background halaman gelap */
+html, body {
+  background-color: #0b1120 !important;
+  color-scheme: dark;
+}
+
+/* Sidebar: warna method badge */
+.sl-text-post, .sl-border-post { color: var(--color-post) !important; border-color: var(--color-post) !important; }
+.sl-text-get, .sl-border-get { color: var(--color-get) !important; border-color: var(--color-get) !important; }
+.sl-text-put, .sl-border-put { color: var(--color-put) !important; border-color: var(--color-put) !important; }
+.sl-text-delete, .sl-border-delete { color: var(--color-delete) !important; border-color: var(--color-delete) !important; }
+.sl-text-patch, .sl-border-patch { color: var(--color-patch) !important; border-color: var(--color-patch) !important; }
+
+/* Endpoint header method badge background */
+.bg-post { background-color: var(--color-post) !important; }
+.bg-get { background-color: var(--color-get) !important; }
+.bg-put { background-color: var(--color-put) !important; }
+.bg-delete { background-color: var(--color-delete) !important; }
+.bg-patch { background-color: var(--color-patch) !important; }
