@@ -25,6 +25,13 @@ export type NonUnitProjectMapping = {
   branchId: number | null;
   projectOffice: Record<string, unknown> | null;
   ready: boolean;
+  /** Kode proyek efektif (identitas external saat mapping staging dipakai). */
+  code: string | null;
+  /** Nama proyek efektif (identitas external saat mapping staging dipakai). */
+  name: string | null;
+  /** Nama kantor efektif (branch yang dipakai saat dispatch). */
+  branchName: string | null;
+  mappingSource: "external_source" | "staging_mapping" | null;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -48,16 +55,42 @@ export const resolveNonUnitProjectMapping = (
         .map(asRecord)
         .find((office) => String(office.id ?? "") === officeId) ?? null
     : null;
-  const projectId = asPositiveSafeInteger(projectRecord.marison_project_id);
-  const branchId = asPositiveSafeInteger(projectOffice?.marison_branch_id);
+  const fallbackProjectId = asPositiveSafeInteger(projectRecord.marison_project_id);
+  const fallbackBranchId = asPositiveSafeInteger(projectOffice?.marison_branch_id);
+  // Kolom hasil enrich BFF (environment staging): sudah menghormati mapping
+  // staging (marison_outbound_record_mappings) sesuai rantai dispatch.
+  const projectId = asPositiveSafeInteger(projectRecord.marison_effective_project_id) ?? fallbackProjectId;
+  const branchId = asPositiveSafeInteger(projectRecord.marison_effective_branch_id) ?? fallbackBranchId;
   const branchUnavailable = hasUnavailableMarisonProjectBranch(
     projectRecord.marison_review_reasons,
   );
+  const mappingReady = projectRecord.marison_mapping_ready;
+  const ready = typeof mappingReady === "boolean"
+    ? mappingReady === true
+    : projectId !== null && branchId !== null && !branchUnavailable;
+  const mappingSource = projectRecord.marison_mapping_source === "staging_mapping"
+    ? "staging_mapping"
+    : projectRecord.marison_mapping_source === "external_source" || projectId !== null
+      ? "external_source"
+      : null;
+  const code = String(
+    projectRecord.marison_effective_project_code ?? projectRecord.code ?? "",
+  ).trim() || null;
+  const name = String(
+    projectRecord.marison_effective_project_name ?? projectRecord.name ?? "",
+  ).trim() || null;
+  const branchName = String(
+    projectRecord.marison_effective_branch_name ?? projectOffice?.name ?? "",
+  ).trim() || null;
   return {
     projectId,
     branchId,
     projectOffice,
-    ready: projectId !== null && branchId !== null && !branchUnavailable,
+    ready,
+    code,
+    name,
+    branchName,
+    mappingSource,
   };
 };
 
