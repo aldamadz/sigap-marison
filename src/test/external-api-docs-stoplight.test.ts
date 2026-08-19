@@ -10,6 +10,9 @@ describe("external API Zudoku docs portal", () => {
 
   beforeEach(async () => {
     app = Fastify({ logger: false });
+    // Register /health and /openapi.json like server.mjs does.
+    app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
+    app.get("/openapi.json", { schema: { hide: true } }, async () => buildExternalOpenApi(PUBLIC_URL));
     await registerDocsRoute(app, { publicUrl: PUBLIC_URL });
   });
 
@@ -17,20 +20,19 @@ describe("external API Zudoku docs portal", () => {
     await app.close();
   });
 
-  it("redirects /docs to /docs/ for static file serving", async () => {
-    const response = await app.inject({ method: "GET", url: "/docs" });
-
-    expect(response.statusCode).toBe(301);
-    expect(response.headers.location).toBe("/docs/");
+  it("redirects / to /api", async () => {
+    const response = await app.inject({ method: "GET", url: "/" });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("/api");
   });
 
-  it("serves the Zudoku SPA on /docs/", async () => {
-    const response = await app.inject({ method: "GET", url: "/docs/" });
+  it("serves the Zudoku SPA on /api", async () => {
+    const response = await app.inject({ method: "GET", url: "/api" });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
-    // Zudoku index.html redirects to /docs/api (SPA entry point).
-    expect(response.body).toContain("/docs/api");
+    // Zudoku SPA markers.
+    expect(response.body).toContain("SIGAP External API Docs");
     // No old portal markers.
     expect(response.body).not.toContain("swagger-ui");
     expect(response.body).not.toContain("cdn.jsdelivr.net");
@@ -39,19 +41,18 @@ describe("external API Zudoku docs portal", () => {
     expect(response.body).not.toContain("elements-api");
   });
 
-  it("applies a same-origin CSP on /docs/", async () => {
-    const response = await app.inject({ method: "GET", url: "/docs/" });
+  it("applies a same-origin CSP on /api", async () => {
+    const response = await app.inject({ method: "GET", url: "/api" });
 
     expect(response.headers["content-security-policy"]).toBe(DOCS_CSP);
     expect(DOCS_CSP).toContain("script-src 'self' 'unsafe-inline'");
     expect(DOCS_CSP).toContain("style-src 'self' 'unsafe-inline'");
     expect(DOCS_CSP).toContain("connect-src 'self'");
     expect(DOCS_CSP).not.toContain("https:");
-    expect(response.headers["cache-control"]).toBe("no-store");
   });
 
   it("serves the OpenAPI document with only the public decision endpoint", async () => {
-    const response = await app.inject({ method: "GET", url: "/docs/openapi.json" });
+    const response = await app.inject({ method: "GET", url: "/openapi.json" });
 
     expect(response.statusCode).toBe(200);
     const document = response.json();

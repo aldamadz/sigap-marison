@@ -4,7 +4,6 @@ const config: ZudokuConfig = {
   site: {
     title: "SIGAP External API Docs",
   },
-  base: "/docs",
   navigation: [
     {
       type: "link",
@@ -12,7 +11,7 @@ const config: ZudokuConfig = {
       label: "API Reference",
     },
   ],
-  redirects: [{ from: "/", to: "/docs/api" }],
+  redirects: [{ from: "/", to: "/api" }],
   apis: [
     {
       type: "file",
