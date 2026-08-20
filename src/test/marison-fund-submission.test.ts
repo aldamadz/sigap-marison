@@ -16,9 +16,13 @@ const approval = {
 describe("Marison Fund Submission mapper", () => {
   it.each([
     ["Staff IT", "staff"],
+    ["Staff Departemen", "staff"],
     ["Manager Pengembangan Organisasi", "manager"],
     ["Kepala Cabang", "manager"],
+    ["Pimpinan Departemen", "manager"],
+    ["Mgr. HRD GA", "manager"],
     ["Direktur Utama", "director"],
+    ["Direktur I / Direktur Utama", "director"],
   ])("maps SIGAP approval role %s to vendor role %s", (source, expected) => {
     expect(normalizeMarisonFundApprovalRole(source)).toBe(expected);
   });

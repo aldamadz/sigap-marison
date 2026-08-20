@@ -9,9 +9,9 @@ const normalizedNik = (value) => text(value).toUpperCase().replace(/\s+/gu, " ")
 
 export const normalizeMarisonFundApprovalRole = (value) => {
   const role = text(value).toLowerCase();
-  if (/\b(direktur|director)\b/u.test(role)) return "director";
-  if (/\b(manager|manajer|kepala|head)\b/u.test(role)) return "manager";
-  if (/\b(staff|staf|officer|specialist|admin)\b/u.test(role)) return "staff";
+  if (/\b(direktur|director|direksi|dirut)\b/u.test(role)) return "director";
+  if (/\b(manager|manajer|kepala|head|pimpinan|mgr)\b/u.test(role)) return "manager";
+  if (/\b(staff|staf|officer|specialist|admin|pelaksana)\b/u.test(role)) return "staff";
 
   const error = new Error("Role approval Fund Submission tidak dikenali.");
   error.status = 422;
