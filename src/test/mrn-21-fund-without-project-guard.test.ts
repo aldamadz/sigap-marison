@@ -39,4 +39,14 @@ describe('MRN-21: dana umum tanpa proyek guard outbound', () => {
     expect(resolver).toContain('Proyek yang diminta tapi tidak tervalidasi tetap ditolak di bawah.');
     expect(resolver).toContain('resolveMarisonEffectiveProjectBranch');
   });
+
+  it('packages the fund-without-project helper into the runtime image so the build endpoint can import it', () => {
+    // Regresi 2026-08-20: fail saat deploy karena dockerfile tidak menyalin
+    // server/marison-fund-without-project.mjs sehingga import di backend/dist
+    // gagal dengan ERR_MODULE_NOT_FOUND dan container tidak sehat.
+    const dockerfile = read('dockerfile');
+    expect(dockerfile).toContain(
+      'COPY server/marison-fund-without-project.mjs ./server/marison-fund-without-project.mjs',
+    );
+  });
 });
