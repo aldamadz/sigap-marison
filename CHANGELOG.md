@@ -6,17 +6,34 @@
 - Form Non Aset: pilihan "Tanpa Proyek (Dana Umum)" — pengajuan dana umum tanpa
   `requested_project`; snapshot proyek tidak dibuat.
 - Payload `/fund-submissions` meng-omit field `project_id` saat dana tanpa
-  proyek (tidak mengirim `null`/`0`).
+  proyek (tidak mengirim `null`/`0`) dan menggantinya dengan `branch_id`
+  external pemohon (observasi vendor staging 20 Agu 2026: payload tanpa
+  proyek dan tanpa cabang ditolak `"Cabang wajib diisi."`).
 - Resolution source `projectId` opsional untuk kind `fund` (RPC
   `prepare_marison_outbound_dispatch_with_sources` via migration
   `20260820100000_fund_without_project.sql` dan `normalizePayloadResolutionSources`).
+- Pengenalan label jabatan SIGAP untuk role approval Fund Submission:
+  `Pimpinan Departemen`, `Mgr. ...`, `Direktur I / Direktur Utama` (sebelumnya
+  422 tanpa pengenalan).
 - Regression: SQL test fund-without-project dan kasus kontrak/mapper tanpa
-  `project_id`.
+  `project_id`; kasus branch eksternal dana umum; label approval nyata.
+
+### Fixed
+- Guard `recordProjectId === null` gagal menangkap string kosong dari
+  `firstString` sehingga dana umum jatuh ke validasi effective project/branch
+  (500 `Effective project dan branch outbound tidak tervalidasi.`); guard kini
+  memakai predikat falsy (`isMarisonFundWithoutProject`).
+- Dockerfile runtime tidak meng-copy modul server baru pada pengembangan MRN-21
+  (`ERR_MODULE_NOT_FOUND` saat startup); daftar COPY diperbarui dan dilindungi
+  regression test.
 
 ### Safety
 - Proyek yang diminta tapi tidak tervalidasi tetap ditolak sebelum dispatch.
 - Unit/Non Unit tetap mewajibkan `project_id`; sumber resolution yang hadir
   tetap divalidasi `external_source`/`staging_mapping`.
+- Dana umum tanpa divisi, tanpa branch external, atau tanpa keduanya
+  (`project_id` maupun `branch_id`) ditolak sebelum request dikirim — tidak ada
+  angka palsu.
 
 ## [2026-08-18] DOC-10: Database-native document pipeline
 
