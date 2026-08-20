@@ -36,7 +36,16 @@ describe("MRN-16 canonical resolution sources", () => {
       projectId: "external_source",
       "approval:1:signer": "staging_mapping",
     });
+  });
+
+  it("allows Fund Submission without any project source (dana umum)", () => {
+    expect(normalizePayloadResolutionSources({
+      "approval:1:signer": "external_source",
+    }, { kind: "fund", approvalCount: 1 })).toEqual({
+      "approval:1:signer": "external_source",
+    });
     expect(() => normalizePayloadResolutionSources({
+      projectId: "unavailable",
       "approval:1:signer": "external_source",
     }, { kind: "fund", approvalCount: 1 })).toThrow("Metadata sumber payload belum lengkap");
   });

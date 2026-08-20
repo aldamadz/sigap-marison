@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026-08-20] MRN-21: Fund Submission tanpa proyek (dana umum)
+
+### Added
+- Form Non Aset: pilihan "Tanpa Proyek (Dana Umum)" — pengajuan dana umum tanpa
+  `requested_project`; snapshot proyek tidak dibuat.
+- Payload `/fund-submissions` meng-omit field `project_id` saat dana tanpa
+  proyek (tidak mengirim `null`/`0`).
+- Resolution source `projectId` opsional untuk kind `fund` (RPC
+  `prepare_marison_outbound_dispatch_with_sources` via migration
+  `20260820100000_fund_without_project.sql` dan `normalizePayloadResolutionSources`).
+- Regression: SQL test fund-without-project dan kasus kontrak/mapper tanpa
+  `project_id`.
+
+### Safety
+- Proyek yang diminta tapi tidak tervalidasi tetap ditolak sebelum dispatch.
+- Unit/Non Unit tetap mewajibkan `project_id`; sumber resolution yang hadir
+  tetap divalidasi `external_source`/`staging_mapping`.
+
 ## [2026-08-18] DOC-10: Database-native document pipeline
 
 ### Changed

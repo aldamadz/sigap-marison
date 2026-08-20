@@ -43,13 +43,16 @@ export const mapMarisonFundSubmission = ({ request, projectId, division, attachm
   const payload = {
     submission_number: text(request?.submissionNumber),
     type: text(request?.type),
-    project_id: Number(projectId),
     division: text(division),
     title: text(request?.title),
     description: nullableText(request?.description),
     attachments: Array.isArray(attachments) ? attachments : [],
     approvals: Array.isArray(approvals) ? approvals.map(normalizeFundApproval) : [],
   };
+  // Dana umum tanpa proyek: field project_id dihilangkan dari payload (omit).
+  if (projectId !== null && projectId !== undefined && String(projectId).trim() !== "") {
+    payload.project_id = Number(projectId);
+  }
 
   return {
     endpoint: "/fund-submissions",

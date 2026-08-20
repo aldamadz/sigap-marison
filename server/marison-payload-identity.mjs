@@ -36,9 +36,14 @@ export const normalizePayloadResolutionSources = (sources, { kind, approvalCount
     delete normalizedSources.branchId;
   }
 
-  const required = kind === 'fund' ? ['projectId'] : ['requesterNik', 'branchId'];
+  // Fund boleh tanpa proyek (dana umum): projectId hanya divalidasi bila ada.
+  const required = kind === 'fund' ? [] : ['requesterNik', 'branchId'];
   if (kind === 'unit' || kind === 'non_unit') required.push('projectId');
   if (required.some((key) => !VALID_SOURCES.has(normalizedSources[key]))) {
+    throw new Error('Metadata sumber payload belum lengkap.');
+  }
+  // Fund tanpa proyek diizinkan, tetapi projectId yang hadir tetap harus valid.
+  if (kind === 'fund' && normalizedSources.projectId !== undefined && !VALID_SOURCES.has(normalizedSources.projectId)) {
     throw new Error('Metadata sumber payload belum lengkap.');
   }
 

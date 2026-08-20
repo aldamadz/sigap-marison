@@ -292,6 +292,41 @@ export const NON_UNIT_FORM_USAGE_RAW = [
   },
 ];
 
+// Non Aset (Fund Submission) usage for Flow MRN-21: dana umum tanpa proyek.
+export const UUID_FUND = {
+  form_usage: "a7eebc99-9c0b-4ef8-bb6d-6bb9bd380a2e",
+  form_a: "b8eebc99-9c0b-4ef8-bb6d-6bb9bd380a2f",
+  step1: "c9eebc99-9c0b-4ef8-bb6d-6bb9bd380a30",
+  step2: "daeebc99-9c0b-4ef8-bb6d-6bb9bd380a31",
+} as const;
+
+export const FUND_FORM_USAGE_RAW = [
+  {
+    id: UUID_FUND.form_usage,
+    name: "Permohonan Dana (Non Aset)",
+    form_id: UUID_FUND.form_a,
+    request_category: "non_asset",
+    scope_type: "cabang",
+    recommendation_config: null,
+    master_forms: {
+      id: UUID_FUND.form_a,
+      nama_form: "FORM PERMOHONAN DANA",
+      nomor_form: "FNA-001",
+      department_id: UUID.dept_pbo,
+      input_schema: JSON.stringify([
+        { key: "request_place", label: "Tempat", default_source: "request_place", cell: "C5" },
+        { key: "request_date", label: "Tanggal", default_source: "request_date", cell: "C6" },
+      ]),
+    },
+    form_usage_departments: [{ department_id: UUID.dept_pbo }],
+    form_usage_steps: [
+      { id: UUID_FUND.step1, step_order: 1, role_name: "membuat", label: "Pemohon", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user }], form_usage_step_verifiers: [] },
+      { id: UUID_FUND.step2, step_order: 2, role_name: "menyetujui", label: "Direktur", action_type: "approval", candidate_scope: "manual", signer_department_id: null, form_usage_step_users: [{ user_id: UUID.user3 }], form_usage_step_verifiers: [] },
+    ],
+    form_usage_attachment_requirements: [],
+  },
+];
+
 // Usage with attachments
 export const UUID_ATTACH = {
   form_usage: "3beebc99-9c0b-4ef8-bb6d-6bb9bd380a2a",

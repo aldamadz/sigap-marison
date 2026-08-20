@@ -1444,6 +1444,7 @@ export const USER_DOCS: DocsEntry[] = [
             rows: [
               ["Data utama", "Nama kebutuhan, satuan, jumlah, status prioritas, keterangan, catatan, dan lampiran pendukung."],
               ["Alokasi kavling", "Tidak menggunakan pemilihan kavling, kode produksi, atau rekap adendum Unit."],
+              ["Proyek Marison", "Pilih proyek yang siap Marison, atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tidak terikat proyek; surat tersebut dikirim ke Marison tanpa project_id."],
               ["Persetujuan", "Mengikuti kegunaan dan matrix Non Aset yang tersedia untuk departemen/kantor pemohon."],
               ["Pencatatan", "Kategori menunjukkan kebutuhan bukan aset; keputusan akuntansi akhir tetap mengikuti kebijakan perusahaan."],
             ],
