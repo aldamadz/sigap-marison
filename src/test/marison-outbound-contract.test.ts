@@ -60,6 +60,12 @@ describe("Marison outbound contract v1", () => {
     expect(() => assertMarisonOutboundContract("fund", { ...fixture, project_id: 0 })).toThrow();
     expect(() => assertMarisonOutboundContract("fund", { ...fixture, submitted_by: "A 114" })).toThrow();
   });
+
+  it("accepts a Fund Submission without project_id (dana umum)", () => {
+    const fixture = readFixture("fund-submission.example.json");
+    delete fixture.project_id;
+    expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
+  });
   it("accepts the canonical Unit payload supplied to the vendor", () => {
     const fixture = readFixture("unit-submission.example.json");
 

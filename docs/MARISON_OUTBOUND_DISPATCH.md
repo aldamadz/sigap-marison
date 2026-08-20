@@ -33,6 +33,22 @@ Production belum disentuh.
 - Internal idempotency key tidak dikirim ke vendor sampai kontrak vendor
   mendukungnya.
 
+## Fund Submission Tanpa Proyek (Dana Umum)
+
+Fund/Non Aset dapat diajukan tanpa proyek (dana umum). Alur ini dikirim ke
+`/fund-submissions` dengan **menghilangkan field `project_id`** dari payload
+(omit), bukan mengirim `null` atau `0`.
+
+- Form Non Aset menampilkan pilihan "Tanpa Proyek (Dana Umum)"; snapshot
+  `requested_project` tidak dibuat untuk surat ini.
+- Resolution source `projectId` menjadi opsional untuk kind `fund`: bila ada
+  tetap harus `external_source`/`staging_mapping`, bila tidak ada tidak
+  memblokir preflight.
+- Proyek yang **diminta** namun tidak tervalidasi (belum sync, review
+  terblokir, atau branch external tidak tersedia) tetap ditolak sebelum
+  dispatch — aturan MRN-18 tidak berubah dan angka palsu tidak pernah dikirim.
+- Unit dan Non Unit tetap mewajibkan `project_id`.
+
 ## Konfigurasi
 
 Runtime aplikasi dan worker memakai nilai berikut:

@@ -75,6 +75,40 @@ describe("Marison Fund Submission mapper", () => {
     expect(result.payload).not.toHaveProperty("items");
   });
 
+  it("omits project_id when the fund has no project (dana umum)", () => {
+    const result = mapMarisonFundSubmission({
+      request: {
+        submissionNumber: "012/UAI/PBO.1/VIII/2026",
+        type: "operational",
+        title: "Permohonan dana umum tanpa proyek",
+      },
+      projectId: null,
+      division: "Pengembangan Organisasi",
+      attachments: [],
+      approvals: [approval],
+    });
+
+    expect(result).toMatchObject({ endpoint: "/fund-submissions", kind: "fund" });
+    expect(result.payload).not.toHaveProperty("project_id");
+    expect(result.payload).toMatchObject({
+      submission_number: "012/UAI/PBO.1/VIII/2026",
+      type: "operational",
+      division: "Pengembangan Organisasi",
+    });
+  });
+
+  it("omits project_id for an empty string project reference", () => {
+    const result = mapMarisonFundSubmission({
+      request: { submissionNumber: "013/UAI/PBO.1/VIII/2026", type: "production_cost", title: "Dana produksi umum" },
+      projectId: "",
+      division: "Produksi",
+      attachments: [],
+      approvals: [approval],
+    });
+
+    expect(result.payload).not.toHaveProperty("project_id");
+  });
+
   it("rejects a missing user-selected type", () => {
     expect(() => mapMarisonFundSubmission({
       request: { submissionNumber: "010", title: "Dana", type: "" },

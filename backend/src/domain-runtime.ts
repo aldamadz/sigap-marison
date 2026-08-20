@@ -3529,6 +3529,11 @@ const getMarisonOutboundMappings = async (surat = null, kind = "asset") => {
     const sourceProjectAvailable = sourceProject.data && !hasUnavailableMarisonProjectBranch(sourceProject.data.marison_review_reasons);
     const mappedProjectAvailable = projectTarget.data && !hasUnavailableMarisonProjectBranch(projectTarget.data.marison_review_reasons);
     const mappedProjectId = mappedProjectAvailable && projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
+    if (kind === "fund" && sourceProjectId === null && recordProjectId === null) {
+      // Dana umum tanpa proyek: kirim tanpa project_id dan tanpa metadata proyek.
+      // Proyek yang diminta tapi tidak tervalidasi tetap ditolak di bawah.
+      return { branchId: null, projectId: null, sources: {} };
+    }
     const officeResolution = kind === "asset" ? await resolveMarisonOfficeBranch(surat) : null;
     const effectiveProjectBranch = resolveMarisonEffectiveProjectBranch({
       kind,
@@ -4045,7 +4050,8 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 };
 
 const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) => {
-  const projectId = requireExternalInteger(overrides.projectId, "Project ID");
+  // Fund tanpa proyek (dana umum) diizinkan: projectId null membuat payload tanpa project_id.
+  const projectId = overrides.projectId == null ? null : requireExternalInteger(overrides.projectId, "Project ID");
   const fundType = firstString(input.fund_type, input.fund_submission_type);
   const employeePayload = await getMarisonProtectedJson(
     marisonDeploymentEnvironment,

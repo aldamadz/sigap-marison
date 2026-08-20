@@ -47,6 +47,7 @@ import {
 } from "@/components/surat/recommendation-multi-detail";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   normalizeNonUnitOption,
   resolveNonUnitProjectMapping,
@@ -212,6 +213,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
+  const [fundWithoutProject, setFundWithoutProject] = useState(false);
   const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);
   const [activeDraftReservationId, setActiveDraftReservationId] = useState<string | null>(null);
   const [activeDrafts, setActiveDrafts]           = useState<SuratRegistrationDraft[]>([]);
@@ -390,6 +392,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         form_input_data: nextInput,
       };
     });
+    if (category !== "non_asset") setFundWithoutProject(false);
     if (category === "unit") {
       setFormData(prev => {
         const nextInput = { ...prev.form_input_data };
@@ -1765,6 +1768,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
     const proj = master.projects?.find((p: MasterRecord) => p.id === projectId);
+    setFundWithoutProject(false);
     setFormData(prev => ({ ...prev, project_id: projectId, entity_id: proj?.entity_id || prev.entity_id }));
   };
 
@@ -1923,14 +1927,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         description: "Mapping proyek atau kantor proyek belum lengkap. Minta admin meninjau Master Proyek.",
       });
     }
-    if (requestCategory === "non_asset" && !formData.project_id) {
+    if (requestCategory === "non_asset" && !fundWithoutProject && !formData.project_id) {
       return toast({
         variant: "destructive",
         title: "Proyek Tujuan Wajib Dipilih",
-        description: "Fund Submission selalu membutuhkan proyek external, termasuk pengajuan Kantor Pusat.",
+        description: "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
       });
     }
-    if (requestCategory === "non_asset" && !isMarisonProjectReady) {
+    if (requestCategory === "non_asset" && !fundWithoutProject && !isMarisonProjectReady) {
       return toast({
         variant: "destructive",
         title: "Proyek Belum Terhubung",
@@ -2233,11 +2237,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       }
     }
     if (isFundMode) {
-      if (!isMarisonProjectReady) {
+      if (!fundWithoutProject && !isMarisonProjectReady) {
         toast({
           variant: "destructive",
           title: "Proyek Belum Terhubung",
-          description: "Fund Submission membutuhkan proyek external yang valid.",
+          description: "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
         });
         return false;
       }
@@ -3978,6 +3982,29 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
                     <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
                   </div>
+                )}
+                {isFundMode && (
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-muted bg-muted/40 px-3 py-2.5">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={fundWithoutProject}
+                      disabled={!!generatedNoSurat}
+                      onCheckedChange={(checked) => {
+                        if (checked === true) {
+                          setFundWithoutProject(true);
+                          setFormData((prev) => ({ ...prev, project_id: "" }));
+                        } else {
+                          setFundWithoutProject(false);
+                        }
+                      }}
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium text-foreground">Tanpa Proyek (Dana Umum)</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Pengajuan dana tidak terikat proyek; dikirim ke Marison tanpa <code>project_id</code>.
+                      </span>
+                    </span>
+                  </label>
                 )}
                 {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
                   <p className="px-1 text-xs text-muted-foreground">

@@ -24,6 +24,7 @@
     "test:legacy-document-cleanup-sql": "node scripts/test-legacy-document-cleanup-sql.mjs",
     "test:surat-rejection-sql": "node scripts/test-surat-rejection-sql.mjs",
     "test:external-submission-decisions-sql": "node scripts/test-external-submission-decisions-sql.mjs",
+    "test:fund-without-project-sql": "node scripts/test-fund-without-project-sql.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",
     "dev:server": "npm run dev --workspace @sigap/backend",

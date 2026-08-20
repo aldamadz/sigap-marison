@@ -248,6 +248,7 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Dokumentasi user menyediakan satu panduan terpadu untuk memilih `Aset`, `Non Aset`, `Unit`, dan `Non Unit`.
 - `Aset` digunakan untuk barang yang menjadi inventaris/aset perusahaan, termasuk pengadaan atau peremajaan perangkat. Dokumen rekomendasi dapat tersedia sesuai departemen dan konfigurasi.
 - `Non Aset` digunakan untuk barang habis pakai, jasa, sewa, promosi, kegiatan, dan biaya operasional yang tidak dicatat sebagai aset serta bukan pekerjaan pembangunan/proyek fisik.
+- `Non Aset` dapat diajukan sebagai dana umum dengan memilih `Tanpa Proyek (Dana Umum)`; surat tidak menyimpan `requested_project` dan pengiriman ke Marison meng-omit `project_id`.
 - `Unit` digunakan untuk order bangun yang wajib memiliki proyek, jumlah unit, alokasi kavling, struktur atas/bawah, dan kode produksi.
 - `Non Unit` digunakan untuk seluruh permohonan pekerjaan pembangunan/proyek fisik yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk SPK, infrastruktur, fasilitas umum, perbaikan kawasan, material proyek, dan tenaga proyek.
 - Untuk proyek yang sudah terhubung ke Marison, setiap item Non Unit berisi jenis pekerjaan dari master eksternal, nama pekerjaan aktual, nilai pengajuan, dan catatan perencanaan opsional.
@@ -403,6 +404,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kontrak outbound Aset dan Unit v1 memakai fixture kanonis di `docs/contracts/marison/v1` dan divalidasi secara strict sebelum request dikirim.
 - Perubahan nama field, tipe data, atau struktur payload harus melalui versi kontrak baru dan koordinasi vendor; server tidak menyediakan dua bentuk payload untuk endpoint yang sama.
 - Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
+- Untuk `Non Aset`, `project_id` bukan data wajib: dana umum dikirim ke `/fund-submissions` tanpa field `project_id`. Jika proyek diminta namun datanya belum tersedia, pengiriman tetap ditandai gagal dengan alasan spesifik; aturan ini tidak berlaku untuk Unit/Non Unit yang tetap wajib proyek.
 - Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
 ### Non-Fungsional

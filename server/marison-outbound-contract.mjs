@@ -100,7 +100,8 @@ export const marisonAssetPurchaseRequestSchema = z.object({
 export const marisonFundSubmissionSchema = z.object({
   submission_number: nonEmptyText,
   type: z.enum(["production_cost", "operational"]),
-  project_id: positiveInteger,
+  // Dana umum tanpa proyek: field dihilangkan dari payload (omit).
+  project_id: positiveInteger.optional(),
   division: nonEmptyText,
   title: nonEmptyText,
   description: requiredText.nullable(),
