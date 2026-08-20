@@ -1,0 +1,32 @@
+name: Deploy Staging
+on:
+  push:
+    branches: [ staging ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run quality
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+      - name: Create staging env file
+        run: echo "${{ secrets.STAGING_ENV_FILE }}" > .env.staging
+      - name: Deploy to staging
+        run: |
+          docker context create remote --docker "host=ssh://${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          DEPLOY_GIT_SHA=${{ github.sha }} docker --context remote compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+          docker context rm remote
+      - name: Smoke test staging
+        run: |
+          curl -f https://sigap.marison-testing.biz.id/health/ready || (echo 'Staging smoke test failed' && exit 1)
