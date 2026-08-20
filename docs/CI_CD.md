@@ -15,8 +15,9 @@ Dokumen ini menjelaskan pipeline CI/CD yang diterapkan di repository SIGAP.
 ### 1. CI (`ci.yml`)
 
 - **Trigger**: Push/PR ke `main` dan `staging`
-- **Jobs**: `npm ci`, `npm run quality` (lint + typecheck + test + build), `npm audit`
+- **Jobs**: `npm ci`, `npm run quality:ci` (lint + typecheck + test + build, tanpa test SQL berbasis docker), `npm audit`
 - **Tujuan**: Pastikan kode yang masuk staging/main lolos quality gate sebelum di-deploy
+- Test SQL berbasis docker (`test:*sql`) tidak dijalankan di runner; jalankan `npm run quality` secara lokal untuk cakupan penuh
 
 ### 2. Deploy Staging (`deploy-staging.yml`)
 
