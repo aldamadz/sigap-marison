@@ -6,6 +6,7 @@ export interface MarisonFundSubmissionInput {
     description?: unknown;
   };
   projectId?: unknown;
+  branchId?: unknown;
   division?: unknown;
   attachments?: unknown[];
   approvals?: unknown[];
@@ -22,5 +23,10 @@ export function resolveMarisonFundDivision(input: {
   employees?: Array<{ nik?: unknown; division?: unknown }>;
   requesterNik?: unknown;
 }): string;
+
+export function resolveMarisonFundBranch(input: {
+  employees?: Array<{ nik?: unknown; branch?: { id?: unknown; name?: unknown } }>;
+  requesterNik?: unknown;
+}): number;
 
 export function normalizeMarisonFundApprovalRole(value: unknown): "staff" | "manager" | "director";

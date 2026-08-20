@@ -46,7 +46,7 @@ import {
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
-import { mapMarisonFundSubmission, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
+import { mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
   consumedFileViewTokenResult,
@@ -4058,10 +4058,16 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
     marisonDeploymentEnvironment,
     `/employees?search=${encodeURIComponent(overrides.nik)}&per_page=20&page=1`,
   );
+  const employees = Array.isArray(employeePayload?.data) ? employeePayload.data : [];
   const division = resolveMarisonFundDivision({
-    employees: Array.isArray(employeePayload?.data) ? employeePayload.data : [],
+    employees,
     requesterNik: overrides.nik,
   });
+  // Dana umum tanpa proyek wajib menyertakan branch_id external pemohon
+  // (vendor staging menolak payload tanpa cabang: "Cabang wajib diisi.").
+  const branchId = projectId == null
+    ? resolveMarisonFundBranch({ employees, requesterNik: overrides.nik })
+    : null;
 
   return mapMarisonFundSubmission({
     request: {
@@ -4071,6 +4077,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
       description: firstString(input.catatan, input.description, surat.judul_surat),
     },
     projectId,
+    branchId,
     division,
     attachments: await buildMarisonAttachmentLinks(surat, actorId),
     approvals: overrides.approvals,

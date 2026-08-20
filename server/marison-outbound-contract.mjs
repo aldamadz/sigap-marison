@@ -100,14 +100,27 @@ export const marisonAssetPurchaseRequestSchema = z.object({
 export const marisonFundSubmissionSchema = z.object({
   submission_number: nonEmptyText,
   type: z.enum(["production_cost", "operational"]),
-  // Dana umum tanpa proyek: field dihilangkan dari payload (omit).
+  // Fund berproyek: project_id dikirim, branch_id di-omit.
+  // Dana umum tanpa proyek: project_id di-omit, branch_id wajib dikirim
+  // (observasi vendor staging 20 Agu 2026 menolak payload kosong keduanya
+  // dengan "Cabang wajib diisi.").
   project_id: positiveInteger.optional(),
+  branch_id: positiveInteger.optional(),
   division: nonEmptyText,
   title: nonEmptyText,
   description: requiredText.nullable(),
   attachments: z.array(externalLink),
   approvals: z.array(fundApproval).min(1),
-}).strict();
+}).strict().superRefine((payload, ctx) => {
+  const hasProject = payload.project_id != null;
+  const hasBranch = payload.branch_id != null;
+  if (!hasProject && !hasBranch) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Dana umum Fund Submission wajib menyertakan branch_id (cabang) external pemohon.",
+    });
+  }
+});
 
 const schemas = {
   unit: marisonUnitSubmissionSchema,

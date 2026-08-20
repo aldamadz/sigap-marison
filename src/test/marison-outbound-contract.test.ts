@@ -61,9 +61,21 @@ describe("Marison outbound contract v1", () => {
     expect(() => assertMarisonOutboundContract("fund", { ...fixture, submitted_by: "A 114" })).toThrow();
   });
 
-  it("accepts a Fund Submission without project_id (dana umum)", () => {
+  it("accepts a Fund Submission without project_id only when branch_id is present", () => {
     const fixture = readFixture("fund-submission.example.json");
     delete fixture.project_id;
+    let error;
+    try {
+      assertMarisonOutboundContract("fund", fixture);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Payload Marison fund tidak sesuai kontrak");
+    expect(error.details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringContaining("branch_id") }),
+    ]));
+    fixture.branch_id = 11;
     expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
   });
   it("accepts the canonical Unit payload supplied to the vendor", () => {
