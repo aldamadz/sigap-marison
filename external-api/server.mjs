@@ -1,10 +1,15 @@
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
-import swagger from "@fastify/swagger";
-import swaggerUi from "@fastify/swagger-ui";
 import { createClient } from "@supabase/supabase-js";
-import { buildExternalOpenApi } from "./openapi.mjs";
+import { registerDocsRoute } from "./docs-route.mjs";
+import {
+  isRfc3339,
+  sha256Hex,
+  verifyRequestSignature,
+  verifyScryptSecret,
+} from "./auth.mjs";
+import { buildExternalOpenApi, submissionDecisionValidationSchema } from "./openapi.mjs";
 
 const port = Number(process.env.PORT || 80);
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -14,9 +19,13 @@ const appPublicUrl = String(process.env.APP_PUBLIC_URL || "https://sigap.marison
 const maxSkewMs = Number(process.env.EXTERNAL_API_MAX_SKEW_MS || 5 * 60 * 1000);
 const maxLimit = Number(process.env.EXTERNAL_API_MAX_LIMIT || 100);
 const accessTokenTtlSeconds = Number(process.env.EXTERNAL_API_ACCESS_TOKEN_TTL_SECONDS || 15 * 60);
+const submissionDecisionsApiToken = String(process.env.SUBMISSION_DECISIONS_API_TOKEN || "");
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
+}
+if (submissionDecisionsApiToken.length < 32) {
+  throw new Error("SUBMISSION_DECISIONS_API_TOKEN must contain at least 32 characters.");
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
@@ -35,43 +44,10 @@ if (storageMode !== "self_hosted_supabase" || !storageSupabase || !storagePublic
   throw new Error("Self-hosted storage is required for external file access.");
 }
 
-const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
-const hmacSha512Hex = (secret, value) => createHmac("sha512", secret).update(value).digest("hex");
-const safeHexEqual = (left, right) => {
-  const a = Buffer.from(String(left || ""), "hex");
-  const b = Buffer.from(String(right || ""), "hex");
-  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
-};
-const safeTextEqual = (left, right) => {
-  const a = Buffer.from(String(left || ""));
-  const b = Buffer.from(String(right || ""));
-  return a.length === b.length && timingSafeEqual(a, b);
-};
-
-const verifyScryptSecret = (secret, encoded) => {
-  const [algorithm, nRaw, rRaw, pRaw, saltHex, keyHex] = String(encoded || "").split("$");
-  if (algorithm !== "scrypt" || !saltHex || !keyHex) return false;
-  const n = Number(nRaw);
-  const r = Number(rRaw);
-  const p = Number(pRaw);
-  if (![n, r, p].every(Number.isFinite)) return false;
-  const expected = Buffer.from(keyHex, "hex");
-  const actual = scryptSync(String(secret || ""), Buffer.from(saltHex, "hex"), expected.length, {
-    N: n,
-    r,
-    p,
-    maxmem: 64 * 1024 * 1024,
-  });
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-};
-
 const getBearerToken = (request) => {
   const auth = request.headers.authorization || "";
   return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
 };
-
-const isRfc3339 = (value) =>
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(String(value || ""));
 
 const storageClientForRef = (ref) => ref?.origin === "external" && storageSupabase ? storageSupabase : supabase;
 
@@ -255,7 +231,7 @@ const authenticateRequest = async (request, reply) => {
 
   const { data: accessToken, error } = await supabase
     .from("external_api_access_tokens")
-    .select("id, client_id, expires_at, revoked_at, external_api_clients!inner(id, name, allowed_ips, is_active)")
+    .select("id, client_id, expires_at, revoked_at, external_api_clients!inner(id, name, allowed_ips, is_active, scopes)")
     .eq("token_hash", sha256Hex(token))
     .maybeSingle();
   const client = accessToken?.external_api_clients;
@@ -267,9 +243,12 @@ const authenticateRequest = async (request, reply) => {
     return reply.code(403).send({ message: "IP tidak diizinkan" });
   }
 
-  const bodyHash = sha256Hex(Buffer.alloc(0));
-  const canonical = [request.method, request.url, token, bodyHash, timestamp].join(":");
-  if (!safeHexEqual(hmacSha512Hex(token, canonical), signature)) {
+  if (!verifyRequestSignature(signature, token, {
+    method: request.method,
+    pathWithQuery: request.url,
+    rawBody: request.rawBody ?? Buffer.alloc(0),
+    timestamp,
+  })) {
     request.externalClient = client;
     return reply.code(401).send({ message: "Unauthorized" });
   }
@@ -280,6 +259,14 @@ const authenticateRequest = async (request, reply) => {
     supabase.from("external_api_clients").update({ last_used_at: new Date().toISOString() }).eq("id", client.id),
     supabase.from("external_api_access_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", accessToken.id),
   ]);
+};
+
+const authenticateSubmissionDecisionRequest = async (request, reply) => {
+  await authenticateRequest(request, reply);
+  if (reply.sent) return;
+  if (!Array.isArray(request.externalClient?.scopes) || !request.externalClient.scopes.includes("submission:decide")) {
+    return reply.code(403).send({ message: "Client tidak memiliki scope submission:decide" });
+  }
 };
 
 const resolveFileRef = async (suratId, type, query) => {
@@ -297,54 +284,46 @@ const resolveFileRef = async (suratId, type, query) => {
 };
 
 const app = Fastify({
-  logger: { redact: ["req.headers.authorization"] },
+  logger: {
+    redact: [
+      "req.headers.authorization",
+      "req.headers.x-signature",
+      "req.body.client_secret",
+      "res.body.data.access_token",
+    ],
+  },
   trustProxy: true,
 });
+app.removeContentTypeParser("application/json");
+app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
+  request.rawBody = Buffer.from(body);
+  try {
+    done(null, JSON.parse(request.rawBody.toString("utf8")));
+  } catch (error) {
+    error.statusCode = 400;
+    done(error);
+  }
+});
 await app.register(rateLimit, { global: false });
-await app.register(swagger, {
-  openapi: {
-    openapi: "3.1.0",
-    info: {
-      title: "SIGAP External Surat API",
-      version: "2.1.0",
-      description: [
-        "API read-only untuk integrasi data surat SIGAP.",
-        "Request data wajib membawa `Authorization: Bearer <access_token>`, `X-Timestamp`, dan `X-Signature`.",
-        "Signature: `HMAC_SHA512(access_token, METHOD:PATH_WITH_QUERY:ACCESS_TOKEN:BODY_SHA256:TIMESTAMP)`.",
-        "Gunakan timestamp RFC3339 dan minta access token baru setiap 15 menit.",
-      ].join("\n\n"),
-    },
-    servers: [{ url: `${publicUrl}/api`, description: "Live" }],
-    components: {
-      securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque" },
-        timestamp: { type: "apiKey", in: "header", name: "X-Timestamp" },
-        signature: { type: "apiKey", in: "header", name: "X-Signature" },
-      },
-    },
-  },
-});
-await app.register(swaggerUi, {
-  routePrefix: "/docs",
-  uiConfig: {
-    docExpansion: "list",
-    deepLinking: true,
-    persistAuthorization: false,
-  },
-  transformSpecification: () => buildExternalOpenApi(publicUrl),
-});
+await registerDocsRoute(app);
 
+app.get("/", { schema: { hide: true } }, async (_request, reply) => reply.redirect("/docs/api"));
 app.get("/openapi.json", { schema: { hide: true } }, async () => buildExternalOpenApi(publicUrl));
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
 
 app.post("/api/v1/submission-decisions", {
+  config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+  preValidation: authenticateSubmissionDecisionRequest,
+  onResponse: async (request, reply) => {
+    await writeAuditLog(request, reply.statusCode, reply.statusCode >= 400 ? reply.statusMessage : null);
+  },
   bodyLimit: 4096,
-  schema: { hide: true },
+  schema: { hide: true, body: submissionDecisionValidationSchema },
 }, async (request, reply) => {
   const upstream = await fetch(`${appPublicUrl}/api/v1/submission-decisions`, {
     method: "POST",
     headers: {
-      authorization: String(request.headers.authorization || ""),
+      authorization: `Bearer ${submissionDecisionsApiToken}`,
       "content-type": "application/json",
       "x-request-id": request.id,
     },

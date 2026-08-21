@@ -1,12 +1,29 @@
 # Keputusan Pengajuan dari Sistem Departemen
 
-## Endpoint
+## Autentikasi
+
+1. Minta access token melalui `POST /api/access-token` menggunakan `client_id`
+   dan `client_secret`.
+2. Access token berlaku singkat, default 15 menit, dan tidak disimpan permanen.
+3. Request keputusan wajib membawa `Authorization: Bearer <access_token>`,
+   `X-Timestamp`, dan `X-Signature`.
+4. Client wajib memiliki scope `submission:decide`.
+
+Canonical signature:
+
+`METHOD:PATH_WITH_QUERY:ACCESS_TOKEN:BODY_SHA256:TIMESTAMP`
+
+`BODY_SHA256` dihitung dari byte raw request body yang benar-benar dikirim.
+`X-Signature` adalah HMAC SHA-512 lowercase hexadecimal menggunakan access token
+sebagai key. Timestamp harus RFC3339 dan berada dalam toleransi lima menit.
+
+`SUBMISSION_DECISIONS_API_TOKEN` tetap digunakan hanya di jaringan internal antara
+facade External API dan backend SIGAP. Token tersebut tidak diberikan kepada
+consumer/vendor.
+
+## Endpoint Keputusan
 
 `POST /api/v1/submission-decisions`
-
-Autentikasi machine-to-machine memakai `Authorization: Bearer <token>` yang cocok
-dengan `SUBMISSION_DECISIONS_API_TOKEN`. Token minimal 32 karakter dan tidak boleh
-ditaruh di query string, payload, log, atau repository.
 
 ```json
 {
@@ -22,6 +39,9 @@ Hanya lima field tersebut yang diterima. `note`, `revision_scope`,
 `affected_items`, dan `external_reference` ditolak. `event_id` merupakan kunci
 idempotensi: replay payload identik mengembalikan sukses idempotent, sedangkan
 payload berbeda dengan `event_id` yang sama menghasilkan HTTP 409.
+
+Client credentials membuktikan identitas sistem pemanggil. `event_id` tetap wajib
+karena menangani retry dan duplikasi keputusan pada tingkat bisnis.
 
 ## Prasyarat
 
