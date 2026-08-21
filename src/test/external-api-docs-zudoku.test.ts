@@ -1,5 +1,6 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { readFileSync } from "node:fs";
+import { describe, expect, it, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
@@ -7,16 +8,28 @@ import { registerDocsRoute, DOCS_CSP } from "../../external-api/docs-route.mjs";
 import { buildExternalOpenApi } from "../../external-api/openapi.mjs";
 
 const PUBLIC_URL = "https://external.marison-testing.biz.id";
+const TEST_INDEX = `<!doctype html><html lang="id"><head><title>SIGAP External API Docs</title><link rel="icon" href="/docs/favicon.png"></head><body><img src="/docs/favicon.png"><main>Zudoku</main></body></html>`;
 
 describe("external API Zudoku docs portal", () => {
   let app: FastifyInstance;
+  let testDocsDir: string;
+
+  beforeAll(() => {
+    testDocsDir = mkdtempSync(join(tmpdir(), "sigap-zudoku-docs-"));
+    writeFileSync(join(testDocsDir, "api.html"), TEST_INDEX);
+    writeFileSync(join(testDocsDir, "favicon.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  });
+
+  afterAll(() => {
+    rmSync(testDocsDir, { recursive: true, force: true });
+  });
 
   beforeEach(async () => {
     app = Fastify({ logger: false });
     // Register /health and /openapi.json like server.mjs does.
     app.get("/health", async () => ({ status: "ok" }));
     app.get("/openapi.json", async () => buildExternalOpenApi(PUBLIC_URL));
-    await registerDocsRoute(app);
+    await registerDocsRoute(app, { distDir: testDocsDir });
   });
 
   afterEach(async () => {
@@ -114,5 +127,17 @@ describe("external API Zudoku docs portal", () => {
     );
 
     expect(bundledDocument).toEqual(buildExternalOpenApi(PUBLIC_URL));
+  });
+
+  it("keeps the Zudoku brand and base path in its build configuration", () => {
+    const config = readFileSync(
+      join(process.cwd(), "external-api", "docs-zudoku", "zudoku.config.ts"),
+      "utf8",
+    );
+
+    expect(config).toContain('basePath: "/docs"');
+    expect(config).toContain('title: "SIGAP External API Docs"');
+    expect(config).toContain('src: { light: "/favicon.png", dark: "/favicon.png" }');
+    expect(config).toContain('favicon: "/favicon.png"');
   });
 });

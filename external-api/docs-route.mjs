@@ -35,9 +35,10 @@ export const DOCS_CSP = [
  * - SPA fallback: route /docs/* yang tidak match file → serve api.html
  *
  * @param {import("fastify").FastifyInstance} app
+ * @param {{ distDir?: string }} [options]
  */
-export const registerDocsRoute = async (app) => {
-  const distDir = join(here, "docs-zudoku", "dist", "docs");
+export const registerDocsRoute = async (app, options = {}) => {
+  const distDir = options.distDir || join(here, "docs-zudoku", "dist", "docs");
 
   // Serve static files dari Zudoku build output.
   await app.register(fastifyStatic, {
