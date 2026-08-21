@@ -59,18 +59,9 @@ export const buildExternalOpenApi = (publicUrl) => ({
   info: {
     title: "SIGAP External API Docs",
     version: "2.0.0",
-    description: [
-      "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
-      "Tukar `client_id` dan `client_secret` melalui `/api/access-token`, lalu gunakan access token berumur pendek untuk request keputusan.",
-      "Request keputusan wajib membawa `Authorization`, `X-Timestamp`, dan `X-Signature` HMAC SHA-512.",
-      "`event_id` tetap wajib sebagai kunci idempotensi bisnis dan tidak digantikan oleh autentikasi.",
-    ].join("\n\n"),
   },
   servers: [{ url: publicUrl, description: "SIGAP External API staging" }],
-  tags: [
-    { name: "Authentication", description: "Pertukaran client credentials menjadi access token singkat." },
-    { name: "Submission Decisions", description: "Keputusan pengajuan dari sistem departemen." },
-  ],
+  tags: [{ name: "Authentication" }, { name: "Submission Decisions" }],
   components: {
     securitySchemes: {
       bearerAuth: {

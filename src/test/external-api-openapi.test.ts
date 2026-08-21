@@ -12,8 +12,10 @@ describe("external API OpenAPI document", () => {
     expect(document.servers).toEqual([{ url: "https://external.marison-testing.biz.id", description: "SIGAP External API staging" }]);
     expect(document.paths["/api/access-token"].post.security).toEqual([]);
     expect(operation.security).toEqual([{ bearerAuth: [], timestamp: [], signature: [] }]);
-    expect(document.info.description).toContain("client_id");
-    expect(document.info.description).toContain("X-Timestamp");
+    expect(document.info.description).toBeUndefined();
+    expect(document.paths["/api/access-token"].post.description).toContain("access token");
+    expect(operation.description).toContain("X-Signature");
+    expect(operation.description).toContain("event_id");
     expect(operation.description).toContain("raw request body");
     expect(schema.required).toEqual(["event_id", "document_number", "decision", "reason", "decided_at"]);
     expect(Object.keys(schema.properties)).toEqual(schema.required);
