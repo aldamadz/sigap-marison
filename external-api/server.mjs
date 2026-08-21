@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
-import scalarApiReference from "@scalar/fastify-api-reference";
 import { createClient } from "@supabase/supabase-js";
+import { registerDocsRoute } from "./docs-route.mjs";
 import {
   isRfc3339,
   sha256Hex,
@@ -305,20 +305,9 @@ app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, bo
   }
 });
 await app.register(rateLimit, { global: false });
-await app.register(scalarApiReference, {
-  routePrefix: "/docs",
-  configuration: {
-    content: () => buildExternalOpenApi(publicUrl),
-    pageTitle: "SIGAP External API Docs",
-    theme: "moon",
-    layout: "modern",
-    persistAuth: false,
-    hideModels: true,
-    defaultHttpClient: { targetKey: "js", clientKey: "fetch" },
-  },
-});
+await registerDocsRoute(app);
 
-app.get("/", { schema: { hide: true } }, async (_request, reply) => reply.redirect("/docs"));
+app.get("/", { schema: { hide: true } }, async (_request, reply) => reply.redirect("/docs/api"));
 app.get("/openapi.json", { schema: { hide: true } }, async () => buildExternalOpenApi(publicUrl));
 app.get("/health", { schema: { hide: true } }, async () => ({ status: "ok" }));
 

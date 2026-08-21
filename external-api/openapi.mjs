@@ -57,7 +57,7 @@ const messageSchema = {
 export const buildExternalOpenApi = (publicUrl) => ({
   openapi: "3.1.0",
   info: {
-    title: "SIGAP Submission Decisions API",
+    title: "SIGAP External API Docs",
     version: "2.0.0",
     description: [
       "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
