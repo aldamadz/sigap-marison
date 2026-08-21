@@ -139,5 +139,7 @@ describe("external API Zudoku docs portal", () => {
     expect(config).toContain('title: "SIGAP External API Docs"');
     expect(config).toContain('src: { light: "/favicon.png", dark: "/favicon.png" }');
     expect(config).toContain('favicon: "/favicon.png"');
+    expect(config).toContain('href: "/api"');
+    expect(config).toContain("reloadDocument: true");
   });
 });
