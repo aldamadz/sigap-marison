@@ -141,5 +141,7 @@ describe("external API Zudoku docs portal", () => {
     expect(config).toContain('favicon: "/favicon.png"');
     expect(config).toContain('href: "/api"');
     expect(config).toContain("reloadDocument: true");
+    expect(config).toContain('"#root > .grid > .lg\\\\:hidden.sticky.border-b"');
+    expect(config).toContain('display: "none !important"');
   });
 });
