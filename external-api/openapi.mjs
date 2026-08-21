@@ -91,7 +91,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
                 additionalProperties: false,
                 required: ["client_id", "client_secret"],
                 properties: {
-                  client_id: { type: "string", minLength: 1, example: "department-system" },
+                  client_id: { type: "string", minLength: 1, example: "123" },
                   client_secret: { type: "string", minLength: 32, format: "password" },
                 },
               },
