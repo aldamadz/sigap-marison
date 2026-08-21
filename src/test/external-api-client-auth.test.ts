@@ -58,8 +58,12 @@ describe("external API client credential request signing", () => {
       "utf8",
     );
 
-    expect(script).toContain('flag: "wx"');
-    expect(script).toContain("mode: 0o600");
+    expect(script).toContain('openSync(outputPath, "wx", 0o600)');
+    expect(script).toContain("rmSync(outputPath, { force: true })");
+    expect(script).toContain('const DEFAULT_SCOPE = "submission:decide"');
+    expect(script).toContain("if (!options.scopes.length) options.scopes.push(DEFAULT_SCOPE)");
+    expect(script).toContain("process.exitCode = 1");
+    expect(script).not.toContain("process.exit(1)");
     expect(script).toContain("scopes,");
     expect(script).not.toContain("console.log(JSON.stringify({\n  client: data,\n  client_id: clientId,\n  client_secret: clientSecret");
     expect(migration).toContain("add column if not exists scopes text[] not null");

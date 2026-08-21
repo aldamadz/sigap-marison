@@ -162,15 +162,21 @@ SIGAP berhenti pada approval akhir. SPK, bukti pembayaran, dan proses operasiona
 
 ## Create Client Credential
 
-Jalankan dari environment operator yang memiliki service role Supabase cloud:
+Jalankan dari environment operator yang memiliki service role Supabase cloud.
+Client keputusan pengajuan otomatis mendapat scope `submission:decide`:
 
 ```powershell
-node --env-file=.env.production scripts\create-external-api-client.mjs "nama-client" 203.0.113.10
+node --env-file=.env.staging scripts\create-external-api-client.mjs "nama-client"
 ```
 
-IP opsional. Hilangkan argumen IP jika partner belum memiliki IP statis.
+Untuk production, ganti file environment menjadi `.env.production`. IP statis
+opsional dapat diberikan sebagai argumen kedua atau melalui `--allowed-ip`.
+Scope tambahan dapat diberikan dengan mengulang `--scope`.
 
-Output `client_id` dan `client_secret` hanya tampil sekali. Simpan di secret manager partner. Secret asli tidak disimpan di database.
+File kredensial dibuat dengan nama unik di `~/.sigap/credentials/`. Path file
+ditampilkan di terminal, tetapi `client_secret` tidak pernah dicetak. Pindahkan
+isinya ke secret manager partner lalu hapus file tersebut setelah handoff.
+Secret asli tidak disimpan di database.
 
 ## Deployment
 
