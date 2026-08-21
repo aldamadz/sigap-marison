@@ -117,10 +117,46 @@ const config: ZudokuConfig = {
         ":root": {
           "--side-nav-width": "260px !important",
         },
-        // Zudoku juga merender bar "Menu" di area konten. Hamburger pada
-        // header sudah membuka navigasi yang sama, jadi bar duplikat dihapus.
-        "#root > .grid > .lg\\:hidden.sticky.border-b": {
+        // Hamburger header bawaan membuka global navigation yang kosong.
+        // Gunakan tombol API sidebar yang fungsional sebagai hamburger tunggal.
+        "header button[aria-label='Open navigation menu']": {
           display: "none !important",
+        },
+        "#root > .grid > .lg\\:hidden.sticky.border-b": {
+          position: "fixed !important",
+          inset: "1rem 1rem auto auto !important",
+          width: "32px !important",
+          height: "32px !important",
+          padding: "0 !important",
+          border: "0 !important",
+          background: "transparent !important",
+          "backdrop-filter": "none !important",
+          "z-index": "60 !important",
+        },
+        "#root > .grid > .lg\\:hidden.sticky.border-b > button": {
+          position: "relative !important",
+          width: "32px !important",
+          height: "32px !important",
+          padding: "0 !important",
+          background:
+            "linear-gradient(currentColor, currentColor) center / 22px 2px no-repeat !important",
+        },
+        "#root > .grid > .lg\\:hidden.sticky.border-b > button > svg, #root > .grid > .lg\\:hidden.sticky.border-b > button > span": {
+          display: "none !important",
+        },
+        "#root > .grid > .lg\\:hidden.sticky.border-b > button::before, #root > .grid > .lg\\:hidden.sticky.border-b > button::after": {
+          content: '""',
+          position: "absolute",
+          left: "5px",
+          width: "22px",
+          height: "2px",
+          background: "currentColor",
+        },
+        "#root > .grid > .lg\\:hidden.sticky.border-b > button::before": {
+          top: "8px",
+        },
+        "#root > .grid > .lg\\:hidden.sticky.border-b > button::after": {
+          bottom: "8px",
         },
         // Judul di header disembunyikan di layar kecil agar tidak penuh.
         "header a.shrink-0::after": {
