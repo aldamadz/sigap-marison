@@ -7,6 +7,7 @@ RUN npm install --omit=dev
 
 COPY server.mjs ./server.mjs
 COPY openapi.mjs ./openapi.mjs
+COPY auth.mjs ./auth.mjs
 
 EXPOSE 80
 
