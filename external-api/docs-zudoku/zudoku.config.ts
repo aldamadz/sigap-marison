@@ -117,6 +117,11 @@ const config: ZudokuConfig = {
         ":root": {
           "--side-nav-width": "260px !important",
         },
+        // Zudoku juga merender bar "Menu" di area konten. Hamburger pada
+        // header sudah membuka navigasi yang sama, jadi bar duplikat dihapus.
+        "#root > .grid > .lg\\:hidden.sticky.border-b": {
+          display: "none !important",
+        },
         // Judul di header disembunyikan di layar kecil agar tidak penuh.
         "header a.shrink-0::after": {
           display: "none",
