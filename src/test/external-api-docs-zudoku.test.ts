@@ -113,9 +113,9 @@ describe("external API Zudoku docs portal", () => {
     const document = buildExternalOpenApi(PUBLIC_URL);
     expect(Object.keys(document.paths).sort()).toEqual(["/api/access-token", "/api/v1/submission-decisions"].sort());
     expect(document.info.version).toBe("2.0.0");
-    expect(document.info.description).toContain("client_id");
-    expect(document.info.description).toContain("X-Signature");
-    expect(document.info.description).toContain("event_id");
+    expect(document.info.description).toBeUndefined();
+    expect(document.tags).toEqual([{ name: "Authentication" }, { name: "Submission Decisions" }]);
+    expect(document.paths["/api/v1/submission-decisions"].post.description).toContain("X-Signature");
   });
 
   it("bundles the same OpenAPI contract served by the runtime", () => {
