@@ -143,7 +143,11 @@ describe("external API Zudoku docs portal", () => {
     expect(config).toContain("reloadDocument: true");
     expect(config).toContain('"#root > .grid > .lg\\\\:hidden.sticky.border-b"');
     expect(config).toContain('"header button[aria-label=\'Open navigation menu\']"');
-    expect(config).toContain('inset: "1rem 1rem auto auto !important"');
+    expect(config).toContain('"padding-left": "1.5rem !important"');
+    expect(config).toContain('"padding-right": "1.5rem !important"');
+    expect(config).toContain('"padding-left": "1.25rem !important"');
+    expect(config).toContain('"padding-right": "1.25rem !important"');
+    expect(config).toContain('inset: "1rem 1.25rem auto auto !important"');
     expect(config).toContain("linear-gradient(currentColor, currentColor)");
   });
 });
