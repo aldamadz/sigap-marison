@@ -7,6 +7,8 @@ const config: ZudokuConfig = {
       src: { light: "/favicon.png", dark: "/favicon.png" },
       alt: "SIGAP",
       width: "28px",
+      href: "/api",
+      reloadDocument: true,
     },
     showPoweredBy: false,
     sidebar: {
