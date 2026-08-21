@@ -78,4 +78,16 @@ describe("external API client credential request signing", () => {
     expect(migration).toContain("nullif(btrim(client_secret_hash), '') is not null");
     expect(migration).toContain("cardinality(scopes) > 0");
   });
+
+  it("allows short-lived tokens to start active while enforcing their lifecycle", () => {
+    const migration = readFileSync(
+      join(process.cwd(), "supabase", "migrations", "20260821144500_external_api_enable_short_lived_tokens.sql"),
+      "utf8",
+    );
+
+    expect(migration).toContain("drop constraint if exists external_api_access_tokens_revoked_check");
+    expect(migration).toContain("external_api_access_tokens_lifecycle_check");
+    expect(migration).toContain("expires_at > created_at");
+    expect(migration).toContain("revoked_at is null or revoked_at >= created_at");
+  });
 });
