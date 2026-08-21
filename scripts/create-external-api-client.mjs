@@ -1,17 +1,20 @@
 import { randomBytes, scryptSync } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const args = process.argv.slice(2);
-const nameFlagIndex = args.indexOf("--name");
-const name = nameFlagIndex >= 0 ? args[nameFlagIndex + 1] : args[0];
-const allowedIps = args.filter((_arg, index) =>
-  index !== nameFlagIndex &&
-  index !== nameFlagIndex + 1 &&
-  !(nameFlagIndex < 0 && index === 0)
-);
+const valueFor = (flag) => {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : null;
+};
+const valuesFor = (flag) => args.flatMap((arg, index) => arg === flag && args[index + 1] ? [args[index + 1]] : []);
+const name = valueFor("--name");
+const outputPath = valueFor("--output");
+const allowedIps = valuesFor("--allowed-ip");
+const scopes = valuesFor("--scope");
 
-if (!name) {
-  console.error("Usage: node scripts/create-external-api-client.mjs --name <client-name> [allowed-ip ...]");
+if (!name || !outputPath) {
+  console.error("Usage: node scripts/create-external-api-client.mjs --name <client-name> --output <secure-file> [--scope <scope>] [--allowed-ip <ip>]");
   process.exit(1);
 }
 
@@ -52,8 +55,9 @@ const { data, error } = await supabase
     client_id: clientId,
     client_secret_hash: clientSecretHash,
     allowed_ips: allowedIps,
+    scopes,
   })
-  .select("id, name, client_id, allowed_ips, created_at")
+  .select("id, name, client_id, allowed_ips, scopes, created_at")
   .single();
 
 if (error) {
@@ -61,10 +65,15 @@ if (error) {
   process.exit(1);
 }
 
-console.log(JSON.stringify({
+writeFileSync(outputPath, JSON.stringify({
   client: data,
   client_id: clientId,
   client_secret: clientSecret,
   token_endpoint: "/api/access-token",
-  note: "Simpan client_id dan client_secret sekarang. Client secret asli tidak disimpan di database.",
+}, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+
+console.log(JSON.stringify({
+  client: data,
+  credentials_file: outputPath,
+  note: "Credential dibuat sekali dan tidak dicetak ke stdout.",
 }, null, 2));

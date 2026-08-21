@@ -36,6 +36,16 @@ export const submissionDecisionRequestSchema = {
   },
 };
 
+export const submissionDecisionValidationSchema = {
+  ...submissionDecisionRequestSchema,
+  properties: Object.fromEntries(
+    Object.entries(submissionDecisionRequestSchema.properties).map(([key, value]) => {
+      const { example: _example, ...validationSchema } = value;
+      return [key, validationSchema];
+    }),
+  ),
+};
+
 const messageSchema = {
   type: "object",
   additionalProperties: true,
@@ -48,27 +58,83 @@ export const buildExternalOpenApi = (publicUrl) => ({
   openapi: "3.1.0",
   info: {
     title: "SIGAP Submission Decisions API",
-    version: "1.0.0",
+    version: "2.0.0",
     description: [
       "API machine-to-machine untuk keputusan pengajuan dari sistem departemen ke SIGAP.",
-      "Gunakan tombol **Authorize** untuk memasukkan bearer token, lalu **Try it out** untuk menguji request.",
-      "### Header wajib\n- `Authorization: Bearer <token>` — pada dialog Authorize, masukkan nilai token saja; Swagger menambahkan awalan `Bearer` secara otomatis.\n- `Content-Type: application/json` — ditambahkan otomatis saat request dijalankan dari Swagger.",
-      "Request hanya menerima lima field yang tercantum pada schema.",
+      "Tukar `client_id` dan `client_secret` melalui `/api/access-token`, lalu gunakan access token berumur pendek untuk request keputusan.",
+      "Request keputusan wajib membawa `Authorization`, `X-Timestamp`, dan `X-Signature` HMAC SHA-512.",
+      "`event_id` tetap wajib sebagai kunci idempotensi bisnis dan tidak digantikan oleh autentikasi.",
     ].join("\n\n"),
   },
   servers: [{ url: publicUrl, description: "SIGAP External API staging" }],
-  tags: [{ name: "Submission Decisions", description: "Keputusan pengajuan dari sistem departemen." }],
+  tags: [
+    { name: "Authentication", description: "Pertukaran client credentials menjadi access token singkat." },
+    { name: "Submission Decisions", description: "Keputusan pengajuan dari sistem departemen." },
+  ],
   components: {
     securitySchemes: {
-      submissionDecisionBearer: {
+      bearerAuth: {
         type: "http",
         scheme: "bearer",
         bearerFormat: "opaque",
-        description: "Token machine-to-machine khusus submission decisions. Masukkan token saja; Swagger otomatis mengirim header `Authorization: Bearer <token>`.",
+        description: "Access token singkat dari `/api/access-token`.",
       },
+      timestamp: { type: "apiKey", in: "header", name: "X-Timestamp", description: "Timestamp RFC3339 dalam toleransi lima menit." },
+      signature: { type: "apiKey", in: "header", name: "X-Signature", description: "HMAC SHA-512 lowercase hexadecimal." },
     },
   },
   paths: {
+    "/api/access-token": {
+      post: {
+        operationId: "generateAccessToken",
+        summary: "Generate access token",
+        description: "Menukar client credentials menjadi bearer access token yang berlaku 15 menit. Jangan menyimpan access token secara permanen.",
+        tags: ["Authentication"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["client_id", "client_secret"],
+                properties: {
+                  client_id: { type: "string", minLength: 1, example: "department-system" },
+                  client_secret: { type: "string", minLength: 32, format: "password" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Access token berhasil dibuat.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    data: {
+                      type: "object",
+                      properties: {
+                        access_token: { type: "string" },
+                        token_type: { type: "string", enum: ["bearer"] },
+                        expires_in: { type: "string", example: "900" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: "Client credentials tidak valid.", content: { "application/json": { schema: messageSchema } } },
+          403: { description: "Alamat IP tidak diizinkan.", content: { "application/json": { schema: messageSchema } } },
+          429: { description: "Rate limit terlampaui.", content: { "application/json": { schema: messageSchema } } },
+        },
+      },
+    },
     "/api/v1/submission-decisions": {
       post: {
         operationId: "applySubmissionDecision",
@@ -76,10 +142,11 @@ export const buildExternalOpenApi = (publicUrl) => ({
         description: [
           "Gunakan `rejected` untuk menolak secara terminal atau `revision_required` untuk mengembalikan pengajuan kepada pemohon.",
           "`event_id` adalah kunci idempotensi: replay payload identik berhasil, sedangkan payload berbeda dengan event yang sama ditolak HTTP 409.",
-          "### Header wajib\n`Authorization: Bearer <token>` dan `Content-Type: application/json`. Klik **Authorize** dan masukkan token tanpa menulis kata `Bearer`.",
+          "Hash body dihitung dari raw request body yang dikirim, termasuk whitespace. Gunakan byte yang sama saat menghitung signature dan saat mengirim request.",
+          "Canonical string: `METHOD:PATH_WITH_QUERY:ACCESS_TOKEN:BODY_SHA256:TIMESTAMP`. Nilai `X-Signature` adalah HMAC SHA-512 lowercase hexadecimal dengan access token sebagai key.",
         ].join("\n\n"),
         tags: ["Submission Decisions"],
-        security: [{ submissionDecisionBearer: [] }],
+        security: [{ bearerAuth: [], timestamp: [], signature: [] }],
         requestBody: {
           required: true,
           content: {
@@ -89,7 +156,8 @@ export const buildExternalOpenApi = (publicUrl) => ({
         responses: {
           200: { description: "Keputusan diterapkan atau replay idempotent berhasil." },
           400: { description: "Payload tidak valid.", content: { "application/json": { schema: messageSchema } } },
-          401: { description: "Bearer token tidak valid.", content: { "application/json": { schema: messageSchema } } },
+          401: { description: "Access token, timestamp, atau signature tidak valid.", content: { "application/json": { schema: messageSchema } } },
+          403: { description: "Alamat IP tidak diizinkan.", content: { "application/json": { schema: messageSchema } } },
           404: { description: "Nomor dokumen tidak ditemukan.", content: { "application/json": { schema: messageSchema } } },
           409: { description: "Konflik event idempotensi atau state dokumen.", content: { "application/json": { schema: messageSchema } } },
           422: { description: "Dokumen belum memenuhi prasyarat keputusan.", content: { "application/json": { schema: messageSchema } } },
