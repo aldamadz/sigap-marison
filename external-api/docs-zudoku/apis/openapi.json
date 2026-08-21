@@ -65,7 +65,7 @@
                   "client_id": {
                     "type": "string",
                     "minLength": 1,
-                    "example": "department-system"
+                    "example": "123"
                   },
                   "client_secret": {
                     "type": "string",

@@ -51,13 +51,13 @@ const config: ZudokuConfig = {
       },
       // Sejajarkan header dengan ruang baca konten tanpa membuatnya mepet viewport.
       "header .max-w-screen-2xl": {
-        "padding-left": "1.5rem !important",
-        "padding-right": "1.5rem !important",
+        "padding-left": "2.5rem !important",
+        "padding-right": "2.5rem !important",
       },
       // Ruang baca seimbang untuk judul, schema, dan contoh request.
       main: {
-        "padding-left": "1.5rem !important",
-        "padding-right": "1.5rem !important",
+        "padding-left": "2.5rem !important",
+        "padding-right": "2.5rem !important",
       },
       // Sidebar: hapus fade mask di tepi atas/bawah nav agar item pertama
       // tidak tampak transparan saat sidebar pendek (tidak scroll), dan
@@ -116,12 +116,12 @@ const config: ZudokuConfig = {
           "--side-nav-width": "260px !important",
         },
         "header .max-w-screen-2xl": {
-          "padding-left": "1.25rem !important",
-          "padding-right": "1.25rem !important",
+          "padding-left": "1.5rem !important",
+          "padding-right": "1.5rem !important",
         },
         main: {
-          "padding-left": "1.25rem !important",
-          "padding-right": "1.25rem !important",
+          "padding-left": "1.5rem !important",
+          "padding-right": "1.5rem !important",
         },
         // Hamburger header bawaan membuka global navigation yang kosong.
         // Gunakan tombol API sidebar yang fungsional sebagai hamburger tunggal.
@@ -130,7 +130,7 @@ const config: ZudokuConfig = {
         },
         "#root > .grid > .lg\\:hidden.sticky.border-b": {
           position: "fixed !important",
-          inset: "1rem 1.25rem auto auto !important",
+          inset: "1rem 1.5rem auto auto !important",
           width: "32px !important",
           height: "32px !important",
           padding: "0 !important",

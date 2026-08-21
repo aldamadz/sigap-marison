@@ -11,6 +11,7 @@ describe("external API OpenAPI document", () => {
     expect(document.info.version).toBe("2.0.0");
     expect(document.servers).toEqual([{ url: "https://external.marison-testing.biz.id", description: "SIGAP External API staging" }]);
     expect(document.paths["/api/access-token"].post.security).toEqual([]);
+    expect(document.paths["/api/access-token"].post.requestBody.content["application/json"].schema.properties.client_id.example).toBe("123");
     expect(operation.security).toEqual([{ bearerAuth: [], timestamp: [], signature: [] }]);
     expect(document.info.description).toBeUndefined();
     expect(document.paths["/api/access-token"].post.description).toContain("access token");
