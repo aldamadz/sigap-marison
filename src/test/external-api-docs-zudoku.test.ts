@@ -142,6 +142,8 @@ describe("external API Zudoku docs portal", () => {
     expect(config).toContain('href: "/api"');
     expect(config).toContain("reloadDocument: true");
     expect(config).toContain('"#root > .grid > .lg\\\\:hidden.sticky.border-b"');
-    expect(config).toContain('display: "none !important"');
+    expect(config).toContain('"header button[aria-label=\'Open navigation menu\']"');
+    expect(config).toContain('inset: "1rem 1rem auto auto !important"');
+    expect(config).toContain("linear-gradient(currentColor, currentColor)");
   });
 });
