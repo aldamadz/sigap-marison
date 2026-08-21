@@ -65,4 +65,17 @@ describe("external API client credential request signing", () => {
     expect(migration).toContain("add column if not exists scopes text[] not null");
     expect(migration).toContain("submission:decide");
   });
+
+  it("only activates external clients with credentials and an explicit scope", () => {
+    const migration = readFileSync(
+      join(process.cwd(), "supabase", "migrations", "20260821143000_external_api_enable_scoped_clients.sql"),
+      "utf8",
+    );
+
+    expect(migration).toContain("drop constraint if exists external_api_clients_inactive_check");
+    expect(migration).toContain("external_api_clients_active_credentials_check");
+    expect(migration).toContain("nullif(btrim(client_id), '') is not null");
+    expect(migration).toContain("nullif(btrim(client_secret_hash), '') is not null");
+    expect(migration).toContain("cardinality(scopes) > 0");
+  });
 });
