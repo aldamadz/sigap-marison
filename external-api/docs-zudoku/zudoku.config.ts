@@ -49,17 +49,15 @@ const config: ZudokuConfig = {
       ".max-w-screen-2xl": {
         "max-width": "none !important",
       },
-      // Kurangi padding default header (lg:px-8 = 32px) jadi 16px agar logo
-      // tidak tampak "maju ke kanan".
+      // Sejajarkan header dengan ruang baca konten tanpa membuatnya mepet viewport.
       "header .max-w-screen-2xl": {
-        "padding-left": "1rem !important",
-        "padding-right": "1rem !important",
+        "padding-left": "1.5rem !important",
+        "padding-right": "1.5rem !important",
       },
-      // Konten utama: kurangi padding kiri (default lg:px-8 = 32px -> 16px)
-      // agar blok konten (judul halaman, deskripsi, kartu endpoint, contoh
-      // request) menempel lebih dekat ke tepi kanan sidebar.
+      // Ruang baca seimbang untuk judul, schema, dan contoh request.
       main: {
-        "padding-left": "1rem !important",
+        "padding-left": "1.5rem !important",
+        "padding-right": "1.5rem !important",
       },
       // Sidebar: hapus fade mask di tepi atas/bawah nav agar item pertama
       // tidak tampak transparan saat sidebar pendek (tidak scroll), dan
@@ -117,6 +115,14 @@ const config: ZudokuConfig = {
         ":root": {
           "--side-nav-width": "260px !important",
         },
+        "header .max-w-screen-2xl": {
+          "padding-left": "1.25rem !important",
+          "padding-right": "1.25rem !important",
+        },
+        main: {
+          "padding-left": "1.25rem !important",
+          "padding-right": "1.25rem !important",
+        },
         // Hamburger header bawaan membuka global navigation yang kosong.
         // Gunakan tombol API sidebar yang fungsional sebagai hamburger tunggal.
         "header button[aria-label='Open navigation menu']": {
@@ -124,7 +130,7 @@ const config: ZudokuConfig = {
         },
         "#root > .grid > .lg\\:hidden.sticky.border-b": {
           position: "fixed !important",
-          inset: "1rem 1rem auto auto !important",
+          inset: "1rem 1.25rem auto auto !important",
           width: "32px !important",
           height: "32px !important",
           padding: "0 !important",
