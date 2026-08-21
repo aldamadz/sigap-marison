@@ -404,7 +404,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kontrak outbound Aset dan Unit v1 memakai fixture kanonis di `docs/contracts/marison/v1` dan divalidasi secara strict sebelum request dikirim.
 - Perubahan nama field, tipe data, atau struktur payload harus melalui versi kontrak baru dan koordinasi vendor; server tidak menyediakan dua bentuk payload untuk endpoint yang sama.
 - Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
-- Untuk `Non Aset`, `project_id` bukan data wajib: dana umum dikirim ke `/fund-submissions` tanpa field `project_id`. Jika proyek diminta namun datanya belum tersedia, pengiriman tetap ditandai gagal dengan alasan spesifik; aturan ini tidak berlaku untuk Unit/Non Unit yang tetap wajib proyek.
+- Untuk `Non Aset`, `project_id` bukan data wajib: dana umum dikirim ke `/fund-submissions` tanpa field `project_id` dan wajib menyertakan `branch_id` external pemohon (dari branch employee di direktori Marison; vendor menolak dana umum tanpa cabang). Jika proyek diminta namun datanya belum tersedia, pengiriman tetap ditandai gagal dengan alasan spesifik; aturan ini tidak berlaku untuk Unit/Non Unit yang tetap wajib proyek.
 - Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
 ### Non-Fungsional

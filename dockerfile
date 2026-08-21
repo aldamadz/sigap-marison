@@ -75,6 +75,7 @@ COPY server/marison-sync-worker.mjs ./server/marison-sync-worker.mjs
 COPY server/marison-outbound-worker.mjs ./server/marison-outbound-worker.mjs
 COPY server/marison-rejection-diagnosis.mjs ./server/marison-rejection-diagnosis.mjs
 COPY server/surat-linked-access.mjs ./server/surat-linked-access.mjs
+COPY server/marison-fund-without-project.mjs ./server/marison-fund-without-project.mjs
 
 EXPOSE 80
 

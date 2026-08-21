@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mapMarisonFundSubmission,
   normalizeMarisonFundApprovalRole,
+  resolveMarisonFundBranch,
   resolveMarisonFundDivision,
 } from "../../server/marison-fund-submission.mjs";
 
@@ -16,9 +17,13 @@ const approval = {
 describe("Marison Fund Submission mapper", () => {
   it.each([
     ["Staff IT", "staff"],
+    ["Staff Departemen", "staff"],
     ["Manager Pengembangan Organisasi", "manager"],
     ["Kepala Cabang", "manager"],
+    ["Pimpinan Departemen", "manager"],
+    ["Mgr. HRD GA", "manager"],
     ["Direktur Utama", "director"],
+    ["Direktur I / Direktur Utama", "director"],
   ])("maps SIGAP approval role %s to vendor role %s", (source, expected) => {
     expect(normalizeMarisonFundApprovalRole(source)).toBe(expected);
   });
@@ -43,6 +48,27 @@ describe("Marison Fund Submission mapper", () => {
       requesterNik: "A 114",
       employees: [{ nik: "A 114", division: null }],
     })).toThrow("Division external pemohon tidak tersedia");
+  });
+
+  it("resolves the external employee branch for dana umum", () => {
+    expect(resolveMarisonFundBranch({
+      requesterNik: "a   114 ",
+      employees: [
+        { nik: "A 115", branch: { id: "5", name: "Cabang X" } },
+        { nik: "A 114", branch: { id: 11, name: "MARISON TEST" } },
+      ],
+    })).toBe(11);
+  });
+
+  it("fails closed when the requester employee has no external branch", () => {
+    expect(() => resolveMarisonFundBranch({
+      requesterNik: "A 114",
+      employees: [{ nik: "A 114", branch: null }],
+    })).toThrow("Branch external pemohon tidak tersedia");
+    expect(() => resolveMarisonFundBranch({
+      requesterNik: "A 114",
+      employees: [{ nik: "A 114", branch: { id: 0 } }],
+    })).toThrow("Branch external pemohon tidak tersedia");
   });
 
   it("maps the exact vendor contract without requester, branch, or items", () => {
@@ -75,7 +101,7 @@ describe("Marison Fund Submission mapper", () => {
     expect(result.payload).not.toHaveProperty("items");
   });
 
-  it("omits project_id when the fund has no project (dana umum)", () => {
+  it("omits project_id and sends branch_id for dana umum", () => {
     const result = mapMarisonFundSubmission({
       request: {
         submissionNumber: "012/UAI/PBO.1/VIII/2026",
@@ -83,6 +109,7 @@ describe("Marison Fund Submission mapper", () => {
         title: "Permohonan dana umum tanpa proyek",
       },
       projectId: null,
+      branchId: 11,
       division: "Pengembangan Organisasi",
       attachments: [],
       approvals: [approval],
@@ -93,6 +120,7 @@ describe("Marison Fund Submission mapper", () => {
     expect(result.payload).toMatchObject({
       submission_number: "012/UAI/PBO.1/VIII/2026",
       type: "operational",
+      branch_id: 11,
       division: "Pengembangan Organisasi",
     });
   });
@@ -101,12 +129,25 @@ describe("Marison Fund Submission mapper", () => {
     const result = mapMarisonFundSubmission({
       request: { submissionNumber: "013/UAI/PBO.1/VIII/2026", type: "production_cost", title: "Dana produksi umum" },
       projectId: "",
+      branchId: 7,
       division: "Produksi",
       attachments: [],
       approvals: [approval],
     });
 
     expect(result.payload).not.toHaveProperty("project_id");
+    expect(result.payload.branch_id).toBe(7);
+  });
+
+  it("rejects dana umum without project_id and branch_id", () => {
+    expect(() => mapMarisonFundSubmission({
+      request: { submissionNumber: "014/UAI/PBO.1/VIII/2026", type: "operational", title: "Dana umum tanpa cabang" },
+      projectId: null,
+      branchId: null,
+      division: "Finance",
+      attachments: [],
+      approvals: [approval],
+    })).toThrow("Payload Marison fund tidak sesuai kontrak");
   });
 
   it("rejects a missing user-selected type", () => {

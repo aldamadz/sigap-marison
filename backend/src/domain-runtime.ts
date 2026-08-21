@@ -46,7 +46,7 @@ import {
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
 } from "../../server/marison-outbound-contract.mjs";
-import { mapMarisonFundSubmission, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
+import { mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
   consumedFileViewTokenResult,
@@ -75,6 +75,7 @@ import {
   resolveProfilePayloadIdentity,
 } from "../../server/marison-payload-identity.mjs";
 import { resolveMarisonEffectiveProjectBranch } from "../../server/marison-branch-resolution.mjs";
+import { isMarisonFundWithoutProject } from "../../server/marison-fund-without-project.mjs";
 import { executeMarisonPayloadMappingCommand } from "../../server/marison-payload-mapping-handler.mjs";
 import {
   parseMarisonPayloadCatalogQuery,
@@ -3529,7 +3530,7 @@ const getMarisonOutboundMappings = async (surat = null, kind = "asset") => {
     const sourceProjectAvailable = sourceProject.data && !hasUnavailableMarisonProjectBranch(sourceProject.data.marison_review_reasons);
     const mappedProjectAvailable = projectTarget.data && !hasUnavailableMarisonProjectBranch(projectTarget.data.marison_review_reasons);
     const mappedProjectId = mappedProjectAvailable && projectTarget.data?.marison_project_id && projectTarget.data?.marison_synced_at && projectTarget.data?.master_offices?.marison_branch_id && projectTarget.data?.master_offices?.marison_synced_at ? projectTarget.data.marison_project_id : null;
-    if (kind === "fund" && sourceProjectId === null && recordProjectId === null) {
+    if (kind === "fund" && isMarisonFundWithoutProject(sourceProjectId, recordProjectId)) {
       // Dana umum tanpa proyek: kirim tanpa project_id dan tanpa metadata proyek.
       // Proyek yang diminta tapi tidak tervalidasi tetap ditolak di bawah.
       return { branchId: null, projectId: null, sources: {} };
@@ -4057,10 +4058,16 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
     marisonDeploymentEnvironment,
     `/employees?search=${encodeURIComponent(overrides.nik)}&per_page=20&page=1`,
   );
+  const employees = Array.isArray(employeePayload?.data) ? employeePayload.data : [];
   const division = resolveMarisonFundDivision({
-    employees: Array.isArray(employeePayload?.data) ? employeePayload.data : [],
+    employees,
     requesterNik: overrides.nik,
   });
+  // Dana umum tanpa proyek wajib menyertakan branch_id external pemohon
+  // (vendor staging menolak payload tanpa cabang: "Cabang wajib diisi.").
+  const branchId = projectId == null
+    ? resolveMarisonFundBranch({ employees, requesterNik: overrides.nik })
+    : null;
 
   return mapMarisonFundSubmission({
     request: {
@@ -4070,6 +4077,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
       description: firstString(input.catatan, input.description, surat.judul_surat),
     },
     projectId,
+    branchId,
     division,
     attachments: await buildMarisonAttachmentLinks(surat, actorId),
     approvals: overrides.approvals,
