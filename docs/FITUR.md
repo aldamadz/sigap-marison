@@ -39,9 +39,6 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 | Admin | `/admin/master-projects` | Master Proyek |
 | Admin | `/admin/monitoring` | All Status Monitoring |
 | Admin | `/admin/kpi-departments` | SLA Departemen |
-| Admin | `/admin/configuration/forms` | Configuration: Form & Template |
-| Admin | `/admin/configuration/template-designer` | Configuration: Template Builder |
-| Admin | `/admin/configuration/workflows` | Configuration: Dokumentasi Matrix Lama |
 | Admin | `/admin/configuration/form-usages` | Configuration: Kegunaan Form |
 | Admin | `/admin/configuration/kpi` | Configuration: SLA Departemen |
 | Admin | `/admin/configuration/job-title-labels` | Configuration: Label Jabatan |
@@ -168,8 +165,8 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Setiap item rekomendasi dapat diputuskan sebagai Service, Ganti Komponen, Beli Baru, atau Tidak Direkomendasikan.
 - Service, Ganti Komponen, dan Beli Baru mewajibkan lampiran gambar; Tidak Direkomendasikan hanya mewajibkan alasan.
 - Keputusan rekomendasi disalin ke snapshot surat induk saat task rekomendasi selesai, sehingga item yang tidak direkomendasikan dapat tampil tercoret pada detail surat dan PDF PGD tanpa membuka lampiran rekomendasi.
-- Admin dapat memilih preset konfigurasi template saat upload Excel agar mapping input, kode form, departemen, dan area tanda tangan terisi otomatis.
-- Template `Rekomendasi Peremajaan Barang / Alat Kerja` memakai file Excel terbaru user `Form Rekomendasi Peremajaan Alat Template 20260629.xlsx` sebagai form rekomendasi/prasyarat PBO dengan nomor dokumen di `C4:J4`, tabel rekomendasi row `9-15`, catatan `B18:H24`, tempat/tanggal `I17:J17`, dan tanda tangan dinamis `I17:J24`.
+- Item `not_recommended` tidak wajib memiliki detail, tetapi detail lama boleh tetap disimpan; payload outbound selalu mengabaikan seluruh detail item tersebut.
+- Dokumen `Rekomendasi Peremajaan Barang / Alat Kerja` dirender langsung dari data terstruktur dan snapshot tanda tangan; tidak memakai template Excel atau preset layout.
 - Tabel rekomendasi berisi `No.` otomatis, `Nama Barang / Alat Kerja`, `No Registrasi` opsional, `Lokasi / PIC` dari pilihan user, `Kerusakan` opsional, pilihan `Service`, `Ganti`, atau `Beli Baru`, `Uraian`, dan `Keterangan` opsional.
 - Item rekomendasi dibuat dari konteks permohonan induk, tetapi `Nama Barang / Alat Kerja` diisi manual oleh tim IT/PO agar spesifikasi, tipe, dan pilihan barang dapat ditentukan berdasarkan hasil pemeriksaan.
 - Navigator item rekomendasi menampilkan nama item dari permohonan induk sebagai konteks pekerjaan, sedangkan input `Nama Barang / Alat Kerja` tetap manual dan tidak mengikuti nama item induk.
@@ -234,9 +231,13 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Deteksi dokumen rekomendasi tertaut dilakukan dari parameter URL sejak render pertama, sehingga halaman tidak sempat menampilkan pilihan registrasi biasa saat draft rekomendasi sedang dipulihkan.
 - Jika link rekomendasi lama masih membuka `/surat/registrasi?linked_type=recommendation`, aplikasi mengarahkannya ke `/surat/rekomendasi/registrasi` dengan parameter yang sama.
 - Draft aktif dapat dilanjutkan melalui URL `?draft=<draftId>`; jika hanya ada satu draft, halaman membukanya otomatis, sedangkan beberapa draft ditampilkan sebagai pilihan.
+- Saat draft dibuka kembali, alur penandatangan direkonsiliasi dengan konfigurasi Kegunaan Form aktif. Pilihan signer pada tahap yang ID-nya masih sama dipertahankan, tahap baru ditambahkan, dan tahap yang sudah dihapus tidak digunakan lagi.
+- Perubahan matrix hanya diterapkan pada draft yang belum didaftarkan. Surat yang sudah terdaftar tetap memakai snapshot alur saat pendaftaran agar histori persetujuan tidak berubah.
 - Lampiran yang dipilih setelah nomor dipesan langsung diunggah dan dikaitkan ke draft. Saat draft dibuka kembali, file tetap tersedia dan digunakan pada registrasi final tanpa unggah ulang.
+- Validasi registrasi menghitung gabungan file baru dan lampiran draft yang sudah tersimpan berdasarkan persyaratan masing-masing. Lampiran draft dibaca ulang dari database saat submit agar batas minimum/maksimum tidak bergantung pada state browser.
+- Upload lampiran pemohon menampilkan nama file aktif, urutan file, persentase byte yang sudah terkirim, fase penyimpanan metadata, serta status berhasil atau gagal. Ringkasan dan pendaftaran dikunci sampai proses selesai.
 - Draft dan reservation nomor aktif selama tujuh hari. Draft yang dibatalkan menjadi `VOID` dan nomornya tidak digunakan ulang.
-- User mengisi detail template berdasarkan Master Form.
+- User mengisi detail sesuai schema form dari Kegunaan Form.
 - Jika user memilih `Aset` atau `Non Unit`, field teknis Unit tidak ditampilkan dan tidak ditulis ke dokumen.
 - User memilih pejabat penandatangan berdasarkan matrix.
 - Jika tahap dikonfigurasi mengikuti kantor pemohon, daftar pejabat otomatis dibatasi ke kandidat pada kantor/cabang surat yang sama.
@@ -246,9 +247,16 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 
 - Dokumentasi user menyediakan satu panduan terpadu untuk memilih `Aset`, `Non Aset`, `Unit`, dan `Non Unit`.
 - `Aset` digunakan untuk barang yang menjadi inventaris/aset perusahaan, termasuk pengadaan atau peremajaan perangkat. Dokumen rekomendasi dapat tersedia sesuai departemen dan konfigurasi.
-- `Non Aset` digunakan untuk barang habis pakai, jasa, sewa, promosi, kegiatan, dan biaya operasional yang tidak dicatat sebagai aset.
+- `Non Aset` digunakan untuk barang habis pakai, jasa, sewa, promosi, kegiatan, dan biaya operasional yang tidak dicatat sebagai aset serta bukan pekerjaan pembangunan/proyek fisik.
+- `Non Aset` dapat diajukan sebagai dana umum dengan memilih `Tanpa Proyek (Dana Umum)`; surat tidak menyimpan `requested_project` dan pengiriman ke Marison meng-omit `project_id`.
 - `Unit` digunakan untuk order bangun yang wajib memiliki proyek, jumlah unit, alokasi kavling, struktur atas/bawah, dan kode produksi.
-- `Non Unit` digunakan untuk kegunaan dokumen yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk proses proyek atau dokumen umum yang dikonfigurasi demikian.
+- `Non Unit` digunakan untuk seluruh permohonan pekerjaan pembangunan/proyek fisik yang tidak membutuhkan pemilihan kavling atau alokasi unit, termasuk SPK, infrastruktur, fasilitas umum, perbaikan kawasan, material proyek, dan tenaga proyek.
+- Untuk proyek yang sudah terhubung ke Marison, setiap item Non Unit berisi jenis pekerjaan dari master eksternal, nama pekerjaan aktual, nilai pengajuan, dan catatan perencanaan opsional.
+- Pemohon Kantor Pusat memilih Proyek Tujuan dari seluruh proyek yang siap terhubung, sedangkan pemohon cabang hanya melihat proyek siap pada kantornya.
+- Nilai seluruh item Non Unit dijumlahkan otomatis pada form, ringkasan konfirmasi, dan detail pengajuan.
+- Data proyek eksternal disimpan sebagai snapshot bersama surat. ID proyek tidak diambil dari UUID internal, dan ID cabang selalu mengikuti kantor proyek tujuan, bukan kantor pemohon.
+- Proyek yang belum mempunyai mapping proyek atau kantor external tidak dapat dipilih untuk Non Unit dan tetap masuk antrean review Master Proyek.
+- Cabang tanpa proyek tetap dapat memakai alur PGD lokal dengan kode proyek virtual `000`; alur ini tidak memaksakan jenis pekerjaan dari proyek eksternal.
 - `Non Aset` dan `Non Unit` tidak dianggap istilah yang sama: Non Aset menjelaskan klasifikasi kebutuhan, sedangkan Non Unit menjelaskan tidak adanya proses alokasi kavling.
 - Panduan menampilkan kegunaan, contoh, data yang diminta, alur, perbandingan kategori, dan solusi ketika form/kegunaan tidak muncul.
 
@@ -322,8 +330,10 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Perencanaan mengisi `Struktur Atas`, `Struktur Bawah`, dan komponen kode produksi per unit.
 - Input `Struktur Atas` dan `Struktur Bawah` menerima nominal hasil ketik maupun paste dengan pemisah ribuan. Nilai `1.000.000`, `1,000,000`, dan `1000000` dinormalisasi menjadi satu juta serta ditampilkan sebagai `1.000.000`.
 - Detail kavling dan kode produksi pada approval Unit ditampilkan sebagai tabel satu baris per kavling dengan header sticky, sehingga tim pemeriksa tetap melihat kolom `Struktur Atas`, `Struktur Bawah`, `Nomor`, `Blok`, dan `Tanggal` saat daftar discroll.
-- Setelah memilih kavling, tim pemeriksa dapat mengunduh template Excel alokasi unit, mengisi struktur atas/bawah, nomor, blok, dan tanggal produksi secara massal, lalu import kembali ke tabel pemeriksaan.
-- Template Excel alokasi unit memiliki keterangan cell yang memberi contoh input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
+- Tipe Unit tetap berupa teks dan memakai contoh `60`, sehingga nilai lain seperti `60/72` tetap dapat dicatat tanpa dibulatkan.
+- Datepicker Tanggal Produksi membuka bulan berjalan untuk data kosong dan menandai hari ini tanpa mengisi nilai otomatis. Tanggal baru disimpan setelah tim pemeriksa memilihnya.
+- Setelah memilih kavling, tim pemeriksa dapat memakai spreadsheet impor data alokasi untuk pengisian massal. File ini hanya alat input data dan bukan dokumen surat atau sumber PDF.
+- Template Excel alokasi unit memiliki keterangan cell yang memberi contoh Tipe Unit `60`, input nominal, nomor kode produksi, blok, dan tanggal produksi agar tim pemeriksa tidak perlu menebak format.
 - Nomor kode produksi pada template Excel memakai format tiga digit. Input `1` maupun `001` ditampilkan, diimport, disimpan, dan diekspor sebagai `001`.
 - Import alokasi unit menerima `.xlsx`, `.xls`, dan `.csv`, hanya memperbarui kavling yang sudah dipilih, serta memberi informasi jika ada baris yang dilewati.
 - Format kode produksi otomatis: `[nomor]/UAI/PRC/[blok]/[tanggal]`.
@@ -337,11 +347,11 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 - Mode unit tidak boleh bercampur dengan input barang biasa.
 - Mapping field Unit hanya aktif saat kategori registrasi adalah `Unit`.
-- Kategori `Aset`, `Unit`, dan `Non Unit` harus berada pada matrix alur, bukan pada Master Form.
+- Kategori `Aset`, `Unit`, dan `Non Unit` harus berada pada Kegunaan Form, bukan pada renderer dokumen.
 - Izin Unit mengikuti departemen profil akun yang login, bukan departemen yang dipilih user pada form registrasi.
 - Matrix Unit tanpa departemen terpilih tidak dapat dipakai oleh departemen mana pun.
 - Frontend menyaring pilihan Unit dan RPC registrasi memvalidasi ulang izin yang sama di database.
-- `unit_config` pada Master Form hanya menyimpan mapping teknis template, aturan lampiran, dan cell unit.
+- Konfigurasi Unit aktif berada pada Kegunaan Form dan data alokasi tersimpan langsung di database; tidak ada mapping cell pada Master Form.
 - Unit terpilih, proyek alokasi, detail struktur, kode produksi, lampiran, waktu, dan signature harus terekam di database.
 - Lampiran otomatis Unit harus tersimpan sebagai `stage = unit_allocation`.
 - Saat tim pemeriksa menekan `Simpan & lanjutkan`, alokasi Unit disimpan lewat RPC database atomik agar data kavling tidak hanya tersimpan di draft/autosave. Jika ada data lama yang sudah diverifikasi tetapi alokasi masih hanya ada di draft, migration melakukan backfill ke `form_input_data` dan snapshot detail.
@@ -390,7 +400,11 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Setelah approval selesai, dokumen berstatus `DONE`.
 - Pada deployment staging, surat yang sudah selesai ditandatangani dikirim otomatis dari server SIGAP ke API Marison staging untuk kategori `Aset`, `Unit`, dan `Non Unit`.
 - Payload outbound memakai nomor surat, data pengajuan, item/unit yang dipilih, lampiran bertautan token, serta riwayat approval berisi role, NIK, waktu, dan catatan.
+- Selama pengujian integrasi staging, seluruh NIK pemohon dan penandatangan pada payload outbound dapat diganti dengan satu NIK karyawan external yang valid melalui konfigurasi server. Override ini tidak mengubah NIK profil SIGAP dan selalu diabaikan pada production.
+- Kontrak outbound Aset dan Unit v1 memakai fixture kanonis di `docs/contracts/marison/v1` dan divalidasi secara strict sebelum request dikirim.
+- Perubahan nama field, tipe data, atau struktur payload harus melalui versi kontrak baru dan koordinasi vendor; server tidak menyediakan dua bentuk payload untuk endpoint yang sama.
 - Jika data eksternal wajib seperti `branch_id`, `project_id`, `unit_id`, atau `non_unit_id` belum tersedia, pengiriman ditandai gagal di snapshot surat dengan alasan spesifik dan tidak mengirim angka palsu.
+- Untuk `Non Aset`, `project_id` bukan data wajib: dana umum dikirim ke `/fund-submissions` tanpa field `project_id` dan wajib menyertakan `branch_id` external pemohon (dari branch employee di direktori Marison; vendor menolak dana umum tanpa cabang). Jika proyek diminta namun datanya belum tersedia, pengiriman tetap ditandai gagal dengan alasan spesifik; aturan ini tidak berlaku untuk Unit/Non Unit yang tetap wajib proyek.
 - Pembuatan SPK dan bukti pembayaran dilakukan di sistem departemen, bukan di SIGAP.
 
 ### Non-Fungsional
@@ -399,6 +413,10 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Data hanya dapat dibaca oleh pembuat, penandatangan terkait, admin, atau external client resmi.
 - Integrasi downstream berjalan dari server, memakai access token dan HMAC API Marison, serta tidak pernah mengirim `client_secret` ke browser.
 - Integrasi downstream bersifat idempoten melalui `data_snapshot.marison_dispatch`; surat yang sudah sukses dikirim tidak dikirim ulang otomatis.
+- Kontrak baru tidak boleh diaktifkan pada staging sebelum OpenAPI vendor dan contract test bersama menyatakan struktur payload yang sama.
+- Branch eksternal dipetakan ke `master_offices.marison_branch_id`; payload Aset memakai mapping ini ketika snapshot surat belum membawa ID branch numerik.
+- Master Kantor Cabang adalah mirror read-only dari endpoint `GET /branches` Marison External API. Admin dapat memeriksa dan menjalankan sinkronisasi dari halaman master, tetapi tidak dapat membuat, mengubah, atau menghapus kantor langsung dari SIGAP.
+- Sinkronisasi mempertahankan UUID `master_offices` agar seluruh relasi SIGAP tetap valid, lalu memperbarui nama, kode, kedudukan, ID branch, kode branch, dan waktu sinkron berdasarkan data external.
 
 ## 12. Notifikasi dan Realtime
 
@@ -486,39 +504,29 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Kode entitas harus unik dan stabil.
 - Perubahan entitas harus menjaga histori surat lama.
 
-## 16. Master Form
+## 16. Schema Form Native
 
 ### Fungsional
 
-- Admin mengelola template form.
-- Admin mengatur mapping cell Excel.
-- Admin membuat konfigurasi permohonan biasa.
-- Admin membuat mapping teknis template unit tanpa menentukan kategori registrasi.
-- Admin menyimpan dan menerapkan quick preset.
-- Admin mengatur field manual, field sistem, tabel, textarea, external select, merge range, alignment, font, dan row height.
+- Admin mengelola pemakaian form, field input, lampiran, dan signer melalui Kegunaan Form.
+- Data registrasi, approval, revisi, dan tanda tangan disimpan sebagai data terstruktur serta snapshot transaksi di database.
+- Renderer dokumen native membaca snapshot database; tidak ada mapping cell, workbook, quick preset, atau template file per tahap.
 - Admin dapat memilih setiap form yang tersimpan lalu menghasilkan PDF uji tanpa membuat surat, nomor dokumen, tanda tangan, maupun data database. Form baru otomatis ikut tersedia pada pilihan uji.
 - Uji PDF Form Permintaan Barang & Jasa mengisi contoh nomor, identitas pengaju, tiga item, catatan, tempat/tanggal, dan kotak tanda tangan berdasarkan jumlah serta distribusi role yang dipilih admin.
 - Kolom nama barang selalu diratakan ke kiri berdasarkan fungsi datanya, termasuk ketika input UI menggunakan pilihan/select. Tipe kontrol tidak boleh mengubahnya menjadi rata tengah.
 - Form Permintaan Barang & Jasa memakai generator PDF-native deklaratif dan tidak memakai Excel atau LibreOffice sebagai sumber tata letak PDF.
 - Uji PDF, surat baru, snapshot approval, dan `Buat Ulang PDF` memakai renderer PGD tunggal. Data diambil dari snapshot transaksi database sehingga tabel, identitas, catatan, tempat/tanggal, dan tanda tangan tidak berbeda antarjalur.
 - Stamp tanda tangan diseragamkan menjadi `DISETUJUI SISTEM` dengan tanggal-jam WIB, tanpa emoji dan tanpa label bahasa Inggris.
-- Excel PGD hanya dipertahankan sebagai sumber historis/kompatibilitas; perubahan merge, border, atau print area Excel tidak memengaruhi PDF PGD baru.
 - Renderer PGD menampilkan header Marison, metadata Cabang/Departemen dan Proyek, pilihan aset/non-aset, maksimal 15 baris barang, catatan, dan kotak tanda tangan dinamis pada satu halaman A4 landscape.
 - Uji PDF dan dokumen transaksi memakai aturan pembagian tanda tangan yang sama: 3 kotak memakai tiga slot kanan dari grid 4, 4 kotak memakai grid 4, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`.
 - Tinggi setiap baris kotak tanda tangan bersifat tetap. Formasi satu baris 3/4 signer memakai tinggi yang sama dengan baris pertama formasi dua baris; area bawah dibiarkan kosong tanpa border.
 - Tempat/tanggal hanya membentang selebar kotak aktif pada baris pertama.
-- Area cetak dokumen dengan tanda tangan dinamis dipaksa satu halaman melalui `fitToWidth = 1` dan `fitToHeight = 1`.
 
 ### Non-Fungsional
 
-- Mapping cell harus tervalidasi.
-- Merge range harus tetap dianggap mapping valid.
-- Preset tidak boleh hanya menjadi placeholder tanpa cell.
-- Master Form tidak menentukan apakah registrasi termasuk Aset, Unit, atau Non Unit.
-- Mapping teknis biasa dan unit harus terpisah jelas.
-- Template baru harus bisa ditangani tanpa mengubah kode selama formatnya sesuai konfigurasi.
-- Konfirmasi hapus template dan quick preset memakai dialog reusable aplikasi, bukan dialog browser bawaan.
-- PDF uji hanya dapat dibuat oleh admin, mengambil template berdasarkan `form_id` dari database, membatasi host file template, dibatasi enam kali per menit, dan dibuka melalui URL sekali pakai yang kedaluwarsa dalam dua menit.
+- Kategori Aset, Unit, Non Unit, dan Non Aset ditentukan oleh Kegunaan Form, bukan oleh layout dokumen.
+- Perubahan renderer wajib dikunci oleh test layout dan snapshot; tidak ada editor layout runtime alternatif.
+- PDF uji hanya dapat dibuat oleh admin, dibatasi enam kali per menit, dan dibuka melalui URL sekali pakai yang kedaluwarsa dalam dua menit.
 
 ## 17. Master Jenis Surat
 
@@ -557,13 +565,16 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 
 ### Fungsional
 
-- Admin mengelola proyek internal.
+- Admin mengelola proyek internal dan dapat menambah proyek manual.
+- Proyek manual dapat dibiarkan khusus SIGAP atau dipetakan ke `ID Proyek Marison` dan `Kode Proyek Marison` yang benar.
+- ID Proyek Marison harus unik. Sinkronisasi berikutnya mencocokkan proyek berdasarkan ID tersebut agar tidak membuat duplikat.
 - Proyek dipakai untuk cabang dan nomor surat.
 - Proyek juga menjadi konteks filter dan integrasi unit.
 
 ### Non-Fungsional
 
 - Kode proyek harus sinkron dengan kebutuhan nomor surat dan integrasi eksternal.
+- Proyek manual hanya dapat dipakai untuk integrasi Non Unit jika ID proyek dan ID branch pada kantor proyek sudah lengkap.
 - Perubahan proyek tidak boleh merusak surat yang sudah dibuat.
 
 ## 20. Matriks Tanda Tangan
@@ -577,7 +588,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Admin dapat memfilter daftar Kegunaan Form berdasarkan form dan departemen pengaju.
 - Admin dapat membuat Kegunaan Form kategori `Non Aset` selain `Aset`, `Unit`, dan `Non Unit`.
 - Admin dapat mengatur scope kandidat signer per tahap: manual, kantor pemohon, kantor pusat, atau semua kantor.
-- Kegunaan PGD cabang tersedia untuk `Permohonan Marketing Cabang` dan `Permohonan Teknik Cabang`, dengan Spv/BM mengikuti kantor pemohon serta Manager Marketing/Direktur Utama mengikuti kantor pusat.
+- Kegunaan PGD cabang tersedia untuk `Permohonan Marketing Cabang` dan `Permohonan Teknik Cabang`, dengan Spv/BM mengikuti kantor pemohon serta Manager Marketing/Direktur Utama mengikuti kantor pusat. `Permohonan Teknik Cabang` diklasifikasikan sebagai `Non Unit` karena mencakup pekerjaan pembangunan/proyek fisik tanpa alokasi kavling.
 - Kegunaan PGD diperluas untuk permohonan utilitas PDAM/PLN, SLO/SLF, legal-perizinan, karangan bunga, aset/non aset pusat dan cabang, HRD/GA, event, entertain, parcel, serta kompensasi proyek dengan alur signer sesuai konfigurasi bisnis.
 - Registrasi kegunaan cabang dapat dibuat oleh admin cabang seperti `Marketing (Cabang)`, `Teknik (Cabang)`, `Umum & Keuangan (Cabang)`, atau departemen `Cabang`; penanda tangan tahap `Membuat` tetap mengikuti matrix signer yang dikonfigurasi.
 - Jika kategori `Unit` aktif, izin pemakaiannya diatur terpisah per departemen pada Configuration `Pengajuan Unit`.
@@ -587,7 +598,7 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 - Urutan step harus deterministik.
 - Matrix harus tersimpan sebagai konfigurasi yang dapat diaudit.
 - Daftar matrix pada registrasi harus difilter berdasarkan kategori yang dipilih user sebelum form diketahui.
-- Izin departemen Unit disimpan pada relasi `workflow_allowed_departments` dan tidak boleh bergantung pada konfigurasi Master Form.
+- Izin departemen Unit disimpan pada relasi `workflow_allowed_departments` dan tidak boleh bergantung pada layout dokumen.
 - Editor Alur Persetujuan tidak menjadi tempat mengatur izin departemen agar konfigurasi matrix dan akses departemen tetap terpisah.
 - Perubahan matrix tidak boleh mengubah surat yang sudah berjalan kecuali memang diproses ulang dengan aturan baru.
 
@@ -654,22 +665,14 @@ Butuh : 10 Unit, Proyek: Marisland Kalinegoro, Cabang: Magelang
 ### Fungsional
 
 - Admin mengakses konfigurasi sistem dari satu menu `Configuration`.
-- Dropdown konfigurasi memindahkan admin di antara `Form & Template`, `Template Builder`, `Alur Persetujuan`, `Pengajuan Unit`, `SLA Departemen`, `Penomoran Surat`, dan `Label Jabatan`.
+- Dropdown konfigurasi memindahkan admin di antara `Kegunaan Form`, `Integrasi`, `SLA Departemen`, `Penomoran Surat`, `Label Jabatan`, dan konfigurasi aktif lain.
 - Dropdown konfigurasi juga menyediakan `Email Notification` untuk penerima email, privasi, dan mode file.
-- Form & Template mengatur konfigurasi form, mapping input, mode unit, dan lampiran. Untuk form non-PGD seperti rekomendasi, template Excel tetap aktif. Untuk PGD, template Excel dinonaktifkan dari UI karena PDF dibuat oleh renderer sistem.
-- Template Builder mengatur template dokumen native dari nol. Admin dapat membuat canvas A4/F4 portrait atau landscape, menambahkan logo, teks, field data, tabel berulang, catatan, kotak, garis, dan area tanda tangan.
-- Template Builder mendukung data berulang melalui elemen `Tabel Berulang`. Admin memilih sumber data seperti `Daftar Barang`, `Daftar Unit`, `Daftar Rekomendasi`, `Daftar Lampiran`, atau `Penandatangan`, lalu mengatur kolom, binding, format, jumlah baris minimum, jumlah baris maksimum, dan tinggi baris.
-- Untuk template kompleks, AI tetap dipakai sebagai pendamping konfigurasi: membantu menyusun struktur form input, binding field, tabel berulang, dan variasi kotak tanda tangan dinamis 2-8 slot sebelum admin merapikan desain akhir di Template Builder.
-- Area tanda tangan mendukung tinggi otomatis berdasarkan lebar area cetak, jumlah slot, dan jumlah baris. Aksi `Sesuaikan area cetak` memenuhi lebar halaman di dalam margin dan menjaga seluruh kotak tetap berada pada halaman; mode tinggi tetap tersedia untuk kebutuhan khusus.
-- Canvas menampilkan batas area cetak dan mendeteksi elemen yang melewati margin. Tombol `Sesuaikan Semua` menata ulang posisi, memperkecil layout secara proporsional, lalu memusatkan keseluruhan layout secara horizontal dan vertikal di dalam area cetak.
-- Template Builder menyimpan definisi layout sebagai JSON berversi pada tabel `document_template_builders` dan `document_template_builder_versions`. Versioning menjaga dokumen lama tetap dapat dirender dengan layout yang sama walaupun template baru sudah dipublish.
-- Template Builder saat ini menjadi fondasi native renderer dan belum mengganti seluruh alur produksi PGD/rekomendasi yang sudah berjalan. Integrasi berikutnya adalah membuat generator PDF membaca JSON builder yang sama untuk Uji PDF, Buat Ulang PDF, dan surat baru.
-- Alur Persetujuan mengatur urutan penandatangan serta koordinat tanda tangan.
-- Pengajuan Unit mengatur matrix Unit yang diizinkan untuk setiap departemen.
+- Kegunaan Form mengatur schema input, kategori, lampiran, urutan penandatangan, dan matrix Unit per departemen.
+- Layout PDF dimiliki renderer sistem dan mendukung 2-8 penandatangan sesuai konfigurasi tanpa koordinat workbook.
 - SLA Departemen mengatur target SLA, jam kerja, waktu istirahat, hari kerja, dan timezone.
 - Penomoran Surat mengatur counter awal per tahun untuk scope pusat atau cabang/proyek.
 - Label Jabatan mengatur alias jabatan untuk tampilan dokumen, misalnya `Manager Pengembangan Bisnis` ditampilkan sebagai `Mgr. PO`.
-- Route lama `/admin/forms` dan `/admin/workflow-details` dialihkan ke route Configuration yang baru.
+- Route konfigurasi form dan workflow lama telah dihapus; seluruh konfigurasi aktif berada pada Kegunaan Form.
 
 ### Non-Fungsional
 
@@ -858,6 +861,10 @@ Fallback data lama:
 - Error akses harus tampil di UI.
 - Storage transaksi surat wajib menggunakan Supabase Storage self-hosted.
 - Aplikasi dan worker gagal start jika konfigurasi self-hosted storage tidak lengkap.
+- Production dan staging memakai layanan storage self-hosted yang sama agar pengelolaan bucket terpusat. Production mempertahankan path utama, sedangkan seluruh write staging dipaksa masuk ke namespace `staging/`.
+- BFF dan PDF worker menolak akses storage staging ke object path di luar namespace `staging/`. Service-role bersama tetap harus diperlakukan sebagai credential sensitif karena namespace aplikasi bukan pengganti pembatasan credential di tingkat storage.
+- Validasi namespace saat membuka dokumen atau lampiran memakai `bucket` dan object path aktual dari token file. Token yang sah tidak boleh ditolak hanya karena pemeriksaan origin tidak membawa path objek.
+- Referensi file staging yang dibuat sebelum namespace `staging/` diterapkan dimigrasikan secara idempotent ke path baru. Migrasi menyalin objek terlebih dahulu, memperbarui referensi database setelah salinan tersedia, dan tidak menghapus objek sumber.
 
 ## 30. Operasional, Deployment, dan Worker
 
@@ -865,19 +872,27 @@ Fallback data lama:
 
 - Aplikasi utama berjalan di Docker production.
 - Deployment staging selalu memakai datasource Marison staging, sedangkan deployment production selalu memakai datasource Marison production.
+
+- Mapping payload Marison staging pada Master User, Master Kantor, dan Master Proyek hanya menunjuk record mirror hasil sinkronisasi. Data SIGAP tetap menjadi data internal; payload memakai mapping staging per record dan per signer bila tersedia, lalu data SIGAP yang terbukti valid di katalog mirror, atau fail-closed.
 - Domain production adalah `https://sigap.marisoncloud.com`; DNS Cloudflare berupa proxied `A` record ke origin publik, lalu Caddy meneruskan request ke container production pada `10.10.10.246:3010`.
 - Domain staging adalah `https://sigap.marison-testing.biz.id` dan tetap melalui Cloudflare Tunnel ke container staging pada port host `3011`.
-- Staging memakai project Supabase, Auth, database, bucket storage, dan PDF worker tersendiri; data transaksi production tidak disalin.
+- Staging memakai project Supabase, Auth, database, dan PDF worker tersendiri. Layanan storage fisiknya dipakai bersama production, tetapi object path staging dipisahkan dengan prefix `staging/`; data transaksi production tidak disalin ke database staging.
 - Master/config staging disalin dari production, sedangkan kandidat user dimasking agar matrix dapat diuji tanpa menyalin PII production.
 - `npm run dev` membaca `.env.local`, menjalankan Vite pada port `8080` dan BFF lokal pada port `3010`, serta tetap memakai Supabase dan datasource Marison staging.
 - Request `/api` dari Vite diproxy ke BFF lokal tanpa mengubah Host header agar validasi same-origin dan cookie HttpOnly bekerja sama seperti deployment.
 - Environment Marison dikunci melalui `MARISON_DEPLOYMENT_ENVIRONMENT` pada Docker Compose dan tidak dapat diganti dari UI atau nilai database.
-- Halaman Integrasi Marison hanya menampilkan status endpoint aktif dan tes koneksi Projects, Unit, serta Non Unit untuk admin.
+- Docker runtime wajib menyalin setiap modul lokal yang diimpor backend/worker; regression test packaging menjaga image tidak lolos build tetapi gagal saat container dimulai.
+- Halaman `Konfigurasi > Integration` menampilkan status endpoint aktif, tes koneksi, pemeriksaan data, dan sinkronisasi manual master Marison untuk admin.
+- Antrean Outbound Marison berada pada halaman Integration. Kegagalan sebelum POST dapat dibangun ulang pada job yang sama setelah preflight, sedangkan penolakan pasti HTTP 422 menggunakan job pengganti bergenerasi dengan alasan audit dan perlindungan klik ganda.
+- Khusus staging, admin dapat memeriksa lalu menyinkronkan data `/branches` dan `/employees` dari halaman Integration tanpa mengirim credential external ke browser.
+- Staging menjalankan sinkronisasi otomatis setiap hari pukul 00:00 Asia/Jakarta setelah sinkron manual dan aturan mapping diuji. Scheduler production tetap nonaktif sampai ada permintaan rilis production yang eksplisit.
+- Sinkronisasi mempertahankan UUID, role, jabatan, departemen, dan kantor profil lama; NIK dinormalisasi dari sumber external, akun baru memakai role `user`, dan email login memakai pola `nama.lengkap@staging.test`.
+- Employee tanpa NIK atau NIK yang ambigu diblokir dan dilaporkan pada preview; akun yang tidak ada pada response external tidak dinonaktifkan otomatis.
 - External API berjalan sebagai service terpisah.
 - PDF worker dapat dipisah di server lain.
 - Cloudflare Tunnel hanya dipakai oleh staging dan layanan testing lain; hostname production SIGAP tidak terdaftar pada ingress Tunnel.
 - Deploy aplikasi utama dilakukan dari host/workstation yang memiliki Docker context `ubuntu-server`.
-- Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, LibreOffice/font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
+- Jika perubahan tidak menyentuh `pdf-worker.mjs`, Dockerfile runtime PDF, font runtime, atau konfigurasi worker, deploy cukup menjalankan service aplikasi utama tanpa merestart PDF worker.
 - PDF worker hanya diredeploy ketika ada perubahan worker, dependency/runtime PDF, atau konfigurasi worker.
 - External API dideploy terpisah melalui `docker-compose.external.yml`.
 
@@ -890,7 +905,13 @@ Fallback data lama:
 - `APP_PUBLIC_URL` dan `VITE_APP_PUBLIC_URL` dikunci oleh masing-masing Compose agar tautan email, reset password, dan API browser tidak silang domain.
 - Credential `MARISON_STAGING_*` dan `MARISON_PRODUCTION_*` hanya tersedia di server dan tidak dikirim ke browser.
 - Fallback lama `MARISON_EXTERNAL_*`, pemilihan environment global dari database, dan switch OTP tidak digunakan lagi.
-- Command deploy staging aplikasi utama:
+- Command deploy staging aplikasi utama saja, tanpa membuat ulang PDF worker atau sync worker:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build --no-deps agenda-flow-staging
+```
+
+- Command deploy seluruh stack staging secara sengaja:
 
 ```powershell
 docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build
@@ -904,12 +925,36 @@ docker --context ubuntu-server compose -p agenda-flow-production -f docker-compo
 
 - Jangan hilangkan `-p`; nama project Compose yang berbeda mencegah deploy staging menganggap container production sebagai orphan.
 - Jangan hilangkan `--env-file`; staging wajib memakai `.env.staging` dan production wajib memakai `.env.production`.
-- Jika hanya mengubah frontend, halaman dokumentasi, server aplikasi utama, atau `server.mjs`, gunakan command aplikasi utama di atas dan jangan redeploy worker PDF.
-- Jika perlu redeploy PDF worker, gunakan compose worker secara terpisah:
+- Deploy aplikasi utama saja tidak merestart PDF worker atau sync worker yang sudah berjalan.
+- Jika hanya mengubah frontend, halaman dokumentasi, atau backend aplikasi utama di `backend/src`, gunakan command aplikasi utama staging di atas.
+- Redeploy PDF worker staging hanya jika `pdf-worker.mjs`, dependency/runtime PDF, font, atau konfigurasi worker berubah:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-pdf-worker-staging
+```
+
+- Redeploy sync worker staging hanya jika `server/marison-sync-worker.mjs`, image/runtime, token, URL, jadwal, atau konfigurasi sinkronisasi berubah:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-marison-sync-staging
+```
+
+- Jika perlu redeploy PDF worker production, gunakan compose worker production secara terpisah:
 
 ```powershell
 docker --context ubuntu-server compose -p agenda-flow-production-worker -f docker-compose.worker.yml --env-file .env.production up -d --build
 ```
+
+- Setelah deploy staging, verifikasi service Compose dan endpoint readiness publik:
+
+```powershell
+docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging ps
+Invoke-WebRequest -UseBasicParsing https://sigap.marison-testing.biz.id/health/ready
+```
+
+- App harus berstatus healthy. Worker yang ikut dideploy harus berstatus running; periksa log service terkait bila worker tidak stabil.
 
 - Jika hanya mengubah External API, gunakan compose external dan app utama/PDF worker tidak perlu diredeploy:
 
@@ -1001,15 +1046,13 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Semua lampiran pemohon dan approval hanya dikonfigurasi melalui Kegunaan Form berdasarkan `stage_order`.
 - Departemen penanda tangan hanya wajib pada scope kandidat manual; scope dinamis seperti kantor pusat, kantor pemohon, departemen pemohon, BM cabang/departemen pusat, dan lintas kantor dapat menyimpan kandidat tanpa departemen tetap.
 - Preview kandidat pada konfigurasi kegunaan tetap menampilkan kandidat relevan untuk scope dinamis walaupun departemen tetap belum dipilih.
-- Konfigurasi lampiran lama pada Master Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
+- Konfigurasi lampiran lama di luar Kegunaan Form dan fallback snapshot surat telah dihapus; satu file hanya melewati satu jalur validasi dan penyimpanan.
 - Saat signer memilih lampiran approval, UI menampilkan jumlah file, nama file, ukuran file, status siap unggah, dan status mengunggah ketika approval sedang diproses.
-- Form menyimpan satu `signature_layout` berupa sheet dan area persegi panjang yang dikelola sistem.
-- Konfigurasi layout menyediakan preset `PGD` untuk aturan tanda tangan renderer sistem 3-8 kotak; mode `Adaptif` tetap tersedia untuk form lain.
-- Setiap role `Membuat`, `Memeriksa`, dan `Menyetujui` wajib memiliki 1-3 signer. Jumlah keseluruhan signer yang didukung adalah 3-8.
+- Jumlah penandatangan mengikuti langkah aktif pada Kegunaan Form. Dokumen mendukung 2-8 penandatangan; role yang tidak digunakan tidak perlu diisi.
 - Pembagian baris preset PGD adalah: 3 kotak memakai grid 3, 4 kotak `4`, 5 kotak `3 + 2`, 6 kotak `3 + 3`, 7 kotak `4 + 3`, dan 8 kotak `4 + 4`. Jika baris kedua lebih pendek, slotnya diratakan ke kanan terhadap grid baris pertama.
 - Ukuran vertikal satu blok tidak berubah berdasarkan jumlah baris. Formasi 3/4 memakai blok atas saja, sedangkan blok bawah hanya digunakan oleh formasi 5-8.
-- Pada preset PGD, urutan tahap wajib `Membuat`, `Memeriksa`, lalu `Menyetujui`; kombinasi di luar aturan 3-8 signer ditolak agar dokumen tidak rusak.
-- Saat dokumen dibuat, sistem membuka merge hanya di area tanda tangan, lalu membangun kotak 2-8 signer secara otomatis tanpa mengubah matrix tanda tangan lama.
+- Pada preset PGD, urutan tahap mengikuti konfigurasi Kegunaan Form; kombinasi di luar aturan 2-8 signer ditolak agar dokumen tidak rusak.
+- Saat PDF dibuat, renderer native membangun kotak 2-8 signer langsung dari snapshot workflow.
 - Baris pertama area tanda tangan dipakai untuk `Tempat, Tanggal`, misalnya `Magelang, 20 Juli 2026`; nilainya di-merge, diberi border, rata tengah, dan selebar kotak tanda tangan paling kanan tepat di bawahnya.
 - Lebar, border, dan pembagian baris kotak pada preset PGD mengikuti aturan renderer sistem, bukan merge Excel lama.
 - Label yang sama dan berdampingan dalam satu baris tanda tangan digabung pada area label, sedangkan area tanda tangan, nama, dan jabatan tetap per signer.
@@ -1046,5 +1089,31 @@ docker --context ubuntu-server compose -f docker-compose.external.yml --env-file
 - Attention badge memakai satu RPC agregasi, menggantikan enam query PostgREST terpisah pada setiap sinkronisasi.
 - Subscription realtime global menjadi sumber invalidasi agenda dan riwayat; subscription halaman yang menduplikasi query yang sama dihapus.
 - Worker PDF memakai backoff dari 2 detik sampai 30 detik saat antrean kosong dan kembali responsif setelah menemukan pekerjaan.
+- PDF rekomendasi gabungan diunggah sekali ke object versi immutable `pdf/recommendations/<surat_id>/versions/<job_id>-<version_id>.pdf`; worker tidak menimpa `final.pdf`. Setiap retry memakai version ID baru agar object percobaan sebelumnya tetap immutable. Pointer `pdf_path` baru dipublikasikan melalui `publish_document_pdf_job` setelah upload sukses dan RPC menolak job dengan sumber workbook yang sudah stale.
+- Sumber workbook/PDF rekomendasi wajib berada di bucket `dokumen_surat`, sedangkan foto/detail rekomendasi wajib berada di `lampiran_surat`. Worker mempertahankan bucket dan origin dari URL storage, lalu menolak object di luar `STORAGE_PATH_PREFIX` environment.
+- Final approval child rekomendasi menyimpan workbook bertanda tangan lalu menahan status `PDF_PENDING`. Service mengantrekan job canonical tanpa `signature_id`; worker hanya mempublikasikan pointer versi immutable dan mengubah child ke `DONE` melalui RPC service-role atomik setelah lock, source path, dan fingerprint konten rekomendasi masih cocok. Kegagalan atau render stale tetap `PDF_PENDING`, sehingga trigger notifikasi, snapshot parent, revisi, dan outbound belum berjalan.
+- Link PDF rekomendasi eksternal memakai identity bearer stabil hasil HMAC, hanya hash disimpan. Resolver selalu mengikuti `surat.pdf_path`; pembuatan, akses, dan pencabutan tujuan khusus diaudit. Builder service-role dapat memakai creator child/parent saat tidak ada aktor browser.
+- Dispatch aset dengan seluruh parent rekomendasi ditolak selalu menjadi `skipped` di setiap environment. Migration REC-03 tetap belum diterapkan; target hanya staging setelah review dan disposable test lulus. Production tidak berubah.
 - Index parsial disediakan untuk signature pending, notifikasi belum dibaca, revision aktif, status surat, dan urutan histori.
 - Dependency transitif `brace-expansion` dikunci ke patch aman `1.1.16` dan `2.1.2` tanpa mengubah major version yang dipakai tooling maupun ExcelJS; `js-yaml` milik tooling juga diperbarui ke patch aman `4.3.0`.
+
+## 33. Pipeline Dokumen Native
+
+### Fungsional
+
+- Data permohonan, alur signer, keputusan, lampiran, dan histori persetujuan di database menjadi sumber kebenaran dokumen.
+- Registrasi baru tidak membuat file XLSX. `file_path` menyimpan versi logis `native://document/...` untuk invalidasi cache dan audit.
+- Approval hanya menyimpan keputusan, waktu, catatan, lampiran, dan versi logis baru. Approval tidak mengunduh atau memodifikasi workbook.
+- PDF dibuat oleh worker langsung dari snapshot database ketika user membuka/mengunduh dokumen atau ketika dokumen final dibutuhkan outbound.
+- Dokumen final mendukung 2 sampai 8 signer sesuai Kegunaan Form.
+- Form Permintaan Barang & Jasa serta Rekomendasi Peremajaan memakai renderer PDF-native. Lampiran rekomendasi disusun maksimal enam gambar per halaman.
+- Route konfigurasi Forms dan Workflows lama dialihkan ke `Kegunaan Form`. Konfigurasi aktif dokumen dan alur tetap dikelola melalui Kegunaan Form.
+- Data template dan mapping lama dipertahankan sebagai kompatibilitas histori, tetapi tidak digunakan untuk membuat dokumen transaksi baru.
+
+### Non-Fungsional
+
+- Setiap perubahan approval mengosongkan cache `pdf_path` dalam transaksi yang sama dengan perubahan `file_path`.
+- PDF final dibuat asinkron setelah dokumen selesai sehingga respons approval tidak menunggu render atau upload PDF.
+- Outbound tidak pernah mengirim marker `native://`. Jika PDF final belum tersedia, builder membuat job PDF dan mengembalikan kegagalan retryable sebelum batas POST.
+- Cache PDF terikat pada versi logis sumber. PDF lama tidak boleh dipakai setelah data atau tanda tangan berubah.
+- App dan PDF worker wajib menggunakan revision image yang sama saat deployment renderer berubah.

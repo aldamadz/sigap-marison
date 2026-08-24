@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "data": {
+    "asset_purchase_request_id": 70021,
+    "submission_number": "001/UAI/PBO.1/VIII/2026",
+    "status": "received",
+    "received_at": "2026-08-03T07:55:02Z"
+  }
+}

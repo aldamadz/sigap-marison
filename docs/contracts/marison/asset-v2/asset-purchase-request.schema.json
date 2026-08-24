@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sigap.marison-testing.biz.id/contracts/marison/asset/v2.0.0/schema.json",
+  "title": "SIGAP Marison Asset Purchase Request",
+  "description": "Vendor Asset outbound contract version 2.0.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "submission_number",
+    "branch_id",
+    "submitted_by",
+    "submitted_at",
+    "category",
+    "attachments",
+    "items",
+    "approvals"
+  ],
+  "properties": {
+    "submission_number": { "type": "string", "minLength": 1 },
+    "branch_id": { "type": "integer", "exclusiveMinimum": 0 },
+    "submitted_by": { "type": "string", "minLength": 1 },
+    "submitted_at": { "type": "string", "format": "date-time" },
+    "category": { "enum": ["Pengajuan Pusat", "Pengajuan Cabang"] },
+    "description": { "type": "string" },
+    "attachments": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/attachment" }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "approvals": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/approval" }
+    }
+  },
+  "$defs": {
+    "attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "link"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "link": { "type": "string", "format": "uri", "pattern": "^https://" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_name",
+        "quantity",
+        "recommendation_action",
+        "recommendation_description",
+        "attachments"
+      ],
+      "properties": {
+        "asset_name": { "type": "string", "minLength": 1 },
+        "quantity": { "type": "integer", "exclusiveMinimum": 0 },
+        "description": { "type": "string" },
+        "recommendation_action": { "enum": ["service", "replace_component", "buy_new"] },
+        "recommendation_description": { "type": "string" },
+        "recommendation_notes": { "type": "string" },
+        "attachments": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/attachment" }
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "nik", "action", "actioned_at"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "nik": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "minLength": 1 },
+        "actioned_at": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

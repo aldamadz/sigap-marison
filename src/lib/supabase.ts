@@ -66,14 +66,16 @@ const notifyAuth = (event: string, session: any | null, broadcast = true) => {
   if (broadcast) authBroadcast?.postMessage({ event });
 };
 
-const loadSession = async (force = false) => {
+const loadSession = async (force = false, emitAuthTransition = true) => {
   if (!force && Date.now() - sessionCheckedAt < 5_000) return cachedSession;
   if (sessionRequest) return sessionRequest;
+  const hadSession = Boolean(cachedSession);
   sessionRequest = requestJson('/api/auth/session')
     .then((payload) => {
       cachedSession = payload.session || null;
       sessionCheckedAt = Date.now();
       sessionLoadError = null;
+      if (emitAuthTransition && hadSession && !cachedSession) notifyAuth('SIGNED_OUT', null);
       return cachedSession;
     })
     .catch((error) => {
@@ -86,16 +88,21 @@ const loadSession = async (force = false) => {
   return sessionRequest;
 };
 
+const refreshSessionState = async () => {
+  return loadSession(true);
+};
+
 if (typeof BroadcastChannel !== 'undefined') {
   authBroadcast = new BroadcastChannel('sigap-auth');
   authBroadcast.onmessage = async (message) => {
-    const session = await loadSession(true);
+    const session = await loadSession(true, false);
     notifyAuth(String(message.data?.event || 'TOKEN_REFRESHED'), session, false);
   };
 }
 
 class BffQueryBuilder implements PromiseLike<BffResult> {
   private readonly operations: QueryOperation[] = [];
+  private requestSignal?: AbortSignal;
 
   constructor(
     private readonly kind: 'table' | 'rpc',
@@ -138,11 +145,16 @@ class BffQueryBuilder implements PromiseLike<BffResult> {
   maybeSingle(...args: any[]) { return this.add('maybeSingle', args); }
   csv(...args: any[]) { return this.add('csv', args); }
   throwOnError(...args: any[]) { return this.add('throwOnError', args); }
+  abortSignal(signal: AbortSignal) {
+    this.requestSignal = signal;
+    return this;
+  }
 
   private async execute(): Promise<BffResult> {
     try {
       return await requestJson('/api/bff/query', {
         method: 'POST',
+        signal: this.requestSignal,
         body: JSON.stringify({
           kind: this.kind,
           name: this.name,
@@ -368,10 +380,10 @@ export const supabase: any = {
   },
 };
 
-window.setInterval(() => { void loadSession(true); }, 5 * 60_000);
+window.setInterval(() => { void refreshSessionState(); }, 5 * 60_000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    void loadSession(true);
+    void refreshSessionState();
     scheduleRealtimeReconnect(0);
   } else {
     if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);

@@ -36,6 +36,11 @@ export const humanizeInputKey = (key: string) => {
     jumlah: "Jumlah",
     status: "Status",
     keterangan: "Keterangan",
+    non_unit_id: "ID Non Unit",
+    non_unit_name: "Jenis Pekerjaan",
+    item_name: "Nama Pekerjaan",
+    subtotal: "Nilai Pengajuan",
+    planning_notes: "Catatan Perencanaan",
     kode: "Kode",
     requested_unit_count: "Jumlah Unit Diajukan",
     requested_project: "Proyek Diajukan",
@@ -46,7 +51,7 @@ export const humanizeInputKey = (key: string) => {
     recommendation_template_name: "Template Rekomendasi",
     recommendation_attachment_note: "Catatan Rekomendasi",
     reference_link: "Link Referensi",
-    items: "Daftar Barang",
+    items: "Daftar Barang / Pekerjaan",
   };
   return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 };

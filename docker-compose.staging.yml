@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: dockerfile
       args:
+        GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
         VITE_APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
@@ -18,22 +19,42 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       NODE_ENV: production
       PORT: "80"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
       APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
       VITE_APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"
       SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.staging}"
+      SUPABASE_PUBLISHABLE_KEY: "${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in .env.staging}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY in .env.staging}"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET in .env.staging}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in .env.staging}"
+      STORAGE_SUPABASE_SERVICE_ROLE_KEY: "${STORAGE_SUPABASE_SERVICE_ROLE_KEY:?Set STORAGE_SUPABASE_SERVICE_ROLE_KEY in .env.staging}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-465}"
+      SMTP_SECURE: "${SMTP_SECURE:-true}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-}"
       MARISON_DEPLOYMENT_ENVIRONMENT: "staging"
+      MARISON_SUBMISSION_DISPATCH_ENABLED: "${MARISON_SUBMISSION_DISPATCH_ENABLED:-true}"
+      MARISON_OUTBOUND_INTERNAL_TOKEN: "${MARISON_OUTBOUND_INTERNAL_TOKEN:-}"
+      SUBMISSION_DECISIONS_API_TOKEN: "${SUBMISSION_DECISIONS_API_TOKEN:-}"
       MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
       MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
       MARISON_STAGING_CLIENT_SECRET: "${MARISON_STAGING_CLIENT_SECRET:-}"
+      MARISON_STAGING_OUTBOUND_NIK_OVERRIDE: "${MARISON_STAGING_OUTBOUND_NIK_OVERRIDE:-A 114}"
       MARISON_PRODUCTION_BASE_URL: "${MARISON_PRODUCTION_BASE_URL:-https://external.marisonregency.id/api}"
       MARISON_PRODUCTION_CLIENT_ID: "${MARISON_PRODUCTION_CLIENT_ID:-}"
       MARISON_PRODUCTION_CLIENT_SECRET: "${MARISON_PRODUCTION_CLIENT_SECRET:-}"
       STORAGE_MODE: "${STORAGE_MODE:-self_hosted_supabase}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:-}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-}"
+      STORAGE_PATH_PREFIX: "staging"
     env_file:
       - path: .env.staging
         required: false
@@ -43,7 +64,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://127.0.0.1/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
+          "require('http').get('http://127.0.0.1/health/ready', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
         ]
       interval: 30s
       timeout: 10s
@@ -67,20 +88,86 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       NODE_ENV: production
       SUPABASE_URL: "${SUPABASE_URL}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
-      PDF_WORKER_CONCURRENCY: "${PDF_WORKER_CONCURRENCY:-1}"
+      PDF_WORKER_CONCURRENCY: "${PDF_WORKER_CONCURRENCY:-3}"
       PDF_WORKER_POLL_INTERVAL_MS: "${PDF_WORKER_POLL_INTERVAL_MS:-2000}"
-      PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS: "${PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS:-30000}"
+      PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS: "${PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS:-5000}"
       PDF_WORKER_MAX_ATTEMPTS: "${PDF_WORKER_MAX_ATTEMPTS:-3}"
       PDF_WORKER_CONVERT_TIMEOUT_MS: "${PDF_WORKER_CONVERT_TIMEOUT_MS:-120000}"
       STORAGE_MODE: "${STORAGE_MODE}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL}"
+      STORAGE_PATH_PREFIX: "staging"
     env_file:
       - path: .env.staging
         required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  agenda-marison-sync-staging:
+    image: agenda-flow:staging
+    container_name: agenda-marison-sync-staging
+    restart: always
+    command: ["node", "server/marison-sync-worker.mjs"]
+    depends_on:
+      agenda-flow-staging:
+        condition: service_healthy
+    environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
+      MARISON_SYNC_ENABLED: "true"
+      MARISON_SYNC_INTERNAL_URL: "http://agenda-flow-staging/api/internal/marison/directory-sync"
+      MARISON_SYNC_CRON_TOKEN: "${MARISON_SYNC_CRON_TOKEN:-}"
+    env_file:
+      - path: .env.staging
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  agenda-marison-outbound-staging:
+    profiles: ["marison-outbound"]
+    image: agenda-flow:staging
+    container_name: agenda-marison-outbound-staging
+    restart: always
+    command: ["node", "server/marison-outbound-worker.mjs"]
+    depends_on:
+      agenda-flow-staging:
+        condition: service_healthy
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
+      NODE_ENV: production
+      SUPABASE_URL: "${SUPABASE_URL}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY}"
+      MARISON_DEPLOYMENT_ENVIRONMENT: "staging"
+      MARISON_SUBMISSION_DISPATCH_ENABLED: "${MARISON_SUBMISSION_DISPATCH_ENABLED:-true}"
+      MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
+      MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
+      MARISON_STAGING_CLIENT_SECRET: "${MARISON_STAGING_CLIENT_SECRET:-}"
+      MARISON_OUTBOUND_INTERNAL_TOKEN: "${MARISON_OUTBOUND_INTERNAL_TOKEN:-}"
+      MARISON_OUTBOUND_INTERNAL_URL: "http://agenda-flow-staging"
+      MARISON_OUTBOUND_POLL_MS: "${MARISON_OUTBOUND_POLL_MS:-5000}"
+      MARISON_OUTBOUND_MAX_BACKOFF_MS: "${MARISON_OUTBOUND_MAX_BACKOFF_MS:-60000}"
+      MARISON_OUTBOUND_DATABASE_TIMEOUT_MS: "${MARISON_OUTBOUND_DATABASE_TIMEOUT_MS:-15000}"
+      MARISON_OUTBOUND_TOKEN_TIMEOUT_MS: "${MARISON_OUTBOUND_TOKEN_TIMEOUT_MS:-15000}"
+      MARISON_OUTBOUND_BUILD_TIMEOUT_MS: "${MARISON_OUTBOUND_BUILD_TIMEOUT_MS:-60000}"
+      MARISON_OUTBOUND_TIMEOUT_MS: "${MARISON_OUTBOUND_TIMEOUT_MS:-30000}"
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     logging:
       driver: json-file
       options:

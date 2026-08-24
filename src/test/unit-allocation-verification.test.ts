@@ -40,7 +40,7 @@ describe("unit allocation verification persistence", () => {
     expect(service).toContain("persistedVerificationDraft.allocated_units");
     expect(service).toContain('supabase.rpc("verify_surat_signature_v2"');
     expect(service).not.toContain('supabase.rpc("verify_surat_signature",');
-    expect(inbox).toContain('invalidateQueries({ queryKey: ["surat-inbox"] })');
+    expect(inbox).toContain('invalidateQueries({ queryKey: [\'surat-inbox-compact\'] })');
   });
 
   it("finalizes unit allocation in a security definer RPC and backfills verified drafts", () => {

@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: dockerfile
       args:
+        GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
         VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
@@ -20,11 +21,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: "80"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
       APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
       VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
       SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.production}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in .env.production}"
       MARISON_DEPLOYMENT_ENVIRONMENT: "production"
+      SUBMISSION_DECISIONS_API_TOKEN: "${SUBMISSION_DECISIONS_API_TOKEN:-}"
       MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
       MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
       MARISON_STAGING_CLIENT_SECRET: "${MARISON_STAGING_CLIENT_SECRET:-}"
@@ -34,6 +37,7 @@ services:
       STORAGE_MODE: "${STORAGE_MODE:-self_hosted_supabase}"
       STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:-}"
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-}"
+      STORAGE_PATH_PREFIX: ""
     env_file:
       - path: .env.production
         required: false
@@ -43,7 +47,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://127.0.0.1/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
+          "require('http').get('http://127.0.0.1/health/ready', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
         ]
       interval: 30s
       timeout: 10s

@@ -9,6 +9,7 @@ type UnitAllocationTemplateRow = {
   Kavling: string;
   "Struktur Atas": string | number;
   "Struktur Bawah": string | number;
+  "Tipe Unit": string;
   "Nomor Kode Produksi": string | number;
   "Blok": string;
   "Tanggal Produksi": string;
@@ -74,9 +75,10 @@ export const exportRowsToXlsx = async (
 
 const parseTemplateNumber = (value: string | number) => {
   if (typeof value === "number") return value;
-  const digits = String(value || "").replace(/[^\d-]/g, "");
-  const parsed = Number(digits);
-  return Number.isFinite(parsed) ? parsed : "";
+  const str = String(value || "").trim();
+  const cleaned = str.replace(/^Rp\.?\s*/i, "").replace(/[.,\s]/g, "").replace(/\D/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : "";
 };
 
 const parseTemplateDate = (value: string) => {
@@ -89,8 +91,7 @@ const parseTemplateDate = (value: string) => {
 const parseTemplateSerial = (value: string | number) => {
   const normalized = normalizeProductionSerial(value);
   if (!normalized) return "";
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : normalized;
+  return normalized;
 };
 
 export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplateRow[]) => {
@@ -102,6 +103,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
     { header: "No", key: "No", width: 8 },
     { header: "Proyek", key: "Proyek", width: 32 },
     { header: "Kavling", key: "Kavling", width: 14 },
+    { header: "Tipe Unit", key: "Tipe Unit", width: 14 },
     { header: "Struktur Atas", key: "Struktur Atas", width: 18 },
     { header: "Struktur Bawah", key: "Struktur Bawah", width: 18 },
     { header: "Nomor Kode Produksi", key: "Nomor Kode Produksi", width: 22 },
@@ -110,17 +112,27 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   ];
 
   rows.forEach((row) => {
-    worksheet.addRow({
+    const excelRow = worksheet.addRow({
       ...row,
+      "Tipe Unit": String(row["Tipe Unit"] || "").replace(/\D/g, ""),
       "Struktur Atas": parseTemplateNumber(row["Struktur Atas"]),
       "Struktur Bawah": parseTemplateNumber(row["Struktur Bawah"]),
       "Nomor Kode Produksi": parseTemplateSerial(row["Nomor Kode Produksi"]),
+      "Blok": String(row["Blok"] || ""),
       "Tanggal Produksi": parseTemplateDate(row["Tanggal Produksi"]),
     });
+    const tipeCell = excelRow.getCell(4);
+    if (tipeCell.value !== null && tipeCell.value !== undefined && tipeCell.value !== "") {
+      tipeCell.value = { text: String(tipeCell.value) } as any;
+    }
+    const blokCell = excelRow.getCell(8);
+    if (blokCell.value !== null && blokCell.value !== undefined && blokCell.value !== "") {
+      blokCell.value = { text: String(blokCell.value) } as any;
+    }
   });
 
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
-  worksheet.autoFilter = "A1:H1";
+  worksheet.autoFilter = "A1:I1";
   worksheet.getRow(1).height = 24;
   worksheet.getRow(1).eachCell((cell) => {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -137,11 +149,21 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   for (let rowNumber = 2; rowNumber <= Math.max(rows.length + 1, 20); rowNumber += 1) {
     const row = worksheet.getRow(rowNumber);
     row.height = 22;
-    row.getCell(4).numFmt = "#,##0";
     row.getCell(5).numFmt = "#,##0";
-    row.getCell(6).numFmt = "000";
-    row.getCell(8).numFmt = "dd/mm/yyyy";
+    row.getCell(6).numFmt = "#,##0";
+    row.getCell(7).numFmt = "000";
+    row.getCell(9).numFmt = "dd/mm/yyyy";
     row.getCell(4).dataValidation = {
+      type: "textLength",
+      operator: "greaterThanOrEqual",
+      formulae: [1],
+      allowBlank: true,
+      showErrorMessage: false,
+      showInputMessage: true,
+      promptTitle: "Tipe Unit",
+      prompt: "Isi tipe unit, contoh: 60. Format lain seperti 60/72 tetap dapat digunakan.",
+    };
+    row.getCell(5).dataValidation = {
       type: "whole",
       operator: "greaterThanOrEqual",
       formulae: [0],
@@ -153,7 +175,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       promptTitle: "Struktur Atas",
       prompt: "Isi nominal struktur atas. Contoh: 1000000, 1.000.000, atau 1,000,000. Saat import, sistem membaca semuanya sebagai satu juta.",
     };
-    row.getCell(5).dataValidation = {
+    row.getCell(6).dataValidation = {
       type: "whole",
       operator: "greaterThanOrEqual",
       formulae: [0],
@@ -165,7 +187,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       promptTitle: "Struktur Bawah",
       prompt: "Isi nominal struktur bawah. Contoh: 1000000, 1.000.000, atau 1,000,000. Saat import, sistem membaca semuanya sebagai satu juta.",
     };
-    row.getCell(6).dataValidation = {
+    row.getCell(7).dataValidation = {
       type: "whole",
       operator: "greaterThanOrEqual",
       formulae: [0],
@@ -177,7 +199,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       promptTitle: "Nomor Kode Produksi",
       prompt: "Isi nomor urut, misalnya 1 atau 001. Template menampilkannya sebagai tiga digit: 001.",
     };
-    row.getCell(7).dataValidation = {
+    row.getCell(8).dataValidation = {
       type: "textLength",
       operator: "greaterThanOrEqual",
       formulae: [1],
@@ -187,7 +209,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       promptTitle: "Blok",
       prompt: "Isi kode blok produksi. Contoh: 5.2.",
     };
-    row.getCell(8).dataValidation = {
+    row.getCell(9).dataValidation = {
       type: "date",
       operator: "between",
       formulae: [new Date(2000, 0, 1), new Date(2099, 11, 31)],
@@ -202,7 +224,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.alignment = {
         vertical: "middle",
-        horizontal: [1, 3, 6, 7, 8].includes(colNumber) ? "center" : colNumber >= 4 && colNumber <= 5 ? "right" : "left",
+        horizontal: [1, 3, 4, 7, 8, 9].includes(colNumber) ? "center" : colNumber >= 5 && colNumber <= 6 ? "right" : "left",
       };
       cell.border = {
         top: { style: "thin", color: { argb: "FFD1D5DB" } },
@@ -214,10 +236,10 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   }
 
   worksheet.getColumn(2).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-  worksheet.getColumn(4).numFmt = "#,##0";
   worksheet.getColumn(5).numFmt = "#,##0";
-  worksheet.getColumn(6).numFmt = "000";
-  worksheet.getColumn(8).numFmt = "dd/mm/yyyy";
+  worksheet.getColumn(6).numFmt = "#,##0";
+  worksheet.getColumn(7).numFmt = "000";
+  worksheet.getColumn(9).numFmt = "dd/mm/yyyy";
 
   return workbook;
 };

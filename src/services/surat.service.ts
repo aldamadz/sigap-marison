@@ -1,80 +1,23 @@
 import { supabase } from "@/lib/supabase";
-import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { parseRupiahInteger } from "@/lib/rupiah";
+import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode } from "@/lib/production-code";
+import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
+import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
+import {
+  flattenRecommendationItems,
+  withoutRecommendationEstimatedPrices,
+  type RecommendationMultiDetail,
+} from "@sigap/shared";
+import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
+import {
+  buildRegistrationAttachmentRows,
+  classifyRegistrationDraftAttachments,
+  formatCreateRegistrasiError,
+} from "@/lib/registration-draft-attachment-classification";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
-import {
-  buildDynamicSignatureLayout,
-  normalizeSignatureLayoutConfig,
-  type SignaturePosition,
-} from "./signature-layout.service";
-import {
-  normalizeGoodsServicesWorksheet,
-  resolveTableHorizontalAlignment,
-} from "../../document-layout-rules.mjs";
-
-type TableInputColumn = {
-  key: string;
-  label: string;
-  column: string;
-  required?: boolean;
-  type?: "text" | "number" | "date" | "select";
-  options?: Array<{ label?: string; value: string | number } | string | number>;
-  helper_text?: string;
-};
-
-type TemplateInputField = {
-  key: string;
-  label: string;
-  type?: "text" | "textarea" | "date" | "number" | "currency" | "table" | "external_select";
-  required?: boolean;
-  cell?: string;
-  sheet?: number;
-  defaultSource?: string;
-  default_source?: string;
-  merge_range?: string;
-  mergeRange?: string;
-  horizontal?: "left" | "center" | "right";
-  vertical?: "top" | "middle" | "bottom";
-  wrap?: boolean;
-  shrink?: boolean;
-  font_name?: string;
-  fontName?: string;
-  font_size?: number;
-  fontSize?: number;
-  row_height?: number;
-  rowHeight?: number;
-  prefix?: string;
-  suffix?: string;
-  table_config?: {
-    start_row: number;
-    end_row: number;
-    no_column?: string;
-    columns: TableInputColumn[];
-  };
-  tableConfig?: {
-    startRow: number;
-    endRow: number;
-    noColumn?: string;
-    columns: TableInputColumn[];
-  };
-};
-
-const formatSignatureStampDateTime = (value?: string | null) => {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Jakarta",
-  }).format(date).replace(".", ":");
-};
 
 export interface SuratRegistrasi {
   id: string;
@@ -115,7 +58,8 @@ export interface SuratRegistrasi {
 
 export interface SuratRegistrationDraft {
   id: string;
-  reservation_id: string;
+  reservation_id: string | null;
+  revision_event_id?: string | null;
   created_by: string;
   no_surat: string;
   status: "DRAFT" | "SUBMITTED" | "VOID" | "EXPIRED";
@@ -190,6 +134,7 @@ export interface LinkedSuratDocument {
   child_pdf_path: string | null;
   child_created_at: string | null;
   child_created_by: string | null;
+  child_recommendation_multi_detail: unknown | null;
 }
 
 export interface SuratRegistrationDraftFile {
@@ -204,17 +149,17 @@ export interface SuratRegistrationDraftFile {
   created_at: string;
 }
 
-export const suratService = {
-  getUnitConfigFromForm(form: any) {
-    const raw = form?.unit_config;
-    const parsed = typeof raw === "string" ? (() => {
-      try { return JSON.parse(raw || "{}"); } catch { return {}; }
-    })() : (raw || {});
-    return {
-      request_sentence_cell: String(parsed.request_sentence_cell || "C11").trim().toUpperCase(),
-    };
-  },
+export interface RegistrationDraftUploadProgress {
+  phase: "uploading" | "saving";
+  fileName: string;
+  fileIndex: number;
+  fileCount: number;
+  loaded: number;
+  total: number;
+  percent: number;
+}
 
+export const suratService = {
   async sendNotification(userIds: string[], title: string, message: string, link?: string, meta: Record<string, any> = {}) {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (ids.length === 0) return;
@@ -301,86 +246,11 @@ export const suratService = {
     return "memeriksa";
   },
 
-  getRelativePath(url: string): string {
-    if (!url) return "";
-    const parts = url.split("/dokumen_surat/");
-    const path = parts.length < 2 ? url : parts[1];
-    return decodeURIComponent(path.split("?")[0]);
-  },
-
-  async downloadStorageFile(pathOrUrl: string, bucket = "dokumen_surat") {
-    if (/^https?:\/\//i.test(pathOrUrl)) {
-      const response = await fetch(pathOrUrl);
-      if (!response.ok) throw new Error("Gagal download file.");
-      return response.blob();
-    }
-    const relativePath = this.getRelativePath(pathOrUrl);
-    const { data, error } = await supabase.storage.from(bucket).download(relativePath);
-    if (error || !data) throw new Error(error?.message || "Gagal download file.");
-    return data;
-  },
-
-  resolveStampPositions(usageDetail: any, roleName: string, stepOrder: number): any[] {
-    try {
-      const config = typeof usageDetail.ttd_config === "string"
-        ? JSON.parse(usageDetail.ttd_config) : usageDetail.ttd_config;
-      if (!Array.isArray(config)) return [];
-      const matched = config.filter((_item: any, index: number) => (index + 1) === Number(stepOrder));
-      console.log(`Stamp Match Found for Step ${stepOrder}:`, matched);
-      return matched;
-    } catch (e) {
-      console.error("Error parsing ttd_config:", e);
-      return [];
-    }
-  },
-
-  parseInputSchema(schema: any): TemplateInputField[] {
-    if (!schema) return [];
-    if (Array.isArray(schema)) return schema;
-    if (typeof schema === "string") {
-      try {
-        const parsed = JSON.parse(schema || "[]");
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  },
-
   formatDateForDocument(value: string | Date | null | undefined): string {
     if (!value) return "";
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-  },
-
-  formatInputValue(value: any, type?: string): any {
-    if (value === null || value === undefined) return "";
-    if (Array.isArray(value)) {
-      return value.map((item) => this.formatInputValue(item, type)).filter(Boolean).join(", ");
-    }
-    if (typeof value === "object" && !Array.isArray(value)) {
-      return value.label ?? value.name ?? value.code ?? value.value ?? "";
-    }
-    if (type === "date") return this.formatDateForDocument(value);
-    if (type === "currency") {
-      const n = Number(value);
-      if (Number.isNaN(n)) return value;
-      return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
-    }
-    return value;
-  },
-
-  getTableConfig(field: TemplateInputField) {
-    const raw = field.table_config || field.tableConfig;
-    if (!raw) return null;
-    return {
-      startRow: Number((raw as any).start_row || (raw as any).startRow || 1),
-      endRow: Number((raw as any).end_row || (raw as any).endRow || 1),
-      noColumn: (raw as any).no_column || (raw as any).noColumn || "A",
-      columns: Array.isArray((raw as any).columns) ? (raw as any).columns : [],
-    };
   },
 
   normalizeRecommendationItems(value: any[]) {
@@ -413,10 +283,11 @@ export const suratService = {
           file_size: row?.recommendation_attachment_file_size,
           uploaded_at: row?.recommendation_attachment_uploaded_at,
           source: row?.recommendation_attachment_source,
+          attachments: Array.isArray(row?.attachments) ? row.attachments : undefined,
         };
         const hasAttachment = Boolean(String(
           attachmentSource?.draft_file_id || attachmentSource?.file_url || attachmentSource?.file_name || ""
-        ).trim());
+        ).trim()) || (Array.isArray(attachmentSource?.attachments) && attachmentSource.attachments.length > 0);
         const normalized = {
           ...row,
           no: index + 1,
@@ -442,6 +313,9 @@ export const suratService = {
                 file_size: Number(attachmentSource.file_size || 0) || null,
                 uploaded_at: String(attachmentSource.uploaded_at || "").trim() || null,
                 source: String(attachmentSource.source || "").trim() || null,
+                attachments: Array.isArray(attachmentSource.attachments)
+                  ? attachmentSource.attachments
+                  : undefined,
               }
             : null,
         };
@@ -483,7 +357,9 @@ export const suratService = {
       }];
     } else {
       normalized.request_mode = "barang";
-      delete normalized.requested_project;
+      if (normalized.request_category !== "non_unit") {
+        delete normalized.requested_project;
+      }
       delete normalized.requested_unit_count;
       delete normalized.unit_request_sentence;
       delete normalized.unit_config_snapshot;
@@ -491,11 +367,10 @@ export const suratService = {
       delete normalized.allocated_units;
       delete normalized.allocated_unit_count;
     }
-    const requesterDepartmentCode = String(context?.requesterDepartmentCode || "").trim().toUpperCase();
-    const requesterDepartmentName = String(context?.requesterDepartmentName || "").trim().toLowerCase();
-    const canUseRecommendation = requesterDepartmentCode === "PBO" ||
-      requesterDepartmentName === "pengembangan organisasi" ||
-      requesterDepartmentName === "po";
+    const canUseRecommendation = canUseAssetRecommendation({
+      code: context?.requesterDepartmentCode,
+      name: context?.requesterDepartmentName,
+    });
     if (normalized.request_category === "asset" && canUseRecommendation) {
       normalized.requires_recommendation = normalized.requires_recommendation === true;
       normalized.recommendation_template_name = normalized.recommendation_template_name || "Rekomendasi Peremajaan Alat";
@@ -513,23 +388,20 @@ export const suratService = {
         Object.values(row ?? {}).some((value) => String(value ?? "").trim())
       );
     }
-    if (Array.isArray(normalized.recommendation_items)) {
+    if (
+      normalized.recommendation_multi_detail?.version === 1
+      && Array.isArray(normalized.recommendation_multi_detail?.items)
+    ) {
+      normalized.recommendation_multi_detail = withoutRecommendationEstimatedPrices(
+        normalized.recommendation_multi_detail as RecommendationMultiDetail,
+      );
+      normalized.recommendation_items = flattenRecommendationItems(
+        normalized.recommendation_multi_detail as RecommendationMultiDetail,
+      );
+    } else if (Array.isArray(normalized.recommendation_items)) {
       normalized.recommendation_items = this.normalizeRecommendationItems(normalized.recommendation_items);
     }
     return normalized;
-  },
-
-  isUnitTemplateField(field: TemplateInputField) {
-    return [
-      "unit",
-      "requested_project",
-      "requested_unit_count",
-      "unit_request_sentence",
-      "unit_config_snapshot",
-      "allocated_project",
-      "allocated_units",
-      "allocated_unit_count",
-    ].includes(field.key);
   },
 
   getUnitCode(unit: any) {
@@ -544,14 +416,28 @@ export const suratService = {
     ).trim();
   },
 
+  getUnitType(unit: any) {
+    return String(
+      unit?.allocation_detail?.unit_type ||
+      unit?.allocation_detail?.type ||
+      unit?.allocation_detail?.tipe ||
+      unit?.unit_type ||
+      unit?.raw?.unit_type ||
+      unit?.raw?.type ||
+      unit?.raw?.tipe ||
+      unit?.raw?.house_type ||
+      "-"
+    ).trim();
+  },
+
   parseMoney(value: any) {
     return parseRupiahInteger(value);
   },
 
   formatRupiah(value: any) {
     const amount = this.parseMoney(value);
-    if (amount === 0) return "";
-    return new Intl.NumberFormat("id-ID").format(amount);
+    if (amount === 0) return "Rp 0";
+    return formatRupiahCanonical(amount);
   },
 
   buildProductionCode(unit: any) {
@@ -575,57 +461,6 @@ export const suratService = {
     return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
   },
 
-  async ensureUnitAllocationPersisted(suratId: string, formInputData: any) {
-    if (!Array.isArray(formInputData?.allocated_units) || formInputData.allocated_units.length === 0) return;
-
-    const { data: current } = await supabase
-      .from("surat_registrasi")
-      .select("data_snapshot")
-      .eq("id", suratId)
-      .maybeSingle();
-
-    const { data: attachments } = await supabase
-      .from("surat_attachments")
-      .select("*")
-      .eq("surat_id", suratId)
-      .order("created_at", { ascending: true });
-
-    const { error } = await supabase
-      .from("surat_registrasi")
-      .update({
-        form_input_data: formInputData,
-        data_snapshot: {
-          ...(current?.data_snapshot || {}),
-          input: formInputData,
-          requested_project: formInputData?.requested_project ?? null,
-          allocated_project: formInputData?.allocated_project ?? null,
-          requested_unit_count: formInputData?.requested_unit_count ?? null,
-          allocated_units: formInputData?.allocated_units ?? [],
-          allocated_unit_count: formInputData?.allocated_unit_count ?? null,
-          attachments: attachments || current?.data_snapshot?.attachments || [],
-        },
-      })
-      .eq("id", suratId);
-
-    if (error) throw error;
-  },
-
-  async dispatchCompletedSuratToMarison(suratId: string) {
-    const { data: { session } } = await supabase.auth.getSession({ force: true });
-    if (!session?.access_token) return null;
-
-    const response = await fetch(`/api/integrations/marison/surat/${suratId}/dispatch`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(String(payload?.error || "Gagal mengirim data ke API Marison."));
-    }
-    return payload;
-  },
-
   createUnitRecapAttachment(project: any, units: any[]) {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 15;
@@ -639,6 +474,7 @@ export const suratService = {
       return [
         String(index + 1),
         this.getUnitCode(unit),
+        this.getUnitType(unit),
         this.formatRupiah(atas),
         this.formatRupiah(bawah),
         this.formatRupiah(atas + bawah),
@@ -658,9 +494,9 @@ export const suratService = {
     autoTable(doc, {
       startY: 36,
       margin: { left: margin, right: margin },
-      head: [["No", "Kavling", "Struktur Atas", "Struktur Bawah", "Nominal"]],
+      head: [["No", "Kavling", "Tipe", "Struktur Atas", "Struktur Bawah", "Nominal"]],
       body,
-      foot: [["TOTAL", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
+      foot: [["TOTAL", "", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
       theme: "grid",
       styles: {
         font: "helvetica",
@@ -683,17 +519,21 @@ export const suratService = {
       },
       columnStyles: {
         0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 35, halign: "center" },
-        2: { halign: "right" },
+        1: { cellWidth: 28, halign: "center" },
+        2: { cellWidth: 28 },
         3: { halign: "right" },
         4: { halign: "right" },
+        5: { halign: "right" },
       },
       didParseCell: (data) => {
         if (data.section === "foot" && data.column.index === 0) {
-          data.cell.colSpan = 2;
+          data.cell.colSpan = 3;
           data.cell.styles.halign = "center";
         }
         if (data.section === "foot" && data.column.index === 1) {
+          data.cell.text = [];
+        }
+        if (data.section === "foot" && data.column.index === 2) {
           data.cell.text = [];
         }
       },
@@ -714,6 +554,7 @@ export const suratService = {
       String(index + 1),
       project?.name || project?.label || "-",
       this.getUnitCode(unit),
+      this.getUnitType(unit),
       this.buildProductionCode(unit) || "-",
     ]);
 
@@ -728,7 +569,7 @@ export const suratService = {
     autoTable(doc, {
       startY: 35,
       margin: { left: margin, right: margin },
-      head: [["No", "Proyek", "Unit", "Kode Produksi"]],
+      head: [["No", "Proyek", "Unit", "Tipe", "Kode Produksi"]],
       body,
       theme: "grid",
       styles: {
@@ -748,9 +589,10 @@ export const suratService = {
       },
       columnStyles: {
         0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 58 },
-        2: { cellWidth: 25, halign: "center" },
-        3: { cellWidth: 84 },
+        1: { cellWidth: 42 },
+        2: { cellWidth: 24, halign: "center" },
+        3: { cellWidth: 27 },
+        4: { cellWidth: 74 },
       },
     });
 
@@ -849,325 +691,7 @@ export const suratService = {
     };
   },
 
-  applyGeneratedCellPadding(cell: ExcelJS.Cell, options: { horizontal?: "left" | "center" | "right"; vertical?: "top" | "middle" | "bottom"; wrap?: boolean } = {}) {
-    const horizontal = options.horizontal || (cell.alignment?.horizontal as "left" | "center" | "right" | undefined) || "left";
-    cell.alignment = {
-      ...(cell.alignment || {}),
-      horizontal,
-      vertical: options.vertical || (cell.alignment?.vertical as "top" | "middle" | "bottom" | undefined) || "middle",
-      wrapText: options.wrap ?? cell.alignment?.wrapText ?? true,
-      shrinkToFit: cell.alignment?.shrinkToFit ?? false,
-      ...(horizontal === "left" ? { indent: Math.max(Number(cell.alignment?.indent || 0), 1) } : {}),
-    };
-  },
-
-  normalizeRecommendationTemplate(workbook: ExcelJS.Workbook, worksheet: ExcelJS.Worksheet) {
-    // Excel "Place in Cell" images are stored as a #VALUE! fallback that LibreOffice
-    // cannot render. Replace that fallback with the embedded PNG as a normal image.
-    worksheet.getCell("A1").value = null;
-    if (worksheet.getImages().length > 0) return;
-
-    const workbookMedia = (workbook as ExcelJS.Workbook & { media: ExcelJS.Media[] }).media || [];
-    const embeddedLogo = workbookMedia.find((media) =>
-      media.type === "image" && media.extension.toLowerCase() === "png" && media.buffer
-    );
-    if (!embeddedLogo) return;
-
-    const imageId = workbook.addImage({
-      buffer: embeddedLogo.buffer,
-      extension: "png",
-    });
-    worksheet.addImage(imageId, {
-      tl: { col: 0.1, row: 0.12 },
-      ext: { width: 170, height: 60 },
-      editAs: "oneCell",
-    });
-  },
-
-  writeTableField(workbook: ExcelJS.Workbook, field: TemplateInputField, value: any[]) {
-    const config = this.getTableConfig(field);
-    if (!config) return;
-
-    const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-    const sheet = workbook.worksheets[sheetIndex] ?? workbook.worksheets[0];
-    const rows = Array.isArray(value)
-      ? value.filter((row) => Object.values(row ?? {}).some((cellValue) => String(cellValue ?? "").trim()))
-      : [];
-    const maxRows = Math.max(config.endRow - config.startRow + 1, 0);
-
-    for (let index = 0; index < maxRows; index += 1) {
-      const excelRow = config.startRow + index;
-      if (config.noColumn) {
-        sheet.getCell(`${config.noColumn}${excelRow}`).value = null;
-      }
-      config.columns.forEach((column: TableInputColumn) => {
-        sheet.getCell(`${column.column}${excelRow}`).value = null;
-      });
-    }
-
-    rows.slice(0, maxRows).forEach((row, index) => {
-      const excelRow = config.startRow + index;
-      if (config.noColumn) {
-        const noCell = sheet.getCell(`${config.noColumn}${excelRow}`);
-        noCell.value = index + 1;
-        this.applyGeneratedCellPadding(noCell, { horizontal: "center", vertical: "middle", wrap: true });
-      }
-      config.columns.forEach((column: TableInputColumn) => {
-        const rawValue = row?.[column.key];
-        const cell = sheet.getCell(`${column.column}${excelRow}`);
-        cell.value = this.formatInputValue(rawValue, column.type);
-        this.applyGeneratedCellPadding(cell, {
-          horizontal: resolveTableHorizontalAlignment(column.key, column.type),
-          vertical: "middle",
-          wrap: true,
-        });
-      });
-      const rowRef = sheet.getRow(excelRow);
-      rowRef.height = Math.max(Number(rowRef.height || 0), 28);
-    });
-  },
-
-  fitTextForBox(value: any, maxCharsPerLine = 115, maxLines = 5) {
-    const words = String(value ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-    const lines: string[] = [];
-    let current = "";
-
-    for (const word of words) {
-      const chunks = word.length > maxCharsPerLine
-        ? word.match(new RegExp(`.{1,${maxCharsPerLine}}`, "g")) || [word]
-        : [word];
-
-      for (const chunk of chunks) {
-        const next = current ? `${current} ${chunk}` : chunk;
-        if (next.length > maxCharsPerLine) {
-          if (current) lines.push(current);
-          current = chunk;
-        } else {
-          current = next;
-        }
-
-        if (lines.length >= maxLines) break;
-      }
-
-      if (lines.length >= maxLines) break;
-    }
-
-    if (current && lines.length < maxLines) lines.push(current);
-    const original = String(value ?? "").trim();
-    let fitted = lines.slice(0, maxLines).join("\n");
-    if (fitted.length < original.length && fitted) {
-      fitted = `${fitted.slice(0, Math.max(fitted.length - 3, 0))}...`;
-    }
-    return fitted;
-  },
-
-  getTopLeftCell(range: string, fallback: string) {
-    return String(range || fallback || "").split(":")[0].trim().toUpperCase();
-  },
-
-  getRowsForField(field: TemplateInputField, range: string) {
-    const source = range || field.cell || "";
-    const rowNumbers = String(source).match(/\d+/g)?.map(Number).filter(Boolean) || [];
-    if (rowNumbers.length >= 2) {
-      const start = Math.min(rowNumbers[0], rowNumbers[1]);
-      const end = Math.max(rowNumbers[0], rowNumbers[1]);
-      return Array.from({ length: end - start + 1 }, (_item, index) => start + index);
-    }
-    return rowNumbers.length === 1 ? [rowNumbers[0]] : [];
-  },
-
-  applyFieldFormatting(sheet: ExcelJS.Worksheet, field: TemplateInputField, target: ExcelJS.Cell, range: string) {
-    const fontName = field.font_name || field.fontName;
-    const fontSize = Number(field.font_size || field.fontSize || 0);
-    if (fontName || fontSize > 0) {
-      target.font = {
-        ...(target.font || {}),
-        ...(fontName ? { name: fontName } : {}),
-        ...(fontSize > 0 ? { size: fontSize } : {}),
-      };
-    }
-
-    const source = String(field.default_source || field.defaultSource || "").trim().toLowerCase();
-    const isPlaceDateField = field.key === "request_place_date" || source === "request_place_date";
-    const horizontal = isPlaceDateField
-      ? "left"
-      : field.horizontal || (field.type === "number" || field.type === "currency" ? "right" : "left");
-    const shouldWrap = field.wrap === true || field.type === "textarea" || isPlaceDateField;
-    const shouldShrink = field.shrink === true;
-    if (horizontal || field.vertical || shouldWrap || shouldShrink) {
-      target.alignment = {
-        ...(target.alignment || {}),
-        horizontal,
-        ...(field.vertical ? { vertical: field.vertical } : {}),
-        ...(shouldWrap ? { wrapText: true } : {}),
-        ...(shouldShrink ? { shrinkToFit: true } : {}),
-      };
-    }
-    this.applyGeneratedCellPadding(target, {
-      horizontal,
-      vertical: field.vertical || (field.type === "textarea" ? "top" : "middle"),
-      wrap: isPlaceDateField ? true : field.wrap !== false,
-    });
-
-    const rowHeight = Number(field.row_height || field.rowHeight || 0);
-    if (rowHeight > 0) {
-      this.getRowsForField(field, range).forEach((rowNumber) => {
-        sheet.getRow(rowNumber).height = rowHeight;
-      });
-    }
-  },
-
-  writeWrappedField(sheet: ExcelJS.Worksheet, field: TemplateInputField, value: any) {
-    const formatted = this.formatInputValue(value, field.type);
-    const baseText = String(formatted ?? "");
-    const text = baseText
-      ? `${field.prefix || ""}${baseText}${field.suffix || ""}`
-      : "";
-    const configuredRange = String(field.merge_range || field.mergeRange || "").trim().toUpperCase();
-    const mergeRange = configuredRange;
-    const cellAddress = this.getTopLeftCell(mergeRange, field.cell || "");
-    if (!cellAddress) return;
-
-    if (field.key === "catatan") {
-      const [configuredStartAddress, configuredEndAddress] = mergeRange.split(":");
-      const configuredStart = configuredStartAddress ? sheet.getCell(configuredStartAddress) : null;
-      const configuredEnd = configuredEndAddress ? sheet.getCell(configuredEndAddress) : configuredStart;
-      const rowWiseMerges = configuredStart && configuredEnd
-        ? ((sheet.model as { merges?: string[] }).merges || [])
-            .map((rangeValue) => {
-              const [startAddress, endAddress] = rangeValue.split(":");
-              const start = sheet.getCell(startAddress);
-              const end = sheet.getCell(endAddress || startAddress);
-              return { rangeValue, start, end };
-            })
-            .filter(({ start, end }) =>
-              start.row === end.row &&
-              start.col === configuredStart.col &&
-              end.col === configuredEnd.col &&
-              Number(start.row) >= Number(configuredStart.row) &&
-              Number(end.row) <= Number(configuredEnd.row)
-            )
-            .sort((left, right) => Number(left.start.row) - Number(right.start.row))
-        : [];
-      const hasCompleteRowWiseMerges = Boolean(
-        configuredStart &&
-        configuredEnd &&
-        rowWiseMerges.length === Number(configuredEnd.row) - Number(configuredStart.row) + 1
-      );
-
-      if (hasCompleteRowWiseMerges) {
-        const lines = this.fitTextForBox(text, 115, rowWiseMerges.length).split("\n");
-        rowWiseMerges.forEach(({ start }, index) => {
-          start.value = lines[index] || null;
-          start.font = {
-            ...(start.font || {}),
-            name: field.font_name || field.fontName || "Arial",
-            size: Number(field.font_size || field.fontSize || 11),
-          };
-          start.alignment = {
-            ...(start.alignment || {}),
-            wrapText: false,
-            shrinkToFit: false,
-            vertical: "middle",
-            horizontal: field.horizontal || "left",
-            indent: Math.max(Number(start.alignment?.indent || 0), 1),
-          };
-          const rowHeight = Number(field.row_height || field.rowHeight || 15);
-          sheet.getRow(Number(start.row)).height = rowHeight;
-        });
-        return;
-      }
-
-      if (mergeRange) {
-        const [startAddress, endAddress] = mergeRange.split(":");
-        const startCell = sheet.getCell(startAddress);
-        const endCell = sheet.getCell(endAddress || startAddress);
-        for (let row = startCell.row; row <= endCell.row; row += 1) {
-          for (let col = startCell.col; col <= endCell.col; col += 1) {
-            const cell = sheet.getCell(row, col);
-            if (cell.isMerged) {
-              try {
-                sheet.unMergeCells(cell.master.address);
-              } catch {
-                // Some templates merge the note area row by row. Ignore already-unmerged cells.
-              }
-            }
-          }
-        }
-        sheet.mergeCells(mergeRange);
-      }
-      const target = sheet.getCell(cellAddress);
-      target.value = this.fitTextForBox(text, 115, 4);
-      target.font = { ...(target.font || {}), name: field.font_name || field.fontName || "Arial", size: Number(field.font_size || field.fontSize || 11) };
-      target.border = {
-        ...(target.border || {}),
-        top: target.border?.top || { style: "thin", color: { argb: "FF000000" } },
-        left: target.border?.left || { style: "thin", color: { argb: "FF000000" } },
-        right: target.border?.right || { style: "thin", color: { argb: "FF000000" } },
-        bottom: { style: "medium", color: { argb: "FF000000" } },
-      };
-      target.alignment = {
-        ...(target.alignment || {}),
-        wrapText: field.wrap !== false,
-        shrinkToFit: field.shrink !== false,
-        vertical: field.vertical || "top",
-        horizontal: field.horizontal || "left",
-        indent: Math.max(Number(target.alignment?.indent || 0), 1),
-      };
-      const rowHeight = Number(field.row_height || field.rowHeight || 15);
-      this.getRowsForField(field, mergeRange).forEach((rowNumber) => {
-        sheet.getRow(rowNumber).height = rowHeight;
-      });
-      return;
-    }
-
-    if (mergeRange && !sheet.getCell(cellAddress).isMerged) {
-      sheet.mergeCells(mergeRange);
-    }
-
-    const cell = sheet.getCell(cellAddress);
-    cell.value = text;
-    this.applyFieldFormatting(sheet, field, cell, mergeRange);
-    if (field.type === "textarea") {
-      cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: "top" };
-      const rowNumber = Number(String(cellAddress).match(/\d+/)?.[0] || 0);
-      if (rowNumber > 0 && !field.row_height && !field.rowHeight) sheet.getRow(rowNumber).height = Math.max(sheet.getRow(rowNumber).height || 15, 45);
-    }
-  },
-
-  getSystemFieldValue(source: string, context: any) {
-    switch (source) {
-      case "requester_name": return context.profile?.full_name ?? "";
-      case "requester_nik": return context.profile?.nik ?? "";
-      case "requester_job_title": return context.profile?.job_title ?? "";
-      case "department_name": return context.department?.name ?? "";
-      case "office_name": return context.office?.name ?? "";
-      case "project_name": return context.project?.name ?? context.payload?.form_input_data?.project_name ?? "";
-      case "entity_name": return context.entity?.name ?? "";
-      case "letter_number": return context.payload?.no_surat ?? "";
-      case "letter_title": return context.payload?.judul_surat ?? "";
-      case "request_place": return context.payload?.request_place ?? "";
-      case "request_date": return this.formatDateForDocument(context.payload?.request_date);
-      case "request_place_date": {
-        const place = String(context.payload?.request_place ?? "").trim();
-        const date = this.formatDateForDocument(context.payload?.request_date);
-        return [place, date].filter(Boolean).join(", ");
-      }
-      default: return undefined;
-    }
-  },
-
-  hasPlaceDateMapping(schema: TemplateInputField[]) {
-    const mappedSources = new Set(
-      schema
-        .filter((field) => !!String(field.cell || field.merge_range || field.mergeRange || "").trim())
-        .map((field) => field.default_source || field.defaultSource || "manual")
-    );
-    return mappedSources.has("request_place_date") ||
-      (mappedSources.has("request_place") && mappedSources.has("request_date"));
-  },
-
-  async getTemplateContext(payload: any) {
+  async getRegistrationContext(payload: any) {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Tidak terautentikasi");
 
@@ -1209,14 +733,14 @@ export const suratService = {
                 form_usage_step_users(user_id)
               ),
               form_usage_attachment_requirements(*),
-              master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id, signature_layout)
+              master_forms(id, nama_form, nomor_form, input_schema, department_id)
             `)
             .eq("id", effectivePayload.form_usage_id)
             .single()
         : effectivePayload.penggunaan_id
         ? supabase
             .from("master_penggunaan_detail")
-            .select("*, workflow_allowed_departments(department_id), master_forms!fk_master_forms(id, nama_form, nomor_form, link_form, input_schema, unit_config, department_id)")
+            .select("*, workflow_allowed_departments(department_id), master_forms!fk_master_forms(id, nama_form, nomor_form, input_schema, department_id)")
             .eq("id", effectivePayload.penggunaan_id)
             .single()
         : Promise.resolve({ data: null }),
@@ -1251,91 +775,12 @@ export const suratService = {
     };
   },
 
-  async buildFilledTemplateFile(payload: any): Promise<{ publicUrl: string; context: any; signaturePositions: SignaturePosition[] }> {
-    const context = await this.getTemplateContext(payload);
-    const templateLink = context.form?.link_form;
-    if (!templateLink) throw new Error("Template Excel belum tersedia untuk matrix ini.");
-
-    const templateUrl = `${templateLink}${templateLink.includes("?") ? "&" : "?"}v=${Date.now()}`;
-    const response = await fetch(templateUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error("Gagal mengambil template Excel.");
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await response.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-
-    const isRecommendationTemplate = String(context.form?.nama_form || "").toUpperCase().includes("REKOMENDASI");
-    if (isRecommendationTemplate) {
-      this.normalizeRecommendationTemplate(workbook, worksheet);
-    }
-
-    const inputData = payload.form_input_data ?? {};
-    const requestedProject = inputData?.request_mode === "unit" ? inputData?.requested_project : null;
-    const isPgdTemplate = String(context.form?.nama_form || "").toUpperCase().includes("PERMINTAAN BARANG");
-    if (isPgdTemplate) {
-      worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
-      worksheet.getCell("D5").value = `: ${payload.no_surat}`;
-      worksheet.getCell("L4").value = ":";
-      worksheet.getCell("L5").value = ":";
-      if (payload.office_id && context.office?.name !== "Kantor Pusat") {
-        worksheet.getCell("M4").value = `KC. ${context.office?.name || ""}`;
-        worksheet.getCell("M5").value = context.project?.name || inputData.project_name || "";
-      } else if (requestedProject?.name) {
-        worksheet.getCell("M4").value = context.department?.name || "";
-        worksheet.getCell("M5").value = requestedProject.name;
-      } else {
-        worksheet.getCell("M4").value = context.department?.name || "";
-        worksheet.getCell("M5").value = inputData.project_name || "-";
-      }
-    }
-
-    const schema = this.parseInputSchema(context.form?.input_schema);
-    if (!this.hasPlaceDateMapping(schema)) {
-      throw new Error("Template belum memiliki mapping cell untuk Tempat, Tanggal.");
-    }
-    schema.forEach((field) => {
-      if (inputData.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
-      if (field.type === "table") {
-        this.writeTableField(workbook, field, inputData[field.key]);
-        return;
-      }
-      if (!field.cell && !(field.merge_range || field.mergeRange)) return;
-      const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-      const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
-      const source = field.default_source || field.defaultSource || "manual";
-      const systemValue = this.getSystemFieldValue(source, context);
-      const rawValue = systemValue !== undefined ? systemValue : inputData[field.key];
-      this.writeWrappedField(sheet, field, rawValue);
-    });
-    const signaturePositions = buildDynamicSignatureLayout(
-      workbook,
-      normalizeSignatureLayoutConfig(context.form?.signature_layout),
-      Array.isArray(payload.signature_steps) ? payload.signature_steps : [],
-      {
-        requestPlaceDate: [
-          String(payload.request_place || "").trim(),
-          this.formatDateForDocument(payload.request_date),
-        ].filter(Boolean).join(", "),
-      }
-    );
-    if (isPgdTemplate) normalizeGoodsServicesWorksheet(worksheet);
-    const buffer = await workbook.xlsx.writeBuffer();
-    const safeNumber = String(payload.no_surat ?? "draft").replace(/[^\w-]+/g, "_");
-    const path = `dokumen/system_${safeNumber}_${Date.now()}.xlsx`;
-    const uploaded = await appStorageService.upload({
-      bucket: "dokumen_surat",
-      path,
-      file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      upsert: true,
-    });
-    return { publicUrl: uploaded.publicUrl, context, signaturePositions };
-  },
-
   async getActiveRegistrationDrafts(): Promise<SuratRegistrationDraft[]> {
     const { data, error } = await supabase
       .from("surat_registration_drafts")
       .select("*, surat_registration_draft_files(*)")
       .eq("status", "DRAFT")
+      .is("revision_event_id", null)
       .gt("expires_at", new Date().toISOString())
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -1352,6 +797,30 @@ export const suratService = {
       .single();
     if (error) throw error;
     return data as SuratRegistrationDraft;
+  },
+
+  async createExternalSubmissionRevisionDraft(revisionEventId: string): Promise<SuratRegistrationDraft> {
+    const { data, error } = await supabase.rpc("create_external_submission_revision_draft", {
+      p_revision_event_id: revisionEventId,
+    });
+    if (error) throw error;
+    return data as SuratRegistrationDraft;
+  },
+
+  async submitExternalSubmissionRevision(args: {
+    revisionEventId: string;
+    draftId: string;
+    formData: Record<string, any>;
+    requesterNote?: string;
+  }): Promise<{ success: boolean; next_step: string; surat_id: string; revision_event_id: string }> {
+    const { data, error } = await supabase.rpc("submit_external_submission_revision", {
+      p_revision_event_id: args.revisionEventId,
+      p_draft_id: args.draftId,
+      p_form_data: args.formData,
+      p_requester_note: args.requesterNote || null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; next_step: string; surat_id: string; revision_event_id: string };
   },
 
   async createRegistrationDraft(args: {
@@ -1449,49 +918,94 @@ export const suratService = {
     return Boolean(data);
   },
 
-  async autoApproveRecommendationFirstStep(suratId: string): Promise<void> {
+  async autoApproveRequesterFirstStep(suratId: string): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     if (!user) throw new Error("Sesi login tidak tersedia.");
 
-    const { data: signature, error: signatureError } = await supabase
-      .from("surat_signatures")
-      .select("id, surat_id, step_order, user_id, is_signed, surat_registrasi!inner(current_step)")
-      .eq("surat_id", suratId)
-      .eq("step_order", 1)
-      .eq("user_id", user.id)
-      .eq("is_signed", false)
-      .maybeSingle();
+    const [suratResult, signatureResult, profileResult] = await Promise.all([
+      supabase
+        .from("surat_registrasi")
+        .select("created_by, current_step, status")
+        .eq("id", suratId)
+        .maybeSingle(),
+      supabase
+        .from("surat_signatures")
+        .select("id, surat_id, step_order, user_id, is_signed, action_type, verification_required, requires_unit_allocation")
+        .eq("surat_id", suratId)
+        .eq("step_order", 1)
+        .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]);
 
-    if (signatureError) throw signatureError;
-    if (!signature) throw new Error("Signer pertama rekomendasi tidak ditemukan untuk akun ini.");
+    if (suratResult.error) throw suratResult.error;
+    if (signatureResult.error) throw signatureResult.error;
+    const surat = suratResult.data;
+    const signature = signatureResult.data;
+    if (!surat || !signature) return false;
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .maybeSingle();
+    const isOrdinaryRequesterApproval = canAutoApproveRequesterFirstStep({
+      actorId: user.id,
+      surat,
+      signature,
+    });
+    if (!isOrdinaryRequesterApproval) return false;
 
     await this.approveSurat(
       signature.id,
       suratId,
       1,
-      profile?.full_name || user.email || "Pembuat Rekomendasi",
-      "Dikonfirmasi oleh pembuat rekomendasi"
+      profileResult.data?.full_name || user.email || "Pemohon",
+      "Disetujui otomatis karena pemohon adalah penandatangan tahap pertama"
     );
+    return true;
+  },
+
+  async autoApproveRecommendationFirstStep(suratId: string): Promise<void> {
+    const autoApproved = await this.autoApproveRequesterFirstStep(suratId);
+    if (!autoApproved) {
+      throw new Error("Signer pertama rekomendasi tidak cocok dengan akun pembuat atau membutuhkan tindakan khusus.");
+    }
   },
 
   async uploadRegistrationDraftFiles(
     draftId: string,
     files: File[],
-    requirement?: { key?: string; label?: string }
+    requirement?: { key?: string; label?: string },
+    onProgress?: (progress: RegistrationDraftUploadProgress) => void,
   ): Promise<SuratRegistrationDraftFile[]> {
-    const { data: { user } } = await supabase.auth.getUser({ force: true });
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Sesi login tidak tersedia.");
     const rows = [];
-    for (const file of files) {
+    const totalBytes = files.reduce((total, file) => total + file.size, 0);
+    let completedBytes = 0;
+
+    for (const [index, file] of files.entries()) {
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
       const path = `drafts/${draftId}/${crypto.randomUUID()}_${safeName}`;
-      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path, file });
+      const uploaded = await appStorageService.upload({
+        bucket: "lampiran_surat",
+        path,
+        file,
+        onProgress: ({ loaded }) => {
+          const aggregateLoaded = completedBytes + Math.min(loaded, file.size);
+          onProgress?.({
+            phase: "uploading",
+            fileName: file.name,
+            fileIndex: index + 1,
+            fileCount: files.length,
+            loaded: aggregateLoaded,
+            total: totalBytes,
+            percent: totalBytes > 0
+              ? Math.min(Math.round((aggregateLoaded / totalBytes) * 100), 100)
+              : 100,
+          });
+        },
+      });
+      completedBytes += file.size;
       rows.push({
         draft_id: draftId,
         created_by: user.id,
@@ -1504,6 +1018,15 @@ export const suratService = {
       });
     }
     if (rows.length === 0) return [];
+    onProgress?.({
+      phase: "saving",
+      fileName: files.at(-1)?.name || "",
+      fileIndex: files.length,
+      fileCount: files.length,
+      loaded: totalBytes,
+      total: totalBytes,
+      percent: 100,
+    });
     const { data, error } = await supabase
       .from("surat_registration_draft_files")
       .insert(rows)
@@ -1537,7 +1060,7 @@ export const suratService = {
       const requestCategory = payload.form_input_data?.request_category;
       const isUnitRequest = requestCategory === "unit" || payload.form_input_data?.request_mode === "unit";
       if (isUnitRequest) {
-        const context = await this.getTemplateContext(payload);
+        const context = await this.getRegistrationContext(payload);
         const actorDepartmentId = context.profile?.department_id;
         const allowedDepartments = Array.isArray(context.usage?.workflow_allowed_departments)
           ? context.usage.workflow_allowed_departments
@@ -1549,15 +1072,8 @@ export const suratService = {
         }
       }
 
-      if (!isPusat && !isUnitRequest && !projectIdClean) {
-        const { count, error: projectCountError } = await supabase
-          .from("master_projects")
-          .select("id", { count: "exact", head: true })
-          .eq("office_id", officeIdClean);
-        if (projectCountError) throw new Error("Gagal memeriksa proyek cabang.");
-        if ((count ?? 0) > 0) {
-          throw new Error("Pilih proyek cabang untuk kantor ini.");
-        }
+      if (!isPusat && !projectIdClean) {
+        throw new Error("Pilih proyek cabang sebelum mengambil nomor surat.");
       }
 
       // PERUBAHAN UTAMA: tambah p_dept_id agar nomor urut dimulai dari 001 per dept/project
@@ -1631,8 +1147,7 @@ export const suratService = {
     payload: any,
     signers: any[],
     file: File | null,
-    lampiranFiles?: File[] | File | null,
-    draftAttachments: SuratRegistrationDraftFile[] = []
+    lampiranFiles?: File[] | File | null
   ) {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession({ force: true });
@@ -1648,18 +1163,27 @@ export const suratService = {
         : lampiranFiles
           ? [lampiranFiles]
           : [];
+      const payloadDraftId = this.cleanUuid(payload.draft_id);
+      let persistedDraftAttachments: SuratRegistrationDraftFile[] = [];
+      if (payloadDraftId) {
+        const { data, error } = await supabase
+          .from("surat_registration_draft_files")
+          .select("id, draft_id, file_url, file_name, file_type, file_size, requirement_key, requirement_label, created_at")
+          .eq("draft_id", payloadDraftId);
+        if (error) throw error;
+        persistedDraftAttachments = (data || []) as SuratRegistrationDraftFile[];
+      }
 
       const noUrut      = parseInt(payload.no_surat.split("/")[0]);
       const currentYear = new Date().getFullYear();
       // Recommendation authorization depends on the requester's department.
-      // Normalize only after getTemplateContext has resolved that trusted context.
-      const configContext = await this.getTemplateContext(payload);
+      // Normalize only after the trusted registration context is resolved.
+      const configContext = await this.getRegistrationContext(payload);
       const normalizedFormInputData = this.normalizeFormInputData(configContext.payload.form_input_data, {
         requesterDepartmentCode: configContext.department?.code,
         requesterDepartmentName: configContext.department?.name,
       });
       payload = { ...configContext.payload, form_input_data: normalizedFormInputData };
-      const unitConfig = this.getUnitConfigFromForm(configContext.form);
       const isUnitMode = normalizedFormInputData?.request_mode === "unit";
       if (isUnitMode) {
         const workflowCategories = Array.isArray(configContext.usage?.request_categories)
@@ -1677,47 +1201,28 @@ export const suratService = {
         )) {
           throw new Error("Departemen akun Anda tidak diizinkan membuat permohonan Unit pada matrix ini.");
         }
-        normalizedFormInputData.unit_config_snapshot = unitConfig;
-        payload = { ...payload, form_input_data: normalizedFormInputData };
       }
 
       const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
         .filter((requirement: any) => Number(requirement.stage_order) === 0);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
-      const configuredInitialKeys = new Set(initialRequirements.map((requirement: any) => requirement.requirement_key));
-      const unconfiguredAttachment = attachmentFiles.find(file => {
-        const key = initialAttachmentMeta[file.name]?.key;
-        return !key || !configuredInitialKeys.has(key);
+      const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
+        files: persistedDraftAttachments,
+        initialRequirementKeys: new Set(
+          initialRequirements.map((requirement: any) => String(requirement.requirement_key)),
+        ),
+        formInputData: normalizedFormInputData,
       });
-      if (unconfiguredAttachment) {
-        throw new Error(`Lampiran ${unconfiguredAttachment.name} tidak memiliki konfigurasi yang valid.`);
-      }
-      initialRequirements.forEach((requirement: any) => {
-        const files = attachmentFiles.filter(file => initialAttachmentMeta[file.name]?.key === requirement.requirement_key);
-        const minimum = requirement.is_required
-          ? Math.max(1, Number(requirement.min_files || 1))
-          : 0;
-        const maximum = Math.max(minimum, Number(requirement.max_files || 1));
-        if (files.length < minimum) {
-          throw new Error(`Lampiran pemohon belum lengkap: ${requirement.label || requirement.requirement_key}.`);
-        }
-        if (files.length > maximum) {
-          throw new Error(`Lampiran ${requirement.label || requirement.requirement_key} melebihi batas.`);
-        }
-        files.forEach(file => {
-          const allowedTypes = Array.isArray(requirement.allowed_types) ? requirement.allowed_types : [];
-          if (allowedTypes.length > 0 && file.type && !allowedTypes.includes(file.type)) {
-            throw new Error(`Tipe file ${file.name} tidak diizinkan.`);
-          }
-          if (requirement.max_size_bytes && file.size > Number(requirement.max_size_bytes)) {
-            throw new Error(`Ukuran file ${file.name} melebihi batas.`);
-          }
-        });
+      validateInitialRegistrationAttachments({
+        requirements: initialRequirements,
+        newFiles: attachmentFiles,
+        newFileMetadata: initialAttachmentMeta,
+        persistedFiles: classifiedDraftAttachments.initialAttachments,
       });
 
       const activeSigners = signers.filter(s => s.user_id);
       if (activeSigners.length < 2 || activeSigners.length > 8) {
-        throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap.");
+        throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap sesuai konfigurasi.");
       }
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
       const totalSteps = activeSigners.length;
@@ -1747,7 +1252,6 @@ export const suratService = {
       payload = { ...payload, signature_steps: signatureSteps };
 
       let payloadReservationId = this.cleanUuid(payload.reservation_id);
-      const payloadDraftId = this.cleanUuid(payload.draft_id);
       if (!payloadReservationId && payloadDraftId) {
         const { data: draftReservation, error: draftReservationError } = await supabase
           .from("surat_registration_drafts")
@@ -1782,9 +1286,10 @@ export const suratService = {
         payload.policy_validation = validation;
       }
 
-      const generated = file ? null : await this.buildFilledTemplateFile(payload);
-      const context = generated?.context ?? configContext;
-      const signaturePositions = generated?.signaturePositions || [];
+      if (file) {
+        throw new Error("Dokumen sumber tidak lagi menerima file Excel. Data permohonan akan dirender sebagai PDF-native.");
+      }
+      const context = configContext;
 
       const cleanPayload = {
         ...payload,
@@ -1806,6 +1311,11 @@ export const suratService = {
           form_id: configContext.form?.id || null,
           request_category: configContext.usage?.request_category || null,
           recommendation_config: configContext.usage?.recommendation_config || {},
+          external_revision_policy: configContext.usage?.external_revision_policy || {
+            recipient_type: "requester",
+            recipient_step_order: null,
+            approval_restart_step: 1,
+          },
           requester_department_id: payload.policy_validation?.requester_department_id || null,
           steps: snapshotSigners,
           attachment_requirements: configContext.usage?.form_usage_attachment_requirements || [],
@@ -1836,8 +1346,7 @@ export const suratService = {
         data_snapshot: this.buildDataSnapshot(context, payload, snapshotSigners, normalizedFormInputData),
       };
 
-      if (file)         cleanPayload.file_path     = await this.uploadFile(file);
-      if (!file)        cleanPayload.file_path     = generated?.publicUrl;
+      cleanPayload.file_path = `native://document/${payloadDraftId || payloadReservationId || encodeURIComponent(String(payload.no_surat || "draft"))}`;
 
       const { data: surat, error: suratError } = await supabase
         .rpc("create_surat_registrasi", { p_payload: cleanPayload });
@@ -1845,36 +1354,54 @@ export const suratService = {
       if (suratError) throw suratError;
       if (!surat?.id) throw new Error("Surat gagal dibuat.");
 
+      // A previous attempt may have committed the registration before a later
+      // recommendation-link step failed. In that case the RPC returns the same
+      // surat; do not duplicate its attachments, snapshots, or signatures.
+      if (payloadDraftId) {
+        const { count: existingSignatureCount, error: existingSignatureError } = await supabase
+          .from("surat_signatures")
+          .select("id", { count: "exact", head: true })
+          .eq("surat_id", surat.id);
+        if (existingSignatureError) throw existingSignatureError;
+        if ((existingSignatureCount || 0) > 0) {
+          if (!normalizedFormInputData?.linked_parent_surat_id) {
+            await this.autoApproveRequesterFirstStep(surat.id).catch((autoApproveError) => {
+              console.error("Gagal melanjutkan auto-approval pemohon:", autoApproveError);
+            });
+          }
+          return surat;
+        }
+      }
+
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
         stage: "initial",
         requirements: payload.initial_attachment_meta || {},
       });
       let reusedDraftAttachments: any[] = [];
-      if (draftAttachments.length > 0) {
+      const draftAttachmentRows = buildRegistrationAttachmentRows({
+        suratId: surat.id,
+        userId: user.id,
+        initialAttachments: classifiedDraftAttachments.initialAttachments,
+        recommendationAttachments: classifiedDraftAttachments.activeRecommendationAttachments,
+      });
+      if (draftAttachmentRows.length > 0) {
         const { data, error } = await supabase
           .from("surat_attachments")
-          .insert(draftAttachments.map(attachment => ({
-            surat_id: surat.id,
-            file_url: attachment.file_url,
-            file_name: attachment.file_name,
-            file_type: attachment.file_type,
-            file_size: attachment.file_size,
-            created_by: user.id,
-            stage: "initial",
-            requirement_key: attachment.requirement_key,
-            requirement_label: attachment.requirement_label,
-          })))
+          .insert(draftAttachmentRows)
           .select("*");
         if (error) throw error;
         reusedDraftAttachments = data || [];
       }
       uploadedAttachments.push(...reusedDraftAttachments);
-      if (uploadedAttachments[0]?.file_url) {
+      const primaryInitialAttachment = uploadedAttachments.find(
+        (attachment) => attachment.stage !== "recommendation_item",
+      );
+      if (primaryInitialAttachment?.file_url) {
         await supabase
           .from("surat_registrasi")
-          .update({ lampiran_path: uploadedAttachments[0].file_url })
+          .update({ lampiran_path: primaryInitialAttachment.file_url })
           .eq("id", surat.id);
-        surat.lampiran_path = uploadedAttachments[0].file_url;
+        surat.lampiran_path = primaryInitialAttachment.file_url;
       }
       surat.surat_attachments = uploadedAttachments;
 
@@ -1911,12 +1438,10 @@ export const suratService = {
         form_usage_step_id: this.cleanUuid(s.form_usage_step_id),
         action_type: s.action_type || (s.requires_unit_allocation ? "unit_allocation" : "approval"),
         attachment_requirements_snapshot: s.attachment_requirements || [],
-        signature_position_snapshot: signaturePositions.find(position =>
-          position.step_order === Number(s.step_order || idx + 1)
-        ) || {},
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
 
+      let requesterAutoApproved = false;
       if (signerPayload.length > 0) {
         const { error: signerInsertError } = await supabase.from("surat_signatures").insert(signerPayload);
         if (signerInsertError) {
@@ -1925,27 +1450,26 @@ export const suratService = {
         }
         
         const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
-        await this.notifyInboxStepTasks(
-          surat.id,
-          firstStepOrd,
-          cleanPayload.judul_surat,
-          "new_inbox"
-        );
+        if (!normalizedFormInputData?.linked_parent_surat_id) {
+          requesterAutoApproved = await this.autoApproveRequesterFirstStep(surat.id).catch((autoApproveError) => {
+            console.error("Auto-approval pemohon gagal; tahap pertama tetap tersedia secara manual:", autoApproveError);
+            return false;
+          });
+        }
+        if (!requesterAutoApproved) {
+          await this.notifyInboxStepTasks(
+            surat.id,
+            firstStepOrd,
+            cleanPayload.judul_surat,
+            "new_inbox"
+          );
+        }
       }
-
-      documentPreviewService.enqueuePdf(surat.id).catch((pdfError) => {
-        console.error("Gagal enqueue PDF awal:", pdfError);
-      });
 
       return surat;
     } catch (error: any) {
       const message = String(error?.message || error?.error || "Gagal menyimpan surat.");
-      console.error("Error in createRegistrasi:", {
-        message,
-        code: error?.code || null,
-        details: error?.details || null,
-        hint: error?.hint || null,
-      });
+      console.error(formatCreateRegistrasiError(error));
       throw new Error(message);
     }
   },
@@ -1962,77 +1486,6 @@ export const suratService = {
     return true;
   },
 
-  async stampApprovalExcel(
-    suratId: string,
-    currentFilePath: string,
-    userName: string,
-    roleName: string,
-    usageId: string | null,
-    stepOrder: number,
-    positionSnapshot?: Record<string, any> | null,
-    signerJobTitle: string = "",
-    signedAt?: string | null
-  ): Promise<string> {
-    const { data: usageDetail } = usageId
-      ? await supabase.from("master_penggunaan_detail").select("*").eq("id", usageId).maybeSingle()
-      : { data: null };
-
-    const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await fileData.arrayBuffer());
-    const positions = positionSnapshot?.ttd
-      ? [{
-          ...positionSnapshot,
-          labelJabatan: positionSnapshot.job_title || positionSnapshot.label || positionSnapshot.role_name || roleName,
-          sheet: Number(positionSnapshot.sheet || 1),
-        }]
-      : usageDetail
-        ? this.resolveStampPositions(usageDetail, roleName, stepOrder)
-        : [];
-
-    if (positions && positions.length > 0) {
-      positions.forEach((pos: any) => {
-          const worksheet = workbook.worksheets[Math.max(Number(pos.sheet || 1) - 1, 0)] || workbook.worksheets[0];
-          const ttdCell = worksheet.getCell(pos.ttd);
-          ttdCell.value = `DISETUJUI SISTEM\n${formatSignatureStampDateTime(signedAt)} WIB`;
-          ttdCell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
-          const rowNum = parseInt(pos.ttd.match(/\d+/)?.[0] || "35");
-          worksheet.getRow(rowNum).height = 65;
-          if (pos.nama) {
-            const nameCell = worksheet.getCell(pos.nama);
-            nameCell.value = userName.toUpperCase();
-            nameCell.alignment = {
-              ...(nameCell.alignment || {}),
-              horizontal: "center",
-              vertical: "middle",
-              wrapText: true,
-            };
-          }
-          if (pos.jabatan) {
-            const jobCell = worksheet.getCell(pos.jabatan);
-            jobCell.value = signerJobTitle || pos.signer_job_title || pos.jobTitle || pos.labelJabatan || "";
-            jobCell.alignment = {
-              ...(jobCell.alignment || {}),
-              horizontal: "center",
-              vertical: "middle",
-              wrapText: true,
-            };
-          }
-      });
-      const buffer  = await workbook.xlsx.writeBuffer();
-      const newPath = `dokumen/signed_${suratId}_step${stepOrder}_${Date.now()}.xlsx`;
-      const uploaded = await appStorageService.upload({
-        bucket: "dokumen_surat",
-        path: newPath,
-        file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-        upsert: true,
-      });
-      return uploaded.publicUrl;
-    }
-    return currentFilePath;
-  },
-
   async rebuildDocumentSource(suratId: string): Promise<string> {
     const { data: actor } = await supabase.auth.getUser({ force: true });
     if (!actor.user) throw new Error("Tidak terautentikasi.");
@@ -2046,124 +1499,8 @@ export const suratService = {
       throw new Error("Hanya admin yang dapat membangun ulang sumber dokumen.");
     }
 
-    const { data: surat, error } = await supabase
-      .from("surat_registrasi")
-      .select(`
-        *,
-        surat_signatures (
-          id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at,
-          signer_snapshot, signature_position_snapshot,
-          profiles:user_id (full_name, job_title)
-        )
-      `)
-      .eq("id", suratId)
-      .single();
-    if (error || !surat) throw error || new Error("Surat tidak ditemukan.");
-    const { data: requesterProfile, error: requesterError } = surat.created_by
-      ? await supabase
-          .from("profiles")
-          .select("id, full_name, nik, job_title, email, department_id, office_id")
-          .eq("id", surat.created_by)
-          .maybeSingle()
-      : { data: null, error: null };
-    if (requesterError) throw requesterError;
-
-    const signatures = [...(surat.surat_signatures || [])].sort(
-      (left: any, right: any) => Number(left.step_order) - Number(right.step_order)
-    );
-    const signatureSteps = signatures.map((signature: any) => ({
-      step_order: Number(signature.step_order),
-      role_name: signature.role_name,
-      label: signature.label_jabatan || signature.signer_snapshot?.job_title || signature.profiles?.job_title || "",
-      job_title: signature.signer_snapshot?.job_title_display || signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
-      user_name: signature.signer_snapshot?.full_name || signature.profiles?.full_name || "",
-    }));
-    const generated = await this.buildFilledTemplateFile({
-      ...surat,
-      dept_id: surat.dept_id,
-      penggunaan_id: surat.penggunaan_id,
-      form_usage_id: surat.form_usage_id,
-      form_input_data: surat.form_input_data || {},
-      signature_steps: signatureSteps,
-      _requester_profile_override: requesterProfile || surat.requester_snapshot || {},
-    });
-
-    let rebuiltPath = generated.publicUrl;
-    for (const signature of signatures) {
-      const position = generated.signaturePositions.find(
-        item => item.step_order === Number(signature.step_order)
-      ) || {};
-      const { error: positionError } = await supabase
-        .from("surat_signatures")
-        .update({ signature_position_snapshot: position })
-        .eq("id", signature.id);
-      if (positionError) throw positionError;
-      if (!signature.is_signed) continue;
-      rebuiltPath = await this.stampApprovalExcel(
-        surat.id,
-        rebuiltPath,
-        signature.signer_snapshot?.full_name || signature.profiles?.full_name || "",
-        signature.role_name,
-        surat.penggunaan_id,
-        Number(signature.step_order),
-        position,
-        signature.signer_snapshot?.job_title_display || signature.signer_snapshot?.job_title || signature.profiles?.job_title || signature.label_jabatan || "",
-        signature.signed_at
-      );
-    }
-
-    const { error: updateError } = await supabase
-      .from("surat_registrasi")
-      .update({ file_path: rebuiltPath, pdf_path: null })
-      .eq("id", suratId);
-    if (updateError) throw updateError;
-    return rebuiltPath;
-  },
-
-  async applyFormInputDataToExcel(currentFilePath: string, usageId: string, formInputData: any): Promise<string> {
-    const { data: usageDetail } = await supabase
-      .from("master_penggunaan_detail")
-      .select("*, master_forms!fk_master_forms(input_schema, unit_config)")
-      .eq("id", usageId)
-      .single();
-    const schema = this.parseInputSchema((usageDetail as any)?.master_forms?.input_schema);
-    if (!usageDetail || schema.length === 0) return currentFilePath;
-
-    const fileData = await this.downloadStorageFile(currentFilePath, "dokumen_surat");
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await fileData.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-    if (formInputData?.request_mode === "unit" && formInputData?.requested_project?.name) {
-      worksheet.getCell("L5").value = `: ${formInputData.requested_project.name}`;
-    }
-
-    schema.forEach((field) => {
-      const source = field.default_source || field.defaultSource || "manual";
-      if (source !== "manual") return;
-      if (formInputData?.request_mode !== "unit" && this.isUnitTemplateField(field)) return;
-      if (field.type === "table") {
-        this.writeTableField(workbook, field, formInputData?.[field.key]);
-        return;
-      }
-      if (!field.cell && !(field.merge_range || field.mergeRange)) return;
-      const sheetIndex = Math.max(Number(field.sheet || 1) - 1, 0);
-      const sheet = workbook.worksheets[sheetIndex] ?? worksheet;
-      this.writeWrappedField(sheet, field, formInputData?.[field.key]);
-    });
-    const isGoodsServicesSheet =
-      String(worksheet.getCell("C9").value || "").toUpperCase().includes("NAMA BARANG") &&
-      String(worksheet.getCell("J9").value || "").toUpperCase().includes("SAT");
-    if (isGoodsServicesSheet) normalizeGoodsServicesWorksheet(worksheet);
-    const buffer = await workbook.xlsx.writeBuffer();
-    const path = `dokumen/updated_input_${Date.now()}.xlsx`;
-    const uploaded = await appStorageService.upload({
-      bucket: "dokumen_surat",
-      path,
-      file: new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      upsert: true,
-    });
-    return uploaded.publicUrl;
+    await documentPreviewService.enqueuePdf(suratId, { refresh: true });
+    return suratId;
   },
 
   async approveSurat(
@@ -2177,31 +1514,27 @@ export const suratService = {
       approvalAttachments?: Array<{ key: string; label: string; file: File }>;
     } = {}
   ): Promise<{ success: boolean }> {
-    const { data: { user } } = await supabase.auth.getUser({ force: true });
-    const { data: suratFresh, error: suratErr } = await supabase
-      .from("surat_registrasi")
-      .select("current_step, file_path, penggunaan_id, form_usage_id, form_input_data, data_snapshot")
-      .eq("id", suratId)
-      .single();
+    const [suratResult, signatureResult] = await Promise.all([
+      supabase
+        .from("surat_registrasi")
+        .select("current_step, file_path, penggunaan_id, form_usage_id, form_input_data, data_snapshot")
+        .eq("id", suratId)
+        .single(),
+      supabase
+        .from("surat_signatures")
+        .select("role_name, requires_unit_allocation, action_type, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
+        .eq("id", signatureId)
+        .single(),
+    ]);
+    const { data: suratFresh, error: suratErr } = suratResult;
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
     if (suratFresh.current_step !== currentStep) throw new Error("Dokumen sudah diproses. Silakan refresh.");
 
-    const { data: sigInfo } = await supabase
-      .from("surat_signatures")
-      .select("role_name, requires_unit_allocation, action_type, signature_position_snapshot, attachment_requirements_snapshot, signer_snapshot, verification_required, verification_status")
-      .eq("id", signatureId)
-      .single();
+    const { data: sigInfo } = signatureResult;
     if (!sigInfo) throw new Error("Data tanda tangan tidak valid.");
     if ((sigInfo as any).verification_required && (sigInfo as any).verification_status !== "verified") {
       throw new Error("Data pengajuan belum diperiksa tim pemeriksa.");
     }
-    const signerJobTitle = String(
-      (sigInfo as any).signer_snapshot?.job_title_display ||
-      (sigInfo as any).signer_snapshot?.job_title ||
-      ""
-    ).trim();
-
-    let workingFilePath = suratFresh.file_path;
     let formInputData = suratFresh.form_input_data ?? {};
     let uploadedAllocationAttachments: any[] = [];
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
@@ -2212,6 +1545,15 @@ export const suratService = {
     const existingAllocatedUnits = Array.isArray(formInputData?.allocated_units) ? formInputData.allocated_units : [];
     const hasExistingUnitAllocation = existingAllocatedUnits.length > 0;
     const hasIncomingUnitAllocation = Array.isArray(options.unitAllocation?.units) && options.unitAllocation.units.length > 0;
+    let uploaderId: string | undefined;
+    let uploaderResolved = false;
+    const getUploaderId = async () => {
+      if (uploaderResolved) return uploaderId;
+      const { data: { user } } = await supabase.auth.getUser();
+      uploaderId = user?.id;
+      uploaderResolved = true;
+      return uploaderId;
+    };
     if (!isPreparedByVerifier) {
       approvalRequirements.forEach((requirement: any) => {
         const files = approvalAttachments.filter(item => item.key === requirement.requirement_key);
@@ -2260,13 +1602,6 @@ export const suratService = {
         allocated_by_signature_id: signatureId,
         allocated_at: new Date().toISOString(),
       };
-
-      const { error: updateInputError } = await supabase
-        .from("surat_registrasi")
-        .update({ form_input_data: formInputData })
-        .eq("id", suratId);
-      if (updateInputError) throw updateInputError;
-
       const unitRecapAttachment = this.createUnitRecapAttachment(project, units);
       const productionCodeAttachment = this.createProductionCodeAttachment(project, units);
       uploadedAllocationAttachments = await this.uploadAttachmentFiles(
@@ -2275,7 +1610,7 @@ export const suratService = {
           unitRecapAttachment,
           productionCodeAttachment,
         ],
-        user?.id,
+        await getUploaderId(),
         {
           stage: "unit_allocation",
           signature_id: signatureId,
@@ -2292,14 +1627,16 @@ export const suratService = {
         }
       );
 
-      const { data: allAttachments } = await supabase
+      const { data: allAttachments, error: attachmentsError } = await supabase
         .from("surat_attachments")
         .select("*")
         .eq("surat_id", suratId)
         .order("created_at", { ascending: true });
-      await supabase
+      if (attachmentsError) throw attachmentsError;
+      const { error: allocationPersistError } = await supabase
         .from("surat_registrasi")
         .update({
+          form_input_data: formInputData,
           data_snapshot: {
             ...(suratFresh.data_snapshot || {}),
             input: formInputData,
@@ -2312,17 +1649,14 @@ export const suratService = {
           },
         })
         .eq("id", suratId);
-
-      if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
-        workingFilePath = await this.applyFormInputDataToExcel(workingFilePath, suratFresh.penggunaan_id, formInputData);
-      }
+      if (allocationPersistError) throw allocationPersistError;
     }
 
     if (approvalAttachments.length > 0) {
       await this.uploadAttachmentFiles(
         suratId,
         approvalAttachments.map(item => item.file),
-        user?.id,
+        await getUploaderId(),
         {
           stage: "approval",
           signature_id: signatureId,
@@ -2334,42 +1668,31 @@ export const suratService = {
       );
     }
 
-    let finalUrl = workingFilePath ?? "";
-    if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx")) {
-      finalUrl = await this.stampApprovalExcel(
-        suratId,
-        workingFilePath,
-        userName,
-        sigInfo.role_name,
-        suratFresh.penggunaan_id,
-        currentStep,
-        sigInfo.signature_position_snapshot,
-        signerJobTitle
-      );
-    }
+    const finalUrl = `native://document/${suratId}/approval/${signatureId}/${Date.now()}`;
 
     const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_approve_surat_v2", {
       p_sig_id: signatureId, p_surat_id: suratId, p_note: note, p_file_path: finalUrl
     });
     if (rpcError) throw new Error(rpcError.message);
     if (!rpcResult?.success) throw new Error("Gagal memproses persetujuan.");
-    await this.ensureUnitAllocationPersisted(suratId, formInputData);
 
-    documentPreviewService.enqueuePdf(suratId, { refresh: true, signatureId }).catch((pdfError) => {
-      console.error("Gagal enqueue snapshot PDF:", pdfError);
-    });
-
-    // Ambil data terbaru untuk notifikasi
-    const { data: updatedSurat } = await supabase
+    const updatedSuratResult = await supabase
       .from("surat_registrasi")
       .select("current_step, status, created_by, judul_surat")
       .eq("id", suratId)
       .single();
 
+    const { data: updatedSurat } = updatedSuratResult;
+
+    if (updatedSurat?.status === "PDF_PENDING") {
+      // The database transition enqueues the immutable recommendation render job.
+      return { success: true };
+    }
+
     if (updatedSurat) {
       // 1. Notif ke pembuat surat (yang mengajukan surat)
       if (updatedSurat.created_by) {
-        this.sendNotification(
+        void this.sendNotification(
           [updatedSurat.created_by],
           'Surat Ditandatangani',
           `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
@@ -2380,23 +1703,22 @@ export const suratService = {
 
       // 2. Notif ke next signer jika masih diproses dan step bertambah
       if (updatedSurat.status === 'PROSES' && updatedSurat.current_step > currentStep) {
-        await this.notifyInboxStepTasks(
+        void this.notifyInboxStepTasks(
           suratId,
           updatedSurat.current_step,
           updatedSurat.judul_surat,
           "next_inbox"
-        );
+        ).catch((notificationError) => {
+          console.error("Gagal menyiapkan notifikasi inbox berikutnya:", notificationError);
+        });
       }
 
-      if (updatedSurat.status === 'SELESAI') {
+      if (['SELESAI', 'DONE'].includes(updatedSurat.status)) {
         await this.finalizeRecommendationRevisionIfNeeded(suratId);
+        documentPreviewService.enqueuePdf(suratId).catch((pdfError) => {
+          console.error("Gagal enqueue PDF final dokumen:", pdfError);
+        });
       }
-    }
-
-    if (rpcResult?.isDone) {
-      this.dispatchCompletedSuratToMarison(suratId).catch((dispatchError) => {
-        console.error("Gagal mengirim surat selesai ke API Marison:", dispatchError);
-      });
     }
 
     return { success: true };
@@ -2446,13 +1768,12 @@ export const suratService = {
     const suratId = options.suratId || sigInfo.surat_id;
     const { data: suratFresh, error: suratErr } = await supabase
       .from("surat_registrasi")
-      .select("file_path, penggunaan_id, judul_surat, form_input_data, data_snapshot, status")
+      .select("judul_surat, form_input_data, data_snapshot, status")
       .eq("id", suratId)
       .single();
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
 
     let formInputData = suratFresh.form_input_data ?? {};
-    let workingFilePath = suratFresh.file_path;
     const persistedVerificationDraft =
       (suratFresh.data_snapshot as any)?.verification_drafts?.[signatureId]?.input || {};
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
@@ -2536,9 +1857,6 @@ export const suratService = {
         ]
       );
 
-      if (workingFilePath?.split("?")[0].toLowerCase().endsWith(".xlsx") && suratFresh.penggunaan_id) {
-        workingFilePath = await this.applyFormInputDataToExcel(workingFilePath, suratFresh.penggunaan_id, formInputData);
-      }
     }
 
     const rpcPayload =
@@ -2656,7 +1974,7 @@ export const suratService = {
   async getMyInbox(userId: string) {
     const selectQuery = `
         id, role_name, label_jabatan, step_order, is_signed, surat_id, user_id, requires_unit_allocation, action_type,
-        attachment_requirements_snapshot, signature_position_snapshot, available_at, signer_snapshot,
+        attachment_requirements_snapshot, available_at, signer_snapshot,
         verification_required, verification_status, verified_at, verified_by, verification_note, verifier_snapshot,
         surat_registrasi!inner (
           *,
@@ -2719,6 +2037,43 @@ export const suratService = {
         .sort((a: any, b: any) => Number(a.step_order) - Number(b.step_order));
       return { ...sig, surat_registrasi: surat };
     }).filter(Boolean);
+  },
+
+  async getMyInboxCompact(params: { limit?: number; cursor?: string; search?: string; request_category?: string; task_type?: string } = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Unauthorized");
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.cursor) qs.set("cursor", params.cursor);
+    if (params.search) qs.set("search", params.search);
+    if (params.request_category) qs.set("request_category", params.request_category);
+    if (params.task_type) qs.set("task_type", params.task_type);
+    const response = await fetch(`/api/surat/inbox?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Gagal memuat inbox."));
+    return payload as {
+      items: any[];
+      total: number;
+      hasMore: boolean;
+      nextCursor: string | null;
+      pageSize: number;
+    };
+  },
+
+  async getMyInboxDetail(signatureId: string) {
+    if (!signatureId) throw new Error("signature ID wajib diisi");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Unauthorized");
+    const response = await fetch(`/api/surat/inbox/${encodeURIComponent(signatureId)}/detail`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Gagal memuat detail task."));
+    return payload as any;
   },
 
   async getLinkedDocuments(parentSuratId: string): Promise<LinkedSuratDocument[]> {
@@ -2804,15 +2159,12 @@ export const suratService = {
       requirements?: Record<string, { key?: string; label?: string }>;
     } = {}
   ) {
-    const rows = [];
-
-    for (const file of files) {
-      if (!file) continue;
+    const rows = await Promise.all(files.filter(Boolean).map(async (file, index) => {
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
-      const filePath = `lampiran_${suratId}/${Date.now()}_${safeName}`;
+      const filePath = `lampiran_${suratId}/${Date.now()}_${index}_${safeName}`;
       const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file });
       const requirement = meta.requirements?.[file.name] || {};
-      rows.push({
+      return {
         surat_id: suratId,
         file_url: uploaded.publicUrl,
         file_name: file.name,
@@ -2823,8 +2175,8 @@ export const suratService = {
         requirement_key: requirement.key || null,
         requirement_label: requirement.label || null,
         signature_id: meta.signature_id || null,
-      });
-    }
+      };
+    }));
 
     if (rows.length === 0) return [];
 
@@ -2847,20 +2199,21 @@ export const suratService = {
   },
 
   async getMasterData() {
-    const res = await Promise.all([
-      supabase.from("master_entities").select("*"),
-      supabase.from("master_offices").select("*"),
-      supabase.from("master_departments").select("*"),
-      supabase.from("master_letter_types").select("*"),
-      supabase.from("master_dept_letter_types").select("dept_id, letter_type_id, sort_index"),
-      supabase.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
-      supabase.from("master_projects").select("*").order("name"),
-      supabase.from("master_penggunaan_detail").select("*").order("created_at", { ascending: false })
-    ]);
+    const response = await fetch("/api/surat/master-data", {
+      credentials: "same-origin",
+      headers: { "X-SIGAP-Client": "web" },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || payload?.message || "Gagal memuat data awal permohonan."));
+    }
+    const departmentLetterTypes = Array.isArray(payload.departmentLetterTypes)
+      ? payload.departmentLetterTypes
+      : [];
     const typeDepartmentMap = new Map<string, string[]>();
     const typeSortMap = new Map<string, number>();
     const typeDepartmentSortMap = new Map<string, Record<string, number>>();
-    (res[4].data || []).forEach((row: any) => {
+    departmentLetterTypes.forEach((row: any) => {
       if (!row.letter_type_id || !row.dept_id) return;
       const ids = typeDepartmentMap.get(row.letter_type_id) || [];
       ids.push(row.dept_id);
@@ -2871,7 +2224,7 @@ export const suratService = {
         [row.dept_id]: row.sort_index ?? 999,
       });
     });
-    const letterTypes = (res[3].data || [])
+    const letterTypes = (Array.isArray(payload.letterTypes) ? payload.letterTypes : [])
       .map((type: any) => ({
         ...type,
         departmentIds: typeDepartmentMap.get(type.id) || [],
@@ -2882,44 +2235,16 @@ export const suratService = {
       }))
       .sort((a: any, b: any) => (a.department_sort_index ?? 999) - (b.department_sort_index ?? 999) || String(a.name || "").localeCompare(String(b.name || ""), "id"));
     return {
-      entities:   res[0].data || [], offices:    res[1].data || [],
-      depts:      res[2].data || [], types:      letterTypes,
-      users:      res[5].data || [], projects:   res[6].data || [],
-      penggunaan: res[7].data || []
+      entities: Array.isArray(payload.entities) ? payload.entities : [],
+      offices: Array.isArray(payload.offices) ? payload.offices : [],
+      depts: Array.isArray(payload.departments) ? payload.departments : [],
+      types: letterTypes,
+      users: Array.isArray(payload.users) ? payload.users : [],
+      projects: Array.isArray(payload.projects) ? payload.projects : [],
+      penggunaan: Array.isArray(payload.usages) ? payload.usages : [],
     };
   },
 
-  async downloadFilledTemplate(payload: any, templateLink: string) {
-    const [officeRes, projectRes, deptRes] = await Promise.all([
-      payload.office_id  ? supabase.from("master_offices").select("name").eq("id", payload.office_id).maybeSingle()  : Promise.resolve({ data: null }),
-      payload.project_id ? supabase.from("master_projects").select("name").eq("id", payload.project_id).maybeSingle() : Promise.resolve({ data: null }),
-      supabase.from("master_departments").select("name").eq("id", payload.dept_id).maybeSingle()
-    ]);
-    const response = await fetch(templateLink);
-    const workbook  = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await response.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-    worksheet.getCell(payload.is_aset ? "B4" : "E4").value = "V";
-    worksheet.getCell("D5").value = `: ${payload.no_surat}`;
-    if (payload.office_id && officeRes?.data?.name !== "Kantor Pusat") {
-      worksheet.getCell("L4").value = `: KC. ${officeRes?.data?.name || ""}`;
-      worksheet.getCell("L5").value = `: ${projectRes?.data?.name || ""}`;
-    } else {
-      worksheet.getCell("L4").value = `: ${deptRes?.data?.name || ""}`;
-      worksheet.getCell("L5").value = ": -";
-    }
-    const buffer = await workbook.xlsx.writeBuffer();
-    const a = document.createElement("a");
-    a.href = window.URL.createObjectURL(new Blob([buffer]));
-    a.download = `Form_${payload.no_surat?.replace(/\//g, "_")}.xlsx`;
-    a.click();
-    return true;
-  },
 
-  getPreviewUrl(publicUrl: string) {
-    if (!publicUrl) return "";
-    const stripped = publicUrl.split("?")[0];
-    const decoded  = decodeURIComponent(stripped);
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(decoded)}&wdPrint=0&wdEmbedCode=0`;
-  },
+
 };

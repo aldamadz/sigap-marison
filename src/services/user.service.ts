@@ -16,6 +16,7 @@ export async function getUsers(): Promise<User[]> {
         id, email, full_name, nik, job_title, role, avatar_url,
         phone, join_date, resign_date, is_active,
         office_id, department_id, parent_id,
+        marison_employee_id, marison_synced_at, marison_review_required, marison_review_reasons,
         master_departments ( name ),
         master_offices ( name )
       `)
@@ -38,6 +39,10 @@ export async function getUsers(): Promise<User[]> {
         join_date:      item.join_date   ?? null,
         resign_date:    item.resign_date ?? null,
         is_active:      item.is_active   ?? true,
+        marison_employee_id: item.marison_employee_id ?? null,
+        marison_synced_at: item.marison_synced_at ?? null,
+        marison_review_required: item.marison_review_required ?? false,
+        marison_review_reasons: item.marison_review_reasons ?? [],
       } as any;
     });
   } catch (error) {
@@ -63,6 +68,13 @@ export async function updateUserProfile(userId: string, updates: any) {
     if (updates.phone       !== undefined) finalPayload.phone       = updates.phone       || null;
     if (updates.join_date   !== undefined) finalPayload.join_date   = updates.join_date   || null;
     if (updates.resign_date !== undefined) finalPayload.resign_date = updates.resign_date || null;
+    if (updates.marisonEmployeeId !== undefined) {
+      const externalId = updates.marisonEmployeeId ? Number(updates.marisonEmployeeId) : null;
+      if (externalId != null && !Number.isSafeInteger(externalId)) {
+        throw new Error('ID employee external harus berupa angka bulat.');
+      }
+      finalPayload.marison_employee_id = externalId;
+    }
 
     if (updates.officeId !== undefined) {
       // office_id sekarang uuid string (FK ke master_offices)

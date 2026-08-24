@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: dockerfile
+      args:
+        GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
     image: agenda-flow:local
     container_name: agenda-flow
     restart: unless-stopped

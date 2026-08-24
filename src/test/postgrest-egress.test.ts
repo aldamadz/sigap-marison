@@ -6,9 +6,10 @@ const read = (path: string) => readFileSync(path, "utf8");
 describe("PostgREST egress guardrails", () => {
   it("keeps monitoring lists paginated and details on demand", () => {
     const service = read("src/services/surat-monitoring.service.ts");
-    expect(service).toContain(".range(from, to)");
-    expect(service).toContain("LIST_COLUMNS");
-    expect(service).toContain("DETAIL_COLUMNS");
+    expect(service).toContain('rpc("get_surat_monitoring_page"');
+    expect(service).toContain("p_limit: pageSize");
+    expect(service).toContain("p_offset: from");
+    expect(service).toContain('rpc("get_surat_monitoring_detail"');
     expect(service).toContain("get_my_surat_monitoring_stats");
   });
 
@@ -20,11 +21,11 @@ describe("PostgREST egress guardrails", () => {
     expect(userPage).toContain("suratMonitoringService.getPage");
     expect(adminPage).toContain("suratMonitoringService.getPage");
     expect(userPage).not.toContain("selectedSurat._status");
-    expect(userPage).toContain("resolveStatus(selectedSurat, detailSignatures)");
+    expect(userPage).toContain("resolveStatus(selectedSurat, selectedSignatures)");
   });
 
   it("aggregates attention in one database call", () => {
-    const server = read("server.mjs");
+    const server = read("backend/src/domain-runtime.ts");
     const start = server.indexOf("const getAttentionStateForUser");
     const end = server.indexOf("const getAttentionStateFromRequest", start);
     const implementation = server.slice(start, end);

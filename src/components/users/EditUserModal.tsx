@@ -50,6 +50,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
     departmentId: 'none' as string,
     officeId:     'none' as string,
     parentId:     'none' as string,
+    marisonEmployeeId: '',
   });
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
       departmentId: user.departmentId ? String(user.departmentId) : 'none',
       officeId:     user.officeId     ? String(user.officeId)     : 'none',
       parentId:     user.parentId     || 'none',
+      marisonEmployeeId: (user as any).marison_employee_id == null ? '' : String((user as any).marison_employee_id),
     });
   }, [user, isOpen]);
 
@@ -142,6 +144,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
         officeId:     formData.officeId     === 'none' ? null : String(formData.officeId),
         departmentId: formData.departmentId === 'none' ? null : String(formData.departmentId),
         parentId:     formData.parentId     === 'none' ? null : formData.parentId,
+        marisonEmployeeId: formData.marisonEmployeeId.trim() || null,
       });
 
       toast.success('Data karyawan berhasil diperbarui');
@@ -220,7 +223,17 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
                 <Input value={formData.phone} onChange={set('phone')}
                   placeholder="08xxxxxxxxxx" className="bg-background h-10" />
               </div>
+              <div className="col-span-2 space-y-2">
+                <Label className="text-xs font-bold">ID Employee External</Label>
+                <Input type="number" value={formData.marisonEmployeeId} onChange={set('marisonEmployeeId')}
+                  placeholder="Kosong untuk user manual" className="bg-background h-10 font-mono" />
+              </div>
             </div>
+            {(user as any)?.marison_review_required && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700">
+                {((user as any).marison_review_reasons || []).join(' · ')}
+              </div>
+            )}
           </div>
 
           {/* ── Informasi Jabatan ──────────────────────────────────────────── */}

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router'
 import {
   LayoutDashboard, Calendar, ClipboardList, Users, Activity, Settings,
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
   GitMerge, Monitor, Briefcase, History, BarChart3, Network,
-  SlidersHorizontal, BookOpenText, FileCheck2, ClipboardCheck, ServerCog,
+  SlidersHorizontal, BookOpenText, FileCheck2, ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -16,7 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/types/agenda'
 import { useAttention } from '@/providers/AttentionProvider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { useMarisonEnvironment } from '@/providers/MarisonEnvironmentProvider'
+import { getSuratNavigationTone, type SuratNavigationTone } from './surat-navigation-tone'
 
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated'
 
@@ -27,11 +27,51 @@ interface SidebarProps {
   onNavigate?: () => void
 }
 
+type SidebarAttentionTone = 'task' | 'update' | 'review'
+
+const attentionToneClasses: Record<SidebarAttentionTone, {
+  row: string
+  badge: string
+  dot: string
+}> = {
+  task: {
+    row: 'border border-rose-500/35 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-300',
+    badge: 'bg-rose-600 text-white shadow-sm shadow-rose-500/30',
+    dot: 'bg-rose-500',
+  },
+  update: {
+    row: 'border border-sky-500/35 bg-sky-500/10 text-sky-700 hover:bg-sky-500/15 dark:text-sky-300',
+    badge: 'bg-sky-600 text-white shadow-sm shadow-sky-500/30',
+    dot: 'bg-sky-500',
+  },
+  review: {
+    row: 'border border-amber-500/40 bg-amber-500/10 text-amber-800 hover:bg-amber-500/15 dark:text-amber-300',
+    badge: 'bg-amber-600 text-white shadow-sm shadow-amber-500/30',
+    dot: 'bg-amber-500',
+  },
+}
+
+const suratNavigationToneClasses: Record<SuratNavigationTone, string> = {
+  safe: 'border border-emerald-500/35 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300',
+  overdue: 'border border-rose-500/40 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-300',
+}
+
+const SidebarCountBadge = ({ count, tone }: { count: number; tone: SidebarAttentionTone }) => (
+  <span
+    className={cn(
+      'sidebar-attention-badge ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums',
+      attentionToneClasses[tone].badge,
+    )}
+    aria-label={`${count} item membutuhkan perhatian`}
+  >
+    {count > 99 ? '99+' : count}
+  </span>
+)
+
 export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: SidebarProps) => {
   const location = useLocation()
   const queryClient = useQueryClient()
   const { state: attentionState, refetch: refetchAttention } = useAttention()
-  const { status: marisonEnvironment } = useMarisonEnvironment()
   
   const [user, setUser] = useState<User | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -47,8 +87,32 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const recommendationCount = canAccessRecommendation ? attentionState.recommendationCount : 0
   const monitoringBadge = attentionState.monitoringCount
   const followUpCount = attentionState.followUpCount || 0
+  const officeReviewCount = attentionState.masterOfficeReviewCount || 0
+  const profileReviewCount = attentionState.profileReviewCount || 0
+  const projectReviewCount = attentionState.masterProjectReviewCount || 0
+  const masterReviewCount = officeReviewCount + profileReviewCount + projectReviewCount
   const suratAttentionCount = inboxCount + recommendationCount + monitoringBadge + followUpCount
+  const suratNavigationTone = getSuratNavigationTone(attentionState.overdueSlaCount)
   const isUserAdmin = user?.role === 'admin'
+  const badgeOnlyAttentionLabels = new Set([
+    'User Organization',
+    'Master Kantor Cabang',
+    'Master Proyek',
+  ])
+
+  const getNavAttention = (label: string): { count: number; tone: SidebarAttentionTone } | null => {
+    const attentionByLabel: Record<string, { count: number; tone: SidebarAttentionTone }> = {
+      Persetujuan: { count: inboxCount, tone: 'task' },
+      Rekomendasi: { count: recommendationCount, tone: 'task' },
+      'Tindak Lanjut': { count: followUpCount, tone: 'task' },
+      'Status Pengajuan': { count: monitoringBadge, tone: 'update' },
+      'User Organization': { count: profileReviewCount, tone: 'review' },
+      'Master Kantor Cabang': { count: officeReviewCount, tone: 'review' },
+      'Master Proyek': { count: projectReviewCount, tone: 'review' },
+    }
+    const attention = attentionByLabel[label]
+    return attention?.count > 0 ? attention : null
+  }
 
   useEffect(() => {
     if (location.pathname.startsWith('/surat/monitoring') && user?.id) {
@@ -77,6 +141,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
       const data = await getCurrentUser()
       if (data) {
         setUser(data)
+        await refetchAttention()
       }
     }
     initSidebar()
@@ -95,7 +160,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
     window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
     return () => window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated)
-  }, [])
+  }, [refetchAttention])
 
   const handleLogout = async () => {
     if (isLoggingOut) return
@@ -123,7 +188,11 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
   const isDesktopCollapsed = !isMobile && collapsed
 
-  const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => (
+  const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => {
+    const attention = getNavAttention(label)
+    const badgeOnlyAttention = attention && badgeOnlyAttentionLabels.has(label)
+    const isSuratSubItem = isSubItem && path.startsWith('/surat/')
+    return (
     <NavLink to={path} end={path === '/dashboard' || path === '/admin/users' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
       {({ isActive }) => (
         <motion.div
@@ -135,49 +204,42 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                 ? "pl-9 pr-3"
                 : "px-3",
             isActive
-              ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              ? isSuratSubItem
+                ? cn(suratNavigationToneClasses[suratNavigationTone], suratNavigationTone === 'overdue'
+                  ? 'shadow-[inset_3px_0_0_rgb(244_63_94)]'
+                  : 'shadow-[inset_3px_0_0_rgb(16_185_129)]')
+                : "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            attention && !badgeOnlyAttention && !isSuratSubItem && 'sidebar-attention-row',
+            attention && !badgeOnlyAttention && !isSuratSubItem && attentionToneClasses[attention.tone].row,
           )}
           whileTap={{ scale: 0.98 }}
         >
           <div className="relative shrink-0">
-            <Icon className={cn(isSubItem ? "w-4 h-4" : "w-5 h-5", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-            {!isMobile && collapsed && label === 'Persetujuan' && inboxCount > 0 && (
+            <Icon className={cn(
+              isSubItem ? "w-4 h-4" : "w-5 h-5",
+              isActive && isSuratSubItem
+                ? suratNavigationTone === 'overdue' ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'
+                : isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+            )} />
+            {!isMobile && collapsed && attention && (
               <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
-                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-sidebar bg-primary"></span>
+                <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-50", attentionToneClasses[attention.tone].dot)} />
+                <span className={cn("sidebar-attention-badge relative inline-flex h-3 w-3 rounded-full border-2 border-sidebar", attentionToneClasses[attention.tone].dot)} />
               </span>
             )}
           </div>
           {(isMobile || !collapsed) && (
             <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
               <span className={cn("truncate font-medium", isSubItem ? "text-[13px]" : "text-sm")}>{label}</span>
-              {label === 'Persetujuan' && inboxCount > 0 && (
-                <span className="ml-2 shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                  {inboxCount > 99 ? '99+' : inboxCount}
-                </span>
-              )}
-              {label === 'Rekomendasi' && recommendationCount > 0 && (
-                <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
-                  {recommendationCount > 99 ? '99+' : recommendationCount}
-                </span>
-              )}
-              {label === 'Status Pengajuan' && monitoringBadge > 0 && (
-                <span className="ml-2 shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                  {monitoringBadge > 99 ? '99+' : monitoringBadge}
-                </span>
-              )}
-              {label === 'Tindak Lanjut' && followUpCount > 0 && (
-                <span className="ml-2 shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
-                  {followUpCount > 99 ? '99+' : followUpCount}
-                </span>
-              )}
+              {attention && <SidebarCountBadge count={attention.count} tone={attention.tone} />}
             </div>
           )}
         </motion.div>
       )}
     </NavLink>
-  )
+    )
+  }
 
   // Mobile Header in sidebar - TANPA TOMBOL X (sudah ada di Sheet)
   const MobileHeader = () => (
@@ -253,21 +315,23 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
           <div className="space-y-1">
             <button
               onClick={() => setIsSuratOpen(!isSuratOpen)}
+              aria-label={`Layanan Surat - ${suratNavigationTone === 'overdue' ? 'ada tugas melewati SLA' : 'SLA aman'}`}
               className={cn(
-                "group relative flex w-full items-center rounded-md py-2.5 transition-colors",
+                "group relative flex w-full items-center rounded-md border border-transparent py-2.5 transition-colors",
                 isDesktopCollapsed ? "justify-center px-0" : "justify-between px-4",
-                location.pathname.includes('/surat')
-                  ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
-                  : "text-muted-foreground hover:bg-accent"
+                suratNavigationToneClasses[suratNavigationTone],
+                suratNavigationTone === 'overdue'
+                  ? 'shadow-[inset_3px_0_0_rgb(244_63_94)]'
+                  : 'shadow-[inset_3px_0_0_rgb(16_185_129)]',
               )}
             >
               <div className={cn("flex items-center min-w-0", isDesktopCollapsed ? "gap-0" : "gap-3")}>
                 <div className="relative shrink-0">
                   <Mail className="w-5 h-5" />
                   {!isMobile && collapsed && suratAttentionCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+                    <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
+                      <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-50", attentionToneClasses.task.dot)} />
+                      <span className={cn("sidebar-attention-badge relative inline-flex h-3 w-3 rounded-full border-2 border-sidebar", attentionToneClasses.task.dot)} />
                     </span>
                   )}
                 </div>
@@ -275,7 +339,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               </div>
               {(isMobile || !collapsed) && (
                 <div className="flex items-center gap-2 shrink-0">
-                  {suratAttentionCount > 0 && !isSuratOpen && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                  {suratAttentionCount > 0 && <SidebarCountBadge count={suratAttentionCount} tone="task" />}
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isSuratOpen && "rotate-180")} />
                 </div>
               )}
@@ -312,16 +376,29 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
               <button
                 onClick={() => setIsMasterOpen(!isMasterOpen)}
                 className={cn(
-                  "group flex w-full items-center justify-between rounded-md px-3 py-2.5 transition-colors",
-                  isMasterOpen ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]" : "text-muted-foreground hover:bg-accent"
+                  "group flex w-full items-center justify-between rounded-md border border-transparent px-3 py-2.5 transition-colors",
+                  isMasterOpen ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]" : "text-muted-foreground hover:bg-accent",
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <Database className="w-5 h-5 shrink-0" />
+                  <div className="relative shrink-0">
+                    <Database className="w-5 h-5" />
+                    {!isMobile && collapsed && masterReviewCount > 0 && (
+                      <span className="absolute -right-1.5 -top-1.5 flex h-3 w-3">
+                        <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-50", attentionToneClasses.review.dot)} />
+                        <span className={cn("sidebar-attention-badge relative inline-flex h-3 w-3 rounded-full border-2 border-sidebar", attentionToneClasses.review.dot)} />
+                      </span>
+                    )}
+                  </div>
                   {(isMobile || !collapsed) && <span className="truncate text-sm font-medium">Master Data</span>}
                 </div>
                 {(isMobile || !collapsed) && (
-                  <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isMasterOpen && "rotate-180")} />
+                  <div className="flex items-center gap-2">
+                    {masterReviewCount > 0 && (
+                      <SidebarCountBadge count={masterReviewCount} tone="review" />
+                    )}
+                    <ChevronDown className={cn("w-4 h-4 transition-transform duration-300 shrink-0", isMasterOpen && "rotate-180")} />
+                  </div>
                 )}
               </button>
               <AnimatePresence>
@@ -346,14 +423,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
             {renderNavLink('/admin/configuration', 'Konfigurasi', SlidersHorizontal)}
             {renderNavLink('/admin/monitoring', 'Monitoring Admin', Monitor)}
             {renderNavLink('/admin/kpi-departments', 'SLA Departemen', BarChart3)}
-            {marisonEnvironment?.canManage && renderNavLink('/admin/marison-integration', 'Integrasi Marison', ServerCog)}
             {renderNavLink('/audit-logs', 'Audit Log', Activity)}
-          </div>
-        )}
-
-        {!isUserAdmin && marisonEnvironment?.canManage && (
-          <div className="space-y-1 pt-2">
-            {renderNavLink('/admin/marison-integration', 'Integrasi Marison', ServerCog)}
           </div>
         )}
 
