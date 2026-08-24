@@ -82,6 +82,23 @@ describe("Hybrid Marison master sync", () => {
     expect(sync).toContain("fallbackOffice");
     expect(sync).not.toContain("defaultEntityId");
     expect(server).toContain("masterProjectReviewCount");
+    const routes = read("backend/src/routes/domain.routes.ts");
+    expect(routes).toContain('{ method: "GET", url: "/api/integrations/marison/projects/preview" }');
+    expect(routes).toContain('{ method: "POST", url: "/api/integrations/marison/projects/sync" }');
+  });
+
+  it("keeps production master pages usable without staging-only payload mappings", () => {
+    const server = read("backend/src/domain-runtime.ts");
+    const mappingList = server.slice(
+      server.indexOf("export const getMarisonPayloadMappings"),
+      server.indexOf("export const getMarisonPayloadMappingCatalog"),
+    );
+    const mappingCatalog = server.slice(
+      server.indexOf("export const getMarisonPayloadMappingCatalog"),
+      server.indexOf("export const configureMarisonPayloadMapping"),
+    );
+    expect(mappingList).toContain("return { mappings: [], actorId: actor.id }");
+    expect(mappingCatalog).toContain("return { catalog: [], actorId: actor.id }");
   });
 
   it("requires external projects to be reviewed until an entity is selected", () => {
