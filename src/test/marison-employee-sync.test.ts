@@ -10,6 +10,7 @@ import {
   marisonNikKey,
   normalizeMarisonNik,
   previewMarisonBranchSync,
+  resolveMarisonDepartment,
 } from "../../server/marison-employee-sync.mjs";
 
 describe("Marison employee sync", () => {
@@ -67,6 +68,23 @@ describe("Marison employee sync", () => {
     expect(deriveMarisonOfficeType({ name: "KCP Magelang Selatan" })).toBe("KCP");
     expect(deriveMarisonOfficeType({ name: "Kantor Site Cibubur" })).toBe("Kost");
     expect(deriveMarisonOfficeType({ name: "Magelang" })).toBe("KC");
+  });
+
+  it("maps production employee divisions to stable SIGAP departments", () => {
+    const pusat = { kedudukan: "Pusat" };
+    const cabang = { kedudukan: "KC" };
+
+    expect(resolveMarisonDepartment("Direktur Utama", pusat)).toEqual({
+      name: "Direksi", code: "DIR", deptIndex: 2,
+    });
+    expect(resolveMarisonDepartment("Sekretaris Direksi", pusat)?.name).toBe("Direksi");
+    expect(resolveMarisonDepartment("Marketing", pusat)?.name).toBe("Marketing");
+    expect(resolveMarisonDepartment("Marketing & Sales", cabang)?.name).toBe("Marketing (Cabang)");
+    expect(resolveMarisonDepartment("Teknik", cabang)?.name).toBe("Teknik (Cabang)");
+    expect(resolveMarisonDepartment("Umum & Keuangan", cabang)?.name).toBe("Umum & Keuangan (Cabang)");
+    expect(resolveMarisonDepartment("Operasional Kos", cabang)?.name).toBe("Operasional Kost");
+    expect(resolveMarisonDepartment("Cabang", cabang)?.name).toBe("Branch Manager");
+    expect(resolveMarisonDepartment("4", pusat)).toBeNull();
   });
 
   it("resolves a conflicting staging row only when one name matches an existing profile", () => {

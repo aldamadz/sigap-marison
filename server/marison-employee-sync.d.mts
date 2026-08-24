@@ -20,6 +20,10 @@ export function canUseMarisonNameFallback(
 ): boolean;
 export function buildMarisonStagingEmail(employee: MarisonEmployee, duplicateName?: boolean): string;
 export function deriveMarisonOfficeType(branch: Record<string, unknown>): "Pusat" | "KC" | "KCP" | "Kost";
+export function resolveMarisonDepartment(
+  division: unknown,
+  office?: Record<string, unknown> | null,
+): { name: string; code: string; deptIndex: number } | null;
 export function resolveMarisonEmployeeActive(status: unknown, fallback?: boolean): boolean;
 export function deduplicateMarisonEmployees(rows: MarisonEmployee[], options?: { knownNames?: string[] }): {
   employees: MarisonEmployee[];
