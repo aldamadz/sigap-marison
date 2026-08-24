@@ -122,11 +122,11 @@ const containerId = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:
 try {
   let ready = false;
   for (let attempt = 0; attempt < 40 && !ready; attempt += 1) {
-    ready = spawnSync("docker", ["exec", containerId, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
+    ready = spawnSync("docker", ["exec", containerId, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], { encoding: "utf8" }).status === 0;
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", containerId, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], `${schema}\n${tests}`));
+  process.stdout.write(run(["exec", "-i", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], `${schema}\n${tests}`));
 } finally {
   run(["rm", "-f", containerId]);
 }

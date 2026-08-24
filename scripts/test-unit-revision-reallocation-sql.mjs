@@ -61,7 +61,7 @@ const run = (args, input = "") => {
 
 const id = run([
   "run", "-d", "-e", "POSTGRES_PASSWORD=test",
-  "--health-cmd", "pg_isready -U postgres",
+  "--health-cmd", "pg_isready -h 127.0.0.1 -U postgres",
   "--health-interval", "1s", "--health-timeout", "5s", "--health-retries", "30",
   "postgres:17-alpine",
 ]).trim();
@@ -74,7 +74,7 @@ try {
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
-  process.stdout.write(run(["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + statusMigration + notificationMigration + assertions));
+  process.stdout.write(run(["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + statusMigration + notificationMigration + assertions));
 } finally {
   run(["rm", "-f", id]);
 }
