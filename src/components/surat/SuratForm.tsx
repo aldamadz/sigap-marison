@@ -73,6 +73,7 @@ import {
   normalizeTableRows,
 } from "@/components/surat/form/surat-form-schema";
 import {
+  buildNonUnitRequestTitle,
   formatDatePickerDisplay,
   formatFileSize,
   formatIndonesianList,
@@ -1044,13 +1045,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         : "Permohonan Order Bangun";
       return [title, project?.name, officeSuffix].filter(Boolean).join(" ");
     }
+    if (category === "non_unit") {
+      return buildNonUnitRequestTitle(itemText, officeSuffix);
+    }
     const categoryLabel = category === "asset"
       ? "Permohonan Aset"
       : category === "non_asset"
         ? "Permohonan Non Aset"
-        : category === "non_unit"
-          ? "Permohonan Non Unit"
-          : "Permohonan";
+        : "Permohonan";
     return [itemText ? `${categoryLabel} : ${itemText}` : categoryLabel, officeSuffix].filter(Boolean).join(" ");
   };
 

@@ -12,6 +12,7 @@ import {
   normalizeTableRows,
 } from "@/components/surat/form/surat-form-schema";
 import {
+  buildNonUnitRequestTitle,
   formatDatePickerDisplay,
   formatFileSize,
   formatIndonesianList,
@@ -90,5 +91,14 @@ describe("SuratForm pure formatters", () => {
     expect(getOfficeTitleSuffix(pusat, dept)).toBe("Dept. Pengembangan Organisasi Kantor Pusat");
     expect(getDefaultRequestPlace(pusat, dept)).toBe("Magelang");
     expect(getDefaultRequestPlace({ id: "o2", name: "KC Temanggung", kedudukan: "KC" }, null)).toBe("Temanggung");
+  });
+
+  it("formats Non Unit titles without separators or dotted office abbreviations", () => {
+    expect(buildNonUnitRequestTitle("Pembangunan Talud", "KC. Bandung")).toBe(
+      "Permohonan Non Unit Pembangunan Talud KC Bandung",
+    );
+    expect(buildNonUnitRequestTitle("Renovasi Kantor", "KCP. Muntilan")).toBe(
+      "Permohonan Non Unit Renovasi Kantor KCP Muntilan",
+    );
   });
 });

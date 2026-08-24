@@ -34,6 +34,15 @@ export function formatIndonesianList(values: string[]): string {
   return `${cleaned.slice(0, -1).join(", ")}, dan ${cleaned[cleaned.length - 1]}`;
 }
 
+export function buildNonUnitRequestTitle(itemText: string, officeSuffix: string): string {
+  const compactOfficeSuffix = officeSuffix
+    .replace(/^(KC|KCP)\.\s*/i, (_, prefix: string) => `${prefix.toUpperCase()} `)
+    .trim();
+  return ["Permohonan Non Unit", itemText.trim(), compactOfficeSuffix]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export const toReadableLocationName = (value: string): string => value
   .toLowerCase()
   .split(/\s+/)
