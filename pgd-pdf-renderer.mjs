@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
-import { buildPgdSignatureSlotPlan } from "./document-layout-rules.mjs";
+import { buildPgdSignatureSlotPlan, buildSignatureLayoutPlan } from "./document-layout-rules.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -80,10 +80,12 @@ const parseRecommendationItemDecisions = (source = {}) => {
     .filter((row) => row && typeof row === "object" && !Array.isArray(row))
     .map((row) => ({
       index: Number(row.parent_item_index || 0) - 1,
-      parentName: String(row.parent_item_name || "").trim().toLowerCase(),
-      action: String(row.recommendation_action || "").trim(),
-      isRecommended: row.is_recommended !== false && String(row.recommendation_action || "") !== "tidak_direkomendasikan",
-      reason: String(row.keterangan || row.alasan || row.reason || "").trim(),
+      parentName: String(row.parent_item_name || asObject(row.applicant_original).name || "").trim().toLowerCase(),
+      action: String(row.recommendation_action || row.action || row.status || "").trim(),
+      isRecommended: row.is_recommended !== false && ![
+        "not_recommended", "tidak_direkomendasikan", "rejected", "ditolak",
+      ].includes(String(row.recommendation_action || row.action || row.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_")),
+      reason: String(row.rejection_reason || row.keterangan || row.alasan || row.reason || "").trim(),
     }))
     .filter((row) => Number.isFinite(row.index) || row.parentName);
 };
@@ -129,14 +131,8 @@ export const isPgdDocument = (source = {}) => {
   return names.some((name) => name.includes("PERMINTAAN BARANG"));
 };
 
-export const normalizePgdDocumentData = (source = {}, options = {}) => {
-  const input = source.form_input_data || source?.data_snapshot?.input || {};
-  const location = source.location_snapshot || {};
-  const items = Array.isArray(input.items) ? input.items : [];
-  const revisionChanges = parseRevisionItemChanges(source);
-  const recommendationDecisions = parseRecommendationItemDecisions(source);
-  const targetStep = Number(options.targetStep || 0);
-  const signatures = (Array.isArray(options.signatures) ? options.signatures : [])
+export const normalizeNativeSignatures = (signatures = [], targetStep = 0) =>
+  (Array.isArray(signatures) ? signatures : [])
     .slice()
     .sort((left, right) => Number(left.step_order || 0) - Number(right.step_order || 0))
     .map((signature, index) => {
@@ -152,6 +148,15 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
         signedAt: signed ? signature.signed_at : null,
       };
     });
+
+export const normalizePgdDocumentData = (source = {}, options = {}) => {
+  const input = source.form_input_data || source?.data_snapshot?.input || {};
+  const location = source.location_snapshot || {};
+  const items = Array.isArray(input.items) ? input.items : [];
+  const revisionChanges = parseRevisionItemChanges(source);
+  const recommendationDecisions = parseRecommendationItemDecisions(source);
+  const targetStep = Number(options.targetStep || 0);
+  const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.PGD-01-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
@@ -187,7 +192,7 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
 };
 
 export const createPgdPreviewData = (options = {}) => {
-  const total = Math.min(Math.max(Number(options.signature_count || 5), 3), 8);
+  const total = Math.min(Math.max(Number(options.signature_count || 5), 2), 8);
   const roles = Array.isArray(options.signature_roles) ? options.signature_roles : [1, Math.max(total - 2, 1), 1];
   const roleNames = ["Membuat", "Memeriksa", "Menyetujui"];
   const jobs = {
@@ -279,9 +284,12 @@ const signatureRow = (signers, topCount) => {
   };
 };
 
-const buildSignatureBlock = (signatures) => {
-  const safeSignatures = signatures.length >= 3 ? signatures.slice(0, 8) : createPgdPreviewData({ signature_count: 3, signature_roles: [1, 1, 1] }).signatures;
-  const plan = buildPgdSignatureSlotPlan(safeSignatures.length);
+export const buildNativeSignatureBlock = (signatures) => {
+  const providedSignatures = Array.isArray(signatures) ? signatures.slice(0, 8) : [];
+  const safeSignatures = providedSignatures.length > 0
+    ? providedSignatures
+    : createPgdPreviewData({ signature_count: 3, signature_roles: [1, 1, 1] }).signatures;
+  const plan = buildSignatureLayoutPlan(safeSignatures.length);
   let cursor = 0;
   const groups = plan.groupSizes.map((size) => {
     const group = safeSignatures.slice(cursor, cursor + size);
@@ -423,7 +431,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
                 table: { widths: ["*"], body: [[{ text: data.placeDate, alignment: "center" }]] },
                 layout: compactBorderLayout,
               },
-              buildSignatureBlock(data.signatures),
+              buildNativeSignatureBlock(data.signatures),
             ],
           },
         ],

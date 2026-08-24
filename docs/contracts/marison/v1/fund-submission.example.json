@@ -1,0 +1,23 @@
+{
+  "submission_number": "001/UAI/PBO.1/VIII/2026",
+  "type": "operational",
+  "project_id": 12,
+  "division": "Pengembangan Organisasi",
+  "title": "Permohonan biaya operasional",
+  "description": "Pengajuan kebutuhan operasional departemen",
+  "attachments": [
+    {
+      "name": "Dokumen Pengajuan Final",
+      "link": "https://sigap.marison-testing.biz.id/api/files/example-token"
+    }
+  ],
+  "approvals": [
+    {
+      "role": "Manager PO",
+      "nik": "EMP001",
+      "action": "approved",
+      "actioned_at": "2026-08-11T10:00:00+07:00",
+      "notes": "Disetujui"
+    }
+  ]
+}

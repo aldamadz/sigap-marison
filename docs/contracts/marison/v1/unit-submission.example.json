@@ -1,0 +1,35 @@
+{
+  "submission_number": "041/UAI/MKT.1.WSVJ9/VII/2026",
+  "project_id": 13,
+  "branch_id": 8,
+  "description": "Permohonan Order Bangun SPK pembangunan unit sesuai judul surat",
+  "submitted_by": "EMP-MKT-001",
+  "submitted_at": "2026-07-21T09:32:14+07:00",
+  "units": [
+    {
+      "unit_id": 718,
+      "production_code": "001/UAI/PRC/5.2/31/12/2024",
+      "type": "4.0",
+      "addendum_atas_label": "Struktur Atas",
+      "addendum_atas_nominal": 1000000,
+      "addendum_bawah_label": "Struktur Bawah",
+      "addendum_bawah_nominal": 1500000,
+      "planning_notes": "Pembangunan mengikuti siteplan dan spesifikasi terlampir"
+    }
+  ],
+  "attachments": [
+    {
+      "name": "Dokumen Pengajuan Final",
+      "link": "https://sigap.marison-testing.biz.id/api/files/view/demo-unit-final-001"
+    }
+  ],
+  "approvals": [
+    {
+      "role": "Mgr. Perencanaan",
+      "nik": "EMP-PRC-001",
+      "action": "approved",
+      "actioned_at": "2026-07-21T11:05:45+07:00",
+      "notes": "Siteplan dan nilai adendum telah sesuai"
+    }
+  ]
+}

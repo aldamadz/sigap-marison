@@ -45,7 +45,6 @@ export const ActivityLogsView = ({ logs, users, agendas, currentUser }: Activity
     master_departments: 'Departemen',
     master_letter_types: 'Jenis surat',
     master_forms: 'Form surat',
-    master_form_presets: 'Preset form',
     master_penggunaan_detail: 'Detail penggunaan',
     master_projects: 'Proyek',
     department_kpi_configs: 'Konfigurasi SLA',

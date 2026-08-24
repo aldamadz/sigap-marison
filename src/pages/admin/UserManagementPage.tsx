@@ -1,6 +1,6 @@
 // frontend/src/pages/UserManagementPage.tsx
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { supabase } from '@/lib/supabase';
 import { getUsers } from '@/services/user.service';
 import { User } from '@/types/agenda';
@@ -31,6 +31,15 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppDialog } from '@/components/app/AppDialogProvider';
 import { excelSerialToDateInput, exportRowsToXlsx, readSpreadsheetRows } from '@/lib/excel';
+import {
+  getMasterReviewDescription,
+  MasterReviewStatus,
+  masterReviewRowClass,
+} from '@/components/admin/MasterReviewStatus';
+import { MarisonPayloadMappingCell } from '@/components/admin/MarisonPayloadMappingCell';
+import { marisonPayloadMappingService, type MarisonPayloadMapping } from '@/services/marison-payload-mapping.service';
+import { matchesMarisonPayloadMappingFilter } from '@/lib/marison-payload-mapping';
+import { isMarisonProfileExternalIdentityValid } from '@/lib/marison-payload-mapping';
 
 type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
@@ -384,11 +393,26 @@ export default function UserManagementPage() {
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState<number | 'all'>(10);
+  const [syncIssueCount, setSyncIssueCount] = useState(0);
+  const [overrides, setOverrides] = useState<MarisonPayloadMapping[]>([]);
+  const [overrideFilter, setOverrideFilter] = useState('all');
   const importRef = useRef<HTMLInputElement>(null);
 
   const fetchUsers = async () => {
     setLoading(true);
-    try { setUsers(await getUsers()); }
+    try {
+      const [nextUsers, issueResult] = await Promise.all([
+        getUsers(),
+        supabase
+          .from('marison_sync_issues')
+          .select('id', { count: 'exact', head: true })
+          .eq('entity_type', 'employee')
+          .eq('status', 'open'),
+      ]);
+      setUsers(nextUsers);
+      setOverrides(await marisonPayloadMappingService.list('profile'));
+      setSyncIssueCount(issueResult.count || 0);
+    }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -406,17 +430,30 @@ export default function UserManagementPage() {
     officeFilter !== 'all',
     deptFilter !== 'all',
     jobFilter !== 'all',
+    overrideFilter !== 'all',
     sortBy !== 'name_asc',
   ].filter(Boolean).length;
 
   const filteredUsers = useMemo(() => users
-    .filter(u => {
+     .filter(u => {
+       const override = overrides.find((item) => item.entity_type === 'profile' && item.record_id === u.id);
+        const hasSource = isMarisonProfileExternalIdentityValid(u);
+       if (!matchesMarisonPayloadMappingFilter(
+         overrideFilter,
+         (u as any).marison_employee_id,
+         hasSource,
+         override,
+       )) return false;
       const s = searchQuery.toLowerCase();
       const ok = u.fullName.toLowerCase().includes(s)
         || (u.email?.toLowerCase() || '').includes(s)
         || (u.jobTitle?.toLowerCase() || '').includes(s)
         || (u.nik?.toLowerCase() || '').includes(s)
-        || ((u as any).phone?.toLowerCase() || '').includes(s);
+        || ((u as any).phone?.toLowerCase() || '').includes(s)
+        || getMasterReviewDescription(
+          (u as any).marison_review_required,
+          (u as any).marison_review_reasons,
+        ).toLowerCase().includes(s);
       const isActive = (u as any).is_active !== false;
       return ok
         && (officeFilter === 'all' || u.officeName === officeFilter)
@@ -425,6 +462,9 @@ export default function UserManagementPage() {
         && (statusFilter === 'all' || (statusFilter === 'active' ? isActive : !isActive));
     })
     .sort((a, b) => {
+      const reviewA = (a as any).marison_review_required ? 0 : 1;
+      const reviewB = (b as any).marison_review_required ? 0 : 1;
+      if (reviewA !== reviewB) return reviewA - reviewB;
       if (sortBy === 'job_asc') return `${a.jobTitle || ''} ${a.fullName}`.localeCompare(`${b.jobTitle || ''} ${b.fullName}`, 'id');
       if (sortBy === 'department_asc') return `${a.departmentName || ''} ${a.fullName}`.localeCompare(`${b.departmentName || ''} ${b.fullName}`, 'id');
       if (sortBy === 'office_asc') return `${a.officeName || ''} ${a.fullName}`.localeCompare(`${b.officeName || ''} ${b.fullName}`, 'id');
@@ -434,9 +474,9 @@ export default function UserManagementPage() {
         return `${statusA} ${a.fullName}`.localeCompare(`${statusB} ${b.fullName}`, 'id');
       }
       return String(a.fullName || '').localeCompare(String(b.fullName || ''), 'id');
-    }), [users, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
+    }), [users, overrides, overrideFilter, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
 
-  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy, pageSize]);
+  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, overrideFilter, sortBy, pageSize]);
 
   const showAll    = pageSize === 'all';
   const totalPages = showAll ? 1 : Math.max(1, Math.ceil(filteredUsers.length / (pageSize as number)));
@@ -976,6 +1016,8 @@ export default function UserManagementPage() {
             {[
               { val: statusFilter, set: (value: string) => setStatusFilter(value), icon: <AlertCircle className="w-4 h-4 text-primary" />, ph: "Status Akun",
                 opts: [["all","Semua Status"],["active","Aktif"],["inactive","Nonaktif"]] },
+              { val: overrideFilter, set: (value: string) => setOverrideFilter(value), icon: <Hash className="w-4 h-4 text-primary" />, ph: "Outbound",
+                 opts: [["all","Semua"],["external","Siap dari data external"],["override","Menggunakan mapping staging"],["unavailable","Belum dapat dikirim"],["invalid","Perlu koreksi relasi"]] },
               { val: officeFilter, set: (value: string) => setOfficeFilter(value), icon: <Building2 className="w-4 h-4 text-primary" />,   ph: "Kantor",
                 opts: [["all","Semua Kantor"], ...uniqueOffices.map(o => [o,o])] },
               { val: deptFilter,   set: (value: string) => setDeptFilter(value),   icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Departemen",
@@ -1002,6 +1044,12 @@ export default function UserManagementPage() {
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
+      {syncIssueCount > 0 && (
+        <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+          <AlertCircle className="h-4 w-4" />
+          {syncIssueCount} karyawan external mengalami konflik mapping. Cocokkan NIK/email atau isi ID Employee External pada user yang benar.
+        </div>
+      )}
       <div className="relative bg-card shadow-sm">
         <Table className="min-w-[980px]" containerClassName="max-h-[calc(100dvh-24rem)] min-h-[380px]">
           <TableHeader className="sticky top-0 z-20 bg-card/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -1017,9 +1065,12 @@ export default function UserManagementPage() {
               {[
                 { label: "Karyawan", className: "min-w-[280px]" },
                 { label: "No. HP", className: "min-w-[150px]" },
+                { label: "ID External", className: "min-w-[120px]" },
+                { label: "Mapping Payload Staging", className: "min-w-[280px]" },
                 { label: "Role", className: "min-w-[120px]" },
                 { label: "Jabatan & Unit", className: "min-w-[260px]" },
                 { label: "Masa Kerja", className: "min-w-[170px]" },
+                { label: "Keterangan", className: "min-w-[280px]" },
               ].map(h => (
                 <TableHead key={h.label} className={cn("sticky top-0 z-20 bg-card/95 py-4 text-xs font-semibold text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-card/80", h.className)}>
                   {h.label}
@@ -1029,14 +1080,14 @@ export default function UserManagementPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={6} className="py-32">
+              <TableRow><TableCell colSpan={9} className="py-32">
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                   <p className="text-muted-foreground font-medium animate-pulse text-sm">Memuat data karyawan...</p>
                 </div>
               </TableCell></TableRow>
             ) : filteredUsers.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="py-32 text-center">
+              <TableRow><TableCell colSpan={9} className="py-32 text-center">
                 <div className="max-w-xs mx-auto space-y-3 opacity-40">
                   <Search className="w-12 h-12 mx-auto" />
                   <p className="text-lg font-medium">Data tidak ditemukan</p>
@@ -1056,6 +1107,7 @@ export default function UserManagementPage() {
                   className={cn(
                     "border-border transition-colors cursor-pointer",
                     isSelected ? "bg-primary/5 hover:bg-primary/8" : "hover:bg-accent/30",
+                    (user as any).marison_review_required && masterReviewRowClass,
                     !isActive && "opacity-60"
                   )}
                 >
@@ -1083,7 +1135,7 @@ export default function UserManagementPage() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-bold text-sm text-foreground truncate">{user.fullName}</p>
+                        <p className="truncate text-sm font-bold text-foreground">{user.fullName}</p>
                         <p className="text-xs text-primary/70 font-medium truncate">{user.email}</p>
                         <p className="text-[10px] text-muted-foreground font-mono mt-0.5">NIK: {user.nik || '—'}</p>
                       </div>
@@ -1098,6 +1150,8 @@ export default function UserManagementPage() {
                       </div>
                     ) : <span className="text-muted-foreground text-xs font-bold">—</span>}
                   </TableCell>
+                  <TableCell>{(user as any).marison_employee_id || '-'}</TableCell>
+                   <TableCell><MarisonPayloadMappingCell entityType="profile" recordId={user.id} sigapLabel={`${user.fullName} / ${user.nik || '-'}`} externalIdentity={isMarisonProfileExternalIdentityValid(user) ? `Employee ${(user as any).marison_employee_id} / NIK ${user.nik}` : '-'} source={user.nik} sourceValid={isMarisonProfileExternalIdentityValid(user)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id)?.mapping_valid)} field="nik" override={overrides.find((entry) => entry.entity_type === 'profile' && entry.record_id === user.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)), next] : current.filter((entry) => !(entry.entity_type === 'profile' && entry.record_id === user.id)))} /></TableCell>
 
                   <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
                     {(user as any).role === 'admin' ? (
@@ -1152,6 +1206,13 @@ export default function UserManagementPage() {
                         <span className="text-muted-foreground text-xs font-bold">Belum diisi</span>
                       )}
                     </div>
+                  </TableCell>
+
+                  <TableCell onClick={() => { setSelectedUser(user); setIsDetailOpen(true); }}>
+                    <MasterReviewStatus
+                      required={(user as any).marison_review_required}
+                      reasons={(user as any).marison_review_reasons}
+                    />
                   </TableCell>
                 </TableRow>
               );

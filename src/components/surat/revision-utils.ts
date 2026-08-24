@@ -1,5 +1,5 @@
 import { formatSummaryValue } from "@/components/surat/request-summary";
-import { parseRupiahInteger } from "@/lib/rupiah";
+import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 
 export type RevisionItemChange = {
   index: number;
@@ -120,7 +120,7 @@ export const getRevisionApprovedValue = (change?: Partial<RevisionItemChange> | 
 export const formatRevisionMoney = (value: unknown) => {
   const amount = parseRupiahInteger(value);
   if (!amount) return formatSummaryValue(value);
-  return `Rp ${amount.toLocaleString("id-ID")}`;
+  return formatRupiahCanonical(amount);
 };
 
 export const formatRevisionValue = (

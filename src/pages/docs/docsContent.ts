@@ -13,12 +13,12 @@ import {
   History,
   Inbox,
   KeyRound,
-  LayoutTemplate,
   Mail,
   MapPin,
   Network,
   Route,
   SearchCheck,
+  Server,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -91,8 +91,8 @@ export interface DocsEntry {
   sections?: DocsSection[];
 }
 
-export const DOCS_VERSION = "v1.18.0";
-export const DOCS_UPDATED_AT = "21 Juli 2026";
+export const DOCS_VERSION = "v1.25.0";
+export const DOCS_UPDATED_AT = "18 Agustus 2026";
 
 export const DOCS_OVERVIEW_SLUG = "overview";
 
@@ -124,10 +124,8 @@ const DOCS_ENTRY_SLUGS: Record<string, string> = {
   "admin-letter-types": "master-jenis-surat",
   "admin-offices": "master-kantor-cabang",
   "admin-projects": "master-proyek",
-  "admin-forms": "form-template",
-  "admin-template-builder": "template-builder",
-  "admin-workflows": "alur-persetujuan",
   "admin-form-usages": "kegunaan-form",
+  "admin-integration": "integrasi-marison",
   "admin-numbering": "penomoran-surat",
   "admin-job-title-labels": "label-jabatan",
   "admin-sla": "sla-departemen",
@@ -561,67 +559,6 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
       ],
     },
   ],
-  "admin-forms": [
-    {
-      type: "table",
-      title: "Bagian konfigurasi template",
-      columns: ["Bagian", "Fungsi"],
-      rows: [
-        ["File Excel", "Template sumber yang diisi sistem."],
-        ["Field input", "Daftar input user yang akan masuk ke dokumen."],
-        ["Mapping cell", "Letak data pada sheet Excel."],
-        ["Tabel barang", "Konfigurasi baris/kolom detail barang atau kebutuhan."],
-        ["Tempat tanggal", "Cell untuk teks seperti Magelang, 21 Mei 2026."],
-        ["Tanda tangan", "Area kotak tanda tangan dinamis."],
-      ],
-    },
-  ],
-  "admin-template-builder": [
-    {
-      type: "table",
-      title: "Bagian Template Builder",
-      columns: ["Bagian", "Fungsi"],
-      rows: [
-        ["Canvas", "Area A4/F4 untuk menyusun tampilan dokumen."],
-        ["Panel elemen", "Tempat menambahkan logo, teks, field data, tabel berulang, catatan, dan tanda tangan."],
-        ["Panel properti", "Mengatur posisi, ukuran, font, warna, border, binding, dan kolom tabel."],
-        ["Schema input", "Menentukan field yang akan diisi user ketika template dipakai pada registrasi."],
-        ["Versioning", "Menyimpan perubahan sebagai draft atau publish agar dokumen lama tetap stabil."],
-      ],
-    },
-    {
-      type: "table",
-      title: "Data berulang",
-      description: "Gunakan Tabel Berulang untuk data yang jumlahnya bisa berubah.",
-      columns: ["Sumber data", "Contoh isi", "Kapan dipakai"],
-      rows: [
-        ["Daftar Barang", "Kode, nama barang, satuan, jumlah, status, keterangan", "Permohonan barang dan jasa."],
-        ["Daftar Unit", "Proyek, kavling, kode produksi", "Permohonan unit atau order bangun."],
-        ["Daftar Rekomendasi", "Nama alat, lokasi/PIC, tindakan, link", "Rekomendasi aset."],
-        ["Daftar Lampiran", "Nama file, tipe, ukuran", "Ringkasan lampiran dalam dokumen."],
-        ["Penandatangan", "Label, nama, jabatan", "Area tanda tangan dinamis."],
-      ],
-    },
-  ],
-  "admin-workflows": [
-    {
-      type: "callout",
-      title: "Matrix lama bersifat referensi",
-      description:
-        "Halaman Alur Persetujuan dipakai untuk membaca atau migrasi matrix lama. Alur aktif registrasi dikendalikan oleh Kegunaan Form.",
-      tone: "warning",
-    },
-    {
-      type: "table",
-      title: "Yang dicek pada matrix lama",
-      columns: ["Data", "Fungsi"],
-      rows: [
-        ["Urutan step", "Mengetahui siapa membuat, memeriksa, dan menyetujui."],
-        ["Jumlah kotak tanda tangan", "Referensi saat menyiapkan signature layout dinamis."],
-        ["Role/label", "Konteks jabatan atau fungsi tiap tahap."],
-      ],
-    },
-  ],
   "admin-form-usages": [
     {
       type: "table",
@@ -662,6 +599,28 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
         ["Kandidat Staff IT/PBO", "Menentukan siapa yang dapat melihat dan mengambil tugas rekomendasi."],
         ["Shared lock", "Kandidat pertama yang mengambil tugas menjadi pembuat draft; kandidat lain hanya melihat status terkunci."],
       ],
+    },
+  ],
+  "admin-integration": [
+    {
+      type: "table",
+      title: "Kontrol Integrasi Marison",
+      columns: ["Kontrol", "Fungsi"],
+      rows: [
+        ["Status environment", "Menunjukkan koneksi staging atau production yang dikunci saat deployment."],
+        ["Cek koneksi", "Memeriksa akses SIGAP ke endpoint Projects, Unit, dan Non Unit tanpa mengubah master data."],
+        ["Periksa karyawan", "Menampilkan jumlah data karyawan dan kantor yang akan dibuat, diperbarui, dilewati, atau perlu ditinjau."],
+        ["Sinkron karyawan", "Memperbarui master kantor dan karyawan SIGAP setelah admin menyetujui hasil pemeriksaan."],
+        ["Periksa proyek", "Menampilkan perubahan master proyek dan mapping kantor sebelum sinkronisasi."],
+        ["Sinkron proyek", "Memperbarui master proyek SIGAP tanpa mengganti UUID lokal yang sudah dipakai surat."],
+      ],
+    },
+    {
+      type: "callout",
+      title: "Periksa sebelum sinkron",
+      description:
+        "Jalankan pemeriksaan terlebih dahulu. Setelah sinkronisasi selesai, buka master terkait dan lengkapi baris yang ditandai untuk ditinjau.",
+      tone: "warning",
     },
   ],
   "admin-numbering": [
@@ -1289,7 +1248,7 @@ export const USER_DOCS: DocsEntry[] = [
           "Pilih kategori pengajuan: Aset, Non Aset, Unit, atau Non Unit sesuai izin departemen.",
           "Untuk kategori Aset, tentukan apakah permohonan membutuhkan dokumen rekomendasi tertaut. Jika memilih butuh rekomendasi, rekomendasi dibuat sebagai surat terpisah dengan nomor dan approval sendiri.",
           "Pilih kegunaan form. Pilihan ini menentukan template, nomor surat, kandidat penandatangan, dan lampiran wajib.",
-          "Isi tempat, tanggal, detail permohonan, catatan, dan lampiran yang diminta.",
+          "Isi tempat, tanggal, detail permohonan, catatan, dan lampiran yang diminta. Tunggu progres lampiran mencapai 100% dan berstatus tersimpan sebelum membuka ringkasan.",
           "Pilih kandidat penandatangan dari daftar yang tersedia. Untuk cabang, kandidat dapat mengikuti kantor pemohon.",
           "Kirim pengajuan. Setelah terkirim, dokumen masuk ke tahap persetujuan pertama.",
         ],
@@ -1368,6 +1327,11 @@ export const USER_DOCS: DocsEntry[] = [
             solution:
               "Itu berarti ada nomor yang sudah dipesan dan belum dikirim. Lanjutkan draft atau batalkan sesuai prosedur yang tersedia.",
           },
+          {
+            problem: "Admin menambah tahap penandatangan setelah draft dibuat",
+            solution:
+              "Buka ulang draft. Sistem memakai alur Kegunaan Form terbaru, mempertahankan signer pada tahap yang sama, lalu meminta Anda memilih signer untuk tahap baru sebelum mendaftarkan surat.",
+          },
         ],
       },
     ],
@@ -1389,14 +1353,14 @@ export const USER_DOCS: DocsEntry[] = [
     steps: [
       "Tentukan apakah permohonan berkaitan dengan unit/kavling properti.",
       "Jika berkaitan dengan unit/kavling, pilih Unit; jika tidak, lanjutkan menilai jenis barang atau prosesnya.",
-      "Pilih Aset untuk barang yang dicatat sebagai aset, Non Aset untuk kebutuhan operasional, atau Non Unit untuk proses yang memang dikonfigurasi tanpa alokasi unit.",
+      "Pilih Aset untuk barang yang dicatat sebagai aset, Non Aset untuk kebutuhan operasional, atau Non Unit untuk pekerjaan pembangunan/proyek fisik tanpa alokasi kavling.",
       "Periksa form dan kegunaan yang muncul. Sistem hanya menampilkan konfigurasi yang sesuai kategori dan departemen Anda.",
     ],
     examples: [
       "Komputer inventaris kantor menggunakan Aset.",
       "ATK, jasa sewa, biaya promosi, atau bahan habis pakai menggunakan Non Aset.",
       "Order bangun rumah pada kavling proyek menggunakan Unit.",
-      "Dokumen pekerjaan proyek yang tidak memilih kavling menggunakan Non Unit jika kegunaannya dikonfigurasi demikian.",
+      "SPK, pembangunan infrastruktur, perbaikan kawasan, material proyek, dan tenaga proyek tanpa pemilihan kavling menggunakan Non Unit.",
     ],
     troubleshooting: [
       "Jika form atau kegunaan tidak muncul, pastikan kategori yang dipilih sesuai dan minta admin memeriksa konfigurasi departemen.",
@@ -1419,8 +1383,8 @@ export const USER_DOCS: DocsEntry[] = [
         rows: [
           ["Apakah permohonan membutuhkan proyek, pemilihan kavling, dan alokasi unit?", "Pilih Unit.", "Lanjutkan ke klasifikasi barang atau proses."],
           ["Apakah barang akan menjadi inventaris/aset perusahaan?", "Pilih Aset.", "Pertimbangkan Non Aset atau Non Unit."],
-          ["Apakah kebutuhan berupa biaya operasional, jasa, sewa, promosi, atau barang habis pakai?", "Pilih Non Aset.", "Periksa apakah kegunaannya merupakan proses Non Unit."],
-          ["Apakah kegunaan dokumen memang disiapkan tanpa alokasi kavling/unit?", "Pilih Non Unit.", "Hubungi admin jika tidak ada kategori yang sesuai."],
+          ["Apakah kebutuhan berupa biaya operasional, jasa, sewa, promosi, atau barang habis pakai dan bukan pekerjaan pembangunan?", "Pilih Non Aset.", "Periksa apakah kegunaannya merupakan pekerjaan Non Unit."],
+          ["Apakah permohonan berupa pekerjaan pembangunan/proyek fisik tanpa alokasi kavling/unit?", "Pilih Non Unit.", "Hubungi admin jika tidak ada kategori yang sesuai."],
         ],
       },
       {
@@ -1460,7 +1424,7 @@ export const USER_DOCS: DocsEntry[] = [
       {
         type: "group",
         title: "Non Aset",
-        description: "Untuk kebutuhan barang/jasa dan biaya operasional yang tidak dicatat sebagai aset perusahaan.",
+        description: "Untuk kebutuhan barang/jasa dan biaya operasional yang tidak dicatat sebagai aset perusahaan serta bukan pekerjaan pembangunan/proyek fisik.",
         sections: [
           {
             type: "table",
@@ -1468,7 +1432,7 @@ export const USER_DOCS: DocsEntry[] = [
             columns: ["Kegunaan", "Contoh"],
             rows: [
               ["Barang habis pakai", "ATK, bahan kebersihan, konsumsi, bahan pendukung, atau kebutuhan rutin."],
-              ["Jasa dan sewa", "Sewa peralatan, dokumentasi, tenaga pemasangan, jasa perbaikan, atau layanan pihak ketiga."],
+              ["Jasa dan sewa operasional", "Sewa peralatan, dokumentasi, layanan operasional, atau jasa pihak ketiga yang tidak menjadi pekerjaan pembangunan."],
               ["Promosi dan kegiatan", "Banner, baliho, brosur, paid promote, sponsorship, pameran, atau customer gathering."],
               ["Biaya operasional", "Perpanjangan iklan, perawatan, biaya pemasangan, dan kebutuhan operasional lain."],
             ],
@@ -1480,6 +1444,7 @@ export const USER_DOCS: DocsEntry[] = [
             rows: [
               ["Data utama", "Nama kebutuhan, satuan, jumlah, status prioritas, keterangan, catatan, dan lampiran pendukung."],
               ["Alokasi kavling", "Tidak menggunakan pemilihan kavling, kode produksi, atau rekap adendum Unit."],
+              ["Proyek Marison", "Pilih proyek yang siap Marison, atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tidak terikat proyek; surat tersebut dikirim ke Marison tanpa project_id."],
               ["Persetujuan", "Mengikuti kegunaan dan matrix Non Aset yang tersedia untuk departemen/kantor pemohon."],
               ["Pencatatan", "Kategori menunjukkan kebutuhan bukan aset; keputusan akuntansi akhir tetap mengikuti kebijakan perusahaan."],
             ],
@@ -1524,17 +1489,46 @@ export const USER_DOCS: DocsEntry[] = [
       {
         type: "group",
         title: "Non Unit",
-        description: "Untuk dokumen yang tidak membutuhkan pemilihan kavling atau alokasi unit, tetapi kegunaannya dikonfigurasi sebagai Non Unit.",
+        description: "Untuk seluruh permohonan pekerjaan pembangunan/proyek fisik yang tidak membutuhkan pemilihan kavling atau alokasi unit.",
         sections: [
           {
             type: "table",
             title: "Kegunaan Non Unit",
             columns: ["Kegunaan", "Contoh", "Catatan"],
             rows: [
-              ["Pekerjaan proyek tanpa kavling", "Pekerjaan kawasan, infrastruktur, fasilitas umum, atau pekerjaan proyek lain yang tidak menunjuk unit tertentu.", "Pilih sesuai kegunaan yang tersedia untuk departemen."],
-              ["Dokumen umum selain unit", "Permohonan atau proses administrasi yang memakai alur khusus tanpa data kavling.", "Tidak menghasilkan rekap adendum atau kode produksi Unit."],
+              ["SPK dan pembangunan", "Pembuatan SPK, pembangunan kawasan, talud, jalan, jembatan, pondasi, saluran, fasos, atau fasum.", "Tidak memilih kavling/unit tertentu."],
+              ["Perbaikan dan infrastruktur proyek", "Perbaikan jalan, saluran, jaringan air/listrik, penerangan, perkerasan, atau rehabilitasi kawasan.", "Tidak menghasilkan rekap adendum atau kode produksi Unit."],
+              ["Material, alat, dan tenaga proyek", "Sirtu, pasir, urugan, sewa excavator, tenaga harian proyek, pemadatan, atau pembersihan lahan.", "Mengikuti matrix Permohonan Teknik Cabang."],
               ["Cabang tanpa proyek", "Pengajuan non-unit dari KC/KCP yang belum memiliki master proyek.", "Nomor surat memakai kode proyek virtual 000."],
             ],
+          },
+          {
+            type: "steps",
+            title: "Mengisi pekerjaan Non Unit",
+            items: [
+              "Pilih Proyek Tujuan yang sesuai. Pemohon Kantor Pusat melihat seluruh proyek siap, sedangkan pemohon cabang hanya melihat proyek siap pada kantornya.",
+              "Pada setiap item, pilih jenis pekerjaan lalu isi nama pekerjaan yang benar-benar diajukan.",
+              "Isi nilai pengajuan. Angka dapat diketik atau ditempel dalam format seperti 1000000 atau 1.000.000.",
+              "Tambahkan catatan perencanaan jika ada ruang lingkup, lokasi, atau ketentuan teknis yang perlu diketahui penandatangan.",
+              "Periksa total dan rincian item pada ringkasan sebelum menekan Data Sudah Benar, Daftarkan.",
+            ],
+          },
+          {
+            type: "table",
+            title: "Data pada setiap pekerjaan",
+            columns: ["Data", "Isi", "Contoh"],
+            rows: [
+              ["Jenis pekerjaan", "Dipilih dari master Non Unit proyek.", "INFRA - Pekerjaan Infrastruktur"],
+              ["Nama pekerjaan", "Nama pekerjaan aktual pada pengajuan.", "Pembangunan saluran blok A"],
+              ["Nilai pengajuan", "Nilai untuk item tersebut.", "Rp 125.000.000"],
+              ["Catatan perencanaan", "Ruang lingkup atau informasi teknis; opsional.", "Termasuk material dan tenaga pemasangan"],
+            ],
+          },
+          {
+            type: "callout",
+            title: "Proyek tidak tersedia",
+            description: "Proyek hanya dapat dipilih jika ID proyek dan kantor proyek sudah terhubung ke Marison. Admin dapat meninjau proyek yang belum siap pada Master Proyek.",
+            tone: "warning",
           },
           {
             type: "callout",
@@ -1552,7 +1546,7 @@ export const USER_DOCS: DocsEntry[] = [
           ["Aset", "Inventaris/aset perusahaan", "Mengikuti konteks kantor", "Tidak", "Dapat tersedia", "Komputer inventaris"],
           ["Non Aset", "Barang/jasa dan biaya operasional", "Mengikuti konteks kantor", "Tidak", "Tidak", "Sewa alat atau banner"],
           ["Unit", "Order bangun dan unit properti", "Wajib", "Wajib dialokasikan", "Tidak", "Pembangunan 3 unit"],
-          ["Non Unit", "Proses tanpa alokasi unit", "Sesuai kegunaan; dapat memakai 000", "Tidak", "Tidak", "Pekerjaan kawasan tanpa kavling"],
+          ["Non Unit", "Pekerjaan pembangunan/proyek fisik tanpa alokasi kavling", "Sesuai kegunaan; dapat memakai 000", "Tidak", "Tidak", "SPK atau pekerjaan kawasan"],
         ],
       },
       {
@@ -1573,7 +1567,7 @@ export const USER_DOCS: DocsEntry[] = [
           },
           {
             problem: "Bingung memilih Non Aset atau Non Unit",
-            solution: "Gunakan Non Aset untuk kebutuhan operasional/barang-jasa non aset. Gunakan Non Unit hanya ketika kegunaan proses tersebut memang disiapkan tanpa alokasi unit.",
+            solution: "Gunakan Non Aset untuk kebutuhan operasional/barang-jasa non aset. Gunakan Non Unit untuk pekerjaan pembangunan/proyek fisik yang tidak membutuhkan alokasi kavling.",
           },
         ],
       },
@@ -2053,7 +2047,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: Users,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengelola akun, role, status aktif, jabatan, departemen, kantor, dan data organisasi karyawan.",
+     summary: "Mengelola akun, organisasi karyawan, dan identitas employee payload staging.",
     whenToUse: [
       "Import atau memperbarui data karyawan aktif.",
       "Mengubah role user menjadi admin atau user biasa.",
@@ -2062,8 +2056,11 @@ export const ADMIN_DOCS: DocsEntry[] = [
     steps: [
       "Buka User Organization.",
       "Gunakan pencarian dan filter jabatan jika perlu.",
+      "Dahulukan baris berwarna amber dan baca kolom Keterangan untuk mengetahui data yang perlu diperbaiki.",
       "Edit profil user atau lakukan import data karyawan.",
       "Cek hasil import, termasuk data berhasil, gagal, dan user yang dinonaktifkan.",
+      "User hasil sinkron dengan NIK external valid otomatis berstatus Siap dikirim - data external.",
+      "Untuk user lokal/trial, cari employee external dari katalog Mapping Payload Staging. Simpan atau Reset hanya mengubah nilai outbound, bukan NIK SIGAP.",
     ],
     examples: [
       "Jika NIK sama tetapi nama atau jabatan berubah, sistem memperbarui data user yang sama.",
@@ -2072,6 +2069,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     troubleshooting: [
       "Jika import gagal karena akses ditolak, pastikan akun yang melakukan import adalah admin aktif.",
       "Jika kantor belum termapping, tambahkan mapping kantor sebelum import ulang.",
+      "Jika badge sidebar belum berkurang, pastikan seluruh alasan pada kolom Keterangan sudah diselesaikan lalu segarkan data.",
     ],
   },
   {
@@ -2224,7 +2222,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: MapPin,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur kantor pusat, cabang, kost, dan mapping kantor untuk user serta workflow.",
+     summary: "Mengatur kantor pusat, cabang, kost, mapping workflow, dan identitas branch payload staging.",
     whenToUse: [
       "Menambah kantor atau cabang baru.",
       "Membetulkan mapping kantor dari data import HRD.",
@@ -2232,8 +2230,11 @@ export const ADMIN_DOCS: DocsEntry[] = [
     ],
     steps: [
       "Buka Master Kantor Cabang.",
+      "Periksa baris berwarna amber dan baca kolom Keterangan.",
       "Tambah atau edit nama kantor, kode, dan tipe kantor.",
       "Cek user yang memakai kantor tersebut.",
+      "Pada Mapping Payload Staging, kantor hasil sinkron dengan branch ID valid otomatis berstatus Siap dikirim - data external.",
+      "Untuk kantor lokal/trial, cari kantor external hasil sinkronisasi lalu klik Simpan. Reset mengembalikan penggunaan identitas external sumber atau status Belum dapat dikirim.",
     ],
     examples: [
       "User KC Jepara akan melihat kandidat SPV/BM Jepara pada workflow yang mengikuti kantor pemohon.",
@@ -2242,6 +2243,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     troubleshooting: [
       "Jika kandidat cabang salah, cek kantor pada profil user dan tipe kantor.",
       "Jika kantor belum termapping saat import, tambahkan alias kantor lalu import ulang.",
+      "Jika badge masih tampil, selesaikan seluruh alasan pada kolom Keterangan lalu segarkan data.",
     ],
   },
   {
@@ -2252,162 +2254,31 @@ export const ADMIN_DOCS: DocsEntry[] = [
     icon: Briefcase,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur dan memantau data proyek yang dipakai pada pengajuan Unit dan dokumen proyek.",
+     summary: "Mengatur proyek SIGAP dan identitas project payload staging tanpa mengubah data internal.",
     whenToUse: [
       "Memastikan pilihan proyek tersedia saat registrasi.",
       "Memeriksa relasi proyek dengan cabang.",
       "Menyediakan data proyek untuk pengajuan Unit.",
+      "Menambahkan proyek staging secara manual untuk pengujian integrasi.",
     ],
     steps: [
       "Buka Master Proyek.",
-      "Cek daftar proyek dan cabang terkait.",
+      "Cek daftar proyek, cabang, dan kolom Keterangan.",
+      "Klik Tambah manual untuk membuat proyek lokal. Isi ID dan kode proyek Marison hanya jika nilainya sudah diketahui dari API external.",
+      "Untuk baris amber, lengkapi entitas atau mapping yang disebutkan pada Keterangan.",
       "Pastikan data proyek aktif sebelum dipakai user.",
+      "Proyek hasil sinkron dengan project ID dan relasi branch external valid otomatis berstatus Siap dikirim - data external.",
+      "Untuk proyek lokal/trial, pilih project external dari katalog branch efektif. Mapping branch yang tidak cocok berstatus Perlu koreksi relasi dan ditolak backend.",
     ],
     examples: [
       "Saat pemohon memilih proyek Marison Jepara Perluasan, proyek itu terkunci untuk proses Unit selanjutnya.",
     ],
     troubleshooting: [
       "Jika proyek tidak muncul, cek data source proyek dan status aktif proyek.",
+      "Jika proyek manual tidak muncul pada Non Unit, pastikan ID Proyek Marison dan ID Branch Marison pada kantor proyek sudah terisi, atau lengkapi mapping staging trial untuk proyek yang memakai identitas external.",
+      "Jika ID external ditolak, cari proyek lain yang sudah memakai ID tersebut. Satu ID hanya boleh terhubung ke satu proyek SIGAP.",
       "Jika unit tidak muncul, cek integrasi unit/proyek dan konfigurasi pengajuan Unit.",
-    ],
-  },
-  {
-    id: "admin-forms",
-    title: "Form dan Template",
-    menu: "Konfigurasi > Form & Template",
-    audience: "admin",
-    icon: FileCheck2,
-    version: "v1.0.0",
-    updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengelola form lama, template Excel aktif, konfigurasi field input, tabel barang, tempat tanggal, dan area tanda tangan.",
-    whenToUse: [
-      "Upload template baru.",
-      "Mengatur field input yang akan diisi user dari sistem.",
-      "Mengatur kotak tanda tangan dinamis tanpa membuat banyak file duplikat.",
-    ],
-    steps: [
-      "Buka Form & Template.",
-      "Pilih form atau buat form baru.",
-      "Atur mapping cell, tabel, catatan, tempat tanggal, dan tanda tangan.",
-      "Simpan lalu pilih Uji PDF.",
-      "Pilih jumlah penandatangan dan distribusi Membuat, Memeriksa, serta Menyetujui.",
-      "Periksa hasil PDF sebelum form dipakai pada registrasi dokumen.",
-    ],
-    examples: [
-      "Satu form PGD dapat dipakai untuk beberapa kegunaan dengan 3 sampai 8 tanda tangan tanpa menggandakan template.",
-      "Untuk catatan panjang, mapping area merge harus disesuaikan agar teks tidak keluar kotak.",
-    ],
-    troubleshooting: [
-      "Jika tulisan tidak masuk ke dokumen, cek mapping cell dan sheet.",
-      "Jika tanda tangan tidak rapi, cek konfigurasi area tanda tangan dan jumlah step.",
-    ],
-    sections: [
-      {
-        type: "table",
-        title: "Formasi kotak tanda tangan",
-        description: "Uji PDF dan dokumen yang didaftarkan memakai pembagian yang sama.",
-        columns: ["Jumlah signer", "Susunan", "Catatan"],
-        rows: [
-          ["3", "Tiga slot kanan", "Mengikuti template PGD asli: slot kiri kosong, tiga kotak berada di kanan."],
-          ["4", "4", "Semua kotak berada pada baris pertama dengan tinggi blok tetap."],
-          ["5", "3 + 2", "Dua kotak bawah memakai slot kanan pada grid tiga kolom."],
-          ["6", "3 + 3", "Baris atas dan bawah sejajar."],
-          ["7", "4 + 3", "Tiga kotak bawah memakai tiga slot paling kanan pada grid empat kolom."],
-          ["8", "4 + 4", "Dua baris penuh dan sejajar."],
-        ],
-      },
-      {
-        type: "callout",
-        title: "Uji PDF tidak membuat surat",
-        description: "Uji PDF hanya memeriksa hasil renderer, isi contoh, dan formasi tanda tangan. Nomor surat, transaksi, dan histori approval tidak dibuat.",
-        tone: "info",
-      },
-      {
-        type: "callout",
-        title: "Normalisasi akhir PGD",
-        description: "Form Permintaan Barang & Jasa dibuat langsung sebagai A4 landscape oleh renderer PDF-native. Uji PDF, surat baru, snapshot approval, dan Buat Ulang PDF memakai renderer yang sama sehingga tidak dipengaruhi merge, border, atau print area Excel.",
-        tone: "info",
-      },
-    ],
-  },
-  {
-    id: "admin-template-builder",
-    title: "Template Builder",
-    menu: "Konfigurasi > Template Builder",
-    audience: "admin",
-    icon: LayoutTemplate,
-    version: "v1.0.0",
-    updatedAt: DOCS_UPDATED_AT,
-    summary: "Merancang template dokumen native dari nol memakai elemen, binding data, tabel berulang, dan versioning.",
-    whenToUse: [
-      "Membuat bentuk dokumen baru tanpa menyusun file Excel.",
-      "Membutuhkan data berulang seperti item 1, item 2, daftar unit, lampiran, atau signer.",
-      "Menguji layout dokumen native sebelum dihubungkan ke generator PDF produksi.",
-    ],
-    steps: [
-      "Buka Template Builder dari menu Configuration.",
-      "Buat template baru atau pilih template draft.",
-      "Tambahkan elemen dari panel kiri: logo, teks, field data, tabel berulang, catatan, kotak, garis, atau tanda tangan.",
-      "Klik elemen pada canvas untuk mengatur posisi, ukuran, warna, border, font, dan binding dari panel kanan.",
-      "Untuk item berulang, pilih elemen Tabel Berulang lalu tentukan sumber data dan kolomnya.",
-      "Atur schema input agar sistem tahu field apa saja yang perlu diisi user saat registrasi.",
-      "Simpan draft. Publish hanya jika validasi tidak menampilkan error.",
-    ],
-    examples: [
-      "Untuk daftar barang, cukup buat satu Tabel Berulang dengan sumber data Daftar Barang. Sistem akan mengulang baris sesuai jumlah barang user.",
-      "Untuk tanda tangan, gunakan elemen Tanda Tangan agar nama dan jabatan signer diambil dari alur approval, bukan ditulis manual.",
-    ],
-    troubleshooting: [
-      "Jika halaman menampilkan migration belum siap, jalankan migration document_template_builder terlebih dahulu.",
-      "Jika template tidak bisa dipublish, cek apakah sudah ada tabel berulang dan area tanda tangan.",
-      "Jika data tidak muncul di preview, cek binding data pada elemen field atau kolom tabel.",
-    ],
-    sections: [
-      {
-        type: "table",
-        title: "Jenis elemen",
-        columns: ["Elemen", "Dipakai untuk", "Catatan"],
-        rows: [
-          ["Teks", "Judul, label, instruksi pendek", "Untuk teks statis yang tidak berubah per surat."],
-          ["Field Data", "Nomor surat, judul, pengaju, departemen, kantor", "Pilih binding agar nilai diisi otomatis."],
-          ["Tabel Berulang", "Barang, unit, rekomendasi, lampiran", "Satu konfigurasi tabel bisa menghasilkan banyak baris."],
-          ["Catatan", "Area teks panjang", "Gunakan tinggi cukup agar tidak memotong isi."],
-          ["Tanda Tangan", "Kotak signer", "Mengambil data signer dari alur persetujuan."],
-        ],
-      },
-      {
-        type: "callout",
-        title: "Belum mengganti produksi otomatis",
-        description: "Template Builder adalah fondasi native renderer. Sampai generator PDF membaca JSON builder, PGD dan rekomendasi tetap mengikuti jalur produksi yang sudah aktif.",
-        tone: "warning",
-      },
-    ],
-  },
-  {
-    id: "admin-workflows",
-    title: "Alur Persetujuan",
-    menu: "Konfigurasi > Alur Persetujuan",
-    audience: "admin",
-    icon: Route,
-    version: "v1.0.0",
-    updatedAt: DOCS_UPDATED_AT,
-    summary: "Mengatur atau membaca dokumentasi alur approval yang dipakai oleh form dan kegunaan.",
-    whenToUse: [
-      "Memeriksa urutan membuat, memeriksa, dan menyetujui.",
-      "Memahami matrix lama saat migrasi ke konfigurasi kegunaan baru.",
-      "Membandingkan kebutuhan bisnis dengan alur yang aktif.",
-    ],
-    steps: [
-      "Buka Alur Persetujuan.",
-      "Cari matrix atau alur yang ingin dicek.",
-      "Bandingkan dengan konfigurasi Kegunaan Form yang aktif.",
-    ],
-    examples: [
-      "Form PGD dapat menggunakan matrix 3 sampai 8 tanda tangan tanpa menggandakan file template.",
-    ],
-    troubleshooting: [
-      "Jika alur yang tampil tidak sesuai registrasi, cek Kegunaan Form karena alur aktif dikendalikan dari sana.",
-      "Jika matrix lama masih membingungkan, jadikan halaman ini sebagai referensi migrasi, bukan sumber utama aksi user.",
+      "Jika badge Master Proyek masih tampil, periksa proyek amber yang belum memiliki entitas atau mapping cabang lengkap.",
     ],
   },
   {
@@ -2421,7 +2292,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
     summary: "Mengatur penggunaan form berdasarkan departemen, kategori, alur tanda tangan, tim pemeriksa, dan kebutuhan lampiran.",
     whenToUse: [
       "Membuat kegunaan dokumen baru untuk departemen tertentu.",
-      "Mengatur alur tanda tangan 3 sampai 8 tahap.",
+      "Mengatur alur tanda tangan 2 sampai 8 tahap sesuai konfigurasi.",
       "Menambahkan tim pemeriksa sebelum penandatangan boleh aksi.",
       "Mengatur dokumen rekomendasi atau prasyarat yang harus selesai sebelum surat induk lanjut.",
     ],
@@ -2442,7 +2313,41 @@ export const ADMIN_DOCS: DocsEntry[] = [
       "Jika user tidak bisa membuat Unit, cek izin departemen pengaju pada konfigurasi Unit.",
       "Jika signer tidak bisa setujui, cek apakah tim pemeriksa belum pemeriksaan.",
       "Jika rekomendasi tidak muncul, cek form rekomendasi, departemen PBO, kandidat Staff IT/PBO, dan tahap prasyarat pada Kegunaan Form.",
+      "Jika admin mengganti tahap atau kandidat signer, buka kembali draft. Draft aktif mengikuti konfigurasi terbaru; surat yang sudah terdaftar tetap memakai snapshot lama.",
     ],
+  },
+  {
+    id: "admin-integration",
+    title: "Integrasi Marison",
+    menu: "Konfigurasi > Integration",
+    audience: "admin",
+    icon: Server,
+    version: DOCS_VERSION,
+    updatedAt: DOCS_UPDATED_AT,
+    summary: "Memeriksa koneksi dan menyinkronkan master karyawan, kantor, serta proyek dari sistem Marison ke SIGAP.",
+    whenToUse: [
+      "Mengecek kesiapan endpoint Marison pada environment yang sedang aktif.",
+      "Meninjau perubahan data sebelum sinkronisasi manual.",
+      "Menjalankan sinkronisasi master karyawan, kantor, atau proyek.",
+    ],
+    steps: [
+      "Buka Konfigurasi lalu pilih Integration.",
+      "Pastikan environment dan credential server berstatus siap.",
+      "Jalankan Cek koneksi untuk memastikan sumber data dapat diakses.",
+      "Pilih Periksa karyawan atau Periksa proyek dan baca ringkasan perubahannya.",
+      "Jalankan sinkronisasi setelah hasil pemeriksaan sesuai.",
+      "Buka master data terkait untuk melengkapi baris yang masih ditandai perlu ditinjau.",
+    ],
+    examples: [
+      "Setelah karyawan baru tersedia di Marison, admin memeriksa data lalu menjalankan Sinkron karyawan agar akun dan mapping kantornya tersedia di SIGAP.",
+      "Setelah proyek cabang baru dibuat, admin menjalankan Periksa proyek sebelum menyinkronkannya ke Master Proyek.",
+    ],
+    troubleshooting: [
+      "Jika Cek koneksi gagal, periksa status credential dan endpoint environment aktif; credential tidak dapat diubah dari browser.",
+      "Jika hasil sinkronisasi perlu ditinjau, buka User Organization, Master Kantor Cabang, atau Master Proyek dan baca kolom Keterangan.",
+      "Jika data external tidak lengkap, jangan menebak mapping entitas atau organisasi; lengkapi berdasarkan sumber resmi.",
+    ],
+    related: ["User Organization", "Master Kantor Cabang", "Master Proyek"],
   },
   {
     id: "admin-numbering",
@@ -2816,10 +2721,10 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     icon: Database,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Panduan deploy SIGAP dengan aplikasi, database, storage, dan datasource yang terpisah per environment.",
+    summary: "Panduan deploy SIGAP dengan aplikasi, database, dan datasource terpisah serta storage bersama yang dipisahkan berdasarkan namespace.",
     whenToUse: [
       "Mendeploy perubahan frontend, halaman dokumentasi, atau server aplikasi utama.",
-      "Memastikan deployment staging tidak membaca database, storage, atau datasource production dan sebaliknya.",
+      "Memastikan staging tidak membaca database atau datasource production dan hanya mengakses object storage dalam namespace staging/.",
       "Memastikan deploy memakai file env dan nama project Compose yang sesuai.",
       "Memutuskan apakah PDF worker perlu ikut diredeploy.",
     ],
@@ -2827,23 +2732,24 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
       "Pastikan perubahan sudah dibuild atau sudah siap dideploy dari workspace.",
       "Pilih compose staging untuk domain testing atau compose production untuk domain production.",
       "Jalankan command dengan Docker context `ubuntu-server`, nama project `-p`, dan file env yang sesuai.",
-      "Cek status container `agenda-flow-prod` sampai healthy.",
-      "Buka domain production atau route yang berubah untuk pemeriksaan.",
-      "Redeploy worker PDF hanya jika memang ada perubahan worker/runtime PDF.",
+      "Cek status service Compose pada environment yang dipilih sampai aplikasi healthy.",
+      "Buka domain staging atau production yang sesuai dan periksa `/health/ready` serta route yang berubah.",
+      "Redeploy PDF worker atau sync worker hanya jika source, runtime, atau konfigurasi worker tersebut berubah.",
     ],
     examples: [
       "Perubahan dokumentasi `/docs` cukup deploy app utama, tidak perlu deploy PDF worker.",
       "Domain testing memakai `docker-compose.staging.yml`; environment Marison terkunci ke staging.",
       "Domain production memakai `docker-compose.prod.yml`; environment Marison terkunci ke production.",
       "Production dibuka melalui `https://sigap.marisoncloud.com`, sedangkan staging melalui `https://sigap.marison-testing.biz.id`.",
-      "Staging memiliki project Supabase, storage, dan worker PDF sendiri tanpa data transaksi production.",
+      "Staging memiliki project Supabase dan worker PDF sendiri, tetapi memakai storage self-hosted yang sama melalui namespace staging/.",
       "Production memakai origin publik melalui Caddy; staging tetap melalui Cloudflare Tunnel.",
       "Pengembangan lokal dengan `npm run dev` menjalankan Vite dan BFF lokal bersama-sama, memakai `.env.local`, serta tetap menggunakan Supabase dan datasource Marison staging.",
-      "Perubahan `server.mjs` deploy app utama karena container app yang menjalankan server HTTP.",
-      "Perubahan `pdf-worker.mjs` perlu deploy `docker-compose.worker.yml` secara terpisah.",
+      "Perubahan `backend/src` deploy app utama karena container app yang menjalankan server Fastify.",
+      "Perubahan `pdf-worker.mjs` pada staging memakai service `agenda-pdf-worker-staging`; `docker-compose.worker.yml` hanya untuk PDF worker production.",
+      "Deploy app-only staging tidak merestart PDF worker atau sync worker yang sudah berjalan.",
     ],
     troubleshooting: [
-      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dan production memakai `.env.production`.",
+      "Jika container restart karena storage kosong, pastikan staging memakai `.env.staging` dengan `STORAGE_PATH_PREFIX=staging`, sedangkan production memakai `.env.production` tanpa prefix.",
       "Jika datasource salah environment, periksa compose yang dipakai dan nilai `MARISON_DEPLOYMENT_ENVIRONMENT` di container.",
       "Jika login lokal menampilkan 502 atau 403, restart `npm run dev` dan pastikan port 3010 tidak dipakai proses lain. Endpoint `/api` development harus menuju BFF lokal, bukan domain staging publik.",
       "Jika tautan email membuka domain yang salah, periksa `APP_PUBLIC_URL` pada container aktif; nilai ini dikunci oleh file Compose.",
@@ -2859,15 +2765,27 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         columns: ["Kebutuhan", "Command"],
         rows: [
           [
-            "Deploy aplikasi staging",
+            "Deploy app-only staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build --no-deps agenda-flow-staging",
+          ],
+          [
+            "Deploy seluruh stack staging",
             "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --build",
+          ],
+          [
+            "Deploy PDF worker staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging; docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-pdf-worker-staging",
+          ],
+          [
+            "Deploy sync worker staging",
+            "docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging build agenda-flow-staging; docker --context ubuntu-server compose -p agenda-flow-staging -f docker-compose.staging.yml --env-file .env.staging up -d --no-deps agenda-marison-sync-staging",
           ],
           [
             "Deploy aplikasi production",
             "docker --context ubuntu-server compose -p agenda-flow-production -f docker-compose.prod.yml --env-file .env.production up -d --build",
           ],
           [
-            "Deploy PDF worker",
+            "Deploy PDF worker production",
             "docker --context ubuntu-server compose -p agenda-flow-production-worker -f docker-compose.worker.yml --env-file .env.production up -d --build",
           ],
           [
@@ -2881,8 +2799,9 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
         title: "Kapan worker PDF ikut deploy",
         columns: ["Perubahan", "Deploy yang diperlukan"],
         rows: [
-          ["Frontend, dokumentasi, route aplikasi, atau `server.mjs`", "Deploy aplikasi utama saja."],
-          ["`pdf-worker.mjs`, dependency/runtime PDF, LibreOffice/font runtime, atau konfigurasi worker", "Deploy PDF worker."],
+          ["Frontend, dokumentasi, route aplikasi, atau `backend/src`", "Deploy aplikasi utama saja; worker tetap berjalan tanpa restart."],
+          ["`pdf-worker.mjs`, dependency/runtime PDF, font runtime, atau konfigurasi worker", "Redeploy PDF worker pada environment terkait."],
+          ["`server/marison-sync-worker.mjs`, image/runtime, token, URL, jadwal, atau konfigurasi sync", "Redeploy sync worker staging."],
           ["Folder `external-api/` atau `docker-compose.external.yml`", "Deploy External API saja."],
           ["Env storage production", "Redeploy service yang membaca env tersebut dengan `--env-file .env.production`."],
         ],
@@ -2894,6 +2813,105 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
 
 export const DOCS_CHANGELOG = [
+  {
+    version: "v1.25.0",
+    date: "18 Agustus 2026",
+    changes: [
+      "Mengubah registrasi dan approval dokumen menjadi database-native tanpa membuat atau memodifikasi XLSX.",
+      "Membuat PDF secara asinkron dari snapshot database saat dibutuhkan atau setelah dokumen final.",
+      "Menambahkan renderer native untuk rekomendasi, lampiran enam gambar per halaman, dan tanda tangan dinamis 2-8 signer.",
+      "Menginvalidasi cache PDF secara atomik setiap kali versi dokumen berubah.",
+      "Menahan outbound sebelum POST sampai PDF final tersedia dan mencegah marker native menjadi tautan lampiran.",
+      "Mengalihkan halaman Forms dan Workflows lama ke Kegunaan Form.",
+    ],
+  },
+  {
+    version: "v1.24.0",
+    date: "3 Agustus 2026",
+    changes: [
+      "Memindahkan Antrean Outbound Marison sepenuhnya ke halaman Konfigurasi Integration.",
+      "Membedakan recovery kegagalan sebelum POST dengan pengiriman pengganti setelah penolakan HTTP 422.",
+      "Menambahkan generasi job, idempotency key deterministik, audit append-only, dan perlindungan pengiriman pengganti ganda.",
+      "Menampilkan nomor generasi, status penyimpanan, dan pesan konflik operasional pada panel antrean admin.",
+      "Menambahkan regression test packaging agar seluruh modul resolver Marison tersedia saat container staging dimulai.",
+      "Memperbaiki error dan loading tanpa akhir pada Bangun Ulang dan Coba Lagi dengan memastikan helper eligibility serta respons preflight tersedia pada handler backend.",
+      "Menampilkan konfigurasi yang perlu diperbaiki beserta tautan langsung ke User Organization, Master Kantor Cabang, atau Master Proyek pada diagnosis recovery.",
+      "Menjelaskan data yang perlu diperiksa sebelum membuat pengiriman pengganti HTTP 422, tanpa menyebut semua penolakan vendor sebagai kesalahan konfigurasi.",
+      "Memperbaiki validasi resolution source projectId pada Unit dan Non Unit agar PostgreSQL tidak menafsirkannya sebagai array literal.",
+      "Menerapkan migration dan aplikasi MRN-17 di staging serta memverifikasi antrean lama tetap utuh tanpa business POST.",
+    ],
+  },
+  {
+    version: "v1.23.0",
+    date: "31 Juli 2026",
+    changes: [
+      "Menetapkan identitas external hasil sinkronisasi sebagai sumber payload yang siap dikirim tanpa mapping ulang.",
+      "Menambahkan mapping payload staging untuk record lokal/trial dengan validasi effective branch dan fallback dari office mapping saat branch source stale.",
+      "Menampilkan Identitas External, nilai efektif, dan status payload pada Master User, Master Kantor, dan Master Proyek.",
+      "Menerapkan MRN-16 di staging dan menyelesaikan acceptance backend rollback serta pemeriksaan UI desktop/mobile tanpa mengubah antrean bisnis.",
+    ],
+  },
+  {
+    version: "v1.22.0",
+    date: "30 Juli 2026",
+    changes: [
+      "Memperbaiki susunan datepicker Tanggal Produksi pada tabel alokasi Unit untuk desktop dan mobile.",
+      "Membuka datepicker kosong pada bulan berjalan dan menandai hari ini tanpa mengisi tanggal sebelum dipilih.",
+      "Menggunakan contoh Tipe Unit `60` pada input dan template Excel sambil tetap menerima format teks seperti `60/72`.",
+      "Menambahkan progres upload lampiran pemohon berdasarkan byte file, urutan file, fase penyimpanan, dan status hasil.",
+      "Mengunci ringkasan serta pendaftaran surat selama lampiran masih diunggah atau disimpan.",
+      "Memisahkan Integrasi Marison menjadi halaman khusus di Konfigurasi agar Kegunaan Form hanya memuat aturan dokumen dan approval.",
+      "Mengklasifikasikan seluruh pekerjaan pembangunan pada Kegunaan Form Permohonan Teknik Cabang sebagai Non Unit tanpa mengubah matrix penandatangan.",
+      "Memperbaiki validasi lampiran pemohon agar file yang sudah tersimpan pada draft ikut dihitung terhadap batas minimum dan maksimum saat pendaftaran final.",
+      "Menambahkan form Non Unit terstruktur berdasarkan proyek dengan jenis pekerjaan eksternal, nama pekerjaan, nilai pengajuan, catatan perencanaan, dan total otomatis.",
+      "Menyamakan data Non Unit pada ringkasan konfirmasi, detail pengajuan, PDF PGD, dan kontrak outbound agar tidak ada input ganda atau kolom mentah.",
+      "Menyimpan mapping proyek serta cabang Marison pada snapshot surat tanpa memakai UUID lokal sebagai ID external.",
+      "Menambahkan pilihan Proyek Tujuan Non Unit untuk pemohon Kantor Pusat dan memastikan ID cabang mengikuti kantor proyek yang dipilih.",
+      "Menyaring pilihan Non Unit ke proyek yang sudah siap terhubung agar data tidak terkirim ke proyek atau cabang external yang salah.",
+      "Menambahkan mapping manual ID dan kode proyek Marison pada Master Proyek staging dengan validasi ID positif dan pencegahan duplikasi.",
+    ],
+  },
+  {
+    version: "v1.21.0",
+    date: "27 Juli 2026",
+    changes: [
+      "Menampilkan jumlah review Master Proyek pada badge sidebar melalui kontrak attention state yang konsisten.",
+      "Menyamakan tampilan review User Organization, Master Kantor Cabang, dan Master Proyek dengan baris amber serta kolom Keterangan.",
+      "Menghapus badge kecil Lengkapi/Perlu dilengkapi dari tabel master agar alasan perbaikan terbaca langsung.",
+      "Memperbarui draft aktif agar kandidat dan tahap penandatangan mengikuti konfigurasi Kegunaan Form terbaru saat dibuka dan sebelum didaftarkan.",
+      "Mempertahankan snapshot penandatangan pada surat yang sudah terdaftar agar jejak audit tidak berubah.",
+    ],
+  },
+  {
+    version: "v1.20.0",
+    date: "23 Juli 2026",
+    changes: [
+      "Menambahkan penanda kesiapan cronjob sinkronisasi sebagai rencana otomasi berikutnya tanpa mengaktifkan scheduler diam-diam.",
+    ],
+  },
+  {
+    version: "v1.19.0",
+    date: "22 Juli 2026",
+    changes: [
+      "Menyatukan layanan storage staging dan production agar bucket dapat dikelola dari satu storage self-hosted.",
+      "Mengisolasi seluruh upload staging, avatar, lampiran pemeriksa, dan hasil PDF worker di bawah namespace staging/.",
+      "Menolak akses file lintas environment pada BFF dan worker ketika path tidak sesuai namespace deployment.",
+      "Memperbaiki pembukaan dokumen dan lampiran staging agar validasi namespace membaca object path aktual dari token file.",
+      "Memigrasikan referensi file staging lama ke namespace staging/ tanpa menghapus object sumber.",
+      "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
+      "Menetapkan kontrak payload outbound Aset dan Unit v1 agar nama field, tipe data, struktur item, lampiran, rekomendasi, dan approval konsisten dengan integrasi vendor.",
+      "Menambahkan validasi payload sebelum request dikirim serta contract test berbasis contoh JSON kanonis.",
+      "Menambahkan NIK uji tunggal untuk seluruh pemohon dan penandatangan pada payload outbound staging tanpa mengubah NIK profil atau payload production.",
+      "Menandai kontrak baru belum boleh diaktifkan sampai endpoint staging vendor selesai disesuaikan dan pengujian bersama dinyatakan lulus.",
+      "Menambahkan sinkronisasi branch dan employee API Marison khusus staging melalui halaman Integrasi Marison.",
+      "Menggunakan external employee ID dan NIK sebagai identitas sinkronisasi tanpa mengganti UUID internal SIGAP.",
+      "Membuat email login staging berbasis nama lengkap, mempertahankan role akun lama, dan memakai role user untuk akun baru.",
+      "Memblokir employee tanpa NIK atau NIK konflik serta menampilkan hasil pemeriksaan sebelum admin menjalankan sinkronisasi.",
+      "Mempertahankan jabatan, departemen, dan kantor profil lama agar data uji external yang tidak valid tidak merusak workflow approval.",
+      "Memperbarui draft registrasi agar mengikuti tahap penandatangan terbaru dari konfigurasi Kegunaan Form saat dibuka ulang.",
+      "Mempertahankan pilihan signer pada tahap yang masih sama, menambahkan tahap baru, dan membuang tahap yang sudah dihapus tanpa mengubah surat yang telah didaftarkan.",
+    ],
+  },
   {
     version: "v1.18.0",
     date: "21 Juli 2026",
@@ -3121,7 +3139,7 @@ export const DOCS_CHANGELOG = [
       "Menjaga item Nama Barang tetap rata kiri meskipun field menggunakan kontrol pilihan/select.",
       "Menyatukan aturan formasi tanda tangan dan alignment tabel antara Uji PDF dan generator dokumen transaksi.",
       "Mengubah baris kedua yang lebih pendek menjadi rata kanan dan memastikan baris tiga kotak menggunakan grid 3.",
-      "Memperbarui Form dan Template dengan formasi tanda tangan konsisten untuk 3 sampai 8 signer.",
+      "Memperbarui Form dan Template dengan formasi tanda tangan konsisten untuk 2 sampai 8 signer.",
       "Menjelaskan bahwa Uji PDF dan dokumen transaksi memakai aturan pembagian kotak yang sama.",
       "Menambahkan panduan perbedaan Buka Dokumen dan Buat Ulang PDF.",
       "Mendokumentasikan regenerasi surat lama dari template aktif tanpa mengulang atau mengubah histori approval.",

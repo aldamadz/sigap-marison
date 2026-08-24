@@ -1,5 +1,5 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BriefcaseBusiness, FileCode2, FileSpreadsheet, GitMerge, Hash, Mail, Route, Timer } from "lucide-react";
+import { Outlet, useLocation, useNavigate } from "react-router";
+import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -11,22 +11,10 @@ import {
 
 const configurationOptions = [
   {
-    value: "/admin/configuration/forms",
-    label: "Form & Template",
-    description: "Template Excel, mapping input, unit, dan lampiran.",
-    icon: FileSpreadsheet,
-  },
-  {
-    value: "/admin/configuration/template-designer",
-    label: "Template Builder",
-    description: "Rancang dokumen native dari nol dengan elemen, binding, dan tabel berulang.",
-    icon: FileCode2,
-  },
-  {
-    value: "/admin/configuration/workflows",
-    label: "Dokumentasi Matrix Lama",
-    description: "Referensi read-only untuk menduplikasi konfigurasi lama ke Kegunaan Form.",
-    icon: GitMerge,
+    value: "/admin/configuration/integration",
+    label: "Integration",
+    description: "Konfigurasi dan pengujian koneksi integrasi Marison.",
+    icon: Server,
   },
   {
     value: "/admin/configuration/form-usages",

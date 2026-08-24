@@ -77,26 +77,6 @@ export const adminService = {
     return data;
   },
 
-  async createOffice(payload: { name: string; kedudukan?: string; code?: string; parent_id?: string | null }) {
-    const { data, error } = await supabase
-      .from('master_offices')
-      .insert([payload])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  async deleteOffice(id: string) {   // uuid, bukan integer
-    const { error } = await supabase
-      .from('master_offices')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
-  },
-
   // ==========================================
   // DEPARTMENT MANAGEMENT — pakai master_departments
   // ==========================================

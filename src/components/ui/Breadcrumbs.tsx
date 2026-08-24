@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router'
 import { ChevronRight, Home } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -29,11 +29,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/users': 'Manajemen User',
   '/admin/users/hierarchy': 'Hirarki Organisasi',
   '/admin/configuration': 'Configuration',
-  '/admin/configuration/forms': 'Form & Template',
-  '/admin/configuration/template-designer': 'Template Builder',
-  '/admin/configuration/workflows': 'Alur Persetujuan',
+  '/admin/configuration/integration': 'Integrasi Marison',
   '/admin/configuration/kpi': 'SLA Departemen',
-  '/admin/marison-integration': 'Integrasi Marison',
   '/admin/settings': 'Pengaturan',
   '/audit-logs': 'Audit Log',
   '/settings': 'Pengaturan',

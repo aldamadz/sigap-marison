@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { Copy, FileText, Loader2, Plus, Save, Search, ShieldCheck, Trash2, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -19,11 +19,18 @@ type RoleName = "membuat" | "memeriksa" | "menyetujui";
 type ActionType = "approval" | "unit_allocation";
 type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
 type CandidateSort = "name_asc" | "job_asc" | "office_asc";
+type ExternalRevisionRecipient = "requester" | "signer";
+
+type ExternalRevisionPolicy = {
+  recipient_type: ExternalRevisionRecipient;
+  recipient_step_order: number | null;
+  approval_restart_step: number;
+};
 
 type Department = { id: string; name: string; code?: string | null };
 type Office = { id: string; name: string; code?: string | null; kedudukan?: string | null };
 type Profile = { id: string; full_name: string; job_title?: string | null; department_id?: string | null; office_id?: string | null };
-type MasterForm = { id: string; nama_form?: string | null; signature_layout?: { enabled?: boolean; region?: string } | null };
+type MasterForm = { id: string; nama_form?: string | null };
 type RouteStep = {
   id?: string;
   step_order: number;
@@ -68,6 +75,7 @@ type UsageRecord = {
   sort_order: number;
   form_id: string;
   route_id?: string | null;
+  external_revision_policy?: ExternalRevisionPolicy | null;
   master_forms?: MasterForm | null;
   form_usage_departments?: Array<{ department_id: string }>;
   form_usage_steps?: Array<RouteStep & {
@@ -109,6 +117,12 @@ const emptyAttachment = (): AttachmentRule => ({
   max_files: 1,
   allowed_types: "application/pdf,image/jpeg,image/png",
   max_size_mb: 10,
+});
+
+const defaultExternalRevisionPolicy = (): ExternalRevisionPolicy => ({
+  recipient_type: "requester",
+  recipient_step_order: null,
+  approval_restart_step: 1,
 });
 
 const normalizeRequestCategory = (value?: string | null): RequestCategory => {
@@ -172,6 +186,7 @@ export default function FormUsageManagementPage() {
     department_ids: [] as string[],
     steps: [emptyStep(1), emptyStep(2)] as RouteStep[],
     attachments: [] as AttachmentRule[],
+    external_revision_policy: defaultExternalRevisionPolicy(),
   });
 
   const loadData = useCallback(async () => {
@@ -180,7 +195,7 @@ export default function FormUsageManagementPage() {
       const [usageResult, formResult, departmentResult, officeResult, profileResult, routeResult] = await Promise.all([
         supabase.from("form_usages").select(`
           *,
-          master_forms(id, nama_form, signature_layout),
+          master_forms(id, nama_form),
           form_usage_departments(department_id),
           form_usage_steps(
             id, step_order, role_name, label, action_type, signer_department_id,
@@ -190,7 +205,7 @@ export default function FormUsageManagementPage() {
           ),
           form_usage_attachment_requirements(*)
         `).order("sort_order").order("created_at", { ascending: false }),
-        supabase.from("master_forms").select("id, nama_form, signature_layout").order("nama_form"),
+        supabase.from("master_forms").select("id, nama_form").order("nama_form"),
         supabase.from("master_departments").select("id, name, code").order("name"),
         supabase.from("master_offices").select("id, name, code, kedudukan").order("name"),
         supabase.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
@@ -261,6 +276,7 @@ export default function FormUsageManagementPage() {
             verifier_user_ids: [],
           })),
           attachments: [],
+          external_revision_policy: defaultExternalRevisionPolicy(),
         });
         setOpen(true);
         setSearchParams({}, { replace: true });
@@ -303,6 +319,7 @@ export default function FormUsageManagementPage() {
       department_ids: [],
       steps: [emptyStep(1), emptyStep(2)],
       attachments: [],
+      external_revision_policy: defaultExternalRevisionPolicy(),
     });
   };
 
@@ -348,6 +365,10 @@ export default function FormUsageManagementPage() {
         allowed_types: (rule.allowed_types || []).join(","),
         max_size_mb: Math.round(Number(rule.max_size_bytes || 10485760) / 1048576),
       })),
+      external_revision_policy: {
+        ...defaultExternalRevisionPolicy(),
+        ...(usage.external_revision_policy || {}),
+      },
     });
     setOpen(true);
   };
@@ -382,13 +403,28 @@ export default function FormUsageManagementPage() {
 
   const removeStep = (index: number) => {
     if (formData.steps.length <= 2) return;
-    setFormData(previous => ({
-      ...previous,
-      steps: previous.steps
+    setFormData(previous => {
+      const nextSteps = previous.steps
         .filter((_step, stepIndex) => stepIndex !== index)
-        .map((step, stepIndex) => ({ ...step, step_order: stepIndex + 1 })),
-      attachments: previous.attachments.filter(rule => rule.stage_order !== index + 1),
-    }));
+        .map((step, stepIndex) => ({ ...step, step_order: stepIndex + 1 }));
+      const maxStep = nextSteps.length;
+      const policy = previous.external_revision_policy;
+      return {
+        ...previous,
+        steps: nextSteps,
+        attachments: previous.attachments.filter(rule => rule.stage_order !== index + 1),
+        external_revision_policy: {
+          ...policy,
+          recipient_type: policy.recipient_type === "signer" && Number(policy.recipient_step_order || 0) > maxStep
+            ? "requester"
+            : policy.recipient_type,
+          recipient_step_order: policy.recipient_type === "signer" && Number(policy.recipient_step_order || 0) <= maxStep
+            ? policy.recipient_step_order
+            : null,
+          approval_restart_step: Math.min(Math.max(policy.approval_restart_step, 1), maxStep),
+        },
+      };
+    });
   };
 
   const updateStep = (index: number, patch: Partial<RouteStep>) => {
@@ -579,12 +615,12 @@ export default function FormUsageManagementPage() {
       if (step.eligible_user_ids.length === 0) missing.push("kandidat signer");
       if (missing.length > 0) return `Tahap ${step.step_order} belum memiliki ${missing.join(", ")}.`;
     }
-    if (formData.status === "active") {
-      const selectedForm = forms.find(item => item.id === formData.form_id);
-      const layout = selectedForm?.signature_layout;
-      if (!layout?.enabled || !layout.region) {
-        return "Form belum memiliki Signature Region aktif sehingga kegunaan belum dapat diaktifkan.";
-      }
+    const revisionPolicy = formData.external_revision_policy;
+    if (revisionPolicy.recipient_type === "signer" && !formData.steps.some(step => step.step_order === revisionPolicy.recipient_step_order)) {
+      return "Pilih signer yang menerima perbaikan dari sistem departemen.";
+    }
+    if (!formData.steps.some(step => step.step_order === revisionPolicy.approval_restart_step)) {
+      return "Pilih tahap awal tanda tangan ulang yang valid.";
     }
     return null;
   };
@@ -606,6 +642,7 @@ export default function FormUsageManagementPage() {
         scope_type: formData.scope_type,
         status: formData.status,
         sort_order: formData.sort_order,
+        external_revision_policy: formData.external_revision_policy,
         updated_at: new Date().toISOString(),
       };
       const stepsPayload = formData.steps.map(step => ({
@@ -811,6 +848,73 @@ export default function FormUsageManagementPage() {
                     {department.code ? `${department.code} - ` : ""}{department.name}
                   </label>
                 ))}
+              </div>
+            </section>
+
+            <section className="space-y-4 rounded-lg border border-border p-4">
+              <div>
+                <h3 className="text-sm font-bold">Keputusan Sistem Departemen</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Atur penanggung jawab perbaikan dan tahap tanda tangan yang harus diulang setelah sistem departemen meminta revisi.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Perbaikan dikembalikan kepada</Label>
+                  <Select
+                    value={formData.external_revision_policy.recipient_type === "requester"
+                      ? "requester"
+                      : `signer:${formData.external_revision_policy.recipient_step_order || 1}`}
+                    onValueChange={value => setFormData(previous => ({
+                      ...previous,
+                      external_revision_policy: value === "requester"
+                        ? { ...previous.external_revision_policy, recipient_type: "requester", recipient_step_order: null }
+                        : {
+                            ...previous.external_revision_policy,
+                            recipient_type: "signer",
+                            recipient_step_order: Number(value.split(":")[1]),
+                          },
+                    }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="requester">Pembuat pengajuan</SelectItem>
+                      {formData.steps.map(step => (
+                        <SelectItem key={step.step_order} value={`signer:${step.step_order}`}>
+                          Signer tahap {step.step_order} - {step.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Signer dapat dipilih walaupun pembuat pengajuan tidak tercantum dalam rangkaian tanda tangan.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tanda tangan ulang dimulai dari</Label>
+                  <Select
+                    value={String(formData.external_revision_policy.approval_restart_step)}
+                    onValueChange={value => setFormData(previous => ({
+                      ...previous,
+                      external_revision_policy: {
+                        ...previous.external_revision_policy,
+                        approval_restart_step: Number(value),
+                      },
+                    }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {formData.steps.map(step => (
+                        <SelectItem key={step.step_order} value={String(step.step_order)}>
+                          Tahap {step.step_order} - {step.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Signer pada tahap ini dan seluruh tahap setelahnya wajib menyetujui ulang. Tahap sebelumnya dipertahankan sebagai histori.
+                  </p>
+                </div>
               </div>
             </section>
 

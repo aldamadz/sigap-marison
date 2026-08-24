@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -39,11 +39,8 @@ const UserManagementPage = lazy(() => import("@/pages/admin/UserManagementPage")
 const OrganizationHierarchyPage = lazy(() => import("@/pages/admin/OrganizationHierarchyPage"));
 const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentManagementPage"));
 const EntityManagementPage = lazy(() => import("./pages/admin/EntityManagementPage"));
-const FormManagementPage = lazy(() => import("./pages/admin/FormManagementPage"));
-const TemplateDesignerPage = lazy(() => import("./pages/admin/TemplateDesignerPage"));
 const LetterTypeManagementPage = lazy(() => import("./pages/admin/LetterTypeManagementPage"));
 const OfficeManagementPage = lazy(() => import("./pages/admin/OfficeManagementPage"));
-const WorkflowDetailManagementPage = lazy(() => import("./pages/admin/WorkflowDetailManagementPage"));
 const FormUsageManagementPage = lazy(() => import("./pages/admin/FormUsageManagementPage"));
 const MasterProjectManagementPage = lazy(() => import("./pages/admin/ProjectManagementPage"));
 const AdminMonitoringPage = lazy(() => import("./pages/admin/AdminMonitoringPage"));
@@ -126,11 +123,11 @@ const AdminOnlyRoute = ({ children }: { children: ReactNode }) => {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('role, is_active')
+        .select('role, is_active, deleted_at')
         .eq('id', user.id)
         .maybeSingle();
 
-      if (active) setAllowed(!error && data?.role === 'admin' && data?.is_active !== false);
+      if (active) setAllowed(!error && data?.role === 'admin' && data?.is_active === true && data?.deleted_at == null);
     };
 
     checkAdmin();
@@ -209,29 +206,27 @@ const App = () => {
           <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
 
           {/* ADMIN MODULE */}
-          <Route path="/admin/users" element={<UserManagementPage />} />
-          <Route path="/admin/users/hierarchy" element={<OrganizationHierarchyPage />} />
-          <Route path="/admin/departments" element={<DepartmentManagementPage />} />
-          <Route path="/admin/entities" element={<EntityManagementPage />} />
-          <Route path="/admin/forms" element={<Navigate to="/admin/configuration/forms" replace />} />
-          <Route path="/admin/letter-types" element={<LetterTypeManagementPage />} />
-          <Route path="/admin/offices" element={<OfficeManagementPage />} />
-          <Route path="/admin/workflow-details" element={<Navigate to="/admin/configuration/workflows" replace />} />
-          <Route path="/admin/master-projects" element={<MasterProjectManagementPage />} />
-          <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
-          <Route path="/admin/kpi-departments" element={<DepartmentKPIPage />} />
-          <Route path="/admin/marison-integration" element={<MarisonIntegrationPage />} />
-          <Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
-            <Route index element={<Navigate to="/admin/configuration/forms" replace />} />
-            <Route path="forms" element={<FormManagementPage embedded />} />
-            <Route path="template-designer" element={<TemplateDesignerPage />} />
-            <Route path="workflows" element={<WorkflowDetailManagementPage embedded />} />
-            <Route path="form-usages" element={<FormUsageManagementPage />} />
-            <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
-            <Route path="numbering" element={<LetterNumberCounterPage />} />
-            <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
-            <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
-          </Route>
+          <Route path="/admin/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/users/hierarchy" element={<AdminOnlyRoute><OrganizationHierarchyPage /></AdminOnlyRoute>} />
+          <Route path="/admin/departments" element={<AdminOnlyRoute><DepartmentManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/entities" element={<AdminOnlyRoute><EntityManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/letter-types" element={<AdminOnlyRoute><LetterTypeManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/offices" element={<AdminOnlyRoute><OfficeManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/master-projects" element={<AdminOnlyRoute><MasterProjectManagementPage /></AdminOnlyRoute>} />
+          <Route path="/admin/monitoring" element={<AdminOnlyRoute><AdminMonitoringPage /></AdminOnlyRoute>} />
+          <Route path="/admin/kpi-departments" element={<AdminOnlyRoute><DepartmentKPIPage /></AdminOnlyRoute>} />
+<Route path="/admin/configuration" element={<AdminOnlyRoute><ConfigurationLayout /></AdminOnlyRoute>}>
+  <Route index element={<Navigate to="/admin/configuration/form-usages" replace />} />
+  <Route path="form-usages" element={<FormUsageManagementPage />} />
+
+  {/* Halaman baru */}
+  <Route path="integration" element={<MarisonIntegrationPage />} />
+
+  <Route path="kpi" element={<DepartmentKPIPage configurationOnly />} />
+  <Route path="numbering" element={<LetterNumberCounterPage />} />
+  <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
+  <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
+</Route>
         </Route>
 
         <Route path="*" element={<NotFound />} />

@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
@@ -21,10 +21,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/surat/riwayat': { title: 'Riwayat Keterlibatan', subtitle: 'Riwayat pengajuan untuk pihak yang terlibat' },
   '/admin/users/hierarchy': { title: 'Hirarki Organisasi', subtitle: 'Tree list dan chart node struktur karyawan' },
   '/admin/kpi-departments': { title: 'SLA Departemen', subtitle: 'Evaluasi approval berdasarkan jam kerja efektif' },
-  '/admin/marison-integration': { title: 'Integrasi Marison', subtitle: 'Periksa sumber data environment deployment' },
-  '/admin/configuration/forms': { title: 'Form & Template', subtitle: 'Konfigurasi template dan input dokumen' },
-  '/admin/configuration/template-designer': { title: 'Template Builder', subtitle: 'Rancang dokumen native dengan elemen dan data berulang' },
-  '/admin/configuration/workflows': { title: 'Alur Persetujuan', subtitle: 'Konfigurasi urutan dan posisi tanda tangan' },
+  '/admin/configuration/integration': { title: 'Integrasi Marison', subtitle: 'Periksa koneksi dan sinkronisasi master data Marison' },
   '/admin/configuration/kpi': { title: 'SLA Departemen', subtitle: 'Konfigurasi waktu kerja efektif departemen' },
 }
 

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const envFile = resolve(root, ".env.local");
 const viteEntry = resolve(root, "node_modules", "vite", "bin", "vite.js");
+const backendEntry = resolve(root, "backend", "node_modules", "tsx", "dist", "cli.mjs");
 
 if (!existsSync(envFile)) {
   console.error(".env.local tidak ditemukan. Siapkan konfigurasi development sebelum menjalankan aplikasi.");
@@ -19,7 +20,7 @@ const childEnvironment = {
 const services = [
   {
     name: "BFF",
-    process: spawn(process.execPath, ["--env-file=.env.local", "server.mjs"], {
+    process: spawn(process.execPath, ["--env-file=.env.local", backendEntry, "backend/src/index.ts"], {
       cwd: root,
       env: childEnvironment,
       stdio: "inherit",

@@ -37,8 +37,24 @@ test("normalizes database snapshots without depending on Excel", () => {
   assert.equal(data.signatures[1].signed, false);
 });
 
+test("renders canonical parent rejection status and reason on PGD item", () => {
+  const data = normalizePgdDocumentData({
+    form_input_data: { items: [{ id: "parent-1", nama_barang: "Laptop", jumlah: 1 }] },
+    data_snapshot: { recommendation: { items: [{
+      id: "parent-1",
+      parent_item_index: 1,
+      applicant_original: { name: "Laptop" },
+      status: "not_recommended",
+      rejection_reason: "Biaya perbaikan terlalu tinggi",
+      details: [],
+    }] } },
+  });
+  assert.equal(data.items[0].revisionAction, "reject");
+  assert.match(data.items[0].note, /Tidak direkomendasikan: Biaya perbaikan terlalu tinggi/);
+});
+
 test("builds and renders every supported dynamic signature formation", async () => {
-  for (let count = 3; count <= 8; count += 1) {
+  for (let count = 2; count <= 8; count += 1) {
     const data = createPgdPreviewData({ signature_count: count });
     const definition = buildPgdDocumentDefinition(data);
     assert.equal(definition.pageSize, "A4");

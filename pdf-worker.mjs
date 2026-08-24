@@ -1,14 +1,18 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { normalizeWorkbookForPdf } from "./document-workbook-normalizer.mjs";
 import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
-
-const execFileAsync = promisify(execFile);
+import {
+  parseStorageRef,
+  recommendationVersionPath,
+  resolveRecommendationSource,
+} from "./recommendation-pdf.mjs";
+import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "./recommendation-native-pdf.mjs";
+import {
+  applyStoragePathPrefix,
+  isStoragePathWithinPrefix,
+  normalizeStoragePathPrefix,
+} from "./storage-path-policy.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,6 +23,7 @@ const storagePublicBaseUrl = String(
   process.env.STORAGE_PUBLIC_BASE_URL ||
   (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
 ).replace(/\/+$/, "");
+const storagePathPrefix = normalizeStoragePathPrefix(process.env.STORAGE_PATH_PREFIX || "");
 const workerId = process.env.PDF_WORKER_ID || `pdf-worker-${randomUUID()}`;
 const concurrency = Math.max(Number(process.env.PDF_WORKER_CONCURRENCY || 3), 1);
 const pollIntervalMs = Math.max(Number(process.env.PDF_WORKER_POLL_INTERVAL_MS || 2000), 500);
@@ -27,7 +32,6 @@ const maxIdlePollIntervalMs = Math.max(
   pollIntervalMs,
 );
 const maxAttempts = Math.max(Number(process.env.PDF_WORKER_MAX_ATTEMPTS || 3), 1);
-const convertTimeoutMs = Math.max(Number(process.env.PDF_WORKER_CONVERT_TIMEOUT_MS || 120000), 10000);
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
@@ -56,23 +60,34 @@ const publicBaseUrl = (origin) => {
 const makePublicUrl = (bucket, path, origin = useExternalStorage() ? "external" : "primary") =>
   `${publicBaseUrl(origin)}/${bucket}/${path}`;
 
-const extractStorageRef = (filePath) => {
-  if (!filePath) return null;
-  const marker = "/storage/v1/object/public/dokumen_surat/";
-  const markerIndex = filePath.indexOf(marker);
-  if (markerIndex >= 0) {
-    return {
-      path: decodeURIComponent(filePath.slice(markerIndex + marker.length).split("?")[0]),
-      origin: storagePublicBaseUrl && filePath.startsWith(storagePublicBaseUrl) ? "external" : "primary",
-    };
+const storageClientForOrigin = (origin) => origin === "external" && storageSupabase ? storageSupabase : supabase;
+
+const downloadStorageFile = async (filePath, label, expectedBucket) => {
+  const sourceRef = parseStorageRef(filePath, {
+    defaultBucket: expectedBucket,
+    defaultOrigin: useExternalStorage() ? "external" : "primary",
+    externalBases: [storageSupabaseUrl, storagePublicBaseUrl],
+  });
+  if (!sourceRef?.bucket || !sourceRef.path) throw new Error(`${label} belum tersedia.`);
+  if (sourceRef.bucket !== expectedBucket) throw new Error(`${label} wajib berada di bucket ${expectedBucket}.`);
+  if (!isStoragePathWithinPrefix(sourceRef.path, storagePathPrefix)) {
+    throw new Error(`${label} berada di luar namespace environment worker.`);
   }
-  return {
-    path: decodeURIComponent(filePath.replace(/^dokumen_surat\//, "").split("?")[0]),
-    origin: "primary",
-  };
+  const { data, error } = await storageClientForOrigin(sourceRef.origin).storage
+    .from(sourceRef.bucket)
+    .download(sourceRef.path);
+  if (error || !data) throw new Error(error?.message || `Gagal mengambil ${label.toLowerCase()}.`);
+  return Buffer.from(await data.arrayBuffer());
 };
 
-const storageClientForOrigin = (origin) => origin === "external" && storageSupabase ? storageSupabase : supabase;
+const recommendationFromSnapshot = (job) => job.render_payload ? ({
+  finalized: true,
+  items: resolveRecommendationSource(
+    job.render_payload.child_input,
+    job.render_payload.parent_input,
+    job.render_payload.child_snapshot_input,
+  ),
+}) : null;
 
 const claimJobs = async () => {
   const { data, error } = await supabase.rpc("claim_document_pdf_jobs", {
@@ -85,18 +100,14 @@ const claimJobs = async () => {
 };
 
 const markFailed = async (job, error) => {
-  const isRetryable = Number(job.attempt_count || 0) < maxAttempts;
-  await supabase
-    .from("document_pdf_jobs")
-    .update({
-      status: isRetryable ? "queued" : "failed",
-      error_message: error.message || "Gagal membuat PDF.",
-      locked_by: null,
-      locked_at: null,
-      updated_at: new Date().toISOString(),
-      finished_at: isRetryable ? null : new Date().toISOString(),
-    })
-    .eq("id", job.id);
+  const { data, error: transitionError } = await supabase.rpc("fail_document_pdf_job", {
+    p_job_id: job.id,
+    p_lease_token: job.lease_token,
+    p_error_message: error.message || "Gagal membuat PDF.",
+    p_max_attempts: maxAttempts,
+  });
+  if (transitionError) throw transitionError;
+  if (!data?.id) throw new Error(`Failure transition returned no job for ${job.id}.`);
 };
 
 const renderDirectPgdJob = async (job) => {
@@ -141,71 +152,90 @@ const renderDirectPgdJob = async (job) => {
   });
 };
 
+const renderDirectRecommendationJob = async (job, recommendation) => {
+  const { data: surat, error: suratError } = await supabase
+    .from("surat_registrasi")
+    .select("id, no_surat, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
+    .eq("id", job.surat_id)
+    .maybeSingle();
+  if (suratError) throw suratError;
+  if (!surat) throw new Error("Dokumen rekomendasi tidak ditemukan.");
+
+  const { data: signatures, error: signatureError } = await supabase
+    .from("surat_signatures")
+    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
+    .eq("surat_id", job.surat_id)
+    .order("step_order", { ascending: true });
+  if (signatureError) throw signatureError;
+
+  const targetSignature = job.signature_id
+    ? (signatures || []).find((signature) => signature.id === job.signature_id)
+    : null;
+  const data = normalizeRecommendationDocumentData(surat, {
+    items: recommendation.items,
+    signatures: signatures || [],
+    targetStep: targetSignature?.step_order || 0,
+  });
+  return renderRecommendationPdf(data, {
+    logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
+    downloadImage: (attachment) => downloadStorageFile(
+      attachment.url,
+      `Gambar ${attachment.name || attachment.id}`,
+      "lampiran_surat",
+    ),
+  });
+};
+
 const processJob = async (job) => {
-  const workDir = await mkdtemp(join(tmpdir(), "agenda-doc-"));
-  try {
-    let pdfBuffer = await renderDirectPgdJob(job);
-    if (!pdfBuffer) {
-      const sourceRef = extractStorageRef(job.source_file_path);
-      if (!sourceRef?.path) throw new Error("File Excel dokumen belum tersedia.");
-      const { data: fileData, error: downloadError } = await storageClientForOrigin(sourceRef.origin).storage
-        .from("dokumen_surat")
-        .download(sourceRef.path);
-      if (downloadError || !fileData) throw new Error(downloadError?.message || "Gagal mengambil file Excel.");
-
-      const sourcePath = join(workDir, "source.xlsx");
-      await writeFile(sourcePath, Buffer.from(await fileData.arrayBuffer()));
-      await normalizeWorkbookForPdf(sourcePath);
-      await execFileAsync("soffice", [
-        "--headless",
-        "--nologo",
-        "--nofirststartwizard",
-        "--convert-to",
-        "pdf",
-        "--outdir",
-        workDir,
-        sourcePath,
-      ], { timeout: convertTimeoutMs });
-      pdfBuffer = await readFile(join(workDir, "source.pdf"));
-    }
-    const pdfPath = `pdf/${job.surat_id}_${Date.now()}.pdf`;
-    const uploadOrigin = useExternalStorage() ? "external" : "primary";
-    const { error: uploadError } = await uploadStorageClient().storage
-      .from("dokumen_surat")
-      .upload(pdfPath, pdfBuffer, { contentType: "application/pdf", upsert: true });
-    if (uploadError) throw uploadError;
-
-    const publicUrl = makePublicUrl("dokumen_surat", pdfPath, uploadOrigin);
-
-    await supabase
-      .from("surat_registrasi")
-      .update({ pdf_path: publicUrl })
-      .eq("id", job.surat_id);
-
-    if (job.signature_id) {
-      await supabase
-        .from("surat_signatures")
-        .update({ pdf_path_snap: publicUrl, file_path_snap: null })
-        .eq("id", job.signature_id);
-    }
-
-    await supabase
-      .from("document_pdf_jobs")
-      .update({
-        status: "done",
-        pdf_url: publicUrl,
-        error_message: null,
-        locked_by: null,
-        locked_at: null,
-        updated_at: new Date().toISOString(),
-        finished_at: new Date().toISOString(),
-      })
-      .eq("id", job.id);
-
-    console.log(`[${workerId}] done ${job.id} -> ${publicUrl}`);
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
+  const recommendation = recommendationFromSnapshot(job);
+  const pdfBuffer = recommendation
+    ? await renderDirectRecommendationJob(job, recommendation)
+    : await renderDirectPgdJob(job);
+  if (!pdfBuffer) {
+    throw new Error("Renderer PDF-native tidak tersedia untuk dokumen ini.");
   }
+  const isCanonicalRecommendation = Boolean(recommendation && !job.signature_id);
+  const defaultPdfPath = applyStoragePathPrefix(`pdf/${job.surat_id}_${Date.now()}.pdf`, storagePathPrefix);
+  const unprefixedPdfPath = isCanonicalRecommendation
+    ? recommendationVersionPath(job.surat_id, `${job.id}-${randomUUID()}`)
+    : null;
+  const pdfPath = unprefixedPdfPath
+    ? applyStoragePathPrefix(unprefixedPdfPath, storagePathPrefix)
+    : defaultPdfPath;
+  const uploadOrigin = useExternalStorage() ? "external" : "primary";
+  const { error: uploadError } = await uploadStorageClient().storage
+    .from("dokumen_surat")
+    .upload(pdfPath, pdfBuffer, { contentType: "application/pdf", upsert: false });
+  if (uploadError) throw uploadError;
+
+  const publicUrl = makePublicUrl("dokumen_surat", pdfPath, uploadOrigin);
+
+  const publishedUrl = publicUrl;
+  if (isCanonicalRecommendation) {
+    const { data: publishedJob, error: publishError } = await supabase.rpc("publish_document_pdf_job", {
+      p_job_id: job.id,
+      p_source_file_path: job.source_file_path,
+      p_content_fingerprint: job.recommendation_content_fingerprint,
+      p_pdf_url: publishedUrl,
+      p_lease_token: job.lease_token,
+      p_pdf_bucket: "dokumen_surat",
+      p_pdf_object_path: pdfPath,
+      p_pdf_storage_origin: uploadOrigin,
+    });
+    if (publishError) throw publishError;
+    if (publishedJob?.status !== "done") throw new Error(`Publication transition failed for ${job.id}.`);
+  } else {
+    const { data: completedJob, error: completionError } = await supabase.rpc("complete_document_pdf_job", {
+      p_job_id: job.id,
+      p_pdf_url: publishedUrl,
+      p_lease_token: job.lease_token,
+    });
+    if (completionError || !completedJob) throw completionError || new Error(`PDF completion transition failed for ${job.id}.`);
+    if (completedJob.status !== "done") throw new Error(`PDF completion transition failed for ${job.id}.`);
+  }
+
+  // Uploaded objects are retained when publication outcome is ambiguous; lifecycle cleanup must reconcile unreferenced job versions later.
+  console.log(`[${workerId}] done ${job.id}`);
 };
 
 console.log(`[${workerId}] PDF worker started. concurrency=${concurrency}`);
@@ -227,7 +257,7 @@ while (true) {
         console.log(`[${workerId}] processing ${job.id}`);
         await processJob(job);
       } catch (error) {
-        console.error(`[${workerId}] failed ${job.id}:`, error);
+        console.error(`[${workerId}] failed ${job.id}`);
         await markFailed(job, error);
       }
     }));
