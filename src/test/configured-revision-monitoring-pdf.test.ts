@@ -6,6 +6,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 const usagePage = read("src/pages/admin/FormUsageManagementPage.tsx");
 const monitoringPage = read("src/pages/surat/MonitoringPage.tsx");
 const monitoringService = read("src/services/surat-monitoring.service.ts");
+const supabaseFacade = read("src/lib/supabase.ts");
 const suratForm = read("src/components/surat/SuratForm.tsx");
 const suratService = read("src/services/surat.service.ts");
 const inboxPage = read("src/pages/surat/InboxPage.tsx");
@@ -38,6 +39,8 @@ describe("monitoring detail readiness", () => {
     expect(monitoringPage).toContain("selectedDetail?.id === selectedSuratId");
     expect(monitoringPage).toContain("queryFn: ({ signal }) => suratMonitoringService.getDetail(selectedSuratId, signal)");
     expect(monitoringService).toContain("query = query.abortSignal(signal)");
+    expect(supabaseFacade).toContain("abortSignal(signal: AbortSignal)");
+    expect(supabaseFacade).toContain("signal: this.requestSignal");
   });
 
   it("shows deterministic loading, retry, and error states without a page refresh", () => {
