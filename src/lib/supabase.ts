@@ -102,6 +102,7 @@ if (typeof BroadcastChannel !== 'undefined') {
 
 class BffQueryBuilder implements PromiseLike<BffResult> {
   private readonly operations: QueryOperation[] = [];
+  private requestSignal?: AbortSignal;
 
   constructor(
     private readonly kind: 'table' | 'rpc',
@@ -144,11 +145,16 @@ class BffQueryBuilder implements PromiseLike<BffResult> {
   maybeSingle(...args: any[]) { return this.add('maybeSingle', args); }
   csv(...args: any[]) { return this.add('csv', args); }
   throwOnError(...args: any[]) { return this.add('throwOnError', args); }
+  abortSignal(signal: AbortSignal) {
+    this.requestSignal = signal;
+    return this;
+  }
 
   private async execute(): Promise<BffResult> {
     try {
       return await requestJson('/api/bff/query', {
         method: 'POST',
+        signal: this.requestSignal,
         body: JSON.stringify({
           kind: this.kind,
           name: this.name,
