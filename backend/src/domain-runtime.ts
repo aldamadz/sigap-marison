@@ -2833,8 +2833,8 @@ const getAllMarisonCollection = async (environment, pathname) => {
 };
 
 const getMarisonEmployeeSyncSource = async () => {
-  const branches = await getAllMarisonCollection("staging", "/branches");
-  const employees = await getAllMarisonCollection("staging", "/employees");
+  const branches = await getAllMarisonCollection(marisonDeploymentEnvironment, "/branches");
+  const employees = await getAllMarisonCollection(marisonDeploymentEnvironment, "/employees");
   return { employees, branches };
 };
 
@@ -2950,13 +2950,8 @@ const syncMarisonProjects = async (req) => {
 };
 
 const assertMarisonEmployeeSyncAvailable = () => {
-  if (marisonDeploymentEnvironment !== "staging") {
-    const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
-    err.status = 403;
-    throw err;
-  }
   if (!supabase || !serviceRoleKey) {
-    const err = new Error("Service role staging belum dikonfigurasi.");
+    const err = new Error("Service role environment ini belum dikonfigurasi.");
     err.status = 500;
     throw err;
   }
@@ -2966,7 +2961,11 @@ const previewMarisonEmployees = async (req) => {
   await requireAdminUser(getBearerToken(req));
   assertMarisonEmployeeSyncAvailable();
   const source = await getMarisonEmployeeSyncSource();
-  return previewMarisonEmployeeSync({ supabase, ...source });
+  return previewMarisonEmployeeSync({
+    supabase,
+    ...source,
+    environment: marisonDeploymentEnvironment,
+  });
 };
 
 const syncMarisonEmployees = async (req) => {
@@ -2997,6 +2996,7 @@ const syncMarisonEmployees = async (req) => {
         supabase,
         ...source,
         defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+        environment: marisonDeploymentEnvironment,
       }),
     });
   } finally {
@@ -3035,6 +3035,7 @@ const syncMarisonDirectoryFromCron = async (req) => {
         supabase,
         ...source,
         defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+        environment: marisonDeploymentEnvironment,
       }),
     });
     const projectSource = await getMarisonProjectSyncSource();

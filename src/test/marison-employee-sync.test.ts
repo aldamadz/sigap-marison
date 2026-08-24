@@ -178,7 +178,7 @@ describe("Marison employee sync", () => {
     expect(migration).not.toContain("create policy master_offices_admin_delete");
   });
 
-  it("keeps execution staging-only, admin-only, and server-side", () => {
+  it("keeps execution environment-aware, admin-only, and server-side", () => {
     const server = read("backend/src/domain-runtime.ts");
     const client = read("src/services/marison-integration.service.ts");
     const dockerfile = read("dockerfile");
@@ -186,6 +186,8 @@ describe("Marison employee sync", () => {
     expect(server).toContain("assertMarisonEmployeeSyncAvailable");
     expect(server).toContain("await requireAdminUser(getBearerToken(req))");
     expect(server).toContain("STAGING_DEFAULT_USER_PASSWORD");
+    expect(server).toContain("environment: marisonDeploymentEnvironment");
+    expect(server).not.toContain("Sinkronisasi karyawan external hanya tersedia di staging.");
     expect(server).toContain("marisonEmployeeSyncInFlight");
     expect(client).not.toContain("STAGING_DEFAULT_USER_PASSWORD");
     expect(client).not.toContain("marison123");

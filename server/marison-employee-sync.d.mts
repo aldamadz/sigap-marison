@@ -54,12 +54,14 @@ export function previewMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];
   branches: Array<Record<string, unknown>>;
+  environment?: "staging" | "production";
 }): Promise<Record<string, unknown>>;
 export function executeMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];
   branches: Array<Record<string, unknown>>;
-  defaultPassword: string;
+  defaultPassword?: string;
+  environment?: "staging" | "production";
 }): Promise<Record<string, unknown>>;
 export function replaceMarisonSyncIssues(options: {
   supabase: unknown;

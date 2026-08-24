@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 const asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
 export const normalizeMarisonName = (value) => String(value ?? "")
@@ -599,7 +601,7 @@ const resolveExistingProfile = (employee, indexes) => {
   return { profile: null, match: "new" };
 };
 
-const buildEmployeePlan = (employees, state, officeMappings) => {
+const buildEmployeePlan = (employees, state, officeMappings, environment = "staging") => {
   const indexes = buildProfileIndexes(state.profiles);
   const nameCounts = new Map();
   for (const employee of employees) {
@@ -632,8 +634,13 @@ const buildEmployeePlan = (employees, state, officeMappings) => {
     }
     const duplicateName = (nameCounts.get(normalizeMarisonName(employee.name)) || 0) > 1;
     const externalEmail = isValidEmail(employee.email) ? normalizeEmail(employee.email) : "";
+    const existingEmail = normalizeEmail(resolved.profile?.email);
+    if (environment === "production" && !externalEmail && !existingEmail) {
+      plan.push({ employee, action: "blocked", reason: "Email external wajib tersedia untuk sinkronisasi production" });
+      continue;
+    }
     let email = externalEmail
-      || normalizeEmail(resolved.profile?.email)
+      || existingEmail
       || buildMarisonStagingEmail(employee, duplicateName);
     let currentAuth = resolved.profile ? authById.get(resolved.profile.id) : null;
     const occupied = authByEmail.get(email);
@@ -678,7 +685,7 @@ const publicIssue = (item) => ({
   reason: item?.reason || "Data tidak valid",
 });
 
-export const previewMarisonEmployeeSync = async ({ supabase, employees, branches }) => {
+export const previewMarisonEmployeeSync = async ({ supabase, employees, branches, environment = "staging" }) => {
   const state = await loadSyncState(supabase);
   const deduplicated = deduplicateMarisonEmployees(employees, {
     knownNames: state.profiles.map((profile) => profile.full_name),
@@ -689,10 +696,10 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
     const resolved = findOfficeForBranch(branch, state.offices);
     if (resolved.office) prospectiveMappings.set(Number(branch.id), resolved.office);
   }
-  const plan = buildEmployeePlan(deduplicated.employees, state, prospectiveMappings);
+  const plan = buildEmployeePlan(deduplicated.employees, state, prospectiveMappings, environment);
   const blockedPlan = plan.filter((item) => item.action === "blocked");
   return {
-    environment: "staging",
+    environment,
     generatedAt: new Date().toISOString(),
     source: {
       employees: Array.isArray(employees) ? employees.length : 0,
@@ -722,8 +729,8 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
   };
 };
 
-export const executeMarisonEmployeeSync = async ({ supabase, employees, branches, defaultPassword }) => {
-  if (typeof defaultPassword !== "string" || defaultPassword.length < 8) {
+export const executeMarisonEmployeeSync = async ({ supabase, employees, branches, defaultPassword, environment = "staging" }) => {
+  if (environment === "staging" && (typeof defaultPassword !== "string" || defaultPassword.length < 8)) {
     throw new Error("STAGING_DEFAULT_USER_PASSWORD belum dikonfigurasi dengan aman.");
   }
   const branchResult = await syncBranches(supabase, branches, false);
@@ -731,7 +738,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
   const deduplicated = deduplicateMarisonEmployees(employees, {
     knownNames: state.profiles.map((profile) => profile.full_name),
   });
-  const plan = buildEmployeePlan(deduplicated.employees, state, branchResult.mappings);
+  const plan = buildEmployeePlan(deduplicated.employees, state, branchResult.mappings, environment);
   const result = {
     created: 0,
     updated: 0,
@@ -768,7 +775,9 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
       } else {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: item.email,
-          password: defaultPassword,
+          password: environment === "production"
+            ? randomBytes(32).toString("base64url")
+            : defaultPassword,
           email_confirm: true,
           user_metadata: { full_name: String(employee.name || "").trim() },
         });
@@ -812,7 +821,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
     }
   }
   return {
-    environment: "staging",
+    environment,
     completedAt: new Date().toISOString(),
     ...result,
   };
