@@ -3991,7 +3991,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       submission_number: surat.no_surat,
       project_id: projectId,
       branch_id: branchId,
-      description: firstString(input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan, surat?.judul_surat),
+      description: firstString(surat?.judul_surat, input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan),
      submitted_by: overrides.nik,
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),

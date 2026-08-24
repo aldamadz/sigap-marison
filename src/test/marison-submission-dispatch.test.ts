@@ -95,4 +95,16 @@ describe("Marison outbound submission dispatch", () => {
     expect(migration).toContain("v_kind := 'fund'; v_endpoint := '/fund-submissions';");
     expect(migration).not.toContain("update public.surat_registrasi");
   });
+
+  it("uses the readable Non Unit request title as the outbound description", () => {
+    const server = read("backend/src/domain-runtime.ts");
+    const start = server.indexOf("const buildMarisonNonUnitPayload");
+    const end = server.indexOf("const buildMarisonAssetPayload", start);
+    const nonUnitBuilder = server.slice(start, end);
+
+    expect(nonUnitBuilder).toContain(
+      "description: firstString(surat?.judul_surat, input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan)",
+    );
+    expect(nonUnitBuilder).toContain("notes: firstString(input.catatan, surat.judul_surat)");
+  });
 });
