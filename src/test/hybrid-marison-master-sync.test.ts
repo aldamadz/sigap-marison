@@ -39,6 +39,8 @@ describe("Hybrid Marison master sync", () => {
       server.indexOf("const getMarisonEmployeeSyncSource"),
       server.indexOf("const getMarisonBranchSyncSource"),
     );
+    expect(sourceLoader).toContain("marisonDeploymentEnvironment");
+    expect(sourceLoader).not.toContain('getAllMarisonCollection("staging"');
     expect(sourceLoader.indexOf('"/branches"')).toBeLessThan(sourceLoader.indexOf('"/employees"'));
 
     const existingAuthUpdate = sync.slice(
@@ -46,6 +48,18 @@ describe("Hybrid Marison master sync", () => {
       sync.indexOf("} else {", sync.indexOf("const authUpdates = {")),
     );
     expect(existingAuthUpdate).not.toContain("password:");
+  });
+
+  it("keeps employee source and audit environment aligned with the deployed runtime", () => {
+    const server = read("backend/src/domain-runtime.ts");
+    const sync = read("server/marison-employee-sync.mjs");
+
+    expect(server).toContain("environment: marisonDeploymentEnvironment");
+    expect(server).not.toContain("Sinkronisasi karyawan external hanya tersedia di staging.");
+    expect(sync).toContain('environment = "staging"');
+    expect(sync).toContain("Email external wajib tersedia untuk sinkronisasi production");
+    expect(sync).toContain('environment === "production"');
+    expect(sync).not.toContain('environment: "staging",');
   });
 
   it("adds tracked project sync without replacing local project UUIDs", () => {
