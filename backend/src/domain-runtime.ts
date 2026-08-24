@@ -24,6 +24,7 @@ import {
   sendJson,
   withSecurityHeaders,
 } from "./lib/http.js";
+import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
 import {
   mapSuratRejectionRpcError,
   normalizeSuratRejectionRequest,
@@ -3774,7 +3775,8 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true }
 };
 
 const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
-  if (!surat?.pdf_path && String(surat?.file_path || "").startsWith("native://document/")) {
+  const finalPdfPath = resolveFinalMarisonPdfPath(surat);
+  if (!finalPdfPath && String(surat?.file_path || "").startsWith("native://document/")) {
     const { data: existingJob, error: existingJobError } = await supabase
       .from("document_pdf_jobs")
       .select("id")
@@ -3799,8 +3801,8 @@ const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
     throw err;
   }
   const rows = [
-    ...(surat?.pdf_path
-      ? [{ file_url: surat.pdf_path, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
+    ...(finalPdfPath
+      ? [{ file_url: finalPdfPath, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
       : []),
     ...asArrayValue(surat?.surat_attachments),
   ];
@@ -4267,7 +4269,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
       id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
       office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
       surat_signatures (
-        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot, file_path_snap, pdf_path_snap,
         profiles:user_id ( id, full_name, nik, job_title )
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
