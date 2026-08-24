@@ -64,10 +64,12 @@ export const suratMonitoringService = {
     return { rows: result.rows || [], count: Number(result.count || 0), page, pageSize };
   },
 
-  async getDetail(id: string) {
-    const { data, error } = await supabase.rpc("get_surat_monitoring_detail", {
+  async getDetail(id: string, signal?: AbortSignal) {
+    let query = supabase.rpc("get_surat_monitoring_detail", {
       p_surat_id: id,
     });
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query;
     if (error) throw error;
     if (!data) throw new Error("Dokumen tidak ditemukan atau tidak dapat diakses.");
     return data;

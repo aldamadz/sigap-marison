@@ -1311,6 +1311,11 @@ export const suratService = {
           form_id: configContext.form?.id || null,
           request_category: configContext.usage?.request_category || null,
           recommendation_config: configContext.usage?.recommendation_config || {},
+          external_revision_policy: configContext.usage?.external_revision_policy || {
+            recipient_type: "requester",
+            recipient_step_order: null,
+            approval_restart_step: 1,
+          },
           requester_department_id: payload.policy_validation?.requester_department_id || null,
           steps: snapshotSigners,
           attachment_requirements: configContext.usage?.form_usage_attachment_requirements || [],

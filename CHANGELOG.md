@@ -145,3 +145,8 @@
 ### Tests
 - 31 diagnosis unit tests (masking, specificity, safe context, comparison, sensitive values).
 - 16 UI integration tests (NIK diagnosis, unit type diagnosis, no NIK in browser, Marison fix confirmation, invariant violation, blocked preflight no submit, checking state no submit, stale response protection, generic diagnosis no misleading links, replacement creation, conflict handling).
+## [2026-08-24] SUR-16 / DOC-05: Configured revision routing and proactive PDF readiness
+
+- Konfigurasi Kegunaan menentukan penerima revisi sistem departemen serta tahap awal tanda tangan ulang.
+- Detail Status Pengajuan memakai request yang dapat dibatalkan, menolak respons stale, dan menyediakan retry lokal.
+- PDF native diantrikan saat registrasi dan transisi tanda tangan tanpa menunggu pengguna membuka dokumen.

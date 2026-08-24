@@ -152,11 +152,11 @@ const MonitoringPage = () => {
   const isAdminUser = ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
+  const [selectedSuratId, setSelectedSuratId] = useState("");
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(search);
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
-  const selectedSuratId = selectedSurat?.id || "";
-  const canReadSelectedDocument = selectedSurat?.can_read_document !== false;
+  const canReadSelectedDocument = Boolean(selectedSurat && selectedSurat.can_read_document !== false);
 
   const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
     queryKey: ['surat-linked-documents', selectedSuratId],
@@ -207,16 +207,23 @@ const MonitoringPage = () => {
     staleTime: 30_000,
   });
 
-  const { data: selectedDetail } = useQuery({
+  const {
+    data: selectedDetail,
+    isLoading: detailLoading,
+    isError: detailFailed,
+    error: detailError,
+    refetch: refetchDetail,
+  } = useQuery({
     queryKey: ['surat-detail', selectedSuratId],
-    queryFn: () => suratMonitoringService.getDetail(selectedSuratId),
+    queryFn: ({ signal }) => suratMonitoringService.getDetail(selectedSuratId, signal),
     enabled: Boolean(selectedSuratId && isDetailOpen),
     staleTime: 30_000,
+    retry: 2,
   });
 
   useEffect(() => {
-    if (selectedDetail) setSelectedSurat(selectedDetail);
-  }, [selectedDetail]);
+    if (selectedDetail?.id === selectedSuratId) setSelectedSurat(selectedDetail);
+  }, [selectedDetail, selectedSuratId]);
 
   useEffect(() => {
     setPage(1);
@@ -408,7 +415,8 @@ const MonitoringPage = () => {
                   <div className={cn("grid gap-2", surat.can_read_document === false ? "grid-cols-1" : "grid-cols-2")}>
                     <button
                       onClick={() => {
-                        setSelectedSurat(surat);
+                        setSelectedSuratId(surat.id);
+                        setSelectedSurat(null);
                         setIsDetailOpen(true);
                       }}
                       className="h-11 flex items-center justify-center gap-2 rounded-xl bg-muted hover:bg-muted/80 transition-all border border-border text-sm font-medium"
@@ -461,7 +469,16 @@ const MonitoringPage = () => {
       )}
 
       {/* DETAIL MODAL */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+      <Dialog
+        open={isDetailOpen}
+        onOpenChange={(open) => {
+          setIsDetailOpen(open);
+          if (!open) {
+            setSelectedSuratId("");
+            setSelectedSurat(null);
+          }
+        }}
+      >
         <DialogContent className="flex max-h-[94dvh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden border-border bg-card p-0 sm:w-[calc(100vw-2rem)]">
           <DialogHeader className="shrink-0 border-b border-border bg-muted/20 px-5 py-4 pr-12 sm:px-7">
             <div className="flex items-center gap-4">
@@ -477,7 +494,29 @@ const MonitoringPage = () => {
 
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/10 p-3 sm:p-6">
 
-            {selectedSurat && <RegistrationSummaryDocument data={buildMonitoringSummary(selectedSurat)} />}
+            {detailLoading && (
+              <div className="flex min-h-40 items-center justify-center rounded-lg border border-border bg-background/70" role="status" aria-live="polite">
+                <div className="text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+                  <p className="mt-3 text-sm font-medium text-foreground">Memuat detail pengajuan...</p>
+                </div>
+              </div>
+            )}
+
+            {detailFailed && (
+              <div className="flex min-h-40 flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-center">
+                <AlertCircle className="h-6 w-6 text-destructive" />
+                <p className="mt-3 text-sm font-semibold">Detail pengajuan gagal dimuat</p>
+                <p className="mt-1 max-w-lg text-xs text-muted-foreground">
+                  {detailError instanceof Error ? detailError.message : "Koneksi detail terputus. Coba muat kembali tanpa me-refresh halaman."}
+                </p>
+                <Button className="mt-4" variant="outline" onClick={() => void refetchDetail()}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Coba Lagi
+                </Button>
+              </div>
+            )}
+
+            {!detailLoading && !detailFailed && selectedSurat && <RegistrationSummaryDocument data={buildMonitoringSummary(selectedSurat)} />}
 
             {selectedSurat?.can_read_document === false && (
               <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
