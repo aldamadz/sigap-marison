@@ -1396,7 +1396,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const loadUsageDetails = useCallback(async () => {
     const { data, error } = await supabase.from("form_usages")
       .select(`
-        id, name, form_id, request_category, scope_type, recommendation_config,
+        id, name, form_id, request_category, scope_type, recommendation_config, external_revision_policy,
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(

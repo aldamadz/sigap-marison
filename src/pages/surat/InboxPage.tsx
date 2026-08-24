@@ -2176,7 +2176,9 @@ const handleApprove = async (item: any) => {
     try {
       await suratService.resolveProcessRevision(revision.event_id, note);
       toast.success("Perbaikan selesai", {
-        description: "Pengajuan dikirim ke pemohon untuk persetujuan kelanjutan proses.",
+        description: revision.target_type === "signer" && revision.changes?.external_submission_revision
+          ? "Perbaikan tersimpan dan approval revisi dimulai sesuai konfigurasi kegunaan."
+          : "Pengajuan dikirim ke pemohon untuk persetujuan kelanjutan proses.",
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),

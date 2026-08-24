@@ -58,6 +58,11 @@ export type UsageDetailRecord = {
   is_cabang?: boolean;
   request_categories?: RequestCategory[];
   recommendation_config?: RecommendationConfig;
+  external_revision_policy?: {
+    recipient_type: "requester" | "signer";
+    recipient_step_order: number | null;
+    approval_restart_step: number;
+  };
   workflow_allowed_departments?: Array<{ department_id: string }>;
   form_usage_steps?: Array<{
     id: string;
