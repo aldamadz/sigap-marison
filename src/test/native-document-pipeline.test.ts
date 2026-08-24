@@ -52,7 +52,7 @@ describe("native document pipeline", () => {
     );
     expect(attachmentBody).toContain('startsWith("native://document/")');
     expect(attachmentBody).toContain("PDF final sedang disiapkan");
-    expect(attachmentBody).toContain("file_url: surat.pdf_path");
+    expect(attachmentBody).toContain("file_url: finalPdfPath");
     expect(attachmentBody).not.toContain("surat.pdf_path || surat.file_path");
   });
 
