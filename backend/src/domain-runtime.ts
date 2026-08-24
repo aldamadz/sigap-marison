@@ -3599,9 +3599,7 @@ const isValidSourceProjectId = async (projectId) => {
 export const getMarisonPayloadMappings = async (req) => {
   const actor = await requireAdminUser(getBearerToken(req));
   if (marisonDeploymentEnvironment !== "staging") {
-    const error = new Error("Mapping payload hanya tersedia di staging.");
-    error.status = 404;
-    throw error;
+    return { mappings: [], actorId: actor.id };
   }
   const entityType = new URL(req.url || '/', 'http://localhost').searchParams.get('entityType') || null;
   if (entityType && !/^(profile|office|project)$/.test(entityType)) {
@@ -3620,7 +3618,7 @@ export const getMarisonPayloadMappings = async (req) => {
 
 export const getMarisonPayloadMappingCatalog = async (req, url) => {
   const actor = await requireAdminUser(getBearerToken(req));
-  if (marisonDeploymentEnvironment !== "staging") { const error = new Error("Payload mappings hanya tersedia di staging."); error.status = 404; throw error; }
+  if (marisonDeploymentEnvironment !== "staging") return { catalog: [], actorId: actor.id };
   const { entityType, query, limit, branchId } = parseMarisonPayloadCatalogQuery(url);
   const { data, error } = await supabase.rpc("get_marison_payload_mapping_catalog", { p_actor_id: actor.id, p_environment: marisonDeploymentEnvironment, p_entity_type: entityType, p_query: query, p_limit: limit, p_branch_id: branchId });
   if (error) throw error;

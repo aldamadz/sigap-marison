@@ -4,12 +4,14 @@ import { join } from "node:path";
 import {
   buildMarisonStagingEmail,
   canUseMarisonNameFallback,
+  chooseProjectLocalCode,
   deduplicateMarisonEmployees,
   deriveMarisonOfficeType,
   executeMarisonBranchSync,
   marisonNikKey,
   normalizeMarisonNik,
   previewMarisonBranchSync,
+  previewMarisonProjectSync,
 } from "../../server/marison-employee-sync.mjs";
 
 describe("Marison employee sync", () => {
@@ -67,6 +69,73 @@ describe("Marison employee sync", () => {
     expect(deriveMarisonOfficeType({ name: "KCP Magelang Selatan" })).toBe("KCP");
     expect(deriveMarisonOfficeType({ name: "Kantor Site Cibubur" })).toBe("Kost");
     expect(deriveMarisonOfficeType({ name: "Magelang" })).toBe("KC");
+  });
+
+  it("keeps projects with duplicate external codes as separate identities", () => {
+    const projects = [{ id: "project-16", code: "MLO", marison_project_id: 16 }];
+    expect(chooseProjectLocalCode("MLO", 16, projects, "project-16")).toBe("MLO");
+    expect(chooseProjectLocalCode("MLO", 11, projects)).toBe("MLO-11");
+    expect(chooseProjectLocalCode(null, 25, projects)).toBe("EXT-PROJECT-25");
+  });
+
+  it("does not repeatedly update a project whose duplicate external code has a stable local suffix", async () => {
+    const office = {
+      id: "office-1",
+      code: "BR-1",
+      name: "Palembang",
+      kedudukan: "KC",
+      marison_branch_id: 1,
+      marison_branch_code: "BR-1",
+    };
+    const projects = [
+      {
+        id: "project-16",
+        office_id: office.id,
+        entity_id: null,
+        code: "MLO",
+        name: "Project 16",
+        marison_project_id: 16,
+        marison_project_code: "MLO",
+        marison_review_required: true,
+        marison_review_reasons: ["Entitas proyek belum dipilih"],
+      },
+      {
+        id: "project-11",
+        office_id: office.id,
+        entity_id: null,
+        code: "MLO-11",
+        name: "Project 11",
+        marison_project_id: 11,
+        marison_project_code: "MLO",
+        marison_review_required: true,
+        marison_review_reasons: ["Entitas proyek belum dipilih"],
+      },
+    ];
+    const supabase = {
+      from: (table: string) => ({
+        select: async () => ({
+          data: table === "master_offices" ? [office] : projects,
+          error: null,
+        }),
+      }),
+    };
+
+    const result = await previewMarisonProjectSync({
+      supabase,
+      environment: "production",
+      branches: [{ id: 1, code: "BR-1", name: "Palembang" }],
+      projects: [
+        { id: 16, code: "MLO", name: "Project 16", branch: { id: 1 } },
+        { id: 11, code: "MLO", name: "Project 11", branch: { id: 1 } },
+      ],
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      matched: 2,
+      toCreate: 0,
+      toUpdate: 0,
+      blocked: 0,
+    }));
   });
 
   it("resolves a conflicting staging row only when one name matches an existing profile", () => {
