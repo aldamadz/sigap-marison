@@ -146,12 +146,23 @@ const run = (args, input = "") => {
 
 const containerId = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
 try {
-  let ready = false;
-  for (let attempt = 0; attempt < 30 && !ready; attempt += 1) {
-    ready = spawnSync("docker", ["exec", containerId, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
-    if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  let consecutiveReadyProbes = 0;
+  for (let attempt = 0; attempt < 60 && consecutiveReadyProbes < 3; attempt += 1) {
+    const probe = spawnSync(
+      "docker",
+      ["exec", containerId, "psql", "-U", "postgres", "-Atqc", "select 1"],
+      { encoding: "utf8" },
+    );
+    consecutiveReadyProbes = probe.status === 0 && probe.stdout.trim() === "1"
+      ? consecutiveReadyProbes + 1
+      : 0;
+    if (consecutiveReadyProbes < 3) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    }
   }
-  if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
+  if (consecutiveReadyProbes < 3) {
+    throw new Error("Disposable PostgreSQL did not become stably ready");
+  }
   process.stdout.write(run([
     "exec", "-i", containerId, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
   ], fixture));
