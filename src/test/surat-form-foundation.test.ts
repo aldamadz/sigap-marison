@@ -93,12 +93,13 @@ describe("SuratForm pure formatters", () => {
     expect(getDefaultRequestPlace({ id: "o2", name: "KC Temanggung", kedudukan: "KC" }, null)).toBe("Temanggung");
   });
 
-  it("formats Non Unit titles without separators or dotted office abbreviations", () => {
+  it("formats Non Unit titles with a colon and compact office abbreviations", () => {
     expect(buildNonUnitRequestTitle("Pembangunan Talud", "KC. Bandung")).toBe(
-      "Permohonan Non Unit Pembangunan Talud KC Bandung",
+      "Permohonan Non Unit : Pembangunan Talud KC Bandung",
     );
     expect(buildNonUnitRequestTitle("Renovasi Kantor", "KCP. Muntilan")).toBe(
-      "Permohonan Non Unit Renovasi Kantor KCP Muntilan",
+      "Permohonan Non Unit : Renovasi Kantor KCP Muntilan",
     );
+    expect(buildNonUnitRequestTitle("", "")).toBe("Permohonan Non Unit");
   });
 });

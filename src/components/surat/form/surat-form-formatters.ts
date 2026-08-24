@@ -38,9 +38,10 @@ export function buildNonUnitRequestTitle(itemText: string, officeSuffix: string)
   const compactOfficeSuffix = officeSuffix
     .replace(/^(KC|KCP)\.\s*/i, (_, prefix: string) => `${prefix.toUpperCase()} `)
     .trim();
-  return ["Permohonan Non Unit", itemText.trim(), compactOfficeSuffix]
+  const detail = [itemText.trim(), compactOfficeSuffix]
     .filter(Boolean)
     .join(" ");
+  return detail ? `Permohonan Non Unit : ${detail}` : "Permohonan Non Unit";
 }
 
 export const toReadableLocationName = (value: string): string => value
