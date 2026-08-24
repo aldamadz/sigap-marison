@@ -543,7 +543,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
       const changed = (
         Number(existing.marison_project_id) !== externalId
         || String(existing.marison_project_code || "") !== externalCode
-        || existing.code !== externalCode
+        || existing.code !== localCode
         || existing.name !== externalName
         || existing.office_id !== office.id
         || existing.entity_id !== payload.entity_id
