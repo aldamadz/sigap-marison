@@ -60,6 +60,12 @@ export function previewMarisonEmployeeSync(options: {
   branches: Array<Record<string, unknown>>;
   environment?: "staging" | "production";
 }): Promise<Record<string, unknown>>;
+export function chooseProjectLocalCode(
+  externalCode: unknown,
+  externalId: number,
+  projects: Array<Record<string, unknown>>,
+  currentId?: string | null,
+): string;
 export function executeMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];

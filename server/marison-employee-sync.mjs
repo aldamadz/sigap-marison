@@ -424,7 +424,10 @@ const findProjectForExternal = (project, office, projects) => {
 
   const externalCode = normalizeProjectCode(project?.code);
   if (externalCode) {
-    const codeMatches = projects.filter((row) => normalizeProjectCode(row.code) === externalCode);
+    const codeMatches = projects.filter((row) => (
+      normalizeProjectCode(row.code) === externalCode
+      && !(Number.isSafeInteger(Number(row.marison_project_id)) && Number(row.marison_project_id) > 0)
+    ));
     if (codeMatches.length === 1) return { project: codeMatches[0], match: "code" };
     if (codeMatches.length > 1) {
       return { project: null, match: "conflict", reason: "Kode proyek cocok dengan lebih dari satu proyek SIGAP" };
@@ -443,6 +446,15 @@ const findProjectForExternal = (project, office, projects) => {
   }
 
   return { project: null, match: "new" };
+};
+
+export const chooseProjectLocalCode = (externalCode, externalId, projects, currentId = null) => {
+  const normalized = normalizeProjectCode(externalCode) || `EXT-PROJECT-${externalId}`;
+  const occupied = (candidate) => projects.some((row) => (
+    row.id !== currentId && normalizeProjectCode(row.code) === normalizeProjectCode(candidate)
+  ));
+  if (!occupied(normalized)) return normalized;
+  return `${normalized}-${externalId}`.slice(0, 30);
 };
 
 const syncProjects = async (supabase, { projects, branches }, dryRun) => {
@@ -507,6 +519,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     }
 
     const existing = resolved.project;
+    const localCode = chooseProjectLocalCode(externalCode, externalId, localProjects, existing?.id || null);
     const entityId = existing?.entity_id || null;
     const reviewReasons = [
       ...(sourceCode ? [] : ["Kode proyek external belum tersedia"]),
@@ -516,7 +529,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     if (existing) {
       result.matched += 1;
       const payload = {
-        code: externalCode,
+        code: localCode,
         name: externalName,
         office_id: office.id,
         entity_id: entityId,
@@ -562,7 +575,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     const { data, error } = await supabase
       .from("master_projects")
       .insert({
-        code: externalCode,
+        code: localCode,
         name: externalName,
         office_id: office.id,
         entity_id: null,
