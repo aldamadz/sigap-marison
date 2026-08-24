@@ -406,17 +406,14 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
 
   for (const rawProject of Array.isArray(projects) ? projects : []) {
     const externalId = Number(rawProject?.id);
-    const externalCode = normalizeProjectCode(rawProject?.code);
     const externalName = String(rawProject?.name || "").trim();
     const branchId = Number(rawProject?.branch?.id ?? rawProject?.branch_id);
     if (!Number.isSafeInteger(externalId)) {
       result.errors.push({ entityType: "project", externalId: rawProject?.id ?? null, name: externalName || "-", reason: "ID proyek tidak valid" });
       continue;
     }
-    if (!externalCode) {
-      result.errors.push({ entityType: "project", externalId, name: externalName || "-", reason: "Kode proyek external belum tersedia" });
-      continue;
-    }
+    const sourceCode = normalizeProjectCode(rawProject?.code);
+    const externalCode = sourceCode || `EXT-PROJECT-${externalId}`;
     if (!externalName) {
       result.errors.push({ entityType: "project", externalId, name: "-", reason: "Nama proyek external belum tersedia" });
       continue;
@@ -443,6 +440,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     const existing = resolved.project;
     const entityId = existing?.entity_id || null;
     const reviewReasons = [
+      ...(sourceCode ? [] : ["Kode proyek external belum tersedia"]),
       ...(hasBranch ? [] : ["Branch proyek external belum tersedia"]),
       ...(entityId ? [] : ["Entitas proyek belum dipilih"]),
     ];

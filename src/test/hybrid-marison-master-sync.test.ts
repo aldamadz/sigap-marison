@@ -64,6 +64,8 @@ describe("Hybrid Marison master sync", () => {
     expect(sync).toContain("export const previewMarisonProjectSync");
     expect(sync).toContain("export const executeMarisonProjectSync");
     expect(sync).toContain("Branch proyek external belum tersedia");
+    expect(sync).toContain("`EXT-PROJECT-${externalId}`");
+    expect(sync).toContain("Kode proyek external belum tersedia");
     expect(sync).toContain("Entitas proyek belum dipilih");
     expect(sync).toContain("fallbackOffice");
     expect(sync).not.toContain("defaultEntityId");
