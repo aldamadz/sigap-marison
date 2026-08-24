@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   buildMarisonStagingEmail,
   canUseMarisonNameFallback,
+  chooseProjectLocalCode,
   deduplicateMarisonEmployees,
   deriveMarisonOfficeType,
   executeMarisonBranchSync,
@@ -85,6 +86,13 @@ describe("Marison employee sync", () => {
     expect(resolveMarisonDepartment("Operasional Kos", cabang)?.name).toBe("Operasional Kost");
     expect(resolveMarisonDepartment("Cabang", cabang)?.name).toBe("Branch Manager");
     expect(resolveMarisonDepartment("4", pusat)).toBeNull();
+  });
+
+  it("keeps projects with duplicate external codes as separate identities", () => {
+    const projects = [{ id: "project-16", code: "MLO", marison_project_id: 16 }];
+    expect(chooseProjectLocalCode("MLO", 16, projects, "project-16")).toBe("MLO");
+    expect(chooseProjectLocalCode("MLO", 11, projects)).toBe("MLO-11");
+    expect(chooseProjectLocalCode(null, 25, projects)).toBe("EXT-PROJECT-25");
   });
 
   it("resolves a conflicting staging row only when one name matches an existing profile", () => {
