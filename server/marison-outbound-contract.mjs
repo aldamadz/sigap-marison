@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
 export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-08-11-no-estimated-price";
-export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-08-12-complete-fields";
+export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-08-26-branch-items";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
@@ -100,27 +100,23 @@ export const marisonAssetPurchaseRequestSchema = z.object({
 export const marisonFundSubmissionSchema = z.object({
   submission_number: nonEmptyText,
   type: z.enum(["production_cost", "operational"]),
-  // Fund berproyek: project_id dikirim, branch_id di-omit.
-  // Dana umum tanpa proyek: project_id di-omit, branch_id wajib dikirim
-  // (observasi vendor staging 20 Agu 2026 menolak payload kosong keduanya
-  // dengan "Cabang wajib diisi.").
+  // Kontrak vendor 26 Agustus 2026 mewajibkan branch_id untuk seluruh Fund.
+  // project_id tetap opsional, tetapi bila ada harus berasal dari branch yang sama.
   project_id: positiveInteger.optional(),
-  branch_id: positiveInteger.optional(),
+  branch_id: positiveInteger,
   division: nonEmptyText,
   title: nonEmptyText,
   description: requiredText.nullable(),
+  amount: nonNegativeInteger,
+  items: z.array(z.object({
+    nama_barang: requiredText,
+    jumlah: positiveInteger,
+    satuan: requiredText,
+    nominal: nonNegativeInteger,
+  }).strict()),
   attachments: z.array(externalLink),
   approvals: z.array(fundApproval).min(1),
-}).strict().superRefine((payload, ctx) => {
-  const hasProject = payload.project_id != null;
-  const hasBranch = payload.branch_id != null;
-  if (!hasProject && !hasBranch) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Dana umum Fund Submission wajib menyertakan branch_id (cabang) external pemohon.",
-    });
-  }
-});
+}).strict();
 
 const schemas = {
   unit: marisonUnitSubmissionSchema,
