@@ -47,7 +47,14 @@ import {
 } from "@/components/surat/recommendation-multi-detail";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
+import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
+import {
+  getFundSubmissionAmount,
+  normalizeFundSubmissionItems,
+  validateFundSubmissionItems,
+} from "@/components/surat/fund-submission";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatRupiahZero } from "@/lib/rupiah";
 import {
   normalizeNonUnitOption,
   resolveNonUnitProjectMapping,
@@ -385,7 +392,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
           }
         : clearRecommendationInput(baseInput);
-      if (category !== "non_asset") delete nextInput.fund_type;
+      if (category !== "non_asset") {
+        delete nextInput.fund_type;
+        delete nextInput.fund_amount;
+        delete nextInput.fund_without_project;
+      }
       return {
         ...prev,
         project_id: prev.form_input_data.request_category === category ? prev.project_id : "",
@@ -1159,6 +1170,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
+    if (isFundMode) {
+      const fundItems = normalizeFundSubmissionItems(input.items);
+      input.items = fundItems;
+      input.fund_amount = getFundSubmissionAmount(fundItems);
+    } else {
+      delete input.fund_amount;
+    }
     if (requiresMarisonProject && isMarisonProjectReady && selectedProject) {
       const snapshotCode = selectedNonUnitProjectMapping.code || "";
       const snapshotName = selectedNonUnitProjectMapping.name || "";
@@ -1213,6 +1231,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedProject,
     selectedNonUnitProjectMapping,
     shouldUseDefaultBranchProject,
+    isFundMode,
   ]);
 
   const effectiveFormData = useMemo(() => ({
@@ -1511,6 +1530,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!draftToRestore || usageDetails.length === 0) return;
     const payload = draftToRestore.payload || {};
     const restoredFormData = payload.formData || {};
+    const restoredInput = restoredFormData.form_input_data || {};
     const usageId = String(payload.selectedUsageId || restoredFormData.form_usage_id || restoredFormData.penggunaan_id || "");
     const usage = usageDetails.find(item => item.id === usageId) || null;
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
@@ -1531,6 +1551,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           }
         : restoredFormData.form_input_data || {},
     }));
+    setFundWithoutProject(
+      restoredInput.fund_without_project === true
+        || (restoredInput.request_category === "non_asset"
+          && !restoredFormData.project_id
+          && Boolean(draftToRestore.no_surat)),
+    );
     setSelectedFormId(String(payload.selectedFormId || usage?.form_id || usage?.master_forms?.id || ""));
     setSelectedUsage(usage);
     const persistedSigners = Array.isArray(draftToRestore.signer_assignments)
@@ -2255,6 +2281,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         });
         return false;
       }
+      const firstFundIssue = validateFundSubmissionItems(effectiveFormInputData.items)[0];
+      if (firstFundIssue) {
+        toast({
+          variant: "destructive",
+          title: "Rincian Dana Belum Lengkap",
+          description: firstFundIssue.message,
+        });
+        return false;
+      }
     }
     const missingField = getManualInputFields(selectedUsage).find((field: TemplateField) => !isManualFieldComplete(field));
     if (missingField) {
@@ -2285,7 +2320,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const mappedKeys = new Set(formFields.map((field) => field.key));
     const hiddenKeys = new Set([
       "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
-      "recommendation_template_name", "recommendation_multi_detail", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type",
+      "recommendation_template_name", "recommendation_multi_detail", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type", "fund_amount", "fund_without_project",
     ]);
     const fields: RegistrationSummaryField[] = formFields
       .filter((field) => !hiddenKeys.has(field.key))
@@ -2304,6 +2339,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         key: "fund_type",
         label: "Jenis Pengajuan Dana",
         value: getFormFieldValue("fund_type") === "production_cost" ? "Biaya Produksi" : "Biaya Operasional",
+      });
+      fields.push({
+        key: "fund_amount",
+        label: "Total Pengajuan Dana",
+        value: formatRupiahZero(getFundSubmissionAmount(effectiveFormInputData.items)),
       });
     }
 
@@ -3280,6 +3320,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     getManualInputFields(selectedUsage).filter((field: TemplateField) => {
       if (!isUnitMode && isUnitExternalField(field)) return false;
       if (isUnitMode && (field.key === "items" || field.key === "unit")) return false;
+      if (isFundMode && (field.key === "items" || field.key === "fund_amount")) return false;
       if (!hasUnitRequestFields(selectedUsage)) return true;
       if (field.key === "requested_unit_count") return false;
       if (isUnitMode) return field.key !== "items" && field.key !== "unit";
@@ -3994,9 +4035,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       onCheckedChange={(checked) => {
                         if (checked === true) {
                           setFundWithoutProject(true);
-                          setFormData((prev) => ({ ...prev, project_id: "" }));
+                          setFormData((prev) => ({
+                            ...prev,
+                            project_id: "",
+                            form_input_data: {
+                              ...prev.form_input_data,
+                              fund_without_project: true,
+                            },
+                          }));
                         } else {
                           setFundWithoutProject(false);
+                          setFormData((prev) => ({
+                            ...prev,
+                            form_input_data: {
+                              ...prev.form_input_data,
+                              fund_without_project: false,
+                            },
+                          }));
                         }
                       }}
                     />
@@ -4366,6 +4421,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </div>
                 </div>
               </div>
+
+              {isFundMode && (
+                <FundSubmissionEditor
+                  value={getFormFieldValue("items")}
+                  onChange={(items) => setInputValue("items", items)}
+                />
+              )}
 
               {selectedUsage && (getVisibleManualFields().length > 0 || hasUnitRequestFields(selectedUsage)) && (
                 <div className="space-y-5">

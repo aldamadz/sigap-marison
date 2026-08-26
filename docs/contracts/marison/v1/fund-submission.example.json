@@ -1,10 +1,20 @@
 {
   "submission_number": "001/UAI/PBO.1/VIII/2026",
   "type": "operational",
+  "branch_id": 1,
   "project_id": 12,
   "division": "Pengembangan Organisasi",
   "title": "Permohonan biaya operasional",
   "description": "Pengajuan kebutuhan operasional departemen",
+  "amount": 1500000,
+  "items": [
+    {
+      "nama_barang": "Sewa perangkat operasional",
+      "jumlah": 1,
+      "satuan": "paket",
+      "nominal": 1500000
+    }
+  ],
   "attachments": [
     {
       "name": "Dokumen Pengajuan Final",

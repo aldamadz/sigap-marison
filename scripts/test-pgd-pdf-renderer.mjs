@@ -53,6 +53,21 @@ test("renders canonical parent rejection status and reason on PGD item", () => {
   assert.match(data.items[0].note, /Tidak direkomendasikan: Biaya perbaikan terlalu tinggi/);
 });
 
+test("renders the latest Fund user inputs in the native document", () => {
+  const data = normalizePgdDocumentData({
+    form_input_data: {
+      request_category: "non_asset",
+      fund_type: "production_cost",
+      fund_amount: 1500000,
+      items: [{ nama_barang: "Semen", jumlah: 10, satuan: "sak", nominal: 1500000 }],
+    },
+  });
+  assert.equal(data.items[0].unit, "sak");
+  assert.match(data.items[0].note, /Nominal: Rp 1\.500\.000/);
+  assert.match(data.notes, /Jenis dana: Biaya Produksi/);
+  assert.match(data.notes, /Total pengajuan: Rp 1\.500\.000/);
+});
+
 test("builds and renders every supported dynamic signature formation", async () => {
   for (let count = 2; count <= 8; count += 1) {
     const data = createPgdPreviewData({ signature_count: count });

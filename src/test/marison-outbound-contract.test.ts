@@ -49,7 +49,7 @@ describe("Marison outbound contract v1", () => {
   it("accepts the active Fund Submission contract and applicant-selected type", () => {
     const fixture = readFixture("fund-submission.example.json");
 
-    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-08-12-complete-fields");
+    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-08-26-branch-items");
     expect(marisonFundSubmissionSchema.parse(fixture)).toEqual(fixture);
     expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
   });
@@ -61,22 +61,12 @@ describe("Marison outbound contract v1", () => {
     expect(() => assertMarisonOutboundContract("fund", { ...fixture, submitted_by: "A 114" })).toThrow();
   });
 
-  it("accepts a Fund Submission without project_id only when branch_id is present", () => {
+  it("accepts a Fund Submission without project_id while branch_id remains required", () => {
     const fixture = readFixture("fund-submission.example.json");
     delete fixture.project_id;
-    let error;
-    try {
-      assertMarisonOutboundContract("fund", fixture);
-    } catch (caught) {
-      error = caught;
-    }
-    expect(error).toBeDefined();
-    expect(error.message).toContain("Payload Marison fund tidak sesuai kontrak");
-    expect(error.details).toEqual(expect.arrayContaining([
-      expect.objectContaining({ message: expect.stringContaining("branch_id") }),
-    ]));
-    fixture.branch_id = 11;
     expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
+    delete fixture.branch_id;
+    expect(() => assertMarisonOutboundContract("fund", fixture)).toThrow("Payload Marison fund tidak sesuai kontrak");
   });
   it("accepts the canonical Unit payload supplied to the vendor", () => {
     const fixture = readFixture("unit-submission.example.json");

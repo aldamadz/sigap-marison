@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const migration = readFileSync(
+const fundWithoutProjectMigration = readFileSync(
   "supabase/migrations/20260820100000_fund_without_project.sql",
+  "utf8",
+);
+const latestFundContractMigration = readFileSync(
+  "supabase/migrations/20260826110000_fund_required_branch_latest_contract.sql",
   "utf8",
 );
 const sql = `
@@ -37,24 +41,26 @@ begin
 end;
 $$;
 
-${migration}
+${fundWithoutProjectMigration}
+${latestFundContractMigration}
 
 insert into public.marison_outbound_dispatches(id, status, lease_token) values
   ('10000000-0000-0000-0000-000000000001', 'processing', '20000000-0000-0000-0000-000000000001'),
   ('10000000-0000-0000-0000-000000000002', 'processing', '20000000-0000-0000-0000-000000000002'),
   ('10000000-0000-0000-0000-000000000003', 'processing', '20000000-0000-0000-0000-000000000003'),
-  ('10000000-0000-0000-0000-000000000004', 'processing', '20000000-0000-0000-0000-000000000004');
+  ('10000000-0000-0000-0000-000000000004', 'processing', '20000000-0000-0000-0000-000000000004'),
+  ('10000000-0000-0000-0000-000000000005', 'processing', '20000000-0000-0000-0000-000000000005');
 
 select * from public.prepare_marison_outbound_dispatch_with_sources(
   '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001',
   'fund', '/fund-submissions', 'test', '{"approvals":[]}', '{}', repeat('a', 64),
-  '{}'
+  '{"branchId":"external_source"}'
 );
 
 select * from public.prepare_marison_outbound_dispatch_with_sources(
   '10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002',
   'fund', '/fund-submissions', 'test', '{"approvals":[]}', '{}', repeat('b', 64),
-  '{"projectId":"external_source"}'
+  '{"branchId":"external_source","projectId":"external_source"}'
 );
 
 do $$
@@ -62,7 +68,7 @@ begin
   perform public.prepare_marison_outbound_dispatch_with_sources(
     '10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000003',
     'fund', '/fund-submissions', 'test', '{"approvals":[]}', '{}', repeat('c', 64),
-    '{"projectId":"bogus"}'
+    '{"branchId":"external_source","projectId":"bogus"}'
   );
   raise exception 'fund with invalid projectId should fail';
 exception when sqlstate '22023' then null;
@@ -73,7 +79,19 @@ do $$
 begin
   perform public.prepare_marison_outbound_dispatch_with_sources(
     '10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000004',
-    'unit', '/unit-submissions', 'test', '{"approvals":[]}', '{}', repeat('d', 64),
+    'fund', '/fund-submissions', 'test', '{"approvals":[]}', '{}', repeat('d', 64),
+    '{}'
+  );
+  raise exception 'fund with missing branchId should fail';
+exception when sqlstate '22023' then null;
+end;
+$$;
+
+do $$
+begin
+  perform public.prepare_marison_outbound_dispatch_with_sources(
+    '10000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000005',
+    'unit', '/unit-submissions', 'test', '{"approvals":[]}', '{}', repeat('e', 64),
     '{"requesterNik":"external_source","branchId":"external_source"}'
   );
   raise exception 'unit with missing projectId should fail';
