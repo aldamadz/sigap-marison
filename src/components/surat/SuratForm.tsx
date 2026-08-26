@@ -46,6 +46,7 @@ import {
   syncRecommendationMultiDetailInput,
 } from "@/components/surat/recommendation-multi-detail";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
+import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -3004,6 +3005,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           projectName={selectedProject?.name || ""}
           onChange={(rows) => setTableRows(field.key, rows)}
           onRetry={() => setNonUnitReloadKey((current) => current + 1)}
+        />
+      );
+    }
+
+    if (field.key === "items" && isFundMode
+      && getNonAsetItemColumnKeys(field.table_config?.columns ?? []) !== null) {
+      return (
+        <NonAsetItemEditor
+          rows={getTableRows(field.key)}
+          columns={field.table_config?.columns ?? []}
+          onChange={(rows) => setTableRows(field.key, rows)}
         />
       );
     }
