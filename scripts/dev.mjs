@@ -5,10 +5,20 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const envFile = resolve(root, ".env.local");
 const viteEntry = resolve(root, "node_modules", "vite", "bin", "vite.js");
-const backendEntry = resolve(root, "backend", "node_modules", "tsx", "dist", "cli.mjs");
+// tsx bisa berada di backend/node_modules (install terisolasi) atau di-root
+// node_modules (hasil hoisting npm workspaces).
+const backendEntry = [
+  resolve(root, "backend", "node_modules", "tsx", "dist", "cli.mjs"),
+  resolve(root, "node_modules", "tsx", "dist", "cli.mjs"),
+].find(existsSync);
 
 if (!existsSync(envFile)) {
   console.error(".env.local tidak ditemukan. Siapkan konfigurasi development sebelum menjalankan aplikasi.");
+  process.exit(1);
+}
+
+if (!backendEntry) {
+  console.error("tsx tidak ditemukan. Jalankan `npm install` lalu coba lagi.");
   process.exit(1);
 }
 
