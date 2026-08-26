@@ -20,6 +20,7 @@ import {
   isNonUnitRequestRows,
   type NonUnitRequestRow,
 } from "@/components/surat/non-unit-request";
+import { formatRupiahZero } from "@/lib/rupiah";
 
 export type RegistrationSummaryField = {
   key: string;
@@ -86,6 +87,7 @@ const ITEM_COLUMNS = [
   { key: "nama_barang", label: "Nama Barang", getValue: (row: Record<string, unknown>) => row.nama_barang || row.nama || row.barang },
   { key: "sat", label: "Satuan", getValue: (row: Record<string, unknown>) => row.sat || row.satuan || row.unit },
   { key: "jumlah", label: "Jumlah", getValue: (row: Record<string, unknown>) => row.jumlah },
+  { key: "nominal", label: "Nominal", getValue: (row: Record<string, unknown>) => row.nominal },
   { key: "status", label: "Status", getValue: (row: Record<string, unknown>) => row.status },
   { key: "keterangan", label: "Keterangan", getValue: (row: Record<string, unknown>) => row.keterangan },
 ];
@@ -271,7 +273,7 @@ const TableSummary = ({
   }
   if (normalizedFieldKey === "items" || rows.some((row) => formatSummaryValue(row.nama_barang || row.nama || row.barang) !== "-")) {
     const columns = ITEM_COLUMNS.filter((column) =>
-      column.key !== "keterangan" ||
+      !["keterangan", "nominal"].includes(column.key) ||
       rows.some((row) => formatSummaryValue(column.getValue(row)) !== "-")
     );
     return (
@@ -295,7 +297,9 @@ const TableSummary = ({
                     {columns.map((column) => (
                       <td key={column.key} className="max-w-72 whitespace-pre-wrap px-3 py-2 align-top">
                         <span className={cn(rejected && "text-muted-foreground line-through decoration-2")}>
-                          {formatSummaryValue(column.getValue(row))}
+                          {column.key === "nominal"
+                            ? formatRupiahZero(column.getValue(row))
+                            : formatSummaryValue(column.getValue(row))}
                         </span>
                       </td>
                     ))}

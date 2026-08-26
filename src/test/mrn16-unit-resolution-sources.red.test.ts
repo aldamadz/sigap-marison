@@ -26,26 +26,33 @@ describe("MRN-16 canonical resolution sources", () => {
     expect(() => normalizePayloadResolutionSources({ requesterNik: "external_source", branchId: "external_source", "approval:1:signer": "external_source" }, { kind: "asset", approvalCount: 2 })).toThrow();
   });
 
-  it("requires only project and signer sources for Fund Submission", () => {
+  it("requires branch and signer sources for a project Fund Submission", () => {
     expect(normalizePayloadResolutionSources({
       projectId: "external_source",
       requesterNik: "unavailable",
-      branchId: "unavailable",
+      branchId: "external_source",
       "approval:1:signer": "staging_mapping",
     }, { kind: "fund", approvalCount: 1 })).toEqual({
       projectId: "external_source",
+      branchId: "external_source",
       "approval:1:signer": "staging_mapping",
     });
   });
 
-  it("allows Fund Submission without any project source (dana umum)", () => {
+  it("allows Fund Submission without a project source but still requires branch (dana umum)", () => {
     expect(normalizePayloadResolutionSources({
+      branchId: "external_source",
       "approval:1:signer": "external_source",
     }, { kind: "fund", approvalCount: 1 })).toEqual({
+      branchId: "external_source",
       "approval:1:signer": "external_source",
     });
     expect(() => normalizePayloadResolutionSources({
+      branchId: "external_source",
       projectId: "unavailable",
+      "approval:1:signer": "external_source",
+    }, { kind: "fund", approvalCount: 1 })).toThrow("Metadata sumber payload belum lengkap");
+    expect(() => normalizePayloadResolutionSources({
       "approval:1:signer": "external_source",
     }, { kind: "fund", approvalCount: 1 })).toThrow("Metadata sumber payload belum lengkap");
   });

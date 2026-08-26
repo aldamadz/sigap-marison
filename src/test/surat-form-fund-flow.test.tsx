@@ -58,13 +58,25 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
       request_category: "non_asset",
       request_mode: "barang",
       fund_type: "operational",
+      fund_without_project: true,
     });
     expect(input).not.toHaveProperty("requested_project");
     expect(input).not.toHaveProperty("project_code");
 
     const draftRequest = serviceMock.createRegistrationDraft.mock.calls[0][0];
     expect(draftRequest.payload.formData.form_input_data.requested_project).toBeUndefined();
+    expect(draftRequest.payload.formData.form_input_data.fund_without_project).toBe(true);
     await waitFor(() => expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument());
+
+    expect(await screen.findByText("Rincian Fund Submission")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Nama barang/jasa"), { target: { value: "Sewa kendaraan operasional" } });
+    fireEvent.change(screen.getByLabelText("Jumlah"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Satuan"), { target: { value: "bulan" } });
+    const nominal = screen.getByRole("textbox", { name: "Nominal item 1" });
+    fireEvent.change(nominal, { target: { value: "1500000" } });
+    fireEvent.blur(nominal);
+    expect(await screen.findByText("Rp 1.500.000")).toBeInTheDocument();
+
     assertStrictServiceCalls();
   });
 });
