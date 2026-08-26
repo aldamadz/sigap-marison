@@ -1604,6 +1604,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   useEffect(() => {
     if (!activeDraftId || !generatedNoSurat || draftToRestore) return;
+    // Jangan pernah menimpa payload dengan kondisi yang sudah kehilangan
+    // tautan usage — itu akan menghapus perihal/penanda tangan secara permanen.
+    if (!selectedUsage?.id && !linkedDocumentContext) return;
     setDraftSaveState("saving");
     const timeout = window.setTimeout(() => {
       suratService.saveRegistrationDraft(
@@ -1633,7 +1636,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [isPusatSelected, generatedNoSurat]);
 
   useEffect(() => {
-    if (!selectedUsage) return;
+    // Setelah nomor terdaftar, konfigurasi workflow yang berubah tidak boleh
+    // memutus tautan usage/draft — penanda tangan yang sudah diisi harus aman.
+    if (!selectedUsage || generatedNoSurat) return;
     if (
       linkedDocumentContext?.type === "recommendation" &&
       linkedDocumentContext.usageId === selectedUsage.id
@@ -1643,7 +1648,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setSelectedUsage(null);
       setSigners([]);
     }
-  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext]);
+  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext, generatedNoSurat]);
 
   useEffect(() => {
     if (getRequestCategory() !== "asset" || canRequesterUseRecommendation) return;
