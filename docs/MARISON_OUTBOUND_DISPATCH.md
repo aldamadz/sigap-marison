@@ -39,6 +39,14 @@ Fund/Non Aset dapat diajukan tanpa proyek (dana umum). Alur ini dikirim ke
 `/fund-submissions` dengan **menghilangkan field `project_id`** dari payload
 (omit), bukan mengirim `null` atau `0`.
 
+Kontrak vendor aktif 26 Agustus 2026 mewajibkan `branch_id` pada seluruh Fund
+Submission. Fund berproyek mengirim `branch_id` kantor pemilik proyek beserta
+`project_id`; dana umum mengirim cabang employee external pemohon tanpa
+`project_id`. Form pengguna menyimpan rincian `items` dan menghitung `amount`
+sebagai total nominal item. Payload selalu mengirim `description`, `amount`,
+`items`, `attachments`, dan `approvals`, termasuk nilai kosong kanonik yang
+masih diizinkan untuk dokumen legacy.
+
 - Form Non Aset menampilkan pilihan "Tanpa Proyek (Dana Umum)"; snapshot
   `requested_project` tidak dibuat untuk surat ini.
 - Resolution source `projectId` menjadi opsional untuk kind `fund`: bila ada

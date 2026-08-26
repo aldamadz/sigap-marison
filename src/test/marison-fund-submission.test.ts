@@ -71,15 +71,18 @@ describe("Marison Fund Submission mapper", () => {
     })).toThrow("Branch external pemohon tidak tersedia");
   });
 
-  it("maps the exact vendor contract without requester, branch, or items", () => {
+  it("maps the latest vendor contract with required branch, amount, and items", () => {
     const result = mapMarisonFundSubmission({
       request: {
         submissionNumber: "010/UAI/PBO.1/VIII/2026",
         type: "operational",
         title: "Permohonan biaya operasional",
         description: "Pembelian kebutuhan kantor",
+        amount: 1500000,
+        items: [{ nama_barang: "Sewa kendaraan", jumlah: 1, satuan: "bulan", nominal: 1500000 }],
       },
       projectId: 12,
+      branchId: 1,
       division: "Pengembangan Organisasi",
       attachments: [{ name: "Dokumen final", link: "https://sigap.example.test/file.pdf" }],
       approvals: [approval],
@@ -89,16 +92,17 @@ describe("Marison Fund Submission mapper", () => {
     expect(result.payload).toEqual({
       submission_number: "010/UAI/PBO.1/VIII/2026",
       type: "operational",
+      branch_id: 1,
       project_id: 12,
       division: "Pengembangan Organisasi",
       title: "Permohonan biaya operasional",
       description: "Pembelian kebutuhan kantor",
+      amount: 1500000,
+      items: [{ nama_barang: "Sewa kendaraan", jumlah: 1, satuan: "bulan", nominal: 1500000 }],
       attachments: [{ name: "Dokumen final", link: "https://sigap.example.test/file.pdf" }],
       approvals: [{ ...approval, role: "manager" }],
     });
     expect(result.payload).not.toHaveProperty("submitted_by");
-    expect(result.payload).not.toHaveProperty("branch_id");
-    expect(result.payload).not.toHaveProperty("items");
   });
 
   it("omits project_id and sends branch_id for dana umum", () => {
@@ -139,7 +143,7 @@ describe("Marison Fund Submission mapper", () => {
     expect(result.payload.branch_id).toBe(7);
   });
 
-  it("rejects dana umum without project_id and branch_id", () => {
+  it("rejects every Fund Submission without branch_id", () => {
     expect(() => mapMarisonFundSubmission({
       request: { submissionNumber: "014/UAI/PBO.1/VIII/2026", type: "operational", title: "Dana umum tanpa cabang" },
       projectId: null,
@@ -154,6 +158,7 @@ describe("Marison Fund Submission mapper", () => {
     expect(() => mapMarisonFundSubmission({
       request: { submissionNumber: "010", title: "Dana", type: "" },
       projectId: 12,
+      branchId: 1,
       division: "Finance",
       approvals: [approval],
       attachments: [],
@@ -168,6 +173,7 @@ describe("Marison Fund Submission mapper", () => {
         title: "Dana operasional",
       },
       projectId: 12,
+      branchId: 1,
       division: "Finance",
       approvals: [{
         role: "manager",
@@ -180,10 +186,13 @@ describe("Marison Fund Submission mapper", () => {
     expect(result.payload).toEqual({
       submission_number: "011/UAI/PBO.1/VIII/2026",
       type: "operational",
+      branch_id: 1,
       project_id: 12,
       division: "Finance",
       title: "Dana operasional",
       description: null,
+      amount: 0,
+      items: [],
       attachments: [],
       approvals: [{
         role: "manager",

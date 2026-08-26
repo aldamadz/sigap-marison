@@ -87,11 +87,15 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('category === "non_asset" || category === "nonasset"');
     expect(server).toContain('/employees?search=${encodeURIComponent(overrides.nik)}');
     expect(server).toContain("resolveMarisonFundDivision");
+    expect(server).toContain('requireExternalInteger(overrides.branchId, "Branch ID proyek")');
+    expect(server).toContain("amount: input.fund_amount");
+    expect(server).toContain("items: input.items");
     expect(server).not.toContain("division: department.name");
     expect(worker).toContain('fund: "/fund-submissions"');
     expect(form).toContain('setInputValue("fund_type", value)');
     expect(form).toContain('<SelectItem value="operational">Biaya Operasional</SelectItem>');
     expect(form).toContain('<SelectItem value="production_cost">Biaya Produksi</SelectItem>');
+    expect(form).toContain("<FundSubmissionEditor");
     expect(migration).toContain("v_kind := 'fund'; v_endpoint := '/fund-submissions';");
     expect(migration).not.toContain("update public.surat_registrasi");
   });

@@ -4064,25 +4064,32 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
     employees,
     requesterNik: overrides.nik,
   });
-  // Dana umum tanpa proyek wajib menyertakan branch_id external pemohon
-  // (vendor staging menolak payload tanpa cabang: "Cabang wajib diisi.").
+  // Vendor mewajibkan branch_id untuk semua Fund. Untuk Fund berproyek gunakan
+  // cabang pemilik proyek yang telah divalidasi; dana umum memakai cabang employee.
   const branchId = projectId == null
     ? resolveMarisonFundBranch({ employees, requesterNik: overrides.nik })
-    : null;
+    : requireExternalInteger(overrides.branchId, "Branch ID proyek");
 
-  return mapMarisonFundSubmission({
-    request: {
-      submissionNumber: surat.no_surat,
-      type: fundType,
-      title: surat.judul_surat,
-      description: firstString(input.catatan, input.description, surat.judul_surat),
+  return {
+    ...mapMarisonFundSubmission({
+      request: {
+        submissionNumber: surat.no_surat,
+        type: fundType,
+        title: surat.judul_surat,
+        description: firstString(input.catatan, input.description, surat.judul_surat),
+        amount: input.fund_amount,
+        items: input.items,
+      },
+      projectId,
+      branchId,
+      division,
+      attachments: await buildMarisonAttachmentLinks(surat, actorId),
+      approvals: overrides.approvals,
+    }),
+    sourceOverrides: {
+      branchId: projectId == null ? "external_source" : overrides.sources?.branchId,
     },
-    projectId,
-    branchId,
-    division,
-    attachments: await buildMarisonAttachmentLinks(surat, actorId),
-    approvals: overrides.approvals,
-  });
+  };
 };
 
 const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
@@ -4106,9 +4113,11 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
     err.status = 422;
     throw err;
   }
+  const { sourceOverrides, ...preparedDispatch } = dispatch;
   return {
-    ...dispatch,
-    resolutionSources: normalizePayloadResolutionSources(resolvedOverrides.sources, {
+    ...preparedDispatch,
+    resolutionSources: normalizePayloadResolutionSources(
+      mergePayloadResolutionSources(resolvedOverrides.sources, sourceOverrides), {
       kind: dispatch.kind,
       approvalCount: dispatch.payload.approvals?.length || 0,
       expectedApprovalKeys: Object.keys(identity.sources).filter((key) => key.startsWith("approval:")),
@@ -4406,9 +4415,21 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
   try {
-    const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund" });
-     const mappings = await getMarisonOutboundMappings(surat, job.kind);
-    normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
+    const identity = await resolveMarisonOutboundIdentity(surat);
+    const mappings = await getMarisonOutboundMappings(surat, job.kind);
+    const sources = { ...mappings.sources, ...identity.sources };
+    if (job.kind === "fund" && mappings.projectId == null) {
+      const employeePayload = await getMarisonProtectedJson(
+        marisonDeploymentEnvironment,
+        `/employees?search=${encodeURIComponent(identity.requester.nik)}&per_page=20&page=1`,
+      );
+      resolveMarisonFundBranch({
+        employees: Array.isArray(employeePayload?.data) ? employeePayload.data : [],
+        requesterNik: identity.requester.nik,
+      });
+      sources.branchId = "external_source";
+    }
+    normalizePayloadResolutionSources(sources, { kind: job.kind, approvalCount: identity.approvals.length });
     return { eligible: true, reasonCode: null, reason: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Identity payload belum siap.";

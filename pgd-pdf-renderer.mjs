@@ -95,7 +95,7 @@ const formatMoneyId = (value) => {
   if (!raw) return "";
   const normalized = raw.replace(/[^\d-]/g, "");
   const amount = Number(normalized);
-  if (!Number.isFinite(amount) || amount === 0) return raw;
+  if (!Number.isFinite(amount)) return raw;
   return `Rp ${amount.toLocaleString("id-ID")}`;
 };
 
@@ -155,6 +155,7 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const items = Array.isArray(input.items) ? input.items : [];
   const revisionChanges = parseRevisionItemChanges(source);
   const recommendationDecisions = parseRecommendationItemDecisions(source);
+  const isFund = input.request_category === "non_asset";
   const targetStep = Number(options.targetStep || 0);
   const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
@@ -175,18 +176,25 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
         : "";
       const revisionNote = buildRevisionNote(change, item);
       const baseNote = text(item.keterangan || item.note, "");
+      const nominalNote = isFund && item.nominal != null
+        ? `Nominal: ${formatMoneyId(item.nominal)}`
+        : "";
       return {
         no: index + 1,
         code: text(item.kode || item.code, ""),
         name: text(item.nama_barang || item.name, ""),
-        unit: text(item.sat || item.unit, ""),
+        unit: text(item.sat || item.unit || item.satuan, ""),
         quantity: text(item.jumlah || item.quantity, ""),
         status: text(item.status, ""),
-        note: [baseNote, recommendationNote, revisionNote].filter(Boolean).join("\n"),
+        note: [baseNote, nominalNote, recommendationNote, revisionNote].filter(Boolean).join("\n"),
         revisionAction: recommendationNote ? "reject" : change?.action || "",
       };
     }),
-    notes: text(input.catatan || source.notes, ""),
+    notes: [
+      isFund ? `Jenis dana: ${input.fund_type === "production_cost" ? "Biaya Produksi" : "Biaya Operasional"}` : "",
+      isFund ? `Total pengajuan: ${formatMoneyId(input.fund_amount) || "Rp 0"}` : "",
+      text(input.catatan || source.notes, ""),
+    ].filter(Boolean).join("\n"),
     signatures,
   };
 };
