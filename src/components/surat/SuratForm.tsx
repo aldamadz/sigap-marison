@@ -48,6 +48,7 @@ import {
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
 import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
+import { NominalInput } from "@/components/surat/NominalInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   normalizeNonUnitOption,
@@ -3284,9 +3285,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             onChange: (value) => setInputValue(field.key, value),
             placeholder: inputPlaceholder,
           })
+        ) : field.type === "currency" ? (
+          <NominalInput
+            value={getFormFieldValue(field.key)}
+            onCommit={(canonical) => setInputValue(field.key, canonical)}
+            ariaLabel={field.label || field.key}
+            className="h-12"
+          />
         ) : (
           <Input
-            type={field.type === "number" || field.type === "currency" ? "number" : "text"}
+            type={field.type === "number" ? "number" : "text"}
             value={getDisplayFieldValue(field.key)}
             onChange={e => setInputValue(field.key, e.target.value)}
             className="h-12 bg-background text-sm"

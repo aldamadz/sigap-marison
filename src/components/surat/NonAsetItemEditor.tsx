@@ -1,12 +1,14 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { NominalInput } from "@/components/surat/NominalInput";
 import {
   formatCurrencyInput,
   formatRupiah,
   parseCurrencyInput,
 } from "@/lib/rupiah";
+import { cn } from "@/lib/utils";
 
 export type NonAsetItemRow = Record<string, unknown>;
 
@@ -62,23 +64,30 @@ export const getNonAsetItemRowTotal = (row: NonAsetItemRow, keys: {
   ? (parseCurrencyInput(row?.[keys.nominalKey]) ?? 0) * parseQty(row?.[keys.qtyKey])
   : 0;
 
-const RowTotalCell = ({ value }: { value: number | null }) => (
-  <Input
-    readOnly
-    disabled
-    tabIndex={-1}
-    aria-label="Total baris"
-    className="h-9 bg-muted/30 text-right text-sm font-semibold tabular-nums"
-    value={value === null ? "-" : formatRupiah(value)}
-  />
+const FieldShell = ({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) => (
+  <div className="space-y-1.5">
+    <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+      {label}
+      {required && <span className="ml-0.5 text-destructive">*</span>}
+    </Label>
+    {children}
+  </div>
 );
 
 /**
- * Editor item Non Aset yang mengikuti tata letak formulir PGD:
- * No | Kode | Nama Barang | Satuan | Jumlah | Status | Nominal Rupiah/satuan | Total.
- * Nominal satuan disimpan pada kolom `keterangan` agar tampil di kolom yang
- * sama pada PDF dan ringkasan persetujuan. Baris terakhir diikuti baris TOTAL
- * hasil penjumlahan (harga × jumlah) seluruh item.
+ * Editor item Non Aset bergaya kartu per barang/jasa (bukan tabel):
+ * field berlabel dengan grid rapi, nominal rupiah berprefiks "Rp" dengan
+ * pemformatan ribuan live, subtotal otomatis per kartu, dan kartu Total
+ * Pengajuan di akhir. Nominal tetap disimpan pada kolom `keterangan` agar
+ * tampil di kolom yang sama pada PDF dan ringkasan persetujuan.
  */
 export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
   const keys = getNonAsetItemColumnKeys(columns);
@@ -87,14 +96,15 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
   const normalizedRows = rows.length > 0 ? rows : [{} as NonAsetItemRow];
   const labelFor = (key: string, fallback: string) =>
     text(columns.find((column) => column.key === key)?.label) || fallback;
+  const requiredFor = (key: string) =>
+    columns.find((column) => column.key === key)?.required !== false;
 
-  const rowTotals = normalizedRows.map((row) =>
-    getNonAsetItemRowTotal(row, keys),
-  );
+  const rowTotals = normalizedRows.map((row) => getNonAsetItemRowTotal(row, keys));
   const grandTotal = rowTotals.reduce<number>((sum, value) => sum + value, 0);
   const hasAnyNominal = normalizedRows.some((row) =>
     parseCurrencyInput(row?.[keys.nominalKey]) !== null,
   );
+  const filledCount = normalizedRows.filter((row) => text(row[keys.nameKey])).length;
 
   const updateRow = (index: number, patch: NonAsetItemRow) => {
     onChange(normalizedRows.map((row, rowIndex) =>
@@ -107,165 +117,156 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
     onChange(next.length > 0 ? next : [{}]);
   };
 
-  const headerCount =
-    2 /* No. + aksi */
-    + 4 /* nama, satuan, jumlah, nominal */
-    + (keys.kodeKey ? 1 : 0)
-    + (keys.statusKey ? 1 : 0);
-
   return (
-    <div className="space-y-3">
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/50 text-left">
-              <th className="w-12 px-2 py-2.5 text-center text-[11px] font-black uppercase tracking-wide text-muted-foreground">No.</th>
-              {keys.kodeKey && (
-                <th className="w-24 px-2 py-2.5 text-left text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                  {labelFor(keys.kodeKey, "Kode")}
-                </th>
-              )}
-              <th className="min-w-[220px] px-2 py-2.5 text-left text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                {labelFor(keys.nameKey, "Nama Barang")}
-              </th>
-              <th className="w-28 px-2 py-2.5 text-left text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                {labelFor(keys.unitKey, "Satuan")}
-              </th>
-              <th className="w-24 px-2 py-2.5 text-left text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                {labelFor(keys.qtyKey, "Jumlah")}
-              </th>
-              {keys.statusKey && (
-                <th className="w-32 px-2 py-2.5 text-left text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                  {labelFor(keys.statusKey, "Status")}
-                </th>
-              )}
-              <th className="w-44 px-2 py-2.5 text-left text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                Nominal Rupiah / Satuan
-                <span className="block text-[10px] font-medium normal-case tracking-normal opacity-70">
-                  Tercatat di kolom {labelFor(keys.nominalKey, "Keterangan")}
+    <div className="space-y-4">
+      <div className="space-y-3">
+        {normalizedRows.map((row, rowIndex) => {
+          const name = text(row[keys.nameKey]);
+          const total = rowTotals[rowIndex];
+          const totalReady =
+            parseCurrencyInput(row[keys.nominalKey]) !== null && parseQty(row[keys.qtyKey]) > 0;
+          return (
+            <div
+              key={rowIndex}
+              className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors focus-within:border-primary/50 hover:border-primary/30 sm:p-5"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-black text-primary">
+                  {rowIndex + 1}
                 </span>
-              </th>
-              <th className="w-36 px-2 py-2.5 text-right text-[11px] font-black uppercase tracking-wide text-muted-foreground">Total</th>
-              <th className="w-12 px-1 py-2.5" aria-hidden />
-            </tr>
-          </thead>
-          <tbody>
-            {normalizedRows.map((row, rowIndex) => {
-              const total = rowTotals[rowIndex];
-              return (
-                <tr key={rowIndex} className="border-b border-border/60 last:border-b-0">
-                  <td className="px-2 py-2 text-center">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-xs font-bold text-primary">
-                      {rowIndex + 1}
-                    </span>
-                  </td>
-                  {keys.kodeKey && (
-                    <td className="px-2 py-2">
-                      <Input
-                        className="h-9 bg-background"
-                        aria-label={`${labelFor(keys.kodeKey!, "Kode")} baris ${rowIndex + 1}`}
-                        value={text(row[keys.kodeKey])}
-                        onChange={(event) => updateRow(rowIndex, { [keys.kodeKey!]: event.target.value })}
-                      />
-                    </td>
-                  )}
-                  <td className="px-2 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className={cn(
+                    "truncate text-sm font-semibold",
+                    name ? "text-foreground" : "text-muted-foreground",
+                  )}>
+                    {name || `Barang/Jasa ${rowIndex + 1}`}
+                  </p>
+                  <p className={cn(
+                    "text-[11px] font-medium",
+                    totalReady ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                  )}>
+                    {totalReady
+                      ? `Subtotal ${formatRupiah(total)}`
+                      : "Isi jumlah dan nominal untuk menghitung total"}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  aria-label={`Hapus ${name || `barang/jasa ${rowIndex + 1}`}`}
+                  onClick={() => removeRow(rowIndex)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FieldShell label={labelFor(keys.nameKey, "Nama Barang")} required={requiredFor(keys.nameKey)}>
+                  <Input
+                    className="h-10 bg-background"
+                    placeholder="Contoh: Kertas HVS A4"
+                    aria-label={`${labelFor(keys.nameKey, "Nama Barang")} barang/jasa ${rowIndex + 1}`}
+                    value={text(row[keys.nameKey])}
+                    onChange={(event) => updateRow(rowIndex, { [keys.nameKey]: event.target.value })}
+                  />
+                </FieldShell>
+                {keys.kodeKey && (
+                  <FieldShell label={labelFor(keys.kodeKey, "Kode")} required={requiredFor(keys.kodeKey)}>
                     <Input
-                      className="h-9 bg-background"
-                      placeholder="Contoh: Kertas HVS A4"
-                      aria-label={`${labelFor(keys.nameKey, "Nama Barang")} baris ${rowIndex + 1}`}
-                      value={text(row[keys.nameKey])}
-                      onChange={(event) => updateRow(rowIndex, { [keys.nameKey]: event.target.value })}
+                      className="h-10 bg-background"
+                      placeholder="Opsional"
+                      aria-label={`${labelFor(keys.kodeKey!, "Kode")} barang/jasa ${rowIndex + 1}`}
+                      value={text(row[keys.kodeKey])}
+                      onChange={(event) => updateRow(rowIndex, { [keys.kodeKey!]: event.target.value })}
                     />
-                  </td>
-                  <td className="px-2 py-2">
+                  </FieldShell>
+                )}
+                <FieldShell label={labelFor(keys.unitKey, "Satuan")} required={requiredFor(keys.unitKey)}>
+                  <Input
+                    className="h-10 bg-background"
+                    placeholder="Contoh: Rim"
+                    aria-label={`${labelFor(keys.unitKey, "Satuan")} barang/jasa ${rowIndex + 1}`}
+                    value={text(row[keys.unitKey])}
+                    onChange={(event) => updateRow(rowIndex, { [keys.unitKey]: event.target.value })}
+                  />
+                </FieldShell>
+                <FieldShell label={labelFor(keys.qtyKey, "Jumlah")} required={requiredFor(keys.qtyKey)}>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    className="h-10 bg-background text-right tabular-nums"
+                    placeholder="0"
+                    aria-label={`${labelFor(keys.qtyKey, "Jumlah")} barang/jasa ${rowIndex + 1}`}
+                    value={text(row[keys.qtyKey])}
+                    onChange={(event) => updateRow(rowIndex, { [keys.qtyKey]: event.target.value })}
+                  />
+                </FieldShell>
+                {keys.statusKey && (
+                  <FieldShell label={labelFor(keys.statusKey, "Status")} required={requiredFor(keys.statusKey)}>
                     <Input
-                      className="h-9 bg-background"
-                      placeholder="Unit"
-                      aria-label={`${labelFor(keys.unitKey, "Satuan")} baris ${rowIndex + 1}`}
-                      value={text(row[keys.unitKey])}
-                      onChange={(event) => updateRow(rowIndex, { [keys.unitKey]: event.target.value })}
+                      className="h-10 bg-background"
+                      placeholder="Contoh: Baru"
+                      aria-label={`${labelFor(keys.statusKey!, "Status")} barang/jasa ${rowIndex + 1}`}
+                      value={text(row[keys.statusKey])}
+                      onChange={(event) => updateRow(rowIndex, { [keys.statusKey!]: event.target.value })}
                     />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className="h-9 bg-background tabular-nums"
-                      placeholder="0"
-                      aria-label={`${labelFor(keys.qtyKey, "Jumlah")} baris ${rowIndex + 1}`}
-                      value={text(row[keys.qtyKey])}
-                      onChange={(event) => updateRow(rowIndex, { [keys.qtyKey]: event.target.value })}
-                    />
-                  </td>
-                  {keys.statusKey && (
-                    <td className="px-2 py-2">
-                      <Input
-                        className="h-9 bg-background"
-                        aria-label={`${labelFor(keys.statusKey!, "Status")} baris ${rowIndex + 1}`}
-                        value={text(row[keys.statusKey])}
-                        onChange={(event) => updateRow(rowIndex, { [keys.statusKey]: event.target.value })}
-                      />
-                    </td>
-                  )}
-                  <td className="px-2 py-2">
-                    <NominalInput
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      ariaLabel={`Nominal rupiah per satuan baris ${rowIndex + 1}`}
-                      placeholder="150.000"
-                      value={row[keys.nominalKey]}
-                      onCommit={(canonical) => updateRow(rowIndex, {
-                        [keys.nominalKey]: canonical ? `Rp ${formatCurrencyInput(canonical)}` : "",
-                      })}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <RowTotalCell value={total > 0 || (parseCurrencyInput(row[keys.nominalKey]) !== null && parseQty(row[keys.qtyKey]) > 0) ? total : null} />
-                  </td>
-                  <td className="px-1 py-2 text-center">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      aria-label={`Hapus baris ${rowIndex + 1}`}
-                      onClick={() => removeRow(rowIndex)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-border bg-muted/40">
-              <td
-                colSpan={headerCount - 1}
-                className="px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-muted-foreground"
-              >
-                Total
-              </td>
-              <td className="px-2 py-3 text-right text-sm font-bold tabular-nums text-foreground">
-                {hasAnyNominal ? formatRupiah(grandTotal) : "-"}
-              </td>
-              <td aria-hidden />
-            </tr>
-          </tfoot>
-        </table>
+                  </FieldShell>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <FieldShell
+                  label={`Nominal Rupiah / ${labelFor(keys.unitKey, "Satuan").toLowerCase()}`}
+                  required={false}
+                >
+                  <NominalInput
+                    className="h-11 bg-card"
+                    ariaLabel={`Nominal rupiah per satuan barang/jasa ${rowIndex + 1}`}
+                    placeholder="150.000"
+                    value={row[keys.nominalKey]}
+                    onCommit={(canonical) => updateRow(rowIndex, {
+                      [keys.nominalKey]: canonical ? `Rp ${formatCurrencyInput(canonical)}` : "",
+                    })}
+                  />
+                </FieldShell>
+                <div className="flex items-center justify-between rounded-xl bg-muted/60 px-3.5 py-2.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Total barang ini
+                  </span>
+                  <span className="text-sm font-bold tabular-nums text-foreground" aria-live="polite">
+                    {totalReady ? formatRupiah(total) : "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        className="h-9 rounded-xl"
+        className="h-11 w-full rounded-2xl border-dashed text-sm font-semibold text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
         onClick={() => onChange([...normalizedRows, {}])}
       >
-        <Plus className="mr-1 h-4 w-4" /> Tambah Barang/Jasa
+        <Plus className="mr-1.5 h-4 w-4" /> Tambah Barang/Jasa
       </Button>
+
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-widest text-primary">Total Pengajuan</p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
+            {filledCount} barang/jasa · dihitung dari harga satuan × jumlah
+          </p>
+        </div>
+        <p className="whitespace-nowrap text-xl font-black tabular-nums text-foreground sm:text-2xl" aria-live="polite">
+          {hasAnyNominal || grandTotal > 0 ? formatRupiah(grandTotal) : "—"}
+        </p>
+      </div>
     </div>
   );
 }

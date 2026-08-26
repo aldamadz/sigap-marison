@@ -9,6 +9,7 @@ const Harness = ({ initial = "" }: { initial?: string }) => {
     <>
       <NominalInput value={value} onCommit={setValue} placeholder="1.000.000" ariaLabel="Nominal" />
       <button onClick={() => setValue("2500000")}>Set eksternal</button>
+      <output data-testid="committed">{value}</output>
     </>
   );
 };
@@ -16,30 +17,41 @@ const Harness = ({ initial = "" }: { initial?: string }) => {
 const getInput = () => screen.getByRole("textbox", { name: "Nominal" }) as HTMLInputElement;
 
 describe("NominalInput", () => {
-  it("tidak menghapus field saat mengetik nominal digit demi digit (regresi wipe)", () => {
+  it("menampilkan prefiks Rp yang tidak dapat diedit", () => {
     render(<Harness />);
-    const input = getInput();
-    const steps = ["1", "10", "100", "1.000", "1.0000", "1.000.000"];
-    for (const step of steps) {
-      fireEvent.change(input, { target: { value: step } });
-      expect(input.value).not.toBe("");
-      expect(input.value).toBe(step.replace(/\D/g, ""));
-    }
-    expect(input.value).toBe("1000000");
+    expect(screen.getByText("Rp")).toBeInTheDocument();
   });
 
-  it("menahan bentuk antara yang tidak lolos parser kanonik tanpa mengosongkan field", () => {
+  it("memformat titik ribuan langsung saat mengetik tanpa mengosongkan field", () => {
+    render(<Harness />);
+    const input = getInput();
+    const steps: Array<[string, string]> = [
+      ["1", "1"],
+      ["10", "10"],
+      ["100", "100"],
+      ["1000", "1.000"],
+      ["10000", "10.000"],
+      ["1000000", "1.000.000"],
+    ];
+    for (const [typed, expected] of steps) {
+      fireEvent.change(input, { target: { value: typed } });
+      expect(input.value).toBe(expected);
+    }
+  });
+
+  it("tetap memformat bentuk antara aneh seperti 1.0000 tanpa wipe", () => {
     render(<Harness />);
     const input = getInput();
     fireEvent.change(input, { target: { value: "1.0000" } });
-    expect(input.value).toBe("10000");
+    expect(input.value).toBe("10.000");
   });
 
-  it("mengirim nilai kanonik saat blur dan menampilkan format titik ribuan", () => {
+  it("mengirim nilai kanonik digit saat blur dan menampilkan format titik ribuan", () => {
     render(<Harness />);
     const input = getInput();
-    fireEvent.change(input, { target: { value: "1.000.000" } });
+    fireEvent.change(input, { target: { value: "1000000" } });
     fireEvent.blur(input);
+    expect(screen.getByTestId("committed").textContent).toBe("1000000");
     expect(input.value).toBe("1.000.000");
   });
 
@@ -48,6 +60,7 @@ describe("NominalInput", () => {
     const input = getInput();
     fireEvent.change(input, { target: { value: "" } });
     fireEvent.blur(input);
+    expect(screen.getByTestId("committed").textContent).toBe("");
     expect(input.value).toBe("");
   });
 
