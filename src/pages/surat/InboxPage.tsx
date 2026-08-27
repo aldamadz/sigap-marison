@@ -1716,28 +1716,22 @@ const handleApprove = async (item: any) => {
                           />
                         </td>
                         <td className="border-r border-border px-2 py-2">
-                          <div className="flex h-11 items-center overflow-hidden rounded-md border border-input focus-within:ring-1 focus-within:ring-ring">
-                            <span className="flex h-full select-none items-center border-r border-input bg-muted/60 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">Rp</span>
-                            <NominalInput
-                              value={detail.struktur_atas}
-                              onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_atas", canonical)}
-                              placeholder="1.000.000"
-                              ariaLabel={`Struktur atas kavling ${unit.label}`}
-                              className="h-full w-full bg-transparent px-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
-                            />
-                          </div>
+                          <NominalInput
+                            value={detail.struktur_atas}
+                            onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_atas", canonical)}
+                            placeholder="1.000.000"
+                            ariaLabel={`Struktur atas kavling ${unit.label}`}
+                            className="h-11 bg-transparent shadow-none"
+                          />
                         </td>
                         <td className="border-r border-border px-2 py-2">
-                          <div className="flex h-11 items-center overflow-hidden rounded-md border border-input focus-within:ring-1 focus-within:ring-ring">
-                            <span className="flex h-full select-none items-center border-r border-input bg-muted/60 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">Rp</span>
-                            <NominalInput
-                              value={detail.struktur_bawah}
-                              onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_bawah", canonical)}
-                              placeholder="1.000.000"
-                              ariaLabel={`Struktur bawah kavling ${unit.label}`}
-                              className="h-full w-full bg-transparent px-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
-                            />
-                          </div>
+                          <NominalInput
+                            value={detail.struktur_bawah}
+                            onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_bawah", canonical)}
+                            placeholder="1.000.000"
+                            ariaLabel={`Struktur bawah kavling ${unit.label}`}
+                            className="h-11 bg-transparent shadow-none"
+                          />
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
@@ -2790,7 +2784,7 @@ const handleApprove = async (item: any) => {
                                 ? updateApprovedRevisionValue(revisionDialogItem, row, canonical)
                                 : updateRevisionRow(row.index, { nilai_disetujui: canonical })}
                               placeholder={revisionDialogItem ? getApprovedValuePlaceholder(revisionDialogItem, row) : "Isi nilai yang disetujui"}
-                              className="mt-1 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background transition-[border-color,box-shadow,background-color] placeholder:text-muted-foreground/75 focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:opacity-70"
+                              className="mt-1 h-10"
                             />
                           </div>
                         </>
