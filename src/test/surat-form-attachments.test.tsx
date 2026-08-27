@@ -19,6 +19,7 @@ import {
   mountFormWithUsage,
   fillNamaBarang,
   selectAllSigners,
+  goToWizardStep,
   clickConfirmRegistration,
 } from "./surat-form-driver";
 
@@ -61,6 +62,7 @@ async function reachReadyAttachmentForm() {
 describe("Flow 10: Required attachment", () => {
   it("blocks summary before required attachment is persisted", async () => {
     await reachReadyAttachmentForm();
+    await goToWizardStep(3);
     const confirm = screen.getByRole("button", { name: /Konfirmasi Pendaftaran/i });
     await act(async () => { fireEvent.click(confirm); });
 
@@ -85,6 +87,7 @@ describe("Flow 10: Required attachment", () => {
     expect((await screen.findAllByText("surat-kuasa.pdf")).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("1 dari 3 file tersimpan")).toBeInTheDocument();
 
+    await goToWizardStep(3);
     await clickConfirmRegistration();
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("surat-kuasa.pdf");

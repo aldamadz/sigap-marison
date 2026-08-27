@@ -17,6 +17,7 @@ import {
 import {
   configureStandardMocks,
   mountFormWithUsageAndSearchParams,
+  goToWizardStep,
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -35,9 +36,18 @@ describe("Flow 15: numbered draft form/usage ownership", () => {
 
     expect(serviceMock.getRegistrationDraft).toHaveBeenCalledWith(UUID.draft);
     expect(await screen.findByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Printer Epson")).toBeInTheDocument();
-    expect(screen.getByText("FORM PERMOHONAN ASET")).toBeInTheDocument();
+
+    // Langkah 1: form & kegunaan tampil read-only, tanpa combobox switch
+    await goToWizardStep(1);
+    expect(await screen.findByText("FORM PERMOHONAN ASET")).toBeInTheDocument();
     expect(screen.getByText("Permohonan Aset")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Form Dokumen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Kegunaan/i })).not.toBeInTheDocument();
+
+    // Langkah 2: nilai draft ter-restore di kolom form dinamis;
+    // panel read-only (langkah 1) sudah tidak tampil
+    await goToWizardStep(2);
+    expect(await screen.findByDisplayValue("Printer Epson")).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Isi Nama Barang/i)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Isi Keterangan Barang/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /Form Dokumen/i })).not.toBeInTheDocument();

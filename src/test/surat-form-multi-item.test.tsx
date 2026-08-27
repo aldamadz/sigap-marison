@@ -18,6 +18,7 @@ import {
   mountFormWithUsage,
   fillTableInput,
   selectAllSigners,
+  goToWizardStep,
   clickConfirmRegistration,
   submitFromDialog,
 } from "./surat-form-driver";
@@ -79,6 +80,7 @@ describe("Flow 12: Summary Payload", () => {
     await waitFor(() => expect(screen.getByPlaceholderText(/Contoh.*Permohonan/i)).toHaveValue(
       "Permohonan Aset : Printer Epson Dept. Pengembangan Organisasi Kantor Pusat"
     ));
+    await goToWizardStep(3);
     await clickConfirmRegistration();
 
     const dialog = screen.getByRole("dialog");

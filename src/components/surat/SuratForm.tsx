@@ -46,7 +46,9 @@ import {
   syncRecommendationMultiDetailInput,
 } from "@/components/surat/recommendation-multi-detail";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
+import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
+import { NominalInput } from "@/components/surat/NominalInput";
 import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import {
   getFundSubmissionAmount,
@@ -222,6 +224,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
   const [fundWithoutProject, setFundWithoutProject] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);
   const [activeDraftReservationId, setActiveDraftReservationId] = useState<string | null>(null);
   const [activeDrafts, setActiveDrafts]           = useState<SuratRegistrationDraft[]>([]);
@@ -1140,6 +1143,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isFundMode = getRequestCategory() === "non_asset";
   const isNonUnitMode = getRequestCategory() === "non_unit";
   const requiresMarisonProject = isNonUnitMode || isFundMode;
+  // Wizard registrasi surat: alur bertahap 1 → 2 → 3 (hanya alur non-rekomendasi).
+  const useRegistrationWizard = !isRecommendationFlow;
+  const activeWizardStep: 0 | 1 | 2 | 3 = !useRegistrationWizard ? 0 : (generatedNoSurat ? wizardStep : 1);
+  const showSectionBerkas = Boolean(generatedNoSurat) && (!useRegistrationWizard || activeWizardStep === 2);
+  const showSectionSigners = Boolean(generatedNoSurat) && signers.length > 0 && (!useRegistrationWizard || activeWizardStep === 3);
   const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects
     && getRequestCategory() !== "unit" && !isFundMode;
   const nonUnitProjectCandidates = useMemo(
@@ -1571,6 +1579,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
+    setWizardStep(2);
     setActiveDraftId(draftToRestore.id);
     setActiveDraftReservationId(draftToRestore.reservation_id);
     setJudulForDisplay(String(restoredFormData.judul_surat || ""));
@@ -1595,6 +1604,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   useEffect(() => {
     if (!activeDraftId || !generatedNoSurat || draftToRestore) return;
+    // Jangan pernah menimpa payload dengan kondisi yang sudah kehilangan
+    // tautan usage — itu akan menghapus perihal/penanda tangan secara permanen.
+    if (!selectedUsage?.id && !linkedDocumentContext) return;
     setDraftSaveState("saving");
     const timeout = window.setTimeout(() => {
       suratService.saveRegistrationDraft(
@@ -1624,7 +1636,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [isPusatSelected, generatedNoSurat]);
 
   useEffect(() => {
-    if (!selectedUsage) return;
+    // Setelah nomor terdaftar, konfigurasi workflow yang berubah tidak boleh
+    // memutus tautan usage/draft — penanda tangan yang sudah diisi harus aman.
+    if (!selectedUsage || generatedNoSurat) return;
     if (
       linkedDocumentContext?.type === "recommendation" &&
       linkedDocumentContext.usageId === selectedUsage.id
@@ -1634,7 +1648,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setSelectedUsage(null);
       setSigners([]);
     }
-  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext]);
+  }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext, generatedNoSurat]);
 
   useEffect(() => {
     if (getRequestCategory() !== "asset" || canRequesterUseRecommendation) return;
@@ -1997,6 +2011,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         throw draftError;
       }
       setGeneratedNoSurat(res.fullNumber);
+      setWizardStep(2);
       setActiveDraftId(draft.id);
       setActiveDraftReservationId(draft.reservation_id);
       setDraftSaveState("saved");
@@ -2130,6 +2145,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       request_place: "", request_date: toDateInputValue(new Date()), form_input_data: {}
     });
     setGeneratedNoSurat(null); setSelectedUsage(null); setSelectedFormId(""); setLampiranFiles([]); setSigners([]);
+    setWizardStep(1);
     setInitialAttachmentFiles({});
     setDraftAttachments([]);
     setUploadingRequirement(null);
@@ -3039,6 +3055,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       );
     }
 
+    if (field.key === "items" && isFundMode
+      && getNonAsetItemColumnKeys(field.table_config?.columns ?? []) !== null) {
+      return (
+        <NonAsetItemEditor
+          rows={getTableRows(field.key)}
+          columns={field.table_config?.columns ?? []}
+          onChange={(rows) => setTableRows(field.key, rows)}
+        />
+      );
+    }
+
     const columns = field.table_config?.columns ?? [];
     const rows = getTableRows(field.key);
 
@@ -3303,9 +3330,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             onChange: (value) => setInputValue(field.key, value),
             placeholder: inputPlaceholder,
           })
+        ) : field.type === "currency" ? (
+          <NominalInput
+            value={getFormFieldValue(field.key)}
+            onCommit={(canonical) => setInputValue(field.key, canonical)}
+            ariaLabel={field.label || field.key}
+            className="h-12"
+          />
         ) : (
           <Input
-            type={field.type === "number" || field.type === "currency" ? "number" : "text"}
+            type={field.type === "number" ? "number" : "text"}
             value={getDisplayFieldValue(field.key)}
             onChange={e => setInputValue(field.key, e.target.value)}
             className="h-12 bg-background text-sm"
@@ -3958,8 +3992,78 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </section>
         )}
 
+        {/* ══ STEPPER REGISTRASI (wizard 1 → 2 → 3) ═══════════════════════ */}
+        {useRegistrationWizard && (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <ol className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3" aria-label="Langkah registrasi surat">
+              {([
+                { step: 1, title: "Lokasi & Klasifikasi", description: "Kantor, proyek, dan jenis dokumen" },
+                { step: 2, title: "Persetujuan & Berkas", description: "Perihal, tanggal, dan lampiran" },
+                { step: 3, title: "Penandatangan", description: "Tetapkan pejabat penanda tangan" },
+              ] as const).map(({ step, title, description }) => {
+                const reachable = step === 1 || Boolean(generatedNoSurat);
+                const isActive = activeWizardStep === step;
+                const isDone = Boolean(generatedNoSurat) && step < activeWizardStep;
+                return (
+                  <li key={step}>
+                    <button
+                      type="button"
+                      disabled={!reachable}
+                      onClick={() => setWizardStep(step)}
+                      aria-current={isActive ? "step" : undefined}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
+                        isActive
+                          ? "border-primary/50 bg-primary/5 shadow-[var(--shadow-card)]"
+                          : reachable
+                            ? "border-border bg-muted/20 hover:border-primary/30 hover:bg-muted/30"
+                            : "cursor-not-allowed border-border bg-muted/10 opacity-60"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                          isActive
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : isDone
+                              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : "border-border bg-background text-muted-foreground"
+                        )}
+                      >
+                        {isDone ? <Check className="h-4 w-4" /> : step}
+                      </span>
+                      <span className="min-w-0">
+                        <span className={cn("block truncate text-sm font-semibold", isActive ? "text-foreground" : "text-muted-foreground")}>
+                          {title}
+                        </span>
+                        <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{description}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            {generatedNoSurat && (
+              <div className="flex shrink-0 items-center gap-2 self-start rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                <Hash className="h-4 w-4 text-primary" />
+                <span className="max-w-[220px] truncate text-xs font-semibold text-foreground">{generatedNoSurat}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => { navigator.clipboard.writeText(generatedNoSurat || ""); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }}
+                  aria-label="Salin nomor surat"
+                >
+                  {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
-        {!isRecommendationFlow && (
+        {!isRecommendationFlow && activeWizardStep === 1 && (
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
@@ -4357,6 +4461,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
         {generatedNoSurat && (
           <div id="surat-registration-details" className="scroll-mt-24 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
+            {showSectionBerkas && (
             <section className="space-y-6">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">2</span>
@@ -4455,9 +4560,28 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
               {!(externalRevision && getRequestCategory() === "unit") && renderAttachmentUploader()}
             </section>
+            )}
+
+            {useRegistrationWizard && activeWizardStep === 2 && (
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setWizardStep(1)}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                >
+                  Selanjutnya <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            )}
 
             {/* ══ SECTION 3: SIGNERS ═══════════════════════════════════════ */}
-            {signers.length > 0 && (
+            {showSectionSigners && (
               <section className="space-y-6 border-t pt-8 animate-in fade-in duration-700">
                 <div className="flex items-center gap-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">3</span>
@@ -4537,9 +4661,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   ))}
                 </div>
 
-                <div className="pt-6">
+                <div className="flex flex-col gap-3 pt-6 sm:flex-row">
+                  {useRegistrationWizard && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 sm:w-44"
+                      onClick={() => setWizardStep(2)}
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
+                    </Button>
+                  )}
                   <Button
-                    className="h-12 w-full text-base font-semibold disabled:opacity-50"
+                    className="h-12 flex-1 text-base font-semibold disabled:opacity-50"
                     disabled={isLoading || Boolean(uploadingRequirement) || Boolean(uploadingRecommendationAttachment) || signers.some(s => !s.user_id) || !formData.judul_surat}
                     onClick={handleOpenRegistrationSummary}
                   >
@@ -4548,10 +4682,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       : externalRevision ? "Tinjau dan Kirim Perbaikan" : "Konfirmasi Pendaftaran"
                     }
                   </Button>
-                  <p className="mt-3 text-center text-xs font-medium text-muted-foreground">
-                    Pastikan semua data sudah benar sebelum konfirmasi
-                  </p>
                 </div>
+                <p className="text-center text-xs font-medium text-muted-foreground">
+                  Pastikan semua data sudah benar sebelum konfirmasi
+                </p>
               </section>
             )}
           </div>
