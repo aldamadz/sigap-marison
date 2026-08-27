@@ -34,6 +34,9 @@ Perubahan:
   tidak salah menabrak subjudul stepper.
 - Tambahan uji untuk lampiran, draf, multi-item, penandatangan minimal,
   signers/usage cascade.
+- Dokumentasi `docs/EXTERNAL_API_SURAT_PRODUCTION.md` untuk URL production
+  external API (placeholder `external.marisoncloud.com`); subdomain final
+  dan konfigurasi deploy production masih menunggu finalisasi.
 
 Validasi:
 
