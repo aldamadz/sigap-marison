@@ -122,12 +122,13 @@ export default function OfficeManagementPage() {
     try {
       const externalId = form.marison_branch_id.trim() ? Number(form.marison_branch_id) : null;
       if (externalId != null && !Number.isSafeInteger(externalId)) throw new Error("ID external harus berupa angka bulat.");
+      const isHeadOffice = form.kedudukan === "Pusat";
       const payload = {
         code: form.code.trim().toUpperCase(),
         name: form.name.trim(),
         email: form.email.trim() || null,
         kedudukan: form.kedudukan,
-        parent_id: form.parent_id === "none" ? null : form.parent_id,
+        parent_id: isHeadOffice || form.parent_id === "none" ? null : form.parent_id,
         marison_branch_id: externalId,
         marison_hierarchy_confirmed: true,
       };
@@ -345,25 +346,34 @@ export default function OfficeManagementPage() {
             </div>
             <div className="space-y-2">
               <Label>Kedudukan</Label>
-              <Select value={form.kedudukan} onValueChange={(value) => setForm({ ...form, kedudukan: value })}>
+              <Select
+                value={form.kedudukan}
+                onValueChange={(value) => setForm({
+                  ...form,
+                  kedudukan: value,
+                  parent_id: value === "Pusat" ? "none" : form.parent_id,
+                })}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {["Pusat", "KC", "KCP", "Kost"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Kantor induk</Label>
-              <Select value={form.parent_id} onValueChange={(value) => setForm({ ...form, parent_id: value })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Tidak ada</SelectItem>
-                  {offices.filter((office) => office.id !== editing?.id).map((office) => (
-                    <SelectItem key={office.id} value={office.id}>{office.kedudukan} {office.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {form.kedudukan !== "Pusat" && (
+              <div className="space-y-2">
+                <Label>Kantor induk</Label>
+                <Select value={form.parent_id} onValueChange={(value) => setForm({ ...form, parent_id: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Tidak ada</SelectItem>
+                    {offices.filter((office) => office.id !== editing?.id).map((office) => (
+                      <SelectItem key={office.id} value={office.id}>{office.kedudukan} {office.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           {editing?.marison_review_required && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
