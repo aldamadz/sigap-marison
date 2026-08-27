@@ -18,14 +18,13 @@ import {
   configureStandardMocks,
   mountFormWithUsageAndSearchParams,
   editFieldAndWaitForAutosave,
+  goToWizardStep,
 } from "./surat-form-driver";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 function draftWithPayloadMutation(mutate: (payload: any) => any) {
   const base = buildDraftForRestore();
   return { ...base, payload: mutate({ ...(base.payload as Record<string, unknown>) }) };
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 beforeEach(() => {
   setupTestHarness();
@@ -59,7 +58,9 @@ describe("draft linkage protection", () => {
     await mountFormWithUsageAndSearchParams(FORM_USAGES_RAW_WITH_DRAFT, { draft: UUID.draft });
 
     expect(await screen.findByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
+    await goToWizardStep(3);
     expect(await screen.findByText("Pemohon Staging")).toBeInTheDocument();
+    await goToWizardStep(2);
 
     const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);
     serviceMock.saveRegistrationDraft.mockClear();
