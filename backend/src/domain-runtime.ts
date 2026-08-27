@@ -24,6 +24,7 @@ import {
   sendJson,
   withSecurityHeaders,
 } from "./lib/http.js";
+import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
 import {
   mapSuratRejectionRpcError,
   normalizeSuratRejectionRequest,
@@ -3598,9 +3599,7 @@ const isValidSourceProjectId = async (projectId) => {
 export const getMarisonPayloadMappings = async (req) => {
   const actor = await requireAdminUser(getBearerToken(req));
   if (marisonDeploymentEnvironment !== "staging") {
-    const error = new Error("Mapping payload hanya tersedia di staging.");
-    error.status = 404;
-    throw error;
+    return { mappings: [], actorId: actor.id };
   }
   const entityType = new URL(req.url || '/', 'http://localhost').searchParams.get('entityType') || null;
   if (entityType && !/^(profile|office|project)$/.test(entityType)) {
@@ -3619,7 +3618,7 @@ export const getMarisonPayloadMappings = async (req) => {
 
 export const getMarisonPayloadMappingCatalog = async (req, url) => {
   const actor = await requireAdminUser(getBearerToken(req));
-  if (marisonDeploymentEnvironment !== "staging") { const error = new Error("Payload mappings hanya tersedia di staging."); error.status = 404; throw error; }
+  if (marisonDeploymentEnvironment !== "staging") return { catalog: [], actorId: actor.id };
   const { entityType, query, limit, branchId } = parseMarisonPayloadCatalogQuery(url);
   const { data, error } = await supabase.rpc("get_marison_payload_mapping_catalog", { p_actor_id: actor.id, p_environment: marisonDeploymentEnvironment, p_entity_type: entityType, p_query: query, p_limit: limit, p_branch_id: branchId });
   if (error) throw error;
@@ -3774,7 +3773,8 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true }
 };
 
 const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
-  if (!surat?.pdf_path && String(surat?.file_path || "").startsWith("native://document/")) {
+  const finalPdfPath = resolveFinalMarisonPdfPath(surat);
+  if (!finalPdfPath && String(surat?.file_path || "").startsWith("native://document/")) {
     const { data: existingJob, error: existingJobError } = await supabase
       .from("document_pdf_jobs")
       .select("id")
@@ -3799,8 +3799,8 @@ const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
     throw err;
   }
   const rows = [
-    ...(surat?.pdf_path
-      ? [{ file_url: surat.pdf_path, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
+    ...(finalPdfPath
+      ? [{ file_url: finalPdfPath, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
       : []),
     ...asArrayValue(surat?.surat_attachments),
   ];
@@ -4063,25 +4063,32 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
     employees,
     requesterNik: overrides.nik,
   });
-  // Dana umum tanpa proyek wajib menyertakan branch_id external pemohon
-  // (vendor staging menolak payload tanpa cabang: "Cabang wajib diisi.").
+  // Vendor mewajibkan branch_id untuk semua Fund. Untuk Fund berproyek gunakan
+  // cabang pemilik proyek yang telah divalidasi; dana umum memakai cabang employee.
   const branchId = projectId == null
     ? resolveMarisonFundBranch({ employees, requesterNik: overrides.nik })
-    : null;
+    : requireExternalInteger(overrides.branchId, "Branch ID proyek");
 
-  return mapMarisonFundSubmission({
-    request: {
-      submissionNumber: surat.no_surat,
-      type: fundType,
-      title: surat.judul_surat,
-      description: firstString(input.catatan, input.description, surat.judul_surat),
+  return {
+    ...mapMarisonFundSubmission({
+      request: {
+        submissionNumber: surat.no_surat,
+        type: fundType,
+        title: surat.judul_surat,
+        description: firstString(input.catatan, input.description, surat.judul_surat),
+        amount: input.fund_amount,
+        items: input.items,
+      },
+      projectId,
+      branchId,
+      division,
+      attachments: await buildMarisonAttachmentLinks(surat, actorId),
+      approvals: overrides.approvals,
+    }),
+    sourceOverrides: {
+      branchId: projectId == null ? "external_source" : overrides.sources?.branchId,
     },
-    projectId,
-    branchId,
-    division,
-    attachments: await buildMarisonAttachmentLinks(surat, actorId),
-    approvals: overrides.approvals,
-  });
+  };
 };
 
 const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
@@ -4105,9 +4112,11 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
     err.status = 422;
     throw err;
   }
+  const { sourceOverrides, ...preparedDispatch } = dispatch;
   return {
-    ...dispatch,
-    resolutionSources: normalizePayloadResolutionSources(resolvedOverrides.sources, {
+    ...preparedDispatch,
+    resolutionSources: normalizePayloadResolutionSources(
+      mergePayloadResolutionSources(resolvedOverrides.sources, sourceOverrides), {
       kind: dispatch.kind,
       approvalCount: dispatch.payload.approvals?.length || 0,
       expectedApprovalKeys: Object.keys(identity.sources).filter((key) => key.startsWith("approval:")),
@@ -4267,7 +4276,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
       id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
       office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
       surat_signatures (
-        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
+        id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot, file_path_snap, pdf_path_snap,
         profiles:user_id ( id, full_name, nik, job_title )
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
@@ -4405,9 +4414,21 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
   try {
-    const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund" });
-     const mappings = await getMarisonOutboundMappings(surat, job.kind);
-    normalizePayloadResolutionSources({ ...mappings.sources, ...identity.sources }, { kind: job.kind, approvalCount: identity.approvals.length });
+    const identity = await resolveMarisonOutboundIdentity(surat);
+    const mappings = await getMarisonOutboundMappings(surat, job.kind);
+    const sources = { ...mappings.sources, ...identity.sources };
+    if (job.kind === "fund" && mappings.projectId == null) {
+      const employeePayload = await getMarisonProtectedJson(
+        marisonDeploymentEnvironment,
+        `/employees?search=${encodeURIComponent(identity.requester.nik)}&per_page=20&page=1`,
+      );
+      resolveMarisonFundBranch({
+        employees: Array.isArray(employeePayload?.data) ? employeePayload.data : [],
+        requesterNik: identity.requester.nik,
+      });
+      sources.branchId = "external_source";
+    }
+    normalizePayloadResolutionSources(sources, { kind: job.kind, approvalCount: identity.approvals.length });
     return { eligible: true, reasonCode: null, reason: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Identity payload belum siap.";

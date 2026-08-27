@@ -6,6 +6,21 @@ import {
 const text = (value) => String(value ?? "").trim();
 const nullableText = (value) => text(value) || null;
 const normalizedNik = (value) => text(value).toUpperCase().replace(/\s+/gu, " ");
+const positiveInteger = (value) => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
+};
+const nonNegativeInteger = (value) => {
+  const parsed = Number(String(value ?? "").replace(/[^\d-]/gu, ""));
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+const normalizeFundItems = (items) => (Array.isArray(items) ? items : []).map((item) => ({
+  nama_barang: text(item?.nama_barang ?? item?.item_name ?? item?.nama ?? item?.name),
+  jumlah: positiveInteger(item?.jumlah ?? item?.quantity),
+  satuan: text(item?.satuan ?? item?.sat ?? item?.unit),
+  nominal: nonNegativeInteger(item?.nominal ?? item?.subtotal ?? item?.nilai),
+}));
 
 export const normalizeMarisonFundApprovalRole = (value) => {
   const role = text(value).toLowerCase();
@@ -59,21 +74,22 @@ export const resolveMarisonFundBranch = ({ employees, requesterNik }) => {
 };
 
 export const mapMarisonFundSubmission = ({ request, projectId, branchId, division, attachments, approvals }) => {
+  const items = normalizeFundItems(request?.items);
   const payload = {
     submission_number: text(request?.submissionNumber),
     type: text(request?.type),
+    branch_id: Number(branchId),
     division: text(division),
     title: text(request?.title),
     description: nullableText(request?.description),
+    amount: request?.amount == null ? items.reduce((total, item) => total + item.nominal, 0) : nonNegativeInteger(request.amount),
+    items,
     attachments: Array.isArray(attachments) ? attachments : [],
     approvals: Array.isArray(approvals) ? approvals.map(normalizeFundApproval) : [],
   };
-  // Dana umum tanpa proyek: field project_id dihilangkan dari payload (omit)
-  // dan wajib menyertakan branch_id external pemohon.
+  // project_id tetap opsional untuk dana umum, sedangkan branch_id selalu wajib.
   if (projectId !== null && projectId !== undefined && String(projectId).trim() !== "") {
     payload.project_id = Number(projectId);
-  } else if (branchId !== null && branchId !== undefined && String(branchId).trim() !== "") {
-    payload.branch_id = Number(branchId);
   }
 
   return {

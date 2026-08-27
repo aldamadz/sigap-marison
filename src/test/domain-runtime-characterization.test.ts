@@ -24,6 +24,8 @@ afterEach(async () => {
 describe("domain-runtime protected route registration (no session)", () => {
   const protectedRoutes: Array<{ name: string; method: "GET" | "POST"; url: string; expected: 401 | 403 }> = [
     { name: "marison status", method: "GET", url: "/api/integrations/marison/status", expected: 401 },
+    { name: "marison project preview", method: "GET", url: "/api/integrations/marison/projects/preview", expected: 401 },
+    { name: "marison project sync", method: "POST", url: "/api/integrations/marison/projects/sync", expected: 401 },
     { name: "marison dispatches", method: "GET", url: "/api/integrations/marison/dispatches", expected: 401 },
     { name: "marison preflight", method: "GET", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/preflight", expected: 401 },
     { name: "marison replacement-preflight", method: "GET", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/replacement-preflight", expected: 401 },
