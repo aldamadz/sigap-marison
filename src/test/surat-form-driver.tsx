@@ -82,7 +82,15 @@ export function configureStandardMocks() {
  * Falls back to matching combobox text content.
  */
 export function findSelectTrigger(labelPattern: RegExp): HTMLElement {
-  const label = screen.getByText(labelPattern);
+  // Regex bisa menabrak subjudul stepper (mis. /Jenis Dokumen/i vs
+  // "Kantor, proyek, dan jenis dokumen"); ambil kandidat dengan teks terpendek.
+  const candidates = screen.queryAllByText(labelPattern);
+  const label = candidates.length > 0
+    ? candidates.reduce((a, b) =>
+        (a.textContent?.length ?? 0) <= (b.textContent?.length ?? 0) ? a : b,
+      )
+    : null;
+  if (!label) throw new Error(`Label not found: ${String(labelPattern)}`);
   let wrapper = label.parentElement;
   while (wrapper && wrapper !== document.body) {
     const cb = wrapper.querySelector("[role='combobox']");
@@ -172,7 +180,9 @@ export async function clickGetNumber() {
   const usageTrigger = findSelectTrigger(/^Kegunaan$/i);
   await waitFor(() => expect(usageTrigger).not.toHaveTextContent(/Pilih kegunaan|Pilih form terlebih dahulu/i));
   await act(async () => { fireEvent.click(btn); });
-  await screen.findByText(/Nomor Terdaftar/i);
+  // Wizard pindah ke langkah 2 setelah nomor didapat; langkah 1 (dengan
+  // kartu "Nomor Terdaftar") unmount. Tunggu header langkah 2.
+  await screen.findByText("Persetujuan dan Berkas");
 }
 
 // ─── Autosave with fake timers ──────────────────────────────────
@@ -279,6 +289,18 @@ export async function closeDialog() {
   });
 }
 
+// ─── Wizard navigation ──────────────────────────────────────────
+
+/** Navigate the registration wizard via its stepper buttons. */
+export async function goToWizardStep(step: 1 | 2 | 3) {
+  const name =
+    step === 1 ? /Lokasi & Klasifikasi/
+    : step === 2 ? /Persetujuan & Berkas/
+    : /Penandatangan/;
+  const btn = screen.getByRole("button", { name });
+  await act(async () => { fireEvent.click(btn); });
+}
+
 // ─── Full flow helpers ──────────────────────────────────────────
 
 export async function navigateToNumberReady() {
@@ -297,6 +319,7 @@ export async function navigateToNumberGenerated() {
 export async function navigateToReadyToSubmit() {
   await navigateToNumberGenerated();
   await fillNamaBarang("Printer Epson");
+  await goToWizardStep(3);
   await selectAllSigners();
 }
 

@@ -2,6 +2,13 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { NominalInput } from "@/components/surat/NominalInput";
 import {
   formatCurrencyInput,
@@ -26,6 +33,9 @@ type Props = {
 };
 
 const text = (value: unknown): string => String(value ?? "").trim();
+
+/** Pilihan status barang pada editor Non Aset: tingkatan 1 sampai 4. */
+const STATUS_OPTIONS = ["1", "2", "3", "4"] as const;
 
 /**
  * Memetakan kolom konfigurasi admin ke peran kolom editor Non Aset.
@@ -67,14 +77,16 @@ export const getNonAsetItemRowTotal = (row: NonAsetItemRow, keys: {
 const FieldShell = ({
   label,
   required,
+  className,
   children,
 }: {
   label: string;
   required?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) => (
-  <div className="space-y-1.5">
-    <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+  <div className={cn("space-y-1.5", className)}>
+    <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
       {label}
       {required && <span className="ml-0.5 text-destructive">*</span>}
     </Label>
@@ -83,11 +95,10 @@ const FieldShell = ({
 );
 
 /**
- * Editor item Non Aset bergaya kartu per barang/jasa (bukan tabel):
- * field berlabel dengan grid rapi, nominal rupiah berprefiks "Rp" dengan
- * pemformatan ribuan live, subtotal otomatis per kartu, dan kartu Total
- * Pengajuan di akhir. Nominal tetap disimpan pada kolom `keterangan` agar
- * tampil di kolom yang sama pada PDF dan ringkasan persetujuan.
+ * Editor item Non Aset tanpa tumpukan kartu: setiap barang adalah satu
+ * bagian yang dipisah garis tipis sehingga halaman terasa lega di desktop
+ * maupun mobile. Nominal tetap disimpan pada kolom `keterangan` agar tampil
+ * di kolom yang sama pada PDF dan ringkasan persetujuan.
  */
 export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
   const keys = getNonAsetItemColumnKeys(columns);
@@ -118,8 +129,8 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-3">
+    <div className="space-y-5">
+      <div className="divide-y divide-border/60">
         {normalizedRows.map((row, rowIndex) => {
           const name = text(row[keys.nameKey]);
           const total = rowTotals[rowIndex];
@@ -128,47 +139,32 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
           return (
             <div
               key={rowIndex}
-              className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors focus-within:border-primary/50 hover:border-primary/30 sm:p-5"
+              className="py-5 transition-colors first:pt-1 last:pb-1"
             >
-              <div className="mb-4 flex items-center gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-black text-primary">
-                  {rowIndex + 1}
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="text-[11px] font-black uppercase tracking-widest text-primary">
+                  Barang/Jasa {rowIndex + 1}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <p className={cn(
-                    "truncate text-sm font-semibold",
-                    name ? "text-foreground" : "text-muted-foreground",
-                  )}>
-                    {name || `Barang/Jasa ${rowIndex + 1}`}
-                  </p>
-                  <p className={cn(
-                    "text-[11px] font-medium",
-                    totalReady ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
-                  )}>
-                    {totalReady
-                      ? `Subtotal ${formatRupiah(total)}`
-                      : "Isi jumlah dan nominal untuk menghitung total"}
-                  </p>
-                </div>
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-xs font-semibold text-muted-foreground hover:text-destructive"
                   aria-label={`Hapus ${name || `barang/jasa ${rowIndex + 1}`}`}
                   onClick={() => removeRow(rowIndex)}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Hapus
                 </Button>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FieldShell label={labelFor(keys.nameKey, "Nama Barang")} required={requiredFor(keys.nameKey)}>
+              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                <FieldShell label={labelFor(keys.nameKey, "Nama Barang")} required={requiredFor(keys.nameKey)} className="sm:col-span-2">
                   <Input
                     className="h-10 bg-background"
                     placeholder="Contoh: Kertas HVS A4"
                     aria-label={`${labelFor(keys.nameKey, "Nama Barang")} barang/jasa ${rowIndex + 1}`}
-                    value={text(row[keys.nameKey])}
+                    value={name}
                     onChange={(event) => updateRow(rowIndex, { [keys.nameKey]: event.target.value })}
                   />
                 </FieldShell>
@@ -198,7 +194,7 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
                     min={0}
                     step={1}
                     inputMode="numeric"
-                    className="h-10 bg-background text-right tabular-nums"
+                    className="h-10 bg-background text-left tabular-nums"
                     placeholder="0"
                     aria-label={`${labelFor(keys.qtyKey, "Jumlah")} barang/jasa ${rowIndex + 1}`}
                     value={text(row[keys.qtyKey])}
@@ -207,24 +203,31 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
                 </FieldShell>
                 {keys.statusKey && (
                   <FieldShell label={labelFor(keys.statusKey, "Status")} required={requiredFor(keys.statusKey)}>
-                    <Input
-                      className="h-10 bg-background"
-                      placeholder="Contoh: Baru"
-                      aria-label={`${labelFor(keys.statusKey!, "Status")} barang/jasa ${rowIndex + 1}`}
-                      value={text(row[keys.statusKey])}
-                      onChange={(event) => updateRow(rowIndex, { [keys.statusKey!]: event.target.value })}
-                    />
+                    <Select
+                      value={text(row[keys.statusKey]) || undefined}
+                      onValueChange={(value) => updateRow(rowIndex, { [keys.statusKey!]: value })}
+                    >
+                      <SelectTrigger
+                        className="h-10 bg-background"
+                        aria-label={`${labelFor(keys.statusKey!, "Status")} barang/jasa ${rowIndex + 1}`}
+                      >
+                        <SelectValue placeholder="Pilih status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </FieldShell>
                 )}
-              </div>
-
-              <div className="mt-4 space-y-3">
                 <FieldShell
                   label={`Nominal Rupiah / ${labelFor(keys.unitKey, "Satuan").toLowerCase()}`}
                   required={false}
                 >
                   <NominalInput
-                    className="h-11 bg-card"
+                    className="h-11 bg-background"
+                    align="left"
                     ariaLabel={`Nominal rupiah per satuan barang/jasa ${rowIndex + 1}`}
                     placeholder="150.000"
                     value={row[keys.nominalKey]}
@@ -233,30 +236,36 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
                     })}
                   />
                 </FieldShell>
-                <div className="flex items-center justify-between rounded-xl bg-muted/60 px-3.5 py-2.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Total barang ini
-                  </span>
-                  <span className="text-sm font-bold tabular-nums text-foreground" aria-live="polite">
-                    {totalReady ? formatRupiah(total) : "—"}
-                  </span>
-                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+                <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                  Total {name || `Barang/Jasa ${rowIndex + 1}`}
+                </span>
+                <span
+                  className={cn(
+                    "whitespace-nowrap text-base font-bold tabular-nums",
+                    totalReady ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                  )}
+                  aria-live="polite"
+                >
+                  {totalReady ? formatRupiah(total) : "—"}
+                </span>
               </div>
             </div>
           );
         })}
       </div>
 
-      <Button
+      <button
         type="button"
-        variant="outline"
-        className="h-11 w-full rounded-2xl border-dashed text-sm font-semibold text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md text-sm font-semibold text-primary transition-colors hover:bg-primary/5"
         onClick={() => onChange([...normalizedRows, {}])}
       >
-        <Plus className="mr-1.5 h-4 w-4" /> Tambah Barang/Jasa
-      </Button>
+        <Plus className="h-4 w-4" /> Tambah Barang/Jasa
+      </button>
 
-      <div className="flex items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5">
+      <div className="flex flex-col gap-2 border-t-2 border-primary/40 pt-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-widest text-primary">Total Pengajuan</p>
           <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">

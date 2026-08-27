@@ -89,7 +89,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     await editFieldAndWaitForAutosave(perihal, "Judul Manual");
 
     expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
-    expect(screen.getByText(/Nomor Terdaftar/i)).toBeInTheDocument();
+    expect(screen.getByText("Persetujuan dan Berkas")).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 

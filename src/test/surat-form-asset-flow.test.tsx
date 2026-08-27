@@ -31,6 +31,7 @@ import {
   navigateToNumberReady,
   navigateToNumberGenerated,
   navigateToReadyToSubmit,
+  goToWizardStep,
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -103,7 +104,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
     await clickGetNumber();
 
     expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
-    expect(screen.getByText(/Nomor Terdaftar/i)).toBeInTheDocument();
+    expect(screen.getByText("Persetujuan dan Berkas")).toBeInTheDocument();
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Nomor Berhasil Didapatkan" })
     );
@@ -115,6 +116,9 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
     await clickGetNumber();
 
     expect(screen.getByText(/Persetujuan dan Berkas/i)).toBeInTheDocument();
+
+    await goToWizardStep(3);
+
     expect(screen.getByText(/Pejabat Penandatangan/i)).toBeInTheDocument();
     expect(screen.getByText("Pemohon")).toBeInTheDocument();
     expect(screen.getByText("Direktur")).toBeInTheDocument();

@@ -13,6 +13,7 @@ import { UUID } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
   navigateToNumberGenerated,
+  goToWizardStep,
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -34,16 +35,18 @@ afterEach(() => {
 describe("Flow 7: Number Lifecycle", () => {
   it("shows Ubah Identitas button after number is generated", async () => {
     await navigateToNumberGenerated();
+    await goToWizardStep(1);
 
     expect(
       screen.getByRole("button", { name: /Ubah Identitas/i })
     ).toBeInTheDocument();
-    expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
+    expect(screen.getAllByText("001/FA/MKT/VIII/2026").length).toBeGreaterThan(0);
     assertStrictServiceCalls();
   });
 
   it("cancel number calls voidRegistrationDraft and resets form", async () => {
     await navigateToNumberGenerated();
+    await goToWizardStep(1);
 
     const btn = screen.getByRole("button", { name: /Ubah Identitas/i });
     await act(async () => { fireEvent.click(btn); });
@@ -75,6 +78,7 @@ describe("Flow 7: Number Lifecycle", () => {
     );
 
     await navigateToNumberGenerated();
+    await goToWizardStep(1);
     toastMock.mockClear();
 
     const btn = screen.getByRole("button", { name: /Ubah Identitas/i });

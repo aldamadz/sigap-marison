@@ -10,6 +10,8 @@ interface NominalInputProps {
   /** Kelas tambahan untuk wadah input-group (mis. tinggi h-11 / h-12). */
   className?: string;
   disabled?: boolean;
+  /** Perataan angka pada input; kanan secara default. */
+  align?: "left" | "right";
 }
 
 /**
@@ -22,7 +24,7 @@ interface NominalInputProps {
  * menggunakan digit yang sudah dibersihkan sehingga bentuk antara apa pun
  * yang diketik tidak pernah mengosongkan field di tengah pengetikan.
  */
-export const NominalInput = ({ value, onCommit, placeholder, ariaLabel, className, disabled }: NominalInputProps) => {
+export const NominalInput = ({ value, onCommit, placeholder, ariaLabel, className, disabled, align = "right" }: NominalInputProps) => {
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const display = draft !== null ? draft : formatCurrencyInput(value);
@@ -58,7 +60,7 @@ export const NominalInput = ({ value, onCommit, placeholder, ariaLabel, classNam
         value={display}
         placeholder={placeholder ?? "0"}
         aria-label={ariaLabel}
-        className="h-full w-full min-w-0 bg-transparent px-2.5 py-2 text-right text-sm tabular-nums outline-none placeholder:text-muted-foreground/50"
+        className={cn("h-full w-full min-w-0 bg-transparent px-2.5 py-2 text-sm tabular-nums outline-none placeholder:text-muted-foreground/50", align === "left" ? "text-left" : "text-right")}
         onChange={(event) => {
           const digits = normalizeRupiahDigits(event.target.value);
           setDraft(digits.replace(/\B(?=(\d{3})+(?!\d))/g, "."));
