@@ -17,11 +17,17 @@ mengikuti pola `release/YYYY-MM-DD`.
 
 ## 2. Rilis Mendatang
 
-### 2.1 Alur registrasi bertahap + editor Non Aset bergaya kartu
+_Tidak ada kandidat rilis yang belum dipromosikan._
 
-- **Status**: PR #233 (staging), menanti deploy & smoke test
-- **Tanggal target**: menyusul hasil verifikasi staging
-- **Cabang**: `feature/surat-registrasi-wizard`
+## 3. Riwayat Rilis
+
+### 3.1 Alur registrasi bertahap + editor Non Aset bergaya kartu
+
+- **Tanggal**: 2026-08-27
+- **Cabang**: `codex/release-wizard-production`
+- **PR**: [#237](https://github.com/aldamadz/frontend/pull/237)
+- **Lingkup**: wizard registrasi tiga tahap, editor item Non Aset bergaya kartu,
+  dan perlindungan linkage draft terhadap perubahan konfigurasi.
 
 Perubahan:
 
@@ -38,13 +44,11 @@ Perubahan:
 Validasi:
 
 - `tsc --noEmit`: hijau
-- `vitest run`: 118 file / 766 tes lulus
-- PR: https://github.com/aldamadz/frontend/pull/233
-
-## 3. Riwayat Rilis
-
-_Belum ada rilis resmi yang tercatat. Entri pertama akan ditambahkan saat
-rilis produksi pertama._
+- `vitest run`: 118 file / 767 tes lulus
+- Smoke staging: pengajuan `011/UAI/PBO.1/VIII/2026` berhasil dan muncul
+  pada inbox approver tahap kedua.
+- PR sumber: [#232](https://github.com/aldamadz/frontend/pull/232) dan
+  [#233](https://github.com/aldamadz/frontend/pull/233)
 
 ## 4. Skema Penambahan Entri
 
