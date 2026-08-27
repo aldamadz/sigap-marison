@@ -9,6 +9,7 @@ import {
 import {
   configureStandardMocks,
   navigateToNumberGenerated,
+  goToWizardStep,
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -29,6 +30,7 @@ afterEach(() => {
 describe("Flow 9: Signer Minimum", () => {
   it("signers build from usage config with correct role names", async () => {
     await navigateToNumberGenerated();
+    await goToWizardStep(3);
 
     const signerSection = screen
       .getByText(/Pejabat Penandatangan/i)
@@ -44,6 +46,7 @@ describe("Flow 9: Signer Minimum", () => {
 
   it("signer count matches usage config steps", async () => {
     await navigateToNumberGenerated();
+    await goToWizardStep(3);
 
     // Count buttons with "Pilih" text — one per signer step
     const allButtons = screen.getAllByRole("button");
@@ -57,6 +60,7 @@ describe("Flow 9: Signer Minimum", () => {
 
   it("each signer shows placeholder when no user selected", async () => {
     await navigateToNumberGenerated();
+    await goToWizardStep(3);
 
     expect(screen.getByText(/Pilih Pemohon\.\.\./i)).toBeInTheDocument();
     expect(screen.getByText(/Pilih Direktur\.\.\./i)).toBeInTheDocument();
