@@ -3,6 +3,8 @@ services:
     build:
       context: ./external-api
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
     image: agenda-flow-external-api:production
     container_name: agenda-flow-external-api
     restart: always
@@ -11,9 +13,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: "80"
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
       SUPABASE_URL: "${SUPABASE_URL:-https://xuhyodtmgwteyslhrkfx.supabase.co}"
       SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY in .env.production}"
-      EXTERNAL_API_PUBLIC_URL: "${EXTERNAL_API_PUBLIC_URL:-https://external.marison-testing.biz.id}"
+      EXTERNAL_API_PUBLIC_URL: "${EXTERNAL_API_PUBLIC_URL:-https://external.marisoncloud.com}"
       EXTERNAL_API_MAX_SKEW_MS: "${EXTERNAL_API_MAX_SKEW_MS:-300000}"
       EXTERNAL_API_MAX_LIMIT: "${EXTERNAL_API_MAX_LIMIT:-100}"
       EXTERNAL_API_ACCESS_TOKEN_TTL_SECONDS: "${EXTERNAL_API_ACCESS_TOKEN_TTL_SECONDS:-900}"
