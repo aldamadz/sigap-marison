@@ -8,10 +8,10 @@ dikembalikan.
 
 ## Konteks untuk Agent Verifier
 
-Anda akan memverifikasi branch `feature/surat-registrasi-wizard` yang
+Anda akan memverifikasi alur `feature/surat-registrasi-wizard` yang
 sudah di-merge ke staging melalui PR
-[#233](https://github.com/aldamadz/frontend/pull/233) dan PR
-[#234](https://github.com/aldamadz/frontend/pull/234). Domain staging
+[#233](https://github.com/aldamadz/frontend/pull/233), beserta perlindungan
+draft dari PR [#232](https://github.com/aldamadz/frontend/pull/232). Domain staging
 adalah `https://sigap.marison-testing.biz.id`. Database Supabase staging
 sudah berisi matrix `Permohonan Non Unit (Pusat)` (id
 `844eb436-bb15-4cea-8ce0-cdeaa33af200`) yang terhubung ke departemen
@@ -31,8 +31,8 @@ Salin prompt ini ke agent lain (atau gunakan sebagai runbook manual).
 Kamu adalah QA engineer yang memverifikasi rilis kandidat SIGAP frontend
 ke environment staging.
 
-**Tujuan:** memastikan branch `feature/surat-registrasi-wizard` (PR #233
-dan #234) dapat digunakan end-to-end di staging
+**Tujuan:** memastikan perubahan registrasi bertahap (PR #233) dan
+perlindungan draft (PR #232) dapat digunakan end-to-end di staging
 (`https://sigap.marison-testing.biz.id`) tanpa regresi.
 
 **Lingkungan yang harus diverifikasi:**
@@ -116,7 +116,7 @@ dan #234) dapat digunakan end-to-end di staging
      200, tidak ada 4xx/5xx.
    - Cek Supabase logs untuk staging project — tidak ada error
      berulang.
-   - Cek file `docs/versi/changelog.md` tampil di repo (PR #234 merged).
+   - Cek file `docs/versi/changelog.md` tersedia pada kandidat rilis.
 
 **Kriteria lulus:**
 
@@ -173,11 +173,12 @@ dilakukan di branch terpisah.
 
 Agent yang menerima laporan kemudian:
 
-- Jika **PASS**: merge PR #234 (changelog) ke staging, lalu minta
-  agent lead untuk membuat PR `feature/surat-registrasi-wizard` →
-  `main` dan sinkronkan `main` ke `staging` setelahnya.
+- Jika **PASS**: promosikan hanya commit fitur, perbaikan draft, dan
+  dokumentasi terkait ke `main`; jangan membawa seluruh isi `staging`.
+  Setelah deployment production terverifikasi, sinkronkan `main` kembali
+  ke `staging` bila diperlukan.
 - Jika **FAIL**: buat branch `fix/*` dari staging, perbaiki regresi,
   ulangi alur merge ke staging, jalankan smoke test ulang.
 - Jika **PASS WITH NOTES**: nilai setiap "catatan" — bila hanya
-  kosmetik (typo, padding), boleh tetap lanjut. Bila涉及 alur data,
+  kosmetik (typo, padding), boleh tetap lanjut. Bila menyangkut alur data,
   tunda rilis ke main.
