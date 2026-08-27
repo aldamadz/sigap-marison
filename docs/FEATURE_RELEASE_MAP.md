@@ -228,7 +228,7 @@ Temuan keamanan outbound:
 | ADM-03 | Master departemen | Production + Staging | Department admin | Users, forms, workflow, KPI | Cross-cutting |
 | ADM-04 | Master entitas | Production + Staging | Entity admin | Numbering/surat | Pertahankan referensi historis |
 | ADM-05 | Master jenis surat | Production + Staging | Letter type admin | Forms, numbering, surat | Pertahankan referensi historis |
-| ADM-06 | Master kantor/cabang | Production + Staging | Office admin | Users, agenda, surat, Marison branch | Cross-cutting |
+| ADM-06 | Master kantor/cabang | Production + Staging; koreksi hierarki Pusat pending staging | Office admin | Users, agenda, surat, Marison branch | Kantor Pusat tidak memiliki kantor induk dan tidak memerlukan konfirmasi hasil deteksi hierarki; KCP/Kost tetap wajib memiliki induk |
 | ADM-07 | Master proyek | Production + Staging | Project admin | Surat/Marison | Jangan campur dengan project external tanpa mapping |
 | ADM-08 | SLA/KPI departemen | Production + Staging | KPI pages/RPC/config | Workflow/signature timestamps | UI dapat ditarik; data config dipertahankan |
 | ADM-09 | Job title display overrides | Production + Staging | Configuration page | Signature rendering | Memengaruhi dokumen baru dan rebuild |
