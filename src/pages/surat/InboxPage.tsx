@@ -32,7 +32,18 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { suratService, type LinkedSuratDocument } from "@/services/surat.service";
+import type { LinkedSuratDocument } from "@/services/surat.service";
+import { suratInboxApi } from "@/features/surat/inbox/services/surat-inbox-api";
+import { suratApprovalApi } from "@/features/surat/inbox/services/surat-approval-api";
+import {
+  getTaskAction,
+  getVerifierDisplayName,
+  hasVerifierTargets,
+  isPreparedByVerifier,
+  isVerificationTask,
+  isWaitingVerification,
+  shouldSignerInputStageData,
+} from "@/features/surat/inbox/lib/inbox-task-state";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -168,7 +179,7 @@ export default function InboxPage() {
 
   const { data: inboxPage, isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
     queryKey: ['surat-inbox-compact', inboxFilterKey, inboxCursor] as string[],
-    queryFn: () => suratService.getMyInboxCompact({
+    queryFn: () => suratInboxApi.getMyInboxCompact({
       limit: 20,
       cursor: inboxCursor || undefined,
       search: debouncedSearch || undefined,
@@ -251,40 +262,6 @@ export default function InboxPage() {
     }
   });
 
-  const isVerificationTask = (item: any) => item?.task_type === "verification";
-
-  const hasVerifierTargets = (item: any) =>
-    Array.isArray(item?.verifier_snapshot) && item.verifier_snapshot.some((entry: any) => entry?.user_id);
-
-  const getVerifierDisplayName = (item: any) => {
-    const names = Array.isArray(item?.verifier_snapshot)
-      ? item.verifier_snapshot
-          .map((entry: any) => String(entry?.full_name || entry?.name || entry?.display_name || "").trim())
-          .filter(Boolean)
-      : [];
-    const uniqueNames = Array.from(new Set(names));
-    if (uniqueNames.length === 0) return "tim pemeriksa";
-    if (uniqueNames.length === 1) return uniqueNames[0];
-    if (uniqueNames.length === 2) return `${uniqueNames[0]} dan ${uniqueNames[1]}`;
-    return `${uniqueNames.slice(0, 2).join(", ")} dan ${uniqueNames.length - 2} lainnya`;
-  };
-
-  const isWaitingVerification = (item: any) =>
-    item?.verification_required === true && item?.verification_status !== "verified";
-
-  const isPreparedByVerifier = (item: any) =>
-    item?.verification_required === true && item?.verification_status === "verified";
-
-  const shouldSignerInputStageData = (item: any) =>
-    !item?.verification_required || isVerificationTask(item);
-
-  const getTaskAction = (item: any) => {
-    if (isVerificationTask(item)) return "verification";
-    if (item.requires_unit_allocation) return "unit";
-    if ((item.attachment_requirements_snapshot || []).length > 0) return "attachment";
-    return "approval";
-  };
-
   const kpiBySignature = useMemo(() => new Map(
     (kpiDetails as DepartmentKpiDetail[]).map((detail) => [detail.signature_id, detail])
   ), [kpiDetails]);
@@ -306,7 +283,7 @@ export default function InboxPage() {
 
   const { data: selectedDetail, isFetching: detailFetching } = useQuery({
     queryKey: ['surat-inbox-detail', selectedSignatureId],
-    queryFn: () => suratService.getMyInboxDetail(selectedSignatureId!),
+    queryFn: () => suratInboxApi.getMyInboxDetail(selectedSignatureId!),
     enabled: Boolean(selectedSignatureId),
     staleTime: 30000,
     gcTime: 120000,
@@ -336,14 +313,14 @@ export default function InboxPage() {
 
   const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
     queryKey: ["surat-linked-documents", selectedSuratId],
-    queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
+    queryFn: () => suratInboxApi.getLinkedDocuments(selectedSuratId),
     enabled: Boolean(selectedSuratId),
     staleTime: 15000,
   });
 
   const { data: revisionHistory = [] } = useQuery({
     queryKey: ["surat-revision-history", selectedSuratId],
-    queryFn: () => suratService.getRevisionHistory(selectedSuratId),
+    queryFn: () => suratInboxApi.getRevisionHistory(selectedSuratId),
     enabled: Boolean(selectedSuratId),
     staleTime: 10000,
   });
@@ -625,7 +602,7 @@ export default function InboxPage() {
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
     draftSaveTimerRef.current = setTimeout(() => {
       setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "saving" }));
-      suratService.saveVerificationDraft(signatureId, payload, note)
+      suratApprovalApi.saveVerificationDraft(signatureId, payload, note)
         .then(() => {
           setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "saved" }));
         })
@@ -740,7 +717,7 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
 
-    await suratService.approveSurat(
+    await suratApprovalApi.approveSurat(
       item.id, 
       item.surat_id, 
       item.surat_registrasi.current_step, 
@@ -830,7 +807,7 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
     try {
-      await suratService.rejectSurat(item.id, item.surat_id, note);
+      await suratApprovalApi.rejectSurat(item.id, item.surat_id, note);
       toast.error("Dokumen Ditolak", {
         description: "Alur dokumen telah dihentikan secara permanen.",
       });
@@ -894,7 +871,7 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
     try {
-      await suratService.verifySignature(item.id, notes[item.id] || "", {
+      await suratApprovalApi.verifySignature(item.id, notes[item.id] || "", {
         suratId: item.surat_id,
         approvalAttachments: getSelectedApprovalFiles(item),
         ...(isUnitAllocationRequired(item) ? {
@@ -1192,7 +1169,7 @@ const handleApprove = async (item: any) => {
         ? Math.max(1, Number(item.step_order || 1) - 1)
         : Number(item.step_order || 1);
       const checkerInputSnapshot = target === "checker" ? buildCheckerInputSnapshot(item) : null;
-      await suratService.requestProcessRevision({
+      await suratApprovalApi.requestProcessRevision({
         suratId: item.surat_id,
         signatureId: item.id,
         targetType: target,
@@ -2168,7 +2145,7 @@ const handleApprove = async (item: any) => {
     const note = notes[item.id] || "";
     setProcessingId(item.id);
     try {
-      await suratService.resolveProcessRevision(revision.event_id, note);
+      await suratApprovalApi.resolveProcessRevision(revision.event_id, note);
       toast.success("Perbaikan selesai", {
         description: revision.target_type === "signer" && revision.changes?.external_submission_revision
           ? "Perbaikan tersimpan dan approval revisi dimulai sesuai konfigurasi kegunaan."

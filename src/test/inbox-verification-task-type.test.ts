@@ -11,6 +11,7 @@ const read = (path: string) => readFileSync(resolve(path), "utf8");
 describe("inbox verification task_type preserved on detail merge", () => {
   const runtime = read("backend/src/domain-runtime.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
+  const inboxTaskState = read("src/features/surat/inbox/lib/inbox-task-state.ts");
 
   it("1. InboxPage merges compact + detail instead of replacing", () => {
     // The selected item must keep the compact item's fields (task_type) and
@@ -32,7 +33,8 @@ describe("inbox verification task_type preserved on detail merge", () => {
   });
 
   it("3. isVerificationTask still keys on canonical task_type", () => {
-    expect(inbox).toContain('const isVerificationTask = (item: any) => item?.task_type === "verification"');
+    expect(inbox).toContain("isVerificationTask");
+    expect(inboxTaskState).toContain('export const isVerificationTask = (item: any) => item?.task_type === "verification"');
   });
 
   it("4. Verification UI still keys on isVerificationTask", () => {
