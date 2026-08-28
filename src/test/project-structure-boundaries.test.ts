@@ -49,4 +49,50 @@ describe("project structure boundaries", () => {
     expect(inboxPage).not.toContain("const getTaskAction =");
     expect(inboxTaskState).toContain("export const getTaskAction");
   });
+
+  it("keeps pure surat-service helpers out of the god service", () => {
+    const suratService = read("src/services/surat.service.ts");
+    const formHelpers = read("src/services/surat/form-helpers.ts");
+    const pdfBuilders = read("src/services/surat/pdf-builders.ts");
+    const notification = read("src/services/surat/notification.ts");
+
+    expect(exists("src/services/surat/form-helpers.ts")).toBe(true);
+    expect(exists("src/services/surat/pdf-builders.ts")).toBe(true);
+    expect(exists("src/services/surat/notification.ts")).toBe(true);
+
+    // Form-helpers module owns these functions; the facade must not
+    // redefine them inline.
+    expect(formHelpers).toContain("export const cleanUuid");
+    expect(formHelpers).toContain("export const normalizeRoleName");
+    expect(formHelpers).toContain("export const formatDateForDocument");
+    expect(formHelpers).toContain("export const normalizeRecommendationItems");
+    expect(formHelpers).toContain("export const normalizeFormInputData");
+    expect(formHelpers).toContain("export const getUnitCode");
+    expect(formHelpers).toContain("export const getUnitType");
+    expect(formHelpers).toContain("export const parseMoney");
+    expect(formHelpers).toContain("export const formatRupiah");
+    expect(formHelpers).toContain("export const buildProductionCode");
+    expect(formHelpers).toContain("export const formatProductionDate");
+    expect(formHelpers).toContain("export const getVerifierIdsFromSnapshot");
+    expect(formHelpers).toContain("export const buildDataSnapshot");
+
+    expect(pdfBuilders).toContain("export const createUnitRecapAttachment");
+    expect(pdfBuilders).toContain("export const createProductionCodeAttachment");
+    expect(pdfBuilders).toContain("export const getSignerSnapshots");
+
+    expect(notification).toContain("export const sendNotification");
+    expect(notification).toContain("export const notifyInboxStepTasks");
+
+    // The facade still exposes the same method names (callers depend on them)
+    // but must not carry the original inline implementations.
+    expect(suratService).toContain("cleanUuid(...args: Parameters<typeof cleanUuid>)");
+    expect(suratService).toContain("normalizeRoleName(...args: Parameters<typeof normalizeRoleName>)");
+    expect(suratService).toContain("formatDateForDocument(...args: Parameters<typeof formatDateForDocument>)");
+    expect(suratService).toContain("normalizeRecommendationItems(...args: Parameters<typeof normalizeRecommendationItems>)");
+    expect(suratService).toContain("normalizeFormInputData(...args: Parameters<typeof normalizeFormInputData>)");
+    expect(suratService).toContain("createUnitRecapAttachment(...args: Parameters<typeof createUnitRecapAttachment>)");
+    expect(suratService).toContain("createProductionCodeAttachment(...args: Parameters<typeof createProductionCodeAttachment>)");
+    expect(suratService).toContain("buildDataSnapshot(...args: Parameters<typeof buildDataSnapshot>)");
+    expect(suratService).toContain("notifyInboxStepTasks(");
+  });
 });
