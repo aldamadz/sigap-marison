@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { NominalInput } from "@/components/surat/NominalInput";
+import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 
 const Harness = ({ initial = "" }: { initial?: string }) => {
   const [value, setValue] = useState(initial);
@@ -90,5 +91,17 @@ describe("NominalInput", () => {
     fireEvent.change(input, { target: { value: "99999999999999999999" } });
     fireEvent.blur(input);
     expect(input.value).toBe("");
+  });
+
+  it("tidak menggandakan prefiks Rp saat dipakai di rincian fund submission", () => {
+    render(
+      <FundSubmissionEditor
+        value={[{ id: "fund-1", nama_barang: "Sewa kendaraan", jumlah: 1, satuan: "bulan", nominal: 0 }]}
+        onChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByText("Rp")).toHaveLength(1);
+    expect(screen.getByRole("textbox", { name: "Nominal item 1" })).toBeInTheDocument();
   });
 });

@@ -73,6 +73,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     fireEvent.change(screen.getByLabelText("Jumlah"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("Satuan"), { target: { value: "bulan" } });
     const nominal = screen.getByRole("textbox", { name: "Nominal item 1" });
+    expect(screen.getAllByText("Rp")).toHaveLength(1);
     fireEvent.change(nominal, { target: { value: "1500000" } });
     fireEvent.blur(nominal);
     expect(await screen.findByText("Rp 1.500.000")).toBeInTheDocument();
