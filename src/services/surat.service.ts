@@ -1,15 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
-import { buildProductionCode } from "@/lib/production-code";
-import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
-import {
-  flattenRecommendationItems,
-  withoutRecommendationEstimatedPrices,
-  type RecommendationMultiDetail,
-} from "@sigap/shared";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import {
   buildRegistrationAttachmentRows,
@@ -18,6 +8,27 @@ import {
 } from "@/lib/registration-draft-attachment-classification";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
+import {
+  buildDataSnapshot,
+  buildProductionCode,
+  cleanUuid,
+  formatDateForDocument,
+  formatProductionDate,
+  formatRupiah,
+  getUnitCode,
+  getUnitType,
+  getVerifierIdsFromSnapshot,
+  normalizeFormInputData,
+  normalizeRecommendationItems,
+  normalizeRoleName,
+  parseMoney,
+} from "./surat/form-helpers";
+import {
+  createProductionCodeAttachment,
+  createUnitRecapAttachment,
+  getSignerSnapshots,
+} from "./surat/pdf-builders";
+import { notifyInboxStepTasks, sendNotification } from "./surat/notification";
 
 export interface SuratRegistrasi {
   id: string;
@@ -160,32 +171,12 @@ export interface RegistrationDraftUploadProgress {
 }
 
 export const suratService = {
-  async sendNotification(userIds: string[], title: string, message: string, link?: string, meta: Record<string, any> = {}) {
-    const ids = [...new Set((userIds || []).filter(Boolean))];
-    if (ids.length === 0) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession({ force: true });
-      if (!session?.access_token) return;
-      const response = await fetch("/api/notifications/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ user_ids: ids, title, message, link, ...meta }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error || "Gagal mengirim notifikasi.");
-      }
-    } catch (error) {
-      console.error("Notification error:", error);
-    }
+  async sendNotification(...args: Parameters<typeof sendNotification>) {
+    return sendNotification(...args);
   },
 
-  getVerifierIdsFromSnapshot(snapshot: any): string[] {
-    const rows = Array.isArray(snapshot) ? snapshot : [];
-    return [...new Set(rows.map((item: any) => item?.user_id).filter(Boolean))];
+  getVerifierIdsFromSnapshot(...args: Parameters<typeof getVerifierIdsFromSnapshot>) {
+    return getVerifierIdsFromSnapshot(...args);
   },
 
   async notifyInboxStepTasks(
@@ -194,501 +185,73 @@ export const suratService = {
     judulSurat: string,
     eventType: string
   ) {
-    const { data: signatures, error } = await supabase
-      .from("surat_signatures")
-      .select("id, user_id, verification_required, verification_status, verifier_snapshot")
-      .eq("surat_id", suratId)
-      .eq("step_order", stepOrder)
-      .eq("is_signed", false);
-
-    if (error) {
-      console.error("Failed to load inbox notification targets:", error);
-      return;
-    }
-
-    for (const signature of signatures || []) {
-      const verifierIds = signature.verification_required && signature.verification_status !== "verified"
-        ? this.getVerifierIdsFromSnapshot(signature.verifier_snapshot)
-        : [];
-      const targetIds = verifierIds.length > 0 ? verifierIds : [signature.user_id].filter(Boolean);
-      if (targetIds.length === 0) continue;
-
-      const isVerification = verifierIds.length > 0;
-      const title = isVerification ? "Pemeriksaan Data Diperlukan" : "Surat Masuk Baru";
-      const message = isVerification
-        ? `Surat "${judulSurat}" perlu diperiksa sebelum ditandatangani`
-        : `Surat "${judulSurat}" memerlukan tindakan Anda`;
-      const link = `/surat/inbox?task=${signature.id}`;
-
-      this.sendNotification(
-        targetIds,
-        title,
-        message,
-        link,
-        { surat_id: suratId, signature_id: signature.id, event_type: eventType }
-      );
-    }
-  },
-
-  cleanUuid(id: any) {
-    if (!id || id === "" || id === "pusat" || id === "undefined" || id === "null") return null;
-    return id;
-  },
-
-  normalizeRoleName(raw: any, stepOrder: number, totalSteps: number): "membuat" | "memeriksa" | "menyetujui" {
-    const v = String(raw ?? "").toLowerCase().trim();
-    if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as any;
-    if (v.includes("setuju") || v.includes("approve") || v.includes("approval") || v.includes("otoris") || v.includes("final")) return "menyetujui";
-    if (v.includes("periksa") || v.includes("review") || v.includes("pemeriksaan") || v.includes("cek") || v.includes("paraf")) return "memeriksa";
-    if (v.includes("buat") || v.includes("draft") || v.includes("pemohon") || v.includes("request")) return "membuat";
-    if (stepOrder === 1) return "membuat";
-    if (stepOrder === totalSteps) return "menyetujui";
-    return "memeriksa";
-  },
-
-  formatDateForDocument(value: string | Date | null | undefined): string {
-    if (!value) return "";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-  },
-
-  normalizeRecommendationItems(value: any[]) {
-    if (!Array.isArray(value)) return [];
-    const allowedActions = new Set(["service", "ganti", "beli_baru", "tidak_direkomendasikan"]);
-    return value
-      .filter((row) => Object.values(row ?? {}).some((cellValue) => String(cellValue ?? "").trim()))
-      .map((row, index) => {
-        const actionRaw = String(row?.recommendation_action || "").trim();
-        const fallbackAction = String(row?.service || "").trim()
-          ? "service"
-          : String(row?.ganti || "").trim()
-            ? "ganti"
-            : String(row?.beli_baru || "").trim()
-              ? "beli_baru"
-              : String(row?.tidak_direkomendasikan || "").trim()
-                ? "tidak_direkomendasikan"
-                : "";
-        const action = allowedActions.has(actionRaw) ? actionRaw : fallbackAction;
-        const nestedAttachment = row?.recommendation_attachment &&
-          typeof row.recommendation_attachment === "object" &&
-          !Array.isArray(row.recommendation_attachment)
-          ? row.recommendation_attachment
-          : null;
-        const attachmentSource = nestedAttachment || {
-          draft_file_id: row?.recommendation_attachment_draft_file_id,
-          file_url: row?.recommendation_attachment_url,
-          file_name: row?.recommendation_attachment_file_name,
-          file_type: row?.recommendation_attachment_file_type,
-          file_size: row?.recommendation_attachment_file_size,
-          uploaded_at: row?.recommendation_attachment_uploaded_at,
-          source: row?.recommendation_attachment_source,
-          attachments: Array.isArray(row?.attachments) ? row.attachments : undefined,
-        };
-        const hasAttachment = Boolean(String(
-          attachmentSource?.draft_file_id || attachmentSource?.file_url || attachmentSource?.file_name || ""
-        ).trim()) || (Array.isArray(attachmentSource?.attachments) && attachmentSource.attachments.length > 0);
-        const normalized = {
-          ...row,
-          no: index + 1,
-          recommendation_action: action || null,
-          is_recommended: action !== "tidak_direkomendasikan",
-          nama_barang: String(row?.nama_barang ?? "").trim(),
-          no_registrasi: String(row?.no_registrasi ?? "").trim(),
-          lokasi_pic: String(row?.lokasi_pic ?? "").trim(),
-          kerusakan: String(row?.kerusakan ?? "").trim(),
-          service: action === "service" ? "✓" : "",
-          ganti: action === "ganti" ? "✓" : "",
-          beli_baru: action === "beli_baru" ? "✓" : "",
-          tidak_direkomendasikan: action === "tidak_direkomendasikan" ? "✓" : "",
-          uraian: String(row?.uraian ?? "").trim(),
-          keterangan: String(row?.keterangan ?? "").trim(),
-          reference_link: String(row?.reference_link ?? row?.link ?? "").trim(),
-          recommendation_attachment: hasAttachment
-            ? {
-                draft_file_id: String(attachmentSource.draft_file_id || "").trim() || null,
-                file_url: String(attachmentSource.file_url || "").trim() || null,
-                file_name: String(attachmentSource.file_name || "").trim() || null,
-                file_type: attachmentSource.file_type || null,
-                file_size: Number(attachmentSource.file_size || 0) || null,
-                uploaded_at: String(attachmentSource.uploaded_at || "").trim() || null,
-                source: String(attachmentSource.source || "").trim() || null,
-                attachments: Array.isArray(attachmentSource.attachments)
-                  ? attachmentSource.attachments
-                  : undefined,
-              }
-            : null,
-        };
-        delete normalized.recommendation_attachment_draft_file_id;
-        delete normalized.recommendation_attachment_url;
-        delete normalized.recommendation_attachment_file_name;
-        delete normalized.recommendation_attachment_file_type;
-        delete normalized.recommendation_attachment_file_size;
-        delete normalized.recommendation_attachment_uploaded_at;
-        delete normalized.recommendation_attachment_source;
-        return normalized;
-      });
-  },
-
-  normalizeFormInputData(inputData: any, context?: { requesterDepartmentCode?: string | null; requesterDepartmentName?: string | null }) {
-    const normalized = { ...(inputData ?? {}) };
-    if (!normalized.request_category) {
-      normalized.request_category = normalized.request_mode === "unit"
-        ? "unit"
-        : normalized.is_aset === true
-          ? "asset"
-          : "non_unit";
-    }
-    if (normalized.request_category === "unit") {
-      normalized.request_mode = "unit";
-      const count = Number(normalized.requested_unit_count || 0);
-      const unitLabel = Number.isFinite(count) && count > 0 ? count : "";
-      normalized.items = [{
-        kode: "",
-        kode_barang: "",
-        nama_barang: `Permohonan Order Bangun SPK Pembangunan Rumah ${unitLabel} Unit`,
-        nama: `Permohonan Order Bangun SPK Pembangunan Rumah ${unitLabel} Unit`,
-        barang: `Permohonan Order Bangun SPK Pembangunan Rumah ${unitLabel} Unit`,
-        sat: "Unit",
-        satuan: "Unit",
-        jumlah: unitLabel,
-        status: "2",
-        keterangan: "",
-      }];
-    } else {
-      normalized.request_mode = "barang";
-      if (normalized.request_category !== "non_unit") {
-        delete normalized.requested_project;
-      }
-      delete normalized.requested_unit_count;
-      delete normalized.unit_request_sentence;
-      delete normalized.unit_config_snapshot;
-      delete normalized.allocated_project;
-      delete normalized.allocated_units;
-      delete normalized.allocated_unit_count;
-    }
-    const canUseRecommendation = canUseAssetRecommendation({
-      code: context?.requesterDepartmentCode,
-      name: context?.requesterDepartmentName,
-    });
-    if (normalized.request_category === "asset" && canUseRecommendation) {
-      normalized.requires_recommendation = normalized.requires_recommendation === true;
-      normalized.recommendation_template_name = normalized.recommendation_template_name || "Rekomendasi Peremajaan Alat";
-      normalized.recommendation_attachment_note = normalized.recommendation_attachment_note ||
-        (normalized.requires_recommendation
-          ? "Pemohon membutuhkan lampiran rekomendasi untuk permohonan aset ini."
-          : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.");
-    } else {
-      delete normalized.requires_recommendation;
-      delete normalized.recommendation_template_name;
-      delete normalized.recommendation_attachment_note;
-    }
-    if (Array.isArray(normalized.items)) {
-      normalized.items = normalized.items.filter((row: any) =>
-        Object.values(row ?? {}).some((value) => String(value ?? "").trim())
-      );
-    }
-    if (
-      normalized.recommendation_multi_detail?.version === 1
-      && Array.isArray(normalized.recommendation_multi_detail?.items)
-    ) {
-      normalized.recommendation_multi_detail = withoutRecommendationEstimatedPrices(
-        normalized.recommendation_multi_detail as RecommendationMultiDetail,
-      );
-      normalized.recommendation_items = flattenRecommendationItems(
-        normalized.recommendation_multi_detail as RecommendationMultiDetail,
-      );
-    } else if (Array.isArray(normalized.recommendation_items)) {
-      normalized.recommendation_items = this.normalizeRecommendationItems(normalized.recommendation_items);
-    }
-    return normalized;
-  },
-
-  getUnitCode(unit: any) {
-    return String(
-      unit?.raw?.code ||
-      unit?.raw?.unit_code ||
-      unit?.raw?.kode ||
-      unit?.code ||
-      unit?.value ||
-      unit?.label ||
-      "-"
-    ).trim();
-  },
-
-  getUnitType(unit: any) {
-    return String(
-      unit?.allocation_detail?.unit_type ||
-      unit?.allocation_detail?.type ||
-      unit?.allocation_detail?.tipe ||
-      unit?.unit_type ||
-      unit?.raw?.unit_type ||
-      unit?.raw?.type ||
-      unit?.raw?.tipe ||
-      unit?.raw?.house_type ||
-      "-"
-    ).trim();
-  },
-
-  parseMoney(value: any) {
-    return parseRupiahInteger(value);
-  },
-
-  formatRupiah(value: any) {
-    const amount = this.parseMoney(value);
-    if (amount === 0) return "Rp 0";
-    return formatRupiahCanonical(amount);
-  },
-
-  buildProductionCode(unit: any) {
-    const detail = unit?.allocation_detail || {};
-    const block = String(detail.production_block || detail.kode_produksi_blok || "").trim();
-    const rawDate = String(detail.production_date || detail.kode_produksi_tanggal || "").trim();
-    const formattedDate = rawDate
-      ? this.formatProductionDate(rawDate)
-      : "";
-    return buildProductionCode({
-      serial: detail.production_serial || detail.kode_produksi_nomor,
-      block,
-      date: formattedDate,
-    });
-  },
-
-  formatProductionDate(value: string) {
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
-  },
-
-  createUnitRecapAttachment(project: any, units: any[]) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const margin = 15;
-    let totalAtas = 0;
-    let totalBawah = 0;
-    const body = units.map((unit, index) => {
-      const atas = this.parseMoney(unit?.allocation_detail?.struktur_atas);
-      const bawah = this.parseMoney(unit?.allocation_detail?.struktur_bawah);
-      totalAtas += atas;
-      totalBawah += bawah;
-      return [
-        String(index + 1),
-        this.getUnitCode(unit),
-        this.getUnitType(unit),
-        this.formatRupiah(atas),
-        this.formatRupiah(bawah),
-        this.formatRupiah(atas + bawah),
-      ];
-    });
-
-    const totalNominal = totalAtas + totalBawah;
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.text("REKAP ADENDUM UNIT", margin, 17);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
-    doc.text(`Cabang: ${project?.branch?.name || "-"}`, margin, 29);
-
-    autoTable(doc, {
-      startY: 36,
-      margin: { left: margin, right: margin },
-      head: [["No", "Kavling", "Tipe", "Struktur Atas", "Struktur Bawah", "Nominal"]],
-      body,
-      foot: [["TOTAL", "", "", this.formatRupiah(totalAtas), this.formatRupiah(totalBawah), this.formatRupiah(totalNominal)]],
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 9,
-        textColor: [0, 0, 0],
-        lineColor: [0, 0, 0],
-        lineWidth: 0.15,
-        cellPadding: 2,
-      },
-      headStyles: {
-        fillColor: [245, 245, 245],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        halign: "center",
-      },
-      footStyles: {
-        fillColor: [245, 245, 245],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 28, halign: "center" },
-        2: { cellWidth: 28 },
-        3: { halign: "right" },
-        4: { halign: "right" },
-        5: { halign: "right" },
-      },
-      didParseCell: (data) => {
-        if (data.section === "foot" && data.column.index === 0) {
-          data.cell.colSpan = 3;
-          data.cell.styles.halign = "center";
-        }
-        if (data.section === "foot" && data.column.index === 1) {
-          data.cell.text = [];
-        }
-        if (data.section === "foot" && data.column.index === 2) {
-          data.cell.text = [];
-        }
-      },
-    });
-
-    const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
-    return new File(
-      [doc.output("blob")],
-      `Rekap_Adendum_Unit_${safeProject}_${Date.now()}.pdf`,
-      { type: "application/pdf" }
+    return notifyInboxStepTasks(
+      { sendNotification, getVerifierIdsFromSnapshot },
+      suratId,
+      stepOrder,
+      judulSurat,
+      eventType,
     );
   },
 
-  createProductionCodeAttachment(project: any, units: any[]) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const margin = 15;
-    const body = units.map((unit, index) => [
-      String(index + 1),
-      project?.name || project?.label || "-",
-      this.getUnitCode(unit),
-      this.getUnitType(unit),
-      this.buildProductionCode(unit) || "-",
-    ]);
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.text("KODE PRODUKSI UNIT", margin, 17);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Proyek: ${project?.name || project?.label || "-"}`, margin, 24);
-
-    autoTable(doc, {
-      startY: 35,
-      margin: { left: margin, right: margin },
-      head: [["No", "Proyek", "Unit", "Tipe", "Kode Produksi"]],
-      body,
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 9,
-        textColor: [0, 0, 0],
-        lineColor: [0, 0, 0],
-        lineWidth: 0.15,
-        cellPadding: 2,
-        overflow: "linebreak",
-      },
-      headStyles: {
-        fillColor: [245, 245, 245],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        halign: "center",
-      },
-      columnStyles: {
-        0: { cellWidth: 13, halign: "center" },
-        1: { cellWidth: 42 },
-        2: { cellWidth: 24, halign: "center" },
-        3: { cellWidth: 27 },
-        4: { cellWidth: 74 },
-      },
-    });
-
-    const safeProject = String(project?.code || project?.name || "unit").replace(/[^\w.-]+/g, "_");
-    return new File(
-      [doc.output("blob")],
-      `Kode_Produksi_Unit_${safeProject}_${Date.now()}.pdf`,
-      { type: "application/pdf" }
-    );
+  cleanUuid(...args: Parameters<typeof cleanUuid>) {
+    return cleanUuid(...args);
   },
 
-  async getSignerSnapshots(signers: any[]) {
-    const userIds = signers.map((s) => s.user_id).filter(Boolean);
-    if (userIds.length === 0) return {};
-
-    const [{ data }, { data: overrides }] = await Promise.all([
-      supabase
-      .from("profiles")
-      .select("id, full_name, nik, job_title, email, department_id, office_id")
-        .in("id", userIds),
-      supabase
-        .from("job_title_display_overrides")
-        .select("source_job_title, display_label")
-        .eq("is_active", true),
-    ]);
-
-    const overrideMap = new Map(
-      (overrides || []).map((row: any) => [
-        String(row.source_job_title || "").toLowerCase().trim(),
-        String(row.display_label || "").trim(),
-      ])
-    );
-
-    return Object.fromEntries((data || []).map((profile: any) => {
-      const jobTitle = String(profile.job_title || "").trim();
-      return [profile.id, {
-        ...profile,
-        job_title_display: overrideMap.get(jobTitle.toLowerCase()) || jobTitle,
-      }];
-    }));
+  normalizeRoleName(...args: Parameters<typeof normalizeRoleName>) {
+    return normalizeRoleName(...args);
   },
 
-  buildDataSnapshot(context: any, payload: any, signers: any[], formInputData: any, attachments: any[] = []) {
-    const place = String(payload.request_place ?? "").trim();
-    const date = this.formatDateForDocument(payload.request_date);
-    const virtualProject = formInputData?.project_is_default === true
-      ? {
-          id: null,
-          code: String(formInputData.project_code || "000").trim() || "000",
-          name: String(formInputData.project_name || "Tanpa proyek").trim() || "Tanpa proyek",
-          is_default: true,
-        }
-      : null;
-    const snapshotProject = context.project ?? virtualProject;
+  formatDateForDocument(...args: Parameters<typeof formatDateForDocument>) {
+    return formatDateForDocument(...args);
+  },
 
-    return {
-      surat: {
-        no_surat: payload.no_surat ?? null,
-        judul_surat: payload.judul_surat ?? null,
-        is_aset: !!payload.is_aset,
-        request_place: payload.request_place ?? null,
-        request_date: payload.request_date ?? null,
-        request_place_date: [place, date].filter(Boolean).join(", "),
-        request_category: formInputData?.request_category ?? null,
-      },
-      requester: {
-        id: context.profile?.id ?? context.user?.id,
-        full_name: context.profile?.full_name ?? null,
-        nik: context.profile?.nik ?? null,
-        job_title: context.profile?.job_title ?? null,
-        email: context.profile?.email ?? context.user?.email ?? null,
-      },
-      location: {
-        entity: context.entity,
-        office: context.office,
-        project: snapshotProject,
-        department: context.department,
-        project_code: snapshotProject?.code ?? null,
-        department_code: context.department?.code ?? null,
-      },
-      form: context.form ? {
-        id: context.form.id,
-        nama_form: context.form.nama_form,
-        nomor_form: context.form.nomor_form,
-      } : null,
-      input: formInputData,
-      detail_barang: formInputData?.items ?? [],
-      request_category: formInputData?.request_category ?? null,
-      requested_project: formInputData?.requested_project ?? null,
-      requested_unit_count: formInputData?.requested_unit_count ?? null,
-      allocated_units: formInputData?.allocated_units ?? [],
-      allocated_unit_count: formInputData?.allocated_unit_count ?? null,
-      catatan: formInputData?.catatan ?? null,
-      signers,
-      attachments,
-    };
+  normalizeRecommendationItems(...args: Parameters<typeof normalizeRecommendationItems>) {
+    return normalizeRecommendationItems(...args);
+  },
+
+  normalizeFormInputData(...args: Parameters<typeof normalizeFormInputData>) {
+    return normalizeFormInputData(...args);
+  },
+
+  getUnitCode(...args: Parameters<typeof getUnitCode>) {
+    return getUnitCode(...args);
+  },
+
+  getUnitType(...args: Parameters<typeof getUnitType>) {
+    return getUnitType(...args);
+  },
+
+  parseMoney(...args: Parameters<typeof parseMoney>) {
+    return parseMoney(...args);
+  },
+
+  formatRupiah(...args: Parameters<typeof formatRupiah>) {
+    return formatRupiah(...args);
+  },
+
+  buildProductionCode(...args: Parameters<typeof buildProductionCode>) {
+    return buildProductionCode(...args);
+  },
+
+  formatProductionDate(...args: Parameters<typeof formatProductionDate>) {
+    return formatProductionDate(...args);
+  },
+
+  createUnitRecapAttachment(...args: Parameters<typeof createUnitRecapAttachment>) {
+    return createUnitRecapAttachment(...args);
+  },
+
+  createProductionCodeAttachment(...args: Parameters<typeof createProductionCodeAttachment>) {
+    return createProductionCodeAttachment(...args);
+  },
+
+  async getSignerSnapshots(...args: Parameters<typeof getSignerSnapshots>) {
+    return getSignerSnapshots(...args);
+  },
+
+  buildDataSnapshot(...args: Parameters<typeof buildDataSnapshot>) {
+    return buildDataSnapshot(...args);
   },
 
   async getRegistrationContext(payload: any) {
