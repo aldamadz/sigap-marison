@@ -70,14 +70,21 @@ describe("compact approval inbox — structural contracts", () => {
     expect(service).toContain("search?: string");
     expect(service).toContain("request_category?: string");
     expect(service).toContain("task_type?: string");
-    expect(inbox).toContain("debouncedSearch");
-    expect(inbox).toContain("taskTypeParam");
+    // Pass B: filter wiring lives in the pagination hook, but InboxPage
+    // still threads `search` / `categoryFilter` / `actionFilter` into it.
+    expect(inbox).toContain("search: debouncedSearch");
+    expect(inbox).toContain("categoryFilter");
+    expect(inbox).toContain("actionFilter");
   });
 
   it("11. InboxPage resets cursor on filter change", () => {
-    expect(inbox).toContain("inboxFilterKey");
-    expect(inbox).toContain("prevFilterKeyRef");
-    expect(inbox).toContain('setInboxCursor(null)');
+    // Pass B: cursor reset moved to use-inbox-pagination. InboxPage
+    // delegates the realtime reset through `resetInboxPagination`.
+    const hook = read("src/features/surat/inbox/lib/use-inbox-pagination.ts");
+    expect(hook).toContain("inboxFilterKey");
+    expect(hook).toContain("prevFilterKeyRef");
+    expect(hook).toContain("setInboxCursor(null)");
+    expect(inbox).toContain("resetInboxPagination");
   });
 
   it("12. SQL integration test has 25+ fixture rows", () => {

@@ -40,7 +40,9 @@ describe("unit allocation verification persistence", () => {
     expect(service).toContain("persistedVerificationDraft.allocated_units");
     expect(service).toContain('supabase.rpc("verify_surat_signature_v2"');
     expect(service).not.toContain('supabase.rpc("verify_surat_signature",');
-    expect(inbox).toContain('invalidateQueries({ queryKey: [\'surat-inbox-compact\'] })');
+    // Pass B: the compact-invalidate path lives in use-inbox-pagination.
+    const hook = readFileSync(resolve("src/features/surat/inbox/lib/use-inbox-pagination.ts"), "utf8");
+    expect(hook).toContain('invalidateQueries({ queryKey: ["surat-inbox-compact"] })');
   });
 
   it("finalizes unit allocation in a security definer RPC and backfills verified drafts", () => {
