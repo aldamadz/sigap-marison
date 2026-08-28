@@ -90,14 +90,13 @@ export function FundSubmissionEditor({ value, onChange }: Props) {
               </div>
               <div className="space-y-2 md:col-span-2 xl:col-span-4">
                 <Label htmlFor={`fund-item-nominal-${index}`}>Nominal item</Label>
-                <div className="relative max-w-md">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">Rp</span>
+                <div className="max-w-md">
                   <NominalInput
                     value={row.nominal}
                     onCommit={(nominal) => updateRow(index, { nominal })}
                     placeholder="0"
                     ariaLabel={`Nominal item ${index + 1}`}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-right text-sm tabular-nums ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="h-10 w-full"
                   />
                 </div>
               </div>
