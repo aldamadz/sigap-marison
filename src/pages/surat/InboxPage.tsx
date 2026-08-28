@@ -1,7 +1,10 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
-import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
-import { 
+import {
+  useInboxPagination,
+} from "@/features/surat/inbox/lib/use-inbox-pagination";
+import {
   Loader2, 
   Search,
   ArrowRight,
@@ -156,83 +159,30 @@ export default function InboxPage() {
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. DATA INBOX (compact)
-  const [inboxCursor, setInboxCursor] = useState<string | null>(null);
-  const [inboxAllItems, setInboxAllItems] = useState<any[]>([]);
-  const [inboxHasMore, setInboxHasMore] = useState(false);
-  const [inboxTotal, setInboxTotal] = useState(0);
-  const [detailCache, setDetailCache] = useState<Record<string, any>>({});
-
-  const inboxFilterKey = `${debouncedSearch}|${categoryFilter}|${actionFilter}`;
-  const prevFilterKeyRef = useRef(inboxFilterKey);
-  useEffect(() => {
-    if (prevFilterKeyRef.current !== inboxFilterKey) {
-      prevFilterKeyRef.current = inboxFilterKey;
-      setInboxCursor(null);
-      setInboxAllItems([]);
-      setInboxHasMore(false);
-      setInboxTotal(0);
-    }
-  }, [inboxFilterKey]);
-
-  const taskTypeParam = actionFilter === "approval" ? "approval" : actionFilter === "verification" ? "verification" : undefined;
-
-  const { data: inboxPage, isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
-    queryKey: ['surat-inbox-compact', inboxFilterKey, inboxCursor] as string[],
-    queryFn: () => suratInboxApi.getMyInboxCompact({
-      limit: 20,
-      cursor: inboxCursor || undefined,
-      search: debouncedSearch || undefined,
-      request_category: categoryFilter !== "all" ? categoryFilter : undefined,
-      task_type: taskTypeParam,
-    }),
-    staleTime: 30000,
-    placeholderData: keepPreviousData,
+  // 1. DATA INBOX (compact) — pagination + lifecycle extracted to hook
+  const {
+    items: inbox,
+    hasMore: inboxHasMore,
+    total: inboxTotal,
+    remaining: inboxRemaining,
+    loading,
+    error: inboxError,
+    isFetching,
+    detailCache,
+    setDetailCache,
+    loadMore,
+    refetch: refetchInbox,
+    refetchFull: refetchInboxFull,
+    finishTaskLocally: finishInboxTaskLocally,
+    refreshAfterAction: refreshInboxAfterAction,
+    resetPagination: resetInboxPagination,
+  } = useInboxPagination({
+    search: debouncedSearch,
+    categoryFilter,
+    actionFilter,
+    refetchAttention,
+    queryClient,
   });
-
-  useEffect(() => {
-    if (!inboxPage) return;
-    const page = inboxPage as { items: any[]; total: number | null; hasMore: boolean; nextCursor: string | null; pageSize: number };
-    if (!inboxCursor) {
-      setInboxAllItems(page.items);
-      if (page.total !== null) setInboxTotal(page.total);
-    } else {
-      setInboxAllItems((prev) => {
-        const ids = new Set(prev.map((i: any) => i.id));
-        const next = page.items.filter((i: any) => !ids.has(i.id));
-        return [...prev, ...next];
-      });
-    }
-    setInboxHasMore(page.hasMore);
-  }, [inboxPage]);
-
-  const inbox = inboxAllItems;
-
-  const refetchInboxFull = () => {
-    setInboxCursor(null);
-    setInboxAllItems([]);
-    setDetailCache({});
-    refetchInbox();
-  };
-
-  const finishInboxTaskLocally = (taskId: string) => {
-    setInboxAllItems((previous) => previous.filter((item: any) => item.id !== taskId));
-    setInboxTotal((previous) => Math.max(0, previous - 1));
-    setDetailCache((previous) => {
-      const next = { ...previous };
-      delete next[taskId];
-      return next;
-    });
-    queryClient.removeQueries({ queryKey: ['surat-inbox-detail', taskId], exact: true });
-  };
-
-  const refreshInboxAfterAction = () => {
-    void Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
-      refetchAttention(),
-    ]);
-  };
 
   const { data: kpiDetails = [], isLoading: kpiLoading } = useQuery({
     queryKey: ['surat-inbox-kpi'],
@@ -380,9 +330,7 @@ export default function InboxPage() {
     const scheduleInboxRefresh = () => {
       if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
       realtimeRefreshTimerRef.current = setTimeout(() => {
-        setInboxCursor(null);
-        setInboxAllItems([]);
-        setDetailCache({});
+        resetInboxPagination();
         queryClient.invalidateQueries({ queryKey: ["surat-inbox-compact"] });
         queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] });
         queryClient.invalidateQueries({ queryKey: ["surat-linked-documents"] });
@@ -2555,10 +2503,10 @@ const handleApprove = async (item: any) => {
                         size="sm"
                         className="w-full text-xs"
                         disabled={isFetching}
-                        onClick={() => setInboxCursor((inboxPage as any)?.nextCursor ?? null)}
+                        onClick={loadMore}
                       >
                         {isFetching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                        Muat lebih banyak ({inboxTotal - inboxAllItems.length} tersisa)
+                        Muat lebih banyak ({inboxRemaining} tersisa)
                       </Button>
                     </div>
                   )}

@@ -55,10 +55,14 @@ describe("approval action latency", () => {
   });
 
   it("removes completed tasks locally and refreshes counters in the background", () => {
-    expect(inbox).toContain("const finishInboxTaskLocally = (taskId: string) =>");
-    expect(inbox).toContain("previous.filter((item: any) => item.id !== taskId)");
-    expect(inbox).toContain("const refreshInboxAfterAction = () =>");
-    expect(inbox).toContain("void Promise.allSettled([");
+    // Pass B: these helpers live in use-inbox-pagination; InboxPage only
+    // invokes them.
+    const hook = read("src/features/surat/inbox/lib/use-inbox-pagination.ts");
+    expect(hook).toContain("const finishTaskLocally");
+    expect(hook).toContain("previous.filter((item: any) => item.id !== taskId)");
+    expect(hook).toContain("const refreshAfterAction");
+    expect(hook).toContain("void Promise.allSettled([");
+    expect(hook).toContain("queryClient.invalidateQueries");
     expect(inbox.match(/finishInboxTaskLocally\(item\.id\);/g)).toHaveLength(3);
   });
 });
