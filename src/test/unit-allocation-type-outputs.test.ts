@@ -20,10 +20,15 @@ describe("unit allocation type outputs", () => {
 
   it("renders type in both generated allocation PDFs and summary PDF", () => {
     const service = read("src/services/surat.service.ts");
+    const pdfBuilders = read("src/services/surat/pdf-builders.ts");
     const inbox = read("src/pages/surat/InboxPage.tsx");
 
-    expect(service).toContain('head: [["No", "Kavling", "Tipe"');
-    expect(service).toContain('head: [["No", "Proyek", "Unit", "Tipe", "Kode Produksi"]]');
+    expect(pdfBuilders).toContain('head: [["No", "Kavling", "Tipe"');
+    expect(pdfBuilders).toContain('head: [["No", "Proyek", "Unit", "Tipe", "Kode Produksi"]]');
+    // The suratService facade still delegates to the new module so the
+    // legacy literal remains available through the public service surface.
+    expect(service).toContain("createUnitRecapAttachment(...args: Parameters<typeof createUnitRecapAttachment>)");
+    expect(service).toContain("createProductionCodeAttachment(...args: Parameters<typeof createProductionCodeAttachment>)");
     expect(inbox).toContain('head: [["No.", "Kavling", "Tipe", "Kode Produksi"');
   });
 
