@@ -28,6 +28,7 @@ import { suratRegistrationApi } from "@/features/surat/registration/services/sur
 import { suratRecommendationApi } from "@/features/surat/recommendation/services/surat-recommendation-api";
 import { buildSignerAssignments } from "@/features/surat/registration/lib/signer-assignments";
 import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-autosave";
+import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -183,10 +184,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);
   const [activeDraftReservationId, setActiveDraftReservationId] = useState<string | null>(null);
-  const [activeDrafts, setActiveDrafts]           = useState<SuratRegistrationDraft[]>([]);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
-  const [draftToRestore, setDraftToRestore]       = useState<SuratRegistrationDraft | null>(null);
-  const [draftLoading, setDraftLoading]           = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
   const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
@@ -847,6 +845,26 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     () => ["admin", "super_admin"].includes(String(currentProfile?.role || "").toLowerCase()),
     [currentProfile?.role]
   );
+
+  // Draft lifecycle (activeDrafts list, draftToRestore, draftLoading,
+  // refreshActiveDrafts) is owned by useSuratDraftLifecycle. The
+  // setters are exposed so the hydrate effect and the submit-confirm
+  // path can still mutate them locally.
+  const {
+    activeDrafts,
+    draftToRestore,
+    draftLoading,
+    refreshActiveDrafts,
+    setDraftToRestore,
+    setActiveDrafts,
+  } = useSuratDraftLifecycle({
+    currentProfile,
+    isCurrentUserAdmin,
+    searchParams,
+    setSearchParams,
+    toast,
+  });
+
   const myDrafts = useMemo(
     () => activeDrafts.filter(draft => draft.created_by === currentProfile?.id),
     [activeDrafts, currentProfile?.id]
@@ -1302,20 +1320,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
   };
 
-  const refreshActiveDrafts = useCallback(async () => {
-    try {
-      const drafts = await suratRegistrationApi.getActiveRegistrationDrafts();
-      setActiveDrafts(drafts);
-      return drafts;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Draft registrasi gagal dimuat.";
-      if (!message.toLowerCase().includes("surat_registration_drafts")) {
-        toast({ variant: "destructive", title: "Gagal memuat draft", description: message });
-      }
-      return [];
-    }
-  }, [toast]);
-
   // ── EFFECTS ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const shouldWarn = isDirty && (!activeDraftId || draftSaveState !== "saved");
@@ -1468,40 +1472,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
     return () => { supabase.removeChannel(channel); };
   }, [loadUsageDetails]);
-
-  useEffect(() => {
-    if (!currentProfile) return;
-    let cancelled = false;
-    const draftId = searchParams.get("draft");
-    setDraftLoading(Boolean(draftId));
-
-    Promise.all([
-      refreshActiveDrafts(),
-      draftId ? suratRegistrationApi.getRegistrationDraft(draftId) : Promise.resolve(null),
-    ])
-      .then(([drafts, requestedDraft]) => {
-        if (cancelled) return;
-        if (requestedDraft) {
-          setDraftToRestore(requestedDraft);
-          return;
-        }
-        if (!draftId && !isCurrentUserAdmin && drafts.length === 1) {
-          setSearchParams({ draft: drafts[0].id }, { replace: true });
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setSearchParams({}, { replace: true });
-        toast({
-          variant: "destructive",
-          title: "Draft tidak dapat dibuka",
-          description: error instanceof Error ? error.message : "Draft tidak ditemukan atau sudah kedaluwarsa.",
-        });
-      })
-      .finally(() => { if (!cancelled) setDraftLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [currentProfile, isCurrentUserAdmin, refreshActiveDrafts, searchParams, setSearchParams, toast]);
 
   useEffect(() => {
     if (!draftToRestore || usageDetails.length === 0) return;
