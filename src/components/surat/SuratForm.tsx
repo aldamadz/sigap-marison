@@ -27,6 +27,7 @@ import {
 import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
 import { suratRecommendationApi } from "@/features/surat/recommendation/services/surat-recommendation-api";
 import { buildSignerAssignments } from "@/features/surat/registration/lib/signer-assignments";
+import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-autosave";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -186,7 +187,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [draftToRestore, setDraftToRestore]       = useState<SuratRegistrationDraft | null>(null);
   const [draftLoading, setDraftLoading]           = useState(false);
-  const [draftSaveState, setDraftSaveState]       = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
   const [signerSearch, setSignerSearch]           = useState<Record<number, string>>({});
@@ -1203,6 +1203,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     form_input_data: effectiveFormInputData,
   }), [formData, shouldUseDefaultBranchProject, effectiveFormInputData]);
 
+  // Autosave controller — owns draftSaveState + the 900ms debounce timer.
+  // Hook is invoked here so the live `effectiveFormData` reference is what
+  // gets persisted, never an empty placeholder.
+  const [draftSaveState, setDraftSaveState] = useSuratAutosave({
+    activeDraftId,
+    generatedNoSurat,
+    draftToRestore,
+    selectedUsage,
+    linkedDocumentContext,
+    effectiveFormData,
+    selectedFormId,
+    signers,
+  });
+
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
     project_id: requiresMarisonProject ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
     project_code: shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
@@ -1556,30 +1570,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
     });
   }, [activeDraftId, selectedUsage]);
-
-  useEffect(() => {
-    if (!activeDraftId || !generatedNoSurat || draftToRestore) return;
-    // Jangan pernah menimpa payload dengan kondisi yang sudah kehilangan
-    // tautan usage — itu akan menghapus perihal/penanda tangan secara permanen.
-    if (!selectedUsage?.id && !linkedDocumentContext) return;
-    setDraftSaveState("saving");
-    const timeout = window.setTimeout(() => {
-      suratRegistrationApi.saveRegistrationDraft(
-        activeDraftId,
-        {
-          formData: effectiveFormData,
-          selectedFormId,
-          selectedUsageId: selectedUsage?.id || "",
-          linkedDocumentContext,
-        },
-        signers,
-        "details"
-      )
-        .then(() => setDraftSaveState("saved"))
-        .catch(() => setDraftSaveState("error"));
-    }, 900);
-    return () => window.clearTimeout(timeout);
-  }, [activeDraftId, generatedNoSurat, effectiveFormData, selectedFormId, selectedUsage?.id, signers, draftToRestore, linkedDocumentContext]);
 
   useEffect(() => {
     if (!generatedNoSurat) {

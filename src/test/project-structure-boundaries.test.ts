@@ -123,4 +123,28 @@ describe("project structure boundaries", () => {
     expect(inbox).not.toContain("finishInboxTaskLocally =");
     expect(inbox).not.toContain("refreshInboxAfterAction =");
   });
+
+  it("keeps surat autosave logic out of SuratForm.tsx", () => {
+    // Pass C: autosave debounce + draftSaveState moved to a hook.
+    const hookPath = "src/features/surat/registration/lib/use-surat-autosave.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(hookPath)).toBe(true);
+    const hook = read(hookPath);
+    expect(hook).toContain("export const useSuratAutosave");
+    // 900ms debounce is the contract; do not let it drift.
+    expect(hook).toContain("900");
+    // The save call site must live in the hook, not in the component.
+    expect(hook).toContain("suratRegistrationApi");
+    expect(hook).toContain("saveRegistrationDraft");
+
+    // SuratForm must consume the hook and not redeclare the inline state
+    // or its own debounce timer.
+    expect(form).toContain("useSuratAutosave");
+    expect(form).not.toContain('useState<"idle" | "saving" | "saved" | "error">');
+    expect(form).not.toContain("window.setTimeout(() => {");
+    // The original autosave useEffect has been removed; the
+    // `}, 900);` debounce close must not appear inline any more.
+    expect(form).not.toContain("}, 900);");
+  });
 });
