@@ -20,11 +20,13 @@ import {
   Link as LinkIcon, UploadCloud, Trash2
 } from "lucide-react";
 import {
-  suratService,
   type SuratRegistrationDraft,
   type SuratRegistrationDraftFile,
   type RecommendationParentSummary as RecommendationParentSummaryData,
 } from "@/services/surat.service";
+import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
+import { suratRecommendationApi } from "@/features/surat/recommendation/services/surat-recommendation-api";
+import { buildSignerAssignments } from "@/features/surat/registration/lib/signer-assignments";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -116,54 +118,7 @@ import type {
   TableRow,
   TemplateField,
   UsageDetailRecord,
-  UsageStepConfig,
 } from "@/components/surat/form/surat-form-types";
-
-
-const normalizeRoleName = (
-  raw: unknown,
-  index: number,
-  total: number,
-): "membuat" | "memeriksa" | "menyetujui" => {
-  const value = String(raw ?? "").toLowerCase().trim();
-  if (value === "membuat" || value === "memeriksa" || value === "menyetujui") return value;
-  if (value.includes("setuju") || value.includes("approve") || value.includes("approval") || value.includes("otoris") || value.includes("final")) return "menyetujui";
-  if (value.includes("periksa") || value.includes("review") || value.includes("verifikasi") || value.includes("cek") || value.includes("paraf")) return "memeriksa";
-  if (value.includes("buat") || value.includes("draft") || value.includes("pemohon") || value.includes("request")) return "membuat";
-  if (index === 0) return "membuat";
-  if (index === total - 1) return "menyetujui";
-  return "memeriksa";
-};
-
-const buildSignerAssignments = (detail: UsageDetailRecord): SignerAssignment[] => {
-  try {
-    const config = typeof detail.ttd_config === "string" ? JSON.parse(detail.ttd_config) : detail.ttd_config;
-    if (!Array.isArray(config)) return [];
-    const total = config.length;
-
-    return config.map((item: UsageStepConfig, index: number) => ({
-      role_name: normalizeRoleName(
-        item.roleName || item.role_name || item.labelJabatan || item.label_jabatan || item.jabatan,
-        index,
-        total,
-      ),
-      label_jabatan: item.labelJabatan || item.label_jabatan || item.jabatan || `Tahap ${index + 1}`,
-      user_id: "",
-      step_order: index + 1,
-      form_usage_step_id: item.form_usage_step_id,
-      action_type: item.action_type || "approval",
-      candidate_scope: item.candidate_scope || "manual",
-      eligible_user_ids: item.eligible_user_ids || [],
-      verifier_user_ids: item.verifier_user_ids || [],
-      attachment_requirements: detail.form_usage_attachment_requirements?.filter(
-        (rule) => rule.stage_order === index + 1,
-      ) || [],
-      requires_unit_allocation: item.requires_unit_allocation === true || item.requiresUnitAllocation === true,
-    }));
-  } catch {
-    return [];
-  }
-};
 
 
 const RECOMMENDATION_TEMPLATE_NAME = "Rekomendasi Peremajaan Alat";
@@ -299,7 +254,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setRecommendationParentLoading(true);
     setRecommendationParentError(null);
     try {
-      setRecommendationParentSummary(await suratService.getRecommendationParentSummary(taskId));
+      setRecommendationParentSummary(await suratRecommendationApi.getRecommendationParentSummary(taskId));
     } catch (error) {
       setRecommendationParentSummary(null);
       setRecommendationParentError(error instanceof Error ? error.message : "Ringkasan pengajuan induk gagal dimuat.");
@@ -533,7 +488,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const uploadKey = `${parentId}:${detailId}`;
     setUploadingRecommendationAttachment(uploadKey);
     try {
-      const uploaded = await suratService.uploadRegistrationDraftFiles(activeDraftId, validFiles, {
+      const uploaded = await suratRegistrationApi.uploadRegistrationDraftFiles(activeDraftId, validFiles, {
         key: `recommendation_detail_${detailId}`,
         label: "Lampiran gambar detail rekomendasi",
       });
@@ -586,7 +541,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!recommendationMultiDetail) return;
     const draftFileId = String(attachment.metadata?.draft_file_id || attachment.id || "").trim();
     try {
-      if (draftFileId) await suratService.deleteRegistrationDraftFile(draftFileId);
+      if (draftFileId) await suratRegistrationApi.deleteRegistrationDraftFile(draftFileId);
       setDraftAttachments((previous) => previous.filter((file) => file.id !== draftFileId));
       setRecommendationMultiDetail({
         ...recommendationMultiDetail,
@@ -615,7 +570,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       const draftFileIds = detail.attachments
         .map((attachment) => String(attachment.metadata?.draft_file_id || attachment.id || "").trim())
         .filter(Boolean);
-      await Promise.all(draftFileIds.map((id) => suratService.deleteRegistrationDraftFile(id)));
+      await Promise.all(draftFileIds.map((id) => suratRegistrationApi.deleteRegistrationDraftFile(id)));
       setDraftAttachments((previous) => previous.filter((file) => !draftFileIds.includes(file.id)));
       setRecommendationMultiDetail({
         ...recommendationMultiDetail,
@@ -735,7 +690,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const uploadKey = `${fieldKey}-${rowIndex}`;
     setUploadingRecommendationAttachment(uploadKey);
     try {
-      const uploaded = await suratService.uploadRegistrationDraftFiles(activeDraftId, [file], {
+      const uploaded = await suratRegistrationApi.uploadRegistrationDraftFiles(activeDraftId, [file], {
         key: `recommendation_item_${rowIndex + 1}`,
         label: `Lampiran gambar rekomendasi item ${rowIndex + 1}`,
       });
@@ -743,7 +698,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       if (!attachment) throw new Error("Lampiran gagal tersimpan.");
 
       if (previousAttachment?.draft_file_id && previousAttachment.draft_file_id !== attachment.id) {
-        await suratService.deleteRegistrationDraftFile(previousAttachment.draft_file_id).catch(() => undefined);
+        await suratRegistrationApi.deleteRegistrationDraftFile(previousAttachment.draft_file_id).catch(() => undefined);
       }
       setDraftAttachments(previous => [
         ...previous.filter(item => item.id !== attachment.id && item.id !== previousAttachment?.draft_file_id),
@@ -776,7 +731,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!attachment) return;
     try {
       if (attachment.draft_file_id) {
-        await suratService.deleteRegistrationDraftFile(attachment.draft_file_id);
+        await suratRegistrationApi.deleteRegistrationDraftFile(attachment.draft_file_id);
         setDraftAttachments(previous => previous.filter(item => item.id !== attachment.draft_file_id));
       }
       updateTableRow(fieldKey, rowIndex, {
@@ -1335,7 +1290,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const refreshActiveDrafts = useCallback(async () => {
     try {
-      const drafts = await suratService.getActiveRegistrationDrafts();
+      const drafts = await suratRegistrationApi.getActiveRegistrationDrafts();
       setActiveDrafts(drafts);
       return drafts;
     } catch (error: unknown) {
@@ -1356,7 +1311,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [isDirty, activeDraftId, draftSaveState]);
 
   useEffect(() => {
-    suratService.getMasterData().then(data => {
+    suratRegistrationApi.getMasterData().then(data => {
       setMaster(data);
       const p = data.offices?.find((o: MasterRecord) => o.kedudukan === "Pusat");
       if (p) setFormData(prev => ({ ...prev, office_id: prev.office_id || p.id }));
@@ -1508,7 +1463,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
     Promise.all([
       refreshActiveDrafts(),
-      draftId ? suratService.getRegistrationDraft(draftId) : Promise.resolve(null),
+      draftId ? suratRegistrationApi.getRegistrationDraft(draftId) : Promise.resolve(null),
     ])
       .then(([drafts, requestedDraft]) => {
         if (cancelled) return;
@@ -1609,7 +1564,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!selectedUsage?.id && !linkedDocumentContext) return;
     setDraftSaveState("saving");
     const timeout = window.setTimeout(() => {
-      suratService.saveRegistrationDraft(
+      suratRegistrationApi.saveRegistrationDraft(
         activeDraftId,
         {
           formData: effectiveFormData,
@@ -1992,10 +1947,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
     setIsProcessingNumber(true);
     try {
-      const res = await suratService.generateNoSurat(effectiveFormData);
+      const res = await suratRegistrationApi.generateNoSurat(effectiveFormData);
       let draft: SuratRegistrationDraft;
       try {
-        draft = await suratService.createRegistrationDraft({
+        draft = await suratRegistrationApi.createRegistrationDraft({
           noUrut: res.noUrut,
           noSurat: res.fullNumber,
           payload: {
@@ -2007,7 +1962,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           signerAssignments: signers,
         });
       } catch (draftError) {
-        await suratService.cancelRegistration(res.fullNumber).catch(() => undefined);
+        await suratRegistrationApi.cancelRegistration(res.fullNumber).catch(() => undefined);
         throw draftError;
       }
       setGeneratedNoSurat(res.fullNumber);
@@ -2048,8 +2003,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!confirmed) return;
     setIsResettingNumber(true);
     try {
-      if (activeDraftId) await suratService.voidRegistrationDraft(activeDraftId);
-      else await suratService.cancelRegistration(generatedNoSurat);
+      if (activeDraftId) await suratRegistrationApi.voidRegistrationDraft(activeDraftId);
+      else await suratRegistrationApi.cancelRegistration(generatedNoSurat);
       setGeneratedNoSurat(null);
       setActiveDraftId(null);
       setActiveDraftReservationId(null);
@@ -2167,7 +2122,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (activeDraftId && generatedNoSurat) {
       try {
         setDraftSaveState("saving");
-        await suratService.saveRegistrationDraft(
+        await suratRegistrationApi.saveRegistrationDraft(
         activeDraftId,
         {
             formData: effectiveFormData,
@@ -2463,14 +2418,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setIsLoading(true);
     try {
       if (externalRevision?.eventId && activeDraftId) {
-        const result = await suratService.submitExternalSubmissionRevision({
+        const result = await suratRegistrationApi.submitExternalSubmissionRevision({
           revisionEventId: externalRevision.eventId,
           draftId: activeDraftId,
           formData: effectiveFormData,
           requesterNote: String(effectiveFormInputData.requester_revision_note || "").trim(),
         });
         if (result.next_step !== "recommendation") {
-          await suratService.autoApproveRequesterFirstStep(result.surat_id).catch((autoApproveError) => {
+          await suratRecommendationApi.autoApproveRequesterFirstStep(result.surat_id).catch((autoApproveError) => {
             console.error("Gagal melanjutkan auto-approval revisi pemohon:", autoApproveError);
           });
         }
@@ -2494,7 +2449,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           ])
         )
       );
-      const result = await suratService.createRegistrasi(
+      const result = await suratRegistrationApi.createRegistrasi(
         {
           ...effectiveFormData,
           no_surat: generatedNoSurat,
@@ -2510,16 +2465,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         let autoSignWarning = "";
         if (linkedDocumentContext?.type === "recommendation" && linkedDocumentContext.parentSuratId) {
           if (linkedDocumentContext.taskId) {
-            await suratService.completeRecommendationTask(linkedDocumentContext.taskId, result.id);
+            await suratRecommendationApi.completeRecommendationTask(linkedDocumentContext.taskId, result.id);
           } else {
-            await suratService.linkRecommendationDocument(
+            await suratRecommendationApi.linkRecommendationDocument(
               linkedDocumentContext.parentSuratId,
               result.id,
               linkedDocumentContext.requiredBeforeStep ?? null
             );
           }
           try {
-            await suratService.autoApproveRecommendationFirstStep(result.id);
+            await suratRecommendationApi.autoApproveRecommendationFirstStep(result.id);
           } catch (autoSignError: unknown) {
             autoSignWarning = autoSignError instanceof Error
               ? ` Tanda tangan otomatis belum berhasil: ${autoSignError.message}`
@@ -2527,7 +2482,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           }
         }
         if (activeDraftId) {
-          await suratService.finishRegistrationDraft(activeDraftId, "SUBMITTED");
+          await suratRegistrationApi.finishRegistrationDraft(activeDraftId, "SUBMITTED");
           setActiveDrafts(previous => previous.filter(draft => draft.id !== activeDraftId));
         }
         toast({
@@ -3631,7 +3586,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       },
     }));
     try {
-      const uploaded = await suratService.uploadRegistrationDraftFiles(activeDraftId, selected, {
+      const uploaded = await suratRegistrationApi.uploadRegistrationDraftFiles(activeDraftId, selected, {
         key: rule.requirement_key,
         label: rule.label,
       }, progress => {
@@ -3690,7 +3645,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const handleRemoveDraftAttachment = async (attachment: SuratRegistrationDraftFile) => {
     try {
-      await suratService.deleteRegistrationDraftFile(attachment.id);
+      await suratRegistrationApi.deleteRegistrationDraftFile(attachment.id);
       setDraftAttachments(previous => previous.filter(item => item.id !== attachment.id));
     } catch (error: unknown) {
       toast({
