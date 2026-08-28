@@ -147,4 +147,32 @@ describe("project structure boundaries", () => {
     // `}, 900);` debounce close must not appear inline any more.
     expect(form).not.toContain("}, 900);");
   });
+
+  it("keeps surat draft restore lifecycle out of SuratForm.tsx", () => {
+    // Pass D: activeDrafts, draftToRestore, draftLoading, refreshActiveDrafts
+    // and the URL→fetch useEffect moved to a hook. The hydrate effect stays
+    // in the component because it writes 12+ form-state setters.
+    const hookPath = "src/features/surat/registration/lib/use-surat-draft-lifecycle.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(hookPath)).toBe(true);
+    const hook = read(hookPath);
+    expect(hook).toContain("export const useSuratDraftLifecycle");
+    // The hook owns the list, the restore target, the loading flag, the
+    // refresh callback, and the URL→fetch effect.
+    expect(hook).toContain("getActiveRegistrationDrafts");
+    expect(hook).toContain("getRegistrationDraft");
+    expect(hook).toContain("refreshActiveDrafts");
+    expect(hook).toContain("draftToRestore");
+
+    // SuratForm must consume the hook and not redeclare the inline state
+    // or its own URL→fetch useEffect.
+    expect(form).toContain("useSuratDraftLifecycle");
+    expect(form).not.toContain("useState<SuratRegistrationDraft[]>([])");
+    expect(form).not.toContain('useState<SuratRegistrationDraft | null>(null)');
+    // The local refreshActiveDrafts useCallback must be gone; the hook owns it.
+    expect(form).not.toContain("suratRegistrationApi.getActiveRegistrationDrafts()");
+    // The original URL→fetch useEffect opening is also gone.
+    expect(form).not.toContain("const draftId = searchParams.get(\"draft\");");
+  });
 });
