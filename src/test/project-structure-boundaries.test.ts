@@ -95,4 +95,32 @@ describe("project structure boundaries", () => {
     expect(suratService).toContain("buildDataSnapshot(...args: Parameters<typeof buildDataSnapshot>)");
     expect(suratService).toContain("notifyInboxStepTasks(");
   });
+
+  it("keeps inbox pagination + lifecycle out of InboxPage", () => {
+    const inbox = read("src/pages/surat/InboxPage.tsx");
+    const hook = read("src/features/surat/inbox/lib/use-inbox-pagination.ts");
+
+    expect(exists("src/features/surat/inbox/lib/use-inbox-pagination.ts")).toBe(true);
+    expect(hook).toContain("export const useInboxPagination");
+    expect(hook).toContain("useQuery");
+    expect(hook).toContain("setInboxCursor(null)");
+    expect(hook).toContain("setInboxAllItems(page.items)");
+    expect(hook).toContain("queryClient.invalidateQueries");
+    expect(hook).toContain("finishTaskLocally");
+    expect(hook).toContain("refreshAfterAction");
+    expect(hook).toContain("resetPagination");
+
+    // InboxPage must consume the hook and not redeclare the inline state,
+    // the cursor useQuery, or the lifecycle helpers.
+    expect(inbox).toContain("useInboxPagination");
+    expect(inbox).not.toContain("inboxFilterKey");
+    expect(inbox).not.toContain("prevFilterKeyRef");
+    expect(inbox).not.toContain("const [inboxCursor");
+    expect(inbox).not.toContain("const [inboxAllItems");
+    expect(inbox).not.toContain("const [inboxHasMore");
+    expect(inbox).not.toContain("const [inboxTotal");
+    expect(inbox).not.toContain("refetchInboxFull =");
+    expect(inbox).not.toContain("finishInboxTaskLocally =");
+    expect(inbox).not.toContain("refreshInboxAfterAction =");
+  });
 });
