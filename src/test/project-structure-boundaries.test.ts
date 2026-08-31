@@ -175,4 +175,40 @@ describe("project structure boundaries", () => {
     // The original URL→fetch useEffect opening is also gone.
     expect(form).not.toContain("const draftId = searchParams.get(\"draft\");");
   });
+
+  it("keeps linked recommendation context out of SuratForm.tsx", () => {
+    // Pass E: linkedDocumentContext state + recommendation parent summary
+    // fetch + parentRecommendationItems memo + URL→state effect moved
+    // to `useLinkedRecommendationContext`. The hydrate effect (Pass D)
+    // and the form-reset path still call `setLinkedDocumentContext`,
+    // so the setter stays exposed by the hook.
+    const hookPath = "src/features/surat/registration/lib/use-linked-recommendation-context.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(hookPath)).toBe(true);
+    const hook = read(hookPath);
+    expect(hook).toContain("export const useLinkedRecommendationContext");
+    expect(hook).toContain("export const parseLinkedDocumentContext");
+    // The hook owns the parent summary fetch + the items memo.
+    expect(hook).toContain("getRecommendationParentSummary");
+    expect(hook).toContain("parentRecommendationItems");
+    // The hook exposes the setter for the hydrate effect + reset path.
+    expect(hook).toContain("setLinkedDocumentContext");
+
+    // SuratForm must consume the hook and not redeclare the inline state,
+    // the parent-summary fetch, the URL→state useEffect, the items memo,
+    // or the multi-detail derivation. The setter call sites stay — only
+    // the *declarations* must move.
+    expect(form).toContain("useLinkedRecommendationContext");
+    expect(form).not.toContain("const parseLinkedDocumentContext =");
+    expect(form).not.toContain("const linkedDocumentContextEquals =");
+    expect(form).not.toContain("useState<RecommendationParentSummaryData | null>(null)");
+    expect(form).not.toContain("setRecommendationParentSummary(");
+    expect(form).not.toContain("setRecommendationParentLoading(");
+    expect(form).not.toContain("setRecommendationParentError(");
+    expect(form).not.toContain("const loadRecommendationParentSummary = useCallback");
+    expect(form).not.toContain("const parentRecommendationItems = useMemo");
+    // The original URL→state useEffect opening is gone; the hook owns it.
+    expect(form).not.toContain("const nextContext = parseLinkedDocumentContext(searchParams);");
+  });
 });
