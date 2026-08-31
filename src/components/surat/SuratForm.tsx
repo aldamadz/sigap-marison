@@ -22,13 +22,13 @@ import {
 import {
   type SuratRegistrationDraft,
   type SuratRegistrationDraftFile,
-  type RecommendationParentSummary as RecommendationParentSummaryData,
 } from "@/services/surat.service";
 import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
 import { suratRecommendationApi } from "@/features/surat/recommendation/services/surat-recommendation-api";
 import { buildSignerAssignments } from "@/features/surat/registration/lib/signer-assignments";
 import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-autosave";
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
+import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -141,34 +141,26 @@ type ExternalRevisionContext = {
   reason?: string;
 };
 
-const parseLinkedDocumentContext = (params: URLSearchParams): LinkedDocumentContext | null => {
-  const type = params.get("linked_type");
-  const parentSuratId = params.get("parent_surat");
-  if (type !== "recommendation" || !parentSuratId) return null;
-  const requiredBeforeStep = Number(params.get("required_before_step") || "");
-  return {
-    type: "recommendation",
-    parentSuratId,
-    parentNoSurat: params.get("parent_no_surat") || undefined,
-    requiredBeforeStep: Number.isFinite(requiredBeforeStep) && requiredBeforeStep > 0 ? requiredBeforeStep : null,
-    formId: params.get("form_id") || undefined,
-    usageId: params.get("usage_id") || undefined,
-    departmentId: params.get("dept_id") || undefined,
-    letterTypeId: params.get("letter_type_id") || undefined,
-    taskId: params.get("task_id") || undefined,
-  };
-};
-
-const linkedDocumentContextEquals = (left: LinkedDocumentContext | null, right: LinkedDocumentContext | null) =>
-  JSON.stringify(left || null) === JSON.stringify(right || null);
-
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
   const { toast } = useToast();
   const appDialog = useAppDialog();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [linkedDocumentContext, setLinkedDocumentContext] = useState<LinkedDocumentContext | null>(() =>
-    parseLinkedDocumentContext(searchParams)
-  );
+
+  // Linked-recommendation controller (Pass E). Owns `linkedDocumentContext`,
+  // the parent-summary fetch, the URL→state re-sync, and the
+  // `parentRecommendationItems` memo. `setLinkedDocumentContext` is
+  // exposed so the draft-restore effect (Pass D) and the form-reset path
+  // can still write it directly.
+  const {
+    linkedDocumentContext,
+    setLinkedDocumentContext,
+    recommendationParentSummary,
+    recommendationParentLoading,
+    recommendationParentError,
+    parentRecommendationItems,
+    loadRecommendationParentSummary,
+    isRecommendationFlow,
+  } = useLinkedRecommendationContext({ searchParams });
 
   // ── STATE ──────────────────────────────────────────────────────────────────
   const [master, setMaster] = useState<MasterData>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
@@ -211,9 +203,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     error: string | null;
   }>({ loading: false, count: null, error: null });
   const [currentProfile, setCurrentProfile]       = useState<CurrentProfile | null>(null);
-  const [recommendationParentSummary, setRecommendationParentSummary] = useState<RecommendationParentSummaryData | null>(null);
-  const [recommendationParentLoading, setRecommendationParentLoading] = useState(false);
-  const [recommendationParentError, setRecommendationParentError] = useState<string | null>(null);
   const [activeRecommendationItem, setActiveRecommendationItem] = useState(0);
   const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
   const [formData, setFormData] = useState({
@@ -228,42 +217,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [manualPlaceOverride, setManualPlaceOverride] = useState(false);
   const [signers, setSigners] = useState<SignerAssignment[]>([]);
   const submitLockRef = useRef(false);
-
-  useEffect(() => {
-    const nextContext = parseLinkedDocumentContext(searchParams);
-    if (nextContext) {
-      setLinkedDocumentContext(previous =>
-        linkedDocumentContextEquals(previous, nextContext) ? previous : nextContext
-      );
-      return;
-    }
-    if (!searchParams.get("draft")) {
-      setLinkedDocumentContext(null);
-    }
-  }, [searchParams]);
-
-  const loadRecommendationParentSummary = useCallback(async () => {
-    const taskId = linkedDocumentContext?.type === "recommendation" ? linkedDocumentContext.taskId : null;
-    if (!taskId) {
-      setRecommendationParentSummary(null);
-      setRecommendationParentError(null);
-      return;
-    }
-    setRecommendationParentLoading(true);
-    setRecommendationParentError(null);
-    try {
-      setRecommendationParentSummary(await suratRecommendationApi.getRecommendationParentSummary(taskId));
-    } catch (error) {
-      setRecommendationParentSummary(null);
-      setRecommendationParentError(error instanceof Error ? error.message : "Ringkasan pengajuan induk gagal dimuat.");
-    } finally {
-      setRecommendationParentLoading(false);
-    }
-  }, [linkedDocumentContext]);
-
-  useEffect(() => {
-    void loadRecommendationParentSummary();
-  }, [loadRecommendationParentSummary]);
 
   const getFormFieldValue = (key: string) => formData.form_input_data[key];
   const getDisplayFieldValue = (key: string) => getScalarFieldValue(getFormFieldValue(key));
@@ -407,29 +360,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const getTableRows = (key: string) => normalizeTableRows(formData.form_input_data[key]);
-
-  const parentRecommendationItems = useMemo(() => {
-    if (!recommendationParentSummary?.form_input_data) return [] as TableRow[];
-    const input = recommendationParentSummary.form_input_data;
-    const toRows = (value: unknown) => Array.isArray(value)
-      ? value.filter((row): row is TableRow => Boolean(row) && typeof row === "object" && !Array.isArray(row))
-      : [];
-    const preferredKeys = ["items", "detail_barang", "barang", "request_items"];
-    const preferred = preferredKeys.map((key) => toRows(input[key])).find((rows) => rows.length > 0);
-    const rows = preferred || Object.values(input)
-      .map(toRows)
-      .find((candidate) => candidate.some((row) =>
-        Boolean(String(row.nama_barang || row.nama || row.barang || row.name || "").trim())
-      )) || [];
-
-    return rows
-      .map((row, index) => ({
-        ...row,
-        parent_item_index: index + 1,
-        parent_item_name: String(row.nama_barang || row.nama || row.barang || row.name || "").trim(),
-      }))
-      .filter((row) => Boolean(row.parent_item_name));
-  }, [recommendationParentSummary]);
 
   const recommendationMultiDetail = useMemo(() => {
     if (linkedDocumentContext?.type !== "recommendation" || parentRecommendationItems.length === 0) return null;
@@ -923,9 +853,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const selectedForm = availableForms.find(form => form.id === selectedFormId);
     return selectedForm?.name || selectedUsage?.master_forms?.nama_form || "Form dokumen";
   }, [availableForms, selectedFormId, selectedUsage?.master_forms?.nama_form]);
-  const isRecommendationFlow =
-    linkedDocumentContext?.type === "recommendation" ||
-    searchParams.get("linked_type") === "recommendation";
 
   const canRequesterChooseUnit = useMemo(
     () => usageDetails.some(item =>
