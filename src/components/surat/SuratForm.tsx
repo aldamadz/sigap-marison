@@ -50,7 +50,7 @@ import {
   buildRecommendationMultiDetail,
   recommendationMultiDetailErrors,
   syncRecommendationMultiDetailInput,
-} from "@/components/surat/recommendation-multi-detail";
+} from "@/features/surat/registration/lib/recommendation-multi-detail-builder";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
 import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
 import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
