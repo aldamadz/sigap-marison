@@ -211,4 +211,34 @@ describe("project structure boundaries", () => {
     // The original URL→state useEffect opening is gone; the hook owns it.
     expect(form).not.toContain("const nextContext = parseLinkedDocumentContext(searchParams);");
   });
+
+  it("keeps active-draft-id lifecycle out of SuratForm.tsx", () => {
+    // Pass F: the `activeDraftId` / `activeDraftReservationId`
+    // useState pair + their inline setters moved to a hook. The
+    // write sites use the named wrappers (`markDraftCreated`,
+    // `markDraftRestored`, `markDraftVoided`, `clearActiveDraftId`).
+    // Reads of the destructured `activeDraftId` stay raw — only
+    // the *declarations* and the inline setter sequences move.
+    const hookPath = "src/features/surat/registration/lib/use-active-draft-lifecycle.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(hookPath)).toBe(true);
+    const hook = read(hookPath);
+    expect(hook).toContain("export const useActiveDraftLifecycle");
+    expect(hook).toContain("markDraftCreated");
+    expect(hook).toContain("markDraftRestored");
+    expect(hook).toContain("markDraftVoided");
+    expect(hook).toContain("clearActiveDraftId");
+
+    // SuratForm must consume the hook and not redeclare the inline
+    // state pair or the four setter sequences at L1449/L1857/L1896/L1998.
+    expect(form).toContain("useActiveDraftLifecycle");
+    expect(form).not.toContain('const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);');
+    expect(form).not.toContain('const [activeDraftReservationId, setActiveDraftReservationId] = useState<string | null>(null);');
+    // No paired setter sequence at the four write sites — the wrappers
+    // collapse each into a single call.
+    expect(form).not.toContain("setActiveDraftId(draftToRestore.id);");
+    expect(form).not.toContain("setActiveDraftId(draft.id);");
+    expect(form).not.toContain("setActiveDraftId(null);");
+  });
 });
