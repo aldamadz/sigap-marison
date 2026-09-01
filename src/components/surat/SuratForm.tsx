@@ -29,6 +29,7 @@ import { buildSignerAssignments } from "@/features/surat/registration/lib/signer
 import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-autosave";
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
 import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
+import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -162,6 +163,22 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     isRecommendationFlow,
   } = useLinkedRecommendationContext({ searchParams });
 
+  // Active-draft id lifecycle (Pass F). Owns the `activeDraftId` +
+  // `activeDraftReservationId` pair that used to be inline. Wrappers
+  // (`markDraftCreated` / `markDraftRestored` / `markDraftVoided` /
+  // `clearActiveDraftId`) preserve the original setter sequences
+  // without reordering or adding side effects.
+  const {
+    activeDraftId,
+    activeDraftReservationId,
+    setActiveDraftId,
+    setActiveDraftReservationId,
+    clearActiveDraftId,
+    markDraftCreated,
+    markDraftRestored,
+    markDraftVoided,
+  } = useActiveDraftLifecycle();
+
   // ── STATE ──────────────────────────────────────────────────────────────────
   const [master, setMaster] = useState<MasterData>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
   const [usageDetails, setUsageDetails]           = useState<UsageDetailRecord[]>([]);
@@ -174,8 +191,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isCopied, setIsCopied]                   = useState(false);
   const [fundWithoutProject, setFundWithoutProject] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
-  const [activeDraftId, setActiveDraftId]         = useState<string | null>(null);
-  const [activeDraftReservationId, setActiveDraftReservationId] = useState<string | null>(null);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
@@ -1446,8 +1461,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
     setWizardStep(2);
-    setActiveDraftId(draftToRestore.id);
-    setActiveDraftReservationId(draftToRestore.reservation_id);
+    markDraftRestored(draftToRestore);
     setJudulForDisplay(String(restoredFormData.judul_surat || ""));
     setDraftSaveState("saved");
     setDraftToRestore(null);
@@ -1854,8 +1868,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       }
       setGeneratedNoSurat(res.fullNumber);
       setWizardStep(2);
-      setActiveDraftId(draft.id);
-      setActiveDraftReservationId(draft.reservation_id);
+      markDraftCreated(draft);
       setDraftSaveState("saved");
       setSearchParams({
         draft: draft.id,
@@ -1893,8 +1906,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       if (activeDraftId) await suratRegistrationApi.voidRegistrationDraft(activeDraftId);
       else await suratRegistrationApi.cancelRegistration(generatedNoSurat);
       setGeneratedNoSurat(null);
-      setActiveDraftId(null);
-      setActiveDraftReservationId(null);
+      markDraftVoided();
       setManualTitleOverride(false);
       setManualPlaceOverride(false);
       setDraftAttachments([]);
@@ -1995,8 +2007,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setUploadingRecommendationAttachment(null);
     setRegistrationSummaryOpen(false);
     setDatePickerOpen({});
-    setActiveDraftId(null);
-    setActiveDraftReservationId(null);
+    clearActiveDraftId();
     setDraftModalOpen(false);
     setDraftSaveState("idle");
     setLinkedDocumentContext(null);
