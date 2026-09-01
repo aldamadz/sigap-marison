@@ -30,6 +30,7 @@ import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-au
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
 import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
 import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
+import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -87,15 +88,11 @@ import {
   normalizeTableRows,
 } from "@/components/surat/form/surat-form-schema";
 import {
-  buildNonUnitRequestTitle,
   formatDatePickerDisplay,
   formatFileSize,
-  formatIndonesianList,
   getDefaultRequestPlace as getDefaultRequestPlaceForOffice,
   getDepartmentShortLabel,
-  getDepartmentTitlePart,
   getOfficeShortLabel,
-  getOfficeTitleSuffix,
   getShortPersonName,
   normalizeNameSearch,
   parseDateInputValue,
@@ -922,72 +919,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getDefaultRequestPlace = (office?: MasterRecord | null) =>
     getDefaultRequestPlaceForOffice(office, selectedDepartment);
 
-  const buildAutoTitle = () => {
-    const category = getRequestCategory();
-    const officeSuffix = getOfficeTitleSuffix(selectedOffice, selectedDepartment);
-    const isRecommendationDocument = linkedDocumentContext?.type === "recommendation";
-    const rows = normalizeTableRows(formData.form_input_data.items);
-    const itemNames = rows
-      .map((row) => String(row.nama_barang || row.name || "").trim())
-      .filter(Boolean);
-    const itemText = formatIndonesianList(itemNames);
-    if (isRecommendationDocument) {
-      const recommendationRows = normalizeTableRows(formData.form_input_data[RECOMMENDATION_ITEMS_KEY]);
-      const recommendationItemText = formatIndonesianList(
-        recommendationRows.map((row) => String(row.nama_barang || row.name || "").trim()).filter(Boolean)
-      );
-      const recommendationSegments = RECOMMENDATION_ACTIONS.flatMap((action) => {
-        if (action.value === "tidak_direkomendasikan") return [];
-        const names = recommendationRows
-          .filter((row) => getRecommendationAction(row) === action.value)
-          .map((row) => String(row.nama_barang || row.name || "").trim())
-          .filter(Boolean);
-        if (names.length === 0) return [];
-        const actionTitle = action.value === "ganti" ? "Ganti Komponen" : action.label;
-        return [`${actionTitle} ${formatIndonesianList(names)}`];
-      });
-      const parentOfficeSuffix = recommendationParentSummary
-        ? String(recommendationParentSummary.office_kedudukan || "").toUpperCase() === "PUSAT"
-          ? getDepartmentTitlePart({
-              id: recommendationParentSummary.parent_surat_id,
-              name: recommendationParentSummary.department_name || "",
-              code: recommendationParentSummary.department_code || "",
-            })
-          : getOfficeTitleSuffix({
-              id: recommendationParentSummary.parent_surat_id,
-              name: recommendationParentSummary.office_name || "",
-              kedudukan: recommendationParentSummary.office_kedudukan || "",
-            })
-        : "";
-      const title = recommendationSegments.length > 0
-        ? `Rekomendasi ${formatIndonesianList(recommendationSegments)}`
-        : recommendationItemText
-          ? `Rekomendasi Peremajaan Alat : ${recommendationItemText}`
-          : "Rekomendasi Peremajaan Alat";
-      return [title, parentOfficeSuffix].filter(Boolean).join(" ");
-    }
-    if (category === "unit") {
-      const count = Number(formData.form_input_data.requested_unit_count || 0);
-      const project = formData.form_input_data.requested_project as { name?: string } | undefined;
-      const title = count > 0
-        ? `Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit`
-        : "Permohonan Order Bangun";
-      return [title, project?.name, officeSuffix].filter(Boolean).join(" ");
-    }
-    if (category === "non_unit") {
-      return buildNonUnitRequestTitle(itemText, officeSuffix);
-    }
-    const categoryLabel = category === "asset"
-      ? "Permohonan Aset"
-      : category === "non_asset"
-        ? "Permohonan Non Aset"
-        : "Permohonan";
-    return [itemText ? `${categoryLabel} : ${itemText}` : categoryLabel, officeSuffix].filter(Boolean).join(" ");
-  };
-
   useEffect(() => {
     if (!generatedNoSurat || manualTitleOverride) return;
-    const nextTitle = buildAutoTitle();
+    const nextTitle = buildAutoTitle({
+      category: getRequestCategory(),
+      formInputData: formData.form_input_data,
+      selectedOffice,
+      selectedDepartment,
+      linkedDocumentContext,
+      recommendationParentSummary,
+      getRecommendationAction,
+    });
     if (!nextTitle || nextTitle === formData.judul_surat) return;
     setFormData(previous => ({ ...previous, judul_surat: nextTitle }));
     setJudulForDisplay(nextTitle);

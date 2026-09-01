@@ -241,4 +241,32 @@ describe("project structure boundaries", () => {
     expect(form).not.toContain("setActiveDraftId(draft.id);");
     expect(form).not.toContain("setActiveDraftId(null);");
   });
+
+  it("keeps the auto-title formatter out of SuratForm.tsx", () => {
+    // Pass I: the inline `buildAutoTitle` definition moved to
+    // `src/features/surat/registration/lib/surat-title-formatters.ts`
+    // as a pure helper. The form imports the helper and calls it
+    // with a snapshot; the body of the title computation (the
+    // category branching, the `formatIndonesianList` join, the
+    // parent summary suffix derivation) lives in the helper only.
+    const hookPath = "src/features/surat/registration/lib/surat-title-formatters.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(hookPath)).toBe(true);
+    const hook = read(hookPath);
+    expect(hook).toContain("export const buildAutoTitle");
+
+    // The form must consume the helper and not redeclare the inline
+    // closure that originally held the title-computation body.
+    expect(form).toContain('import { buildAutoTitle }');
+    expect(form).not.toContain("const buildAutoTitle = () => {");
+    // The dead helper imports removed during the extraction must
+    // not creep back: `formatIndonesianList`, `buildNonUnitRequestTitle`,
+    // `getDepartmentTitlePart`, `getOfficeTitleSuffix` were only used
+    // by the inline buildAutoTitle and now live in the helper.
+    expect(form).not.toContain("formatIndonesianList,");
+    expect(form).not.toContain("buildNonUnitRequestTitle,");
+    expect(form).not.toContain("getDepartmentTitlePart,");
+    expect(form).not.toContain("getOfficeTitleSuffix,");
+  });
 });
