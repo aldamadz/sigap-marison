@@ -269,4 +269,22 @@ describe("project structure boundaries", () => {
     expect(form).not.toContain("getDepartmentTitlePart,");
     expect(form).not.toContain("getOfficeTitleSuffix,");
   });
+
+  it("keeps recommendation multi-detail builder imported from feature registration lib", () => {
+    // Pass L: the recommendation multi-detail builder and helpers
+    // are modularized under `src/features/surat/registration/lib/recommendation-multi-detail-builder.ts`.
+    // SuratForm.tsx must import buildRecommendationMultiDetail,
+    // syncRecommendationMultiDetailInput, and recommendationMultiDetailErrors from this feature lib.
+    const builderPath = "src/features/surat/registration/lib/recommendation-multi-detail-builder.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(builderPath)).toBe(true);
+    const builderCode = read(builderPath);
+    expect(builderCode).toContain("export function buildRecommendationMultiDetail");
+    expect(builderCode).toContain("export function syncRecommendationMultiDetailInput");
+    expect(builderCode).toContain("export function recommendationMultiDetailErrors");
+
+    expect(form).toContain('from "@/features/surat/registration/lib/recommendation-multi-detail-builder"');
+    expect(form).not.toMatch(/from\s+["']@\/components\/surat\/recommendation-multi-detail["']/);
+  });
 });
