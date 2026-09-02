@@ -31,6 +31,21 @@ import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-su
 import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
 import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
 import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
+import {
+  WIZARD_STEP_LOKASI,
+  WIZARD_STEP_BERKAS,
+  WIZARD_STEP_SIGNERS,
+  WIZARD_STEPS,
+  getActiveWizardStep,
+  shouldShowStepSection,
+  isDocumentIdentityStep,
+  isContentStep,
+  isSignerStep,
+  getNextStep,
+  getPreviousStep,
+  canGoToStep,
+  type WizardStep,
+} from "@/features/surat/registration/lib/surat-wizard-steps";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -187,7 +202,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
   const [fundWithoutProject, setFundWithoutProject] = useState(false);
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardStep, setWizardStep] = useState<WizardStep>(WIZARD_STEP_LOKASI);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
@@ -1002,9 +1017,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const requiresMarisonProject = isNonUnitMode || isFundMode;
   // Wizard registrasi surat: alur bertahap 1 → 2 → 3 (hanya alur non-rekomendasi).
   const useRegistrationWizard = !isRecommendationFlow;
-  const activeWizardStep: 0 | 1 | 2 | 3 = !useRegistrationWizard ? 0 : (generatedNoSurat ? wizardStep : 1);
-  const showSectionBerkas = Boolean(generatedNoSurat) && (!useRegistrationWizard || activeWizardStep === 2);
-  const showSectionSigners = Boolean(generatedNoSurat) && signers.length > 0 && (!useRegistrationWizard || activeWizardStep === 3);
+  const activeWizardStep = getActiveWizardStep(useRegistrationWizard, Boolean(generatedNoSurat), wizardStep);
+  const showSectionBerkas = shouldShowStepSection(WIZARD_STEP_BERKAS, activeWizardStep, Boolean(generatedNoSurat));
+  const showSectionSigners = shouldShowStepSection(WIZARD_STEP_SIGNERS, activeWizardStep, Boolean(generatedNoSurat), signers.length > 0);
   const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects
     && getRequestCategory() !== "unit" && !isFundMode;
   const nonUnitProjectCandidates = useMemo(
@@ -1402,7 +1417,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
-    setWizardStep(2);
+    setWizardStep(WIZARD_STEP_BERKAS);
     markDraftRestored(draftToRestore);
     setJudulForDisplay(String(restoredFormData.judul_surat || ""));
     setDraftSaveState("saved");
@@ -1809,7 +1824,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         throw draftError;
       }
       setGeneratedNoSurat(res.fullNumber);
-      setWizardStep(2);
+      setWizardStep(WIZARD_STEP_BERKAS);
       markDraftCreated(draft);
       setDraftSaveState("saved");
       setSearchParams({
@@ -1941,7 +1956,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       request_place: "", request_date: toDateInputValue(new Date()), form_input_data: {}
     });
     setGeneratedNoSurat(null); setSelectedUsage(null); setSelectedFormId(""); setLampiranFiles([]); setSigners([]);
-    setWizardStep(1);
+    setWizardStep(WIZARD_STEP_LOKASI);
     setInitialAttachmentFiles({});
     setDraftAttachments([]);
     setUploadingRequirement(null);
@@ -3791,12 +3806,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         {useRegistrationWizard && (
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <ol className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3" aria-label="Langkah registrasi surat">
-              {([
-                { step: 1, title: "Lokasi & Klasifikasi", description: "Kantor, proyek, dan jenis dokumen" },
-                { step: 2, title: "Persetujuan & Berkas", description: "Perihal, tanggal, dan lampiran" },
-                { step: 3, title: "Penandatangan", description: "Tetapkan pejabat penanda tangan" },
-              ] as const).map(({ step, title, description }) => {
-                const reachable = step === 1 || Boolean(generatedNoSurat);
+              {WIZARD_STEPS.map(({ step, title, description }) => {
+                const reachable = canGoToStep(step, Boolean(generatedNoSurat));
                 const isActive = activeWizardStep === step;
                 const isDone = Boolean(generatedNoSurat) && step < activeWizardStep;
                 return (
@@ -3858,7 +3869,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         )}
 
         {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
-        {!isRecommendationFlow && activeWizardStep === 1 && (
+        {!isRecommendationFlow && isDocumentIdentityStep(activeWizardStep) && (
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
@@ -4357,18 +4368,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </section>
             )}
 
-            {useRegistrationWizard && activeWizardStep === 2 && (
+            {useRegistrationWizard && isContentStep(activeWizardStep) && (
               <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setWizardStep(1)}
+                  onClick={() => setWizardStep(getPreviousStep(WIZARD_STEP_BERKAS))}
                 >
                   <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => setWizardStep(3)}
+                  onClick={() => setWizardStep(getNextStep(WIZARD_STEP_BERKAS))}
                 >
                   Selanjutnya <ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
@@ -4462,7 +4473,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       type="button"
                       variant="outline"
                       className="h-12 sm:w-44"
-                      onClick={() => setWizardStep(2)}
+                      onClick={() => setWizardStep(getPreviousStep(WIZARD_STEP_SIGNERS))}
                     >
                       <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
                     </Button>
