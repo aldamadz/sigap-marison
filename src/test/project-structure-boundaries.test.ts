@@ -293,6 +293,16 @@ describe("project structure boundaries", () => {
     const form = read("src/components/surat/SuratForm.tsx");
     expect(form).not.toContain("const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);");
     expect(form).not.toContain("activeWizardStep: 0 | 1 | 2 | 3");
-    expect(form).toContain("WIZARD_STEP_LOKASI");
+    expect(form).toContain("useSuratWizardStepper");
+  });
+
+  it("keeps wizard stepper hook out of SuratForm.tsx", () => {
+    // Pass J2A: The wizard stepper state and orchestration are extracted into a hook.
+    // SuratForm.tsx must not declare the step state locally.
+    const form = read("src/components/surat/SuratForm.tsx");
+    expect(form).not.toContain("const [wizardStep, setWizardStep] = useState<WizardStep>");
+    expect(form).not.toContain("const [wizardStep, setWizardStep] = useState");
+    expect(form).toContain("useSuratWizardStepper");
+    expect(form).toContain('from "@/features/surat/registration/lib/use-surat-wizard-stepper"');
   });
 });
