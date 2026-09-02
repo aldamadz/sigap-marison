@@ -287,4 +287,12 @@ describe("project structure boundaries", () => {
     expect(form).toContain('from "@/features/surat/registration/lib/recommendation-multi-detail-builder"');
     expect(form).not.toMatch(/from\s+["']@\/components\/surat\/recommendation-multi-detail["']/);
   });
+
+  it("keeps wizard step constants out of SuratForm.tsx", () => {
+    // Pass J1: step definitions and navigation logic moved to feature lib.
+    const form = read("src/components/surat/SuratForm.tsx");
+    expect(form).not.toContain("const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);");
+    expect(form).not.toContain("activeWizardStep: 0 | 1 | 2 | 3");
+    expect(form).toContain("WIZARD_STEP_LOKASI");
+  });
 });
