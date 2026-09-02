@@ -38,6 +38,7 @@ import {
   type WizardStep,
 } from "@/features/surat/registration/lib/surat-wizard-steps";
 import { useSuratWizardStepper } from "@/features/surat/registration/lib/use-surat-wizard-stepper";
+import { validateStep1ForNumberGeneration } from "@/features/surat/registration/lib/surat-wizard-validation";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -1727,84 +1728,26 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [generatedNoSurat, selectedFormId, selectedUsage?.id, usagesForSelectedForm, formData.form_input_data.request_category]);
 
   const handleGetNumber = async () => {
-    if (!profileLocationReady) {
-      return toast({
-        variant: "destructive",
-        title: "Profil Sedang Diselaraskan",
-        description: "Tunggu hingga kantor dan departemen pengajuan sesuai dengan profil Anda.",
-      });
-    }
     const requestCategory = getRequestCategory();
-    if (!requestCategory) {
+    const step1Check = validateStep1ForNumberGeneration({
+      profileLocationReady,
+      requestCategory,
+      selectedUsageId: selectedUsage?.id ?? null,
+      filteredUsageCount: filteredUsage.length,
+      unitProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
+      unitCount: Number(getFormFieldValue("requested_unit_count") || 0),
+      branchHasRegisteredProjects,
+      projectId: formData.project_id,
+      shouldUseDefaultBranchProject,
+      isMarisonProjectReady,
+      fundWithoutProject,
+      fundType: String(getFormFieldValue("fund_type") || ""),
+    });
+    if (!step1Check.valid) {
       return toast({
         variant: "destructive",
-        title: "Klasifikasi Belum Dipilih",
-        description: "Pilih Aset, Unit, Non Aset, atau Non Unit sebelum mendapatkan nomor surat.",
-      });
-    }
-    if (!selectedUsage) {
-      return toast({
-        variant: "destructive",
-        title: "Kegunaan Form Belum Dipilih",
-        description: "Pilih form dan kegunaan sebelum mendapatkan nomor surat.",
-      });
-    }
-    if (filteredUsage.length === 0) {
-      return toast({
-        variant: "destructive",
-        title: "Matrix Belum Tersedia",
-        description: "Belum ada matrix yang mendukung klasifikasi, kantor, dan departemen yang dipilih.",
-      });
-    }
-    if (requestCategory === "unit") {
-      const count = Number(getFormFieldValue("requested_unit_count") || 0);
-      const requestedProject = getFormFieldValue("requested_project") as { code?: string } | undefined;
-      if (!requestedProject?.code) {
-        return toast({ variant: "destructive", title: "Proyek Unit Wajib Dipilih" });
-      }
-      if (!Number.isFinite(count) || count < 1) {
-        return toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
-      }
-    } else if (branchHasRegisteredProjects && !formData.project_id && requestCategory !== "non_unit") {
-      return toast({
-        variant: "destructive",
-        title: "Proyek Cabang Belum Dipilih",
-        description: "Kantor cabang ini memiliki proyek, jadi pilih proyek cabang terlebih dahulu.",
-      });
-    }
-    if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !formData.project_id) {
-      return toast({
-        variant: "destructive",
-        title: "Proyek Tujuan Wajib Dipilih",
-        description: "Pilih proyek yang sudah terhubung ke Marison untuk melanjutkan pengajuan Non Unit.",
-      });
-    }
-    if (requestCategory === "non_unit" && !shouldUseDefaultBranchProject && !isMarisonProjectReady) {
-      return toast({
-        variant: "destructive",
-        title: "Proyek Belum Terhubung",
-        description: "Mapping proyek atau kantor proyek belum lengkap. Minta admin meninjau Master Proyek.",
-      });
-    }
-    if (requestCategory === "non_asset" && !fundWithoutProject && !formData.project_id) {
-      return toast({
-        variant: "destructive",
-        title: "Proyek Tujuan Wajib Dipilih",
-        description: "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
-      });
-    }
-    if (requestCategory === "non_asset" && !fundWithoutProject && !isMarisonProjectReady) {
-      return toast({
-        variant: "destructive",
-        title: "Proyek Belum Terhubung",
-        description: "Pilih proyek yang memiliki ID proyek dan kantor external yang valid.",
-      });
-    }
-    if (requestCategory === "non_asset" && !["operational", "production_cost"].includes(String(getFormFieldValue("fund_type") || ""))) {
-      return toast({
-        variant: "destructive",
-        title: "Jenis Pengajuan Dana Wajib Dipilih",
-        description: "Pilih Biaya Operasional atau Biaya Produksi.",
+        title: step1Check.errorTitle!,
+        ...(step1Check.errorDescription ? { description: step1Check.errorDescription } : {}),
       });
     }
     setIsProcessingNumber(true);
