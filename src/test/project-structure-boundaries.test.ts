@@ -305,4 +305,29 @@ describe("project structure boundaries", () => {
     expect(form).toContain("useSuratWizardStepper");
     expect(form).toContain('from "@/features/surat/registration/lib/use-surat-wizard-stepper"');
   });
+
+  it("keeps step-1 validation in canonical wizard-validation module", () => {
+    // Pass J2B: step-1 pre-flight validation extracted to pure module.
+    const validationPath = "src/features/surat/registration/lib/surat-wizard-validation.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(validationPath)).toBe(true);
+    const validationCode = read(validationPath);
+    expect(validationCode).toContain("export function validateStep1ForNumberGeneration");
+    expect(validationCode).toContain("export interface Step1ValidationInput");
+    expect(validationCode).toContain("export interface WizardValidationResult");
+
+    // SuratForm imports the validator
+    expect(form).toContain('from "@/features/surat/registration/lib/surat-wizard-validation"');
+    expect(form).toContain("validateStep1ForNumberGeneration");
+
+    // Inline step-1 validation blocks must not reappear in SuratForm
+    expect(form).not.toContain('"Profil Sedang Diselaraskan"');
+    expect(form).not.toContain('"Klasifikasi Belum Dipilih"');
+    expect(form).not.toContain('"Kegunaan Form Belum Dipilih"');
+
+    // Submit validation stays in SuratForm (not moved)
+    expect(form).toContain("validateRegistration");
+    expect(form).toContain('"Upload Belum Selesai"');
+  });
 });
