@@ -39,6 +39,7 @@ import {
 } from "@/features/surat/registration/lib/surat-wizard-steps";
 import { useSuratWizardStepper } from "@/features/surat/registration/lib/use-surat-wizard-stepper";
 import { validateStep1ForNumberGeneration } from "@/features/surat/registration/lib/surat-wizard-validation";
+import { validateSuratSubmit } from "@/features/surat/registration/lib/surat-submit-validation";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -1969,117 +1970,46 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const validateRegistration = (signerAssignments: SignerAssignment[] = signers) => {
-    if (uploadingRequirement || uploadingRecommendationAttachment) {
-      toast({
-        variant: "destructive",
-        title: "Upload Belum Selesai",
-        description: "Tunggu sampai seluruh lampiran selesai disimpan.",
-      });
-      return false;
-    }
-    if (!generatedNoSurat || !activeDraftId) {
-      toast({ variant: "destructive", title: "Nomor Surat Belum Siap", description: "Pesan nomor surat terlebih dahulu." });
-      return false;
-    }
-    if (!formData.request_place.trim()) {
-      toast({ variant: "destructive", title: "Tempat Wajib Diisi" });
-      return false;
-    }
-    if (!formData.request_date) {
-      toast({ variant: "destructive", title: "Tanggal Wajib Diisi" });
-      return false;
-    }
-    const missingInitialAttachments = getMissingInitialAttachmentLabels();
-    if (missingInitialAttachments.length > 0) {
-      toast({
-        variant: "destructive",
-        title: "Lampiran Wajib",
-        description: `Lengkapi: ${missingInitialAttachments.join(", ")}.`,
-      });
-      return false;
-    }
-    if (isUnitMode) {
-      if (!hasUnitRequestFields(selectedUsage)) {
-        toast({ variant: "destructive", title: "Matrix Unit Tidak Valid", description: "Pilih matrix/template yang mendukung permohonan unit." });
-        return false;
-      }
-      if (!canCurrentDepartmentRequestUnit(selectedUsage)) {
-        toast({ variant: "destructive", title: "Mode Unit Tidak Diizinkan", description: "Departemen ini tidak termasuk konfigurasi pengaju unit." });
-        return false;
-      }
-      const count = Number(getFormFieldValue("requested_unit_count") || 0);
-      const requestedProject = getFormFieldValue("requested_project") as { code?: string } | undefined;
-      if (!requestedProject?.code) {
-        toast({ variant: "destructive", title: "Proyek Wajib Dipilih", description: "Pilih proyek untuk permohonan unit." });
-        return false;
-      }
-      if (!Number.isFinite(count) || count < 1) {
-        toast({ variant: "destructive", title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." });
-        return false;
-      }
-    }
-    if (isNonUnitMode && !shouldUseDefaultBranchProject) {
-      if (!isMarisonProjectReady) {
-        toast({
-          variant: "destructive",
-          title: "Proyek Belum Terhubung",
-          description: "Pilih proyek yang memiliki ID proyek dan cabang Marison sebelum mendaftarkan Non Unit.",
-        });
-        return false;
-      }
-      const firstError = validateNonUnitRows(effectiveFormInputData.items)[0];
-      if (firstError) {
-        toast({
-          variant: "destructive",
-          title: "Data Non Unit Belum Lengkap",
-          description: firstError.message,
-        });
-        return false;
-      }
-    }
-    if (isFundMode) {
-      if (!fundWithoutProject && !isMarisonProjectReady) {
-        toast({
-          variant: "destructive",
-          title: "Proyek Belum Terhubung",
-          description: "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
-        });
-        return false;
-      }
-      if (!["operational", "production_cost"].includes(String(getFormFieldValue("fund_type") || ""))) {
-        toast({
-          variant: "destructive",
-          title: "Jenis Pengajuan Dana Wajib Dipilih",
-          description: "Pilih Biaya Operasional atau Biaya Produksi.",
-        });
-        return false;
-      }
-      const firstFundIssue = validateFundSubmissionItems(effectiveFormInputData.items)[0];
-      if (firstFundIssue) {
-        toast({
-          variant: "destructive",
-          title: "Rincian Dana Belum Lengkap",
-          description: firstFundIssue.message,
-        });
-        return false;
-      }
-    }
     const missingField = getManualInputFields(selectedUsage).find((field: TemplateField) => !isManualFieldComplete(field));
-    if (missingField) {
-      if (missingField.key === RECOMMENDATION_ITEMS_KEY && recommendationMultiDetail) {
-        const firstRecommendationError = recommendationMultiDetailErrors(recommendationMultiDetail)[0];
-        toast({
-          variant: "destructive",
-          title: "Daftar Rekomendasi Belum Lengkap",
-          description: firstRecommendationError || `${missingField.label} wajib diisi.`,
-        });
-        return false;
-      }
-      toast({ variant: "destructive", title: "Input Belum Lengkap", description: `${missingField.label} wajib diisi.` });
-      return false;
-    }
-    if (signerAssignments.some(s => !s.user_id)) {
-      toast({ variant: "destructive", title: "Pejabat Belum Lengkap" });
+    const firstRecommendationError = recommendationMultiDetail ? recommendationMultiDetailErrors(recommendationMultiDetail)[0] : undefined;
+
+    const result = validateSuratSubmit({
+      uploadingRequirement: Boolean(uploadingRequirement),
+      uploadingRecommendationAttachment: Boolean(uploadingRecommendationAttachment),
+      generatedNoSurat,
+      activeDraftId,
+      requestPlace: formData.request_place,
+      requestDate: formData.request_date,
+      missingInitialAttachmentLabels: getMissingInitialAttachmentLabels(),
+
+      isUnitMode,
+      hasUnitRequestFields: hasUnitRequestFields(selectedUsage),
+      canCurrentDepartmentRequestUnit: canCurrentDepartmentRequestUnit(selectedUsage),
+      requestedUnitCount: Number(getFormFieldValue("requested_unit_count") || 0),
+      requestedProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
+
+      isNonUnitMode,
+      shouldUseDefaultBranchProject,
+      isMarisonProjectReady,
+      firstNonUnitError: isNonUnitMode ? validateNonUnitRows(effectiveFormInputData.items)[0]?.message : undefined,
+
+      isFundMode,
+      fundWithoutProject,
+      fundType: String(getFormFieldValue("fund_type") || ""),
+      firstFundIssue: isFundMode ? validateFundSubmissionItems(effectiveFormInputData.items)[0]?.message : undefined,
+
+      missingField: missingField ? { key: missingField.key, label: missingField.label } : undefined,
+      firstRecommendationError,
+
+      signerAssignments,
+    });
+
+    if (!result.valid) {
+      toast({
+        variant: "destructive",
+        title: result.errorTitle!,
+        ...(result.errorDescription ? { description: result.errorDescription } : {}),
+      });
       return false;
     }
     return true;

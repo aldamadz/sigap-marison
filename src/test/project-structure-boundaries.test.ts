@@ -328,6 +328,34 @@ describe("project structure boundaries", () => {
 
     // Submit validation stays in SuratForm (not moved)
     expect(form).toContain("validateRegistration");
-    expect(form).toContain('"Upload Belum Selesai"');
+    expect(form).not.toContain('"Upload Belum Selesai"');
+  });
+
+  it("keeps final submit validation in canonical submit-validation module", () => {
+    // Pass K1: final submit validation extracted to pure module.
+    const validationPath = "src/features/surat/registration/lib/surat-submit-validation.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(validationPath)).toBe(true);
+    const validationCode = read(validationPath);
+    expect(validationCode).toContain("export function validateSuratSubmit");
+    expect(validationCode).toContain("export interface SuratSubmitValidationInput");
+    expect(validationCode).toContain("export interface SuratSubmitValidationResult");
+
+    // SuratForm imports the validator
+    expect(form).toContain('from "@/features/surat/registration/lib/surat-submit-validation"');
+    expect(form).toContain("validateSuratSubmit(");
+
+    // Inline validateRegistration blocks must not reappear in SuratForm
+    expect(form).not.toContain('"Upload Belum Selesai"');
+    expect(form).not.toContain('"Nomor Surat Belum Siap"');
+    expect(form).not.toContain('"Tempat Wajib Diisi"');
+    expect(form).not.toContain('"Pejabat Belum Lengkap"');
+
+    // Submit handler stays in SuratForm (not moved)
+    expect(form).toContain("const handleSubmit = async");
+    expect(form).toContain("const validateRegistration = (signerAssignments");
+    expect(validationCode).not.toContain("handleSubmit");
+    expect(validationCode).not.toContain("toast(");
   });
 });
