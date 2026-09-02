@@ -32,20 +32,12 @@ import { useLinkedRecommendationContext } from "@/features/surat/registration/li
 import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
 import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
 import {
-  WIZARD_STEP_LOKASI,
   WIZARD_STEP_BERKAS,
-  WIZARD_STEP_SIGNERS,
   WIZARD_STEPS,
-  getActiveWizardStep,
-  shouldShowStepSection,
-  isDocumentIdentityStep,
-  isContentStep,
-  isSignerStep,
-  getNextStep,
-  getPreviousStep,
   canGoToStep,
   type WizardStep,
 } from "@/features/surat/registration/lib/surat-wizard-steps";
+import { useSuratWizardStepper } from "@/features/surat/registration/lib/use-surat-wizard-stepper";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -202,7 +194,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
   const [fundWithoutProject, setFundWithoutProject] = useState(false);
-  const [wizardStep, setWizardStep] = useState<WizardStep>(WIZARD_STEP_LOKASI);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
@@ -1015,11 +1006,24 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isFundMode = getRequestCategory() === "non_asset";
   const isNonUnitMode = getRequestCategory() === "non_unit";
   const requiresMarisonProject = isNonUnitMode || isFundMode;
-  // Wizard registrasi surat: alur bertahap 1 → 2 → 3 (hanya alur non-rekomendasi).
   const useRegistrationWizard = !isRecommendationFlow;
-  const activeWizardStep = getActiveWizardStep(useRegistrationWizard, Boolean(generatedNoSurat), wizardStep);
-  const showSectionBerkas = shouldShowStepSection(WIZARD_STEP_BERKAS, activeWizardStep, Boolean(generatedNoSurat));
-  const showSectionSigners = shouldShowStepSection(WIZARD_STEP_SIGNERS, activeWizardStep, Boolean(generatedNoSurat), signers.length > 0);
+  const {
+    activeWizardStep,
+    showSectionBerkas,
+    showSectionSigners,
+    isIdentityActive,
+    isContentActive,
+    isSignerActive,
+    setCurrentStep: setWizardStep,
+    goToStep: setWizardStepDirect,
+    goToNextStep: goToNextWizardStep,
+    goToPreviousStep: goToPreviousWizardStep,
+    resetWizardStep,
+  } = useSuratWizardStepper(
+    useRegistrationWizard,
+    Boolean(generatedNoSurat),
+    signers.length > 0,
+  );
   const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects
     && getRequestCategory() !== "unit" && !isFundMode;
   const nonUnitProjectCandidates = useMemo(
@@ -1956,7 +1960,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       request_place: "", request_date: toDateInputValue(new Date()), form_input_data: {}
     });
     setGeneratedNoSurat(null); setSelectedUsage(null); setSelectedFormId(""); setLampiranFiles([]); setSigners([]);
-    setWizardStep(WIZARD_STEP_LOKASI);
+    resetWizardStep();
     setInitialAttachmentFiles({});
     setDraftAttachments([]);
     setUploadingRequirement(null);
@@ -3815,7 +3819,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     <button
                       type="button"
                       disabled={!reachable}
-                      onClick={() => setWizardStep(step)}
+                      onClick={() => setWizardStepDirect(step)}
                       aria-current={isActive ? "step" : undefined}
                       className={cn(
                         "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
@@ -3869,7 +3873,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         )}
 
         {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
-        {!isRecommendationFlow && isDocumentIdentityStep(activeWizardStep) && (
+        {!isRecommendationFlow && isIdentityActive && (
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
@@ -4368,18 +4372,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </section>
             )}
 
-            {useRegistrationWizard && isContentStep(activeWizardStep) && (
+            {useRegistrationWizard && isContentActive && (
               <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setWizardStep(getPreviousStep(WIZARD_STEP_BERKAS))}
+                  onClick={goToPreviousWizardStep}
                 >
                   <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => setWizardStep(getNextStep(WIZARD_STEP_BERKAS))}
+                  onClick={goToNextWizardStep}
                 >
                   Selanjutnya <ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
@@ -4473,7 +4477,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       type="button"
                       variant="outline"
                       className="h-12 sm:w-44"
-                      onClick={() => setWizardStep(getPreviousStep(WIZARD_STEP_SIGNERS))}
+                      onClick={goToPreviousWizardStep}
                     >
                       <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
                     </Button>
