@@ -40,6 +40,7 @@ import {
 import { useSuratWizardStepper } from "@/features/surat/registration/lib/use-surat-wizard-stepper";
 import { validateStep1ForNumberGeneration } from "@/features/surat/registration/lib/surat-wizard-validation";
 import { validateSuratSubmit } from "@/features/surat/registration/lib/surat-submit-validation";
+import { buildInitialAttachmentMeta, buildRegistrationSubmitPayload } from "@/features/surat/registration/lib/surat-submit-command";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -2173,22 +2174,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         resetForm();
         return;
       }
-      const initialAttachmentMeta = Object.fromEntries(
-        getInitialAttachmentRequirements().flatMap(rule =>
-          (initialAttachmentFiles[rule.requirement_key] || []).map(file => [
-            file.name,
-            { key: rule.requirement_key, label: rule.label },
-          ])
-        )
+      const initialAttachmentMeta = buildInitialAttachmentMeta(
+        getInitialAttachmentRequirements(),
+        initialAttachmentFiles
+      );
+      const payload = buildRegistrationSubmitPayload(
+        effectiveFormData,
+        generatedNoSurat,
+        activeDraftReservationId,
+        activeDraftId,
+        initialAttachmentMeta
       );
       const result = await suratRegistrationApi.createRegistrasi(
-        {
-          ...effectiveFormData,
-          no_surat: generatedNoSurat,
-          reservation_id: activeDraftReservationId,
-          draft_id: activeDraftId,
-          initial_attachment_meta: initialAttachmentMeta,
-        },
+        payload,
         latestSigners,
         null,
         lampiranFiles

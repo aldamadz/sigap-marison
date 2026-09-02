@@ -358,4 +358,32 @@ describe("project structure boundaries", () => {
     expect(validationCode).not.toContain("handleSubmit");
     expect(validationCode).not.toContain("toast(");
   });
+
+  it("keeps pure submit command builder out of SuratForm", () => {
+    // Pass K2A: pure submit payload builder extracted to pure module.
+    const commandPath = "src/features/surat/registration/lib/surat-submit-command.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(commandPath)).toBe(true);
+    const commandCode = read(commandPath);
+    expect(commandCode).toContain("export function buildInitialAttachmentMeta");
+    expect(commandCode).toContain("export function buildRegistrationSubmitPayload");
+    
+    // SuratForm imports the pure helpers
+    expect(form).toContain('from "@/features/surat/registration/lib/surat-submit-command"');
+    expect(form).toContain("buildInitialAttachmentMeta(");
+    expect(form).toContain("buildRegistrationSubmitPayload(");
+
+    // Inline build logic must not reappear in SuratForm
+    expect(form).not.toContain("const initialAttachmentMeta = Object.fromEntries(");
+    expect(form).not.toMatch(/no_surat:\s*generatedNoSurat,/);
+    expect(form).not.toMatch(/draft_id:\s*activeDraftId,/);
+    expect(form).not.toMatch(/initial_attachment_meta:\s*initialAttachmentMeta,/);
+
+    // Pure module constraints
+    expect(commandCode).not.toContain("import React");
+    expect(commandCode).not.toContain("import { supabase }");
+    expect(commandCode).not.toContain("suratService");
+    expect(commandCode).not.toContain("toast(");
+  });
 });
