@@ -42,6 +42,29 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     expect(migration).toContain("project.office_id = new.office_id");
     expect(migration).toContain("Penomoran kantor pusat wajib per departemen tanpa scope proyek");
     expect(migration).toContain("Penomoran kantor cabang wajib per proyek tanpa scope departemen");
-    expect(suratService).toContain("if (!isPusat && !projectIdClean)");
+    // MRN-22: branch-asset virtual fallback adds an exception clause; the
+    // service guard now also accepts the fallback path explicitly.
+    expect(suratService).toContain("if (!isPusat && !projectIdClean");
+    expect(suratService).toContain("fallbackEligible");
+  });
+
+  it("MRN-22: branch-asset virtual fallback re-verifies on the server", () => {
+    const branchAssetMigration = read(
+      "supabase/migrations/20260903120000_branch_asset_without_project.sql",
+    );
+    expect(branchAssetMigration).toContain("branch_has_active_projects");
+    expect(branchAssetMigration).toContain("is_valid_branch_asset_fallback");
+    // The same fallback predicate must be referenced by the reservation
+    // trigger AND the registration trigger (single source of truth).
+    expect(
+      branchAssetMigration.match(/branch_has_active_projects/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      branchAssetMigration.match(/is_valid_branch_asset_fallback/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+    // The service must call the RPC with the new fallback flag.
+    expect(suratService).toContain("p_is_asset_fallback");
+    // No synthetic project row is created in master_projects.
+    expect(branchAssetMigration).not.toMatch(/insert\s+into\s+public\.master_projects/i);
   });
 });
