@@ -42,6 +42,7 @@ import { validateStep1ForNumberGeneration } from "@/features/surat/registration/
 import { validateSuratSubmit } from "@/features/surat/registration/lib/surat-submit-validation";
 import { buildInitialAttachmentMeta, buildRegistrationSubmitPayload } from "@/features/surat/registration/lib/surat-submit-command";
 import { executeExternalRevisionSubmit, getExternalRevisionSuccessDescription } from "@/features/surat/registration/services/external-revision-submit";
+import { executeRecommendationPostSubmit } from "@/features/surat/recommendation/services/recommendation-post-submit";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -2184,25 +2185,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         lampiranFiles
       );
       if (result) {
-        let autoSignWarning = "";
-        if (linkedDocumentContext?.type === "recommendation" && linkedDocumentContext.parentSuratId) {
-          if (linkedDocumentContext.taskId) {
-            await suratRecommendationApi.completeRecommendationTask(linkedDocumentContext.taskId, result.id);
-          } else {
-            await suratRecommendationApi.linkRecommendationDocument(
-              linkedDocumentContext.parentSuratId,
-              result.id,
-              linkedDocumentContext.requiredBeforeStep ?? null
-            );
-          }
-          try {
-            await suratRecommendationApi.autoApproveRecommendationFirstStep(result.id);
-          } catch (autoSignError: unknown) {
-            autoSignWarning = autoSignError instanceof Error
-              ? ` Tanda tangan otomatis belum berhasil: ${autoSignError.message}`
-              : " Tanda tangan otomatis belum berhasil.";
-          }
-        }
+        const autoSignWarning = await executeRecommendationPostSubmit({
+          linkedDocumentContext,
+          recommendationSuratId: result.id,
+        });
+
         if (activeDraftId) {
           await suratRegistrationApi.finishRegistrationDraft(activeDraftId, "SUBMITTED");
           setActiveDrafts(previous => previous.filter(draft => draft.id !== activeDraftId));
