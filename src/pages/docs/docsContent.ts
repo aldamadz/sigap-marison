@@ -26,159 +26,39 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-
-export type DocsAudience = "user" | "admin" | "troubleshooting";
-
-export type DocsSection =
-  | {
-      type: "group";
-      title: string;
-      description?: string;
-      sections: DocsSection[];
-    }
-  | {
-      type: "feature-grid";
-      title: string;
-      description?: string;
-      items: Array<{ title: string; description: string }>;
-    }
-  | {
-      type: "steps";
-      title: string;
-      description?: string;
-      items: string[];
-    }
-  | {
-      type: "list";
-      title: string;
-      description?: string;
-      items: string[];
-    }
-  | {
-      type: "table";
-      title: string;
-      description?: string;
-      columns: string[];
-      rows: string[][];
-    }
-  | {
-      type: "callout";
-      title: string;
-      description: string;
-      tone?: "info" | "success" | "warning";
-    }
-  | {
-      type: "troubleshooting";
-      title: string;
-      description?: string;
-      items: Array<{ problem: string; solution: string }>;
-    };
-
-export interface DocsEntry {
-  id: string;
-  title: string;
-  menu: string;
-  audience: DocsAudience;
-  icon: LucideIcon;
-  version: string;
-  updatedAt: string;
-  summary: string;
-  whenToUse: string[];
-  steps: string[];
-  examples: string[];
-  troubleshooting: string[];
-  related?: string[];
-  sections?: DocsSection[];
-}
-
-export const DOCS_VERSION = "v1.25.0";
-export const DOCS_UPDATED_AT = "18 Agustus 2026";
-
-export const DOCS_OVERVIEW_SLUG = "overview";
-
-export const slugifyDocsSegment = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/&/g, " dan ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const DOCS_ENTRY_SLUGS: Record<string, string> = {
-  dashboard: "dashboard",
-  agenda: "agenda",
-  calendar: "kalender",
-  "surat-registration": "registrasi-surat",
-  "request-categories": "kategori-pengajuan",
-  "approval-inbox": "persetujuan",
-  "recommendation-tasks": "rekomendasi",
-  monitoring: "status-pengajuan",
-  "documents-attachments": "dokumen-lampiran",
-  history: "riwayat-terlibat",
-  settings: "pengaturan",
-  "admin-users": "user-organization",
-  "admin-hierarchy": "hirarki-organisasi",
-  "admin-departments": "master-departemen",
-  "admin-entities": "master-entitas",
-  "admin-letter-types": "master-jenis-surat",
-  "admin-offices": "master-kantor-cabang",
-  "admin-projects": "master-proyek",
-  "admin-form-usages": "kegunaan-form",
-  "admin-integration": "integrasi-marison",
-  "admin-numbering": "penomoran-surat",
-  "admin-job-title-labels": "label-jabatan",
-  "admin-sla": "sla-departemen",
-  "admin-monitoring": "monitoring-admin",
-  "admin-audit": "audit-log",
-  "admin-email": "email-notification",
-  "login-access": "login-akses",
-  "document-file": "dokumen-lampiran-error",
-  notification: "notifikasi-realtime",
-  "external-api": "external-api",
-  "deploy-production": "deploy-production",
+import {
+  type DocsAudience,
+  type DocsSection,
+  type DocsEntry,
+  type DocsChangelogEntry,
+  DOCS_VERSION,
+  DOCS_UPDATED_AT,
+  DOCS_OVERVIEW_SLUG,
+  slugifyDocsSegment,
+  DOCS_ENTRY_SLUGS,
+  DOCS_SECTION_SLUGS,
+  getDocsEntrySlug,
+  getDocsSectionSlug,
+  getDocsEntryPath,
+  getDocsVersionPath,
+  DOCS_PRINCIPLES,
+  DOCS_CHANGELOG,
+} from "./content";
+export type { DocsAudience, DocsSection, DocsEntry, DocsChangelogEntry };
+export {
+  DOCS_VERSION,
+  DOCS_UPDATED_AT,
+  DOCS_OVERVIEW_SLUG,
+  slugifyDocsSegment,
+  DOCS_ENTRY_SLUGS,
+  DOCS_SECTION_SLUGS,
+  getDocsEntrySlug,
+  getDocsSectionSlug,
+  getDocsEntryPath,
+  getDocsVersionPath,
+  DOCS_PRINCIPLES,
+  DOCS_CHANGELOG,
 };
-
-const DOCS_SECTION_SLUGS: Record<string, string> = {
-  "Data yang ditampilkan": "data-yang-ditampilkan",
-  "Bagian pada Dashboard": "bagian-dashboard",
-  "Kontrol periode": "kontrol-periode",
-  "Membaca ringkasan Pengajuan Surat": "ringkasan-pengajuan-surat",
-  "Membaca KPI Agenda": "kpi-agenda",
-  "Menelusuri pekerjaan dari Dashboard": "alur-dashboard",
-  "Kendala pada Dashboard": "kendala-dashboard",
-  "Nomor surat dan draft": "nomor-draft",
-  "Alur registrasi dokumen": "alur-registrasi",
-  "Pilihan kategori": "kategori-pengajuan",
-  "Yang otomatis diisi sistem": "data-otomatis",
-  "Masalah umum saat registrasi": "kendala-registrasi",
-  "Area utama Persetujuan": "area-persetujuan",
-  "Alur signer": "alur-signer",
-  "Perbedaan signer dan tim pemeriksa": "signer-dan-tim-pemeriksa",
-  "Jika pengajuan Unit": "pengajuan-unit",
-  "Masalah umum saat approval": "kendala-approval",
-  "Alur rekomendasi aset": "alur-rekomendasi-aset",
-  "Mengisi dokumen rekomendasi": "mengisi-dokumen-rekomendasi",
-  "Status dan lock rekomendasi": "status-lock-rekomendasi",
-  "Masalah umum rekomendasi": "kendala-rekomendasi",
-  "Membaca nomor surat": "membaca-nomor-surat",
-  "Nomor surat, counter, dan draft": "nomor-surat-counter-draft",
-  "Variasi format nomor": "variasi-format-nomor",
-  "Scope dan reset nomor": "scope-reset-nomor",
-  "Siklus draft dan nomor": "siklus-draft-nomor",
-};
-
-export const getDocsEntrySlug = (entry: DocsEntry) =>
-  DOCS_ENTRY_SLUGS[entry.id] ?? slugifyDocsSegment(entry.title || entry.id);
-
-export const getDocsSectionSlug = (section: DocsSection) =>
-  DOCS_SECTION_SLUGS[section.title] ?? slugifyDocsSegment(section.title);
-
-export const getDocsEntryPath = (entry: DocsEntry, sectionSlug = DOCS_OVERVIEW_SLUG) =>
-  `/docs/${getDocsEntrySlug(entry)}/${sectionSlug}`;
-
-export const getDocsVersionPath = () => "/docs/versi/changelog";
-
 const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
   agenda: [
     {
@@ -800,7 +680,6 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
     },
   ],
 };
-
 const collectDocsSectionTitles = (sections: DocsSection[]) => {
   const titles = new Set<string>();
   const visit = (section: DocsSection) => {
@@ -810,10 +689,8 @@ const collectDocsSectionTitles = (sections: DocsSection[]) => {
   sections.forEach(visit);
   return titles;
 };
-
 const getDocsEntrySupportSections = (entry: DocsEntry): DocsSection[] => {
   const sections: DocsSection[] = [];
-
   if (entry.steps.length) {
     sections.push({
       type: "steps",
@@ -821,7 +698,6 @@ const getDocsEntrySupportSections = (entry: DocsEntry): DocsSection[] => {
       items: entry.steps,
     });
   }
-
   if (entry.examples.length || entry.troubleshooting.length) {
     sections.push({
       type: "group",
@@ -850,28 +726,21 @@ const getDocsEntrySupportSections = (entry: DocsEntry): DocsSection[] => {
       ],
     });
   }
-
   return sections;
 };
-
 export const getDocsEntrySections = (entry: DocsEntry): DocsSection[] => {
   const detailSections = DETAIL_SECTIONS_BY_ID[entry.id] ?? [];
-
   if (entry.sections?.length) {
     const existingTitles = collectDocsSectionTitles(entry.sections);
-
     return [
       ...entry.sections,
       ...detailSections.filter((section) => !existingTitles.has(section.title)),
     ];
   }
-
   if (detailSections.length) {
     return [...detailSections, ...getDocsEntrySupportSections(entry)];
   }
-
   const sections: DocsSection[] = [];
-
   if (entry.whenToUse.length) {
     sections.push({
       type: "list",
@@ -879,7 +748,6 @@ export const getDocsEntrySections = (entry: DocsEntry): DocsSection[] => {
       items: entry.whenToUse,
     });
   }
-
   if (entry.steps.length) {
     sections.push({
       type: "steps",
@@ -887,7 +755,6 @@ export const getDocsEntrySections = (entry: DocsEntry): DocsSection[] => {
       items: entry.steps,
     });
   }
-
   if (entry.examples.length) {
     sections.push({
       type: "list",
@@ -895,7 +762,6 @@ export const getDocsEntrySections = (entry: DocsEntry): DocsSection[] => {
       items: entry.examples,
     });
   }
-
   if (entry.troubleshooting.length) {
     sections.push({
       type: "list",
@@ -903,10 +769,8 @@ export const getDocsEntrySections = (entry: DocsEntry): DocsSection[] => {
       items: entry.troubleshooting,
     });
   }
-
   return sections;
 };
-
 export const USER_DOCS: DocsEntry[] = [
   {
     id: "dashboard",
@@ -2037,7 +1901,6 @@ export const USER_DOCS: DocsEntry[] = [
     ],
   },
 ];
-
 export const ADMIN_DOCS: DocsEntry[] = [
   {
     id: "admin-users",
@@ -2519,7 +2382,6 @@ export const ADMIN_DOCS: DocsEntry[] = [
     ],
   },
 ];
-
 export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
   {
     id: "login-access",
@@ -2809,389 +2671,4 @@ export const TROUBLESHOOTING_DOCS: DocsEntry[] = [
     ],
   },
 ];
-
 export const ALL_DOCS = [...USER_DOCS, ...ADMIN_DOCS, ...TROUBLESHOOTING_DOCS];
-
-export const DOCS_CHANGELOG = [
-  {
-    version: "v1.25.0",
-    date: "18 Agustus 2026",
-    changes: [
-      "Mengubah registrasi dan approval dokumen menjadi database-native tanpa membuat atau memodifikasi XLSX.",
-      "Membuat PDF secara asinkron dari snapshot database saat dibutuhkan atau setelah dokumen final.",
-      "Menambahkan renderer native untuk rekomendasi, lampiran enam gambar per halaman, dan tanda tangan dinamis 2-8 signer.",
-      "Menginvalidasi cache PDF secara atomik setiap kali versi dokumen berubah.",
-      "Menahan outbound sebelum POST sampai PDF final tersedia dan mencegah marker native menjadi tautan lampiran.",
-      "Mengalihkan halaman Forms dan Workflows lama ke Kegunaan Form.",
-    ],
-  },
-  {
-    version: "v1.24.0",
-    date: "3 Agustus 2026",
-    changes: [
-      "Memindahkan Antrean Outbound Marison sepenuhnya ke halaman Konfigurasi Integration.",
-      "Membedakan recovery kegagalan sebelum POST dengan pengiriman pengganti setelah penolakan HTTP 422.",
-      "Menambahkan generasi job, idempotency key deterministik, audit append-only, dan perlindungan pengiriman pengganti ganda.",
-      "Menampilkan nomor generasi, status penyimpanan, dan pesan konflik operasional pada panel antrean admin.",
-      "Menambahkan regression test packaging agar seluruh modul resolver Marison tersedia saat container staging dimulai.",
-      "Memperbaiki error dan loading tanpa akhir pada Bangun Ulang dan Coba Lagi dengan memastikan helper eligibility serta respons preflight tersedia pada handler backend.",
-      "Menampilkan konfigurasi yang perlu diperbaiki beserta tautan langsung ke User Organization, Master Kantor Cabang, atau Master Proyek pada diagnosis recovery.",
-      "Menjelaskan data yang perlu diperiksa sebelum membuat pengiriman pengganti HTTP 422, tanpa menyebut semua penolakan vendor sebagai kesalahan konfigurasi.",
-      "Memperbaiki validasi resolution source projectId pada Unit dan Non Unit agar PostgreSQL tidak menafsirkannya sebagai array literal.",
-      "Menerapkan migration dan aplikasi MRN-17 di staging serta memverifikasi antrean lama tetap utuh tanpa business POST.",
-    ],
-  },
-  {
-    version: "v1.23.0",
-    date: "31 Juli 2026",
-    changes: [
-      "Menetapkan identitas external hasil sinkronisasi sebagai sumber payload yang siap dikirim tanpa mapping ulang.",
-      "Menambahkan mapping payload staging untuk record lokal/trial dengan validasi effective branch dan fallback dari office mapping saat branch source stale.",
-      "Menampilkan Identitas External, nilai efektif, dan status payload pada Master User, Master Kantor, dan Master Proyek.",
-      "Menerapkan MRN-16 di staging dan menyelesaikan acceptance backend rollback serta pemeriksaan UI desktop/mobile tanpa mengubah antrean bisnis.",
-    ],
-  },
-  {
-    version: "v1.22.0",
-    date: "30 Juli 2026",
-    changes: [
-      "Memperbaiki susunan datepicker Tanggal Produksi pada tabel alokasi Unit untuk desktop dan mobile.",
-      "Membuka datepicker kosong pada bulan berjalan dan menandai hari ini tanpa mengisi tanggal sebelum dipilih.",
-      "Menggunakan contoh Tipe Unit `60` pada input dan template Excel sambil tetap menerima format teks seperti `60/72`.",
-      "Menambahkan progres upload lampiran pemohon berdasarkan byte file, urutan file, fase penyimpanan, dan status hasil.",
-      "Mengunci ringkasan serta pendaftaran surat selama lampiran masih diunggah atau disimpan.",
-      "Memisahkan Integrasi Marison menjadi halaman khusus di Konfigurasi agar Kegunaan Form hanya memuat aturan dokumen dan approval.",
-      "Mengklasifikasikan seluruh pekerjaan pembangunan pada Kegunaan Form Permohonan Teknik Cabang sebagai Non Unit tanpa mengubah matrix penandatangan.",
-      "Memperbaiki validasi lampiran pemohon agar file yang sudah tersimpan pada draft ikut dihitung terhadap batas minimum dan maksimum saat pendaftaran final.",
-      "Menambahkan form Non Unit terstruktur berdasarkan proyek dengan jenis pekerjaan eksternal, nama pekerjaan, nilai pengajuan, catatan perencanaan, dan total otomatis.",
-      "Menyamakan data Non Unit pada ringkasan konfirmasi, detail pengajuan, PDF PGD, dan kontrak outbound agar tidak ada input ganda atau kolom mentah.",
-      "Menyimpan mapping proyek serta cabang Marison pada snapshot surat tanpa memakai UUID lokal sebagai ID external.",
-      "Menambahkan pilihan Proyek Tujuan Non Unit untuk pemohon Kantor Pusat dan memastikan ID cabang mengikuti kantor proyek yang dipilih.",
-      "Menyaring pilihan Non Unit ke proyek yang sudah siap terhubung agar data tidak terkirim ke proyek atau cabang external yang salah.",
-      "Menambahkan mapping manual ID dan kode proyek Marison pada Master Proyek staging dengan validasi ID positif dan pencegahan duplikasi.",
-    ],
-  },
-  {
-    version: "v1.21.0",
-    date: "27 Juli 2026",
-    changes: [
-      "Menampilkan jumlah review Master Proyek pada badge sidebar melalui kontrak attention state yang konsisten.",
-      "Menyamakan tampilan review User Organization, Master Kantor Cabang, dan Master Proyek dengan baris amber serta kolom Keterangan.",
-      "Menghapus badge kecil Lengkapi/Perlu dilengkapi dari tabel master agar alasan perbaikan terbaca langsung.",
-      "Memperbarui draft aktif agar kandidat dan tahap penandatangan mengikuti konfigurasi Kegunaan Form terbaru saat dibuka dan sebelum didaftarkan.",
-      "Mempertahankan snapshot penandatangan pada surat yang sudah terdaftar agar jejak audit tidak berubah.",
-    ],
-  },
-  {
-    version: "v1.20.0",
-    date: "23 Juli 2026",
-    changes: [
-      "Menambahkan penanda kesiapan cronjob sinkronisasi sebagai rencana otomasi berikutnya tanpa mengaktifkan scheduler diam-diam.",
-    ],
-  },
-  {
-    version: "v1.19.0",
-    date: "22 Juli 2026",
-    changes: [
-      "Menyatukan layanan storage staging dan production agar bucket dapat dikelola dari satu storage self-hosted.",
-      "Mengisolasi seluruh upload staging, avatar, lampiran pemeriksa, dan hasil PDF worker di bawah namespace staging/.",
-      "Menolak akses file lintas environment pada BFF dan worker ketika path tidak sesuai namespace deployment.",
-      "Memperbaiki pembukaan dokumen dan lampiran staging agar validasi namespace membaca object path aktual dari token file.",
-      "Memigrasikan referensi file staging lama ke namespace staging/ tanpa menghapus object sumber.",
-      "Mengamankan reset storage agar staging hanya menghapus object dalam namespace staging dan tidak mengosongkan bucket production.",
-      "Menetapkan kontrak payload outbound Aset dan Unit v1 agar nama field, tipe data, struktur item, lampiran, rekomendasi, dan approval konsisten dengan integrasi vendor.",
-      "Menambahkan validasi payload sebelum request dikirim serta contract test berbasis contoh JSON kanonis.",
-      "Menambahkan NIK uji tunggal untuk seluruh pemohon dan penandatangan pada payload outbound staging tanpa mengubah NIK profil atau payload production.",
-      "Menandai kontrak baru belum boleh diaktifkan sampai endpoint staging vendor selesai disesuaikan dan pengujian bersama dinyatakan lulus.",
-      "Menambahkan sinkronisasi branch dan employee API Marison khusus staging melalui halaman Integrasi Marison.",
-      "Menggunakan external employee ID dan NIK sebagai identitas sinkronisasi tanpa mengganti UUID internal SIGAP.",
-      "Membuat email login staging berbasis nama lengkap, mempertahankan role akun lama, dan memakai role user untuk akun baru.",
-      "Memblokir employee tanpa NIK atau NIK konflik serta menampilkan hasil pemeriksaan sebelum admin menjalankan sinkronisasi.",
-      "Mempertahankan jabatan, departemen, dan kantor profil lama agar data uji external yang tidak valid tidak merusak workflow approval.",
-      "Memperbarui draft registrasi agar mengikuti tahap penandatangan terbaru dari konfigurasi Kegunaan Form saat dibuka ulang.",
-      "Mempertahankan pilihan signer pada tahap yang masih sama, menambahkan tahap baru, dan membuang tahap yang sudah dihapus tanpa mengubah surat yang telah didaftarkan.",
-    ],
-  },
-  {
-    version: "v1.18.0",
-    date: "21 Juli 2026",
-    changes: [
-      "Mengurangi penggunaan PostgREST dengan memisahkan daftar monitoring yang ringan dari detail dokumen yang dimuat saat dibuka.",
-      "Menambahkan pagination server-side pada Status Pengajuan dan Monitoring Admin agar browser tidak mengambil seluruh histori surat.",
-      "Memindahkan perhitungan ringkasan pengajuan ke agregasi database sehingga dashboard hanya menerima empat angka.",
-      "Menggabungkan enam query badge menjadi satu RPC attention yang ringkas.",
-      "Membatasi data kalender ke bulan yang sedang dilihat dan menghapus subscription realtime halaman yang tumpang tindih.",
-      "Menambahkan idle backoff pada worker PDF agar antrean kosong tidak memanggil database setiap dua detik terus-menerus.",
-      "Memperbarui dependency brace-expansion dan js-yaml ke patch aman pada seluruh jalur tooling dan generator Excel/PDF.",
-      "Menambahkan panduan terpadu kategori Aset, Non Aset, Unit, dan Non Unit beserta kegunaan, contoh, alur, dan cara memilih kategori yang tepat.",
-      "Memperbaiki login development dengan menjalankan Vite dan BFF lokal bersama-sama serta mempertahankan validasi same-origin pada proxy localhost.",
-      "Menyematkan logo Marison langsung pada email reset kata sandi agar gambar tetap tampil saat email dikirim dari lokal, staging, maupun production.",
-      "Menyiapkan akun uji staging dengan nama riil, email berbasis nama pada domain staging.test, password default staging, dan sinkronisasi identitas Auth dengan profil.",
-      "Menyinkronkan badge sidebar secara langsung saat tugas approval atau pemeriksaan berubah melalui stream SSE yang sama.",
-      "Menormalkan nomor kode produksi Unit menjadi minimal tiga digit pada template Excel, import, autosave, detail, PDF, dan email.",
-      "Memperbaiki finalisasi pemeriksaan Unit agar alokasi kavling tersimpan atomik di database, termasuk backfill data lama yang sebelumnya hanya tersimpan di draft pemeriksa.",
-      "Mengaktifkan pengiriman outbound ke API Marison staging setelah surat selesai ditandatangani untuk kategori Aset, Unit, dan Non Unit.",
-      "Menambahkan pencatatan hasil pengiriman Marison pada snapshot surat agar pengiriman sukses tidak dikirim ulang dan kegagalan punya alasan yang bisa diaudit.",
-      "Menjaga credential dan HMAC API Marison tetap di server; browser hanya memanggil endpoint internal SIGAP setelah approval final.",
-      "Memperbaiki submit draft registrasi melalui validasi server dan ID reservasi nomor milik draft, sehingga draft milik user sendiri tidak gagal karena pencarian nomor yang ambigu.",
-      "Memperbaiki sesi registrasi dengan cookie HttpOnly yang lebih ringkas dan penerusan JWT user yang konsisten, sehingga validasi kegunaan serta konfirmasi akhir draft tidak lagi gagal karena sesi kosong.",
-      "Memperbaiki pendaftaran Aset dengan rekomendasi agar reservasi nomor rekomendasi dibuat atas sesi pemohon lalu dipindahkan saat petugas IT mengklaim tugas, tanpa melonggarkan validasi kepemilikan nomor.",
-      "Memperbaiki modal detail Status Pengajuan agar status dihitung dari data signature lengkap dan halaman tidak menjadi kosong ketika data ringkas digantikan respons detail.",
-    ],
-  },
-  {
-    version: "v1.17.0",
-    date: "20 Juli 2026",
-    changes: [
-      "Memisahkan datasource Marison berdasarkan deployment: staging selalu memakai API staging dan production selalu memakai API production.",
-      "Mengunci environment melalui Docker Compose agar tidak dapat berubah karena konfigurasi database atau tindakan dari UI.",
-      "Mengubah halaman Integrasi Marison menjadi status endpoint dan tes koneksi environment aktif khusus admin.",
-      "Menghapus switch environment berbasis OTP, subscription realtime pengaturan environment, serta fallback credential `MARISON_EXTERNAL_*`.",
-      "Menambahkan `docker-compose.staging.yml` untuk deployment domain testing yang terpisah dari container production.",
-      "Menetapkan `sigap.marisoncloud.com` sebagai domain production dan mempertahankan `sigap.marison-testing.biz.id` sebagai domain staging.",
-      "Mengunci URL publik pada masing-masing deployment agar tautan email, reset password, dan request API tidak silang environment.",
-      "Menetapkan pengembangan lokal melalui `npm run dev` ke datasource staging dan domain staging.",
-      "Membuat project Supabase staging terpisah dengan schema production, master/config terkontrol, kandidat user dimasking, dan tanpa data transaksi production.",
-      "Memisahkan storage serta PDF worker staging agar file pengujian tidak masuk ke storage production.",
-      "Mengubah production dari Cloudflare Tunnel menjadi proxied A record menuju origin publik dan reverse proxy Caddy.",
-      "Mempertahankan Cloudflare Tunnel hanya untuk staging serta menghapus hostname production dari ingress Tunnel.",
-      "Menambahkan nama project Compose yang eksplisit agar deploy staging dan production tidak saling menghapus sebagai orphan.",
-    ],
-  },
-  {
-    version: "v1.16.0",
-    date: "15 Juli 2026",
-    changes: [
-      "Memindahkan sesi browser ke cookie HttpOnly terenkripsi dan menjalankan query Supabase melalui BFF SIGAP.",
-      "Mengganti polling state aplikasi dengan koneksi realtime SSE melalui BFF.",
-      "Memverifikasi tanda tangan token melalui Supabase Auth pada endpoint attention, web push, dan datasource eksternal.",
-      "Membatasi percobaan login gagal dan permintaan reset password untuk mengurangi brute force dan abuse email.",
-      "Menambahkan datasource Marison Non Unit berdasarkan endpoint terbaru `GET /non-unit`.",
-      "Menambahkan pengaturan global environment Marison agar seluruh user dapat memakai staging atau production tanpa deploy ulang.",
-      "Membatasi perubahan environment berdasarkan email terverifikasi serta konfirmasi OTP yang dikirim melalui SMTP.",
-      "Menampilkan indikator staging kepada seluruh user dan menyediakan tes koneksi Projects, Unit, dan Non Unit untuk pengelola.",
-    ],
-  },
-  {
-    version: "v1.15.0",
-    date: "14 Juli 2026",
-    changes: [
-      "Membersihkan dead code, notification subtree lama, wrapper UI orphan, dependency tidak terpakai, dan artefak temporary tanpa mengubah alur production utama.",
-      "Menstandarkan role aktif aplikasi menjadi `admin` dan `user` serta menambahkan migration normalisasi role yang idempotent.",
-      "Menstandarkan toast aplikasi ke Sonner agar feedback UI lebih konsisten.",
-      "Menghapus source, deployment, dan dokumentasi layanan inbound read-only karena arah integrasi SIGAP menjadi outbound ke sistem departemen.",
-      "Mempertahankan integrasi outbound MARISON agar SIGAP tetap dapat mengirim data ke sistem lain saat endpoint tujuan sudah tersedia.",
-      "Mematikan source map production agar source aplikasi tidak ikut terbuka pada hasil deploy publik.",
-      "Memperketat upload, Docker context, deterministic install, dan guard keamanan setelah cleanup.",
-      "Memperbaiki tampilan avatar private agar foto user tetap muncul di halaman organisasi, agenda, aktivitas, sidebar, dan profil selama user sudah login.",
-      "Menyamakan pemuatan avatar di sidebar dan pengaturan melalui komponen authenticated avatar agar foto tidak hilang dan tidak berubah rasio.",
-    ],
-  },
-  {
-    version: "v1.14.0",
-    date: "13 Juli 2026",
-    changes: [
-      "Memperjelas keterangan cell pada template Excel alokasi Unit untuk Struktur Atas, Struktur Bawah, Nomor Kode Produksi, Blok, dan Tanggal Produksi.",
-      "Menambahkan contoh input nominal `1000000`, `1.000.000`, dan `1,000,000` pada template agar tim pemeriksa tidak bingung saat mengisi nilai struktur.",
-      "Menambahkan contoh input tanggal `01/01/25`, `01/01/2025`, dan `01-01-2025` serta catatan bahwa datepicker mengikuti aplikasi Excel yang digunakan.",
-      "Mengaktifkan alur Lupa Sandi dari halaman login agar user dapat menerima email reset password dan membuat kata sandi baru secara mandiri.",
-      "Menambahkan dukungan reset password berbasis `token_hash` agar email auth tidak bergantung pada redirect lama dan lebih aman terhadap link scanner.",
-      "Memperjelas pesan reset password ketika kata sandi baru sama dengan yang sedang aktif serta mengunci form saat proses simpan agar tidak terjadi submit ganda.",
-      "Mengganti template email reset password menjadi HTML branded SIGAP berlogo Marison dan menghapus teks penanda deploy test dari halaman login.",
-      "Memindahkan pengiriman email reset password ke endpoint server SIGAP dengan SMTP Hostinger agar tidak bergantung pada mailer bawaan Supabase.",
-    ],
-  },
-  {
-    version: "v1.13.0",
-    date: "10 Juli 2026",
-    changes: [
-      "Menambahkan External API master data untuk kebutuhan onboarding akun di sistem lain.",
-      "Menambahkan endpoint `GET /api/onboarding/options` agar partner dapat mengambil tipe kantor, daftar Kantor Pusat/KC/KCP, dan Departemen pusat dalam satu request.",
-      "Menambahkan endpoint `GET /api/master/offices` dengan filter `type=pusat|kc|kcp`.",
-      "Menambahkan endpoint `GET /api/master/departments` dengan filter `scope=pusat|cabang|all`.",
-      "Membatasi response master data ke field allowlist agar email, data user, dan field internal tidak terekspos.",
-      "Menambahkan dokumentasi operasional External API di halaman Docs dan memperbarui dokumen teknis `EXTERNAL_API_SURAT.md`.",
-      "Menambahkan download template dan import Excel/CSV untuk pengisian massal detail kavling pada tugas pemeriksaan Unit.",
-    ],
-  },
-  {
-    version: "v1.12.0",
-    date: "9 Juli 2026",
-    changes: [
-      "Memperbolehkan KC/KCP tanpa master proyek membuat pengajuan non-unit dengan kode proyek virtual `000`.",
-      "Membedakan validasi proyek: Unit tetap wajib memilih proyek Unit, cabang yang punya proyek wajib memilih proyek cabang, sedangkan cabang tanpa proyek memakai `000`.",
-      "Menambahkan state read-only pada Registrasi Surat untuk cabang tanpa proyek agar user tidak melihat dropdown proyek kosong.",
-      "Menyimpan konteks `project_code: 000`, `project_name: Tanpa proyek`, dan `project_is_default: true` pada input/snapshot tanpa membuat master proyek palsu.",
-      "Memperbarui dokumentasi nomor surat agar variasi KC/KCP tanpa proyek dan scope counter virtual `000` dapat dipahami user/admin.",
-    ],
-  },
-  {
-    version: "v1.11.0",
-    date: "8 Juli 2026",
-    changes: [
-      "Menambahkan halaman `Tindak Lanjut` untuk keputusan pemohon setelah pengajuan dikembalikan, terpisah dari Status Pengajuan.",
-      "Memindahkan badge revisi yang menjadi tugas pemohon dari Status Pengajuan ke Tindak Lanjut agar user langsung masuk ke antrean keputusan yang benar.",
-      "Menambahkan dokumentasi Tindak Lanjut yang menjelaskan kapan memilih Lanjutkan proses, kapan membatalkan pengajuan, dan dampaknya ke tanda tangan ulang.",
-      "Menormalisasi link notifikasi revisi pemohon ke `/surat/tindak-lanjut` agar notifikasi tidak lagi membuka halaman monitoring.",
-      "Memperbaiki format nilai revisi berdasarkan konteks, misalnya unit ditampilkan sebagai `8 unit dari 10 unit` dan nominal tetap ditampilkan sebagai rupiah.",
-      "Menguatkan penerapan revisi di database agar perubahan jumlah unit, jumlah barang, nominal, dan rekomendasi tidak saling tertukar saat pemohon melanjutkan proses.",
-      "Membuat item permohonan aset yang tidak memiliki keputusan rekomendasi tampil sebagai item belum direkomendasikan pada detail dan ringkasan.",
-      "Membersihkan instruksi lama di Status Pengajuan yang menyarankan registrasi ulang setelah revisi.",
-    ],
-  },
-  {
-    version: "v1.10.0",
-    date: "7 Juli 2026",
-    changes: [
-      "Menjaga Form Dokumen dan Kegunaan tetap terlihat sebagai informasi terkunci setelah nomor surat atau draft dipulihkan, sehingga konteks registrasi tidak berkedip lalu hilang saat halaman direfresh.",
-      "Menyembunyikan kembali informasi Form Dokumen dan Kegunaan pada dokumen rekomendasi tertaut karena form dan kegunaan sudah dikunci oleh task rekomendasi.",
-      "Mengunci deteksi dokumen rekomendasi tertaut dari parameter URL sejak render pertama agar pilihan registrasi biasa tidak sempat tampil saat refresh.",
-      "Memisahkan pengerjaan dokumen rekomendasi ke path `/surat/rekomendasi/registrasi` dan mengalihkan link rekomendasi lama dari path registrasi biasa.",
-      "Menyeragamkan stamp tanda tangan menjadi `DISETUJUI SISTEM` dengan tanggal-jam WIB pada jalur Excel lama dan renderer PDF native.",
-      "Menstandarkan urutan tabel item pada ringkasan pengajuan menjadi No., Nama Barang, Satuan, Jumlah, Status, dan Keterangan walaupun urutan data dari sumber berbeda.",
-      "Memisahkan konteks item induk dan input Nama Barang / Alat Kerja pada rekomendasi: navigator menampilkan item permohonan, sedangkan nama barang rekomendasi tetap diisi manual oleh tim IT/PO.",
-      "Menghapus tombol reset judul/tempat; field kembali otomatis jika dikosongkan oleh user.",
-      "Menambahkan keputusan Tidak Direkomendasikan pada rekomendasi aset per item; opsi ini wajib alasan tetapi tidak wajib gambar.",
-      "Mewajibkan gambar hanya untuk keputusan Service, Ganti Komponen, dan Beli Baru pada dokumen rekomendasi.",
-      "Menyimpan keputusan rekomendasi ke snapshot surat induk agar item yang tidak direkomendasikan dapat tampil tercoret pada detail pengajuan dan PDF PGD.",
-      "Menampilkan keputusan rekomendasi per item pada summary pendaftaran dan email dengan label yang lebih jelas.",
-      "Membuka kembali tugas rekomendasi ketika penanda tangan mengembalikan perbaikan ke tim IT/PBO.",
-      "Mengisi draft rekomendasi revisi dari data rekomendasi terakhir agar tim IT tidak mengulang input dari awal.",
-      "Mewajibkan rekomendasi revisi ditandatangani ulang oleh Mgr. PO sebelum surat induk kembali ke pemohon untuk lanjut atau batal.",
-      "Menonaktifkan tautan rekomendasi lama saat rekomendasi revisi dikonfirmasi agar dokumen tertaut aktif selalu versi terbaru.",
-    ],
-  },
-  {
-    version: "v1.9.0",
-    date: "6 Juli 2026",
-    changes: [
-      "Memperbaiki detail pengajuan agar field items tampil sebagai Daftar Barang dengan kolom tetap No., Nama Barang, Satuan, Jumlah, Status, dan Keterangan.",
-      "Menormalkan alias data barang seperti sat/satuan dan nama_barang/nama/barang agar tidak muncul kolom dobel pada detail pengajuan.",
-      "Memindahkan catatan revisi item ke baris khusus di bawah item terkait supaya alasan perubahan lebih mudah dibaca.",
-      "Menyesuaikan format nilai revisi berdasarkan konteks satuan, misalnya 8 unit dari 10 unit untuk pengajuan Unit dan rupiah untuk nominal besar.",
-      "Mengganti prompt native browser pada aksi Lanjutkan proses dan Batalkan pengajuan menjadi dialog aplikasi yang konsisten dengan validasi catatan.",
-      "Menerapkan perubahan item setelah pemohon menekan Lanjutkan proses sehingga detail dokumen dan PDF baru memakai nilai hasil revisi.",
-      "Membersihkan cache job PDF lama setelah revisi diterima agar preview berikutnya tidak memakai dokumen sebelum perbaikan.",
-      "Menjaga catatan revisi tetap terbaca sebagai revisi terapan setelah status surat kembali ke Proses.",
-      "Mencegah catatan revisi tanpa perubahan item seperti kirim ulang tampil sebagai Keterangan barang; catatan tetap tersedia pada riwayat perbaikan.",
-      "Menghentikan hitungan SLA signer/departemen ketika surat berada di status Menunggu Perbaikan dan tugas sedang berada di pemohon.",
-      "Memulai ulang waktu SLA dari waktu pemohon memilih Lanjutkan proses agar antrean tidak langsung terlambat karena timestamp sebelum perbaikan.",
-      "Mengganti tampilan catatan riwayat perbaikan generik seperti Instruksi utama dengan alasan perubahan item yang sebenarnya.",
-      "Menghapus field Instruksi utama dari dialog pengembalian proses yang memiliki item terstruktur; alasan utama kini otomatis diambil dari alasan item yang diubah.",
-      "Mengubah kelanjutan setelah perbaikan pemohon agar approval selalu dimulai ulang dari tahap 1 karena data dokumen sudah berubah.",
-      "Menyederhanakan input pemeriksaan Unit menjadi tabel satu baris per kavling dengan header sticky untuk struktur atas, struktur bawah, nomor, blok, tanggal, dan kode produksi.",
-      "Memastikan signer Unit melihat ringkasan alokasi dari tim pemeriksa dan tidak diminta memilih kavling ulang setelah data pemeriksaan tersimpan.",
-      "Mengizinkan pengembalian ke tim pemeriksa dengan instruksi perbaikan walaupun keputusan item tetap Tidak berubah.",
-      "Mempertahankan data pemeriksaan terakhir saat proses dikembalikan ke tim pemeriksa, sehingga kavling, detail kode produksi, dan lampiran tahap tidak perlu diinput ulang dari nol.",
-      "Memperbaiki tombol Pemeriksaan Data pada revisi tim pemeriksa agar menyelesaikan event revisi lama setelah data diperbarui, bukan mencoba verifikasi ulang yang sudah berstatus diperiksa.",
-      "Mengubah label tombol aksi tim pemeriksa menjadi Simpan & lanjutkan agar jelas bahwa pemeriksaan akan diteruskan ke signer berikutnya.",
-      "Menambahkan autosave halus untuk data pemeriksaan agar alokasi unit, detail kode produksi, dan catatan tidak hilang saat pemeriksa berpindah halaman.",
-      "Memperbarui Export Summary menjadi laporan formal berlogo Marison dengan judul bagian yang jelas, jarak antartabel yang lebih lega, waktu dibuat, identitas pengajuan, detail barang/unit, dan total rekap unit tanpa menyertakan lampiran, alur penandatangan, atau riwayat revisi.",
-      "Memperbaiki status internal revisi agar perpindahan dari tim pemeriksa ke pemohon memakai status Menunggu Persetujuan Pemohon tanpa ditolak constraint database.",
-      "Mengembalikan task langsung ke signer aktif setelah tim pemeriksa menyelesaikan revisi tanpa perubahan item atau nilai, sehingga tidak perlu menunggu persetujuan pemohon ulang.",
-      "Menampilkan nama pemeriksa yang sedang ditunggu pada alasan tombol persetujuan terkunci, bukan teks generik tim pemeriksa.",
-      "Mengurangi error badge/push akibat timeout Supabase Auth dengan validasi JWT lokal khusus endpoint attention, web push, dan data source unit.",
-      "Merapikan UI registrasi step Persetujuan dan Berkas agar Perihal, tempat, dan tanggal dokumen lebih mudah dibaca serta tidak terlihat saling menumpuk.",
-      "Menyesuaikan form rekomendasi agar Nama Barang / Alat Kerja dapat diisi manual oleh tim IT/PO, karena spesifikasi barang ditentukan pada tahap rekomendasi.",
-    ],
-  },
-  {
-    version: "v1.8.0",
-    date: "3 Juli 2026",
-    changes: [
-      "Memperbaiki upload foto profil agar identitas file selalu mengikuti akun Supabase Auth yang sedang login.",
-      "Memindahkan avatar dari URL publik Supabase Cloud ke storage private Supabase self-hosted.",
-      "Menyajikan avatar melalui endpoint domain SIGAP agar alamat storage internal tidak diekspos ke browser.",
-      "Menambahkan validasi server untuk format JPG, PNG, WebP, batas 5 MB, serta pemeriksaan isi file.",
-      "Menambahkan thumbnail WebP maksimal 256 x 256 untuk tampilan aplikasi agar penggunaan bandwidth lebih ringan.",
-      "Mempertahankan file asli untuk saat foto dibuka langsung pada tab baru.",
-      "Memigrasikan avatar lama yang masih menunjuk Supabase Cloud ke storage self-hosted.",
-      "Memperbaiki Aktivitas Departemen agar semua akun dapat melihat agregat agenda seluruh departemen, termasuk PO.",
-      "Memindahkan penghitungan Aktivitas Departemen ke endpoint server terautentikasi agar detail agenda lintas departemen tetap terlindungi.",
-      "Memperbaiki modal Aktivitas Terbaru agar konten panjang dapat discroll dan footer tetap terjangkau pada desktop maupun mobile.",
-      "Mengubah badge antrean Persetujuan dari merah menjadi warna primary karena badge menunjukkan jumlah tugas, bukan pelanggaran SLA.",
-      "Mengubah pengisian rekomendasi menjadi fokus per item yang otomatis mengikuti daftar barang pada permohonan induk.",
-      "Menambahkan navigator, progres kelengkapan, dan penguncian nama barang tanpa memecah nomor atau alur dokumen rekomendasi.",
-      "Menyederhanakan penanda nomor rekomendasi menjadi ikon gembok dengan tooltip yang menjelaskan bahwa nomor dibuat otomatis dari pengajuan induk.",
-      "Menormalkan kursor ikon gembok rekomendasi tanpa menghilangkan tooltip dan akses fokus keyboard.",
-      "Menambahkan input nominal Indonesia pada Struktur Atas dan Struktur Bawah sehingga nilai bertitik, berkoma, atau tanpa pemisah dihitung secara konsisten di UI, PDF, dan email.",
-      "Menyamakan istilah menjadi tim pemeriksa dan pemeriksaan data pada UI dan dokumentasi.",
-      "Menambahkan fondasi alur perbaikan approval dengan status Menunggu Perbaikan, target revisi manual, riwayat revisi, serta notifikasi ke pihak yang perlu memperbaiki.",
-      "Menampilkan kapasitas unit tersedia saat pemohon memilih proyek Unit agar jumlah pengajuan punya konteks stok proyek.",
-      "Menambahkan riwayat perbaikan pada detail Persetujuan dan Status Pengajuan.",
-      "Menambahkan perubahan item terstruktur pada pengembalian approval: item dapat dicoret, nilai diajukan/disetujui dicatat, dan alasan perubahan tampil di detail serta PDF PGD.",
-      "Menambahkan persetujuan pemohon setelah perbaikan sebelum proses approval dilanjutkan atau nomor dibatalkan.",
-      "Mengembalikan proses approval untuk ditinjau ulang setelah perubahan diterima pemohon.",
-      "Membatasi opsi pengembalian ke tim pemeriksa hanya untuk tahap yang memang memiliki pemeriksa pada snapshot transaksi.",
-      "Menyederhanakan dialog perbaikan item agar nilai diajukan menjadi referensi, bukan input wajib untuk signer.",
-      "Menyesuaikan placeholder instruksi dan alasan perbaikan berdasarkan konteks pengajuan Unit, Aset, Non Aset, atau Rekomendasi.",
-      "Mengotomatisasi keputusan revisi item Unit berdasarkan jumlah yang disetujui agar signer tidak memilih status manual.",
-      "Memindahkan hitungan revisi yang menjadi tugas pemohon dari badge Persetujuan ke badge Status Pengajuan.",
-      "Menetapkan aturan satu versi per tanggal; perubahan pada tanggal yang sama diperbarui pada entri versi yang sama.",
-    ],
-  },
-  {
-    version: "v1.7.0",
-    date: "1 Juli 2026",
-    changes: [
-      "Menambahkan navigasi berurutan pada subtopik Rekomendasi dan menunda Topik terkait sampai bagian Masalah umum rekomendasi selesai dibaca.",
-      "Menyamakan tinggi kotak tanda tangan satu dan dua baris serta membatasi tempat/tanggal hanya pada lebar kotak aktif.",
-      "Menjaga item Nama Barang tetap rata kiri meskipun field menggunakan kontrol pilihan/select.",
-      "Menyatukan aturan formasi tanda tangan dan alignment tabel antara Uji PDF dan generator dokumen transaksi.",
-      "Mengubah baris kedua yang lebih pendek menjadi rata kanan dan memastikan baris tiga kotak menggunakan grid 3.",
-      "Memperbarui Form dan Template dengan formasi tanda tangan konsisten untuk 2 sampai 8 signer.",
-      "Menjelaskan bahwa Uji PDF dan dokumen transaksi memakai aturan pembagian kotak yang sama.",
-      "Menambahkan panduan perbedaan Buka Dokumen dan Buat Ulang PDF.",
-      "Mendokumentasikan regenerasi surat lama dari template aktif tanpa mengulang atau mengubah histori approval.",
-      "Menambahkan penanganan PDF lama, cache tab browser, dan kondisi ketika admin perlu membangun ulang dokumen.",
-      "Menambahkan dokumentasi menu Rekomendasi untuk tugas pembuatan dokumen rekomendasi aset tertaut.",
-      "Menjelaskan shared lock rekomendasi: kandidat pertama yang mengambil tugas menjadi pemilik draft, kandidat lain melihat status terkunci.",
-      "Memperbarui Registrasi Surat dengan keputusan rekomendasi aset, data item rekomendasi, lampiran gambar wajib, dan link referensi.",
-      "Memperbarui Persetujuan dengan panel rekomendasi, kondisi surat induk terkunci, dan alur lanjut setelah rekomendasi selesai.",
-      "Memperbarui Kegunaan Form dengan konfigurasi dokumen tertaut, prasyarat rekomendasi, scope kandidat lintas kantor, dan antrean PBO.",
-      "Menambahkan pemeriksaan web push, badge rekomendasi, dan notifikasi realtime pada dokumentasi troubleshooting.",
-      "Menambahkan panduan deploy production dengan Docker context ubuntu-server, env production, dan aturan kapan PDF worker perlu ikut redeploy.",
-    ],
-  },
-  {
-    version: "v1.5.0",
-    date: "25 Juni 2026",
-    changes: [
-      "Menambahkan halaman dokumentasi publik untuk end user, admin, dan troubleshooting.",
-      "Memisahkan dokumentasi operasional user dari dokumentasi konfigurasi admin.",
-      "Menambahkan contoh penggunaan pada menu agenda, surat, persetujuan, monitoring, dan konfigurasi.",
-      "Membuat layout dokumentasi lebih lebar agar nyaman dibaca pada desktop.",
-      "Menambahkan pencarian cepat lintas topik dengan shortcut Ctrl+K.",
-      "Mengubah pencarian dokumentasi menjadi modal cepat yang terbuka dari input pencarian atau shortcut Ctrl+K.",
-      "Mengubah cara pakai dan contoh menjadi kartu alur bernomor agar instruksi lebih mudah diikuti.",
-      "Mengubah deep-link dokumentasi dari hash menjadi route penuh seperti /docs/dashboard/overview.",
-      "Menambahkan route subtopik dokumentasi agar topik dan bagian bisa dibuka langsung setelah refresh atau dibagikan.",
-      "Menambahkan navigasi subtopik pada topik aktif di sidebar dokumentasi desktop.",
-      "Menambahkan redirect kompatibilitas dari link hash lama ke route dokumentasi baru.",
-      "Memisahkan isi subhalaman dokumentasi agar setiap route hanya menampilkan section yang dipilih.",
-      "Mengubah Overview menjadi ringkasan topik dan daftar subtopik, bukan duplikasi seluruh isi topik.",
-      "Menambahkan subtopik otomatis untuk topik yang belum memiliki section custom.",
-      "Memperdalam isi dokumentasi agar setiap topik berisi detail operasional, bukan hanya ringkasan.",
-      "Menambahkan penjelasan struktur nomor surat, scope counter, reset tahunan, nomor VOID, dan siklus draft.",
-      "Menambahkan variasi format nomor untuk pusat, proyek/unit, KC, dan KCP.",
-      "Mengurangi pola subhalaman generik agar topik yang sudah punya detail menampilkan section operasional sebagai konten utama.",
-      "Menggabungkan nomor surat, counter, dan draft ke satu subtopik utuh agar penjelasan tidak terpencar.",
-      "Menambahkan dukungan section gabungan untuk dokumentasi yang butuh beberapa tabel dan catatan dalam satu halaman.",
-      "Menambahkan tabel detail untuk agenda, kalender, monitoring, file, riwayat, setting, konfigurasi admin, SLA, audit, email, dan troubleshooting.",
-      "Mengubah perilaku scroll subhalaman agar selalu mulai dari judul halaman.",
-      "Memperjelas dokumentasi Registrasi Surat dengan alur nomor draft, kategori pengajuan, data otomatis, dan kendala umum.",
-      "Memperjelas dokumentasi Persetujuan dengan perbedaan signer dan tim pemeriksa, aturan pengajuan Unit, dan alasan aksi terkunci.",
-      "Menyamakan animasi dialog utama agar pop-up terasa konsisten dan lebih tenang.",
-      "Menambahkan penanda topik aktif saat user membaca dokumentasi di desktop.",
-      "Menambahkan standar agar pembaruan fitur juga dicatat pada halaman dokumentasi end user.",
-    ],
-  },
-];
-
-export const DOCS_PRINCIPLES = [
-  "Dokumentasi harus menjawab masalah user, bukan hanya menjelaskan tombol.",
-  "Dokumentasi admin dipisahkan dari dokumentasi user biasa agar tidak membingungkan.",
-  "Setiap fitur baru harus menambahkan tujuan, cara pakai, contoh, dan troubleshooting.",
-  "Perubahan pada tanggal yang sama harus memperbarui entri versi yang sama, bukan membuat versi baru.",
-  "Dokumentasi teknis pengembang tetap berada di markdown, sedangkan panduan operasional user berada di halaman ini.",
-];
