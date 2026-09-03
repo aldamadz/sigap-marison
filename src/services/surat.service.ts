@@ -653,6 +653,7 @@ export const suratService = {
         fallbackEligible = isBranchAssetFallback({
           officeKedudukan: office?.kedudukan,
           requestCategory,
+          formUsageId: payload.form_usage_id,
           branchHasRegisteredProjects: branchHasProjects,
           projectId: payload.project_id,
           projectIsDefault: payload.form_input_data?.project_is_default,

@@ -103,6 +103,12 @@ create table if not exists public.form_usage_steps (
   usage_id uuid not null references public.form_usages(id) on delete cascade
 );
 
+create table if not exists public.form_usage_departments (
+  usage_id uuid not null references public.form_usages(id) on delete cascade,
+  department_id uuid not null references public.master_departments(id) on delete cascade,
+  primary key (usage_id, department_id)
+);
+
 -- letter_number_counter_configs (pre-MRN-22 shape: 2 scope types only, no office_id)
 create table if not exists public.letter_number_counter_configs (
   id uuid primary key default gen_random_uuid(),
@@ -192,7 +198,8 @@ insert into public.profiles (id, role, office_id, department_id, is_active) valu
   ('f0000000-0000-4000-8000-000000000001', 'user', 'a0000000-0000-4000-8000-000000000031', 'a0000000-0000-4000-8000-000000000020', true),
   ('f0000000-0000-4000-8000-000000000002', 'user', 'a0000000-0000-4000-8000-000000000032', 'a0000000-0000-4000-8000-000000000020', true),
   ('f0000000-0000-4000-8000-000000000003', 'user', 'a0000000-0000-4000-8000-000000000031', 'a0000000-0000-4000-8000-000000000021', true),
-  ('f0000000-0000-4000-8000-000000000004', 'admin', 'a0000000-0000-4000-8000-000000000033', 'a0000000-0000-4000-8000-000000000020', true);
+  ('f0000000-0000-4000-8000-000000000004', 'admin', 'a0000000-0000-4000-8000-000000000033', 'a0000000-0000-4000-8000-000000000020', true),
+  ('f0000000-0000-4000-8000-000000000005', 'super_admin', 'a0000000-0000-4000-8000-000000000033', 'a0000000-0000-4000-8000-000000000020', true);
 
 insert into public.master_letter_types (id, name, code) values
   ('a0000000-0000-4000-8000-000000000050', 'Aset', 'ASET'),
@@ -206,10 +213,7 @@ insert into public.master_projects (id, office_id) values
   ('a0000000-0000-4000-8000-000000000040', 'a0000000-0000-4000-8000-000000000032'),
   ('a0000000-0000-4000-8000-000000000041', 'a0000000-0000-4000-8000-000000000034');
 
--- Need to mock validate_form_usage_for_actor correctly later, but we need
--- basic schema for the migration. The test runner uses a simplified schema.
--- We'll create a mock for validate_form_usage_for_actor since we don't have
--- the full policy/usage tables.
+-- Match the production authorization behavior used by MRN-22.
 create or replace function public.validate_form_usage_for_actor(
   p_usage_id uuid,
   p_requested_department_id uuid default null
@@ -217,18 +221,53 @@ create or replace function public.validate_form_usage_for_actor(
 returns jsonb language plpgsql security definer set search_path = public as $f$
 declare
   v_actor uuid := auth.uid();
-  v_dept uuid;
-  v_role text;
-  v_category text;
-  v_status text;
+  v_profile public.profiles;
+  v_usage public.form_usages;
+  v_department_id uuid;
+  v_step_count integer;
 begin
-  select department_id, role into v_dept, v_role from public.profiles where id = v_actor;
-  select request_category, status into v_category, v_status from public.form_usages where id = p_usage_id;
-  if v_status <> 'active' then raise exception 'Usage tidak aktif.'; end if;
-  if v_role <> 'admin' and p_requested_department_id is distinct from v_dept then
-     raise exception 'Unauthorized department';
+  if v_actor is null then raise exception 'Sesi login tidak tersedia.'; end if;
+
+  select * into v_profile from public.profiles
+  where id = v_actor and coalesce(is_active, true) = true;
+  if not found then raise exception 'Akun deaktif.'; end if;
+
+  select * into v_usage from public.form_usages
+  where id = p_usage_id and status = 'active';
+  if not found then raise exception 'Kegunaan form tidak aktif atau tidak ditemukan.'; end if;
+
+  if v_profile.role = 'admin' and p_requested_department_id is not null then
+    v_department_id := p_requested_department_id;
+  else
+    v_department_id := v_profile.department_id;
   end if;
-  return jsonb_build_object('request_category', v_category);
+
+  if v_department_id is null then raise exception 'Departemen pengaju belum ditentukan.'; end if;
+  if not exists (
+    select 1 from public.form_usage_departments permission
+    where permission.usage_id = v_usage.id
+      and permission.department_id = v_department_id
+  ) then
+    raise exception 'Departemen tidak diizinkan memakai kegunaan form ini.';
+  end if;
+
+  select count(*) into v_step_count from public.form_usage_steps
+  where usage_id = v_usage.id;
+  if v_step_count < 2 or v_step_count > 8 then
+    raise exception 'Kegunaan form harus memiliki 2 sampai 8 tahap.';
+  end if;
+
+  return jsonb_build_object(
+    'usage_id', v_usage.id,
+    'form_id', v_usage.form_id,
+    'request_category', v_usage.request_category,
+    'requester_department_id', v_department_id,
+    'represented_by_admin', case
+      when v_profile.role = 'admin' and v_department_id is distinct from v_profile.department_id
+        then v_actor
+      else null
+    end
+  );
 end;
 $f$;
 
@@ -240,7 +279,19 @@ insert into public.form_usages (id, name, request_category, scope_type, status) 
 
 insert into public.form_usage_steps (id, usage_id) values
   ('a0000000-0000-4000-8000-000000000070', 'a0000000-0000-4000-8000-000000000060'),
-  ('a0000000-0000-4000-8000-000000000071', 'a0000000-0000-4000-8000-000000000061');
+  ('a0000000-0000-4000-8000-000000000071', 'a0000000-0000-4000-8000-000000000060'),
+  ('a0000000-0000-4000-8000-000000000072', 'a0000000-0000-4000-8000-000000000061'),
+  ('a0000000-0000-4000-8000-000000000073', 'a0000000-0000-4000-8000-000000000061'),
+  ('a0000000-0000-4000-8000-000000000074', 'a0000000-0000-4000-8000-000000000062'),
+  ('a0000000-0000-4000-8000-000000000075', 'a0000000-0000-4000-8000-000000000062'),
+  ('a0000000-0000-4000-8000-000000000076', 'a0000000-0000-4000-8000-000000000063'),
+  ('a0000000-0000-4000-8000-000000000077', 'a0000000-0000-4000-8000-000000000063');
+
+insert into public.form_usage_departments (usage_id, department_id) values
+  ('a0000000-0000-4000-8000-000000000060', 'a0000000-0000-4000-8000-000000000020'),
+  ('a0000000-0000-4000-8000-000000000061', 'a0000000-0000-4000-8000-000000000020'),
+  ('a0000000-0000-4000-8000-000000000062', 'a0000000-0000-4000-8000-000000000021'),
+  ('a0000000-0000-4000-8000-000000000063', 'a0000000-0000-4000-8000-000000000020');
 
 insert into public.master_penggunaan_detail (id, request_categories) values
   ('a0000000-0000-4000-8000-000000000080', array['asset', 'non_asset']);

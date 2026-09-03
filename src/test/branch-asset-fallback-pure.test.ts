@@ -11,6 +11,7 @@ function input(overrides: Partial<BranchAssetFallbackInput> = {}): BranchAssetFa
   return {
     officeKedudukan: "KC",
     requestCategory: "asset",
+    formUsageId: "usage-asset",
     branchHasRegisteredProjects: false,
     projectId: "",
     projectIsDefault: true,
@@ -33,6 +34,11 @@ describe("isBranchAssetFallback", () => {
     expect(isBranchAssetFallback(input({ requestCategory: "unit" }))).toBe(false);
     expect(isBranchAssetFallback(input({ requestCategory: "non_unit" }))).toBe(false);
     expect(isBranchAssetFallback(input({ requestCategory: "non_asset" }))).toBe(false);
+  });
+
+  it("rejects legacy usage without a canonical form usage id", () => {
+    expect(isBranchAssetFallback(input({ formUsageId: "" }))).toBe(false);
+    expect(isBranchAssetFallback(input({ formUsageId: null }))).toBe(false);
   });
 
   it("rejects when branch already has projects", () => {

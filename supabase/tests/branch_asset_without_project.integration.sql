@@ -20,7 +20,7 @@
 --   master_projects:    a0000000-0000-4000-8000-000000000040 (PRJ001, MRN_KC_HASPROJ)
 --   form_usages:        a0000000-0000-4000-8000-000000000060 (asset, asset, MRN_KC_NOPROJ)
 --                       a0000000-0000-4000-8000-000000000061 (unit)
---   form_usage_steps:   one step per usage (for completeness)
+--   form_usage_steps:   two steps per usage (matching production validation)
 --
 -- JWT claim is set so auth.uid() returns f0000000-0000-4000-8000-000000000001.
 
@@ -177,7 +177,8 @@ begin
   if not v_failed then raise exception 'C6: cross-office fallback should be rejected'; end if;
 end $$;
 
--- assert_branch_asset_fallback_eligible — entity must match requester department
+-- assert_branch_asset_fallback_eligible — entity uses the authorized requester
+-- department, not a forged department supplied by a normal user
 do $$
 declare v_failed boolean := false;
 begin
@@ -185,8 +186,8 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000031'::uuid,
-      'a0000000-0000-4000-8000-000000000011'::uuid,  -- requested entity is 11
-      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000011'::uuid,  -- forged entity is 11
+      'a0000000-0000-4000-8000-000000000021'::uuid,  -- forged department is also entity 11
       'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
@@ -217,21 +218,22 @@ end $$;
 do $$
 declare v_failed boolean := false;
 begin
-  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000003', false);
   begin
     perform public.assert_branch_asset_fallback_eligible(
-      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'f0000000-0000-4000-8000-000000000003'::uuid,  -- department 21
       'a0000000-0000-4000-8000-000000000031'::uuid,
-      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000011'::uuid,
       'a0000000-0000-4000-8000-000000000021'::uuid,
-      'a0000000-0000-4000-8000-000000000060'::uuid
+      'a0000000-0000-4000-8000-000000000060'::uuid  -- only department 20 is allowed
     );
   exception when others then
     v_failed := true;
-    if sqlerrm not like '%Unauthorized department%' then
+    if sqlerrm not like '%Departemen tidak diizinkan%' then
       raise exception 'C9: unexpected error: %', sqlerrm;
     end if;
   end;
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
   if not v_failed then raise exception 'C9: unauthorized department should be rejected'; end if;
 end $$;
 
@@ -254,6 +256,50 @@ begin
     end if;
   end;
   if not v_failed then raise exception 'C10: inactive usage should be rejected'; end if;
+end $$;
+
+-- Legacy super_admin is not a canonical admin and cannot bypass office scope.
+do $$
+declare v_failed boolean := false;
+begin
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000005', false);
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000005'::uuid,
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%kantor lain%' then
+      raise exception 'C11: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
+  if not v_failed then raise exception 'C11: legacy super_admin must not bypass office scope'; end if;
+end $$;
+
+-- Direct helper calls cannot substitute another active actor.
+do $$
+declare v_failed boolean := false;
+begin
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000004'::uuid,  -- admin, but not auth.uid()
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%Aktor fallback%' then
+      raise exception 'C12: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'C12: actor substitution should be rejected'; end if;
 end $$;
 
 -- ╔══════════════════════════════════════════════════════════════════════╗

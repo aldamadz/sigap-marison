@@ -68,6 +68,9 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     // and the branch fallback eligibility assertion.
     expect(branchAssetMigration).toContain("p_user_id is distinct from v_actor");
     expect(branchAssetMigration).toContain("Profil aktor tidak aktif atau telah dihapus.");
+    expect(branchAssetMigration).toContain("p_actor is distinct from auth.uid()");
+    expect(branchAssetMigration).toContain("v_requester_department_id");
+    expect(branchAssetMigration).not.toContain("v_user_role is distinct from 'super_admin'");
     expect(branchAssetMigration).toContain("assert_branch_asset_fallback_eligible");
     // SECURITY DEFINER hygiene
     expect(branchAssetMigration.match(/search_path\s*=\s*''/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
@@ -78,6 +81,7 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     expect(branchAssetMigration).not.toMatch(/insert\s+into\s+public\.master_projects/i);
     // The service must forward the authoritative form usage id (NOT a flag) only when fallback is eligible.
     expect(suratService).toContain("p_form_usage_id:");
+    expect(suratService).toContain("formUsageId: payload.form_usage_id");
     expect(suratService).not.toContain("p_legacy_workflow_id");
     expect(suratService).not.toContain("p_is_asset_fallback");
     expect(suratService).toContain("fallbackEligible");

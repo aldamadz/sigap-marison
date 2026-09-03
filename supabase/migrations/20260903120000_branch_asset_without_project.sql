@@ -167,9 +167,13 @@ declare
   v_category  text;
   v_user_role text;
   v_user_office uuid;
+  v_requester_department_id uuid;
   v_department_entity uuid;
 begin
   if p_actor is null then raise exception 'Sesi login tidak tersedia.' using errcode = '42501'; end if;
+  if p_actor is distinct from auth.uid() then
+    raise exception 'Aktor fallback tidak sesuai dengan sesi login.' using errcode = '42501';
+  end if;
 
   select profile.role, profile.office_id
   into v_user_role, v_user_office
@@ -190,6 +194,7 @@ begin
     p_department_id
   );
   v_category := v_usage_validation->>'request_category';
+  v_requester_department_id := nullif(v_usage_validation->>'requester_department_id', '')::uuid;
 
   if v_category is distinct from 'asset' then
     raise exception 'Fallback proyek 000 hanya berlaku untuk klasifikasi Aset.' using errcode = '22023';
@@ -197,13 +202,13 @@ begin
 
   select department.entity_id into v_department_entity
   from public.master_departments department
-  where department.id = p_department_id;
+  where department.id = v_requester_department_id;
 
   if v_department_entity is distinct from p_entity_id then
     raise exception 'Entitas reservasi tidak sesuai departemen pengaju.' using errcode = '42501';
   end if;
 
-  if v_user_role is distinct from 'admin' and v_user_role is distinct from 'super_admin' then
+  if v_user_role is distinct from 'admin' then
     if v_user_office is distinct from p_office_id then
       raise exception 'Anda tidak diizinkan membuat reservasi untuk kantor lain.' using errcode = '42501';
     end if;

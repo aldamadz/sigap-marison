@@ -1020,6 +1020,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const shouldUseDefaultBranchProject = isBranchAssetFallbackMarker({
     officeKedudukan: isPusatSelected ? "Pusat" : "Cabang",
     requestCategory: getRequestCategory(),
+    formUsageId: formData.form_usage_id,
     branchHasRegisteredProjects,
     projectId: formData.project_id,
     projectIsDefault: true,
