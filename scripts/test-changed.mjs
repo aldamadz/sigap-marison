@@ -84,6 +84,7 @@ for (const file of changedFiles) {
   if (/rec03.*file.*link.*\.sql$|test-rec03-file-link-sql\.mjs$/u.test(file)) gates.add("test:rec03-file-link-sql");
   if (/outbound.*replacement.*\.sql$|test-outbound-replacement-sql\.mjs$/u.test(file)) gates.add("test:outbound-replacement-sql");
   if (/external.*submission.*decision.*\.sql$|test-external-submission-decisions-sql\.mjs$/u.test(file)) gates.add("test:external-submission-decisions-sql");
+  if (/branch-asset-without-project.*\.sql$|branch-asset-without-project\.integration\.sql$|test-branch-asset-without-project-sql\.mjs$/u.test(file)) gates.add("test:branch-asset-without-project-sql");
 }
 
 for (const gate of gates) run(npm, ["run", gate]);

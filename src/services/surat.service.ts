@@ -640,31 +640,45 @@ export const suratService = {
       // Only applies when the branch has no real projects and the payload carries
       // the canonical marker.  Unit, non_unit, non_asset, and pusat are NOT
       // affected; the database triggers will re-verify independently.
-      const fallbackEligible = !isPusat
-        && !projectIdClean
-        && isBranchAssetFallback({
+      //
+      // branchHasRegisteredProjects is queried here so the predicate is honest
+      // about the source of truth (master data), not a hardcoded false.
+      let fallbackEligible = false;
+      if (!isPusat && !projectIdClean) {
+        const projectsRes = await supabase
+          .from("master_projects")
+          .select("id", { count: "exact", head: true })
+          .eq("office_id", officeIdClean);
+        const branchHasProjects = (projectsRes.count ?? 0) > 0;
+        fallbackEligible = isBranchAssetFallback({
           officeKedudukan: office?.kedudukan,
           requestCategory,
-          branchHasRegisteredProjects: false,
+          branchHasRegisteredProjects: branchHasProjects,
           projectId: payload.project_id,
           projectIsDefault: payload.form_input_data?.project_is_default,
           projectCode: payload.form_input_data?.project_code,
           projectName: payload.form_input_data?.project_name,
         });
+      }
 
       if (!isPusat && !projectIdClean && !fallbackEligible) {
         throw new Error("Pilih proyek cabang sebelum mengambil nomor surat.");
       }
 
       // PERUBAHAN UTAMA: tambah p_dept_id agar nomor urut dimulai dari 001 per dept/project
+      // MRN-22: 8-parameter RPC is the only path that may create a
+      // branch_asset_000 reservation.  We forward the authoritative
+      // form_usage_id (or legacy penggunaan_id) so the database can
+      // resolve request_category itself instead of trusting a client flag.
       const { data: nextNumber, error: rpcError } = await supabase.rpc("generate_new_letter_number", {
-        p_entity_id:         payload.entity_id,
-        p_type_id:           payload.letter_type_id,
-        p_office_id:         officeIdClean,
-        p_project_id:        projectIdClean,
-        p_user_id:           user?.id,
-        p_dept_id:           deptIdClean,
-        p_is_asset_fallback: fallbackEligible,
+        p_entity_id:          payload.entity_id,
+        p_type_id:            payload.letter_type_id,
+        p_office_id:          officeIdClean,
+        p_project_id:         projectIdClean,
+        p_user_id:            user?.id,
+        p_dept_id:            deptIdClean,
+        p_form_usage_id:      this.cleanUuid(payload.form_usage_id),
+        p_legacy_workflow_id: this.cleanUuid(payload.penggunaan_id),
       });
 
       if (rpcError) throw new Error("Gagal menerbitkan nomor urut.");
