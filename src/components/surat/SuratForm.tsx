@@ -809,7 +809,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     draftLoading,
     refreshActiveDrafts,
     setDraftToRestore,
-    setActiveDrafts,
+    finishSubmittedDraft,
   } = useSuratDraftLifecycle({
     currentProfile,
     isCurrentUserAdmin,
@@ -2190,10 +2190,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           recommendationSuratId: result.id,
         });
 
-        if (activeDraftId) {
-          await suratRegistrationApi.finishRegistrationDraft(activeDraftId, "SUBMITTED");
-          setActiveDrafts(previous => previous.filter(draft => draft.id !== activeDraftId));
-        }
+        await finishSubmittedDraft(activeDraftId);
         toast({
           title: linkedDocumentContext?.type === "recommendation" ? "Rekomendasi Berhasil Dibuat" : "Pendaftaran Berhasil",
           description: linkedDocumentContext?.type === "recommendation"

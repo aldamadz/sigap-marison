@@ -36,10 +36,8 @@ export type UseSuratDraftLifecycleResult = {
   setDraftToRestore: React.Dispatch<
     React.SetStateAction<SuratRegistrationDraft | null>
   >;
-  /** Setter exposed so callers (e.g. submit confirm) can prune the list locally. */
-  setActiveDrafts: React.Dispatch<
-    React.SetStateAction<SuratRegistrationDraft[]>
-  >;
+  /** Finish a draft by id and remove it from the active list if successful. */
+  finishSubmittedDraft: (draftId: string | null | undefined) => Promise<void>;
 };
 
 /**
@@ -119,12 +117,18 @@ export const useSuratDraftLifecycle = (
     return () => { cancelled = true; };
   }, [currentProfile, isCurrentUserAdmin, refreshActiveDrafts, searchParams, setSearchParams, toast]);
 
+  const finishSubmittedDraft = useCallback(async (draftId: string | null | undefined): Promise<void> => {
+    if (!draftId) return;
+    await suratRegistrationApi.finishRegistrationDraft(draftId, "SUBMITTED");
+    setActiveDrafts(previous => previous.filter(draft => draft.id !== draftId));
+  }, []);
+
   return {
     activeDrafts,
     draftToRestore,
     draftLoading,
     refreshActiveDrafts,
     setDraftToRestore,
-    setActiveDrafts,
+    finishSubmittedDraft,
   };
 };

@@ -438,4 +438,22 @@ describe("project structure boundaries", () => {
     expect(serviceCode).not.toContain("toast(");
     expect(serviceCode).not.toContain("suratRegistrationApi");
   });
+
+  it("keeps draft finalization inside draft lifecycle hook", () => {
+    // Pass K2C2: draft finalization extracted to useSuratDraftLifecycle hook.
+    const hookPath = "src/features/surat/registration/lib/use-surat-draft-lifecycle.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(hookPath)).toBe(true);
+    const hookCode = read(hookPath);
+    expect(hookCode).toContain("finishSubmittedDraft");
+    expect(hookCode).not.toContain("setActiveDrafts: React.Dispatch"); // The raw setter should be gone from the public API
+
+    // SuratForm uses the hook action
+    expect(form).toContain("finishSubmittedDraft(activeDraftId)");
+
+    // Inline orchestration must not reappear in SuratForm
+    expect(form).not.toContain("suratRegistrationApi.finishRegistrationDraft(activeDraftId");
+    expect(form).not.toContain("setActiveDrafts(previous => previous.filter(draft => draft.id !== activeDraftId))");
+  });
 });
