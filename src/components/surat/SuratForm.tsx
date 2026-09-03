@@ -30,6 +30,7 @@ import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-au
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
 import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
 import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
+import { isBranchAssetFallback as isBranchAssetFallbackMarker } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
 import {
   WIZARD_STEP_BERKAS,
@@ -1011,6 +1012,21 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isFundMode = getRequestCategory() === "non_asset";
   const isNonUnitMode = getRequestCategory() === "non_unit";
   const requiresMarisonProject = isNonUnitMode || isFundMode;
+  // MRN-22: virtual scope "000" fallback is the single source of truth.
+  // Unit, Non Unit, and Non Aset are explicitly excluded by the predicate
+  // (requestCategory must be "asset").  This replaces the old heuristic
+  // `isBranchOfficeSelected && !branchHasRegisteredProjects && cat !== 'unit' && !isFundMode`
+  // which incorrectly covered Non Unit.
+  const shouldUseDefaultBranchProject = isBranchAssetFallbackMarker({
+    officeKedudukan: isPusatSelected ? "Pusat" : "Cabang",
+    requestCategory: getRequestCategory(),
+    formUsageId: formData.form_usage_id,
+    branchHasRegisteredProjects,
+    projectId: formData.project_id,
+    projectIsDefault: true,
+    projectCode: "000",
+    projectName: "Tanpa proyek",
+  });
   const useRegistrationWizard = !isRecommendationFlow;
   const {
     activeWizardStep,
@@ -1029,8 +1045,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     Boolean(generatedNoSurat),
     signers.length > 0,
   );
-  const shouldUseDefaultBranchProject = isBranchOfficeSelected && !branchHasRegisteredProjects
-    && getRequestCategory() !== "unit" && !isFundMode;
   const nonUnitProjectCandidates = useMemo(
     () => isPusatSelected ? (master.projects || []) : filteredProjects,
     [filteredProjects, isPusatSelected, master.projects],

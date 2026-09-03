@@ -1,6 +1,10 @@
-/** Flow 4: Non Unit. Flow 14: KC/KCP tanpa proyek memakai kode 000. */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+/** Flow 4: Non Unit on a branch with no projects must NOT silently use the
+ *  MRN-22 virtual "000" scope.  That scope is reserved for `requestCategory
+ *  === "asset"`.  Non Unit must show the "Belum ada proyek" rejection and
+ *  block generateNoSurat.
+ */
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -15,12 +19,11 @@ import {
   selectEntity,
   selectCategory,
   mountFormWithUsage,
-  clickGetNumber,
 } from "./surat-form-driver";
 
 afterEach(() => teardownTestHarness());
 
-describe("Flow 4 dan 14: Non Unit KC tanpa proyek", () => {
+describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", () => {
   beforeEach(() => {
     setupTestHarness();
     configureStandardMocks();
@@ -33,34 +36,27 @@ describe("Flow 4 dan 14: Non Unit KC tanpa proyek", () => {
     );
   });
 
-  it("shows default-project notice and reserves number with canonical 000 fields", async () => {
+  it("menolak Non Unit di cabang tanpa proyek dan tidak memanggil generateNoSurat", async () => {
     await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
     await selectLetterType();
     await selectEntity();
     await selectCategory("Non Unit");
 
-    expect(await screen.findByText("Tidak ada proyek terdaftar")).toBeInTheDocument();
-    expect(screen.getByText("Kode proyek pada nomor surat akan memakai 000.")).toBeInTheDocument();
-    await clickGetNumber();
+    // MRN-22: Non Unit + branch + no projects must NOT show the
+    // "Tidak ada proyek terdaftar" (asset-fallback) banner.
+    expect(screen.queryByText("Tidak ada proyek terdaftar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Kode proyek pada nomor surat akan memakai 000.")).not.toBeInTheDocument();
 
-    expect(serviceMock.generateNoSurat).toHaveBeenCalledWith(expect.objectContaining({
-      office_id: CURRENT_PROFILE_KC.office_id,
-      project_id: "",
-      form_input_data: expect.objectContaining({
-        request_category: "non_unit",
-        request_mode: "barang",
-        project_code: "000",
-        project_name: "Tanpa proyek",
-        project_is_default: true,
-      }),
-    }));
-    const draftRequest = serviceMock.createRegistrationDraft.mock.calls[0][0];
-    expect(draftRequest.payload.formData.form_input_data).toEqual(expect.objectContaining({
-      project_code: "000",
-      project_name: "Tanpa proyek",
-      project_is_default: true,
-    }));
-    await waitFor(() => expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument());
+    // The Marison-not-ready banner should be visible instead.
+    expect(await screen.findByText("Belum ada proyek yang siap digunakan")).toBeInTheDocument();
+
+    // generateNoSurat must NOT be called: click the button directly so the
+    // driver's success-path wait does not time out on the rejected branch.
+    const btn = screen.getByRole("button", { name: /Dapatkan Nomor Surat/i });
+    serviceMock.generateNoSurat.mockClear();
+    await act(async () => { fireEvent.click(btn); });
+    await waitFor(() => expect(serviceMock.generateNoSurat).not.toHaveBeenCalled());
+
     assertStrictServiceCalls();
   });
 });

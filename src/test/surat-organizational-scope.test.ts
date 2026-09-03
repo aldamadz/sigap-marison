@@ -42,6 +42,50 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     expect(migration).toContain("project.office_id = new.office_id");
     expect(migration).toContain("Penomoran kantor pusat wajib per departemen tanpa scope proyek");
     expect(migration).toContain("Penomoran kantor cabang wajib per proyek tanpa scope departemen");
-    expect(suratService).toContain("if (!isPusat && !projectIdClean)");
+    // MRN-22: branch-asset virtual fallback adds an exception clause; the
+    // service guard now also accepts the fallback path explicitly.
+    expect(suratService).toContain("if (!isPusat && !projectIdClean");
+    expect(suratService).toContain("fallbackEligible");
+  });
+
+  it("MRN-22: branch-asset virtual fallback is server-validated, not client-asserted", () => {
+    const branchAssetMigration = read(
+      "supabase/migrations/20260903120000_branch_asset_without_project.sql",
+    );
+    // The migration must expose authoritative helpers used by both
+    // triggers and the new 7-parameter RPC.
+    expect(branchAssetMigration).toContain("branch_has_registered_projects");
+    expect(branchAssetMigration).toContain("assert_branch_asset_fallback_eligible");
+    expect(branchAssetMigration).toContain("resolve_form_usage_category");
+    expect(branchAssetMigration).toContain("number_scope_type");
+    // The reservation trigger must consult the helper (single source of truth).
+    expect(
+      branchAssetMigration.match(/branch_has_registered_projects/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(3);
+    // The legacy 6-parameter RPC must NOT be the fallback path.
+    expect(branchAssetMigration).toContain("Legacy 6-parameter signature");
+    // The 7-parameter RPC must enforce auth.uid() = p_user_id, profile active,
+    // and the branch fallback eligibility assertion.
+    expect(branchAssetMigration).toContain("p_user_id is distinct from v_actor");
+    expect(branchAssetMigration).toContain("Profil aktor tidak aktif atau telah dihapus.");
+    expect(branchAssetMigration).toContain("p_actor is distinct from auth.uid()");
+    expect(branchAssetMigration).toContain("v_requester_department_id");
+    expect(branchAssetMigration).not.toContain("v_user_role is distinct from 'super_admin'");
+    expect(branchAssetMigration).toContain("assert_branch_asset_fallback_eligible");
+    // SECURITY DEFINER hygiene
+    expect(branchAssetMigration.match(/search_path\s*=\s*''/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
+    expect(branchAssetMigration).toContain("revoke all on function");
+    // Reservation rows must carry an immutable scope marker.
+    expect(branchAssetMigration).toContain("number_scope_type in ('pusat', 'cabang', 'branch_asset_000')");
+    // No synthetic project row is created in master_projects.
+    expect(branchAssetMigration).not.toMatch(/insert\s+into\s+public\.master_projects/i);
+    // The service must forward the authoritative form usage id (NOT a flag) only when fallback is eligible.
+    expect(suratService).toContain("p_form_usage_id:");
+    expect(suratService).toContain("formUsageId: payload.form_usage_id");
+    expect(suratService).not.toContain("p_legacy_workflow_id");
+    expect(suratService).not.toContain("p_is_asset_fallback");
+    expect(suratService).toContain("fallbackEligible");
+    // The service must query real master data instead of hardcoding "false".
+    expect(suratService).toContain("master_projects");
   });
 });
