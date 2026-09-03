@@ -413,4 +413,29 @@ describe("project structure boundaries", () => {
     expect(serviceCode).not.toContain("toast(");
     expect(serviceCode).not.toContain("useRouter");
   });
+
+  it("keeps recommendation post-submit orchestration in canonical service", () => {
+    // Pass K2C1: recommendation post-submit orchestration extracted.
+    const servicePath = "src/features/surat/recommendation/services/recommendation-post-submit.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(servicePath)).toBe(true);
+    const serviceCode = read(servicePath);
+    expect(serviceCode).toContain("export async function executeRecommendationPostSubmit");
+
+    // SuratForm imports the executor
+    expect(form).toContain('from "@/features/surat/recommendation/services/recommendation-post-submit"');
+    expect(form).toContain("executeRecommendationPostSubmit(");
+
+    // Inline orchestration must not reappear in regular path of SuratForm
+    expect(form).not.toContain("suratRecommendationApi.completeRecommendationTask(");
+    expect(form).not.toContain("suratRecommendationApi.linkRecommendationDocument(");
+    expect(form).not.toContain("suratRecommendationApi.autoApproveRecommendationFirstStep(");
+    expect(form).not.toContain('" Tanda tangan otomatis belum berhasil: "');
+
+    // Service module constraints
+    expect(serviceCode).not.toContain("import React");
+    expect(serviceCode).not.toContain("toast(");
+    expect(serviceCode).not.toContain("suratRegistrationApi");
+  });
 });
