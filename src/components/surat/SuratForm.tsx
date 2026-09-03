@@ -30,6 +30,7 @@ import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-au
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
 import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
 import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
+import { isBranchAssetFallback as isBranchAssetFallbackMarker } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
 import {
   WIZARD_STEP_BERKAS,
