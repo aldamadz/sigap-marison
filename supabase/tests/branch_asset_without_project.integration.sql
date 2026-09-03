@@ -28,14 +28,14 @@
 -- ║ A. Predicate helpers                                                 ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
--- branch_has_active_projects
+-- branch_has_registered_projects
 do $$
 declare v boolean;
 begin
-  v := public.branch_has_active_projects('a0000000-0000-4000-8000-000000000031'::uuid);
+  v := public.branch_has_registered_projects('a0000000-0000-4000-8000-000000000031'::uuid);
   if v <> false then raise exception 'A1: expected branch NOPROJ to have no projects'; end if;
 
-  v := public.branch_has_active_projects('a0000000-0000-4000-8000-000000000032'::uuid);
+  v := public.branch_has_registered_projects('a0000000-0000-4000-8000-000000000032'::uuid);
   if v <> true then raise exception 'A2: expected branch HASPROJ to have projects'; end if;
 end $$;
 
@@ -530,7 +530,7 @@ begin
 end $$;
 
 -- F2. Direct insert claiming branch_asset_000 on a branch WITH projects
---     is rejected by the trigger (DB-side branch_has_active_projects check)
+--     is rejected by the trigger (DB-side branch_has_registered_projects check)
 do $$
 declare v_failed boolean := false;
 begin

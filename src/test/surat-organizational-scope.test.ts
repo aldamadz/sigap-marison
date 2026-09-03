@@ -54,13 +54,13 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     );
     // The migration must expose authoritative helpers used by both
     // triggers and the new 7-parameter RPC.
-    expect(branchAssetMigration).toContain("branch_has_active_projects");
+    expect(branchAssetMigration).toContain("branch_has_registered_projects");
     expect(branchAssetMigration).toContain("assert_branch_asset_fallback_eligible");
     expect(branchAssetMigration).toContain("resolve_form_usage_category");
     expect(branchAssetMigration).toContain("number_scope_type");
     // The reservation trigger must consult the helper (single source of truth).
     expect(
-      branchAssetMigration.match(/branch_has_active_projects/g)?.length ?? 0,
+      branchAssetMigration.match(/branch_has_registered_projects/g)?.length ?? 0,
     ).toBeGreaterThanOrEqual(3);
     // The legacy 6-parameter RPC must NOT be the fallback path.
     expect(branchAssetMigration).toContain("Legacy 6-parameter signature");

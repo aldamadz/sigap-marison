@@ -10,7 +10,7 @@
 --     1. office.kedudukan <> 'Pusat'  (branch office)
 --     2. form_usage_id is canonical and resolves to 'asset'
 --     3. project_id IS NULL in the payload
---     4. office genuinely has no active projects  (DB-verified)
+--     4. office genuinely has no registered projects  (DB-verified)
 --     5. The reservation row carries number_scope_type = 'branch_asset_000'
 --        (an immutable marker; the only way a row with project_id NULL AND
 --        dept_id NULL can exist on a branch is via this fallback path)
@@ -133,7 +133,7 @@ create index if not exists idx_surat_reservations_scope_marker
 -- ║ 4. Helpers: Branch Projects and Form Category                       ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
-create or replace function public.branch_has_active_projects(p_office_id uuid)
+create or replace function public.branch_has_registered_projects(p_office_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.master_projects p where p.office_id = p_office_id);
 $$;
@@ -143,8 +143,8 @@ returns text language sql stable security definer set search_path = '' as $$
   select lower(usage.request_category) from public.form_usages usage where usage.id = p_form_usage_id;
 $$;
 
-revoke all on function public.branch_has_active_projects(uuid) from public, anon;
-grant execute on function public.branch_has_active_projects(uuid) to authenticated, service_role;
+revoke all on function public.branch_has_registered_projects(uuid) from public, anon;
+grant execute on function public.branch_has_registered_projects(uuid) to authenticated, service_role;
 
 revoke all on function public.resolve_form_usage_category(uuid) from public, anon;
 grant execute on function public.resolve_form_usage_category(uuid) to authenticated, service_role;
@@ -214,8 +214,8 @@ begin
     end if;
   end if;
 
-  if public.branch_has_active_projects(p_office_id) then
-    raise exception 'Kantor cabang ini memiliki proyek aktif; fallback 000 tidak dapat dipakai.' using errcode = '22023';
+  if public.branch_has_registered_projects(p_office_id) then
+    raise exception 'Kantor cabang ini memiliki proyek terdaftar; fallback 000 tidak dapat dipakai.' using errcode = '22023';
   end if;
 
   return true;
@@ -258,7 +258,7 @@ begin
   else
     if new.number_scope_type = 'branch_asset_000' then
       if new.project_id is not null or new.dept_id is not null then raise exception 'Fallback branch_asset_000 wajib project_id NULL dan dept_id NULL.' using errcode = '22023'; end if;
-      if public.branch_has_active_projects(new.office_id) then raise exception 'Kantor cabang ini memiliki proyek aktif; fallback branch_asset_000 ditolak.' using errcode = '22023'; end if;
+      if public.branch_has_registered_projects(new.office_id) then raise exception 'Kantor cabang ini memiliki proyek terdaftar; fallback branch_asset_000 ditolak.' using errcode = '22023'; end if;
     elsif new.number_scope_type = 'cabang' then
       if new.project_id is null or new.dept_id is not null then raise exception 'Penomoran kantor cabang wajib per proyek tanpa scope departemen.' using errcode = '22023'; end if;
       if not exists (select 1 from public.master_projects project where project.id = new.project_id and project.office_id = new.office_id) then
@@ -354,8 +354,8 @@ begin
         raise exception 'Proyek wajib dipilih untuk pengajuan kantor cabang (atau gunakan marker fallback).' using errcode = '22023';
       end if;
 
-      if public.branch_has_active_projects(new.office_id) then
-        raise exception 'Proyek wajib dipilih untuk pengajuan kantor cabang (kantor ini memiliki proyek aktif).' using errcode = '22023';
+      if public.branch_has_registered_projects(new.office_id) then
+        raise exception 'Proyek wajib dipilih untuk pengajuan kantor cabang (kantor ini memiliki proyek terdaftar).' using errcode = '22023';
       end if;
     else
       if not exists (select 1 from public.master_projects project where project.id = new.project_id and project.office_id = new.office_id) then
