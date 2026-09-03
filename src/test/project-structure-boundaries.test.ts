@@ -386,4 +386,31 @@ describe("project structure boundaries", () => {
     expect(commandCode).not.toContain("suratService");
     expect(commandCode).not.toContain("toast(");
   });
+
+  it("keeps external revision submit orchestration in canonical service", () => {
+    // Pass K2B: external revision submit orchestration extracted.
+    const servicePath = "src/features/surat/registration/services/external-revision-submit.ts";
+    const form = read("src/components/surat/SuratForm.tsx");
+
+    expect(exists(servicePath)).toBe(true);
+    const serviceCode = read(servicePath);
+    expect(serviceCode).toContain("export async function executeExternalRevisionSubmit");
+    expect(serviceCode).toContain("export function getExternalRevisionSuccessDescription");
+
+    // SuratForm imports the executor
+    expect(form).toContain('from "@/features/surat/registration/services/external-revision-submit"');
+    expect(form).toContain("executeExternalRevisionSubmit(");
+    expect(form).toContain("getExternalRevisionSuccessDescription(");
+
+    // Inline orchestration must not reappear in SuratForm
+    expect(form).not.toContain("suratRegistrationApi.submitExternalSubmissionRevision(");
+    expect(form).not.toContain("suratRecommendationApi.autoApproveRequesterFirstStep(");
+    expect(form).not.toContain("Gagal melanjutkan auto-approval revisi pemohon:");
+    expect(form).not.toContain('"Rekomendasi lama dibuka kembali dan menunggu penyesuaian tim rekomendasi."');
+
+    // Service module constraints
+    expect(serviceCode).not.toContain("import React");
+    expect(serviceCode).not.toContain("toast(");
+    expect(serviceCode).not.toContain("useRouter");
+  });
 });
