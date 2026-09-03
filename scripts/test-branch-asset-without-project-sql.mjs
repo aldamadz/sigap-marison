@@ -330,8 +330,12 @@ const id = run([
 try {
   let ready = false;
   for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {
-    const probe = spawnSync("docker", ["exec", id, "pg_isready", "-U", "postgres"], { encoding: "utf8" });
-    ready = probe.status === 0;
+    const probe = spawnSync(
+      "docker",
+      ["exec", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-Atqc", "select 1"],
+      { encoding: "utf8" },
+    );
+    ready = probe.status === 0 && probe.stdout.trim() === "1";
     if (!ready) {
       const ms = 500;
       const sab = new SharedArrayBuffer(4);
@@ -339,7 +343,10 @@ try {
     }
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready.");
-  const output = run(["exec", "-i", id, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], sql);
+  const output = run([
+    "exec", "-i", id,
+    "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
+  ], sql);
   if (!output.includes("MRN-22 branch-asset integration: all assertions passed")) {
     throw new Error("SQL runner did not see the success marker.\n" + output);
   }
