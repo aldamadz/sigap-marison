@@ -43,16 +43,10 @@ end $$;
 do $$
 declare v text;
 begin
-  v := public.resolve_form_usage_category(
-    'a0000000-0000-4000-8000-000000000060'::uuid,  -- asset usage
-    null
-  );
+  v := public.resolve_form_usage_category('a0000000-0000-4000-8000-000000000060'::uuid);
   if v <> 'asset' then raise exception 'B1: resolve_form_usage_category(asset) = %', v; end if;
 
-  v := public.resolve_form_usage_category(
-    null,
-    'a0000000-0000-4000-8000-000000000061'::uuid  -- unit usage
-  );
+  v := public.resolve_form_usage_category('a0000000-0000-4000-8000-000000000061'::uuid);
   if v <> 'unit' then raise exception 'B2: resolve_form_usage_category(unit) = %', v; end if;
 end $$;
 
@@ -62,8 +56,7 @@ begin
   perform public.assert_branch_asset_fallback_eligible(
     'f0000000-0000-4000-8000-000000000001'::uuid,
     'a0000000-0000-4000-8000-000000000031'::uuid,  -- branch no projects
-    'a0000000-0000-4000-8000-000000000060'::uuid,  -- asset usage
-    null
+    'a0000000-0000-4000-8000-000000000060'::uuid   -- asset usage
   );
 exception when others then
   raise exception 'C1: expected fallback to be valid, got %', sqlerrm;
@@ -77,8 +70,7 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000030'::uuid,  -- Pusat
-      'a0000000-0000-4000-8000-000000000060'::uuid,
-      null
+      'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
     v_failed := true;
@@ -97,8 +89,7 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000032'::uuid,  -- branch with projects
-      'a0000000-0000-4000-8000-000000000060'::uuid,
-      null
+      'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
     v_failed := true;
@@ -117,8 +108,7 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000031'::uuid,
-      'a0000000-0000-4000-8000-000000000061'::uuid,  -- unit usage
-      null
+      'a0000000-0000-4000-8000-000000000061'::uuid  -- unit usage
     );
   exception when others then
     v_failed := true;
@@ -133,16 +123,13 @@ end $$;
 do $$
 declare v_failed boolean := false;
 begin
-  -- (auth.uid() is the active user; for this test we patch the profile
-  -- to be deleted_at IS NOT NULL and re-run with the user id)
   update public.profiles set deleted_at = now()
     where id = 'f0000000-0000-4000-8000-000000000001'::uuid;
   begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000031'::uuid,
-      'a0000000-0000-4000-8000-000000000060'::uuid,
-      null
+      'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
     v_failed := true;
@@ -172,8 +159,7 @@ begin
     null,                                          -- project_id null
     'f0000000-0000-4000-8000-000000000001'::uuid,
     null,                                          -- dept_id null
-    'a0000000-0000-4000-8000-000000000060'::uuid,  -- asset usage
-    null
+    'a0000000-0000-4000-8000-000000000060'::uuid   -- asset usage
   );
   if v_n1 <> 1 then raise exception 'D1: expected no_urut=1, got %', v_n1; end if;
 
@@ -184,8 +170,7 @@ begin
     null,
     'f0000000-0000-4000-8000-000000000001'::uuid,
     null,
-    'a0000000-0000-4000-8000-000000000060'::uuid,
-    null
+    'a0000000-0000-4000-8000-000000000060'::uuid
   );
   if v_n2 <> 2 then raise exception 'D2: expected no_urut=2, got %', v_n2; end if;
 
@@ -196,8 +181,7 @@ begin
     null,
     'f0000000-0000-4000-8000-000000000001'::uuid,
     null,
-    'a0000000-0000-4000-8000-000000000060'::uuid,
-    null
+    'a0000000-0000-4000-8000-000000000060'::uuid
   );
   if v_n3 <> 3 then raise exception 'D3: expected no_urut=3, got %', v_n3; end if;
 end $$;
@@ -213,8 +197,7 @@ begin
     null,
     'f0000000-0000-4000-8000-000000000001'::uuid,
     null,
-    'a0000000-0000-4000-8000-000000000060'::uuid,
-    null
+    'a0000000-0000-4000-8000-000000000060'::uuid
   );
   if v_n <> 1 then raise exception 'D4: second branch counter expected to start at 1, got %', v_n; end if;
 end $$;
@@ -231,8 +214,7 @@ begin
       null,
       'f0000000-0000-4000-8000-000000000001'::uuid,
       null,
-      'a0000000-0000-4000-8000-000000000060'::uuid,
-      null
+      'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
     v_failed := true;
@@ -255,8 +237,7 @@ begin
       null,
       'f0000000-0000-4000-8000-000000000002'::uuid,  -- different from auth.uid
       null,
-      'a0000000-0000-4000-8000-000000000060'::uuid,
-      null
+      'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
     v_failed := true;
@@ -279,8 +260,7 @@ begin
       null,
       'f0000000-0000-4000-8000-000000000001'::uuid,
       null,
-      'a0000000-0000-4000-8000-000000000061'::uuid,  -- unit usage
-      null
+      'a0000000-0000-4000-8000-000000000061'::uuid   -- unit usage
     );
   exception when others then
     v_failed := true;
@@ -307,7 +287,7 @@ begin
     'f0000000-0000-4000-8000-000000000001'::uuid,
     null
   );
-  if v_n <> 1 then raise exception 'E1: legacy cabang expected no_urut=1, got %', v_n; end if;
+  if v_n <> 3 then raise exception 'E1: legacy cabang expected no_urut=3, got %', v_n; end if;
 end $$;
 
 -- E2. Legacy RPC rejects null project_id on a branch (no fallback path)
@@ -332,19 +312,34 @@ begin
   if not v_failed then raise exception 'E2: legacy 6-param must NOT create fallback'; end if;
 end $$;
 
+-- E3. Legacy RPC accepts pusat path without project_id (like internal recommendations)
+do $$
+declare v_n int;
+begin
+  v_n := public.generate_new_letter_number(
+    'a0000000-0000-4000-8000-000000000010'::uuid,
+    'a0000000-0000-4000-8000-000000000050'::uuid,
+    'a0000000-0000-4000-8000-000000000030'::uuid,  -- Pusat
+    null,                                          -- project_id
+    'f0000000-0000-4000-8000-000000000001'::uuid,
+    'a0000000-0000-4000-8000-000000000020'::uuid   -- dept_id
+  );
+  if v_n <> 2 then raise exception 'E3: legacy pusat expected no_urut=2 (since backfill used 1), got %', v_n; end if;
+end $$;
+
 -- ╔══════════════════════════════════════════════════════════════════════╗
 -- ║ F. Reservation trigger — direct insert (bypassing RPC) must fail    ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 -- F1. Direct insert with project_id NULL AND dept_id NULL on a branch
---     without a real fallback path is rejected
+--     without a real fallback path is rejected (infer rules fail)
 do $$
 declare v_failed boolean := false;
 begin
   begin
     insert into public.surat_reservations (
       entity_id, type_id, office_id, project_id, dept_id,
-      year, no_urut, status, reserved_by, number_scope_type
+      year, no_urut, status, reserved_by
     ) values (
       'a0000000-0000-4000-8000-000000000010'::uuid,
       'a0000000-0000-4000-8000-000000000050'::uuid,
@@ -354,16 +349,15 @@ begin
       extract(year from now())::int,
       999,
       'PENDING',
-      'f0000000-0000-4000-8000-000000000001'::uuid,
-      'cabang'  -- wrong marker: must be branch_asset_000 to allow null/null
+      'f0000000-0000-4000-8000-000000000001'::uuid
     );
   exception when others then
     v_failed := true;
-    if sqlerrm not like '%branch_asset_000%' and sqlerrm not like '%proyek%' then
+    if sqlerrm not like '%Tanda lingkup nomor tidak dapat disimpulkan secara otomatis%' then
       raise exception 'F1: unexpected error: %', sqlerrm;
     end if;
   end;
-  if not v_failed then raise exception 'F1: direct insert with wrong scope marker must be rejected'; end if;
+  if not v_failed then raise exception 'F1: direct insert without explicit marker and uninferrable scope must fail'; end if;
 end $$;
 
 -- F2. Direct insert claiming branch_asset_000 on a branch WITH projects
@@ -414,9 +408,50 @@ begin
     from public.surat_reservations
     where office_id = 'a0000000-0000-4000-8000-000000000032'::uuid
       and number_scope_type = 'cabang';
-  if v_count_cabang <> 1 then
-    raise exception 'F3b: expected 1 cabang reservation, got %', v_count_cabang;
+  if v_count_cabang <> 2 then
+    raise exception 'F3b: expected 2 cabang reservation, got %', v_count_cabang;
   end if;
+end $$;
+
+-- F4. RLS prevents authenticated role from inserting branch_asset_000
+do $$
+declare v_failed boolean := false;
+begin
+  set local role authenticated;
+  begin
+    insert into public.surat_reservations (
+      entity_id, type_id, office_id, project_id, dept_id,
+      year, no_urut, status, reserved_by, number_scope_type
+    ) values (
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000050'::uuid,
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      null, null, extract(year from now())::int, 999, 'PENDING',
+      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'branch_asset_000'
+    );
+  exception when others then
+    v_failed := true;
+  end;
+  reset role;
+  if not v_failed then raise exception 'F4: RLS should block direct branch_asset_000 insert by authenticated role'; end if;
+end $$;
+
+-- F5. Immutability of number_scope_type
+do $$
+declare v_failed boolean := false;
+begin
+  begin
+    update public.surat_reservations
+    set number_scope_type = 'pusat'
+    where number_scope_type = 'branch_asset_000';
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%tidak boleh diubah%' then
+      raise exception 'F5: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'F5: update of number_scope_type should be blocked'; end if;
 end $$;
 
 -- ╔══════════════════════════════════════════════════════════════════════╗
@@ -431,7 +466,7 @@ begin
     insert into public.surat_registrasi (
       no_surat, entity_id, office_id, project_id, dept_id,
       letter_type_id, judul_surat, status, current_step,
-      created_by, form_input_data, data_snapshot, requester_snapshot,
+      created_by, form_usage_id, form_input_data, data_snapshot, requester_snapshot,
       location_snapshot, policy_snapshot
     ) values (
       '999/MRN/X/IX/2026',
@@ -443,7 +478,8 @@ begin
       'Aset Fallback Tanpa Marker',
       'PROSES', 1,
       'f0000000-0000-4000-8000-000000000001'::uuid,
-      '{"request_category":"asset"}'::jsonb,  -- no marker
+      'a0000000-0000-4000-8000-000000000060'::uuid,
+      '{}'::jsonb,
       '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb
     );
   exception when others then
@@ -463,7 +499,7 @@ begin
     insert into public.surat_registrasi (
       no_surat, entity_id, office_id, project_id, dept_id,
       letter_type_id, judul_surat, status, current_step,
-      created_by, form_input_data, data_snapshot, requester_snapshot,
+      created_by, form_usage_id, form_input_data, data_snapshot, requester_snapshot,
       location_snapshot, policy_snapshot
     ) values (
       '999/MRN/X/IX/2026',
@@ -475,8 +511,8 @@ begin
       'Aset Forged',
       'PROSES', 1,
       'f0000000-0000-4000-8000-000000000001'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid,
       '{
-        "request_category":"asset",
         "project_is_default":true,
         "project_code":"000",
         "project_name":"Tanpa proyek"
@@ -530,7 +566,7 @@ begin
   insert into public.surat_registrasi (
     no_surat, entity_id, office_id, project_id, dept_id,
     letter_type_id, judul_surat, status, current_step,
-    created_by, form_input_data, data_snapshot, requester_snapshot,
+    created_by, form_usage_id, form_input_data, data_snapshot, requester_snapshot,
     location_snapshot, policy_snapshot
   ) values (
     '999/MRN/X/IX/2026',
@@ -542,8 +578,8 @@ begin
     'Aset Fallback Valid',
     'PROSES', 1,
     'f0000000-0000-4000-8000-000000000001'::uuid,
+    'a0000000-0000-4000-8000-000000000060'::uuid,
     '{
-      "request_category":"asset",
       "project_is_default":true,
       "project_code":"000",
       "project_name":"Tanpa proyek"
@@ -578,6 +614,19 @@ begin
   end if;
   -- v_cabang_configs may be 0 if no rows seeded; that's fine for this assertion
   perform v_cabang_configs;  -- silence unused warning
+end $$;
+
+-- H2. Pre-migration reservations have been backfilled correctly
+do $$
+declare
+  v_res_pusat text;
+  v_res_cabang text;
+begin
+  select number_scope_type into v_res_pusat from public.surat_reservations where id = 'b0000000-0000-4000-8000-000000000001'::uuid;
+  select number_scope_type into v_res_cabang from public.surat_reservations where id = 'b0000000-0000-4000-8000-000000000002'::uuid;
+
+  if v_res_pusat <> 'pusat' then raise exception 'H2: expected backfilled pusat reservation, got %', v_res_pusat; end if;
+  if v_res_cabang <> 'cabang' then raise exception 'H2: expected backfilled cabang reservation, got %', v_res_cabang; end if;
 end $$;
 
 -- ╔══════════════════════════════════════════════════════════════════════╗

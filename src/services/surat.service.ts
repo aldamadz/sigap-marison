@@ -678,7 +678,6 @@ export const suratService = {
         p_user_id:            user?.id,
         p_dept_id:            deptIdClean,
         p_form_usage_id:      this.cleanUuid(payload.form_usage_id),
-        p_legacy_workflow_id: this.cleanUuid(payload.penggunaan_id),
       });
 
       if (rpcError) throw new Error("Gagal menerbitkan nomor urut.");

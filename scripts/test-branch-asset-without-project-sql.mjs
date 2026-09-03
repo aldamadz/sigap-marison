@@ -92,8 +92,7 @@ create table if not exists public.form_usages (
 -- master_penggunaan_detail (legacy workflow)
 create table if not exists public.master_penggunaan_detail (
   id uuid primary key,
-  request_category text
-    check (request_category in ('asset', 'unit', 'non_unit', 'non_asset'))
+  request_categories text[]
 );
 
 -- form_usage_steps
@@ -102,7 +101,7 @@ create table if not exists public.form_usage_steps (
   usage_id uuid not null references public.form_usages(id) on delete cascade
 );
 
--- letter_number_counter_configs (pre-MRN-22 shape: 3 scope types only)
+-- letter_number_counter_configs (pre-MRN-22 shape: 2 scope types only, no office_id)
 create table if not exists public.letter_number_counter_configs (
   id uuid primary key default gen_random_uuid(),
   entity_id uuid not null references public.master_entities(id),
@@ -111,7 +110,6 @@ create table if not exists public.letter_number_counter_configs (
   year integer not null,
   dept_id uuid references public.master_departments(id),
   project_id uuid references public.master_projects(id),
-  office_id uuid references public.master_offices(id),
   start_from integer not null default 1,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -158,6 +156,7 @@ create table if not exists public.surat_registrasi (
   status text,
   current_step integer default 1,
   reservation_id uuid,
+  form_usage_id uuid references public.form_usages(id),
   form_input_data jsonb default '{}',
   data_snapshot jsonb default '{}',
   requester_snapshot jsonb default '{}',
@@ -206,6 +205,14 @@ insert into public.form_usages (id, name, request_category, scope_type) values
 insert into public.form_usage_steps (id, usage_id) values
   ('a0000000-0000-4000-8000-000000000070', 'a0000000-0000-4000-8000-000000000060'),
   ('a0000000-0000-4000-8000-000000000071', 'a0000000-0000-4000-8000-000000000061');
+
+insert into public.master_penggunaan_detail (id, request_categories) values
+  ('a0000000-0000-4000-8000-000000000080', array['asset', 'non_asset']);
+
+-- Pre-migration reservations to test backfill
+insert into public.surat_reservations (id, entity_id, office_id, project_id, dept_id, year, no_urut) values
+  ('b0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000030', null, 'a0000000-0000-4000-8000-000000000020', 2026, 1),
+  ('b0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000032', 'a0000000-0000-4000-8000-000000000040', null, 2026, 2);
 
 ${migration}
 

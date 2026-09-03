@@ -78,7 +78,7 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     expect(branchAssetMigration).not.toMatch(/insert\s+into\s+public\.master_projects/i);
     // The service must forward the authoritative form usage id (NOT a flag).
     expect(suratService).toContain("p_form_usage_id");
-    expect(suratService).toContain("p_legacy_workflow_id");
+    expect(suratService).not.toContain("p_legacy_workflow_id");
     expect(suratService).not.toContain("p_is_asset_fallback");
     // The service must query real master data instead of hardcoding "false".
     expect(suratService).toContain("master_projects");
