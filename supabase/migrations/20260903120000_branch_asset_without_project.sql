@@ -107,7 +107,7 @@ begin
     update public.surat_reservations res
     set number_scope_type = case
       when off.kedudukan = 'Pusat' and res.dept_id is not null and res.project_id is null then 'pusat'
-      when off.kedudukan = 'Cabang' and res.project_id is not null and res.dept_id is null then 'cabang'
+      when off.kedudukan <> 'Pusat' and res.project_id is not null and res.dept_id is null then 'cabang'
       else null
     end
     from public.master_offices off
@@ -156,18 +156,27 @@ grant execute on function public.resolve_form_usage_category(uuid) to authentica
 create or replace function public.assert_branch_asset_fallback_eligible(
   p_actor          uuid,
   p_office_id      uuid,
+  p_entity_id      uuid,
+  p_department_id  uuid,
   p_form_usage_id  uuid
 )
 returns boolean language plpgsql stable security definer set search_path = '' as $$
 declare
   v_kedudukan text;
+  v_usage_validation jsonb;
   v_category  text;
+  v_user_role text;
+  v_user_office uuid;
+  v_department_entity uuid;
 begin
   if p_actor is null then raise exception 'Sesi login tidak tersedia.' using errcode = '42501'; end if;
-  if not exists (
-    select 1 from public.profiles profile
-    where profile.id = p_actor and coalesce(profile.is_active, true) = true and profile.deleted_at is null
-  ) then
+
+  select profile.role, profile.office_id
+  into v_user_role, v_user_office
+  from public.profiles profile
+  where profile.id = p_actor and coalesce(profile.is_active, true) = true and profile.deleted_at is null;
+
+  if not found then
     raise exception 'Profil aktor tidak aktif atau telah dihapus.' using errcode = '42501';
   end if;
 
@@ -175,9 +184,29 @@ begin
   if v_kedudukan is null then raise exception 'Kantor penomoran tidak ditemukan.' using errcode = '23503'; end if;
   if v_kedudukan = 'Pusat' then raise exception 'Fallback proyek 000 tidak berlaku untuk kantor pusat.' using errcode = '22023'; end if;
 
-  v_category := public.resolve_form_usage_category(p_form_usage_id);
+  -- Use the existing single source of truth for form usage authorization
+  v_usage_validation := public.validate_form_usage_for_actor(
+    p_form_usage_id,
+    p_department_id
+  );
+  v_category := v_usage_validation->>'request_category';
+
   if v_category is distinct from 'asset' then
     raise exception 'Fallback proyek 000 hanya berlaku untuk klasifikasi Aset.' using errcode = '22023';
+  end if;
+
+  select department.entity_id into v_department_entity
+  from public.master_departments department
+  where department.id = p_department_id;
+
+  if v_department_entity is distinct from p_entity_id then
+    raise exception 'Entitas reservasi tidak sesuai departemen pengaju.' using errcode = '42501';
+  end if;
+
+  if v_user_role is distinct from 'admin' and v_user_role is distinct from 'super_admin' then
+    if v_user_office is distinct from p_office_id then
+      raise exception 'Anda tidak diizinkan membuat reservasi untuk kantor lain.' using errcode = '42501';
+    end if;
   end if;
 
   if public.branch_has_active_projects(p_office_id) then
@@ -188,8 +217,8 @@ begin
 end;
 $$;
 
-revoke all on function public.assert_branch_asset_fallback_eligible(uuid, uuid, uuid) from public, anon;
-grant execute on function public.assert_branch_asset_fallback_eligible(uuid, uuid, uuid) to authenticated, service_role;
+revoke all on function public.assert_branch_asset_fallback_eligible(uuid, uuid, uuid, uuid, uuid) from public, anon;
+grant execute on function public.assert_branch_asset_fallback_eligible(uuid, uuid, uuid, uuid, uuid) to authenticated, service_role;
 
 -- ╔══════════════════════════════════════════════════════════════════════╗
 -- ║ 6. Updated reservation scope trigger & RLS Policies                 ║
@@ -207,7 +236,7 @@ begin
   if new.number_scope_type is null then
     if v_kedudukan = 'Pusat' and new.dept_id is not null and new.project_id is null then
       new.number_scope_type := 'pusat';
-    elsif v_kedudukan = 'Cabang' and new.project_id is not null and new.dept_id is null then
+    elsif v_kedudukan <> 'Pusat' and new.project_id is not null and new.dept_id is null then
       new.number_scope_type := 'cabang';
     else
       raise exception 'Tanda lingkup nomor tidak dapat disimpulkan secara otomatis. Wajib diisi eksplisit.' using errcode = '22023';
@@ -244,9 +273,27 @@ create trigger trg_enforce_surat_reservation_number_scope
   on public.surat_reservations
   for each row execute function public.enforce_surat_reservation_number_scope();
 
-create or replace function public.prevent_surat_reservation_scope_update()
+create or replace function public.prevent_surat_reservation_identity_update()
 returns trigger language plpgsql set search_path = '' as $$
 begin
+  if new.entity_id is distinct from old.entity_id then
+    raise exception 'Identitas nomor reservasi (entity_id) tidak boleh diubah.' using errcode = '22023';
+  end if;
+  if new.office_id is distinct from old.office_id then
+    raise exception 'Identitas nomor reservasi (office_id) tidak boleh diubah.' using errcode = '22023';
+  end if;
+  if new.project_id is distinct from old.project_id then
+    raise exception 'Identitas nomor reservasi (project_id) tidak boleh diubah.' using errcode = '22023';
+  end if;
+  if new.dept_id is distinct from old.dept_id then
+    raise exception 'Identitas nomor reservasi (dept_id) tidak boleh diubah.' using errcode = '22023';
+  end if;
+  if new.year is distinct from old.year then
+    raise exception 'Identitas nomor reservasi (year) tidak boleh diubah.' using errcode = '22023';
+  end if;
+  if new.no_urut is distinct from old.no_urut then
+    raise exception 'Identitas nomor reservasi (no_urut) tidak boleh diubah.' using errcode = '22023';
+  end if;
   if new.number_scope_type is distinct from old.number_scope_type then
     raise exception 'Tanda lingkup nomor (number_scope_type) tidak boleh diubah.' using errcode = '22023';
   end if;
@@ -255,9 +302,10 @@ end;
 $$;
 
 drop trigger if exists trg_a_prevent_surat_reservation_scope_update on public.surat_reservations;
-create trigger trg_a_prevent_surat_reservation_scope_update
-  before update of number_scope_type on public.surat_reservations
-  for each row execute function public.prevent_surat_reservation_scope_update();
+drop trigger if exists trg_a_prevent_surat_reservation_identity_update on public.surat_reservations;
+create trigger trg_a_prevent_surat_reservation_identity_update
+  before update of entity_id, office_id, project_id, dept_id, year, no_urut, number_scope_type on public.surat_reservations
+  for each row execute function public.prevent_surat_reservation_identity_update();
 
 -- Restrict authenticated users from inserting branch_asset_000 directly.
 -- The RPC is security definer and bypasses RLS, so it can still insert it.
@@ -370,7 +418,8 @@ begin
 
   if v_next_val is not null then
     update public.surat_reservations
-       set status = 'PENDING', type_id = p_type_id, office_id = p_office_id, project_id = p_project_id, dept_id = p_dept_id,
+       set status = 'PENDING', type_id = p_type_id, office_id = p_office_id, project_id = p_project_id,
+           dept_id = case when v_is_pusat then p_dept_id else null end,
            number_scope_type = case when v_is_pusat then 'pusat' else 'cabang' end,
            reserved_by = p_user_id, created_at = now(), expires_at = (now() + interval '30 minutes')
      where entity_id = p_entity_id and year = v_year and no_urut = v_next_val
@@ -381,7 +430,7 @@ begin
       and ((v_is_pusat and dept_id = p_dept_id and project_id is null) or (not v_is_pusat and project_id = p_project_id and dept_id is null));
 
     insert into public.surat_reservations (entity_id, type_id, office_id, project_id, dept_id, year, no_urut, status, reserved_by, number_scope_type)
-    values (p_entity_id, p_type_id, p_office_id, p_project_id, p_dept_id, v_year, v_next_val, 'PENDING', p_user_id, case when v_is_pusat then 'pusat' else 'cabang' end);
+    values (p_entity_id, p_type_id, p_office_id, p_project_id, case when v_is_pusat then p_dept_id else null end, v_year, v_next_val, 'PENDING', p_user_id, case when v_is_pusat then 'pusat' else 'cabang' end);
   end if;
   return v_next_val;
 end;
@@ -420,7 +469,7 @@ begin
 
   v_is_branch_fallback := (not v_is_pusat) and p_project_id is null;
   if v_is_branch_fallback then
-    perform public.assert_branch_asset_fallback_eligible(v_actor, p_office_id, p_form_usage_id);
+    perform public.assert_branch_asset_fallback_eligible(v_actor, p_office_id, p_entity_id, p_dept_id, p_form_usage_id);
   elsif not v_is_pusat and p_project_id is null then
     raise exception 'Proyek wajib dipilih untuk pengajuan kantor cabang.' using errcode = '22023';
   end if;
@@ -449,7 +498,8 @@ begin
 
   if v_next_val is not null then
     update public.surat_reservations
-       set status = 'PENDING', type_id = p_type_id, office_id = p_office_id, project_id = p_project_id, dept_id = p_dept_id,
+       set status = 'PENDING', type_id = p_type_id, office_id = p_office_id, project_id = p_project_id,
+           dept_id = case when v_is_pusat then p_dept_id else null end,
            number_scope_type = case when v_is_pusat then 'pusat' when v_is_branch_fallback then 'branch_asset_000' else 'cabang' end,
            reserved_by = p_user_id, created_at = now(), expires_at = (now() + interval '30 minutes')
      where entity_id = p_entity_id and year = v_year and no_urut = v_next_val
@@ -460,7 +510,7 @@ begin
       and ((v_is_pusat and dept_id = p_dept_id and project_id is null) or (v_is_branch_fallback and office_id = p_office_id and project_id is null and dept_id is null and number_scope_type = 'branch_asset_000') or (not v_is_pusat and not v_is_branch_fallback and project_id = p_project_id and dept_id is null));
 
     insert into public.surat_reservations (entity_id, type_id, office_id, project_id, dept_id, year, no_urut, status, reserved_by, number_scope_type)
-    values (p_entity_id, p_type_id, p_office_id, p_project_id, p_dept_id, v_year, v_next_val, 'PENDING', p_user_id, case when v_is_pusat then 'pusat' when v_is_branch_fallback then 'branch_asset_000' else 'cabang' end);
+    values (p_entity_id, p_type_id, p_office_id, p_project_id, case when v_is_pusat then p_dept_id else null end, v_year, v_next_val, 'PENDING', p_user_id, case when v_is_pusat then 'pusat' when v_is_branch_fallback then 'branch_asset_000' else 'cabang' end);
   end if;
   return v_next_val;
 end;

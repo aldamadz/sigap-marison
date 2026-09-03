@@ -53,7 +53,7 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
       "supabase/migrations/20260903120000_branch_asset_without_project.sql",
     );
     // The migration must expose authoritative helpers used by both
-    // triggers and the new 8-parameter RPC.
+    // triggers and the new 7-parameter RPC.
     expect(branchAssetMigration).toContain("branch_has_active_projects");
     expect(branchAssetMigration).toContain("assert_branch_asset_fallback_eligible");
     expect(branchAssetMigration).toContain("resolve_form_usage_category");
@@ -64,7 +64,7 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     ).toBeGreaterThanOrEqual(3);
     // The legacy 6-parameter RPC must NOT be the fallback path.
     expect(branchAssetMigration).toContain("Legacy 6-parameter signature");
-    // The 8-parameter RPC must enforce auth.uid() = p_user_id, profile active,
+    // The 7-parameter RPC must enforce auth.uid() = p_user_id, profile active,
     // and the branch fallback eligibility assertion.
     expect(branchAssetMigration).toContain("p_user_id is distinct from v_actor");
     expect(branchAssetMigration).toContain("Profil aktor tidak aktif atau telah dihapus.");
@@ -76,10 +76,11 @@ describe("SUR-13 organizational status, numbering, and requester approval", () =
     expect(branchAssetMigration).toContain("number_scope_type in ('pusat', 'cabang', 'branch_asset_000')");
     // No synthetic project row is created in master_projects.
     expect(branchAssetMigration).not.toMatch(/insert\s+into\s+public\.master_projects/i);
-    // The service must forward the authoritative form usage id (NOT a flag).
-    expect(suratService).toContain("p_form_usage_id");
+    // The service must forward the authoritative form usage id (NOT a flag) only when fallback is eligible.
+    expect(suratService).toContain("p_form_usage_id:");
     expect(suratService).not.toContain("p_legacy_workflow_id");
     expect(suratService).not.toContain("p_is_asset_fallback");
+    expect(suratService).toContain("fallbackEligible");
     // The service must query real master data instead of hardcoding "false".
     expect(suratService).toContain("master_projects");
   });

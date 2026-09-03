@@ -666,19 +666,38 @@ export const suratService = {
       }
 
       // PERUBAHAN UTAMA: tambah p_dept_id agar nomor urut dimulai dari 001 per dept/project
-      // MRN-22: 8-parameter RPC is the only path that may create a
+      // MRN-22: 7-parameter RPC is the only path that may create a
       // branch_asset_000 reservation.  We forward the authoritative
-      // form_usage_id (or legacy penggunaan_id) so the database can
-      // resolve request_category itself instead of trusting a client flag.
-      const { data: nextNumber, error: rpcError } = await supabase.rpc("generate_new_letter_number", {
-        p_entity_id:          payload.entity_id,
-        p_type_id:            payload.letter_type_id,
-        p_office_id:          officeIdClean,
-        p_project_id:         projectIdClean,
-        p_user_id:            user?.id,
-        p_dept_id:            deptIdClean,
-        p_form_usage_id:      this.cleanUuid(payload.form_usage_id),
-      });
+      // form_usage_id so the database can resolve request_category
+      // itself instead of trusting a client flag.
+      // For Pusat, branch with project, or legacy usage, we use the
+      // original 6-parameter RPC.
+      let nextNumber, rpcError;
+
+      if (fallbackEligible) {
+        const { data: n, error: e } = await supabase.rpc("generate_new_letter_number", {
+          p_entity_id:          payload.entity_id,
+          p_type_id:            payload.letter_type_id,
+          p_office_id:          officeIdClean,
+          p_project_id:         projectIdClean,
+          p_user_id:            user?.id,
+          p_dept_id:            deptIdClean,
+          p_form_usage_id:      this.cleanUuid(payload.form_usage_id),
+        });
+        nextNumber = n;
+        rpcError = e;
+      } else {
+        const { data: n, error: e } = await supabase.rpc("generate_new_letter_number", {
+          p_entity_id:          payload.entity_id,
+          p_type_id:            payload.letter_type_id,
+          p_office_id:          officeIdClean,
+          p_project_id:         projectIdClean,
+          p_user_id:            user?.id,
+          p_dept_id:            deptIdClean,
+        });
+        nextNumber = n;
+        rpcError = e;
+      }
 
       if (rpcError) throw new Error("Gagal menerbitkan nomor urut.");
 

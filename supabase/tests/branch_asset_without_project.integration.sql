@@ -56,6 +56,8 @@ begin
   perform public.assert_branch_asset_fallback_eligible(
     'f0000000-0000-4000-8000-000000000001'::uuid,
     'a0000000-0000-4000-8000-000000000031'::uuid,  -- branch no projects
+    'a0000000-0000-4000-8000-000000000010'::uuid,  -- entity
+    'a0000000-0000-4000-8000-000000000020'::uuid,
     'a0000000-0000-4000-8000-000000000060'::uuid   -- asset usage
   );
 exception when others then
@@ -70,6 +72,8 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000030'::uuid,  -- Pusat
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
       'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
@@ -85,10 +89,13 @@ end $$;
 do $$
 declare v_failed boolean := false;
 begin
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000002', false);
   begin
     perform public.assert_branch_asset_fallback_eligible(
-      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'f0000000-0000-4000-8000-000000000002'::uuid,  -- user assigned to KCP
       'a0000000-0000-4000-8000-000000000032'::uuid,  -- branch with projects
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
       'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
@@ -97,6 +104,7 @@ begin
       raise exception 'C3: unexpected error: %', sqlerrm;
     end if;
   end;
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
   if not v_failed then raise exception 'C3: fallback on branch with projects should be rejected'; end if;
 end $$;
 
@@ -108,6 +116,8 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
       'a0000000-0000-4000-8000-000000000061'::uuid  -- unit usage
     );
   exception when others then
@@ -129,6 +139,8 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
       'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
@@ -144,8 +156,108 @@ begin
     where id = 'f0000000-0000-4000-8000-000000000001'::uuid;
 end $$;
 
+-- assert_branch_asset_fallback_eligible — cross-office rejected for normal user
+do $$
+declare v_failed boolean := false;
+begin
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000001'::uuid,  -- belongs to 31
+      'a0000000-0000-4000-8000-000000000033'::uuid,  -- requested office is 33
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%kantor lain%' then
+      raise exception 'C6: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'C6: cross-office fallback should be rejected'; end if;
+end $$;
+
+-- assert_branch_asset_fallback_eligible — entity must match requester department
+do $$
+declare v_failed boolean := false;
+begin
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000011'::uuid,  -- requested entity is 11
+      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%Entitas reservasi%' then
+      raise exception 'C7: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'C7: cross-entity fallback should be rejected'; end if;
+end $$;
+
+-- assert_branch_asset_fallback_eligible — admin allowed cross-office
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000004', false);
+  perform public.assert_branch_asset_fallback_eligible(
+    'f0000000-0000-4000-8000-000000000004'::uuid,  -- admin (belongs to 33)
+    'a0000000-0000-4000-8000-000000000031'::uuid,  -- requested office 31
+    'a0000000-0000-4000-8000-000000000010'::uuid,
+    'a0000000-0000-4000-8000-000000000020'::uuid,
+    'a0000000-0000-4000-8000-000000000060'::uuid
+  );
+exception when others then
+  raise exception 'C8: admin cross-office should be allowed, got %', sqlerrm;
+end $$;
+
+-- assert_branch_asset_fallback_eligible — unauthorized department rejected
+do $$
+declare v_failed boolean := false;
+begin
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000021'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%Unauthorized department%' then
+      raise exception 'C9: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'C9: unauthorized department should be rejected'; end if;
+end $$;
+
+-- assert_branch_asset_fallback_eligible — inactive usage rejected
+do $$
+declare v_failed boolean := false;
+begin
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000063'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%tidak aktif%' then
+      raise exception 'C10: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'C10: inactive usage should be rejected'; end if;
+end $$;
+
 -- ╔══════════════════════════════════════════════════════════════════════╗
--- ║ D. New 8-parameter RPC — branch fallback path                        ║
+-- ║ D. New 7-parameter RPC — branch fallback path                        ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 do $$
@@ -158,7 +270,7 @@ begin
     'a0000000-0000-4000-8000-000000000031'::uuid,  -- branch no projects
     null,                                          -- project_id null
     'f0000000-0000-4000-8000-000000000001'::uuid,
-    null,                                          -- dept_id null
+    'a0000000-0000-4000-8000-000000000020'::uuid,  -- dept_id non-null
     'a0000000-0000-4000-8000-000000000060'::uuid   -- asset usage
   );
   if v_n1 <> 1 then raise exception 'D1: expected no_urut=1, got %', v_n1; end if;
@@ -169,7 +281,7 @@ begin
     'a0000000-0000-4000-8000-000000000031'::uuid,
     null,
     'f0000000-0000-4000-8000-000000000001'::uuid,
-    null,
+    'a0000000-0000-4000-8000-000000000020'::uuid,
     'a0000000-0000-4000-8000-000000000060'::uuid
   );
   if v_n2 <> 2 then raise exception 'D2: expected no_urut=2, got %', v_n2; end if;
@@ -180,7 +292,7 @@ begin
     'a0000000-0000-4000-8000-000000000031'::uuid,
     null,
     'f0000000-0000-4000-8000-000000000001'::uuid,
-    null,
+    'a0000000-0000-4000-8000-000000000020'::uuid,
     'a0000000-0000-4000-8000-000000000060'::uuid
   );
   if v_n3 <> 3 then raise exception 'D3: expected no_urut=3, got %', v_n3; end if;
@@ -190,30 +302,33 @@ end $$;
 do $$
 declare v_n int;
 begin
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000004', false);
   v_n := public.generate_new_letter_number(
     'a0000000-0000-4000-8000-000000000010'::uuid,
     'a0000000-0000-4000-8000-000000000050'::uuid,
     'a0000000-0000-4000-8000-000000000033'::uuid,  -- second branch
     null,
-    'f0000000-0000-4000-8000-000000000001'::uuid,
-    null,
+    'f0000000-0000-4000-8000-000000000004'::uuid,
+    'a0000000-0000-4000-8000-000000000020'::uuid,
     'a0000000-0000-4000-8000-000000000060'::uuid
   );
   if v_n <> 1 then raise exception 'D4: second branch counter expected to start at 1, got %', v_n; end if;
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
 end $$;
 
 -- D5. Branch fallback REJECTED when branch has projects
 do $$
 declare v_failed boolean := false;
 begin
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000002', false);
   begin
     perform public.generate_new_letter_number(
       'a0000000-0000-4000-8000-000000000010'::uuid,
       'a0000000-0000-4000-8000-000000000050'::uuid,
       'a0000000-0000-4000-8000-000000000032'::uuid,  -- branch with projects
       null,
-      'f0000000-0000-4000-8000-000000000001'::uuid,
-      null,
+      'f0000000-0000-4000-8000-000000000002'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
       'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
@@ -222,6 +337,7 @@ begin
       raise exception 'D5: unexpected error: %', sqlerrm;
     end if;
   end;
+  perform set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', false);
   if not v_failed then raise exception 'D5: branch fallback on branch-with-projects should fail'; end if;
 end $$;
 
@@ -233,8 +349,8 @@ begin
     perform public.generate_new_letter_number(
       'a0000000-0000-4000-8000-000000000010'::uuid,
       'a0000000-0000-4000-8000-000000000050'::uuid,
-      'a0000000-0000-4000-8000-000000000031'::uuid,
-      null,
+       'a0000000-0000-4000-8000-000000000031'::uuid,
+       null,
       'f0000000-0000-4000-8000-000000000002'::uuid,  -- different from auth.uid
       null,
       'a0000000-0000-4000-8000-000000000060'::uuid
@@ -256,10 +372,10 @@ begin
     perform public.generate_new_letter_number(
       'a0000000-0000-4000-8000-000000000010'::uuid,
       'a0000000-0000-4000-8000-000000000052'::uuid,  -- Unit letter type
-      'a0000000-0000-4000-8000-000000000031'::uuid,
-      null,
-      'f0000000-0000-4000-8000-000000000001'::uuid,
-      null,
+       'a0000000-0000-4000-8000-000000000031'::uuid,
+       null,
+       'f0000000-0000-4000-8000-000000000001'::uuid,
+       'a0000000-0000-4000-8000-000000000020'::uuid,
       'a0000000-0000-4000-8000-000000000061'::uuid   -- unit usage
     );
   exception when others then
@@ -275,9 +391,11 @@ end $$;
 -- ║ E. Legacy 6-parameter RPC — no fallback path                        ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
--- E1. Legacy RPC accepts cabang path normally (with a real project)
+-- E1. Legacy RPC accepts cabang path normally (with a real project) and normalizes dept_id
 do $$
-declare v_n int;
+declare
+  v_n int;
+  v_dept uuid;
 begin
   v_n := public.generate_new_letter_number(
     'a0000000-0000-4000-8000-000000000010'::uuid,
@@ -285,9 +403,14 @@ begin
     'a0000000-0000-4000-8000-000000000032'::uuid,  -- branch with projects
     'a0000000-0000-4000-8000-000000000040'::uuid,  -- real project
     'f0000000-0000-4000-8000-000000000001'::uuid,
-    null
+    'a0000000-0000-4000-8000-000000000020'::uuid   -- p_dept_id IS NOT NULL
   );
-  if v_n <> 3 then raise exception 'E1: legacy cabang expected no_urut=3, got %', v_n; end if;
+  if v_n <> 7 then raise exception 'E1: legacy cabang expected no_urut=7, got %', v_n; end if;
+
+  select dept_id into v_dept from public.surat_reservations
+  where office_id = 'a0000000-0000-4000-8000-000000000032'::uuid and no_urut = 7;
+
+  if v_dept is not null then raise exception 'E1: legacy cabang should normalize dept_id to null, but got %', v_dept; end if;
 end $$;
 
 -- E2. Legacy RPC rejects null project_id on a branch (no fallback path)
@@ -324,7 +447,7 @@ begin
     'f0000000-0000-4000-8000-000000000001'::uuid,
     'a0000000-0000-4000-8000-000000000020'::uuid   -- dept_id
   );
-  if v_n <> 2 then raise exception 'E3: legacy pusat expected no_urut=2 (since backfill used 1), got %', v_n; end if;
+  if v_n <> 14 then raise exception 'E3: legacy pusat expected no_urut=14 (since backfill used 13), got %', v_n; end if;
 end $$;
 
 -- ╔══════════════════════════════════════════════════════════════════════╗
@@ -408,8 +531,8 @@ begin
     from public.surat_reservations
     where office_id = 'a0000000-0000-4000-8000-000000000032'::uuid
       and number_scope_type = 'cabang';
-  if v_count_cabang <> 2 then
-    raise exception 'F3b: expected 2 cabang reservation, got %', v_count_cabang;
+  if v_count_cabang <> 7 then
+    raise exception 'F3b: expected 7 cabang reservation, got %', v_count_cabang;
   end if;
 end $$;
 
@@ -437,7 +560,7 @@ begin
   if not v_failed then raise exception 'F4: RLS should block direct branch_asset_000 insert by authenticated role'; end if;
 end $$;
 
--- F5. Immutability of number_scope_type
+-- F5. Immutability of reservation identity
 do $$
 declare v_failed boolean := false;
 begin
@@ -452,6 +575,23 @@ begin
     end if;
   end;
   if not v_failed then raise exception 'F5: update of number_scope_type should be blocked'; end if;
+
+  v_failed := false;
+  begin
+    update public.surat_reservations
+    set no_urut = 999
+    where id = (
+      select id from public.surat_reservations
+      where number_scope_type = 'pusat'
+      limit 1
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%tidak boleh diubah%' then
+      raise exception 'F5: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'F5: update of no_urut should be blocked'; end if;
 end $$;
 
 -- ╔══════════════════════════════════════════════════════════════════════╗

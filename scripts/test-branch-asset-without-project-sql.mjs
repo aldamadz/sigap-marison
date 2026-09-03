@@ -31,20 +31,6 @@ create or replace function auth.role() returns text
   language sql stable set search_path = ''
 as $$ select current_user::text $$;
 
--- profiles (actor)
-create table if not exists public.profiles (
-  id uuid primary key,
-  role text not null,
-  is_active boolean default true,
-  deleted_at timestamptz
-);
-
--- master_offices
-create table if not exists public.master_offices (
-  id uuid primary key,
-  kedudukan text not null check (kedudukan in ('Pusat', 'Cabang'))
-);
-
 -- master_entities
 create table if not exists public.master_entities (
   id uuid primary key,
@@ -56,6 +42,22 @@ create table if not exists public.master_entities (
 create table if not exists public.master_departments (
   id uuid primary key,
   entity_id uuid not null references public.master_entities(id)
+);
+
+-- master_offices
+create table if not exists public.master_offices (
+  id uuid primary key,
+  kedudukan text not null
+);
+
+-- profiles (actor)
+create table if not exists public.profiles (
+  id uuid primary key,
+  role text not null,
+  office_id uuid references public.master_offices(id),
+  department_id uuid references public.master_departments(id),
+  is_active boolean default true,
+  deleted_at timestamptz
 );
 
 -- master_letter_types
@@ -171,21 +173,26 @@ create table if not exists public.surat_registrasi (
 set "request.jwt.claim.sub" = 'f0000000-0000-4000-8000-000000000001';
 
 -- Seed fixtures
-insert into public.profiles (id, role, is_active) values
-  ('f0000000-0000-4000-8000-000000000001', 'user', true),
-  ('f0000000-0000-4000-8000-000000000002', 'user', true);
-
 insert into public.master_entities (id, code, name) values
-  ('a0000000-0000-4000-8000-000000000010', 'ENT10', 'Entity Test');
+  ('a0000000-0000-4000-8000-000000000010', 'ENT10', 'Entity Test'),
+  ('a0000000-0000-4000-8000-000000000011', 'ENT11', 'Entity Cross');
 
 insert into public.master_offices (id, kedudukan) values
   ('a0000000-0000-4000-8000-000000000030', 'Pusat'),
-  ('a0000000-0000-4000-8000-000000000031', 'Cabang'),
-  ('a0000000-0000-4000-8000-000000000032', 'Cabang'),
-  ('a0000000-0000-4000-8000-000000000033', 'Cabang');
+  ('a0000000-0000-4000-8000-000000000031', 'KC'),
+  ('a0000000-0000-4000-8000-000000000032', 'KCP'),
+  ('a0000000-0000-4000-8000-000000000033', 'KC'),
+  ('a0000000-0000-4000-8000-000000000034', 'Kost');
 
 insert into public.master_departments (id, entity_id) values
-  ('a0000000-0000-4000-8000-000000000020', 'a0000000-0000-4000-8000-000000000010');
+  ('a0000000-0000-4000-8000-000000000020', 'a0000000-0000-4000-8000-000000000010'),
+  ('a0000000-0000-4000-8000-000000000021', 'a0000000-0000-4000-8000-000000000011');
+
+insert into public.profiles (id, role, office_id, department_id, is_active) values
+  ('f0000000-0000-4000-8000-000000000001', 'user', 'a0000000-0000-4000-8000-000000000031', 'a0000000-0000-4000-8000-000000000020', true),
+  ('f0000000-0000-4000-8000-000000000002', 'user', 'a0000000-0000-4000-8000-000000000032', 'a0000000-0000-4000-8000-000000000020', true),
+  ('f0000000-0000-4000-8000-000000000003', 'user', 'a0000000-0000-4000-8000-000000000031', 'a0000000-0000-4000-8000-000000000021', true),
+  ('f0000000-0000-4000-8000-000000000004', 'admin', 'a0000000-0000-4000-8000-000000000033', 'a0000000-0000-4000-8000-000000000020', true);
 
 insert into public.master_letter_types (id, name, code) values
   ('a0000000-0000-4000-8000-000000000050', 'Aset', 'ASET'),
@@ -196,11 +203,40 @@ insert into public.master_dept_letter_types (dept_id, letter_type_id) values
   ('a0000000-0000-4000-8000-000000000020', 'a0000000-0000-4000-8000-000000000052');
 
 insert into public.master_projects (id, office_id) values
-  ('a0000000-0000-4000-8000-000000000040', 'a0000000-0000-4000-8000-000000000032');
+  ('a0000000-0000-4000-8000-000000000040', 'a0000000-0000-4000-8000-000000000032'),
+  ('a0000000-0000-4000-8000-000000000041', 'a0000000-0000-4000-8000-000000000034');
 
-insert into public.form_usages (id, name, request_category, scope_type) values
-  ('a0000000-0000-4000-8000-000000000060', 'Pengadaan Aset Cabang', 'asset', 'cabang'),
-  ('a0000000-0000-4000-8000-000000000061', 'Permohonan Unit',       'unit',  'cabang');
+-- Need to mock validate_form_usage_for_actor correctly later, but we need
+-- basic schema for the migration. The test runner uses a simplified schema.
+-- We'll create a mock for validate_form_usage_for_actor since we don't have
+-- the full policy/usage tables.
+create or replace function public.validate_form_usage_for_actor(
+  p_usage_id uuid,
+  p_requested_department_id uuid default null
+)
+returns jsonb language plpgsql security definer set search_path = public as $f$
+declare
+  v_actor uuid := auth.uid();
+  v_dept uuid;
+  v_role text;
+  v_category text;
+  v_status text;
+begin
+  select department_id, role into v_dept, v_role from public.profiles where id = v_actor;
+  select request_category, status into v_category, v_status from public.form_usages where id = p_usage_id;
+  if v_status <> 'active' then raise exception 'Usage tidak aktif.'; end if;
+  if v_role <> 'admin' and p_requested_department_id is distinct from v_dept then
+     raise exception 'Unauthorized department';
+  end if;
+  return jsonb_build_object('request_category', v_category);
+end;
+$f$;
+
+insert into public.form_usages (id, name, request_category, scope_type, status) values
+  ('a0000000-0000-4000-8000-000000000060', 'Pengadaan Aset Cabang', 'asset', 'cabang', 'active'),
+  ('a0000000-0000-4000-8000-000000000061', 'Permohonan Unit',       'unit',  'cabang', 'active'),
+  ('a0000000-0000-4000-8000-000000000062', 'Pengadaan Aset Dept Auth', 'asset', 'cabang', 'active'),
+  ('a0000000-0000-4000-8000-000000000063', 'Pengadaan Aset Inactive', 'asset', 'cabang', 'draft');
 
 insert into public.form_usage_steps (id, usage_id) values
   ('a0000000-0000-4000-8000-000000000070', 'a0000000-0000-4000-8000-000000000060'),
@@ -210,9 +246,15 @@ insert into public.master_penggunaan_detail (id, request_categories) values
   ('a0000000-0000-4000-8000-000000000080', array['asset', 'non_asset']);
 
 -- Pre-migration reservations to test backfill
-insert into public.surat_reservations (id, entity_id, office_id, project_id, dept_id, year, no_urut) values
-  ('b0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000030', null, 'a0000000-0000-4000-8000-000000000020', 2026, 1),
-  ('b0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000032', 'a0000000-0000-4000-8000-000000000040', null, 2026, 2);
+-- 13 Pusat reservations
+insert into public.surat_reservations (id, entity_id, office_id, project_id, dept_id, year, no_urut)
+select
+  gen_random_uuid(), 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000030', null, 'a0000000-0000-4000-8000-000000000020', 2026, generate_series(1, 13);
+
+-- 6 Cabang reservations (KC/KCP)
+insert into public.surat_reservations (id, entity_id, office_id, project_id, dept_id, year, no_urut)
+select
+  gen_random_uuid(), 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000032', 'a0000000-0000-4000-8000-000000000040', null, 2026, generate_series(1, 6);
 
 ${migration}
 
