@@ -41,6 +41,7 @@ import { useSuratWizardStepper } from "@/features/surat/registration/lib/use-sur
 import { validateStep1ForNumberGeneration } from "@/features/surat/registration/lib/surat-wizard-validation";
 import { validateSuratSubmit } from "@/features/surat/registration/lib/surat-submit-validation";
 import { buildInitialAttachmentMeta, buildRegistrationSubmitPayload } from "@/features/surat/registration/lib/surat-submit-command";
+import { executeExternalRevisionSubmit, getExternalRevisionSuccessDescription } from "@/features/surat/registration/services/external-revision-submit";
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -2151,24 +2152,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setIsLoading(true);
     try {
       if (externalRevision?.eventId && activeDraftId) {
-        const result = await suratRegistrationApi.submitExternalSubmissionRevision({
+        const result = await executeExternalRevisionSubmit({
           revisionEventId: externalRevision.eventId,
           draftId: activeDraftId,
           formData: effectiveFormData,
-          requesterNote: String(effectiveFormInputData.requester_revision_note || "").trim(),
+          requesterNote: effectiveFormInputData.requester_revision_note as string | null | undefined,
         });
-        if (result.next_step !== "recommendation") {
-          await suratRecommendationApi.autoApproveRequesterFirstStep(result.surat_id).catch((autoApproveError) => {
-            console.error("Gagal melanjutkan auto-approval revisi pemohon:", autoApproveError);
-          });
-        }
         toast({
           title: "Perbaikan berhasil dikirim",
-          description: result.next_step === "recommendation"
-            ? "Rekomendasi lama dibuka kembali dan menunggu penyesuaian tim rekomendasi."
-            : result.next_step === "unit_allocation_or_approval"
-              ? "Jumlah unit diperbarui. Alokasi akan diperiksa kembali sebelum approval."
-              : "Approval dimulai ulang menggunakan data revisi terbaru.",
+          description: getExternalRevisionSuccessDescription(result.next_step),
         });
         onSuccess(generatedNoSurat || "", formData.judul_surat);
         resetForm();
