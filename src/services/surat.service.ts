@@ -6,6 +6,7 @@ import {
   classifyRegistrationDraftAttachments,
   formatCreateRegistrasiError,
 } from "@/lib/registration-draft-attachment-classification";
+import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -635,19 +636,69 @@ export const suratService = {
         }
       }
 
+      // MRN-22: branch-asset virtual fallback (scope "000")
+      // Only applies when the branch has no real projects and the payload carries
+      // the canonical marker.  Unit, non_unit, non_asset, and pusat are NOT
+      // affected; the database triggers will re-verify independently.
+      //
+      // branchHasRegisteredProjects is queried here so the predicate is honest
+      // about the source of truth (master data), not a hardcoded false.
+      let fallbackEligible = false;
       if (!isPusat && !projectIdClean) {
+        const projectsRes = await supabase
+          .from("master_projects")
+          .select("id", { count: "exact", head: true })
+          .eq("office_id", officeIdClean);
+        const branchHasProjects = (projectsRes.count ?? 0) > 0;
+        fallbackEligible = isBranchAssetFallback({
+          officeKedudukan: office?.kedudukan,
+          requestCategory,
+          formUsageId: payload.form_usage_id,
+          branchHasRegisteredProjects: branchHasProjects,
+          projectId: payload.project_id,
+          projectIsDefault: payload.form_input_data?.project_is_default,
+          projectCode: payload.form_input_data?.project_code,
+          projectName: payload.form_input_data?.project_name,
+        });
+      }
+
+      if (!isPusat && !projectIdClean && !fallbackEligible) {
         throw new Error("Pilih proyek cabang sebelum mengambil nomor surat.");
       }
 
       // PERUBAHAN UTAMA: tambah p_dept_id agar nomor urut dimulai dari 001 per dept/project
-      const { data: nextNumber, error: rpcError } = await supabase.rpc("generate_new_letter_number", {
-        p_entity_id:  payload.entity_id,
-        p_type_id:    payload.letter_type_id,
-        p_office_id:  officeIdClean,
-        p_project_id: projectIdClean,
-        p_user_id:    user?.id,
-        p_dept_id:    deptIdClean,
-      });
+      // MRN-22: 7-parameter RPC is the only path that may create a
+      // branch_asset_000 reservation.  We forward the authoritative
+      // form_usage_id so the database can resolve request_category
+      // itself instead of trusting a client flag.
+      // For Pusat, branch with project, or legacy usage, we use the
+      // original 6-parameter RPC.
+      let nextNumber, rpcError;
+
+      if (fallbackEligible) {
+        const { data: n, error: e } = await supabase.rpc("generate_new_letter_number", {
+          p_entity_id:          payload.entity_id,
+          p_type_id:            payload.letter_type_id,
+          p_office_id:          officeIdClean,
+          p_project_id:         projectIdClean,
+          p_user_id:            user?.id,
+          p_dept_id:            deptIdClean,
+          p_form_usage_id:      this.cleanUuid(payload.form_usage_id),
+        });
+        nextNumber = n;
+        rpcError = e;
+      } else {
+        const { data: n, error: e } = await supabase.rpc("generate_new_letter_number", {
+          p_entity_id:          payload.entity_id,
+          p_type_id:            payload.letter_type_id,
+          p_office_id:          officeIdClean,
+          p_project_id:         projectIdClean,
+          p_user_id:            user?.id,
+          p_dept_id:            deptIdClean,
+        });
+        nextNumber = n;
+        rpcError = e;
+      }
 
       if (rpcError) throw new Error("Gagal menerbitkan nomor urut.");
 
