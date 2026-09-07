@@ -737,7 +737,7 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
 
 export const executeMarisonEmployeeSync = async ({ supabase, employees, branches, defaultPassword }) => {
   if (typeof defaultPassword !== "string" || defaultPassword.length < 8) {
-    throw new Error("STAGING_DEFAULT_USER_PASSWORD belum dikonfigurasi dengan aman.");
+    throw new Error("Konfigurasi password default belum memenuhi persyaratan keamanan.");
   }
   const branchResult = await syncBranches(supabase, branches, false);
   const state = await loadSyncState(supabase);

@@ -2776,7 +2776,13 @@ const syncMarisonProjects = async (req) => {
   }
 };
 
-const assertMarisonEmployeeSyncAvailable = () => {
+const marisonDefaultPassword = () => {
+  const value = process.env.STAGING_DEFAULT_USER_PASSWORD;
+  if (typeof value !== "string" || value.length < 8) return null;
+  return value;
+};
+
+const assertMarisonEmployeeSyncInfraAvailable = () => {
   if (marisonDeploymentEnvironment !== "staging") {
     const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
     err.status = 403;
@@ -2789,9 +2795,18 @@ const assertMarisonEmployeeSyncAvailable = () => {
   }
 };
 
+const assertMarisonEmployeeSyncWriteAvailable = () => {
+  assertMarisonEmployeeSyncInfraAvailable();
+  if (!marisonDefaultPassword()) {
+    const err = new Error("Konfigurasi sinkronisasi karyawan belum lengkap.");
+    err.status = 503;
+    throw err;
+  }
+};
+
 const previewMarisonEmployees = async (req) => {
   await requireAdminUser(getBearerToken(req));
-  assertMarisonEmployeeSyncAvailable();
+  assertMarisonEmployeeSyncInfraAvailable();
   const source = await getMarisonEmployeeSyncSource();
   return previewMarisonEmployeeSync({ supabase, ...source });
 };
@@ -2799,7 +2814,7 @@ const previewMarisonEmployees = async (req) => {
 const syncMarisonEmployees = async (req) => {
   assertSameOrigin(req);
   const user = await requireAdminUser(getBearerToken(req));
-  assertMarisonEmployeeSyncAvailable();
+  assertMarisonEmployeeSyncWriteAvailable();
   const payload = await readJsonBody(req, 4096);
   if (payload?.confirm !== true) {
     const err = new Error("Konfirmasi sinkronisasi diperlukan.");
@@ -2823,7 +2838,7 @@ const syncMarisonEmployees = async (req) => {
       operation: () => executeMarisonEmployeeSync({
         supabase,
         ...source,
-        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+        defaultPassword: marisonDefaultPassword(),
       }),
     });
   } finally {
@@ -2832,7 +2847,7 @@ const syncMarisonEmployees = async (req) => {
 };
 
 const syncMarisonDirectoryFromCron = async (req) => {
-  assertMarisonEmployeeSyncAvailable();
+  assertMarisonEmployeeSyncInfraAvailable();
   if (marisonSyncCronToken.length < 32) {
     const err = new Error("Token cron sinkronisasi belum dikonfigurasi.");
     err.status = 503;
@@ -2844,6 +2859,7 @@ const syncMarisonDirectoryFromCron = async (req) => {
     err.status = 401;
     throw err;
   }
+  assertMarisonEmployeeSyncWriteAvailable();
   if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
     const err = new Error("Sinkronisasi data external sedang berjalan.");
     err.status = 409;
@@ -2861,7 +2877,7 @@ const syncMarisonDirectoryFromCron = async (req) => {
       operation: () => executeMarisonEmployeeSync({
         supabase,
         ...source,
-        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
+        defaultPassword: marisonDefaultPassword(),
       }),
     });
     const projectSource = await getMarisonProjectSyncSource();
