@@ -252,9 +252,10 @@ describe("Marison employee sync", () => {
     const client = read("src/services/marison-integration.service.ts");
     const dockerfile = read("dockerfile");
 
-    expect(server).toContain("assertMarisonEmployeeSyncAvailable");
+    expect(server).toContain("assertMarisonEmployeeSyncInfraAvailable");
+    expect(server).toContain("assertMarisonEmployeeSyncWriteAvailable");
     expect(server).toContain("await requireAdminUser(getBearerToken(req))");
-    expect(server).toContain("STAGING_DEFAULT_USER_PASSWORD");
+    expect(server).toContain("marisonDefaultPassword");
     expect(server).toContain("marisonEmployeeSyncInFlight");
     expect(client).not.toContain("STAGING_DEFAULT_USER_PASSWORD");
     expect(client).not.toContain("marison123");
