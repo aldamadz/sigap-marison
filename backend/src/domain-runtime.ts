@@ -203,6 +203,8 @@ export const setDomainRuntimeDependenciesForTest = (dependencies) => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
   if (dependencies.supabase) supabase = dependencies.supabase;
   if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
+  if (dependencies.getMarisonEmployeeSyncSource) getMarisonEmployeeSyncSource = dependencies.getMarisonEmployeeSyncSource;
+  if (dependencies.getMarisonProjectSyncSource) getMarisonProjectSyncSource = dependencies.getMarisonProjectSyncSource;
 };
 
 const getMailTransporter = () => {
@@ -2659,7 +2661,7 @@ const getAllMarisonCollection = async (environment, pathname) => {
   throw err;
 };
 
-const getMarisonEmployeeSyncSource = async () => {
+let getMarisonEmployeeSyncSource = async () => {
   const branches = await getAllMarisonCollection("staging", "/branches");
   const employees = await getAllMarisonCollection("staging", "/employees");
   return { employees, branches };
@@ -2669,7 +2671,7 @@ const getMarisonBranchSyncSource = async () => (
   getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")
 );
 
-const getMarisonProjectSyncSource = async () => {
+let getMarisonProjectSyncSource = async () => {
   const [branches, projects] = await Promise.all([
     getAllMarisonCollection(marisonDeploymentEnvironment, "/branches"),
     getAllMarisonCollection(marisonDeploymentEnvironment, "/projects"),
@@ -2789,7 +2791,7 @@ const assertMarisonEmployeeSyncInfraAvailable = () => {
     throw err;
   }
   if (!supabase || !serviceRoleKey) {
-    const err = new Error("Service role staging belum dikonfigurasi.");
+    const err = new Error("Layanan sinkronisasi tidak tersedia.");
     err.status = 500;
     throw err;
   }
@@ -2849,7 +2851,7 @@ const syncMarisonEmployees = async (req) => {
 const syncMarisonDirectoryFromCron = async (req) => {
   assertMarisonEmployeeSyncInfraAvailable();
   if (marisonSyncCronToken.length < 32) {
-    const err = new Error("Token cron sinkronisasi belum dikonfigurasi.");
+    const err = new Error("Layanan sinkronisasi tidak tersedia.");
     err.status = 503;
     throw err;
   }

@@ -36,7 +36,7 @@ describe("Hybrid Marison master sync", () => {
     const sync = read("server/marison-employee-sync.mjs");
 
     const sourceLoader = server.slice(
-      server.indexOf("const getMarisonEmployeeSyncSource"),
+      server.indexOf("let getMarisonEmployeeSyncSource"),
       server.indexOf("const getMarisonBranchSyncSource"),
     );
     expect(sourceLoader.indexOf('"/branches"')).toBeLessThan(sourceLoader.indexOf('"/employees"'));
