@@ -1,5 +1,5 @@
 import { History } from "lucide-react";
-import type { DocsEntry } from "../types";
+import type { DocsEntry, DocsSection } from "../types";
 import { DOCS_UPDATED_AT, DOCS_VERSION } from "../metadata";
 
 export const historyDocs: DocsEntry = {
@@ -30,3 +30,28 @@ export const historyDocs: DocsEntry = {
       "Jika dokumen lama tidak muncul, perluas rentang tanggal pencarian.",
     ],
   };
+
+export const historyDetailSections: DocsSection[] = [
+    {
+      type: "table",
+      title: "Filter riwayat",
+      columns: ["Filter", "Default", "Fungsi"],
+      rows: [
+        ["Tanggal", "Bulan berjalan, tanggal 1 sampai hari ini.", "Membatasi riwayat agar daftar tidak terlalu panjang."],
+        ["Tindakan", "Semua.", "Memisahkan riwayat Setuju dan Tolak."],
+        ["Pencarian", "Kosong.", "Mencari berdasarkan judul atau nomor surat."],
+        ["Detail", "Dibuka per item.", "Menampilkan ringkasan, timeline, dokumen, dan lampiran."],
+      ],
+    },
+    {
+      type: "table",
+      title: "Data yang muncul",
+      columns: ["Data", "Arti"],
+      rows: [
+        ["Nomor surat", "Nomor resmi atau nomor draft yang pernah melibatkan user."],
+        ["Judul", "Nama permohonan/dokumen."],
+        ["Peran", "User sebagai pembuat, tim pemeriksa, signer, atau pihak yang pernah memproses."],
+        ["Waktu aksi", "Tanggal ketika user terlibat atau dokumen berubah status."],
+      ],
+    },
+  ];

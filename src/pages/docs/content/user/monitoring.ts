@@ -1,5 +1,5 @@
 import { SearchCheck } from "lucide-react";
-import type { DocsEntry } from "../types";
+import type { DocsEntry, DocsSection } from "../types";
 import { DOCS_UPDATED_AT, DOCS_VERSION } from "../metadata";
 
 export const monitoringDocs: DocsEntry = {
@@ -32,3 +32,28 @@ export const monitoringDocs: DocsEntry = {
       "Jika status ditolak, proses berhenti dan tidak masuk hitungan pending tahap berikutnya.",
     ],
   };
+
+export const monitoringDetailSections: DocsSection[] = [
+    {
+      type: "table",
+      title: "Membaca status pengajuan",
+      columns: ["Status", "Arti", "Langkah berikutnya"],
+      rows: [
+        ["Draft", "Nomor sudah dipesan tetapi surat belum dikirim.", "Lanjutkan registrasi atau batalkan draft."],
+        ["Proses", "Surat sedang menunggu tanda tangan atau pemeriksaan.", "Pantau step aktif dan catatan terbaru."],
+        ["Selesai", "Seluruh tanda tangan selesai.", "Buka PDF final bila perlu arsip."],
+        ["Ditolak", "Salah satu tahap menolak dan alur berhenti.", "Baca alasan, lalu buat pengajuan baru jika perlu."],
+      ],
+    },
+    {
+      type: "table",
+      title: "File pada status pengajuan",
+      columns: ["File", "Kapan tersedia", "Catatan"],
+      rows: [
+        ["PDF utama", "Setelah worker PDF selesai membuat preview.", "Berisi nomor, data pemohon, isi dokumen, dan tanda tangan terbaru."],
+        ["Snapshot", "Setelah step approval tertentu diproses.", "Dipakai untuk membandingkan kondisi dokumen pada tahap tertentu."],
+        ["Lampiran pemohon", "Setelah registrasi dikirim.", "File pendukung awal pengajuan."],
+        ["Lampiran approval/tim pemeriksa", "Setelah tim pemeriksa atau approver mengunggah file.", "Bisa berubah jika file diganti pada revisi."],
+      ],
+    },
+  ];

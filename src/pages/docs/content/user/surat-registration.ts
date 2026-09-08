@@ -233,7 +233,7 @@ export const suratRegistrationDocs: DocsEntry = {
     ],
   };
 
-export const surat_registrationDetailSections: DocsSection[] = [
+export const suratRegistrationDetailSections: DocsSection[] = [
     {
       type: "table",
       title: "Membaca nomor surat",

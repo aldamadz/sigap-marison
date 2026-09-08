@@ -33,7 +33,7 @@ export const documentsAttachmentsDocs: DocsEntry = {
     ],
   };
 
-export const documents_attachmentsDetailSections: DocsSection[] = [
+export const documentsAttachmentsDetailSections: DocsSection[] = [
     {
       type: "table",
       title: "Jenis file surat",

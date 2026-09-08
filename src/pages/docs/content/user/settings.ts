@@ -1,5 +1,5 @@
 import { Settings } from "lucide-react";
-import type { DocsEntry } from "../types";
+import type { DocsEntry, DocsSection } from "../types";
 import { DOCS_UPDATED_AT, DOCS_VERSION } from "../metadata";
 
 export const settingsDocs: DocsEntry = {
@@ -49,3 +49,18 @@ export const settingsDocs: DocsEntry = {
       },
     ],
   };
+
+export const settingsDetailSections: DocsSection[] = [
+    {
+      type: "table",
+      title: "Data profil yang berdampak ke sistem",
+      columns: ["Data", "Dipakai untuk", "Siapa yang mengubah"],
+      rows: [
+        ["Nama", "Tampilan profil, dokumen, email, audit, dan tanda tangan.", "User/admin sesuai izin."],
+        ["Jabatan", "Label tanda tangan dan informasi email.", "Admin jika mengikuti data HRD."],
+        ["Departemen", "Hak akses, kandidat signer, SLA, dan nomor surat pusat.", "Admin."],
+        ["Kantor", "Hak akses cabang, kandidat BM/SPV, dan nomor surat cabang.", "Admin."],
+        ["Tema", "Light/dark/system mode.", "User sendiri."],
+      ],
+    },
+  ];

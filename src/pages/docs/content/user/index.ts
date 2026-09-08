@@ -1,15 +1,15 @@
 import { dashboardDocs } from "./dashboard";
 import { agendaDocs, agendaDetailSections } from "./agenda";
 import { calendarDocs, calendarDetailSections } from "./calendar";
-import { suratRegistrationDocs, surat_registrationDetailSections } from "./surat-registration";
+import { suratRegistrationDocs, suratRegistrationDetailSections } from "./surat-registration";
 import { requestCategoriesDocs } from "./request-categories";
-import { approvalInboxDocs, approval_inboxDetailSections } from "./approval-inbox";
+import { approvalInboxDocs, approvalInboxDetailSections } from "./approval-inbox";
 import { followUpDocs } from "./follow-up";
 import { recommendationTasksDocs } from "./recommendation-tasks";
-import { monitoringDocs } from "./monitoring";
-import { documentsAttachmentsDocs, documents_attachmentsDetailSections } from "./documents-attachments";
-import { historyDocs } from "./history";
-import { settingsDocs } from "./settings";
+import { monitoringDocs, monitoringDetailSections } from "./monitoring";
+import { documentsAttachmentsDocs, documentsAttachmentsDetailSections } from "./documents-attachments";
+import { historyDocs, historyDetailSections } from "./history";
+import { settingsDocs, settingsDetailSections } from "./settings";
 import type { DocsEntry, DocsSection } from "../types";
 
 export type UserDocsId =
@@ -44,7 +44,10 @@ export const USER_DOCS: DocsEntry[] = [
 export const USER_DETAIL_SECTIONS_BY_ID: Readonly<Partial<Record<UserDocsId, DocsSection[]>>> = {
   "agenda": agendaDetailSections,
   "calendar": calendarDetailSections,
-  "surat-registration": surat_registrationDetailSections,
-  "approval-inbox": approval_inboxDetailSections,
-  "documents-attachments": documents_attachmentsDetailSections,
+  "surat-registration": suratRegistrationDetailSections,
+  "approval-inbox": approvalInboxDetailSections,
+  "monitoring": monitoringDetailSections,
+  "documents-attachments": documentsAttachmentsDetailSections,
+  "history": historyDetailSections,
+  "settings": settingsDetailSections,
 };

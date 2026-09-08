@@ -63,68 +63,6 @@ export {
 };
 const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
   ...USER_DETAIL_SECTIONS_BY_ID,
-  monitoring: [
-    {
-      type: "table",
-      title: "Membaca status pengajuan",
-      columns: ["Status", "Arti", "Langkah berikutnya"],
-      rows: [
-        ["Draft", "Nomor sudah dipesan tetapi surat belum dikirim.", "Lanjutkan registrasi atau batalkan draft."],
-        ["Proses", "Surat sedang menunggu tanda tangan atau pemeriksaan.", "Pantau step aktif dan catatan terbaru."],
-        ["Selesai", "Seluruh tanda tangan selesai.", "Buka PDF final bila perlu arsip."],
-        ["Ditolak", "Salah satu tahap menolak dan alur berhenti.", "Baca alasan, lalu buat pengajuan baru jika perlu."],
-      ],
-    },
-    {
-      type: "table",
-      title: "File pada status pengajuan",
-      columns: ["File", "Kapan tersedia", "Catatan"],
-      rows: [
-        ["PDF utama", "Setelah worker PDF selesai membuat preview.", "Berisi nomor, data pemohon, isi dokumen, dan tanda tangan terbaru."],
-        ["Snapshot", "Setelah step approval tertentu diproses.", "Dipakai untuk membandingkan kondisi dokumen pada tahap tertentu."],
-        ["Lampiran pemohon", "Setelah registrasi dikirim.", "File pendukung awal pengajuan."],
-        ["Lampiran approval/tim pemeriksa", "Setelah tim pemeriksa atau approver mengunggah file.", "Bisa berubah jika file diganti pada revisi."],
-      ],
-    },
-  ],
-  history: [
-    {
-      type: "table",
-      title: "Filter riwayat",
-      columns: ["Filter", "Default", "Fungsi"],
-      rows: [
-        ["Tanggal", "Bulan berjalan, tanggal 1 sampai hari ini.", "Membatasi riwayat agar daftar tidak terlalu panjang."],
-        ["Tindakan", "Semua.", "Memisahkan riwayat Setuju dan Tolak."],
-        ["Pencarian", "Kosong.", "Mencari berdasarkan judul atau nomor surat."],
-        ["Detail", "Dibuka per item.", "Menampilkan ringkasan, timeline, dokumen, dan lampiran."],
-      ],
-    },
-    {
-      type: "table",
-      title: "Data yang muncul",
-      columns: ["Data", "Arti"],
-      rows: [
-        ["Nomor surat", "Nomor resmi atau nomor draft yang pernah melibatkan user."],
-        ["Judul", "Nama permohonan/dokumen."],
-        ["Peran", "User sebagai pembuat, tim pemeriksa, signer, atau pihak yang pernah memproses."],
-        ["Waktu aksi", "Tanggal ketika user terlibat atau dokumen berubah status."],
-      ],
-    },
-  ],
-  settings: [
-    {
-      type: "table",
-      title: "Data profil yang berdampak ke sistem",
-      columns: ["Data", "Dipakai untuk", "Siapa yang mengubah"],
-      rows: [
-        ["Nama", "Tampilan profil, dokumen, email, audit, dan tanda tangan.", "User/admin sesuai izin."],
-        ["Jabatan", "Label tanda tangan dan informasi email.", "Admin jika mengikuti data HRD."],
-        ["Departemen", "Hak akses, kandidat signer, SLA, dan nomor surat pusat.", "Admin."],
-        ["Kantor", "Hak akses cabang, kandidat BM/SPV, dan nomor surat cabang.", "Admin."],
-        ["Tema", "Light/dark/system mode.", "User sendiri."],
-      ],
-    },
-  ],
   "admin-users": [
     {
       type: "table",

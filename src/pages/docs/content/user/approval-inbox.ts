@@ -164,7 +164,7 @@ export const approvalInboxDocs: DocsEntry = {
     ],
   };
 
-export const approval_inboxDetailSections: DocsSection[] = [
+export const approvalInboxDetailSections: DocsSection[] = [
     {
       type: "table",
       title: "Kenapa tombol aksi terkunci",

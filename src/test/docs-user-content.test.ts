@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -13,17 +14,17 @@ import {
 } from "../pages/docs/docsContent";
 import { USER_DETAIL_SECTIONS_BY_ID, USER_DOCS } from "../pages/docs/content";
 import { dashboardDocs } from "../pages/docs/content/user/dashboard";
-import { agendaDocs } from "../pages/docs/content/user/agenda";
-import { calendarDocs } from "../pages/docs/content/user/calendar";
-import { suratRegistrationDocs } from "../pages/docs/content/user/surat-registration";
+import { agendaDetailSections, agendaDocs } from "../pages/docs/content/user/agenda";
+import { calendarDetailSections, calendarDocs } from "../pages/docs/content/user/calendar";
+import { suratRegistrationDetailSections, suratRegistrationDocs } from "../pages/docs/content/user/surat-registration";
 import { requestCategoriesDocs } from "../pages/docs/content/user/request-categories";
-import { approvalInboxDocs } from "../pages/docs/content/user/approval-inbox";
+import { approvalInboxDetailSections, approvalInboxDocs } from "../pages/docs/content/user/approval-inbox";
 import { followUpDocs } from "../pages/docs/content/user/follow-up";
 import { recommendationTasksDocs } from "../pages/docs/content/user/recommendation-tasks";
-import { monitoringDocs } from "../pages/docs/content/user/monitoring";
-import { documentsAttachmentsDocs } from "../pages/docs/content/user/documents-attachments";
-import { historyDocs } from "../pages/docs/content/user/history";
-import { settingsDocs } from "../pages/docs/content/user/settings";
+import { monitoringDetailSections, monitoringDocs } from "../pages/docs/content/user/monitoring";
+import { documentsAttachmentsDetailSections, documentsAttachmentsDocs } from "../pages/docs/content/user/documents-attachments";
+import { historyDetailSections, historyDocs } from "../pages/docs/content/user/history";
+import { settingsDetailSections, settingsDocs } from "../pages/docs/content/user/settings";
 
 const expectedIds = [
   "dashboard", "agenda", "calendar", "surat-registration", "request-categories", "approval-inbox",
@@ -49,6 +50,26 @@ const canonicalIcons = {
   "request-categories": "Tag", "approval-inbox": "Inbox", "follow-up": "ClipboardCheck", "recommendation-tasks": "FileCheck2",
   monitoring: "SearchCheck", "documents-attachments": "FileCheck2", history: "History", settings: "Settings",
 } as const;
+const detailSectionsById = {
+  agenda: agendaDetailSections,
+  calendar: calendarDetailSections,
+  "surat-registration": suratRegistrationDetailSections,
+  "approval-inbox": approvalInboxDetailSections,
+  monitoring: monitoringDetailSections,
+  "documents-attachments": documentsAttachmentsDetailSections,
+  history: historyDetailSections,
+  settings: settingsDetailSections,
+};
+const normalizedRuntime = () => ({
+  userDocs: USER_DOCS.map((entry) => ({ ...entry, icon: entry.icon.displayName })),
+  resolved: Object.fromEntries(USER_DOCS.map((entry) => [entry.id, {
+    sections: getDocsEntrySections(entry),
+    sectionSlugs: getDocsEntrySections(entry).map(getDocsSectionSlug),
+    entrySlug: getDocsEntrySlug(entry),
+    path: getDocsEntryPath(entry),
+  }])),
+  allIds: ALL_DOCS.map((entry) => entry.id),
+});
 
 describe("docs-user-content D2A characterization", () => {
   it("preserves twelve user entries, order, audience, uniqueness, URLs, and slugs", () => {
@@ -73,17 +94,19 @@ describe("docs-user-content D2A characterization", () => {
     expect(USER_DOCS).toEqual(topicEntries);
   });
 
-  it("resolves every user topic sections and retains five user detail section registries", () => {
+  it("resolves every user topic sections and retains eight topic-owned detail registries", () => {
     expect(Object.keys(USER_DETAIL_SECTIONS_BY_ID)).toEqual([
-      "agenda", "calendar", "surat-registration", "approval-inbox", "documents-attachments",
+      "agenda", "calendar", "surat-registration", "approval-inbox", "monitoring", "documents-attachments", "history", "settings",
     ]);
+    expect(USER_DETAIL_SECTIONS_BY_ID).toStrictEqual(detailSectionsById);
     for (const entry of USER_DOCS) {
-      const sections = getDocsEntrySections(entry);
-      expect(sections.length).toBeGreaterThan(0);
-      expect(sections.map(getDocsSectionSlug)).toEqual(
-        getDocsEntrySections(FACADE_USER_DOCS.find((candidate) => candidate.id === entry.id)!).map(getDocsSectionSlug),
-      );
+      expect(getDocsEntrySections(entry).length).toBeGreaterThan(0);
     }
+  });
+
+  it("matches exact-base normalized runtime characterization", () => {
+    expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
+      .toBe("08b97a9ff6832d2e8c3e91eb26b8c87c662e9a26b3fe03bfca8735c17a1b6cf6");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {
@@ -100,6 +123,8 @@ describe("docs-user-content D2A boundaries", () => {
 
   it("leaves facade as registry compatibility layer and UI consumers on it", () => {
     const facade = readFileSync("src/pages/docs/docsContent.ts", "utf8");
+    expect(facade).not.toContain('audience: "user"');
+    for (const id of Object.keys(detailSectionsById)) expect(facade).not.toContain(`  ${id}: [`);
     expect(facade).not.toMatch(/export const USER_DOCS/);
     expect(readFileSync("src/pages/docs/PublicDocsPage.tsx", "utf8")).toContain('from "./docsContent"');
     expect(readFileSync("src/pages/docs/DocsArticle.tsx", "utf8")).toContain('from "./docsContent"');
