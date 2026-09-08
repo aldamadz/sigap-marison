@@ -9,7 +9,7 @@ const DETAIL_SECTIONS_BY_ID: Record<string, DocsSection[]> = {
   ...TROUBLESHOOTING_DETAIL_SECTIONS_BY_ID,
 };
 
-export const collectDocsSectionTitles = (sections: DocsSection[]) => {
+const collectDocsSectionTitles = (sections: DocsSection[]) => {
   const titles = new Set<string>();
   const visit = (section: DocsSection) => {
     titles.add(section.title);
@@ -19,7 +19,7 @@ export const collectDocsSectionTitles = (sections: DocsSection[]) => {
   return titles;
 };
 
-export const getDocsEntrySupportSections = (entry: DocsEntry): DocsSection[] => {
+const getDocsEntrySupportSections = (entry: DocsEntry): DocsSection[] => {
   const sections: DocsSection[] = [];
   if (entry.steps.length) {
     sections.push({ type: "steps", title: `Menggunakan ${entry.title}`, items: entry.steps });

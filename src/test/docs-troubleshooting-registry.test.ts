@@ -9,6 +9,7 @@ import { loginAccessDetailSections, loginAccessDocs } from "../pages/docs/conten
 import { notificationDetailSections, notificationDocs } from "../pages/docs/content/troubleshooting/notification";
 import { externalApiDocs } from "../pages/docs/content/troubleshooting/external-api";
 import { deployProductionDocs } from "../pages/docs/content/troubleshooting/deploy-production";
+import * as docsFacade from "../pages/docs/docsContent";
 
 const ids = ["login-access", "document-file", "notification", "external-api", "deploy-production"];
 const normalized = () => {
@@ -52,5 +53,11 @@ describe("docs-troubleshooting-registry D2C", () => {
     expect(facade).not.toMatch(/lucide-react|DocsEntry|USER_DOCS|ADMIN_DOCS|TROUBLESHOOTING_DOCS|ALL_DOCS|getDocsEntrySections/);
     for (const consumer of ["src/pages/docs/PublicDocsPage.tsx", "src/pages/docs/DocsArticle.tsx"]) expect(readFileSync(consumer, "utf8")).toContain('from "./docsContent"');
     expect(readFileSync("src/pages/docs/content/section-resolver.ts", "utf8")).not.toContain("docsContent");
+  });
+
+  it("exports only public resolver from facade", () => {
+    expect(docsFacade).toHaveProperty("getDocsEntrySections");
+    expect(docsFacade).not.toHaveProperty("collectDocsSectionTitles");
+    expect(docsFacade).not.toHaveProperty("getDocsEntrySupportSections");
   });
 });
