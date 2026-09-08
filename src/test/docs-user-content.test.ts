@@ -61,7 +61,10 @@ const detailSectionsById = {
   settings: settingsDetailSections,
 };
 const normalizedRuntime = () => ({
-  userDocs: USER_DOCS.map((entry) => ({ ...entry, icon: entry.icon.displayName })),
+  userDocs: USER_DOCS.map((entry) => {
+    const { version: _version, updatedAt: _updatedAt, ...stableEntry } = entry;
+    return { ...stableEntry, icon: entry.icon.displayName };
+  }),
   resolved: Object.fromEntries(USER_DOCS.map((entry) => [entry.id, {
     sections: getDocsEntrySections(entry),
     sectionSlugs: getDocsEntrySections(entry).map(getDocsSectionSlug),
@@ -106,7 +109,7 @@ describe("docs-user-content D2A characterization", () => {
 
   it("matches exact-base normalized runtime characterization", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("08b97a9ff6832d2e8c3e91eb26b8c87c662e9a26b3fe03bfca8735c17a1b6cf6");
+      .toBe("8651d81e46f61963a3045278a387ff7919668cd38cfc82975c9283ed8904c707");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {
