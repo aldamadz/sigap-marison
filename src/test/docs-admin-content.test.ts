@@ -60,7 +60,10 @@ const fileDetails = {
 };
 
 const normalized = () => ({
-  adminDocs: ADMIN_DOCS.map((entry) => ({ ...entry, icon: entry.icon.displayName })),
+  adminDocs: ADMIN_DOCS.map((entry) => {
+    const { version: _version, updatedAt: _updatedAt, ...stableEntry } = entry;
+    return { ...stableEntry, icon: entry.icon.displayName };
+  }),
   resolved: Object.fromEntries(ADMIN_DOCS.map((entry) => [entry.id, {
     sections: getDocsEntrySections(entry),
     sectionSlugs: getDocsEntrySections(entry).map((section) => getDocsSectionSlug(section)),
@@ -91,7 +94,7 @@ describe("docs-admin-content D2B", () => {
 
   it("matches exact-base runtime", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "b9fcdf35f86251af020e98701bbab618fddf4c87fad6b3b4c413974ed53341df",
+      "023fbf05e8c598593309c2d22f87110ea87854b08a0f4f74585deb079addd0c0",
     );
   });
 

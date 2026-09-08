@@ -2,6 +2,15 @@ import { type DocsChangelogEntry } from "../types";
 
 export const DOCS_CHANGELOG: DocsChangelogEntry[] = [
   {
+    version: "v1.26.0",
+    date: "8 September 2026",
+    changes: [
+      "Menata dokumentasi Pengguna, Admin, dan Bantuan menjadi modul per topik agar pembaruan tidak lagi bergantung pada satu file besar.",
+      "Memisahkan registry topik dan penyusun bagian dokumentasi agar navigasi, pencarian, serta pengembangan dokumentasi lebih mudah dipelihara.",
+      "Mempertahankan URL, urutan topik, ikon, isi, dan perilaku pencarian dokumentasi selama penataan struktur.",
+    ],
+  },
+  {
     version: "v1.25.0",
     date: "18 Agustus 2026",
     changes: [
