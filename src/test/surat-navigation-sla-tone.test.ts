@@ -10,14 +10,14 @@ describe("Layanan Surat SLA navigation tone", () => {
   });
 
   it("queries only active pending SLA breaches and refreshes on signature changes", () => {
-    const runtime = readFileSync("backend/src/domain-runtime.ts", "utf8");
+    const runtime = readFileSync("backend/src/modules/attention/attention-runtime.ts", "utf8");
     const provider = readFileSync("src/providers/AttentionProvider.tsx", "utf8");
     const migration = readFileSync(
       "supabase/migrations/20260814120000_user_active_sla_breach_count.sql",
       "utf8",
     );
 
-    expect(runtime).toContain('.rpc("get_user_active_sla_breach_count"');
+    expect(runtime).toContain('rpc("get_user_active_sla_breach_count"');
     expect(runtime).toContain("overdueSlaCount:");
     expect(migration).toContain("signature.is_signed = false");
     expect(migration).toContain("surat.status = 'PROSES'");
