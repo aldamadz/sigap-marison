@@ -124,7 +124,10 @@ describe("docs-user-content D2A boundaries", () => {
   it("leaves facade as registry compatibility layer and UI consumers on it", () => {
     const facade = readFileSync("src/pages/docs/docsContent.ts", "utf8");
     expect(facade).not.toContain('audience: "user"');
-    for (const id of Object.keys(detailSectionsById)) expect(facade).not.toContain(`  ${id}: [`);
+    for (const id of Object.keys(detailSectionsById)) {
+      const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      expect(facade).not.toMatch(new RegExp(`^\\s*(?:${escapedId}|"${escapedId}")\\s*:\\s*\\[`, "m"));
+    }
     expect(facade).not.toMatch(/export const USER_DOCS/);
     expect(readFileSync("src/pages/docs/PublicDocsPage.tsx", "utf8")).toContain('from "./docsContent"');
     expect(readFileSync("src/pages/docs/DocsArticle.tsx", "utf8")).toContain('from "./docsContent"');
