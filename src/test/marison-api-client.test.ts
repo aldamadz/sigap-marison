@@ -42,7 +42,13 @@ describe("Marison API client", () => {
     fetchImpl.mockResolvedValueOnce(json(token("fallback")));
     const fallback = await client.getMarisonAccessToken({ source_key: "new" }, "staging");
     expect(fallback).toBe("fallback");
-    await expect(makeClient(staging, vi.fn().mockResolvedValue(json({ message: "vendor" }, 401))).getMarisonAccessToken({ source_key: "x" }, "staging")).rejects.toThrow("vendor");
+    try {
+      await makeClient(staging, vi.fn().mockResolvedValue(json({ message: "vendor" }, 401))).getMarisonAccessToken({ source_key: "x" }, "staging");
+      expect.unreachable("Should throw");
+    } catch (e: any) {
+      expect(e.message).toBe("vendor");
+      expect(e.status).toBe(401);
+    }
     await expect(makeClient(staging, vi.fn().mockResolvedValue(json({ data: {} }))).getMarisonAccessToken({ source_key: "x" }, "staging")).rejects.toThrow("Response access token API eksternal Marison tidak valid.");
   });
 
@@ -65,7 +71,13 @@ describe("Marison API client", () => {
     const request = fetchImpl.mock.calls[1][1] as RequestInit;
     const canonical = `GET:/api/employees:key:${createHash("sha256").update(Buffer.alloc(0)).digest("hex")}:2026-09-08T00:00:00.000Z`;
     expect(request.headers).toEqual({ Authorization: "Bearer key", "X-Timestamp": "2026-09-08T00:00:00.000Z", "X-Signature": createHmac("sha512", "key").update(canonical).digest("hex") });
-    await expect(makeClient(staging, vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValueOnce(json({}, 503))).getMarisonProtectedJson("staging", "/branches")).rejects.toThrow("Gagal mengambil /api/branches dari API Marison.");
+    try {
+      await makeClient(staging, vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValueOnce(json({}, 503))).getMarisonProtectedJson("staging", "/branches");
+      expect.unreachable("Should throw");
+    } catch (e: any) {
+      expect(e.message).toBe("Gagal mengambil /api/branches dari API Marison.");
+      expect(e.status).toBe(503);
+    }
   });
 
   it("reads direct/nested collections, stops correctly, and fails after 100 pages", async () => {
