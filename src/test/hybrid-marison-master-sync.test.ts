@@ -69,7 +69,7 @@ describe("Hybrid Marison master sync", () => {
     expect(sync).toContain("Entitas proyek belum dipilih");
     expect(sync).toContain("fallbackOffice");
     expect(sync).not.toContain("defaultEntityId");
-    expect(server).toContain("masterProjectReviewCount");
+    expect(read("backend/src/modules/attention/attention-runtime.ts")).toContain("masterProjectReviewCount");
     const routes = read("backend/src/routes/domain.routes.ts");
     expect(routes).toContain('{ method: "GET", url: "/api/integrations/marison/projects/preview" }');
     expect(routes).toContain('{ method: "POST", url: "/api/integrations/marison/projects/sync" }');

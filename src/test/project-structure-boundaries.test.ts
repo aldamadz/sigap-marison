@@ -24,6 +24,29 @@ describe("project structure boundaries", () => {
     expect(bffRuntime).toContain("const BFF_QUERY_METHODS = new Set");
   });
 
+  it("keeps Inbox and Attention runtime outside domain-runtime shell", () => {
+    const runtime = read("backend/src/domain-runtime.ts");
+    const inboxRuntime = read("backend/src/modules/surat/inbox-runtime.ts");
+    const attentionRuntime = read("backend/src/modules/attention/attention-runtime.ts");
+
+    expect(runtime).toContain('from "./modules/surat/inbox-runtime.js"');
+    expect(runtime).toContain('from "./modules/attention/attention-runtime.js"');
+    expect(runtime).toContain("createInboxRuntime({ getSupabase: () => supabase, requireSupabaseUser })");
+    expect(runtime).toContain("createAttentionRuntime({ getSupabase: () => supabase, requireSupabaseUser })");
+    expect(runtime).not.toContain("const INBOX_DETAIL_SELECT");
+    expect(runtime).not.toContain("const getAttentionStateForUser");
+    expect(inboxRuntime).toContain("export const createInboxRuntime");
+    expect(attentionRuntime).toContain("export const createAttentionRuntime");
+    expect(inboxRuntime).not.toContain('from "../../domain-runtime');
+    expect(attentionRuntime).not.toContain('from "../../domain-runtime"');
+    expect(inboxRuntime).not.toContain("@ts-nocheck");
+    expect(inboxRuntime).not.toMatch(/\bany\b/);
+    expect(inboxRuntime).not.toContain("@ts-ignore");
+    expect(attentionRuntime).not.toContain("@ts-nocheck");
+    expect(attentionRuntime).not.toMatch(/\bany\b/);
+    expect(attentionRuntime).not.toContain("@ts-ignore");
+  });
+
   it("routes surat page dependencies through feature API facades", () => {
     const suratForm = read("src/components/surat/SuratForm.tsx");
     const inboxPage = read("src/pages/surat/InboxPage.tsx");
@@ -368,7 +391,7 @@ describe("project structure boundaries", () => {
     const commandCode = read(commandPath);
     expect(commandCode).toContain("export function buildInitialAttachmentMeta");
     expect(commandCode).toContain("export function buildRegistrationSubmitPayload");
-    
+
     // SuratForm imports the pure helpers
     expect(form).toContain('from "@/features/surat/registration/lib/surat-submit-command"');
     expect(form).toContain("buildInitialAttachmentMeta(");

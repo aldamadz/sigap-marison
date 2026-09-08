@@ -10,6 +10,7 @@ const read = (path: string) => readFileSync(resolve(path), "utf8");
 
 describe("inbox verification task_type preserved on detail merge", () => {
   const runtime = read("backend/src/domain-runtime.ts");
+  const inboxRuntime = read("backend/src/modules/surat/inbox-runtime.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
   const inboxTaskState = read("src/features/surat/inbox/lib/inbox-task-state.ts");
 
@@ -45,26 +46,23 @@ describe("inbox verification task_type preserved on detail merge", () => {
 
   it("5. BFF detail derives task_type with canonical signer/verifier rule", () => {
     // signer (user_id) wins; else verifier_snapshot hit + verification pending
-    expect(runtime).toContain("const isSigner = data.user_id === user.id");
-    expect(runtime).toContain("data.verification_required === true");
-    expect(runtime).toContain('data.verification_status === "pending"');
-    expect(runtime).toContain("const taskType = isSigner");
-    expect(runtime).toContain('task_type: taskType');
+    expect(inboxRuntime).toContain("const isSigner = data.user_id === user.id");
+    expect(inboxRuntime).toContain("data.verification_required === true");
+    expect(inboxRuntime).toContain('data.verification_status === "pending"');
+    expect(inboxRuntime).toContain("const taskType = isSigner");
+    expect(inboxRuntime).toContain('task_type: taskType');
   });
 
   it("6. BFF detail never guesses task_type from label_jabatan", () => {
-    const detailBlock = runtime.slice(
-      runtime.indexOf("const getInboxDetail"),
-      runtime.indexOf("const getAttentionStateForUser"),
-    );
+    const detailBlock = inboxRuntime;
     expect(detailBlock).not.toMatch(/label_jabatan.*task_type/);
     expect(detailBlock).not.toContain("task_type: data.label_jabatan");
   });
 
   it("7. BFF detail still enforces active-task auth (403 for other users)", () => {
-    expect(runtime).toContain('supabase.rpc("is_inbox_task_active"');
-    expect(runtime).toContain("if (!isActive)");
-    expect(runtime).toContain("err.status = 403");
+    expect(inboxRuntime).toContain('rpc("is_inbox_task_active"');
+    expect(inboxRuntime).toContain("if (!isActive)");
+    expect(inboxRuntime).toContain("Task tidak aktif atau tidak ditemukan untuk user ini");
   });
 });
 
