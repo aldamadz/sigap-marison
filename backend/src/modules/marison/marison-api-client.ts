@@ -92,7 +92,12 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
       url = new URL(`${config.baseUrl}${endpointPathOrUrl}`);
     } else {
       url = new URL(endpointPathOrUrl.toString());
-      if (!url.href.startsWith(config.baseUrl)) {
+      const base = new URL(config.baseUrl);
+      const allowedPrefix = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
+      if (
+        url.origin !== base.origin ||
+        (url.pathname !== base.pathname && !url.pathname.startsWith(allowedPrefix))
+      ) {
         throw errorWithStatus("URL external Marison tidak valid.", 400);
       }
     }

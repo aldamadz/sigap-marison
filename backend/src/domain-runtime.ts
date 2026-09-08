@@ -2613,7 +2613,7 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
   });
 
   const payload = source.auth_type === "marison_token_hmac_sha512"
-    ? await getMarisonExternalJson(source, state.environment, `${url.pathname}${url.search}`)
+    ? await getMarisonExternalJson(source, state.environment, url)
     : await (async () => {
       const response = await fetch(url, { method, headers: {} });
       const responsePayload = await response.json().catch(() => ({}));

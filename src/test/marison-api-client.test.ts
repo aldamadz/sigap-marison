@@ -108,6 +108,7 @@ describe("Marison API client", () => {
     const req = fetchImpl.mock.calls[1];
     expect(req[0].toString()).toBe("https://external.marisonregency.id/api/unit?project_id=20&per_page=100");
     expect(req[0].toString()).not.toContain("/api/api/");
+    expect((req[1] as RequestInit).signal).toBeUndefined();
 
     const canonical = `GET:/api/unit:token:${createHash("sha256").update(Buffer.alloc(0)).digest("hex")}:2026-09-08T00:00:00.000Z`;
     expect((req[1] as RequestInit).headers).toEqual({
@@ -117,6 +118,24 @@ describe("Marison API client", () => {
     });
     expect(canonical).not.toContain("project_id=20");
 
-    await expect(resolvingClient.getMarisonExternalJson({}, "production", new URL("https://evil.com/api"))).rejects.toThrow("URL external Marison tidak valid.");
+    const rejectsUrl = async (url: string) => expect(resolvingClient.getMarisonExternalJson({}, "production", new URL(url))).rejects.toThrow("URL external Marison tidak valid.");
+    await rejectsUrl("https://evil.com/api");
+    await rejectsUrl("https://external.marisonregency.id.evil.com/api");
+    await rejectsUrl("http://external.marisonregency.id/api");
+    await rejectsUrl("https://external.marisonregency.id:8443/api");
+    await rejectsUrl("https://external.marisonregency.id/api-evil");
+    await rejectsUrl("https://external.marisonregency.id/apis");
+
+    const timeoutSignal = vi.fn(() => AbortSignal.abort());
+    const collectionClient = createMarisonApiClient({
+      deploymentEnvironment: "production",
+      readEnv: env(values),
+      fetchImpl: vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValue(json({ data: [] })),
+      nowMs: Date.now,
+      nowIso: () => "2026-09-08T00:00:00.000Z",
+      timeoutSignal,
+    });
+    await collectionClient.getAllMarisonCollection("production", "/branches");
+    expect(timeoutSignal).toHaveBeenCalledWith(20_000);
   });
 });
