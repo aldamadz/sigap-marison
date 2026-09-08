@@ -4,3 +4,4 @@ export * from "./navigation";
 export * from "./principles";
 export * from "./version/changelog";
 export * from "./user";
+export * from "./admin";
