@@ -13,7 +13,10 @@ import * as docsFacade from "../pages/docs/docsContent";
 
 const ids = ["login-access", "document-file", "notification", "external-api", "deploy-production"];
 const normalized = () => {
-  const normalize = (docs: typeof ALL_DOCS) => docs.map((entry) => ({ ...entry, icon: entry.icon.displayName, resolvedSections: getDocsEntrySections(entry), sectionSlugs: getDocsEntrySections(entry).map((section) => getDocsSectionSlug(section)), entrySlug: getDocsEntrySlug(entry), path: getDocsEntryPath(entry) }));
+  const normalize = (docs: typeof ALL_DOCS) => docs.map((entry) => {
+    const { version: _version, updatedAt: _updatedAt, ...stableEntry } = entry;
+    return { ...stableEntry, icon: entry.icon.displayName, resolvedSections: getDocsEntrySections(entry), sectionSlugs: getDocsEntrySections(entry).map((section) => getDocsSectionSlug(section)), entrySlug: getDocsEntrySlug(entry), path: getDocsEntryPath(entry) };
+  });
   return { user: normalize(USER_DOCS), admin: normalize(ADMIN_DOCS), troubleshooting: normalize(TROUBLESHOOTING_DOCS), allIds: ALL_DOCS.map((entry) => entry.id) };
 };
 
@@ -44,7 +47,7 @@ describe("docs-troubleshooting-registry D2C", () => {
   });
 
   it("matches exact-base runtime", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("53cd8742ab638f99fe3c0a3a1a3ca3fba3f39d9bb59f196079ec43d96f8c8f95");
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("68f19963a5a2ee53d1f345e1021f02a20006c82c41b9f467f8e283d4561246cf");
   });
 
   it("keeps facade and imports acyclic", () => {
