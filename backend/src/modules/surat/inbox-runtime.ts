@@ -21,7 +21,7 @@ export const INBOX_DETAIL_SELECT = `
 export const INBOX_TASK_TYPE_ALLOWLIST = ["approval", "verification"] as const;
 export type InboxTaskType = typeof INBOX_TASK_TYPE_ALLOWLIST[number];
 export const isInboxTaskType = (value: string): value is InboxTaskType =>
-  (INBOX_TASK_TYPE_ALLOWLIST as readonly string[]).includes(value as InboxTaskType);
+  (INBOX_TASK_TYPE_ALLOWLIST as readonly string[]).includes(value);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const statusError = (message: string, status: number) => Object.assign(new Error(message), { status });
@@ -65,7 +65,7 @@ export const parseInboxTaskType = (raw: string | null) => {
 export const encodeInboxCursor = (item: { available_at: string; task_type: string; id: string }) =>
   Buffer.from(`${item.available_at}|${item.task_type}|${item.id}`).toString("base64");
 
-type SupabaseResult<T> = { data: T | null; error: Error | null };
+type SupabaseResult<T> = { data: T | null; error: unknown | null };
 
 type InboxCompactRow = {
   id: string;
@@ -151,13 +151,13 @@ type InboxDetailRow = {
 };
 
 export interface InboxSupabaseClient {
-  rpc(name: "get_compact_inbox", params: unknown): Promise<SupabaseResult<InboxCompactRow[]>>;
-  rpc(name: "get_compact_inbox_count", params: unknown): Promise<SupabaseResult<string | number>>;
-  rpc(name: "is_inbox_task_active", params: unknown): Promise<SupabaseResult<boolean>>;
+  rpc(name: "get_compact_inbox", params: unknown): PromiseLike<SupabaseResult<InboxCompactRow[]>>;
+  rpc(name: "get_compact_inbox_count", params: unknown): PromiseLike<SupabaseResult<string | number>>;
+  rpc(name: "is_inbox_task_active", params: unknown): PromiseLike<SupabaseResult<boolean>>;
   from(table: "surat_signatures"): {
     select(query: string): {
       eq(column: string, value: string): {
-        maybeSingle(): Promise<SupabaseResult<InboxDetailRow>>;
+        maybeSingle(): PromiseLike<SupabaseResult<InboxDetailRow>>;
       };
     };
   };
@@ -188,7 +188,7 @@ export const createInboxRuntime = ({ getSupabase, requireSupabaseUser }: InboxRu
     const rpcParams = { p_user_id: user.id, p_limit: pageSize, p_cursor_at: cursor?.at || null, p_cursor_task_type: cursor?.taskType || null, p_cursor_id: cursor?.id || null, p_search: search, p_request_category: category, p_task_type: taskType };
     const supabase = getSupabase();
     const needsCount = !cursor;
-    const queries: Array<Promise<SupabaseResult<unknown>>> = [supabase.rpc("get_compact_inbox", rpcParams)];
+    const queries: Array<PromiseLike<SupabaseResult<unknown>>> = [supabase.rpc("get_compact_inbox", rpcParams)];
     if (needsCount) queries.push(supabase.rpc("get_compact_inbox_count", { p_user_id: user.id, p_search: search, p_request_category: category, p_task_type: taskType }));
 
     const results = await Promise.all(queries);

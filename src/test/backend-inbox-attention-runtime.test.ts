@@ -261,50 +261,9 @@ describe("backend inbox runtime", () => {
 });
 
 describe("backend attention runtime", () => {
-  it("Attention calls exactly 3 RPCs; counts normalized to number; object/array identical; errors forwarded; Supabase null follows existing error", async () => {
-    const calls: string[] = [];
-
-    // Array
-    const runtimeArray = createAttentionRuntime({
-      getSupabase: () => createFakeAttentionSupabase({
-        rpc: async (name: string) => {
-          calls.push(name);
-          if (name === "get_attention_state_for_user") return { data: [{ approval_count: "2", follow_up_count: "3" }], error: null } as never;
-          if (name === "get_compact_inbox_count") return { data: "4", error: null } as never;
-          if (name === "get_user_active_sla_breach_count") return { data: "5", error: null } as never;
-          return { data: null, error: null } as never;
-        }
-      }),
-      requireSupabaseUser: user,
-      now: () => new Date("2026-09-08T12:00:00.000Z"),
-    });
-    const resArray = await runtimeArray.getAttentionStateFromRequest("token");
-    expect(calls).toEqual(["get_attention_state_for_user", "get_compact_inbox_count", "get_user_active_sla_breach_count"]);
-    expect(resArray.approvalCount).toBe(2);
-    expect(resArray.followUpCount).toBe(3);
-    expect(resArray.inboxCount).toBe(4);
-    expect(resArray.overdueSlaCount).toBe(5);
-    expect(resArray.generatedAt).toBe("2026-09-08T12:00:00.000Z");
-
-    // Object
-    const runtimeObject = createAttentionRuntime({
-      getSupabase: () => createFakeAttentionSupabase({
-        rpc: async (name: string) => {
-          if (name === "get_attention_state_for_user") return { data: { approval_count: 2, follow_up_count: 3 }, error: null } as never;
-          if (name === "get_compact_inbox_count") return { data: 4, error: null } as never;
-          if (name === "get_user_active_sla_breach_count") return { data: 5, error: null } as never;
-          return { data: null, error: null } as never;
-        }
-      }),
-      requireSupabaseUser: user,
-      now: () => new Date("2026-09-08T12:00:00.000Z"),
-    });
-    const resObject = await runtimeObject.getAttentionStateFromRequest("token");
-    expect(resObject).toEqual(resArray);
-
-    // Errors forwarded
-    const expectedError = new Error("RPC Failure");
-    const runtimeError = createAttentionRuntime({
+  it("Error get_attention_state_for_user diteruskan dengan identitas object sama", async () => {
+    const expectedError = new Error("RPC Failure 1");
+    const runtime = createAttentionRuntime({
       getSupabase: () => createFakeAttentionSupabase({
         rpc: async (name: string) => {
           if (name === "get_attention_state_for_user") return { data: null, error: expectedError } as never;
@@ -313,9 +272,157 @@ describe("backend attention runtime", () => {
       }),
       requireSupabaseUser: user
     });
-    await expect(runtimeError.getAttentionStateFromRequest("token")).rejects.toBe(expectedError);
+    await expect(runtime.getAttentionStateFromRequest("token")).rejects.toBe(expectedError);
+  });
 
-    // Supabase null
+  it("Error get_compact_inbox_count diteruskan dengan identitas object sama", async () => {
+    const expectedError = new Error("RPC Failure 2");
+    const runtime = createAttentionRuntime({
+      getSupabase: () => createFakeAttentionSupabase({
+        rpc: async (name: string) => {
+          if (name === "get_attention_state_for_user") return { data: {}, error: null } as never;
+          if (name === "get_compact_inbox_count") return { data: null, error: expectedError } as never;
+          return { data: null, error: null } as never;
+        }
+      }),
+      requireSupabaseUser: user
+    });
+    await expect(runtime.getAttentionStateFromRequest("token")).rejects.toBe(expectedError);
+  });
+
+  it("Error get_user_active_sla_breach_count diteruskan dengan identitas object sama", async () => {
+    const expectedError = new Error("RPC Failure 3");
+    const runtime = createAttentionRuntime({
+      getSupabase: () => createFakeAttentionSupabase({
+        rpc: async (name: string) => {
+          if (name === "get_attention_state_for_user") return { data: {}, error: null } as never;
+          if (name === "get_compact_inbox_count") return { data: 0, error: null } as never;
+          if (name === "get_user_active_sla_breach_count") return { data: null, error: expectedError } as never;
+          return { data: null, error: null } as never;
+        }
+      }),
+      requireSupabaseUser: user
+    });
+    await expect(runtime.getAttentionStateFromRequest("token")).rejects.toBe(expectedError);
+  });
+
+  it("getAttentionStateForUser('') menghasilkan status 401 dan tidak memanggil RPC", async () => {
+    let calls = 0;
+    const runtime = createAttentionRuntime({
+      getSupabase: () => createFakeAttentionSupabase({
+        rpc: async () => {
+          calls++;
+          return { data: null, error: null } as never;
+        }
+      }),
+      requireSupabaseUser: user
+    });
+    await expect(runtime.getAttentionStateForUser("")).rejects.toMatchObject({ status: 401 });
+    expect(calls).toBe(0);
+  });
+
+  it("Late binding Attention", async () => {
+    let calls = 0;
+    let currentClient = createFakeAttentionSupabase({
+      rpc: async () => { throw new Error("Stale client"); }
+    });
+    const freshClient = createFakeAttentionSupabase({
+      rpc: async () => {
+        calls++;
+        return { data: null, error: null } as never;
+      }
+    });
+
+    const runtime = createAttentionRuntime({
+      getSupabase: () => currentClient,
+      requireSupabaseUser: user
+    });
+
+    currentClient = freshClient;
+    await runtime.getAttentionStateFromRequest("token");
+    expect(calls).toBe(3);
+  });
+
+  it("Normalisasi seluruh output count", async () => {
+    const runtime = createAttentionRuntime({
+      getSupabase: () => createFakeAttentionSupabase({
+        rpc: async (name: string) => {
+          if (name === "get_attention_state_for_user") return {
+            data: {
+              approval_count: "1",
+              verification_count: "2",
+              revision_count: "3",
+              recommendation_count: "4",
+              unread_notifications: "6",
+              monitoring_count: "7",
+              follow_up_count: "8",
+              master_office_review_count: "9",
+              profile_review_count: "10",
+              master_project_review_count: "11"
+            },
+            error: null
+          } as never;
+          if (name === "get_compact_inbox_count") return { data: "5", error: null } as never;
+          if (name === "get_user_active_sla_breach_count") return { data: "12", error: null } as never;
+          return { data: null, error: null } as never;
+        }
+      }),
+      requireSupabaseUser: user,
+      now: () => new Date("2026-09-08T12:00:00.000Z")
+    });
+
+    const result = await runtime.getAttentionStateFromRequest("token");
+    expect(result).toEqual({
+      approvalCount: 1,
+      verificationCount: 2,
+      revisionCount: 3,
+      recommendationCount: 4,
+      inboxCount: 5,
+      unreadNotifications: 6,
+      monitoringCount: 7,
+      followUpCount: 8,
+      masterOfficeReviewCount: 9,
+      profileReviewCount: 10,
+      masterProjectReviewCount: 11,
+      overdueSlaCount: 12,
+      generatedAt: "2026-09-08T12:00:00.000Z"
+    });
+  });
+
+  it("Bentuk row object dan array menghasilkan object output identik", async () => {
+    const dataRow = {
+      approval_count: "2",
+      follow_up_count: "3"
+    };
+
+    const runtimeArray = createAttentionRuntime({
+      getSupabase: () => createFakeAttentionSupabase({
+        rpc: async (name: string) => {
+          if (name === "get_attention_state_for_user") return { data: [dataRow], error: null } as never;
+          return { data: null, error: null } as never;
+        }
+      }),
+      requireSupabaseUser: user,
+      now: () => new Date("2026-09-08T12:00:00.000Z")
+    });
+
+    const runtimeObject = createAttentionRuntime({
+      getSupabase: () => createFakeAttentionSupabase({
+        rpc: async (name: string) => {
+          if (name === "get_attention_state_for_user") return { data: dataRow, error: null } as never;
+          return { data: null, error: null } as never;
+        }
+      }),
+      requireSupabaseUser: user,
+      now: () => new Date("2026-09-08T12:00:00.000Z")
+    });
+
+    const resArray = await runtimeArray.getAttentionStateFromRequest("token");
+    const resObject = await runtimeObject.getAttentionStateFromRequest("token");
+    expect(resArray).toEqual(resObject);
+  });
+
+  it("Supabase null follows existing error", async () => {
     const runtimeNull = createAttentionRuntime({
       getSupabase: () => null,
       requireSupabaseUser: user

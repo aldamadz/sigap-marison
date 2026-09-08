@@ -1,4 +1,4 @@
-type SupabaseResult<T> = { data: T | null; error: Error | null };
+type SupabaseResult<T> = { data: T | null; error: unknown | null };
 
 type AttentionResultRow = {
   approval_count?: string | number;
@@ -14,9 +14,9 @@ type AttentionResultRow = {
 };
 
 export interface AttentionSupabaseClient {
-  rpc(name: "get_attention_state_for_user", params: unknown): Promise<SupabaseResult<AttentionResultRow[] | AttentionResultRow>>;
-  rpc(name: "get_compact_inbox_count", params: unknown): Promise<SupabaseResult<string | number>>;
-  rpc(name: "get_user_active_sla_breach_count", params: unknown): Promise<SupabaseResult<string | number>>;
+  rpc(name: "get_attention_state_for_user", params: unknown): PromiseLike<SupabaseResult<AttentionResultRow[] | AttentionResultRow>>;
+  rpc(name: "get_compact_inbox_count", params: unknown): PromiseLike<SupabaseResult<string | number>>;
+  rpc(name: "get_user_active_sla_breach_count", params: unknown): PromiseLike<SupabaseResult<string | number>>;
 }
 
 export type AttentionDependencies = {
