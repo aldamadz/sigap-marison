@@ -94,6 +94,8 @@ import { createSessionCookieHelpers } from "./domain/session-cookie.js";
 import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
 import { isActiveAdminProfile, isActiveProfile } from "./domain/profile-authorization.js";
 import { createBffRuntime } from "./modules/bff/bff-runtime.js";
+import { createInboxRuntime } from "./modules/surat/inbox-runtime.js";
+import { createAttentionRuntime } from "./modules/attention/attention-runtime.js";
 
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
@@ -754,6 +756,9 @@ const requireAdminUser = async (token) => {
   return user;
 };
 
+const { getInboxCompact, getInboxDetail } = createInboxRuntime({ getSupabase: () => supabase, requireSupabaseUser });
+const { getAttentionStateFromRequest } = createAttentionRuntime({ getSupabase: () => supabase, requireSupabaseUser });
+
 const rejectSuratByDocumentNumber = async (req) => {
   assertSameOrigin(req);
   const token = getBearerToken(req);
@@ -968,238 +973,6 @@ const consumeTemplatePreview = (token) => {
     throw err;
   }
   return preview.pdf;
-};
-
-const INBOX_DETAIL_SELECT = `
-  id, surat_id, user_id, role_name, label_jabatan, step_order, is_signed, action_type,
-  requires_unit_allocation, available_at, signer_snapshot,
-  attachment_requirements_snapshot,
-  verification_required, verification_status, verified_at, verified_by,
-  verification_note, verifier_snapshot,
-  surat_registrasi!inner (
-    id, no_surat, judul_surat, status, current_step, created_at, updated_at,
-    request_date, request_place, policy_snapshot,
-    requester_snapshot, location_snapshot, form_input_data, data_snapshot,
-    surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id ),
-    surat_signatures (
-      id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan,
-      available_at, signer_snapshot, verification_required, verification_status,
-      verified_at, verified_by, verification_note, verifier_snapshot,
-      profiles:user_id ( full_name, job_title )
-    )
-  )
-`.trim();
-
-const INBOX_TASK_TYPE_ALLOWLIST = ["approval", "verification"];
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-const parseInboxLimit = (raw) => {
-  if (!raw) return { error: null, value: 20 };
-  if (!/^\d+$/.test(raw)) return { error: "limit harus integer positif", value: null };
-  const n = parseInt(raw, 10);
-  if (n < 1) return { error: "limit minimum 1", value: null };
-  if (n > 50) return { error: "limit maksimum 50", value: null };
-  return { error: null, value: n };
-};
-
-const parseInboxCursor = (raw) => {
-  if (!raw) return { error: null, value: null };
-  try {
-    const decoded = Buffer.from(raw, "base64").toString("utf8");
-    const parts = decoded.split("|");
-    if (parts.length !== 3) throw new Error("format invalid");
-    const [at, taskType, id] = parts;
-    if (!at || !taskType || !id) throw new Error("field kosong");
-    if (!INBOX_TASK_TYPE_ALLOWLIST.includes(taskType)) throw new Error("task_type tidak valid");
-    const ts = new Date(at);
-    if (isNaN(ts.getTime())) throw new Error("timestamp tidak valid");
-    if (!UUID_RE.test(id)) throw new Error("id bukan UUID valid");
-    return { error: null, value: { at, taskType, id } };
-  } catch {
-    return { error: "cursor tidak valid", value: null };
-  }
-};
-
-const parseInboxSearch = (raw) => {
-  if (!raw) return { error: null, value: null };
-  const trimmed = raw.trim();
-  if (trimmed.length > 200) return { error: "search maksimum 200 karakter", value: null };
-  return { error: null, value: trimmed };
-};
-
-const parseInboxTaskType = (raw) => {
-  if (!raw) return { error: null, value: null };
-  if (!INBOX_TASK_TYPE_ALLOWLIST.includes(raw)) return { error: "task_type tidak valid", value: null };
-  return { error: null, value: raw };
-};
-
-const encodeCursor = (item) =>
-  Buffer.from(`${item.available_at}|${item.task_type}|${item.id}`).toString("base64");
-
-const getInboxCompact = async (token, url) => {
-  const user = await requireSupabaseUser(token);
-  const userId = user.id;
-
-  const rawLimit = url.searchParams.get("limit") || "20";
-  const limitResult = parseInboxLimit(rawLimit);
-  if (limitResult.error) { const err = new Error(limitResult.error); err.status = 400; throw err; }
-  const pageSize = limitResult.value;
-
-  const rawCursor = url.searchParams.get("cursor") || null;
-  const cursorResult = parseInboxCursor(rawCursor);
-  if (cursorResult.error) { const err = new Error(cursorResult.error); err.status = 400; throw err; }
-  const cursor = cursorResult.value;
-
-  const rawSearch = url.searchParams.get("search") || null;
-  const searchResult = parseInboxSearch(rawSearch);
-  if (searchResult.error) { const err = new Error(searchResult.error); err.status = 400; throw err; }
-  const search = searchResult.value;
-
-  const rawCategory = url.searchParams.get("request_category") || null;
-  const category = rawCategory && rawCategory.trim() ? rawCategory.trim() : null;
-
-  const rawTaskType = url.searchParams.get("task_type") || null;
-  const taskTypeResult = parseInboxTaskType(rawTaskType);
-  if (taskTypeResult.error) { const err = new Error(taskTypeResult.error); err.status = 400; throw err; }
-  const taskType = taskTypeResult.value;
-
-  const rpcParams = {
-    p_user_id: userId,
-    p_limit: pageSize,
-    p_cursor_at: cursor?.at || null,
-    p_cursor_task_type: cursor?.taskType || null,
-    p_cursor_id: cursor?.id || null,
-    p_search: search,
-    p_request_category: category,
-    p_task_type: taskType,
-  };
-
-  const needsCount = !cursor;
-  const queries = [supabase.rpc("get_compact_inbox", rpcParams)];
-  if (needsCount) {
-    queries.push(supabase.rpc("get_compact_inbox_count", {
-      p_user_id: userId,
-      p_search: search,
-      p_request_category: category,
-      p_task_type: taskType,
-    }));
-  }
-  const results = await Promise.all(queries);
-  const listRes = results[0];
-  const countRes = needsCount ? results[1] : null;
-
-  if (listRes.error) throw listRes.error;
-  if (countRes?.error) throw countRes.error;
-
-  const rows = listRes.data || [];
-  const hasMore = rows.length > pageSize;
-  const items = hasMore ? rows.slice(0, pageSize) : rows;
-  const total = needsCount ? Number(countRes?.data || 0) : null;
-  const lastItem = items[items.length - 1];
-  const nextCursor = hasMore && lastItem ? encodeCursor(lastItem) : null;
-
-  return { items, total, hasMore, nextCursor, pageSize };
-};
-
-const getInboxDetail = async (token, signatureId) => {
-  const user = await requireSupabaseUser(token);
-  if (!signatureId || !UUID_RE.test(signatureId)) {
-    const err = new Error("signature ID tidak valid");
-    err.status = 400;
-    throw err;
-  }
-
-  const { data: isActive, error: activeError } = await supabase.rpc("is_inbox_task_active", {
-    p_user_id: user.id,
-    p_signature_id: signatureId,
-  });
-  if (activeError) throw activeError;
-  if (!isActive) {
-    const err = new Error("Task tidak aktif atau tidak ditemukan untuk user ini");
-    err.status = 403;
-    throw err;
-  }
-
-  const { data, error } = await supabase
-    .from("surat_signatures")
-    .select(INBOX_DETAIL_SELECT)
-    .eq("id", signatureId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) {
-    const err = new Error("Not found");
-    err.status = 404;
-    throw err;
-  }
-  const surat = Array.isArray(data.surat_registrasi) ? data.surat_registrasi[0] : data.surat_registrasi;
-  if (surat?.surat_signatures) {
-    surat.surat_signatures = [...surat.surat_signatures]
-      .sort((a, b) => Number(a.step_order) - Number(b.step_order));
-  }
-
-  // Derive task_type with the SAME canonical rule as get_compact_inbox:
-  // a user who is the assigned signer (user_id) sees an approval task;
-  // otherwise a user present in verifier_snapshot of a pending, not-yet-signed,
-  // verification-required signature sees a verification task. Signer wins on
-  // overlap (mirrors the RPC's NOT EXISTS dedup). We never guess from label.
-  const isSigner = data.user_id === user.id;
-  const verifierHit = Array.isArray(data.verifier_snapshot)
-    ? data.verifier_snapshot.some((v: any) => v && v.user_id === user.id)
-    : false;
-  const taskType = isSigner
-    ? "approval"
-    : verifierHit && data.verification_required === true && data.verification_status === "pending"
-      ? "verification"
-      : null;
-
-  return { ...data, task_type: taskType, surat_registrasi: surat };
-};
-
-const getAttentionStateForUser = async (userId) => {
-  if (!supabase) throw new Error("Supabase server credentials are not configured.");
-  if (!userId) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-
-  const [attentionRes, compactCountRes, overdueSlaRes] = await Promise.all([
-    supabase.rpc("get_attention_state_for_user", { p_user_id: userId }),
-    supabase.rpc("get_compact_inbox_count", { p_user_id: userId }),
-    supabase.rpc("get_user_active_sla_breach_count", { p_user_id: userId }),
-  ]);
-  if (attentionRes.error) throw attentionRes.error;
-  if (compactCountRes.error) throw compactCountRes.error;
-  if (overdueSlaRes.error) throw overdueSlaRes.error;
-  const row = Array.isArray(attentionRes.data) ? attentionRes.data[0] : attentionRes.data;
-  const approvalCount = Number(row?.approval_count || 0);
-  const verificationCount = Number(row?.verification_count || 0);
-  const revisionCount = Number(row?.revision_count || 0);
-  const requesterRevisionCount = Number(row?.follow_up_count || 0);
-  const recommendationCount = Number(row?.recommendation_count || 0);
-  const monitoringCount = Number(row?.monitoring_count || 0);
-  const compactInboxCount = Number(compactCountRes.data || 0);
-
-  return {
-    approvalCount,
-    verificationCount,
-    revisionCount,
-    recommendationCount,
-    inboxCount: compactInboxCount,
-    unreadNotifications: Number(row?.unread_notifications || 0),
-    monitoringCount,
-    followUpCount: requesterRevisionCount,
-    masterOfficeReviewCount: Number(row?.master_office_review_count || 0),
-    profileReviewCount: Number(row?.profile_review_count || 0),
-    masterProjectReviewCount: Number(row?.master_project_review_count || 0),
-    overdueSlaCount: Number(overdueSlaRes.data || 0),
-    generatedAt: new Date().toISOString(),
-  };
-};
-
-const getAttentionStateFromRequest = async (token) => {
-  const user = await requireSupabaseUser(token);
-  return getAttentionStateForUser(user.id);
 };
 
 const normalizePushSubscription = (value) => {

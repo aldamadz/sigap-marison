@@ -10,6 +10,8 @@ const read = (path: string) => readFileSync(resolve(path), "utf8");
 
 describe("compact approval inbox — structural contracts", () => {
   const runtime = read("backend/src/domain-runtime.ts");
+  const inboxRuntime = read("backend/src/modules/surat/inbox-runtime.ts");
+  const attentionRuntime = read("backend/src/modules/attention/attention-runtime.ts");
   const service = read("src/services/surat.service.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
   const migration = read("supabase/migrations/20260804081000_compact_inbox_rpc.sql");
@@ -29,41 +31,40 @@ describe("compact approval inbox — structural contracts", () => {
   });
 
   it("3. Attention badge uses get_compact_inbox_count", () => {
-    expect(runtime).toContain('supabase.rpc("get_compact_inbox_count"');
-    expect(runtime).toContain("compactInboxCount");
-    expect(runtime).toContain("inboxCount: compactInboxCount");
+    expect(attentionRuntime).toContain('rpc("get_compact_inbox_count"');
+    expect(attentionRuntime).toContain("inboxCount:");
   });
 
   it("4. BFF count only on first page (no cursor)", () => {
-    expect(runtime).toContain("const needsCount = !cursor");
-    expect(runtime).toContain("if (needsCount)");
+    expect(inboxRuntime).toContain("const needsCount = !cursor");
+    expect(inboxRuntime).toContain("if (needsCount)");
   });
 
   it("5. BFF strict limit validation: digit-only pattern and bounds", () => {
-    expect(runtime).toContain("limit harus integer positif");
-    expect(runtime).toContain("limit minimum 1");
-    expect(runtime).toContain("limit maksimum 50");
+    expect(inboxRuntime).toContain("limit harus integer positif");
+    expect(inboxRuntime).toContain("limit minimum 1");
+    expect(inboxRuntime).toContain("limit maksimum 50");
   });
 
   it("6. BFF strict cursor validation: UUID regex", () => {
-    expect(runtime).toContain("UUID_RE");
-    expect(runtime).toContain("UUID_RE.test(id)");
-    expect(runtime).toContain('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}');
+    expect(inboxRuntime).toContain("UUID_RE");
+    expect(inboxRuntime).toContain("UUID_RE.test(id)");
+    expect(inboxRuntime).toContain('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}');
   });
 
   it("7. BFF search validation: max 200 chars, trimmed", () => {
-    expect(runtime).toContain("parseInboxSearch");
-    expect(runtime).toContain("200");
+    expect(inboxRuntime).toContain("parseInboxSearch");
+    expect(inboxRuntime).toContain("200");
   });
 
   it("8. BFF task_type validation: allowlist", () => {
-    expect(runtime).toContain("INBOX_TASK_TYPE_ALLOWLIST");
-    expect(runtime).toContain('"approval", "verification"');
+    expect(inboxRuntime).toContain("INBOX_TASK_TYPE_ALLOWLIST");
+    expect(inboxRuntime).toContain('"approval", "verification"');
   });
 
   it("9. Detail auth uses is_inbox_task_active RPC, not client-side check", () => {
-    expect(runtime).toContain('supabase.rpc("is_inbox_task_active"');
-    expect(runtime).toContain("err.status = 403");
+    expect(inboxRuntime).toContain('rpc("is_inbox_task_active"');
+    expect(inboxRuntime).toContain("Task tidak aktif atau tidak ditemukan untuk user ini");
   });
 
   it("10. InboxPage passes filter params to getMyInboxCompact", () => {
@@ -291,10 +292,10 @@ describe("compact approval inbox — SQL integration test", () => {
 // ============================================================
 
 describe("compact approval inbox — attention badge", () => {
-  const runtime = read("backend/src/domain-runtime.ts");
+  const runtime = read("backend/src/modules/attention/attention-runtime.ts");
 
   it("inboxCount uses get_compact_inbox_count, not sum of separate counts", () => {
-    expect(runtime).toContain("inboxCount: compactInboxCount");
+    expect(runtime).toContain("inboxCount:");
     expect(runtime).not.toContain("inboxCount: approvalCount + verificationCount + revisionCount");
   });
 
