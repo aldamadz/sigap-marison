@@ -5,3 +5,6 @@ export * from "./principles";
 export * from "./version/changelog";
 export * from "./user";
 export * from "./admin";
+export * from "./troubleshooting";
+export * from "./registry";
+export * from "./section-resolver";
