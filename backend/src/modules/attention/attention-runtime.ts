@@ -20,7 +20,7 @@ export interface AttentionSupabaseClient {
 }
 
 export type AttentionDependencies = {
-  getSupabase: () => AttentionSupabaseClient;
+  getSupabase: () => AttentionSupabaseClient | null;
   requireSupabaseUser: (token: string | undefined) => Promise<{ id: string }>;
   now?: () => Date;
 };

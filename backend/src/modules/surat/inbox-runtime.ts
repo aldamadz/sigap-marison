@@ -19,6 +19,9 @@ export const INBOX_DETAIL_SELECT = `
 `.trim();
 
 export const INBOX_TASK_TYPE_ALLOWLIST = ["approval", "verification"] as const;
+export type InboxTaskType = typeof INBOX_TASK_TYPE_ALLOWLIST[number];
+export const isInboxTaskType = (value: string): value is InboxTaskType =>
+  (INBOX_TASK_TYPE_ALLOWLIST as readonly string[]).includes(value as InboxTaskType);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const statusError = (message: string, status: number) => Object.assign(new Error(message), { status });
@@ -37,7 +40,7 @@ export const parseInboxCursor = (raw: string | null) => {
   try {
     const [at, taskType, id, ...rest] = Buffer.from(raw, "base64").toString("utf8").split("|");
     if (rest.length || !at || !taskType || !id) throw new Error("format invalid");
-    if (!INBOX_TASK_TYPE_ALLOWLIST.includes(taskType as any)) throw new Error("task_type tidak valid");
+    if (!isInboxTaskType(taskType)) throw new Error("task_type tidak valid");
     if (Number.isNaN(new Date(at).getTime())) throw new Error("timestamp tidak valid");
     if (!UUID_RE.test(id)) throw new Error("id bukan UUID valid");
     return { error: null, value: { at, taskType, id } };
@@ -55,7 +58,7 @@ export const parseInboxSearch = (raw: string | null) => {
 
 export const parseInboxTaskType = (raw: string | null) => {
   if (!raw) return { error: null, value: null };
-  if (!INBOX_TASK_TYPE_ALLOWLIST.includes(raw as any)) return { error: "task_type tidak valid", value: null };
+  if (!isInboxTaskType(raw)) return { error: "task_type tidak valid", value: null };
   return { error: null, value: raw };
 };
 
@@ -212,9 +215,9 @@ export const createInboxRuntime = ({ getSupabase, requireSupabaseUser }: InboxRu
     if (error) throw error;
     if (!data) throw statusError("Not found", 404);
     const surat = Array.isArray(data.surat_registrasi) ? data.surat_registrasi[0] : data.surat_registrasi;
-    if (surat?.surat_signatures) surat.surat_signatures = [...surat.surat_signatures].sort((a: any, b: any) => Number(a.step_order) - Number(b.step_order));
+    if (surat?.surat_signatures) surat.surat_signatures = [...surat.surat_signatures].sort((a: SignatureSummary, b: SignatureSummary) => Number(a.step_order) - Number(b.step_order));
     const isSigner = data.user_id === user.id;
-    const verifierHit = Array.isArray(data.verifier_snapshot) && data.verifier_snapshot.some((v: any) => v && v.user_id === user.id);
+    const verifierHit = Array.isArray(data.verifier_snapshot) && data.verifier_snapshot.some((v: VerifierSnapshot) => v && v.user_id === user.id);
     const taskType = isSigner ? "approval" : verifierHit && data.verification_required === true && data.verification_status === "pending" ? "verification" : null;
     return { ...data, task_type: taskType, surat_registrasi: surat };
   };

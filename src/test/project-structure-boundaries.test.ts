@@ -40,9 +40,11 @@ describe("project structure boundaries", () => {
     expect(inboxRuntime).not.toContain('from "../../domain-runtime');
     expect(attentionRuntime).not.toContain('from "../../domain-runtime"');
     expect(inboxRuntime).not.toContain("@ts-nocheck");
-    expect(inboxRuntime).not.toMatch(/type \w+ = any/);
+    expect(inboxRuntime).not.toMatch(/\bany\b/);
+    expect(inboxRuntime).not.toContain("@ts-ignore");
     expect(attentionRuntime).not.toContain("@ts-nocheck");
-    expect(attentionRuntime).not.toMatch(/type \w+ = any/);
+    expect(attentionRuntime).not.toMatch(/\bany\b/);
+    expect(attentionRuntime).not.toContain("@ts-ignore");
   });
 
   it("routes surat page dependencies through feature API facades", () => {
