@@ -40,7 +40,7 @@ const model: RecommendationMultiDetail = {
 };
 
 function Harness({
-  onUpload = vi.fn(),
+  onUpload = vi.fn() as any,
   users = [],
   offices = [],
   departments = [],
@@ -59,9 +59,9 @@ function Harness({
       offices={offices}
       departments={departments}
       uploadingKey={null}
-      onUpload={onUpload}
-      onDeleteAttachment={vi.fn()}
-      onDeleteDetail={vi.fn()}
+      onUpload={onUpload as any}
+      onDeleteAttachment={vi.fn() as any}
+      onDeleteDetail={vi.fn() as any}
     />
   );
 }
@@ -90,8 +90,8 @@ function TwoItemHarness() {
         departments={[]}
         uploadingKey={null}
         onUpload={vi.fn()}
-        onDeleteAttachment={vi.fn()}
-        onDeleteDetail={vi.fn()}
+        onDeleteAttachment={vi.fn() as any}
+        onDeleteDetail={vi.fn() as any}
       />
       <output data-testid="quantities">{value.items.map((item) => item.details[0].quantity).join(",")}</output>
     </>
@@ -135,7 +135,7 @@ describe("RecommendationMultiDetailEditor", () => {
 
   it("passes every selected image in one upload action without blanking the editor", () => {
     const onUpload = vi.fn().mockResolvedValue(undefined);
-    const { container } = render(<Harness onUpload={onUpload} />);
+    const { container } = render(<Harness onUpload={onUpload as any} />);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
     const files = [
