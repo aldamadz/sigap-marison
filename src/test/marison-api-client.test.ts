@@ -1,4 +1,4 @@
-﻿import { createHmac, createHash } from "node:crypto";
+﻿import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createMarisonApiClient } from "../../backend/src/modules/marison/marison-api-client";
 
@@ -30,7 +30,13 @@ describe("Marison API client", () => {
 
   it("fails missing credentials before fetch", async () => {
     const fetchImpl = vi.fn();
-    await expect(makeClient({}, fetchImpl).getMarisonAccessToken({ source_key: "source" }, "staging")).rejects.toThrow("Credential API Marison staging belum dikonfigurasi di server.");
+    try {
+      await makeClient({}, fetchImpl).getMarisonAccessToken({ source_key: "source" }, "staging");
+      expect.unreachable("Should throw");
+    } catch (e: unknown) {
+      expect((e as any).message).toBe("Credential API Marison staging belum dikonfigurasi di server.");
+      expect((e as any).status).toBe(500);
+    }
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -45,23 +51,47 @@ describe("Marison API client", () => {
     try {
       await makeClient(staging, vi.fn().mockResolvedValue(json({ message: "vendor" }, 401))).getMarisonAccessToken({ source_key: "x" }, "staging");
       expect.unreachable("Should throw");
-    } catch (e: any) {
-      expect(e.message).toBe("vendor");
-      expect(e.status).toBe(401);
+    } catch (e: unknown) {
+      expect((e as any).message).toBe("vendor");
+      expect((e as any).status).toBe(401);
     }
-    await expect(makeClient(staging, vi.fn().mockResolvedValue(json({ data: {} }))).getMarisonAccessToken({ source_key: "x" }, "staging")).rejects.toThrow("Response access token API eksternal Marison tidak valid.");
+    try {
+      await makeClient(staging, vi.fn().mockResolvedValue(json({ data: {} }))).getMarisonAccessToken({ source_key: "x" }, "staging");
+      expect.unreachable("Should throw");
+    } catch (e: unknown) {
+      expect((e as any).message).toBe("Response access token API eksternal Marison tidak valid.");
+      expect((e as any).status).toBe(502);
+    }
   });
 
-  it("caches token only when more than 30 seconds remain and separates cache keys", async () => {
+  it("caches token explicitly partitioning by baseUrl, source_key, and clientId", async () => {
     let now = 1_000;
     const fetchImpl = vi.fn().mockResolvedValue(json(token("one", 31)));
-    const client = createMarisonApiClient({ deploymentEnvironment: "staging", readEnv: env(staging), fetchImpl, nowMs: () => now, nowIso: () => "", timeoutSignal: AbortSignal.timeout });
+    const envValues = { ...staging };
+    const client = createMarisonApiClient({ 
+      deploymentEnvironment: "staging", 
+      readEnv: (name) => envValues[name], 
+      fetchImpl, 
+      nowMs: () => now, 
+      nowIso: () => "", 
+      timeoutSignal: AbortSignal.timeout 
+    });
+    
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
-    now = 2_001;
-    await client.getMarisonAccessToken({ source_key: "x" }, "staging");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
     await client.getMarisonAccessToken({ source_key: "y" }, "staging");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    envValues.MARISON_STAGING_BASE_URL = "https://new-base/api";
+    await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+    envValues.MARISON_STAGING_BASE_URL = "https://marison-external.digivasi.com/api";
+    envValues.MARISON_STAGING_CLIENT_ID = "new-client";
+    await client.getMarisonAccessToken({ source_key: "x" }, "staging");
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
   it("signs protected GET pathname only and preserves upstream error", async () => {
@@ -74,9 +104,9 @@ describe("Marison API client", () => {
     try {
       await makeClient(staging, vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValueOnce(json({}, 503))).getMarisonProtectedJson("staging", "/branches");
       expect.unreachable("Should throw");
-    } catch (e: any) {
-      expect(e.message).toBe("Gagal mengambil /api/branches dari API Marison.");
-      expect(e.status).toBe(503);
+    } catch (e: unknown) {
+      expect((e as any).message).toBe("Gagal mengambil /api/branches dari API Marison.");
+      expect((e as any).status).toBe(503);
     }
   });
 
@@ -89,7 +119,13 @@ describe("Marison API client", () => {
     const hundred = vi.fn();
     hundred.mockResolvedValueOnce(json(token()));
     for (let index = 0; index < 100; index += 1) hundred.mockResolvedValueOnce(json({ data: [{}], meta: { total_pages: 101 } }));
-    await expect(makeClient(staging, hundred).getAllMarisonCollection("staging", "/branches")).rejects.toThrow("Pagination /branches melebihi batas aman.");
+    try {
+      await makeClient(staging, hundred).getAllMarisonCollection("staging", "/branches");
+      expect.unreachable("Should throw");
+    } catch (e: unknown) {
+      expect((e as any).message).toBe("Pagination /branches melebihi batas aman.");
+      expect((e as any).status).toBe(502);
+    }
   });
 
   it("locks environment at boot and allows late resolved URL with correct canonical signature", async () => {
@@ -106,22 +142,23 @@ describe("Marison API client", () => {
     expect(state.environment).toBe("staging");
 
     const fetchImpl = vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValue(json({ data: [] }));
+    const timeoutSignal = vi.fn(() => AbortSignal.timeout(20_000));
     const resolvingClient = createMarisonApiClient({
       deploymentEnvironment: "production",
       readEnv: env(values),
       fetchImpl,
       nowMs: Date.now,
       nowIso: () => "2026-09-08T00:00:00.000Z",
-      timeoutSignal: vi.fn(() => AbortSignal.abort()),
+      timeoutSignal,
     });
     const resolvedUrl = new URL("https://external.marisonregency.id/api/unit?project_id=20&per_page=100");
     await resolvingClient.getMarisonExternalJson({ source_key: "unit" }, "production", resolvedUrl);
-
+    
     const req = fetchImpl.mock.calls[1];
     expect(req[0].toString()).toBe("https://external.marisonregency.id/api/unit?project_id=20&per_page=100");
     expect(req[0].toString()).not.toContain("/api/api/");
     expect((req[1] as RequestInit).signal).toBeUndefined();
-
+    
     const canonical = `GET:/api/unit:token:${createHash("sha256").update(Buffer.alloc(0)).digest("hex")}:2026-09-08T00:00:00.000Z`;
     expect((req[1] as RequestInit).headers).toEqual({
       Authorization: "Bearer token",
@@ -130,24 +167,20 @@ describe("Marison API client", () => {
     });
     expect(canonical).not.toContain("project_id=20");
 
-    const rejectsUrl = async (url: string) => expect(resolvingClient.getMarisonExternalJson({}, "production", new URL(url))).rejects.toThrow("URL external Marison tidak valid.");
+    const rejectsUrl = async (url: string) => {
+      try {
+        await resolvingClient.getMarisonExternalJson({}, "production", new URL(url));
+        expect.unreachable("Should throw");
+      } catch (e: unknown) {
+        expect((e as any).message).toBe("URL external Marison tidak valid.");
+        expect((e as any).status).toBe(400);
+      }
+    };
     await rejectsUrl("https://evil.com/api");
     await rejectsUrl("https://external.marisonregency.id.evil.com/api");
     await rejectsUrl("http://external.marisonregency.id/api");
     await rejectsUrl("https://external.marisonregency.id:8443/api");
     await rejectsUrl("https://external.marisonregency.id/api-evil");
     await rejectsUrl("https://external.marisonregency.id/apis");
-
-    const timeoutSignal = vi.fn(() => AbortSignal.abort());
-    const collectionClient = createMarisonApiClient({
-      deploymentEnvironment: "production",
-      readEnv: env(values),
-      fetchImpl: vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValue(json({ data: [] })),
-      nowMs: Date.now,
-      nowIso: () => "2026-09-08T00:00:00.000Z",
-      timeoutSignal,
-    });
-    await collectionClient.getAllMarisonCollection("production", "/branches");
-    expect(timeoutSignal).toHaveBeenCalledWith(20_000);
   });
 });

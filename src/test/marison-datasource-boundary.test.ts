@@ -1,14 +1,15 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+﻿import { createHash, createHmac } from "node:crypto";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   stubRuntimeEnv,
   unstubRuntimeEnv,
   bootDomainRuntime,
   closeApp,
-  fetchCalls,
   type BootedRuntime,
 } from "./harness/domain-runtime-harness";
 
 let booted: BootedRuntime | null = null;
+const datasourceFetchCalls: Array<{ url: string; options: RequestInit }> = [];
 
 beforeEach(async () => {
   stubRuntimeEnv(vi);
@@ -16,7 +17,21 @@ beforeEach(async () => {
   vi.stubEnv("MARISON_STAGING_BASE_URL", "https://example.test/api");
   vi.stubEnv("MARISON_STAGING_CLIENT_ID", "client");
   vi.stubEnv("MARISON_STAGING_CLIENT_SECRET", "secret");
+  
+  datasourceFetchCalls.length = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as { url: string }).url);
+    datasourceFetchCalls.push({ url: String(url), options: init || {} });
+    
+    if (String(url).includes("/access-token")) {
+      return { ok: true, status: 200, json: async () => ({ data: { access_token: "fake-token" } }) };
+    }
+    
+    return { ok: true, status: 200, json: async () => ({ data: [{ id: 1 }] }) };
+  }));
+  
   booted = await bootDomainRuntime();
+  vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-08T00:00:00.000Z").getTime());
 });
 
 afterEach(async () => {
@@ -27,6 +42,8 @@ afterEach(async () => {
 
 describe("queryExternalDataSource boundary", () => {
   it("uses the correct canonical signature, preserves query string, avoids duplicate base paths, and has no timeout", async () => {
+    
+
     const chain = {
       select: () => chain,
       eq: () => chain,
@@ -42,46 +59,38 @@ describe("queryExternalDataSource boundary", () => {
         error: null
       })
     };
-    booted!.runtime.setDomainRuntimeDependenciesForTest({ supabase: {
-      from: () => chain,
-      auth: { getUser: async () => ({ data: { user: { id: "user" } }, error: null }) },
-    } as any });
+    
+    booted!.runtime.setDomainRuntimeDependenciesForTest({
+      nowIso: () => "2026-09-08T00:00:00.000Z",
+      supabase: {
+        from: () => chain,
+        auth: { getUser: async () => ({ data: { user: { id: "user" } }, error: null }) },
+      } as unknown
+    });
 
-    vi.stubGlobal("fetch", vi.fn(async (input: any, init?: any) => {
-      const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as any)?.url);
-      (fetchCalls as any[]).push({ url: String(url), options: init });
-      return { ok: true, status: 200, json: async () => ({ data: { access_token: "fake-token" } }) };
-    }));
-
-    // Simulate an authenticated POST to the data source query endpoint
     const res = await booted!.app.inject({
       method: "POST",
       url: "/api/data-sources/unit/query",
-      headers: { authorization: "Bearer fake-token" },
+      headers: { authorization: "Bearer fake-session" },
       payload: { variables: { project_id: 20 } }
     });
 
-    expect(fetchCalls.length).toBeGreaterThanOrEqual(2);
+    expect(res.statusCode).toBe(200);
+    expect(datasourceFetchCalls.length).toBe(2);
 
-    const tokenFetch = (fetchCalls as any[]).find(call => call.url.includes("/access-token"));
-    expect(tokenFetch).toBeDefined();
+    const tokenFetch = datasourceFetchCalls[0];
+    expect(tokenFetch.url).toBe("https://example.test/api/access-token");
 
-    const dataFetch = (fetchCalls as any[]).find(call => call.url.includes("/unit"));
-    expect(dataFetch).toBeDefined();
+    const dataFetch = datasourceFetchCalls[1];
+    expect(dataFetch.url).toBe("https://example.test/api/unit?project_id=20&per_page=100");
+    expect(dataFetch.options.signal).toBeUndefined();
 
-    const fetchUrl = dataFetch!.url;
-    expect(fetchUrl).toBe("https://example.test/api/unit?project_id=20&per_page=100");
-    expect(fetchUrl).not.toContain("/api/api/");
+    const headers = dataFetch.options.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer fake-token");
+    expect(headers["X-Timestamp"]).toBe("2026-09-08T00:00:00.000Z");
 
-    const options = dataFetch!.options;
-    expect(options.signal).toBeUndefined(); // no timeout for datasource query
-
-    const headers = options.headers as Record<string, string>;
-    expect(headers).toHaveProperty("X-Signature");
-    
-    // We can't know the exact token or timestamp here without freezing time,
-    // but we can ensure the query string wasn't hashed by examining how it was built.
-    // The signature uses url.pathname. For https://example.test/api/unit?project_id=20&per_page=100, 
-    // pathname is /api/unit.
+    const canonical = `GET:/api/unit:fake-token:${createHash("sha256").update(Buffer.alloc(0)).digest("hex")}:2026-09-08T00:00:00.000Z`;
+    expect(canonical).not.toContain("project_id=20");
+    expect(headers["X-Signature"]).toBe(createHmac("sha512", "fake-token").update(canonical).digest("hex"));
   });
 });

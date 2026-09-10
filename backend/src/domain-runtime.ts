@@ -202,6 +202,7 @@ const secretMatches = (supplied, expected) => {
 
 export const setDomainRuntimeDependenciesForTest = (dependencies) => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
+  if (dependencies.nowIso) marisonApiClient.setDependencies({ nowIso: dependencies.nowIso });
   if (dependencies.supabase) supabase = dependencies.supabase;
   if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
   if (dependencies.getMarisonEmployeeSyncSource) getMarisonEmployeeSyncSource = dependencies.getMarisonEmployeeSyncSource;

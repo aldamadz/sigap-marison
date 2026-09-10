@@ -26,6 +26,7 @@ const responseJson = async (response: JsonResponse): Promise<Record<string, unkn
 };
 
 export const createMarisonApiClient = (dependencies: MarisonApiClientDependencies) => {
+  let deps = { ...dependencies };
   const accessTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
   const normalizeMarisonEnvironment = (value: unknown): MarisonEnvironment => {
@@ -34,7 +35,7 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
     return environment as MarisonEnvironment;
   };
 
-  const lockedEnvironment = normalizeMarisonEnvironment(dependencies.deploymentEnvironment);
+  const lockedEnvironment = normalizeMarisonEnvironment(deps.deploymentEnvironment);
 
   const getMarisonEnvironmentState = async () => ({
     environment: lockedEnvironment,
@@ -51,9 +52,9 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
       : "https://external.marisonregency.id/api";
     return {
       environment: normalized,
-      baseUrl: String(dependencies.readEnv(`${prefix}_BASE_URL`) || defaultBaseUrl).replace(/\/+$/, ""),
-      clientId: dependencies.readEnv(`${prefix}_CLIENT_ID`) || "",
-      clientSecret: dependencies.readEnv(`${prefix}_CLIENT_SECRET`) || "",
+      baseUrl: String(deps.readEnv(`${prefix}_BASE_URL`) || defaultBaseUrl).replace(/\/+$/, ""),
+      clientId: deps.readEnv(`${prefix}_CLIENT_ID`) || "",
+      clientSecret: deps.readEnv(`${prefix}_CLIENT_SECRET`) || "",
     };
   };
 
@@ -63,8 +64,8 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
     if (!clientId || !clientSecret) throw errorWithStatus(`Credential API Marison ${config.environment} belum dikonfigurasi di server.`, 500);
     const cacheKey = `${baseUrl}:${source.source_key}:${clientId}`;
     const cached = accessTokenCache.get(cacheKey);
-    if (cached && cached.expiresAt > dependencies.nowMs() + 30_000) return cached.token;
-    const response = await dependencies.fetchImpl(`${baseUrl}/access-token`, {
+    if (cached && cached.expiresAt > deps.nowMs() + 30_000) return cached.token;
+    const response = await deps.fetchImpl(`${baseUrl}/access-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
@@ -75,7 +76,7 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
     const token = typeof data.access_token === "string" ? data.access_token : "";
     if (!token) throw errorWithStatus("Response access token API eksternal Marison tidak valid.", 502);
     const expiresInSeconds = Number.parseInt(String(data.expires_in ?? "900"), 10);
-    accessTokenCache.set(cacheKey, { token, expiresAt: dependencies.nowMs() + (Number.isFinite(expiresInSeconds) ? expiresInSeconds : 900) * 1000 });
+    accessTokenCache.set(cacheKey, { token, expiresAt: deps.nowMs() + (Number.isFinite(expiresInSeconds) ? expiresInSeconds : 900) * 1000 });
     return token;
   };
 
@@ -102,12 +103,12 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
       }
     }
     const token = await getMarisonAccessToken({ source_key: sourceKey }, environment);
-    const timestamp = dependencies.nowIso();
+    const timestamp = deps.nowIso();
     const canonical = ["GET", url.pathname, token, sha256Hex(Buffer.alloc(0)), timestamp].join(":");
-    const response = await dependencies.fetchImpl(url, {
+    const response = await deps.fetchImpl(url, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}`, "X-Timestamp": timestamp, "X-Signature": hmacSha512Hex(token, canonical) },
-      ...(timeout ? { signal: dependencies.timeoutSignal(20_000) } : {}),
+      ...(timeout ? { signal: deps.timeoutSignal(20_000) } : {}),
     });
     const payload = await responseJson(response);
     if (!response.ok) throw errorWithStatus(String(payload.message || fallbackMessage), response.status);
@@ -139,5 +140,5 @@ export const createMarisonApiClient = (dependencies: MarisonApiClientDependencie
     throw errorWithStatus(`Pagination ${pathname} melebihi batas aman.`, 502);
   };
 
-  return { normalizeMarisonEnvironment, getMarisonEnvironmentState, getMarisonApiConfig, getMarisonAccessToken, getMarisonProtectedJson, getMarisonExternalJson, getAllMarisonCollection };
+  return { setDependencies: (d: Partial<MarisonApiClientDependencies>) => Object.assign(deps, d), normalizeMarisonEnvironment, getMarisonEnvironmentState, getMarisonApiConfig, getMarisonAccessToken, getMarisonProtectedJson, getMarisonExternalJson, getAllMarisonCollection };
 };
