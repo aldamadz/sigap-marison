@@ -65,7 +65,7 @@ describe("Marison API client", () => {
   });
 
   it("caches token explicitly partitioning by baseUrl, source_key, and clientId", async () => {
-    let now = 1_000;
+    const now = 1_000;
     const fetchImpl = vi.fn().mockResolvedValue(json(token("one", 31)));
     const envValues = { ...staging };
     const client = createMarisonApiClient({ 
@@ -84,12 +84,12 @@ describe("Marison API client", () => {
     await client.getMarisonAccessToken({ source_key: "y" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
 
-    envValues.MARISON_STAGING_BASE_URL = "https://new-base/api";
+    (envValues as any).MARISON_STAGING_BASE_URL = "https://new-base/api";
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(3);
 
-    envValues.MARISON_STAGING_BASE_URL = "https://marison-external.digivasi.com/api";
-    envValues.MARISON_STAGING_CLIENT_ID = "new-client";
+    (envValues as any).MARISON_STAGING_BASE_URL = "https://marison-external.digivasi.com/api";
+    (envValues as any).MARISON_STAGING_CLIENT_ID = "new-client";
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });

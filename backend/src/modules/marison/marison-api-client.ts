@@ -26,7 +26,7 @@ const responseJson = async (response: JsonResponse): Promise<Record<string, unkn
 };
 
 export const createMarisonApiClient = (dependencies: MarisonApiClientDependencies) => {
-  let deps = { ...dependencies };
+  const deps = { ...dependencies };
   const accessTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
   const normalizeMarisonEnvironment = (value: unknown): MarisonEnvironment => {
