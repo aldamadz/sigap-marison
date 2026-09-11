@@ -45,19 +45,16 @@ const authErrorClient = () => ({
 export const fetchCalls: string[] = [];
 
 export const stubRuntimeEnv = (vi: any) => {
-  vi.mock("@supabase/supabase-js", () => ({
-    createClient: authErrorClient,
-  }));
   fetchCalls.length = 0;
   vi.stubGlobal("fetch", vi.fn((input: any, init?: any) => {
-    const url = typeof input === "string" ? input : (input as any)?.url;
+    const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as { url: string }).url);
     fetchCalls.push(String(url));
     throw new Error(`FAIL-CLOSED: real fetch attempted: ${String(url)}`);
   }));
   for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
 };
 
-export const unstubRuntimeEnv = (vi: any) => {
+export const unstubRuntimeEnv = (vi: typeof import("vitest").vi) => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.resetModules();

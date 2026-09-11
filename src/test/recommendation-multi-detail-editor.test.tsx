@@ -40,7 +40,7 @@ const model: RecommendationMultiDetail = {
 };
 
 function Harness({
-  onUpload = vi.fn() as any,
+  onUpload = vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onUpload"]>(),
   users = [],
   offices = [],
   departments = [],
@@ -60,8 +60,8 @@ function Harness({
       departments={departments}
       uploadingKey={null}
       onUpload={onUpload as any}
-      onDeleteAttachment={vi.fn() as any}
-      onDeleteDetail={vi.fn() as any}
+      onDeleteAttachment={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteAttachment"]>()}
+      onDeleteDetail={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteDetail"]>()}
     />
   );
 }
@@ -90,8 +90,8 @@ function TwoItemHarness() {
         departments={[]}
         uploadingKey={null}
         onUpload={vi.fn()}
-        onDeleteAttachment={vi.fn() as any}
-        onDeleteDetail={vi.fn() as any}
+        onDeleteAttachment={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteAttachment"]>()}
+        onDeleteDetail={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteDetail"]>()}
       />
       <output data-testid="quantities">{value.items.map((item) => item.details[0].quantity).join(",")}</output>
     </>
