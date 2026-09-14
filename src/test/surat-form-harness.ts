@@ -193,13 +193,13 @@ export function setupTestHarness() {
   global.fetch = mockFetch as typeof fetch;
 
   // Mock modules
-  vi.mock("@/services/surat.service", () => ({ suratService: serviceMock }));
-  vi.mock("@/lib/supabase", () => ({ supabase: supabaseMock }));
-  vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
-  vi.mock("@/components/app/AppDialogProvider", () => ({
+  vi.doMock("@/services/surat.service", () => ({ suratService: serviceMock }));
+  vi.doMock("@/lib/supabase", () => ({ supabase: supabaseMock }));
+  vi.doMock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
+  vi.doMock("@/components/app/AppDialogProvider", () => ({
     useAppDialog: () => ({ confirm: confirmMock }),
   }));
-  vi.mock("react-router", () => {
+  vi.doMock("react-router", () => {
     const setSearchParams = vi.fn();
     return {
       useSearchParams: () => [searchParamsOverride || new URLSearchParams(), setSearchParams],
