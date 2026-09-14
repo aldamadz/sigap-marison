@@ -44,7 +44,7 @@ const authErrorClient = () => ({
 // a vendor fetch.
 export const fetchCalls: string[] = [];
 
-export const stubRuntimeEnv = (vi: any) => {
+export const stubRuntimeEnv = (vi: typeof import("vitest").vi) => {
   fetchCalls.length = 0;
   vi.stubGlobal("fetch", vi.fn((input: any, init?: any) => {
     const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as { url: string }).url);
