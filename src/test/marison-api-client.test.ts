@@ -9,7 +9,11 @@ const makeClient = (values: Record<string, string> = {}, fetchImpl = vi.fn()) =>
   deploymentEnvironment: "staging",
   readEnv: env(values), fetchImpl, nowMs: () => 1_000, nowIso: () => "2026-09-08T00:00:00.000Z", timeoutSignal: vi.fn(() => AbortSignal.abort()),
 });
-const staging = { MARISON_STAGING_CLIENT_ID: "client", MARISON_STAGING_CLIENT_SECRET: "secret" };
+const staging: Record<string, string> = { MARISON_STAGING_CLIENT_ID: "client", MARISON_STAGING_CLIENT_SECRET: "secret" };
+
+function assertHttpError(e: unknown): asserts e is Error & { status: number } {
+  if (!(e instanceof Error) || !("status" in e)) throw new Error("Expected HTTP error");
+}
 
 describe("Marison API client", () => {
   it("normalizes allowed environments and rejects invalid before env lookup", () => {
@@ -34,8 +38,9 @@ describe("Marison API client", () => {
       await makeClient({}, fetchImpl).getMarisonAccessToken({ source_key: "source" }, "staging");
       expect.unreachable("Should throw");
     } catch (e: unknown) {
-      expect((e as any).message).toBe("Credential API Marison staging belum dikonfigurasi di server.");
-      expect((e as any).status).toBe(500);
+      assertHttpError(e);
+      expect(e.message).toBe("Credential API Marison staging belum dikonfigurasi di server.");
+      expect(e.status).toBe(500);
     }
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -52,15 +57,17 @@ describe("Marison API client", () => {
       await makeClient(staging, vi.fn().mockResolvedValue(json({ message: "vendor" }, 401))).getMarisonAccessToken({ source_key: "x" }, "staging");
       expect.unreachable("Should throw");
     } catch (e: unknown) {
-      expect((e as any).message).toBe("vendor");
-      expect((e as any).status).toBe(401);
+      assertHttpError(e);
+      expect(e.message).toBe("vendor");
+      expect(e.status).toBe(401);
     }
     try {
       await makeClient(staging, vi.fn().mockResolvedValue(json({ data: {} }))).getMarisonAccessToken({ source_key: "x" }, "staging");
       expect.unreachable("Should throw");
     } catch (e: unknown) {
-      expect((e as any).message).toBe("Response access token API eksternal Marison tidak valid.");
-      expect((e as any).status).toBe(502);
+      assertHttpError(e);
+      expect(e.message).toBe("Response access token API eksternal Marison tidak valid.");
+      expect(e.status).toBe(502);
     }
   });
 
@@ -84,12 +91,12 @@ describe("Marison API client", () => {
     await client.getMarisonAccessToken({ source_key: "y" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
 
-    (envValues as any).MARISON_STAGING_BASE_URL = "https://new-base/api";
+    envValues.MARISON_STAGING_BASE_URL = "https://new-base/api";
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(3);
 
-    (envValues as any).MARISON_STAGING_BASE_URL = "https://marison-external.digivasi.com/api";
-    (envValues as any).MARISON_STAGING_CLIENT_ID = "new-client";
+    envValues.MARISON_STAGING_BASE_URL = "https://marison-external.digivasi.com/api";
+    envValues.MARISON_STAGING_CLIENT_ID = "new-client";
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
@@ -105,8 +112,9 @@ describe("Marison API client", () => {
       await makeClient(staging, vi.fn().mockResolvedValueOnce(json(token())).mockResolvedValueOnce(json({}, 503))).getMarisonProtectedJson("staging", "/branches");
       expect.unreachable("Should throw");
     } catch (e: unknown) {
-      expect((e as any).message).toBe("Gagal mengambil /api/branches dari API Marison.");
-      expect((e as any).status).toBe(503);
+      assertHttpError(e);
+      expect(e.message).toBe("Gagal mengambil /api/branches dari API Marison.");
+      expect(e.status).toBe(503);
     }
   });
 
@@ -123,8 +131,9 @@ describe("Marison API client", () => {
       await makeClient(staging, hundred).getAllMarisonCollection("staging", "/branches");
       expect.unreachable("Should throw");
     } catch (e: unknown) {
-      expect((e as any).message).toBe("Pagination /branches melebihi batas aman.");
-      expect((e as any).status).toBe(502);
+      assertHttpError(e);
+      expect(e.message).toBe("Pagination /branches melebihi batas aman.");
+      expect(e.status).toBe(502);
     }
   });
 
@@ -172,8 +181,9 @@ describe("Marison API client", () => {
         await resolvingClient.getMarisonExternalJson({}, "production", new URL(url));
         expect.unreachable("Should throw");
       } catch (e: unknown) {
-        expect((e as any).message).toBe("URL external Marison tidak valid.");
-        expect((e as any).status).toBe(400);
+        assertHttpError(e);
+      expect(e.message).toBe("URL external Marison tidak valid.");
+        expect(e.status).toBe(400);
       }
     };
     await rejectsUrl("https://evil.com/api");
