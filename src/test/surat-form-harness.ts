@@ -17,6 +17,24 @@
 
 import { vi, type Mock } from "vitest";
 
+vi.mock("@/services/surat.service", () => ({ suratService: serviceMock }));
+vi.mock("@/lib/supabase", () => ({ supabase: supabaseMock }));
+vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
+vi.mock("@/components/app/AppDialogProvider", () => ({
+  useAppDialog: () => ({ confirm: confirmMock }),
+}));
+vi.mock("react-router", () => {
+  const setSearchParams = vi.fn();
+  return {
+    useSearchParams: () => [searchParamsOverride || new URLSearchParams(), setSearchParams],
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "default" }),
+    useParams: () => ({}),
+    Outlet: ({ children }: { children?: React.ReactNode }) => children ?? null,
+    BrowserRouter: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  };
+});
+
 // ─── Service Mock ───────────────────────────────────────────────
 export const serviceMock = {
   getMasterData: vi.fn(),
@@ -192,24 +210,6 @@ export function setupTestHarness() {
   // Fetch mock
   global.fetch = mockFetch as typeof fetch;
 
-  // Mock modules
-  vi.mock("@/services/surat.service", () => ({ suratService: serviceMock }));
-  vi.mock("@/lib/supabase", () => ({ supabase: supabaseMock }));
-  vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
-  vi.mock("@/components/app/AppDialogProvider", () => ({
-    useAppDialog: () => ({ confirm: confirmMock }),
-  }));
-  vi.mock("react-router", () => {
-    const setSearchParams = vi.fn();
-    return {
-      useSearchParams: () => [searchParamsOverride || new URLSearchParams(), setSearchParams],
-      useNavigate: () => vi.fn(),
-      useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "default" }),
-      useParams: () => ({}),
-      Outlet: ({ children }: { children?: React.ReactNode }) => children ?? null,
-      BrowserRouter: ({ children }: { children?: React.ReactNode }) => children ?? null,
-    };
-  });
 }
 
 export function teardownTestHarness() {

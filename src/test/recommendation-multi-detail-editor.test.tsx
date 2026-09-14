@@ -40,12 +40,12 @@ const model: RecommendationMultiDetail = {
 };
 
 function Harness({
-  onUpload = vi.fn(),
+  onUpload = vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onUpload"]>(),
   users = [],
   offices = [],
   departments = [],
 }: {
-  onUpload?: ReturnType<typeof vi.fn>;
+  onUpload?: React.ComponentProps<typeof RecommendationMultiDetailEditor>["onUpload"];
   users?: Array<{ id: string; full_name: string; office_id: string; department_id: string }>;
   offices?: Array<{ id: string; name: string; kedudukan: string }>;
   departments?: Array<{ id: string; name: string }>;
@@ -60,8 +60,8 @@ function Harness({
       departments={departments}
       uploadingKey={null}
       onUpload={onUpload}
-      onDeleteAttachment={vi.fn()}
-      onDeleteDetail={vi.fn()}
+      onDeleteAttachment={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteAttachment"]>()}
+      onDeleteDetail={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteDetail"]>()}
     />
   );
 }
@@ -90,8 +90,8 @@ function TwoItemHarness() {
         departments={[]}
         uploadingKey={null}
         onUpload={vi.fn()}
-        onDeleteAttachment={vi.fn()}
-        onDeleteDetail={vi.fn()}
+        onDeleteAttachment={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteAttachment"]>()}
+        onDeleteDetail={vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onDeleteDetail"]>()}
       />
       <output data-testid="quantities">{value.items.map((item) => item.details[0].quantity).join(",")}</output>
     </>
@@ -134,7 +134,7 @@ describe("RecommendationMultiDetailEditor", () => {
   });
 
   it("passes every selected image in one upload action without blanking the editor", () => {
-    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const onUpload = vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onUpload"]>().mockResolvedValue(undefined);
     const { container } = render(<Harness onUpload={onUpload} />);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
