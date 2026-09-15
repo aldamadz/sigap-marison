@@ -35,9 +35,10 @@ describe("Hybrid Marison master sync", () => {
     const server = read("backend/src/domain-runtime.ts");
     const sync = read("server/marison-employee-sync.mjs");
 
-    const sourceLoader = server.slice(
-      server.indexOf("let getMarisonEmployeeSyncSource"),
-      server.indexOf("const getMarisonBranchSyncSource"),
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    const sourceLoader = preview.slice(
+      preview.indexOf("const getMarisonEmployeeSyncSource"),
+      preview.indexOf("const previewMarisonBranches"),
     );
     expect(sourceLoader.indexOf('"/branches"')).toBeLessThan(sourceLoader.indexOf('"/employees"'));
 
@@ -58,7 +59,8 @@ describe("Hybrid Marison master sync", () => {
     expect(migration).toContain("scope in ('branches', 'directory', 'projects')");
     expect(migration).toContain("entity_type in ('branch', 'employee', 'project')");
     expect(migration).not.toContain("alter column id");
-    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/projects")');
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/projects")');
     expect(server).toContain("/api/integrations/marison/projects/sync");
     expect(server).toContain('scope: "projects"');
     expect(sync).toContain("export const previewMarisonProjectSync");
