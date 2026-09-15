@@ -37,6 +37,28 @@ function renderWorkspace(options: {
 
 const quickInput = () => screen.getByLabelText("Apa yang akan dikerjakan?");
 
+/**
+ * Membuka kontrol status pada baris lalu memilih satu status dari menu.
+ * Radix memakai pointerdown untuk klik, jadi menu dibuka lewat keyboard
+ * (yang sekaligus menguji aksesibilitas keyboard).
+ */
+async function chooseStatus(row: HTMLElement, statusLabel: string): Promise<void> {
+  const trigger = within(row).getByTestId(/^work-entry-status-control-/);
+  trigger.focus();
+  expect(trigger).toHaveFocus();
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  const option = await screen.findByRole("menuitemradio", { name: statusLabel });
+  fireEvent.keyDown(option, { key: "Enter" });
+  fireEvent.click(option);
+}
+
+async function openActionMenu(row: HTMLElement): Promise<void> {
+  const menuButton = within(row).getByRole("button", { name: /Menu tindakan/i });
+  menuButton.focus();
+  fireEvent.keyDown(menuButton, { key: "Enter" });
+  await screen.findByRole("menu");
+}
+
 describe("WorkCalendarWorkspace — quick entry", () => {
   it("hanya membutuhkan judul untuk membuat pekerjaan", async () => {
     const { repository } = renderWorkspace({ entries: [] });
@@ -101,14 +123,45 @@ describe("WorkCalendarWorkspace — quick entry", () => {
   });
 });
 
-describe("WorkCalendarWorkspace — status inline", () => {
+describe("WorkCalendarWorkspace — kontrol status per baris", () => {
+  it("memakai satu kontrol status dengan label status aktif", async () => {
+    renderWorkspace({
+      entries: [
+        createFixtureWorkEntry({ id: "single-1", title: "Pekerjaan satu kontrol", status: "planned" }),
+      ],
+    });
+
+    const row = await screen.findByTestId("work-entry-row-single-1");
+    const trigger = within(row).getByTestId("work-entry-status-control-single-1");
+    expect(trigger).toHaveTextContent("Direncanakan");
+    expect(trigger).toHaveAttribute("data-active-status", "planned");
+    // Deretan empat tombol ikon lama tidak boleh ada lagi.
+    expect(screen.queryByTestId("work-entry-status-group-single-1")).not.toBeInTheDocument();
+  });
+
+  it("menampilkan empat status berlabel lengkap pada menu status", async () => {
+    renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "single-2", title: "Pekerjaan menu", status: "planned" })],
+    });
+
+    const row = await screen.findByTestId("work-entry-row-single-2");
+    const trigger = within(row).getByTestId("work-entry-status-control-single-2");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    expect(await screen.findByRole("menuitemradio", { name: "Direncanakan" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: "Sedang Dikerjakan" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: "Selesai" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: "Terhambat" })).toBeInTheDocument();
+  });
+
   it("meminta realisasi inline saat status menjadi completed", async () => {
     renderWorkspace({
       entries: [createFixtureWorkEntry({ id: "status-1", title: "Pekerjaan status", status: "planned" })],
     });
 
     const row = await screen.findByTestId("work-entry-row-status-1");
-    fireEvent.click(within(row).getByRole("button", { name: /sebagai Selesai/i }));
+    await chooseStatus(row, "Selesai");
 
     const field = await screen.findByLabelText(/Hasil pekerjaan/i);
     expect(field).toBeInTheDocument();
@@ -122,7 +175,7 @@ describe("WorkCalendarWorkspace — status inline", () => {
     });
 
     const row = await screen.findByTestId("work-entry-row-status-2");
-    fireEvent.click(within(row).getByRole("button", { name: /sebagai Selesai/i }));
+    await chooseStatus(row, "Selesai");
     const save = await screen.findByRole("button", { name: "Simpan" });
     expect(save).toBeDisabled();
     expect(row).toHaveAttribute("data-entry-status", "planned");
@@ -134,7 +187,7 @@ describe("WorkCalendarWorkspace — status inline", () => {
     });
 
     const row = await screen.findByTestId("work-entry-row-status-3");
-    fireEvent.click(within(row).getByRole("button", { name: /sebagai Selesai/i }));
+    await chooseStatus(row, "Selesai");
     fireEvent.change(await screen.findByLabelText(/Hasil pekerjaan/i), {
       target: { value: "Sudah dikirim ke atasan." },
     });
@@ -157,7 +210,7 @@ describe("WorkCalendarWorkspace — status inline", () => {
     });
 
     const row = await screen.findByTestId("work-entry-row-status-4");
-    fireEvent.click(within(row).getByRole("button", { name: /sebagai Terhambat/i }));
+    await chooseStatus(row, "Terhambat");
     expect(await screen.findByLabelText(/Alasan terhambat/i)).toBeInTheDocument();
   });
 
@@ -167,7 +220,7 @@ describe("WorkCalendarWorkspace — status inline", () => {
     });
 
     const row = await screen.findByTestId("work-entry-row-status-5");
-    fireEvent.click(within(row).getByRole("button", { name: /sebagai Terhambat/i }));
+    await chooseStatus(row, "Terhambat");
     fireEvent.change(await screen.findByLabelText(/Alasan terhambat/i), {
       target: { value: "Menunggu dokumen dari pusat." },
     });
@@ -186,7 +239,7 @@ describe("WorkCalendarWorkspace — status inline", () => {
     });
 
     const row = await screen.findByTestId("work-entry-row-status-6");
-    fireEvent.click(within(row).getByRole("button", { name: /sebagai Sedang Dikerjakan/i }));
+    await chooseStatus(row, "Sedang Dikerjakan");
 
     await waitFor(() =>
       expect(screen.getByTestId("work-entry-row-status-6")).toHaveAttribute(
@@ -195,6 +248,37 @@ describe("WorkCalendarWorkspace — status inline", () => {
       ),
     );
     expect(screen.queryByLabelText(/Hasil pekerjaan/i)).not.toBeInTheDocument();
+  });
+
+  it("tetap menyediakan menu tindakan detail dan pindah tanggal", async () => {
+    renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "menu-1", title: "Pekerjaan dengan aksi" })],
+    });
+
+    const row = await screen.findByTestId("work-entry-row-menu-1");
+    await openActionMenu(row);
+
+    expect(await screen.findByRole("menuitem", { name: /Buka detail/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Ubah judul/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Pindahkan tanggal/i })).toBeInTheDocument();
+  });
+
+  it("menyederhanakan baris minggu (compact) tanpa label status ganda", async () => {
+    renderWorkspace({
+      view: "week",
+      entries: [
+        createFixtureWorkEntry({ id: "compact-1", title: "Pekerjaan minggu", status: "in_progress" }),
+      ],
+    });
+
+    const row = await screen.findByTestId("work-entry-row-compact-1");
+    expect(row).toHaveAttribute("data-row-variant", "compact");
+    // Pada row compact label status ditegaskan sekali saja di baris metadata.
+    expect(within(row).getAllByTestId("work-entry-status-label-compact-1")).toHaveLength(1);
+    expect(within(row).getByTestId("work-entry-status-control-compact-1")).toHaveAttribute(
+      "data-active-status",
+      "in_progress",
+    );
   });
 });
 
@@ -212,6 +296,27 @@ describe("WorkCalendarWorkspace — overdue dan navigasi", () => {
     expect(await screen.findByTestId("work-entry-overdue-late")).toHaveTextContent("Terlambat");
     // Overdue tetap status `planned`; tidak ada status tersimpan bernama overdue.
     expect(screen.getByTestId("work-entry-row-late")).toHaveAttribute("data-entry-status", "planned");
+  });
+
+  it("menandai pekerjaan blocked pada tanggal lampau sebagai terlambat", async () => {
+    renderWorkspace({
+      view: "week",
+      entries: [
+        createFixtureWorkEntry({
+          id: "late-blocked",
+          title: "Pekerjaan terhambat lampau",
+          status: "blocked",
+          blockedReason: "Menunggu vendor.",
+          workDate: "2026-03-09",
+        }),
+      ],
+    });
+
+    expect(await screen.findByTestId("work-entry-overdue-late-blocked")).toHaveTextContent("Terlambat");
+    expect(screen.getByTestId("work-entry-row-late-blocked")).toHaveAttribute(
+      "data-entry-status",
+      "blocked",
+    );
   });
 
   it("tidak menandai entry selesai sebagai terlambat", async () => {
@@ -251,6 +356,66 @@ describe("WorkCalendarWorkspace — overdue dan navigasi", () => {
   });
 });
 
+describe("WorkCalendarWorkspace — ringkasan progres", () => {
+  it("menampilkan seluruh status termasuk Direncanakan dan indikator Terlambat", async () => {
+    renderWorkspace({
+      entries: [
+        createFixtureWorkEntry({ id: "sum-1", status: "planned" }),
+        createFixtureWorkEntry({ id: "sum-2", status: "in_progress" }),
+        createFixtureWorkEntry({ id: "sum-3", status: "completed", realization: "Selesai." }),
+        createFixtureWorkEntry({ id: "sum-4", status: "blocked", blockedReason: "Tertahan." }),
+      ],
+    });
+
+    await screen.findByTestId("work-entry-row-sum-1");
+    const summary = screen.getByTestId("daily-progress-summary");
+    expect(within(summary).getByTestId("progress-planned")).toHaveTextContent("1");
+    expect(within(summary).getByTestId("progress-inProgress")).toHaveTextContent("1");
+    expect(within(summary).getByTestId("progress-completed")).toHaveTextContent("1");
+    expect(within(summary).getByTestId("progress-blocked")).toHaveTextContent("1");
+    expect(within(summary).getByTestId("progress-overdue")).toHaveTextContent("0");
+    expect(within(summary).getByTestId("progress-total")).toHaveTextContent("4");
+  });
+
+  it("menjaga jumlah status sama dengan total dan overdue terpisah", async () => {
+    renderWorkspace({
+      entries: [
+        createFixtureWorkEntry({ id: "cons-1", status: "planned" }),
+        createFixtureWorkEntry({ id: "cons-2", status: "blocked", blockedReason: "Tertahan." }),
+        createFixtureWorkEntry({
+          id: "cons-late",
+          status: "planned",
+          workDate: "2026-03-09",
+        }),
+      ],
+    });
+
+    const summary = await screen.findByTestId("daily-progress-summary");
+    // Entry 9 Maret tidak termasuk rentang Hari 10 Maret, jadi ringkasan hari
+    // hanya memuat dua entry; gunakan mode Minggu untuk memuat keduanya.
+    expect(summary).toBeInTheDocument();
+
+    renderWorkspace({
+      view: "week",
+      entries: [
+        createFixtureWorkEntry({ id: "cons-3", status: "planned" }),
+        createFixtureWorkEntry({ id: "cons-4", status: "blocked", blockedReason: "Tertahan." }),
+        createFixtureWorkEntry({ id: "cons-5", status: "completed", realization: "Selesai.", workDate: "2026-03-09" }),
+      ],
+    });
+    const weekRow = await screen.findByTestId("work-entry-row-cons-5");
+    expect(weekRow).toHaveAttribute("data-entry-status", "completed");
+  });
+
+  it("tidak pernah menyediakan input persentase yang dapat diedit", async () => {
+    renderWorkspace({ entries: [createFixtureWorkEntry({ id: "pct-1" })] });
+    await screen.findByTestId("work-entry-row-pct-1");
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    const progressbar = screen.getAllByRole("progressbar")[0];
+    expect(progressbar).toHaveAttribute("aria-readonly", "true");
+  });
+});
+
 describe("WorkCalendarWorkspace — mode Tim", () => {
   it("menyembunyikan tab Tim tanpa bawahan", async () => {
     renderWorkspace({ entries: [], teamMembers: [] });
@@ -262,11 +427,32 @@ describe("WorkCalendarWorkspace — mode Tim", () => {
     expect(screen.getByRole("button", { name: /^Tim$/i })).toBeInTheDocument();
   });
 
-  it("menghitung progres tim otomatis tanpa input persen", async () => {
+  it("menampilkan identitas tanpa dipotong dan metrik lengkap per anggota", async () => {
     renderWorkspace({ view: "team" });
     const row = await screen.findByTestId("work-team-row-user-bawahan-1");
-    expect(within(row).getByTestId("team-completed-user-bawahan-1")).toHaveTextContent("1");
-    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+
+    expect(within(row).getByText("Sinta Maharani")).toBeInTheDocument();
+    expect(within(row).getByText("Staf Operasional")).toBeInTheDocument();
+    // Nama dan jabatan tidak memakai kelas truncate.
+    expect(within(row).getByText("Sinta Maharani")).not.toHaveClass("truncate");
+    expect(within(row).getByText("Staf Operasional")).not.toHaveClass("truncate");
+
+    expect(within(row).getByTestId("team-ratio-label-user-bawahan-1")).toHaveTextContent("1");
+    expect(within(row).getByTestId("team-total-user-bawahan-1")).toHaveTextContent("2");
+    expect(within(row).getByTestId("team-planned-user-bawahan-1")).toHaveTextContent("0");
+    expect(within(row).getByTestId("team-in-progress-user-bawahan-1")).toHaveTextContent("1");
+    expect(within(row).getByTestId("team-blocked-user-bawahan-1")).toHaveTextContent("0");
+    expect(within(row).getByTestId("team-overdue-user-bawahan-1")).toBeInTheDocument();
+    expect(within(row).getByTestId("team-ratio-user-bawahan-1")).toBeInTheDocument();
+  });
+
+  it("menampilkan metrik Direncanakan pada anggota tim", async () => {
+    renderWorkspace({ view: "team" });
+    const row = await screen.findByTestId("work-team-row-user-bawahan-2");
+    // Bimo Nugroho punya satu entry planned dan satu blocked.
+    expect(within(row).getByTestId("team-planned-user-bawahan-2")).toHaveTextContent("1");
+    expect(within(row).getByTestId("team-blocked-user-bawahan-2")).toHaveTextContent("1");
+    expect(within(row).getByTestId("team-total-user-bawahan-2")).toHaveTextContent("2");
   });
 
   it("tidak menyediakan aksi ubah/hapus pada entry bawahan", async () => {
@@ -275,17 +461,14 @@ describe("WorkCalendarWorkspace — mode Tim", () => {
     fireEvent.click(within(row).getByRole("button", { expanded: false }));
 
     const entryRow = await screen.findByTestId("work-entry-row-team-1");
-    expect(within(entryRow).queryByTestId("work-entry-status-group-team-1")).not.toBeInTheDocument();
+    expect(within(entryRow).queryByTestId(/^work-entry-status-control-/)).not.toBeInTheDocument();
 
-    // Menu dibuka lewat keyboard karena Radix memakai pointerdown untuk klik.
-    const menuButton = within(entryRow).getByRole("button", { name: /Menu tindakan/i });
-    menuButton.focus();
-    fireEvent.keyDown(menuButton, { key: "Enter" });
+    await openActionMenu(entryRow);
 
     expect(await screen.findByRole("menuitem", { name: /Lihat detail/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Hapus/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Ubah judul/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Ubah status/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitemradio", { name: "Selesai" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Pindahkan tanggal/i })).not.toBeInTheDocument();
   });
 
@@ -320,6 +503,23 @@ describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
     expect(screen.getByTestId(`work-month-more-${WORK_CALENDAR_FIXTURE_TODAY}`)).toHaveTextContent("+1 lainnya");
   });
 
+  it("menyediakan indikator ringkas mobile tanpa preview judul", async () => {
+    renderWorkspace({
+      view: "month",
+      entries: [
+        createFixtureWorkEntry({ id: "mc1", title: "Satu", workDate: WORK_CALENDAR_FIXTURE_TODAY, status: "completed" }),
+        createFixtureWorkEntry({ id: "mc2", title: "Dua", workDate: WORK_CALENDAR_FIXTURE_TODAY, status: "blocked", blockedReason: "Tertahan." }),
+      ],
+    });
+
+    const compact = await screen.findByTestId(`work-month-compact-${WORK_CALENDAR_FIXTURE_TODAY}`);
+    // Satu selesai dan satu terhambat: dua penanda status ringkas.
+    expect(compact).toHaveTextContent("11");
+    // Indikator mobile tidak memuat judul entry.
+    expect(compact).not.toHaveTextContent("Satu");
+    expect(compact).not.toHaveTextContent("Dua");
+  });
+
   it("membuka panel hari saat +N lainnya diklik", async () => {
     renderWorkspace({
       view: "month",
@@ -333,6 +533,114 @@ describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
     fireEvent.click(await screen.findByTestId(`work-month-more-${WORK_CALENDAR_FIXTURE_TODAY}`));
     expect(await screen.findByTestId("work-month-day-panel")).toBeInTheDocument();
     expect(screen.getByTestId("work-month-day-panel")).toHaveTextContent("1 selesai dari 3 pekerjaan");
+  });
+
+  it("membuka daftar hari penuh dari sel bulan versi mobile", async () => {
+    renderWorkspace({
+      view: "month",
+      entries: [
+        createFixtureWorkEntry({ id: "mo1", title: "Rapat koordinasi mingguan", workDate: WORK_CALENDAR_FIXTURE_TODAY }),
+      ],
+    });
+
+    fireEvent.click(await screen.findByTestId(`work-month-open-${WORK_CALENDAR_FIXTURE_TODAY}`));
+    const panel = await screen.findByTestId("work-month-day-panel");
+    // Judul lengkap terbaca di panel, bukan potongan satu huruf di grid.
+    expect(panel).toHaveTextContent("Rapat koordinasi mingguan");
+  });
+});
+
+describe("WorkCalendarWorkspace — konfirmasi hapus", () => {
+  async function openDeleteDialog() {
+    const row = await screen.findByTestId("work-entry-row-del-1");
+    await openActionMenu(row);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Hapus/i }));
+    return row;
+  }
+
+  it("tidak memanggil repository sebelum konfirmasi", async () => {
+    const { repository } = renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "del-1", title: "Pekerjaan dihapus" })],
+    });
+    const deleted: string[] = [];
+    repository.deleteEntry = async ({ entryId }) => {
+      deleted.push(entryId);
+    };
+
+    const row = await openDeleteDialog();
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(deleted).toEqual([]);
+    expect(row).toHaveAttribute("data-entry-status", "planned");
+  });
+
+  it("menyebut judul pekerjaan pada dialog konfirmasi", async () => {
+    renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "del-1", title: "Pekerjaan dihapus" })],
+    });
+    await openDeleteDialog();
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Pekerjaan dihapus");
+    expect(within(dialog).getByRole("button", { name: "Batal" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Hapus pekerjaan/i })).toBeInTheDocument();
+  });
+
+  it("Batal tidak menghapus dan mengembalikan fokus ke tombol menu", async () => {
+    const { repository } = renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "del-1", title: "Pekerjaan dihapus" })],
+    });
+    const deleted: string[] = [];
+    repository.deleteEntry = async ({ entryId }) => {
+      deleted.push(entryId);
+    };
+
+    const row = await openDeleteDialog();
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Batal" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(deleted).toEqual([]);
+    expect(screen.getByTestId("work-entry-row-del-1")).toBeInTheDocument();
+    // Fokus kembali ke tombol menu pemicu.
+    expect(within(row).getByRole("button", { name: /Menu tindakan/i })).toHaveFocus();
+  });
+
+  it("Hapus pekerjaan menjalankan penghapusan setelah konfirmasi", async () => {
+    const { repository } = renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "del-1", title: "Pekerjaan dihapus" })],
+    });
+    const deleted: string[] = [];
+    repository.deleteEntry = async ({ entryId }) => {
+      deleted.push(entryId);
+    };
+
+    await openDeleteDialog();
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: /Hapus pekerjaan/i }),
+    );
+
+    await waitFor(() => expect(deleted).toEqual(["del-1"]));
+    await waitFor(() =>
+      expect(screen.queryByTestId("work-entry-row-del-1")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("menampilkan error hapus dekat area kerja dan tetap menyimpan entry", async () => {
+    const { repository } = renderWorkspace({
+      entries: [createFixtureWorkEntry({ id: "del-1", title: "Pekerjaan dihapus" })],
+    });
+    repository.deleteEntry = async () => {
+      throw new Error("Penghapusan gagal di server.");
+    };
+
+    await openDeleteDialog();
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: /Hapus pekerjaan/i }),
+    );
+
+    expect(await screen.findByTestId("work-calendar-mutation-error")).toHaveTextContent(
+      "Penghapusan gagal di server.",
+    );
+    expect(screen.getByTestId("work-entry-row-del-1")).toBeInTheDocument();
   });
 });
 
@@ -361,17 +669,13 @@ describe("WorkCalendarWorkspace — aksesibilitas", () => {
     expect(screen.getByRole("button", { name: "Tambah pekerjaan" })).toBeInTheDocument();
   });
 
-  it("mengubah status melalui keyboard", async () => {
+  it("mengubah status melalui keyboard dari kontrol status", async () => {
     renderWorkspace({
       entries: [createFixtureWorkEntry({ id: "kb-1", title: "Pekerjaan keyboard" })],
     });
 
     const row = await screen.findByTestId("work-entry-row-kb-1");
-    const button = within(row).getByRole("button", { name: /sebagai Sedang Dikerjakan/i });
-    button.focus();
-    expect(button).toHaveFocus();
-    fireEvent.keyDown(button, { key: "Enter" });
-    fireEvent.click(button);
+    await chooseStatus(row, "Sedang Dikerjakan");
 
     await waitFor(() =>
       expect(screen.getByTestId("work-entry-row-kb-1")).toHaveAttribute(

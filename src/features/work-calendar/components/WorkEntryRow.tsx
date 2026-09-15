@@ -1,17 +1,32 @@
 /**
- * Baris entry pekerjaan untuk tampilan Hari dan hasil pencarian.
+ * Baris entry pekerjaan untuk tampilan Hari, Minggu, dan hasil pencarian.
  *
  * Prinsip:
  * - status selalu memakai ikon + label, bukan warna saja;
- * - realisasi hanya tampil bila sudah diisi;
- * - indikator waktu hanya tampil bila jam diisi;
+ * - kontrol status memakai satu trigger yang menampilkan status aktif dan
+ *   label lengkap, bukan deretan empat tombol ikon yang padat;
  * - status `completed`/`blocked` meminta input lanjutan secara inline,
  *   tanpa membuka modal besar;
+ * - menu tindakan (detail, ubah judul, pindahkan tanggal, hapus) tetap ada;
+ * - `Hapus` hanya meminta konfirmasi; penghapusan dilakukan pemanggil;
+ * - baris `compact` (kolom minggu yang sempit) menaruh kontrol pada baris
+ *   kedua supaya judul tidak pernah terhimpit sampai nol lebar;
  * - seluruh target sentuh minimal 44px dan tidak ada overflow horizontal.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, Check, Ellipsis, Eye, Hourglass, MapPin, Pencil, Trash2, X } from "lucide-react";
+import {
+  CalendarClock,
+  Check,
+  ChevronDown,
+  Ellipsis,
+  Eye,
+  Hourglass,
+  MapPin,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +35,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -29,7 +46,7 @@ import {
 import type { WorkDate, WorkEntry, WorkEntryStatus } from "../types/work-calendar";
 import {
   compareWorkEntries,
-  getWorkEntryStatusLabel,
+  getWorkEntryStatusMeta,
   isWorkEntryOverdue,
   WORK_ENTRY_STATUS_ORDER,
   type WorkEntryStatusFollowUp,
@@ -50,8 +67,8 @@ export interface WorkEntryRowProps {
   isSaving?: boolean;
   promptType?: WorkEntryStatusFollowUp;
   /**
-   * `compact` dipakai kolom minggu yang sempit: menyembunyikan deretan
-   * tombol status agar judul tetap terbaca, tanpa kehilangan menu tindakan.
+   * `compact` dipakai kolom minggu yang sempit: kontrol status dan menu
+   * tindakan diletakkan pada baris kedua.
    */
   variant?: "full" | "compact";
   onUpdateTitle: (title: string) => void;
@@ -61,6 +78,174 @@ export interface WorkEntryRowProps {
   onOpenDetail: () => void;
   onMoveToDate: (date: WorkDate) => void;
   onDelete: () => void;
+}
+
+interface WorkEntryRowControlsProps {
+  entry: WorkEntry;
+  readOnly: boolean;
+  isSaving: boolean;
+  /** `compact` menyembunyikan label status pada trigger (ikon saja). */
+  compact: boolean;
+  onRequestStatus: (status: WorkEntryStatus) => void;
+  onStartEditTitle: () => void;
+  onOpenDetail: () => void;
+  onMoveToDate: (date: WorkDate) => void;
+  onDelete: () => void;
+}
+
+/**
+ * Kontrol status tunggal + menu tindakan.
+ *
+ * Dipisah dari `WorkEntryRow` supaya dapat ditempatkan pada baris pertama
+ * (layout penuh) atau baris kedua (layout compact) tanpa duplikasi kode.
+ */
+function WorkEntryRowControls({
+  entry,
+  readOnly,
+  isSaving,
+  compact,
+  onRequestStatus,
+  onStartEditTitle,
+  onOpenDetail,
+  onMoveToDate,
+  onDelete,
+}: WorkEntryRowControlsProps) {
+  const statusMeta = getWorkEntryStatusMeta(entry.status);
+
+  return (
+    <>
+      {!readOnly && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isSaving}
+              data-testid={`work-entry-status-control-${entry.id}`}
+              data-active-status={entry.status}
+              aria-label={`Ubah status pekerjaan ${entry.title}. Status saat ini ${statusMeta.label}.`}
+              className={cn(
+                "h-11 gap-1.5 rounded-sm px-2 font-medium",
+                compact && "w-11 justify-center px-0",
+              )}
+            >
+              <WorkEntryStatusGlyph
+                status={entry.status}
+                className={cn("h-4 w-4", statusMeta.iconClassName)}
+              />
+              {!compact && (
+                <span className="whitespace-nowrap" data-testid={`work-entry-status-label-${entry.id}`}>
+                  {statusMeta.label}
+                </span>
+              )}
+              {!compact && (
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+              Status pekerjaan
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={entry.status}
+              onValueChange={(value) => {
+                const next = value as WorkEntryStatus;
+                if (next === entry.status) return;
+                onRequestStatus(next);
+              }}
+            >
+              {WORK_ENTRY_STATUS_ORDER.map((status) => {
+                const meta = getWorkEntryStatusMeta(status);
+                return (
+                  <DropdownMenuRadioItem
+                    key={status}
+                    value={status}
+                    data-status-option={status}
+                    className="min-h-touch gap-2"
+                  >
+                    <meta.icon
+                      className={cn("h-4 w-4 shrink-0", meta.iconClassName)}
+                      aria-hidden="true"
+                    />
+                    {meta.label}
+                  </DropdownMenuRadioItem>
+                );
+              })}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-sm"
+            data-work-entry-menu={entry.id}
+            aria-label={`Menu tindakan untuk ${entry.title}`}
+          >
+            <Ellipsis aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+            {readOnly ? "Entry bawahan" : "Tindakan"}
+          </DropdownMenuLabel>
+          <DropdownMenuItem onSelect={onOpenDetail}>
+            <Eye aria-hidden="true" />
+            {readOnly ? "Lihat detail" : "Buka detail"}
+          </DropdownMenuItem>
+          {!readOnly && (
+            <>
+              <DropdownMenuItem onSelect={onStartEditTitle}>
+                <Pencil aria-hidden="true" />
+                Ubah judul
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <CalendarClock className="mr-2" aria-hidden="true" />
+                  Pindahkan tanggal
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-52">
+                  {workWeekDates(entry.workDate).map((date) => (
+                    <DropdownMenuItem
+                      key={date}
+                      disabled={date === entry.workDate}
+                      onSelect={() => onMoveToDate(date)}
+                    >
+                      {formatWorkDateShort(date)}
+                      {date === entry.workDate ? " (sekarang)" : ""}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  {[1, 2, 3].map((offset) => {
+                    const date = shiftWorkDate(entry.workDate, offset * 7);
+                    return (
+                      <DropdownMenuItem key={date} onSelect={() => onMoveToDate(date)}>
+                        {formatWorkDateShort(date)}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={onDelete}
+              >
+                <Trash2 aria-hidden="true" />
+                Hapus
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
 }
 
 export function WorkEntryRow({
@@ -103,6 +288,8 @@ export function WorkEntryRow({
   const startLabel = formatWorkTimeLabelFromIso(entry.startsAt);
   const endLabel = formatWorkTimeLabelFromIso(entry.endsAt);
   const hasTimeIndicator = !entry.isAllDay && Boolean(startLabel);
+  const statusMeta = getWorkEntryStatusMeta(entry.status);
+  const isCompact = variant === "compact";
 
   const commitTitle = () => {
     const normalized = normalizeWorkEntryTitle(titleDraft);
@@ -114,6 +301,20 @@ export function WorkEntryRow({
     onUpdateTitle(normalized);
   };
 
+  const controls = (
+    <WorkEntryRowControls
+      entry={entry}
+      readOnly={readOnly}
+      isSaving={isSaving}
+      compact={isCompact}
+      onRequestStatus={onRequestStatus}
+      onStartEditTitle={() => setIsEditingTitle(true)}
+      onOpenDetail={onOpenDetail}
+      onMoveToDate={onMoveToDate}
+      onDelete={onDelete}
+    />
+  );
+
   return (
     <li
       data-testid={`work-entry-row-${entry.id}`}
@@ -122,12 +323,12 @@ export function WorkEntryRow({
       data-row-variant={variant}
       className={cn(
         "rounded-sm border bg-card",
-        variant === "compact" ? "px-1.5 py-1.5" : "px-3 py-2.5",
+        isCompact ? "px-1.5 py-1.5" : "px-3 py-2.5",
         overdue ? "border-overdue/40" : "border-border",
       )}
     >
-      <div className={cn("flex items-start", variant === "compact" ? "gap-1" : "gap-2")}>
-        <span className="mt-1.5 shrink-0">
+      <div className={cn("flex items-start", isCompact ? "gap-1" : "gap-2")}>
+        <span className={isCompact ? "mt-0.5 shrink-0" : "mt-2 shrink-0"}>
           <WorkEntryStatusGlyph status={entry.status} />
         </span>
 
@@ -167,7 +368,7 @@ export function WorkEntryRow({
               }
               className={cn(
                 "flex w-full min-h-touch items-center rounded-sm text-left font-medium leading-snug text-foreground",
-                variant === "compact" ? "text-xs" : "text-sm",
+                isCompact ? "text-xs" : "text-sm",
                 readOnly
                   ? "cursor-default"
                   : "hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -179,10 +380,17 @@ export function WorkEntryRow({
           )}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1" data-testid={`work-entry-status-label-${entry.id}`}>
-              <WorkEntryStatusGlyph status={entry.status} />
-              {getWorkEntryStatusLabel(entry.status)}
-            </span>
+            {/* Pada row compact kontrol status hanya berupa ikon, sehingga
+                label status ditegaskan kembali di baris metadata. */}
+            {isCompact && (
+              <span
+                className="inline-flex items-center gap-1"
+                data-testid={`work-entry-status-label-${entry.id}`}
+              >
+                <WorkEntryStatusGlyph status={entry.status} />
+                {statusMeta.label}
+              </span>
+            )}
 
             {hasTimeIndicator && (
               <span data-testid={`work-entry-time-${entry.id}`} className="inline-flex items-center gap-1">
@@ -279,119 +487,13 @@ export function WorkEntryRow({
           )}
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0 rounded-sm"
-              aria-label={`Menu tindakan untuk ${entry.title}`}
-            >
-              <Ellipsis aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-              {readOnly ? "Entry bawahan" : "Tindakan"}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={onOpenDetail}>
-              <Eye aria-hidden="true" />
-              {readOnly ? "Lihat detail" : "Buka detail"}
-            </DropdownMenuItem>
-            {!readOnly && (
-              <>
-                <DropdownMenuItem onSelect={() => setIsEditingTitle(true)}>
-                  <Pencil aria-hidden="true" />
-                  Ubah judul
-                </DropdownMenuItem>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <WorkEntryStatusGlyph status={entry.status} className="mr-2" />
-                    Ubah status
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    {WORK_ENTRY_STATUS_ORDER.map((status) => (
-                      <DropdownMenuItem
-                        key={status}
-                        disabled={entry.status === status}
-                        onSelect={() => onRequestStatus(status)}
-                      >
-                        <WorkEntryStatusGlyph status={status} className="mr-2" />
-                        {getWorkEntryStatusLabel(status)}
-                        {entry.status === status ? " (sekarang)" : ""}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <CalendarClock aria-hidden="true" />
-                    Pindahkan tanggal
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-52">
-                    {workWeekDates(entry.workDate).map((date) => (
-                      <DropdownMenuItem
-                        key={date}
-                        disabled={date === entry.workDate}
-                        onSelect={() => onMoveToDate(date)}
-                      >
-                        {formatWorkDateShort(date)}
-                        {date === entry.workDate ? " (sekarang)" : ""}
-                      </DropdownMenuItem>
-                    ))}
-                    <DropdownMenuSeparator />
-                    {[1, 2, 3].map((offset) => {
-                      const date = shiftWorkDate(entry.workDate, offset * 7);
-                      return (
-                        <DropdownMenuItem key={date} onSelect={() => onMoveToDate(date)}>
-                          {formatWorkDateShort(date)}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
-                  <Trash2 aria-hidden="true" />
-                  Hapus
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {!isCompact && <div className="flex shrink-0 items-start gap-1">{controls}</div>}
       </div>
 
-      {!readOnly && variant === "full" && (
-        <div
-          role="group"
-          aria-label={`Status pekerjaan ${entry.title}`}
-          data-testid={`work-entry-status-group-${entry.id}`}
-          className="mt-2 flex flex-wrap items-center gap-1 pl-5"
-        >
-          {WORK_ENTRY_STATUS_ORDER.map((status) => (
-            <button
-              key={status}
-              type="button"
-              disabled={isSaving}
-              aria-pressed={entry.status === status}
-              aria-label={`Tandai ${entry.title} sebagai ${getWorkEntryStatusLabel(status)}`}
-              data-status-option={status}
-              onClick={() => onRequestStatus(status)}
-              className={cn(
-                "inline-flex h-11 w-11 items-center justify-center rounded-sm border transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                entry.status === status
-                  ? "border-primary/50 bg-primary/10"
-                  : "border-border hover:bg-accent",
-              )}
-            >
-              <WorkEntryStatusGlyph status={status} className="h-4 w-4" />
-            </button>
-          ))}
-          <span className="ml-1 text-xs text-muted-foreground">Status</span>
-        </div>
+      {/* Kolom minggu sempit: kontrol turun ke baris kedua agar judul tetap
+          mendapat lebar penuh dan tidak pernah terhimpit sampai nol. */}
+      {isCompact && (
+        <div className="mt-1 flex items-center justify-end gap-1 pl-5">{controls}</div>
       )}
     </li>
   );
