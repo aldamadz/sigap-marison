@@ -220,4 +220,24 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
       }
     }
   });
+
+  it("ketiga hierarchy (list_members, list_entries, entries_select) identik dan tidak drift", () => {
+    const migrationsDir = join(root, "supabase", "migrations");
+    const migrationFiles = readdirSync(migrationsDir).filter((name) =>
+      name.endsWith("work_calendar_team_members.sql"),
+    );
+    expect(migrationFiles.length).toBe(1);
+
+    const sql = readFileSync(join(migrationsDir, migrationFiles[0]), "utf8");
+
+    // Verifikasi klausa WHERE dari root query di dalam subordinates
+    const rootWhere = sql.match(/where p\.parent_id = \(select auth\.uid\(\)\)\s+and p\.id <> \(select auth\.uid\(\)\)\s+and p\.deleted_at is null\s+and p\.is_active is true/g);
+    expect(rootWhere).toBeTruthy();
+    expect(rootWhere!.length).toBe(3);
+
+    // Verifikasi klausa WHERE dari recursive query di dalam subordinates
+    const recursiveWhere = sql.match(/where not \(child\.id = any\(s\.path\)\)\s+and child\.id <> \(select auth\.uid\(\)\)\s+and child\.deleted_at is null\s+and child\.is_active is true/g);
+    expect(recursiveWhere).toBeTruthy();
+    expect(recursiveWhere!.length).toBe(3);
+  });
 });

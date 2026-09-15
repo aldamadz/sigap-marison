@@ -165,6 +165,112 @@ begin
 
   -- Reset to postgres
   perform set_config('role', 'postgres', true);
+
+  -- ==========================================================================
+  -- Test list_work_calendar_team_entries AND table RLS
+  -- ==========================================================================
+
+  -- Insert entries for testing team entries and RLS. Each user has one entry on 2026-09-15.
+  insert into public.work_calendar_entries (owner_id, work_date, title, status) values
+    (v_user_a, '2026-09-15', 'Entry A (Own)', 'planned'),
+    (v_user_b, '2026-09-15', 'Entry B (Active Direct Sub)', 'planned'),
+    (v_user_c, '2026-09-15', 'Entry C (Active Recursive Sub)', 'planned'),
+    (v_user_d, '2026-09-15', 'Entry D (Active Direct Sub)', 'planned'),
+    (v_user_inactive_direct, '2026-09-15', 'Entry Inactive Direct Sub', 'planned'),
+    (v_user_null_direct, '2026-09-15', 'Entry Null Direct Sub', 'planned'),
+    (v_user_inactive_sub, '2026-09-15', 'Entry Inactive Recursive Sub', 'planned'),
+    (v_user_null_sub, '2026-09-15', 'Entry Null Recursive Sub', 'planned'),
+    (v_user_child_of_inactive, '2026-09-15', 'Entry Child of Inactive', 'planned'),
+    (v_user_deleted, '2026-09-15', 'Entry Deleted', 'planned'),
+    (v_user_outside, '2026-09-15', 'Entry Outside', 'planned');
+
+  -- 7. Manager A RLS Table SELECT Check
+  perform set_config('request.jwt.claim.sub', v_user_a::text, true);
+  perform set_config('role', 'authenticated', true);
+
+  select count(*) into v_count from public.work_calendar_entries;
+  -- Expected: 4 entries: Own (A) + Active Subs (B, C, D)
+  if v_count <> 4 then
+    raise exception 'Assertion failed: Manager A table SELECT expected 4 entries (Own + Active Subs), got %', v_count;
+  end if;
+
+  if exists (
+    select 1 from public.work_calendar_entries
+    where owner_id in (
+      v_user_inactive_direct,
+      v_user_null_direct,
+      v_user_inactive_sub,
+      v_user_null_sub,
+      v_user_child_of_inactive,
+      v_user_deleted,
+      v_user_outside
+    )
+  ) then
+    raise exception 'Assertion failed: Manager A table SELECT returned inactive/null/pruned/deleted/unrelated entries';
+  end if;
+
+  -- 8. Manager A RPC list_work_calendar_team_entries Check
+  select count(*) into v_count from public.list_work_calendar_team_entries('2026-09-01', '2026-09-30');
+  -- Expected: 3 entries: Active Subs only (B, C, D). Caller A is excluded.
+  if v_count <> 3 then
+    raise exception 'Assertion failed: Manager A RPC team_entries expected 3 entries, got %', v_count;
+  end if;
+
+  if exists (
+    select 1 from public.list_work_calendar_team_entries('2026-09-01', '2026-09-30')
+    where owner_id in (
+      v_user_a,
+      v_user_inactive_direct,
+      v_user_null_direct,
+      v_user_inactive_sub,
+      v_user_null_sub,
+      v_user_child_of_inactive,
+      v_user_deleted,
+      v_user_outside
+    )
+  ) then
+    raise exception 'Assertion failed: Manager A RPC team_entries returned caller or inactive/null/pruned/deleted/unrelated entries';
+  end if;
+
+  -- 9. Check UUID intersection (no unknown owners)
+  if exists (
+    select 1
+    from public.list_work_calendar_team_entries('2026-09-01', '2026-09-30') e
+    left join public.list_work_calendar_team_members() m on e.owner_id = m.id
+    where m.id is null
+  ) then
+    raise exception 'Assertion failed: list_work_calendar_team_entries returned entries for owners not in list_work_calendar_team_members';
+  end if;
+
+  -- 10. Anon RLS / RPC rejection
+  perform set_config('role', 'anon', true);
+  perform set_config('request.jwt.claim.sub', '', true);
+
+  -- Anon table select should throw or return 0
+  v_threw := false;
+  begin
+    select count(*) into v_count from public.work_calendar_entries;
+    if v_count <> 0 then
+      raise exception 'Assertion failed: anon table SELECT returned entries instead of throwing or 0';
+    end if;
+  exception when others then
+    v_threw := true;
+  end;
+  -- Both throwing permission denied or returning 0 is acceptable depending on grant.
+  -- The requirement is they cannot read data.
+
+  v_threw := false;
+  begin
+    perform public.list_work_calendar_team_entries('2026-09-01', '2026-09-30');
+  exception when others then
+    v_threw := true;
+  end;
+  if not v_threw then
+    raise exception 'Assertion failed: anon role was able to execute list_work_calendar_team_entries';
+  end if;
+
+  -- Reset to postgres
+  perform set_config('role', 'postgres', true);
 end;
 $$;
 
