@@ -3,18 +3,26 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 const migrationsDir = "supabase/migrations";
-const migrationFileName = readdirSync(migrationsDir).find((name) =>
-  name.endsWith("work_calendar_entries.sql"),
-);
-if (!migrationFileName) {
-  throw new Error("Could not find work_calendar_entries migration file.");
+const migrationFiles = readdirSync(migrationsDir)
+  .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
+  .sort();
+
+if (migrationFiles.length === 0) {
+  throw new Error("Could not find work_calendar migration files.");
 }
 
-const migration = readFileSync(join(migrationsDir, migrationFileName), "utf8");
-const assertions = readFileSync(
-  "supabase/tests/work_calendar_entries.integration.sql",
-  "utf8",
-);
+const migrations = migrationFiles
+  .map((file) => readFileSync(join(migrationsDir, file), "utf8"))
+  .join("\n\n");
+
+const testsDir = "supabase/tests";
+const testFiles = readdirSync(testsDir)
+  .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
+  .sort();
+
+const assertions = testFiles
+  .map((file) => readFileSync(join(testsDir, file), "utf8"))
+  .join("\n\n");
 
 const baseSchemaSql = `
 create extension if not exists pgcrypto;
@@ -38,9 +46,11 @@ create table if not exists public.profiles (
   id uuid primary key,
   email text,
   full_name text,
+  job_title text,
   role text not null default 'user',
   parent_id uuid references public.profiles(id),
-  deleted_at timestamptz null
+  deleted_at timestamptz null,
+  is_active boolean not null default true
 );
 alter table public.profiles enable row level security;
 alter table public.profiles force row level security;
@@ -141,8 +151,8 @@ create table if not exists public.agendas (
 insert into public.agendas (id, title) values
   ('b0000000-0000-4000-8000-000000000001', 'Legacy Agenda 1');
 
--- Apply migration
-${migration}
+-- Apply migrations
+${migrations}
 
 -- Run integration tests
 ${assertions}
@@ -185,8 +195,11 @@ try {
     "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
   ], baseSchemaSql);
 
-  if (!output.includes("CAL-03 work calendar integration: all assertions passed")) {
-    throw new Error("SQL runner did not see the success marker.\n" + output);
+  if (
+    !output.includes("CAL-03 work calendar integration: all assertions passed") ||
+    !output.includes("CAL-03 team members integration: all assertions passed")
+  ) {
+    throw new Error("SQL runner did not see all success markers.\n" + output);
   }
   process.stdout.write(output);
 } finally {

@@ -15,8 +15,7 @@ interface BreadcrumbsProps {
 
 const ROUTE_LABELS: Record<string, string> = {
   '/dashboard': 'Dashboard',
-  '/agenda': 'Agenda',
-  '/calendar': 'Kalender',
+  '/calendar': 'Kalender Kerja',
   '/surat': 'Surat',
   '/surat/registrasi': 'Registrasi Surat',
   '/surat/rekomendasi': 'Rekomendasi',

@@ -28,6 +28,19 @@ export type {
   WorkCalendarRpcQuery,
 } from "./data/supabase-work-entry-repository";
 export {
+  createSupabaseWorkCalendarProfileRepository,
+  mapProfileRowToOwner,
+} from "./data/work-calendar-profile-repository";
+export type {
+  SupabaseWorkCalendarProfileClient,
+  WorkCalendarProfileDbQuery,
+  WorkCalendarProfileDbTable,
+  WorkCalendarProfileRepository,
+  WorkCalendarProfileRpcQuery,
+  WorkCalendarProfileRow,
+  WorkCalendarTeamMemberRow,
+} from "./data/work-calendar-profile-repository";
+export {
   WorkEntryConflictError,
   WORK_ENTRY_CONFLICT_CODE,
   isWorkEntryConflictError,

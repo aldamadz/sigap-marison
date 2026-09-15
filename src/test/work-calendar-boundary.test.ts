@@ -39,7 +39,7 @@ const runtimeFiles = collectRuntimeFiles(featureDir).map((full) => ({
   source: readFileSync(full, "utf8"),
 }));
 
-describe("Work Calendar — batas modul CAL-03 F2", () => {
+describe("Work Calendar — batas modul CAL-03 F3", () => {
   it("menemukan berkas runtime untuk diaudit", () => {
     expect(runtimeFiles.length).toBeGreaterThan(0);
     expect(runtimeFiles.some((file) => file.path.endsWith("index.ts"))).toBe(true);
@@ -121,10 +121,31 @@ describe("Work Calendar — batas modul CAL-03 F2", () => {
     expect(barrelCode).not.toContain("createFixtureWorkEntryRepository");
   });
 
-  it("tidak terpasang pada route aplikasi", () => {
+  it("terpasang pada canonical route /calendar dan route legacy /agenda tidak terdaftar", () => {
     const app = readFileSync(join(root, "src", "App.tsx"), "utf8");
-    expect(app).not.toContain("features/work-calendar");
-    expect(app).toContain('<Route path="/agenda"');
+    expect(app).toContain('const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPage"));');
+    expect(app).toContain('<Route path="/calendar" element={<WorkCalendarPage />} />');
+    expect(app).not.toContain('<Route path="/agenda"');
+    expect(app).not.toContain("@/pages/agenda/AgendaPage");
+    expect(app).not.toContain("@/pages/calendar/CalendarPage");
+  });
+
+  it("sidebar hanya memiliki satu item Kalender Kerja pada /calendar tanpa menu Agenda", () => {
+    const sidebar = readFileSync(join(root, "src", "components", "layout", "Sidebar.tsx"), "utf8");
+    expect(sidebar).toContain("renderNavLink('/calendar', 'Kalender Kerja', Calendar)");
+    expect(sidebar).not.toContain("renderNavLink('/agenda'");
+    expect(sidebar).not.toContain("ClipboardList");
+  });
+
+  it("WorkCalendarPage tidak mengimpor modul agenda legacy", () => {
+    const page = readFileSync(
+      join(root, "src", "pages", "work-calendar", "WorkCalendarPage.tsx"),
+      "utf8",
+    );
+    const markers = findLegacyWorkCalendarImports(page);
+    expect(markers).toEqual([]);
+    expect(page).not.toContain("@/types/agenda");
+    expect(page).not.toContain("useAuth");
   });
 
   it("konstanta validasi frontend selaras dengan constraint migration database", () => {
