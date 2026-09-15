@@ -256,7 +256,8 @@ describe("Marison employee sync", () => {
 
     expect(server).toContain("/api/integrations/marison/branches/preview");
     expect(server).toContain("/api/integrations/marison/branches/sync");
-    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")');
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/branches")');
     expect(page).toContain("Sinkronkan External");
     expect(page).toContain("Tambah Kantor");
     expect(page).toContain('.from("master_offices").insert');
@@ -270,7 +271,9 @@ describe("Marison employee sync", () => {
     const client = read("src/services/marison-integration.service.ts");
     const dockerfile = read("dockerfile");
 
-    expect(server).toContain("assertMarisonEmployeeSyncAvailable");
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    expect(preview).toContain("assertMarisonEmployeeSyncInfraAvailable");
+    expect(server).toContain("assertMarisonEmployeeSyncWriteAvailable");
     expect(server).toContain("await requireAdminUser(getBearerToken(req))");
     expect(server).toContain("STAGING_DEFAULT_USER_PASSWORD");
     expect(server).toContain("environment: marisonDeploymentEnvironment");
