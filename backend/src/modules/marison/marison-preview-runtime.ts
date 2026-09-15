@@ -18,16 +18,23 @@ export type MarisonPreviewDependencies = {
 };
 
 export type MarisonPreviewTestOverrides = {
+  getMarisonBranchSyncSource?: () => Promise<unknown[]>;
   getMarisonEmployeeSyncSource?: () => Promise<{ branches: unknown[]; employees: unknown[] }>;
   getMarisonProjectSyncSource?: () => Promise<{ branches: unknown[]; projects: unknown[] }>;
 };
 
 export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
+  let overrideBranchSource: (() => Promise<unknown[]>) | null = null;
   let overrideEmployeeSource: (() => Promise<{ branches: unknown[]; employees: unknown[] }>) | null = null;
   let overrideProjectSource: (() => Promise<{ branches: unknown[]; projects: unknown[] }>) | null = null;
 
   const setDependencies = (overrides: MarisonPreviewTestOverrides) => {
-    if (process.env.NODE_ENV !== "test") return;
+    if (process.env.NODE_ENV !== "test") {
+      throw new Error("Test dependencies can only be set in test environment.");
+    }
+    if (overrides.getMarisonBranchSyncSource) {
+      overrideBranchSource = overrides.getMarisonBranchSyncSource;
+    }
     if (overrides.getMarisonEmployeeSyncSource) {
       overrideEmployeeSource = overrides.getMarisonEmployeeSyncSource;
     }
@@ -36,28 +43,42 @@ export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
     }
   };
 
-  const assertMarisonBranchSyncAvailable = () => {
-    if (!deps.getSupabase() || !deps.getServiceRoleKey()) {
+  const resetOverrides = () => {
+    if (process.env.NODE_ENV !== "test") {
+      throw new Error("Test dependencies can only be reset in test environment.");
+    }
+    overrideBranchSource = null;
+    overrideEmployeeSource = null;
+    overrideProjectSource = null;
+  };
+
+  const assertMarisonBranchSyncAvailable = (): SupabaseClientStructural => {
+    const supabase = deps.getSupabase();
+    if (!supabase || !deps.getServiceRoleKey()) {
       const err = new Error("Service role environment ini belum dikonfigurasi.");
       Object.assign(err, { status: 500 });
       throw err;
     }
+    return supabase;
   };
 
-  const assertMarisonEmployeeSyncInfraAvailable = () => {
+  const assertMarisonEmployeeSyncInfraAvailable = (): SupabaseClientStructural => {
     if (deps.deploymentEnvironment !== "staging") {
       const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
       Object.assign(err, { status: 403 });
       throw err;
     }
-    if (!deps.getSupabase() || !deps.getServiceRoleKey()) {
+    const supabase = deps.getSupabase();
+    if (!supabase || !deps.getServiceRoleKey()) {
       const err = new Error("Layanan sinkronisasi tidak tersedia.");
       Object.assign(err, { status: 500 });
       throw err;
     }
+    return supabase;
   };
 
   const getMarisonBranchSyncSource = async () => {
+    if (overrideBranchSource) return overrideBranchSource();
     return deps.getAllMarisonCollection(deps.deploymentEnvironment, "/branches");
   };
 
@@ -79,10 +100,10 @@ export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
 
   const previewMarisonBranches = async (req: unknown) => {
     await deps.requireAdminUser(deps.getBearerToken(req));
-    assertMarisonBranchSyncAvailable();
+    const supabase = assertMarisonBranchSyncAvailable();
     const branches = await getMarisonBranchSyncSource();
     return deps.previewMarisonBranchSync({
-      supabase: deps.getSupabase()!,
+      supabase,
       branches,
       environment: deps.deploymentEnvironment,
     });
@@ -90,10 +111,10 @@ export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
 
   const previewMarisonProjects = async (req: unknown) => {
     await deps.requireAdminUser(deps.getBearerToken(req));
-    assertMarisonBranchSyncAvailable();
+    const supabase = assertMarisonBranchSyncAvailable();
     const source = await getMarisonProjectSyncSource();
     return deps.previewMarisonProjectSync({
-      supabase: deps.getSupabase()!,
+      supabase,
       ...source,
       environment: deps.deploymentEnvironment,
     });
@@ -101,16 +122,17 @@ export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
 
   const previewMarisonEmployees = async (req: unknown) => {
     await deps.requireAdminUser(deps.getBearerToken(req));
-    assertMarisonEmployeeSyncInfraAvailable();
+    const supabase = assertMarisonEmployeeSyncInfraAvailable();
     const source = await getMarisonEmployeeSyncSource();
     return deps.previewMarisonEmployeeSync({
-      supabase: deps.getSupabase()!,
+      supabase,
       ...source,
     });
   };
 
   return {
     setDependencies,
+    resetOverrides,
     assertMarisonBranchSyncAvailable,
     assertMarisonEmployeeSyncInfraAvailable,
     getMarisonBranchSyncSource,

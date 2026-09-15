@@ -201,15 +201,22 @@ const secretMatches = (supplied, expected) => {
   return timingSafeEqual(suppliedHash, expectedHash);
 };
 
+
+export const resetDomainRuntimeDependenciesForTest = () => {
+  if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
+  marisonPreviewRuntime.resetOverrides();
+};
+
 export const setDomainRuntimeDependenciesForTest = (dependencies) => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
   if (dependencies.nowIso) marisonApiClient.setDependencies({ nowIso: dependencies.nowIso });
   if (dependencies.supabase) supabase = dependencies.supabase;
   if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
-    if (dependencies.getMarisonEmployeeSyncSource || dependencies.getMarisonProjectSyncSource) {
+  if (dependencies.getMarisonEmployeeSyncSource || dependencies.getMarisonProjectSyncSource || dependencies.getMarisonBranchSyncSource) {
     marisonPreviewRuntime.setDependencies({
       getMarisonEmployeeSyncSource: dependencies.getMarisonEmployeeSyncSource,
       getMarisonProjectSyncSource: dependencies.getMarisonProjectSyncSource,
+      getMarisonBranchSyncSource: dependencies.getMarisonBranchSyncSource,
     });
   }
 };

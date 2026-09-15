@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMarisonPreviewRuntime } from "../../backend/src/modules/marison/marison-preview-runtime";
 
 const mockDeps = () => ({
-  getSupabase: vi.fn(() => ({} as any)),
+  getSupabase: vi.fn(() => ({
+    auth: { getUser: vi.fn() },
+    from: vi.fn(),
+    rpc: vi.fn(),
+  })),
   getServiceRoleKey: vi.fn(() => "secret"),
   deploymentEnvironment: "staging",
   getBearerToken: vi.fn(),
@@ -13,35 +17,48 @@ const mockDeps = () => ({
   previewMarisonEmployeeSync: vi.fn(),
 });
 
+const originalFetch = global.fetch;
+
 describe("Marison Preview Runtime", () => {
+  let runtime: ReturnType<typeof createMarisonPreviewRuntime>;
+  let deps: ReturnType<typeof mockDeps>;
+
+  beforeEach(() => {
+    global.fetch = () => { throw new Error("Network request explicitly forbidden in this test."); };
+    vi.stubEnv("NODE_ENV", "test");
+    deps = mockDeps();
+    runtime = createMarisonPreviewRuntime(deps);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    global.fetch = originalFetch;
+    runtime.resetOverrides();
+  });
+
   it("branch preview auth gagal -> source tidak dipanggil", async () => {
-    const deps = mockDeps();
     deps.requireAdminUser.mockRejectedValue(new Error("Auth failed"));
-    const runtime = createMarisonPreviewRuntime(deps);
     await expect(runtime.previewMarisonBranches({})).rejects.toThrow("Auth failed");
     expect(deps.getAllMarisonCollection).not.toHaveBeenCalled();
+    expect(deps.getSupabase).not.toHaveBeenCalled();
   });
 
   it("project preview auth gagal -> source tidak dipanggil", async () => {
-    const deps = mockDeps();
     deps.requireAdminUser.mockRejectedValue(new Error("Auth failed"));
-    const runtime = createMarisonPreviewRuntime(deps);
     await expect(runtime.previewMarisonProjects({})).rejects.toThrow("Auth failed");
     expect(deps.getAllMarisonCollection).not.toHaveBeenCalled();
+    expect(deps.getSupabase).not.toHaveBeenCalled();
   });
 
   it("employee preview auth gagal -> source tidak dipanggil", async () => {
-    const deps = mockDeps();
     deps.requireAdminUser.mockRejectedValue(new Error("Auth failed"));
-    const runtime = createMarisonPreviewRuntime(deps);
     await expect(runtime.previewMarisonEmployees({})).rejects.toThrow("Auth failed");
     expect(deps.getAllMarisonCollection).not.toHaveBeenCalled();
+    expect(deps.getSupabase).not.toHaveBeenCalled();
   });
 
   it("missing Supabase/service role -> existing error/status", async () => {
-    const deps = mockDeps();
     deps.getSupabase.mockReturnValue(null);
-    const runtime = createMarisonPreviewRuntime(deps);
     await expect(runtime.previewMarisonBranches({})).rejects.toMatchObject({
       message: "Service role environment ini belum dikonfigurasi.",
       status: 500,
@@ -49,9 +66,7 @@ describe("Marison Preview Runtime", () => {
   });
 
   it("employee preview di production -> 403", async () => {
-    const deps = mockDeps();
     deps.deploymentEnvironment = "production";
-    const runtime = createMarisonPreviewRuntime(deps);
     await expect(runtime.previewMarisonEmployees({})).rejects.toMatchObject({
       message: "Sinkronisasi karyawan external hanya tersedia di staging.",
       status: 403,
@@ -59,62 +74,51 @@ describe("Marison Preview Runtime", () => {
   });
 
   it("branch loader memakai deployment environment", async () => {
-    const deps = mockDeps();
     deps.deploymentEnvironment = "production";
-    const runtime = createMarisonPreviewRuntime(deps);
     await runtime.getMarisonBranchSyncSource();
     expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("production", "/branches");
   });
 
   it("employee loader memakai literal staging", async () => {
-    const deps = mockDeps();
     deps.deploymentEnvironment = "production";
     deps.getAllMarisonCollection.mockResolvedValue([]);
-    const runtime = createMarisonPreviewRuntime(deps);
     await runtime.getMarisonEmployeeSyncSource();
     expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("staging", "/branches");
     expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("staging", "/employees");
   });
 
   it("project loader mengambil branches dan projects", async () => {
-    const deps = mockDeps();
     deps.deploymentEnvironment = "staging";
     deps.getAllMarisonCollection.mockResolvedValue([]);
-    const runtime = createMarisonPreviewRuntime(deps);
     await runtime.getMarisonProjectSyncSource();
     expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("staging", "/branches");
     expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("staging", "/projects");
   });
 
   it("project source Promise.all behavior dipertahankan", async () => {
-    const deps = mockDeps();
     deps.deploymentEnvironment = "staging";
-    let bResolve: any;
-    let pResolve: any;
-    const bPromise = new Promise((r) => { bResolve = r; });
-    const pPromise = new Promise((r) => { pResolve = r; });
+    let bResolve: (value: unknown[]) => void;
+    let pResolve: (value: unknown[]) => void;
+    const bPromise = new Promise<unknown[]>((r) => { bResolve = r; });
+    const pPromise = new Promise<unknown[]>((r) => { pResolve = r; });
     deps.getAllMarisonCollection.mockImplementation(async (env, path) => {
       if (path === "/branches") return bPromise;
       if (path === "/projects") return pPromise;
       return [];
     });
-    const runtime = createMarisonPreviewRuntime(deps);
     let resolved = false;
     const resultPromise = runtime.getMarisonProjectSyncSource().then(r => { resolved = true; return r; });
     expect(resolved).toBe(false);
-    bResolve([{ id: "b1" }]);
+    bResolve!([{ id: "b1" }]);
     await Promise.resolve(); // flush microtasks
     expect(resolved).toBe(false);
-    pResolve([{ id: "p1" }]);
+    pResolve!([{ id: "p1" }]);
     const result = await resultPromise;
     expect(result.branches).toEqual([{ id: "b1" }]);
     expect(result.projects).toEqual([{ id: "p1" }]);
   });
 
   it("existing test source override masih bekerja", async () => {
-    const deps = mockDeps();
-    const runtime = createMarisonPreviewRuntime(deps);
-    process.env.NODE_ENV = "test";
     runtime.setDependencies({
       getMarisonEmployeeSyncSource: async () => ({ branches: [{ id: "mock-b" }], employees: [{ id: "mock-e" }] }),
     });
@@ -123,7 +127,16 @@ describe("Marison Preview Runtime", () => {
     expect(deps.getAllMarisonCollection).not.toHaveBeenCalled();
   });
 
-  it("tidak ada fetch nyata", () => {
-    expect(vi.isMockFunction(global.fetch) ? global.fetch : vi.fn()).not.toHaveBeenCalled();
+  it("fails loudly if dependencies mutated outside test env", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(() => runtime.setDependencies({})).toThrow("Test dependencies can only be set in test environment.");
+    expect(() => runtime.resetOverrides()).toThrow("Test dependencies can only be reset in test environment.");
+  });
+
+  it("memanggil getSupabase tepat sekali pada request", async () => {
+    deps.getAllMarisonCollection.mockResolvedValue([]);
+    deps.previewMarisonBranchSync.mockReturnValue({ ok: true });
+    await runtime.previewMarisonBranches({});
+    expect(deps.getSupabase).toHaveBeenCalledTimes(1);
   });
 });

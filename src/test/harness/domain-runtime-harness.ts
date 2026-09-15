@@ -85,7 +85,8 @@ export const bootDomainRuntime = async (): Promise<BootedRuntime> => {
 
 // Helper to close the app safely in afterEach.
 export const closeApp = async (booted: BootedRuntime | null) => {
-  if (booted?.app) {
+  if (booted?.runtime?.resetDomainRuntimeDependenciesForTest) booted.runtime.resetDomainRuntimeDependenciesForTest();
+    if (booted?.app) {
     try { await booted.app.close(); } catch { /* ignore */ }
   }
 };
