@@ -231,8 +231,10 @@ export function createFixtureWorkEntryRepository(
       const current = store.get(entryId);
       if (!current) throw new Error("Entry tidak ditemukan.");
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
-        const error = new Error("Data telah berubah");
-        error.name = "WorkEntryConflictError";
+        const error = Object.assign(new Error("Data telah berubah"), {
+          name: "WorkEntryConflictError",
+          code: "WORK_ENTRY_CONFLICT",
+        });
         throw error;
       }
       const next: WorkEntry = { ...current, ...patch, updatedAt: new Date().toISOString() };
@@ -243,8 +245,10 @@ export function createFixtureWorkEntryRepository(
       const current = store.get(entryId);
       if (!current) return;
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
-        const error = new Error("Data telah berubah");
-        error.name = "WorkEntryConflictError";
+        const error = Object.assign(new Error("Data telah berubah"), {
+          name: "WorkEntryConflictError",
+          code: "WORK_ENTRY_CONFLICT",
+        });
         throw error;
       }
       store.set(entryId, { ...current, deletedAt: new Date().toISOString() });

@@ -1,13 +1,30 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WorkEntry, WorkEntryDraft, WorkEntryPatch, WorkEntryRepository } from "../types/work-calendar";
+import type { WorkEntryDraft, WorkEntryPatch, WorkEntryRepository } from "../types/work-calendar";
 import type { WorkCalendarEntryRow } from "./work-entry-row-mapper";
 import { mapWorkEntryRow } from "./work-entry-row-mapper";
 
+export const WORK_ENTRY_CONFLICT_CODE = "WORK_ENTRY_CONFLICT" as const;
+
 export class WorkEntryConflictError extends Error {
-  constructor() {
-    super("Pembaruan gagal karena data telah berubah atau tidak ditemukan. Muat ulang halaman.");
+  readonly code = WORK_ENTRY_CONFLICT_CODE;
+
+  constructor(message = "Pembaruan gagal karena data telah berubah atau tidak ditemukan. Muat ulang halaman.") {
+    super(message);
     this.name = "WorkEntryConflictError";
   }
+}
+
+export function isWorkEntryConflictError(error: unknown): error is WorkEntryConflictError {
+  if (error instanceof WorkEntryConflictError) return true;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    ("code" in error
+      ? (error as { code: unknown }).code === WORK_ENTRY_CONFLICT_CODE
+      : "name" in error
+        ? (error as { name: unknown }).name === "WorkEntryConflictError"
+        : false)
+  );
 }
 
 interface WorkCalendarEntryInsert {
@@ -37,8 +54,6 @@ interface WorkCalendarEntryUpdate {
   starts_at?: string | null;
   ends_at?: string | null;
   blocked_reason?: string | null;
-  completed_at?: string | null;
-  deleted_at?: string | null;
 }
 
 const WORK_ENTRY_SELECT_COLUMNS =
@@ -104,20 +119,22 @@ export function createSupabaseWorkEntryRepository(
     },
 
     async listTeamEntries({ fromDate, toDate, signal }) {
-      let query = client.rpc("list_work_calendar_team_entries", {
-        p_start_date: fromDate,
-        p_end_date: toDate,
-      });
+      const rows = await paginateQuery(async (offset, limit) => {
+        let query = client
+          .rpc("list_work_calendar_team_entries", {
+            p_start_date: fromDate,
+            p_end_date: toDate,
+          })
+          .range(offset, offset + limit - 1);
 
-      if (signal && typeof (query as { abortSignal?: (s: AbortSignal) => unknown }).abortSignal === "function") {
-        query = (query as { abortSignal: (s: AbortSignal) => typeof query }).abortSignal(signal);
-      }
+        if (signal && typeof (query as { abortSignal?: (s: AbortSignal) => unknown }).abortSignal === "function") {
+          query = (query as { abortSignal: (s: AbortSignal) => typeof query }).abortSignal(signal);
+        }
 
-      const { data, error } = await query;
-      if (error) {
-        throw new Error("Gagal memuat data pekerjaan tim.");
-      }
-      return ((data as WorkCalendarEntryRow[] | null) ?? []).map(mapWorkEntryRow);
+        return (await query) as { data: WorkCalendarEntryRow[] | null; error: { message: string } | null };
+      }, signal);
+
+      return rows.map(mapWorkEntryRow);
     },
 
     async createEntry(draft: WorkEntryDraft) {
@@ -166,7 +183,6 @@ export function createSupabaseWorkEntryRepository(
       if (patch.startsAt !== undefined) updates.starts_at = patch.startsAt ?? null;
       if (patch.endsAt !== undefined) updates.ends_at = patch.endsAt ?? null;
       if (patch.blockedReason !== undefined) updates.blocked_reason = patch.blockedReason ?? null;
-      if (patch.completedAt !== undefined) updates.completed_at = patch.completedAt ?? null;
 
       const { data, error } = await client
         .from("work_calendar_entries")
@@ -191,13 +207,10 @@ export function createSupabaseWorkEntryRepository(
         throw new Error("expectedUpdatedAt is required for deleteEntry");
       }
 
-      const { data, error } = await client
-        .from("work_calendar_entries")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", entryId)
-        .eq("updated_at", expectedUpdatedAt)
-        .select("id")
-        .maybeSingle();
+      const { data, error } = await client.rpc("soft_delete_work_calendar_entry", {
+        p_entry_id: entryId,
+        p_expected_updated_at: expectedUpdatedAt,
+      });
 
       if (error) {
         throw new Error("Gagal menghapus pekerjaan.");

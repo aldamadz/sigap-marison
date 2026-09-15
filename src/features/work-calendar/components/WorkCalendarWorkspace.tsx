@@ -63,6 +63,15 @@ interface StatusPrompt {
   target: WorkEntryStatus;
 }
 
+function isWorkEntryConflict(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { code?: unknown; name?: unknown };
+  return (
+    candidate.code === "WORK_ENTRY_CONFLICT" ||
+    candidate.name === "WorkEntryConflictError"
+  );
+}
+
 export function WorkCalendarWorkspace({  currentUser,
   repository,
   teamMembers,
@@ -202,8 +211,10 @@ export function WorkCalendarWorkspace({  currentUser,
         return true;
       } catch (thrown) {
         setMutationError(
-          thrown instanceof Error && thrown.name === "WorkEntryConflictError"
-            ? thrown.message
+          isWorkEntryConflict(thrown)
+            ? thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Pembaruan gagal karena data telah berubah atau tidak ditemukan. Muat ulang halaman."
             : thrown instanceof Error && thrown.message
               ? thrown.message
               : "Perubahan gagal disimpan. Coba lagi.",
@@ -240,8 +251,10 @@ export function WorkCalendarWorkspace({  currentUser,
           calendar.applyLocalEntry(updated);
         } catch (thrown) {
           setMutationError(
-            thrown instanceof Error && thrown.name === "WorkEntryConflictError"
-              ? thrown.message
+            isWorkEntryConflict(thrown)
+              ? thrown instanceof Error && thrown.message
+                ? thrown.message
+                : "Status gagal disimpan karena data telah berubah. Muat ulang halaman."
               : thrown instanceof Error && thrown.message
                 ? thrown.message
                 : "Status gagal disimpan. Coba lagi.",
@@ -317,8 +330,10 @@ export function WorkCalendarWorkspace({  currentUser,
         if (prompt?.entryId === entry.id) setPrompt(null);
       } catch (thrown) {
         setMutationError(
-          thrown instanceof Error && thrown.name === "WorkEntryConflictError"
-            ? thrown.message
+          isWorkEntryConflict(thrown)
+            ? thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Pekerjaan gagal dihapus karena data telah berubah. Muat ulang halaman."
             : thrown instanceof Error && thrown.message
               ? thrown.message
               : "Pekerjaan gagal dihapus. Coba lagi.",

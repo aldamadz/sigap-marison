@@ -1,4 +1,5 @@
 import type { WorkEntry, WorkEntryKind, WorkEntryStatus } from "../types/work-calendar";
+import { WORK_ENTRY_KINDS, WORK_ENTRY_STATUSES } from "../types/work-calendar";
 
 export interface WorkCalendarEntryRow {
   id: string;
@@ -20,7 +21,23 @@ export interface WorkCalendarEntryRow {
   updated_at: string;
 }
 
+function isValidStatus(value: unknown): value is WorkEntryStatus {
+  return typeof value === "string" && (WORK_ENTRY_STATUSES as readonly string[]).includes(value);
+}
+
+function isValidKind(value: unknown): value is WorkEntryKind {
+  return typeof value === "string" && (WORK_ENTRY_KINDS as readonly string[]).includes(value);
+}
+
 export function mapWorkEntryRow(row: WorkCalendarEntryRow): WorkEntry {
+  if (!isValidStatus(row.status)) {
+    throw new Error(`Data pekerjaan tidak valid: status "${row.status}" tidak dikenali.`);
+  }
+
+  if (!isValidKind(row.kind)) {
+    throw new Error(`Data pekerjaan tidak valid: jenis "${row.kind}" tidak dikenali.`);
+  }
+
   return {
     id: row.id,
     ownerId: row.owner_id,
@@ -29,8 +46,8 @@ export function mapWorkEntryRow(row: WorkCalendarEntryRow): WorkEntry {
     realization: row.realization,
     notes: row.notes,
     location: row.location,
-    status: row.status as WorkEntryStatus,
-    kind: row.kind as WorkEntryKind,
+    status: row.status,
+    kind: row.kind,
     isAllDay: row.is_all_day,
     startsAt: row.starts_at,
     endsAt: row.ends_at,

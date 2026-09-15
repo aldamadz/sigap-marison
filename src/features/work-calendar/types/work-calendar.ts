@@ -70,9 +70,7 @@ export interface WorkEntryDraft {
 }
 
 /** Patch pembaruan entry. `ownerId` tidak dapat diubah dari UI. */
-export type WorkEntryPatch = Partial<Omit<WorkEntryDraft, "ownerId">> & {
-  completedAt?: WorkTimestamp | null;
-};
+export type WorkEntryPatch = Partial<Omit<WorkEntryDraft, "ownerId">>;
 
 /** Satu entry dengan status turunan overdue untuk tanggal acuan tertentu. */
 export interface WorkEntryState {
