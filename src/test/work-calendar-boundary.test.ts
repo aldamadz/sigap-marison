@@ -221,7 +221,7 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
     }
   });
 
-  it("ketiga hierarchy (list_members, list_entries, entries_select) identik dan tidak drift", () => {
+  it("ketiga hierarchy (list_members, list_entries, entries_select) identik dan tidak memuat relaksasi is_active", () => {
     const migrationsDir = join(root, "supabase", "migrations");
     const migrationFiles = readdirSync(migrationsDir).filter((name) =>
       name.endsWith("work_calendar_team_members.sql"),
@@ -230,12 +230,19 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
 
     const sql = readFileSync(join(migrationsDir, migrationFiles[0]), "utf8");
 
+    // Guard: pastikan file ini bebas dari relaksasi coalesce(is_active) atau is_active is null
+    expect(sql).not.toMatch(/coalesce\s*\(\s*p\.is_active/i);
+    expect(sql).not.toMatch(/coalesce\s*\(\s*child\.is_active/i);
+    expect(sql).not.toMatch(/is_active\s*is\s*null/i);
+
     // Verifikasi klausa WHERE dari root query di dalam subordinates
+    // Bentuk ini memastikan isolasi caller, pengecualian user terhapus, dan hanya true (bukan null) untuk is_active
     const rootWhere = sql.match(/where p\.parent_id = \(select auth\.uid\(\)\)\s+and p\.id <> \(select auth\.uid\(\)\)\s+and p\.deleted_at is null\s+and p\.is_active is true/g);
     expect(rootWhere).toBeTruthy();
     expect(rootWhere!.length).toBe(3);
 
     // Verifikasi klausa WHERE dari recursive query di dalam subordinates
+    // Bentuk ini memastikan cycle protection, isolasi caller, pengecualian user terhapus, dan hanya true untuk is_active
     const recursiveWhere = sql.match(/where not \(child\.id = any\(s\.path\)\)\s+and child\.id <> \(select auth\.uid\(\)\)\s+and child\.deleted_at is null\s+and child\.is_active is true/g);
     expect(recursiveWhere).toBeTruthy();
     expect(recursiveWhere!.length).toBe(3);

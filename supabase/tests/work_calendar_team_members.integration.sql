@@ -242,7 +242,110 @@ begin
     raise exception 'Assertion failed: list_work_calendar_team_entries returned entries for owners not in list_work_calendar_team_members';
   end if;
 
-  -- 10. Anon RLS / RPC rejection
+  -- 10. Intermediate Manager B RLS Table SELECT Check
+  perform set_config('request.jwt.claim.sub', v_user_b::text, true);
+  perform set_config('role', 'authenticated', true);
+
+  select count(*) into v_count from public.work_calendar_entries;
+  -- Expected: 2 entries: Own (B) + Active Sub (C)
+  if v_count <> 2 then
+    raise exception 'Assertion failed: Manager B table SELECT expected 2 entries (Own + Active Sub), got %', v_count;
+  end if;
+
+  if exists (
+    select 1 from public.work_calendar_entries
+    where owner_id not in (v_user_b, v_user_c)
+  ) then
+    raise exception 'Assertion failed: Manager B table SELECT returned unauthorized entries (A, D, inactive, deleted, outside)';
+  end if;
+
+  -- 11. Intermediate Manager B RPC list_work_calendar_team_entries Check
+  select count(*) into v_count from public.list_work_calendar_team_entries('2026-09-01', '2026-09-30');
+  -- Expected: 1 entry: Active Sub only (C). Caller B is excluded.
+  if v_count <> 1 then
+    raise exception 'Assertion failed: Manager B RPC team_entries expected 1 entry, got %', v_count;
+  end if;
+
+  -- 12. Intermediate Manager B Check UUID intersection
+  if exists (
+    select 1
+    from public.list_work_calendar_team_entries('2026-09-01', '2026-09-30') e
+    left join public.list_work_calendar_team_members() m on e.owner_id = m.id
+    where m.id is null
+  ) then
+    raise exception 'Assertion failed: Manager B list_work_calendar_team_entries returned unknown UUIDs not in list_work_calendar_team_members';
+  end if;
+
+  -- 13. Write Check: A can update own entry
+  perform set_config('request.jwt.claim.sub', v_user_a::text, true);
+  v_threw := false;
+  begin
+    update public.work_calendar_entries set title = 'Updated A' where owner_id = v_user_a;
+  exception when others then
+    v_threw := true;
+  end;
+  if v_threw then
+    raise exception 'Assertion failed: Manager A could not update own entry';
+  end if;
+
+  -- 14. Write Check: A CANNOT update entry of subordinate B
+  v_threw := false;
+  begin
+    update public.work_calendar_entries set title = 'Hacked by A' where owner_id = v_user_b;
+  exception when others then
+    v_threw := true;
+  end;
+  -- If update returns 0 rows (via RLS), or throws exception, both are safe. Let's check row count.
+  select count(*) into v_count from public.work_calendar_entries where title = 'Hacked by A';
+  if v_count > 0 then
+    raise exception 'Assertion failed: Manager A successfully updated subordinate B entry (cross-owner write)';
+  end if;
+
+  -- 15. Write Check: B can update own entry
+  perform set_config('request.jwt.claim.sub', v_user_b::text, true);
+  v_threw := false;
+  begin
+    update public.work_calendar_entries set title = 'Updated B' where owner_id = v_user_b;
+  exception when others then
+    v_threw := true;
+  end;
+  if v_threw then
+    raise exception 'Assertion failed: Manager B could not update own entry';
+  end if;
+
+  -- 16. Write Check: B CANNOT update entry of subordinate C
+  v_threw := false;
+  begin
+    update public.work_calendar_entries set title = 'Hacked by B' where owner_id = v_user_c;
+  exception when others then
+    v_threw := true;
+  end;
+  select count(*) into v_count from public.work_calendar_entries where title = 'Hacked by B';
+  if v_count > 0 then
+    raise exception 'Assertion failed: Manager B successfully updated subordinate C entry (cross-owner write)';
+  end if;
+
+  -- 17. Cycle member entry test
+  perform set_config('role', 'postgres', true);
+  insert into public.work_calendar_entries (owner_id, work_date, title, status) values
+    (v_user_cycle_1, '2026-09-15', 'Cycle 1 Entry', 'planned'),
+    (v_user_cycle_2, '2026-09-15', 'Cycle 2 Entry', 'planned');
+
+  perform set_config('request.jwt.claim.sub', v_user_cycle_1::text, true);
+  perform set_config('role', 'authenticated', true);
+
+  -- Cycle 1 should only see its own entry + Cycle 2
+  select count(*) into v_count from public.work_calendar_entries;
+  if v_count <> 2 then
+    raise exception 'Assertion failed: Cycle user 1 table SELECT expected 2 entries, got %', v_count;
+  end if;
+
+  select count(*) into v_count from public.list_work_calendar_team_entries('2026-09-01', '2026-09-30');
+  if v_count <> 1 then
+    raise exception 'Assertion failed: Cycle user 1 RPC team_entries expected 1 entry, got %', v_count;
+  end if;
+
+  -- 18. Anon RLS / RPC rejection
   perform set_config('role', 'anon', true);
   perform set_config('request.jwt.claim.sub', '', true);
 
