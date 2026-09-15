@@ -1,16 +1,23 @@
 /**
  * Tampilan Tim (baca saja).
  *
- * Satu baris per anggota dengan hitungan selesai/total, berjalan,
- * terhambat, dan terlambat. Progres dihitung otomatis. Tidak ada aksi
+ * Satu baris per anggota dengan urutan yang dapat dipindai:
+ * - baris pertama: identitas (nama dan jabatan, tidak dipotong) serta rasio
+ *   selesai/total;
+ * - baris kedua: metrik lengkap `Direncanakan`, `Berjalan`, `Selesai`,
+ *   `Terhambat`, dan indikator lintas status `Terlambat`;
+ * - baris ketiga: batang rasio selesai yang ringkas.
+ *
+ * Progres dihitung otomatis dari status entry. `Terlambat` bukan bagian
+ * penjumlahan status sehingga tidak pernah menambah total. Tidak ada aksi
  * ubah/hapus terhadap entry bawahan.
  */
 
 import { ChevronDown, ChevronRight, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { WorkEntryOwnerGroup } from "../types/work-calendar";
-import { computeWorkProgress } from "../lib/work-progress";
+import type { WorkProgressCounts, WorkEntryOwnerGroup } from "../types/work-calendar";
+import { computeWorkCompletionPercent, computeWorkProgress } from "../lib/work-progress";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 
 export interface TeamProgressViewProps {
@@ -18,6 +25,39 @@ export interface TeamProgressViewProps {
   interactions: WorkCalendarViewInteractionProps;
   expandedOwnerId: string | null;
   onToggleOwner: (ownerId: string) => void;
+}
+
+function TeamMetrics({ ownerId, progress }: { ownerId: string; progress: WorkProgressCounts }) {
+  const items = [
+    {
+      key: "planned",
+      label: "Direncanakan",
+      value: progress.planned,
+      tone: "text-muted-foreground",
+    },
+    { key: "in-progress", label: "Berjalan", value: progress.inProgress, tone: "text-pending" },
+    { key: "completed", label: "Selesai", value: progress.completed, tone: "text-success" },
+    { key: "blocked", label: "Terhambat", value: progress.blocked, tone: "text-destructive" },
+    {
+      key: "overdue",
+      label: "Terlambat",
+      value: progress.overdue,
+      tone: progress.overdue > 0 ? "text-overdue" : "text-muted-foreground",
+    },
+  ] as const;
+
+  return (
+    <dl className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      {items.map((item) => (
+        <div key={item.key} className="inline-flex items-center gap-1">
+          <dt className="text-muted-foreground">{item.label}</dt>
+          <dd className={cn("font-semibold", item.tone)} data-testid={`team-${item.key}-${ownerId}`}>
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function TeamOwnerRow({
@@ -32,6 +72,7 @@ function TeamOwnerRow({
   onToggle: () => void;
 }) {
   const progress = computeWorkProgress(group.entries, interactions.today);
+  const percent = computeWorkCompletionPercent(progress);
   const headingId = `work-team-heading-${group.owner.id}`;
 
   return (
@@ -40,47 +81,60 @@ function TeamOwnerRow({
       data-owner-id={group.owner.id}
       className="rounded-sm border border-border bg-card"
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        aria-controls={`work-team-panel-${group.owner.id}`}
-        className="flex min-h-touch w-full items-center gap-2 rounded-sm px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {isExpanded ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        )}
+      <div className="flex flex-col gap-1.5 px-3 py-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-controls={`work-team-panel-${group.owner.id}`}
+          className="flex min-h-touch w-full items-start gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {isExpanded ? (
+            <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          )}
 
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-foreground">{group.owner.name}</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {group.owner.jobTitle ?? "Anggota tim"}
+          <span className="min-w-0 flex-1">
+            <span className="block break-words text-sm font-medium text-foreground">
+              {group.owner.name}
+            </span>
+            <span className="block break-words text-xs text-muted-foreground">
+              {group.owner.jobTitle ?? "Anggota tim"}
+            </span>
           </span>
-        </span>
 
-        <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs">
-          <span className="text-muted-foreground">
-            <span className="font-semibold text-foreground" data-testid={`team-completed-${group.owner.id}`}>
+          <span className="shrink-0 whitespace-nowrap pt-0.5 text-xs tabular-nums text-muted-foreground">
+            <span
+              className="font-semibold text-foreground"
+              data-testid={`team-ratio-label-${group.owner.id}`}
+            >
               {progress.completed}
             </span>
-            /{progress.total} selesai
+            /<span data-testid={`team-total-${group.owner.id}`}>{progress.total}</span> selesai
           </span>
-          <span className="text-pending" data-testid={`team-in-progress-${group.owner.id}`}>
-            {progress.inProgress} berjalan
-          </span>
-          <span className="text-destructive" data-testid={`team-blocked-${group.owner.id}`}>
-            {progress.blocked} terhambat
-          </span>
+        </button>
+
+        <div className="pl-6">
+          <TeamMetrics ownerId={group.owner.id} progress={progress} />
+        </div>
+
+        <div
+          role="progressbar"
+          aria-label={`Rasio selesai ${group.owner.name}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          aria-valuetext={`${percent} persen selesai, ${progress.completed} dari ${progress.total} pekerjaan`}
+          data-testid={`team-ratio-${group.owner.id}`}
+          className="ml-6 h-1.5 w-full max-w-[240px] overflow-hidden rounded-full bg-muted"
+        >
           <span
-            className={cn(progress.overdue > 0 ? "text-overdue" : "text-muted-foreground")}
-            data-testid={`team-overdue-${group.owner.id}`}
-          >
-            {progress.overdue} terlambat
-          </span>
-        </span>
-      </button>
+            className="block h-full rounded-full bg-success transition-[width] duration-200 motion-reduce:transition-none"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </div>
 
       <div id={`work-team-panel-${group.owner.id}`} hidden={!isExpanded} className="border-t border-border px-3 py-2">
         <h3 id={headingId} className="sr-only">
