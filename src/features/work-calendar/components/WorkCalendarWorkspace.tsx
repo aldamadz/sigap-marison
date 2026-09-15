@@ -39,6 +39,7 @@ import type {
   WorkEntryStatus,
   WorkProgressCounts,
 } from "../types/work-calendar";
+import { isWorkEntryConflictError } from "../lib/work-entry-conflict";
 import { formatWorkDateFull } from "../lib/work-calendar-date";
 import { getWorkEntryStatusFollowUp } from "../lib/work-entry-status";
 import {
@@ -193,14 +194,22 @@ export function WorkCalendarWorkspace({  currentUser,
       setSavingEntryId(entry.id);
       setMutationError(null);
       try {
-        const updated = await repository.updateEntry({ entryId: entry.id, patch });
+        const updated = await repository.updateEntry({
+          entryId: entry.id,
+          patch,
+          expectedUpdatedAt: entry.updatedAt,
+        });
         calendar.applyLocalEntry(updated);
         return true;
       } catch (thrown) {
         setMutationError(
-          thrown instanceof Error && thrown.message
-            ? thrown.message
-            : "Perubahan gagal disimpan. Coba lagi.",
+          isWorkEntryConflictError(thrown)
+            ? thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Pembaruan gagal karena data telah berubah atau tidak ditemukan. Muat ulang halaman."
+            : thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Perubahan gagal disimpan. Coba lagi.",
         );
         return false;
       } finally {
@@ -229,13 +238,18 @@ export function WorkCalendarWorkspace({  currentUser,
           const updated = await repository.updateEntry({
             entryId: entry.id,
             patch: { status },
+            expectedUpdatedAt: entry.updatedAt,
           });
           calendar.applyLocalEntry(updated);
         } catch (thrown) {
           setMutationError(
-            thrown instanceof Error && thrown.message
-              ? thrown.message
-              : "Status gagal disimpan. Coba lagi.",
+            isWorkEntryConflictError(thrown)
+              ? thrown instanceof Error && thrown.message
+                ? thrown.message
+                : "Status gagal disimpan karena data telah berubah. Muat ulang halaman."
+              : thrown instanceof Error && thrown.message
+                ? thrown.message
+                : "Status gagal disimpan. Coba lagi.",
           );
         } finally {
           setSavingEntryId(null);
@@ -299,15 +313,22 @@ export function WorkCalendarWorkspace({  currentUser,
       setIsDeleting(true);
       setMutationError(null);
       try {
-        await repository.deleteEntry({ entryId: entry.id });
+        await repository.deleteEntry({
+          entryId: entry.id,
+          expectedUpdatedAt: entry.updatedAt,
+        });
         calendar.removeLocalEntry(entry.id);
         if (selectedEntryId === entry.id) setSelectedEntryId(null);
         if (prompt?.entryId === entry.id) setPrompt(null);
       } catch (thrown) {
         setMutationError(
-          thrown instanceof Error && thrown.message
-            ? thrown.message
-            : "Pekerjaan gagal dihapus. Coba lagi.",
+          isWorkEntryConflictError(thrown)
+            ? thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Pekerjaan gagal dihapus karena data telah berubah. Muat ulang halaman."
+            : thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Pekerjaan gagal dihapus. Coba lagi.",
         );
       } finally {
         setIsDeleting(false);
