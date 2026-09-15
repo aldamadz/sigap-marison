@@ -99,7 +99,6 @@ import { createAttentionRuntime } from "./modules/attention/attention-runtime.js
 import { createMarisonApiClient } from "./modules/marison/marison-api-client.js";
 import { createMarisonPreviewRuntime } from "./modules/marison/marison-preview-runtime.js";
 
-
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -200,7 +199,6 @@ const secretMatches = (supplied, expected) => {
   const expectedHash = createHash("sha256").update(String(expected || "")).digest();
   return timingSafeEqual(suppliedHash, expectedHash);
 };
-
 
 export const resetDomainRuntimeDependenciesForTest = () => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
@@ -2328,8 +2326,7 @@ const fillEndpointTemplate = (template, variables = {}) => {
   return path.startsWith("/") ? path : `/${path}`;
 };
 
-
-  const marisonApiClient = createMarisonApiClient({
+const marisonApiClient = createMarisonApiClient({
   deploymentEnvironment: marisonDeploymentEnvironment,
   readEnv: (name) => process.env[name],
   fetchImpl: (...args) => fetch(...args),
@@ -2347,23 +2344,17 @@ const {
   getAllMarisonCollection,
 } = marisonApiClient;
 
-  const marisonPreviewRuntime = createMarisonPreviewRuntime({
-    getSupabase: () => supabase,
-    getServiceRoleKey: () => serviceRoleKey,
-    deploymentEnvironment: marisonDeploymentEnvironment,
-    getBearerToken,
-    requireAdminUser,
-    getAllMarisonCollection: marisonApiClient.getAllMarisonCollection,
-    previewMarisonBranchSync,
-    previewMarisonProjectSync,
-    previewMarisonEmployeeSync,
-  });
-
-
-
-
-
-
+const marisonPreviewRuntime = createMarisonPreviewRuntime({
+  getSupabase: () => supabase,
+  getServiceRoleKey: () => serviceRoleKey,
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  getBearerToken,
+  requireAdminUser,
+  getAllMarisonCollection: marisonApiClient.getAllMarisonCollection,
+  previewMarisonBranchSync,
+  previewMarisonProjectSync,
+  previewMarisonEmployeeSync,
+});
 
 const syncMarisonBranches = async (req) => {
   assertSameOrigin(req);
@@ -2399,7 +2390,6 @@ const syncMarisonBranches = async (req) => {
     marisonBranchSyncInFlight = false;
   }
 };
-
 
 const syncMarisonProjects = async (req) => {
   const user = await requireAdminUser(getBearerToken(req));
@@ -2441,7 +2431,6 @@ const marisonDefaultPassword = () => {
   return value;
 };
 
-
 const assertMarisonEmployeeSyncWriteAvailable = () => {
   marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable();
   if (!marisonDefaultPassword()) {
@@ -2450,7 +2439,6 @@ const assertMarisonEmployeeSyncWriteAvailable = () => {
     throw err;
   }
 };
-
 
 const syncMarisonEmployees = async (req) => {
   assertSameOrigin(req);
