@@ -55,6 +55,7 @@ export interface WorkEntryValidationInput {
   title: string;
   status: WorkEntryStatus;
   kind: WorkEntryKind;
+  isAllDay?: boolean;
   realization?: string | null;
   blockedReason?: string | null;
   notes?: string | null;
@@ -113,9 +114,13 @@ export function validateWorkEntryInput(input: WorkEntryValidationInput): WorkEnt
   const hasEnd = isIsoTimestamp(input.endsAt);
   const wantsTime = Boolean(input.startsAt) || Boolean(input.endsAt);
 
-  if (wantsTime && (!hasStart || !hasEnd)) {
+  if (input.isAllDay === true && (input.startsAt || input.endsAt)) {
+    errors.timeRange = "Pekerjaan sepanjang hari tidak boleh memiliki jam mulai atau jam selesai.";
+  } else if (input.isAllDay === false && (!hasStart || !hasEnd)) {
     errors.timeRange = "Isi jam mulai dan jam selesai bersama-sama.";
-  } else if (hasStart && hasEnd && (input.startsAt as string) > (input.endsAt as string)) {
+  } else if (wantsTime && (!hasStart || !hasEnd)) {
+    errors.timeRange = "Isi jam mulai dan jam selesai bersama-sama.";
+  } else if (hasStart && hasEnd && (input.startsAt as string) >= (input.endsAt as string)) {
     errors.timeRange = "Jam selesai harus setelah jam mulai.";
   }
 
@@ -128,6 +133,7 @@ export function validateStoredWorkEntry(entry: WorkEntry): WorkEntryValidationRe
     title: entry.title,
     status: entry.status,
     kind: entry.kind,
+    isAllDay: entry.isAllDay,
     realization: entry.realization,
     blockedReason: entry.blockedReason,
     notes: entry.notes,

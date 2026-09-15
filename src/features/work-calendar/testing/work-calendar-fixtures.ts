@@ -227,16 +227,26 @@ export function createFixtureWorkEntryRepository(
       store.set(entry.id, entry);
       return entry;
     },
-    async updateEntry({ entryId, patch }) {
+    async updateEntry({ entryId, patch, expectedUpdatedAt }) {
       const current = store.get(entryId);
       if (!current) throw new Error("Entry tidak ditemukan.");
+      if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
+        const error = new Error("Data telah berubah");
+        error.name = "WorkEntryConflictError";
+        throw error;
+      }
       const next: WorkEntry = { ...current, ...patch, updatedAt: new Date().toISOString() };
       store.set(entryId, next);
       return next;
     },
-    async deleteEntry({ entryId }) {
+    async deleteEntry({ entryId, expectedUpdatedAt }) {
       const current = store.get(entryId);
       if (!current) return;
+      if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
+        const error = new Error("Data telah berubah");
+        error.name = "WorkEntryConflictError";
+        throw error;
+      }
       store.set(entryId, { ...current, deletedAt: new Date().toISOString() });
     },
   };

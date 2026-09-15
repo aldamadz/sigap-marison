@@ -1,5 +1,5 @@
 /**
- * Public boundary Unified Work Calendar (CAL-03 F1).
+ * Public boundary Unified Work Calendar (CAL-03 F1 & F2).
  *
  * Modul ini sengaja tidak mengekspor `testing/*`. Fixture hanya boleh
  * diimpor langsung dari `@/features/work-calendar/testing/work-calendar-fixtures`
@@ -19,6 +19,10 @@ export { WeeklyWorkView } from "./components/WeeklyWorkView";
 export { MonthlyWorkView } from "./components/MonthlyWorkView";
 export { TeamProgressView } from "./components/TeamProgressView";
 export { DailyProgressSummary } from "./components/DailyProgressSummary";
+
+export { createSupabaseWorkEntryRepository, WorkEntryConflictError } from "./data/supabase-work-entry-repository";
+export { mapWorkEntryRow } from "./data/work-entry-row-mapper";
+export type { WorkCalendarEntryRow } from "./data/work-entry-row-mapper";
 
 export { useWorkCalendarView, useWorkCalendarDerivedView } from "./hooks/use-work-calendar-view";
 export type {

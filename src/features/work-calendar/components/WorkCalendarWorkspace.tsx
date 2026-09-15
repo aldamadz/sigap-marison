@@ -193,14 +193,20 @@ export function WorkCalendarWorkspace({  currentUser,
       setSavingEntryId(entry.id);
       setMutationError(null);
       try {
-        const updated = await repository.updateEntry({ entryId: entry.id, patch });
+        const updated = await repository.updateEntry({
+          entryId: entry.id,
+          patch,
+          expectedUpdatedAt: entry.updatedAt,
+        });
         calendar.applyLocalEntry(updated);
         return true;
       } catch (thrown) {
         setMutationError(
-          thrown instanceof Error && thrown.message
+          thrown instanceof Error && thrown.name === "WorkEntryConflictError"
             ? thrown.message
-            : "Perubahan gagal disimpan. Coba lagi.",
+            : thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Perubahan gagal disimpan. Coba lagi.",
         );
         return false;
       } finally {
@@ -229,13 +235,16 @@ export function WorkCalendarWorkspace({  currentUser,
           const updated = await repository.updateEntry({
             entryId: entry.id,
             patch: { status },
+            expectedUpdatedAt: entry.updatedAt,
           });
           calendar.applyLocalEntry(updated);
         } catch (thrown) {
           setMutationError(
-            thrown instanceof Error && thrown.message
+            thrown instanceof Error && thrown.name === "WorkEntryConflictError"
               ? thrown.message
-              : "Status gagal disimpan. Coba lagi.",
+              : thrown instanceof Error && thrown.message
+                ? thrown.message
+                : "Status gagal disimpan. Coba lagi.",
           );
         } finally {
           setSavingEntryId(null);
@@ -299,15 +308,20 @@ export function WorkCalendarWorkspace({  currentUser,
       setIsDeleting(true);
       setMutationError(null);
       try {
-        await repository.deleteEntry({ entryId: entry.id });
+        await repository.deleteEntry({
+          entryId: entry.id,
+          expectedUpdatedAt: entry.updatedAt,
+        });
         calendar.removeLocalEntry(entry.id);
         if (selectedEntryId === entry.id) setSelectedEntryId(null);
         if (prompt?.entryId === entry.id) setPrompt(null);
       } catch (thrown) {
         setMutationError(
-          thrown instanceof Error && thrown.message
+          thrown instanceof Error && thrown.name === "WorkEntryConflictError"
             ? thrown.message
-            : "Pekerjaan gagal dihapus. Coba lagi.",
+            : thrown instanceof Error && thrown.message
+              ? thrown.message
+              : "Pekerjaan gagal dihapus. Coba lagi.",
         );
       } finally {
         setIsDeleting(false);
