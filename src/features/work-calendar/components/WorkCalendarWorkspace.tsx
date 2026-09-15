@@ -16,9 +16,19 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { AlertCircle, CalendarDays, LoaderCircle, Plus, X } from "lucide-react";
+import { AlertCircle, CalendarDays, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type {
   WorkCalendarViewMode,
   WorkCalendarWorkspaceProps,
@@ -95,6 +105,16 @@ export function WorkCalendarWorkspace({  currentUser,
   const [monthPanelDate, setMonthPanelDate] = useState<WorkDate | null>(null);
   const [expandedOwnerId, setExpandedOwnerId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
+  /**
+   * Entry yang menunggu konfirmasi hapus. Selama state ini terisi, tidak ada
+   * pemanggilan `repository.deleteEntry`. `AlertDialog` memakai `open` yang
+   * dikendalikan UI (bukan `AlertDialogTrigger`) supaya fokus kembali ke
+   * tombol menu pemicu setelah `Batal` tanpa dipaksa membuka menu lagi.
+   */
+  const [pendingDeleteEntryId, setPendingDeleteEntryId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  /** Id entry yang menunggu konfirmasi; dipakai untuk memulihkan fokus. */
+  const deleteTriggerIdRef = useRef<string | null>(null);
   const quickEntryInputRef = useRef<HTMLInputElement>(null);
 
   const viewDate = calendar.view === "team" ? calendar.today : calendar.anchorDate;
@@ -276,7 +296,7 @@ export function WorkCalendarWorkspace({  currentUser,
 
   const handleDelete = useCallback(
     async (entry: WorkEntry) => {
-      setSavingEntryId(entry.id);
+      setIsDeleting(true);
       setMutationError(null);
       try {
         await repository.deleteEntry({ entryId: entry.id });
@@ -290,10 +310,16 @@ export function WorkCalendarWorkspace({  currentUser,
             : "Pekerjaan gagal dihapus. Coba lagi.",
         );
       } finally {
-        setSavingEntryId(null);
+        setIsDeleting(false);
+        setPendingDeleteEntryId(null);
       }
     },
     [calendar, prompt, repository, selectedEntryId],
+  );
+
+  const pendingDeleteEntry = useMemo(
+    () => calendar.entries.find((entry) => entry.id === pendingDeleteEntryId) ?? null,
+    [calendar.entries, pendingDeleteEntryId],
   );
 
   const handleMoveToDate = useCallback(
@@ -363,7 +389,9 @@ export function WorkCalendarWorkspace({  currentUser,
     onOpenDetail: (entry) => setSelectedEntryId(entry.id),
     onMoveToDate: handleMoveToDate,
     onDelete: (entry) => {
-      void handleDelete(entry);
+      // Tidak ada penghapusan sebelum konfirmasi: hanya menyimpan target.
+      deleteTriggerIdRef.current = entry.id;
+      setPendingDeleteEntryId(entry.id);
     },
   };
 
@@ -595,6 +623,56 @@ export function WorkCalendarWorkspace({  currentUser,
           {(teamMembers ?? []).find((member) => member.id === calendar.ownerFilterId)?.name ?? ""}
         </p>
       )}
+
+      {/*
+        Konfirmasi hapus. Dialog dikendalikan lewat state sehingga:
+        - tidak ada `deleteEntry` sebelum pengguna menekan `Hapus pekerjaan`;
+        - `Batal` mengembalikan fokus ke tombol menu pemicu (perilaku Radix).
+        Tidak ada undo palsu: repository benar-benar menghapus data.
+      */}
+      <AlertDialog
+        open={pendingDeleteEntry !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setPendingDeleteEntryId(null);
+        }}
+      >
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            // Pastikan fokus tidak hilang setelah Batal/Esc.
+            event.preventDefault();
+            const triggerId = deleteTriggerIdRef.current;
+            const trigger = triggerId
+              ? document.querySelector<HTMLElement>(`[data-work-entry-menu="${triggerId}"]`)
+              : null;
+            (trigger ?? quickEntryInputRef.current)?.focus();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus pekerjaan ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Pekerjaan{" "}
+              <span className="font-medium text-foreground">
+                &ldquo;{pendingDeleteEntry?.title ?? ""}&rdquo;
+              </span>{" "}
+              akan dihapus dan tidak dapat dikembalikan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingDeleteEntry) void handleDelete(pendingDeleteEntry);
+              }}
+            >
+              <Trash2 aria-hidden="true" />
+              Hapus pekerjaan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
