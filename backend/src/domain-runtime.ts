@@ -97,6 +97,7 @@ import { createBffRuntime } from "./modules/bff/bff-runtime.js";
 import { createInboxRuntime } from "./modules/surat/inbox-runtime.js";
 import { createAttentionRuntime } from "./modules/attention/attention-runtime.js";
 import { createMarisonApiClient } from "./modules/marison/marison-api-client.js";
+import { createMarisonPreviewRuntime } from "./modules/marison/marison-preview-runtime.js";
 
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
@@ -205,8 +206,12 @@ export const setDomainRuntimeDependenciesForTest = (dependencies) => {
   if (dependencies.nowIso) marisonApiClient.setDependencies({ nowIso: dependencies.nowIso });
   if (dependencies.supabase) supabase = dependencies.supabase;
   if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
-  if (dependencies.getMarisonEmployeeSyncSource) getMarisonEmployeeSyncSource = dependencies.getMarisonEmployeeSyncSource;
-  if (dependencies.getMarisonProjectSyncSource) getMarisonProjectSyncSource = dependencies.getMarisonProjectSyncSource;
+    if (dependencies.getMarisonEmployeeSyncSource || dependencies.getMarisonProjectSyncSource) {
+    marisonPreviewRuntime.setDependencies({
+      getMarisonEmployeeSyncSource: dependencies.getMarisonEmployeeSyncSource,
+      getMarisonProjectSyncSource: dependencies.getMarisonProjectSyncSource,
+    });
+  }
 };
 
 const getMailTransporter = () => {
@@ -2316,7 +2321,8 @@ const fillEndpointTemplate = (template, variables = {}) => {
   return path.startsWith("/") ? path : `/${path}`;
 };
 
-const marisonApiClient = createMarisonApiClient({
+
+  const marisonApiClient = createMarisonApiClient({
   deploymentEnvironment: marisonDeploymentEnvironment,
   readEnv: (name) => process.env[name],
   fetchImpl: (...args) => fetch(...args),
@@ -2334,47 +2340,28 @@ const {
   getAllMarisonCollection,
 } = marisonApiClient;
 
-let getMarisonEmployeeSyncSource = async () => {
-  const branches = await getAllMarisonCollection("staging", "/branches");
-  const employees = await getAllMarisonCollection("staging", "/employees");
-  return { employees, branches };
-};
-
-const getMarisonBranchSyncSource = async () => (
-  getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")
-);
-
-let getMarisonProjectSyncSource = async () => {
-  const [branches, projects] = await Promise.all([
-    getAllMarisonCollection(marisonDeploymentEnvironment, "/branches"),
-    getAllMarisonCollection(marisonDeploymentEnvironment, "/projects"),
-  ]);
-  return { branches, projects };
-};
-
-const assertMarisonBranchSyncAvailable = () => {
-  if (!supabase || !serviceRoleKey) {
-    const err = new Error("Service role environment ini belum dikonfigurasi.");
-    err.status = 500;
-    throw err;
-  }
-};
-
-const previewMarisonBranches = async (req) => {
-  await requireAdminUser(getBearerToken(req));
-  assertMarisonBranchSyncAvailable();
-  const branches = await getMarisonBranchSyncSource();
-  return previewMarisonBranchSync({
-    supabase,
-    branches,
-    environment: marisonDeploymentEnvironment,
+  const marisonPreviewRuntime = createMarisonPreviewRuntime({
+    getSupabase: () => supabase,
+    getServiceRoleKey: () => serviceRoleKey,
+    deploymentEnvironment: marisonDeploymentEnvironment,
+    getBearerToken,
+    requireAdminUser,
+    getAllMarisonCollection: marisonApiClient.getAllMarisonCollection,
+    previewMarisonBranchSync,
+    previewMarisonProjectSync,
+    previewMarisonEmployeeSync,
   });
-};
+
+
+
+
+
+
 
 const syncMarisonBranches = async (req) => {
   assertSameOrigin(req);
   const user = await requireAdminUser(getBearerToken(req));
-  assertMarisonBranchSyncAvailable();
+  marisonPreviewRuntime.assertMarisonBranchSyncAvailable();
   const payload = await readJsonBody(req, 4096);
   if (payload?.confirm !== true) {
     const err = new Error("Konfirmasi sinkronisasi diperlukan.");
@@ -2388,7 +2375,7 @@ const syncMarisonBranches = async (req) => {
   }
   marisonBranchSyncInFlight = true;
   try {
-    const branches = await getMarisonBranchSyncSource();
+    const branches = await marisonPreviewRuntime.getMarisonBranchSyncSource();
     return await runTrackedMarisonSync({
       supabase,
       environment: marisonDeploymentEnvironment,
@@ -2406,16 +2393,6 @@ const syncMarisonBranches = async (req) => {
   }
 };
 
-const previewMarisonProjects = async (req) => {
-  await requireAdminUser(getBearerToken(req));
-  assertMarisonBranchSyncAvailable();
-  const source = await getMarisonProjectSyncSource();
-  return previewMarisonProjectSync({
-    supabase,
-    ...source,
-    environment: marisonDeploymentEnvironment,
-  });
-};
 
 const syncMarisonProjects = async (req) => {
   const user = await requireAdminUser(getBearerToken(req));
@@ -2425,7 +2402,7 @@ const syncMarisonProjects = async (req) => {
     err.status = 400;
     throw err;
   }
-  assertMarisonBranchSyncAvailable();
+  marisonPreviewRuntime.assertMarisonBranchSyncAvailable();
   if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
     const err = new Error("Sinkronisasi data external sedang berjalan.");
     err.status = 409;
@@ -2433,7 +2410,7 @@ const syncMarisonProjects = async (req) => {
   }
   marisonProjectSyncInFlight = true;
   try {
-    const source = await getMarisonProjectSyncSource();
+    const source = await marisonPreviewRuntime.getMarisonProjectSyncSource();
     return await runTrackedMarisonSync({
       supabase,
       environment: marisonDeploymentEnvironment,
@@ -2457,21 +2434,9 @@ const marisonDefaultPassword = () => {
   return value;
 };
 
-const assertMarisonEmployeeSyncInfraAvailable = () => {
-  if (marisonDeploymentEnvironment !== "staging") {
-    const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
-    err.status = 403;
-    throw err;
-  }
-  if (!supabase || !serviceRoleKey) {
-    const err = new Error("Layanan sinkronisasi tidak tersedia.");
-    err.status = 500;
-    throw err;
-  }
-};
 
 const assertMarisonEmployeeSyncWriteAvailable = () => {
-  assertMarisonEmployeeSyncInfraAvailable();
+  marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable();
   if (!marisonDefaultPassword()) {
     const err = new Error("Konfigurasi sinkronisasi karyawan belum lengkap.");
     err.status = 503;
@@ -2479,12 +2444,6 @@ const assertMarisonEmployeeSyncWriteAvailable = () => {
   }
 };
 
-const previewMarisonEmployees = async (req) => {
-  await requireAdminUser(getBearerToken(req));
-  assertMarisonEmployeeSyncInfraAvailable();
-  const source = await getMarisonEmployeeSyncSource();
-  return previewMarisonEmployeeSync({ supabase, ...source });
-};
 
 const syncMarisonEmployees = async (req) => {
   assertSameOrigin(req);
@@ -2503,7 +2462,7 @@ const syncMarisonEmployees = async (req) => {
   }
   marisonEmployeeSyncInFlight = true;
   try {
-    const source = await getMarisonEmployeeSyncSource();
+    const source = await marisonPreviewRuntime.getMarisonEmployeeSyncSource();
     return await runTrackedMarisonSync({
       supabase,
       environment: marisonDeploymentEnvironment,
@@ -2522,7 +2481,7 @@ const syncMarisonEmployees = async (req) => {
 };
 
 const syncMarisonDirectoryFromCron = async (req) => {
-  assertMarisonEmployeeSyncInfraAvailable();
+  marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable();
   if (marisonSyncCronToken.length < 32) {
     const err = new Error("Layanan sinkronisasi tidak tersedia.");
     err.status = 503;
@@ -2543,7 +2502,7 @@ const syncMarisonDirectoryFromCron = async (req) => {
   marisonEmployeeSyncInFlight = true;
   marisonProjectSyncInFlight = true;
   try {
-    const source = await getMarisonEmployeeSyncSource();
+    const source = await marisonPreviewRuntime.getMarisonEmployeeSyncSource();
     const directory = await runTrackedMarisonSync({
       supabase,
       environment: marisonDeploymentEnvironment,
@@ -2555,7 +2514,7 @@ const syncMarisonDirectoryFromCron = async (req) => {
         defaultPassword: marisonDefaultPassword(),
       }),
     });
-    const projectSource = await getMarisonProjectSyncSource();
+    const projectSource = await marisonPreviewRuntime.getMarisonProjectSyncSource();
     const projects = await runTrackedMarisonSync({
       supabase,
       environment: marisonDeploymentEnvironment,
@@ -4740,12 +4699,12 @@ export const handleRequest = async (req, res) => {
       }
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/employees/preview") {
-        const result = await previewMarisonEmployees(req);
+        const result = await marisonPreviewRuntime.previewMarisonEmployees(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/branches/preview") {
-        const result = await previewMarisonBranches(req);
+        const result = await marisonPreviewRuntime.previewMarisonBranches(req);
         return sendJson(res, 200, result);
       }
 
@@ -4755,7 +4714,7 @@ export const handleRequest = async (req, res) => {
       }
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/projects/preview") {
-        const result = await previewMarisonProjects(req);
+        const result = await marisonPreviewRuntime.previewMarisonProjects(req);
         return sendJson(res, 200, result);
       }
 
