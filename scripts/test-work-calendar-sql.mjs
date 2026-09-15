@@ -39,8 +39,15 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   role text not null default 'user',
-  parent_id uuid references public.profiles(id)
+  parent_id uuid references public.profiles(id),
+  deleted_at timestamptz null
 );
+alter table public.profiles enable row level security;
+alter table public.profiles force row level security;
+drop policy if exists profiles_select_authenticated on public.profiles;
+create policy profiles_select_authenticated on public.profiles
+  for select to authenticated
+  using (deleted_at is null);
 grant select on public.profiles to authenticated;
 
 create type public.activity_action as enum ('INSERT', 'UPDATE', 'DELETE');

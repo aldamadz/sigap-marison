@@ -11,11 +11,14 @@ declare
   v_user_e uuid := 'f0000000-0000-4000-8000-000000000005'; -- Subordinate of D
   v_user_cycle_x uuid := 'f0000000-0000-4000-8000-000000000006'; -- Cycle test X
   v_user_cycle_y uuid := 'f0000000-0000-4000-8000-000000000007'; -- Cycle test Y
+  v_user_deleted_sub uuid := 'f0000000-0000-4000-8000-000000000008'; -- Deleted subordinate of A
 
   v_entry_b1 uuid;
   v_entry_c1 uuid;
   v_entry_d1 uuid;
-  v_entry_test uuid;
+  v_entry_x1 uuid;
+  v_entry_y1 uuid;
+  v_entry_del_sub uuid;
   v_count integer;
   v_row record;
   v_updated_at timestamptz;
@@ -26,19 +29,22 @@ declare
   v_threw boolean;
   v_rpc_res boolean;
   v_activity_count integer;
+  v_sub_title text;
+  v_sub_owner text;
   v_forged_time timestamptz := '2020-01-01 00:00:00+00'::timestamptz;
 begin
   -- --------------------------------------------------------------------------
-  -- 1. Setup Profiles Hierarchy with cycle scenario
+  -- 1. Setup Profiles Hierarchy with cycle scenario and deleted subordinate
   -- --------------------------------------------------------------------------
-  insert into public.profiles (id, email, full_name, role, parent_id) values
-    (v_user_a, 'usera@example.com', 'Manager A', 'user', null),
-    (v_user_b, 'userb@example.com', 'Staff B', 'user', v_user_a),
-    (v_user_c, 'userc@example.com', 'Staff C', 'user', v_user_b),
-    (v_user_d, 'userd@example.com', 'Manager D', 'user', null),
-    (v_user_e, 'usere@example.com', 'Staff E', 'user', v_user_d),
-    (v_user_cycle_x, 'cyclex@example.com', 'Cycle X', 'user', null),
-    (v_user_cycle_y, 'cycley@example.com', 'Cycle Y', 'user', v_user_cycle_x);
+  insert into public.profiles (id, email, full_name, role, parent_id, deleted_at) values
+    (v_user_a, 'usera@example.com', 'Manager A', 'user', null, null),
+    (v_user_b, 'userb@example.com', 'Staff B', 'user', v_user_a, null),
+    (v_user_c, 'userc@example.com', 'Staff C', 'user', v_user_b, null),
+    (v_user_d, 'userd@example.com', 'Manager D', 'user', null, null),
+    (v_user_e, 'usere@example.com', 'Staff E', 'user', v_user_d, null),
+    (v_user_cycle_x, 'cyclex@example.com', 'Cycle X', 'user', null, null),
+    (v_user_cycle_y, 'cycley@example.com', 'Cycle Y', 'user', v_user_cycle_x, null),
+    (v_user_deleted_sub, 'deletedsub@example.com', 'Deleted Sub', 'user', v_user_a, now());
 
   -- Malformed loop for cycle testing: X -> Y -> X
   update public.profiles set parent_id = v_user_cycle_y where id = v_user_cycle_x;
@@ -111,6 +117,29 @@ begin
     v_user_d, '2026-09-15', 'Pekerjaan Rutin D', 'work', true
   ) returning id into v_entry_d1;
 
+  -- 2e. Deleted subordinate user inserts entry (simulated before delete)
+  perform set_config('request.jwt.claim.sub', v_user_deleted_sub::text, true);
+  insert into public.work_calendar_entries (
+    owner_id, work_date, title, kind, is_all_day
+  ) values (
+    v_user_deleted_sub, '2026-09-15', 'Pekerjaan Sub Deleted', 'work', true
+  ) returning id into v_entry_del_sub;
+
+  -- 2f. Cycle users insert entries
+  perform set_config('request.jwt.claim.sub', v_user_cycle_x::text, true);
+  insert into public.work_calendar_entries (
+    owner_id, work_date, title, kind, is_all_day
+  ) values (
+    v_user_cycle_x, '2026-09-15', 'Pekerjaan Cycle X', 'work', true
+  ) returning id into v_entry_x1;
+
+  perform set_config('request.jwt.claim.sub', v_user_cycle_y::text, true);
+  insert into public.work_calendar_entries (
+    owner_id, work_date, title, kind, is_all_day
+  ) values (
+    v_user_cycle_y, '2026-09-15', 'Pekerjaan Cycle Y', 'work', true
+  ) returning id into v_entry_y1;
+
   -- --------------------------------------------------------------------------
   -- 3. Physical DELETE Prohibition (Blocker 1)
   -- --------------------------------------------------------------------------
@@ -135,7 +164,7 @@ begin
   -- --------------------------------------------------------------------------
   -- 4. Hierarchy RLS Checks & Peer / Manager Mutation Restrictions
   -- --------------------------------------------------------------------------
-  -- 4a. User A (Root) can read descendants (B and C) but not outside (D)
+  -- 4a. User A (Root) can read descendants (B and C) but not outside (D) or deleted sub
   perform set_config('request.jwt.claim.sub', v_user_a::text, true);
   select count(*) into v_count from public.work_calendar_entries;
   if v_count <> 2 then
@@ -330,7 +359,7 @@ begin
   if not v_threw then raise exception 'Assertion failed: owner_id modification was accepted'; end if;
 
   -- --------------------------------------------------------------------------
-  -- 7. Soft Delete RPC & Concurrency Conflict (Blocker 3)
+  -- 7. Soft Delete RPC, Row Freezing, & Concurrency Conflict (Blocker 1 & 3)
   -- --------------------------------------------------------------------------
   select updated_at into v_old_updated_at from public.work_calendar_entries where id = v_entry_b1;
 
@@ -360,7 +389,35 @@ begin
     raise exception 'Assertion failed: repeating soft delete returned true';
   end if;
 
-  -- 7e. Modifying or un-deleting a deleted row throws exception
+  -- 7e. Modifying title of a deleted row throws exception
+  v_threw := false;
+  begin
+    update public.work_calendar_entries set title = 'Modifikasi setelah delete' where id = v_entry_b1;
+  exception when others then
+    v_threw := true;
+  end;
+  if not v_threw then
+    raise exception 'Assertion failed: title of deleted record was able to be modified';
+  end if;
+
+  -- Verify title did not change
+  select title into v_row from public.work_calendar_entries where id = v_entry_b1;
+  if v_row.title <> 'Pekerjaan B1 updated' then
+    raise exception 'Assertion failed: title was altered on deleted record';
+  end if;
+
+  -- 7f. Modifying status of a deleted row throws exception
+  v_threw := false;
+  begin
+    update public.work_calendar_entries set status = 'in_progress' where id = v_entry_b1;
+  exception when others then
+    v_threw := true;
+  end;
+  if not v_threw then
+    raise exception 'Assertion failed: status of deleted record was able to be modified';
+  end if;
+
+  -- 7g. Restoring deleted_at to NULL throws exception
   v_threw := false;
   begin
     update public.work_calendar_entries set deleted_at = null where id = v_entry_b1;
@@ -403,33 +460,43 @@ begin
   end;
   if not v_threw then raise exception 'Assertion failed: team RPC accepted range > 366 days'; end if;
 
-  -- 8d. Active team RPC returns only undeleted descendant (C1) and excludes soft-deleted B1
+  -- 8d. Active team RPC returns only undeleted active descendant (C1) and excludes soft-deleted B1 & deleted sub
   select count(*) into v_count
   from public.list_work_calendar_team_entries('2026-09-01'::date, '2026-09-30'::date);
   if v_count <> 1 then
     raise exception 'Assertion failed: list_work_calendar_team_entries expected 1 row (C1), got %', v_count;
   end if;
 
-  -- 8e. Caller exclusion and Cycle Safety
+  -- 8e. Caller exclusion and Cycle Safety with active entries
   -- User Cycle X calls team RPC with loop X <-> Y
   perform set_config('request.jwt.claim.sub', v_user_cycle_x::text, true);
-  select count(*) into v_count
+  select count(*), max(title), max(owner_id::text) into v_count, v_sub_title, v_sub_owner
   from public.list_work_calendar_team_entries('2026-09-01'::date, '2026-09-30'::date);
-  -- Must terminate without error and exclude Cycle X (caller)
-  if v_count <> 0 then
-    raise exception 'Assertion failed: Cycle X team RPC returned % rows, expected 0', v_count;
+  if v_count <> 1 or v_sub_title <> 'Pekerjaan Cycle Y' or v_sub_owner <> v_user_cycle_y::text then
+    raise exception 'Assertion failed: Cycle X team RPC expected only entry Y, got count % title % owner %', v_count, v_sub_title, v_sub_owner;
+  end if;
+
+  -- User Cycle Y calls team RPC with loop X <-> Y
+  perform set_config('request.jwt.claim.sub', v_user_cycle_y::text, true);
+  select count(*), max(title), max(owner_id::text) into v_count, v_sub_title, v_sub_owner
+  from public.list_work_calendar_team_entries('2026-09-01'::date, '2026-09-30'::date);
+  if v_count <> 1 or v_sub_title <> 'Pekerjaan Cycle X' or v_sub_owner <> v_user_cycle_x::text then
+    raise exception 'Assertion failed: Cycle Y team RPC expected only entry X, got count % title % owner %', v_count, v_sub_title, v_sub_owner;
   end if;
 
   -- --------------------------------------------------------------------------
-  -- 9. Audit logs verification
+  -- 9. Audit logs verification (soft-delete recorded as UPDATE)
   -- --------------------------------------------------------------------------
   perform set_config('role', 'postgres', true);
   select count(*) into v_activity_count
   from public.activity_logs
-  where table_name = 'work_calendar_entries';
+  where table_name = 'work_calendar_entries'
+    and action = 'UPDATE'
+    and record_id = v_entry_b1::text
+    and new_values->>'deleted_at' is not null;
 
-  if v_activity_count < 3 then
-    raise exception 'Assertion failed: expected at least 3 audit log records for work_calendar_entries, found %', v_activity_count;
+  if v_activity_count < 1 then
+    raise exception 'Assertion failed: expected audit log for soft-delete UPDATE on B1, found %', v_activity_count;
   end if;
 
   -- --------------------------------------------------------------------------

@@ -20,12 +20,18 @@ export { MonthlyWorkView } from "./components/MonthlyWorkView";
 export { TeamProgressView } from "./components/TeamProgressView";
 export { DailyProgressSummary } from "./components/DailyProgressSummary";
 
+export { createSupabaseWorkEntryRepository } from "./data/supabase-work-entry-repository";
+export type {
+  SupabaseWorkCalendarClient,
+  WorkCalendarDbQueryFilter,
+  WorkCalendarDbTable,
+  WorkCalendarRpcQuery,
+} from "./data/supabase-work-entry-repository";
 export {
-  createSupabaseWorkEntryRepository,
-  isWorkEntryConflictError,
   WorkEntryConflictError,
   WORK_ENTRY_CONFLICT_CODE,
-} from "./data/supabase-work-entry-repository";
+  isWorkEntryConflictError,
+} from "./lib/work-entry-conflict";
 export { mapWorkEntryRow } from "./data/work-entry-row-mapper";
 export type { WorkCalendarEntryRow } from "./data/work-entry-row-mapper";
 

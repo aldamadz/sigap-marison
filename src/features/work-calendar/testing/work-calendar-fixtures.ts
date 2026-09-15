@@ -14,6 +14,7 @@ import type {
   WorkDate,
 } from "../types/work-calendar";
 import { isWorkDateWithin, shiftWorkDate } from "../lib/work-calendar-date";
+import { WorkEntryConflictError } from "../lib/work-entry-conflict";
 
 export const WORK_CALENDAR_FIXTURE_TODAY: WorkDate = "2026-03-10";
 
@@ -198,9 +199,9 @@ export function createFixtureWorkEntryRepository(
       if (options.failOnList) throw new Error("Gagal memuat data pekerjaan (fixture).");
       return listInRange(fromDate, toDate).filter((entry) => entry.ownerId === ownerId);
     },
-    async listTeamEntries({ managerId, fromDate, toDate }) {
+    async listTeamEntries({ fromDate, toDate }) {
       if (options.failOnList) throw new Error("Gagal memuat data pekerjaan (fixture).");
-      return listInRange(fromDate, toDate).filter((entry) => entry.ownerId !== managerId);
+      return listInRange(fromDate, toDate);
     },
     async createEntry(draft: WorkEntryDraft) {
       counter += 1;
@@ -231,11 +232,7 @@ export function createFixtureWorkEntryRepository(
       const current = store.get(entryId);
       if (!current) throw new Error("Entry tidak ditemukan.");
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
-        const error = Object.assign(new Error("Data telah berubah"), {
-          name: "WorkEntryConflictError",
-          code: "WORK_ENTRY_CONFLICT",
-        });
-        throw error;
+        throw new WorkEntryConflictError("Data telah berubah");
       }
       const next: WorkEntry = { ...current, ...patch, updatedAt: new Date().toISOString() };
       store.set(entryId, next);
@@ -245,11 +242,7 @@ export function createFixtureWorkEntryRepository(
       const current = store.get(entryId);
       if (!current) return;
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
-        const error = Object.assign(new Error("Data telah berubah"), {
-          name: "WorkEntryConflictError",
-          code: "WORK_ENTRY_CONFLICT",
-        });
-        throw error;
+        throw new WorkEntryConflictError("Data telah berubah");
       }
       store.set(entryId, { ...current, deletedAt: new Date().toISOString() });
     },

@@ -39,6 +39,7 @@ import type {
   WorkEntryStatus,
   WorkProgressCounts,
 } from "../types/work-calendar";
+import { isWorkEntryConflictError } from "../lib/work-entry-conflict";
 import { formatWorkDateFull } from "../lib/work-calendar-date";
 import { getWorkEntryStatusFollowUp } from "../lib/work-entry-status";
 import {
@@ -61,15 +62,6 @@ interface StatusPrompt {
   entryTitle: string;
   fromStatus: WorkEntryStatus;
   target: WorkEntryStatus;
-}
-
-function isWorkEntryConflict(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const candidate = error as { code?: unknown; name?: unknown };
-  return (
-    candidate.code === "WORK_ENTRY_CONFLICT" ||
-    candidate.name === "WorkEntryConflictError"
-  );
 }
 
 export function WorkCalendarWorkspace({  currentUser,
@@ -211,7 +203,7 @@ export function WorkCalendarWorkspace({  currentUser,
         return true;
       } catch (thrown) {
         setMutationError(
-          isWorkEntryConflict(thrown)
+          isWorkEntryConflictError(thrown)
             ? thrown instanceof Error && thrown.message
               ? thrown.message
               : "Pembaruan gagal karena data telah berubah atau tidak ditemukan. Muat ulang halaman."
@@ -251,7 +243,7 @@ export function WorkCalendarWorkspace({  currentUser,
           calendar.applyLocalEntry(updated);
         } catch (thrown) {
           setMutationError(
-            isWorkEntryConflict(thrown)
+            isWorkEntryConflictError(thrown)
               ? thrown instanceof Error && thrown.message
                 ? thrown.message
                 : "Status gagal disimpan karena data telah berubah. Muat ulang halaman."
@@ -330,7 +322,7 @@ export function WorkCalendarWorkspace({  currentUser,
         if (prompt?.entryId === entry.id) setPrompt(null);
       } catch (thrown) {
         setMutationError(
-          isWorkEntryConflict(thrown)
+          isWorkEntryConflictError(thrown)
             ? thrown instanceof Error && thrown.message
               ? thrown.message
               : "Pekerjaan gagal dihapus karena data telah berubah. Muat ulang halaman."

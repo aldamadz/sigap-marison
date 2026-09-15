@@ -43,6 +43,7 @@ alter table public.work_calendar_entries
 
 create index idx_work_calendar_entries_owner_date on public.work_calendar_entries (owner_id, work_date) where deleted_at is null;
 create index idx_work_calendar_entries_work_date on public.work_calendar_entries (work_date) where deleted_at is null;
+create index if not exists idx_profiles_parent_id on public.profiles (parent_id) where deleted_at is null;
 
 create or replace function public.work_calendar_entries_before_change()
 returns trigger
@@ -72,17 +73,18 @@ begin
             NEW.blocked_reason = null;
         end if;
     elsif TG_OP = 'UPDATE' then
+        -- Once soft-deleted, all updates are strictly rejected
+        if OLD.deleted_at is not null then
+            raise exception 'Deleted record cannot be modified or restored';
+        end if;
+
         if NEW.id <> OLD.id or NEW.owner_id <> OLD.owner_id or NEW.created_at <> OLD.created_at then
             raise exception 'Immutable fields cannot be changed';
         end if;
 
         NEW.updated_at = clock_timestamp();
 
-        if OLD.deleted_at is not null then
-            if NEW.deleted_at is distinct from OLD.deleted_at then
-                raise exception 'Deleted record cannot be modified or restored';
-            end if;
-        elsif NEW.deleted_at is not null then
+        if NEW.deleted_at is not null then
             NEW.deleted_at = clock_timestamp();
         end if;
 
@@ -128,12 +130,14 @@ create policy work_calendar_entries_select on public.work_calendar_entries
                 from public.profiles p
                 where p.parent_id = (select auth.uid())
                   and p.id <> (select auth.uid())
+                  and p.deleted_at is null
                 union
                 select child.id, s.path || child.id
                 from public.profiles child
                 join subordinates s on child.parent_id = s.id
                 where not (child.id = any(s.path))
                   and child.id <> (select auth.uid())
+                  and child.deleted_at is null
             )
             select id from subordinates
         )
@@ -201,12 +205,14 @@ begin
         from public.profiles p
         where p.parent_id = (select auth.uid())
           and p.id <> (select auth.uid())
+          and p.deleted_at is null
         union
         select child.id, s.path || child.id
         from public.profiles child
         join subordinates s on child.parent_id = s.id
         where not (child.id = any(s.path))
           and child.id <> (select auth.uid())
+          and child.deleted_at is null
     )
     select wce.*
     from public.work_calendar_entries wce

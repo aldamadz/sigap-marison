@@ -142,7 +142,6 @@ export interface WorkEntryRepository {
     signal?: AbortSignal;
   }): Promise<readonly WorkEntry[]>;
   listTeamEntries(input: {
-    managerId: WorkEntryOwnerId;
     fromDate: WorkDate;
     toDate: WorkDate;
     signal?: AbortSignal;

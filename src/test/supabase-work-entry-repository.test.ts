@@ -1,11 +1,20 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import type {
+  SupabaseWorkCalendarClient,
+  WorkCalendarDbQueryFilter,
+  WorkCalendarDbTable,
+  WorkCalendarRpcQuery,
+} from "@/features/work-calendar/data/supabase-work-entry-repository";
+import {
+  createSupabaseWorkEntryRepository,
+} from "@/features/work-calendar/data/supabase-work-entry-repository";
 import {
   WORK_ENTRY_CONFLICT_CODE,
   WorkEntryConflictError,
-  createSupabaseWorkEntryRepository,
   isWorkEntryConflictError,
-} from "@/features/work-calendar/data/supabase-work-entry-repository";
+} from "@/features/work-calendar/lib/work-entry-conflict";
 import type { WorkCalendarEntryRow } from "@/features/work-calendar/data/work-entry-row-mapper";
 import { mapWorkEntryRow } from "@/features/work-calendar/data/work-entry-row-mapper";
 import type { WorkEntryDraft } from "@/features/work-calendar/types/work-calendar";
@@ -89,33 +98,32 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
   describe("listEntries", () => {
     it("membentuk query filter dan urutan deterministic dengan tepat", async () => {
       const row = createMockRow();
-      type MockBuilder = {
-        select: (cols: string) => MockBuilder;
-        eq: (col: string, val: string) => MockBuilder;
-        gte: (col: string, val: string) => MockBuilder;
-        lte: (col: string, val: string) => MockBuilder;
-        is: (col: string, val: null) => MockBuilder;
-        order: (col: string, opts: object) => MockBuilder;
-        range: (from: number, to: number) => MockBuilder;
-        abortSignal: (sig: AbortSignal) => MockBuilder;
-        then: (resolve: (res: { data: WorkCalendarEntryRow[] | null; error: null }) => void) => void;
+
+      const mockQueryBuilder: WorkCalendarDbQueryFilter = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (onfulfilled, onrejected) =>
+          Promise.resolve({ data: [row], error: null }).then(onfulfilled, onrejected),
       };
 
-      const mockQueryBuilder: MockBuilder = {
-        select: vi.fn().mockImplementation(() => mockQueryBuilder),
-        eq: vi.fn().mockImplementation(() => mockQueryBuilder),
-        gte: vi.fn().mockImplementation(() => mockQueryBuilder),
-        lte: vi.fn().mockImplementation(() => mockQueryBuilder),
-        is: vi.fn().mockImplementation(() => mockQueryBuilder),
-        order: vi.fn().mockImplementation(() => mockQueryBuilder),
-        range: vi.fn().mockImplementation(() => mockQueryBuilder),
-        abortSignal: vi.fn().mockImplementation(() => mockQueryBuilder),
-        then: (resolve) => resolve({ data: [row], error: null }),
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn().mockReturnValue(mockQueryBuilder),
+        insert: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: vi.fn() }) }),
+        update: vi.fn().mockReturnValue(mockQueryBuilder),
       };
 
-      const mockClient = {
-        from: vi.fn().mockReturnValue(mockQueryBuilder),
-      } as unknown as SupabaseClient;
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       const controller = new AbortController();
@@ -150,38 +158,34 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
       );
       const page2 = [createMockRow({ id: "e-1000", title: "Entry 1000" })];
 
-      type MockBuilder = {
-        select: () => MockBuilder;
-        eq: () => MockBuilder;
-        gte: () => MockBuilder;
-        lte: () => MockBuilder;
-        is: () => MockBuilder;
-        order: () => MockBuilder;
-        range: (from: number, to: number) => MockBuilder;
-        then: (resolve: (res: { data: WorkCalendarEntryRow[]; error: null }) => void) => void;
-      };
-
-      const mockQueryBuilder: MockBuilder = {
-        select: vi.fn().mockImplementation(() => mockQueryBuilder),
-        eq: vi.fn().mockImplementation(() => mockQueryBuilder),
-        gte: vi.fn().mockImplementation(() => mockQueryBuilder),
-        lte: vi.fn().mockImplementation(() => mockQueryBuilder),
-        is: vi.fn().mockImplementation(() => mockQueryBuilder),
-        order: vi.fn().mockImplementation(() => mockQueryBuilder),
-        range: vi.fn().mockImplementation(() => mockQueryBuilder),
-        then: (resolve) => {
+      const mockQueryBuilder: WorkCalendarDbQueryFilter = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (onfulfilled, onrejected) => {
           callCount++;
-          if (callCount === 1) {
-            resolve({ data: page1, error: null });
-          } else {
-            resolve({ data: page2, error: null });
-          }
+          const payload = callCount === 1 ? { data: page1, error: null } : { data: page2, error: null };
+          return Promise.resolve(payload).then(onfulfilled, onrejected);
         },
       };
 
-      const mockClient = {
-        from: vi.fn().mockReturnValue(mockQueryBuilder),
-      } as unknown as SupabaseClient;
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn().mockReturnValue(mockQueryBuilder),
+        insert: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: vi.fn() }) }),
+        update: vi.fn().mockReturnValue(mockQueryBuilder),
+      };
+
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       const result = await repo.listEntries({
@@ -197,31 +201,34 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
     });
 
     it("meneruskan error aplikasi yang stabil saat query gagal", async () => {
-      type MockBuilder = {
-        select: () => MockBuilder;
-        eq: () => MockBuilder;
-        gte: () => MockBuilder;
-        lte: () => MockBuilder;
-        is: () => MockBuilder;
-        order: () => MockBuilder;
-        range: () => MockBuilder;
-        then: (resolve: (res: { data: null; error: { message: string } }) => void) => void;
+      const mockQueryBuilder: WorkCalendarDbQueryFilter = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (onfulfilled, onrejected) =>
+          Promise.resolve({ data: null, error: { message: "Internal PG error" } }).then(
+            onfulfilled,
+            onrejected,
+          ),
       };
 
-      const mockQueryBuilder: MockBuilder = {
-        select: vi.fn().mockImplementation(() => mockQueryBuilder),
-        eq: vi.fn().mockImplementation(() => mockQueryBuilder),
-        gte: vi.fn().mockImplementation(() => mockQueryBuilder),
-        lte: vi.fn().mockImplementation(() => mockQueryBuilder),
-        is: vi.fn().mockImplementation(() => mockQueryBuilder),
-        order: vi.fn().mockImplementation(() => mockQueryBuilder),
-        range: vi.fn().mockImplementation(() => mockQueryBuilder),
-        then: (resolve) => resolve({ data: null, error: { message: "Internal PG error" } }),
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn().mockReturnValue(mockQueryBuilder),
+        insert: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: vi.fn() }) }),
+        update: vi.fn().mockReturnValue(mockQueryBuilder),
       };
 
-      const mockClient = {
-        from: vi.fn().mockReturnValue(mockQueryBuilder),
-      } as unknown as SupabaseClient;
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       await expect(
@@ -242,34 +249,25 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
       );
       const page2 = [createMockRow({ id: "team-entry-1000", title: "Team Entry 1000" })];
 
-      type MockRpcBuilder = {
-        range: (from: number, to: number) => MockRpcBuilder;
-        abortSignal: (sig: AbortSignal) => MockRpcBuilder;
-        then: (resolve: (res: { data: WorkCalendarEntryRow[]; error: null }) => void) => void;
-      };
-
-      const mockRpcBuilder: MockRpcBuilder = {
-        range: vi.fn().mockImplementation(() => mockRpcBuilder),
-        abortSignal: vi.fn().mockImplementation(() => mockRpcBuilder),
-        then: (resolve) => {
+      const mockRpcBuilder: WorkCalendarRpcQuery = {
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        then: (onfulfilled, onrejected) => {
           callCount++;
-          if (callCount === 1) {
-            resolve({ data: page1, error: null });
-          } else {
-            resolve({ data: page2, error: null });
-          }
+          const payload = callCount === 1 ? { data: page1, error: null } : { data: page2, error: null };
+          return Promise.resolve(payload).then(onfulfilled, onrejected);
         },
       };
 
-      const mockClient = {
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn(),
         rpc: vi.fn().mockReturnValue(mockRpcBuilder),
-      } as unknown as SupabaseClient;
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       const controller = new AbortController();
 
       const result = await repo.listTeamEntries({
-        managerId: "asserted-manager-id",
         fromDate: "2026-09-01",
         toDate: "2026-09-30",
         signal: controller.signal,
@@ -287,6 +285,31 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
       expect(result[0].id).toBe("team-entry-0");
       expect(result[1000].id).toBe("team-entry-1000");
     });
+
+    it("meneruskan error aplikasi tim yang stabil saat query RPC gagal", async () => {
+      const mockRpcBuilder: WorkCalendarRpcQuery = {
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        then: (onfulfilled, onrejected) =>
+          Promise.resolve({ data: null, error: { message: "RPC failed" } }).then(
+            onfulfilled,
+            onrejected,
+          ),
+      };
+
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn(),
+        rpc: vi.fn().mockReturnValue(mockRpcBuilder),
+      };
+
+      const repo = createSupabaseWorkEntryRepository(mockClient);
+      await expect(
+        repo.listTeamEntries({
+          fromDate: "2026-09-01",
+          toDate: "2026-09-30",
+        }),
+      ).rejects.toThrow("Gagal memuat data pekerjaan tim.");
+    });
   });
 
   describe("createEntry", () => {
@@ -301,21 +324,20 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         completed_at: null,
       });
 
-      type MockInsertBuilder = {
-        select: () => MockInsertBuilder;
-        single: () => Promise<{ data: WorkCalendarEntryRow; error: null }>;
-      };
-
-      const mockInsertBuilder: MockInsertBuilder = {
-        select: vi.fn().mockImplementation(() => mockInsertBuilder),
-        single: vi.fn().mockResolvedValue({ data: row, error: null }),
-      };
-
-      const mockClient = {
-        from: vi.fn().mockReturnValue({
-          insert: vi.fn().mockReturnValue(mockInsertBuilder),
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn(),
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: row, error: null }),
+          }),
         }),
-      } as unknown as SupabaseClient;
+        update: vi.fn(),
+      };
+
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       const draft: WorkEntryDraft = {
@@ -342,24 +364,32 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         updated_at: "2026-09-15T12:00:00.000Z",
       });
 
-      type MockUpdateBuilder = {
-        eq: (col: string, val: string) => MockUpdateBuilder;
-        select: () => MockUpdateBuilder;
-        maybeSingle: () => Promise<{ data: WorkCalendarEntryRow; error: null }>;
-      };
-
-      const mockUpdateBuilder: MockUpdateBuilder = {
-        eq: vi.fn().mockImplementation(() => mockUpdateBuilder),
-        select: vi.fn().mockImplementation(() => mockUpdateBuilder),
+      const mockQueryBuilder: WorkCalendarDbQueryFilter = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
         maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
+        then: (onfulfilled, onrejected) =>
+          Promise.resolve({ data: [row], error: null }).then(onfulfilled, onrejected),
       };
 
-      const mockInsertMock = vi.fn().mockReturnValue(mockUpdateBuilder);
-      const mockClient = {
-        from: vi.fn().mockReturnValue({
-          update: mockInsertMock,
-        }),
-      } as unknown as SupabaseClient;
+      const mockUpdateFn = vi.fn().mockReturnValue(mockQueryBuilder);
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn(),
+        insert: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: vi.fn() }) }),
+        update: mockUpdateFn,
+      };
+
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       const result = await repo.updateEntry({
@@ -368,30 +398,38 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         expectedUpdatedAt: "2026-09-15T11:00:00.000Z",
       });
 
-      expect(mockInsertMock).toHaveBeenCalledWith({ title: "Judul Baru" });
-      expect(mockUpdateBuilder.eq).toHaveBeenCalledWith("id", row.id);
-      expect(mockUpdateBuilder.eq).toHaveBeenCalledWith("updated_at", "2026-09-15T11:00:00.000Z");
+      expect(mockUpdateFn).toHaveBeenCalledWith({ title: "Judul Baru" });
+      expect(mockQueryBuilder.eq).toHaveBeenCalledWith("id", row.id);
+      expect(mockQueryBuilder.eq).toHaveBeenCalledWith("updated_at", "2026-09-15T11:00:00.000Z");
       expect(result.title).toBe("Judul Baru");
     });
 
     it("melemparkan WorkEntryConflictError jika row tidak ditemukan karena perubahan konkuren", async () => {
-      type MockUpdateBuilder = {
-        eq: () => MockUpdateBuilder;
-        select: () => MockUpdateBuilder;
-        maybeSingle: () => Promise<{ data: null; error: null }>;
-      };
-
-      const mockUpdateBuilder: MockUpdateBuilder = {
-        eq: vi.fn().mockImplementation(() => mockUpdateBuilder),
-        select: vi.fn().mockImplementation(() => mockUpdateBuilder),
+      const mockQueryBuilder: WorkCalendarDbQueryFilter = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
         maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (onfulfilled, onrejected) =>
+          Promise.resolve({ data: null, error: null }).then(onfulfilled, onrejected),
       };
 
-      const mockClient = {
-        from: vi.fn().mockReturnValue({
-          update: vi.fn().mockReturnValue(mockUpdateBuilder),
-        }),
-      } as unknown as SupabaseClient;
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn(),
+        insert: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: vi.fn() }) }),
+        update: vi.fn().mockReturnValue(mockQueryBuilder),
+      };
+
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
 
@@ -407,9 +445,10 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
 
   describe("deleteEntry", () => {
     it("memanggil soft_delete_work_calendar_entry RPC dengan entryId dan expectedUpdatedAt", async () => {
-      const mockClient = {
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn(),
         rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
-      } as unknown as SupabaseClient;
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
       await repo.deleteEntry({
@@ -424,9 +463,10 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
     });
 
     it("melemparkan WorkEntryConflictError jika RPC mengembalikan false", async () => {
-      const mockClient = {
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn(),
         rpc: vi.fn().mockResolvedValue({ data: false, error: null }),
-      } as unknown as SupabaseClient;
+      };
 
       const repo = createSupabaseWorkEntryRepository(mockClient);
 
@@ -436,6 +476,37 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
           expectedUpdatedAt: "2026-09-15T11:00:00.000Z",
         }),
       ).rejects.toThrow(WorkEntryConflictError);
+    });
+  });
+
+  describe("boundary assertions for safe typing", () => {
+    it("memastikan source data layer dan test repository tidak mengandung unsafe casts atau ignore comments", () => {
+      const targetFiles = [
+        "src/features/work-calendar/data/supabase-work-entry-repository.ts",
+        "src/features/work-calendar/data/work-entry-row-mapper.ts",
+        "src/features/work-calendar/lib/work-entry-conflict.ts",
+        "src/test/supabase-work-entry-repository.test.ts",
+      ];
+
+      const forbiddenPatterns = [
+        new RegExp("as" + "\\s+unknown\\s+as", "i"),
+        new RegExp("as" + "\\s+any\\s+as", "i"),
+        new RegExp(":" + "\\s*any\\b"),
+        new RegExp("@" + "ts-ignore"),
+        new RegExp("@" + "ts-nocheck"),
+      ];
+
+      for (const relativePath of targetFiles) {
+        const fullPath = resolve(process.cwd(), relativePath);
+        const content = readFileSync(fullPath, "utf8");
+
+        for (const pattern of forbiddenPatterns) {
+          expect(
+            pattern.test(content),
+            `File ${relativePath} tidak boleh mengandung pola terlarang: ${pattern.toString()}`,
+          ).toBe(false);
+        }
+      }
     });
   });
 });

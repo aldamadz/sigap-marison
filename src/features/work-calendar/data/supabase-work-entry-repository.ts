@@ -1,33 +1,53 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorkEntryDraft, WorkEntryPatch, WorkEntryRepository } from "../types/work-calendar";
+import { WorkEntryConflictError } from "../lib/work-entry-conflict";
 import type { WorkCalendarEntryRow } from "./work-entry-row-mapper";
 import { mapWorkEntryRow } from "./work-entry-row-mapper";
 
-export const WORK_ENTRY_CONFLICT_CODE = "WORK_ENTRY_CONFLICT" as const;
-
-export class WorkEntryConflictError extends Error {
-  readonly code = WORK_ENTRY_CONFLICT_CODE;
-
-  constructor(message = "Pembaruan gagal karena data telah berubah atau tidak ditemukan. Muat ulang halaman.") {
-    super(message);
-    this.name = "WorkEntryConflictError";
-  }
+export interface WorkCalendarDbQueryFilter<TResult = WorkCalendarEntryRow>
+  extends PromiseLike<{ data: TResult[] | null; error: { message: string } | null }> {
+  eq(column: string, value: string): WorkCalendarDbQueryFilter<TResult>;
+  gte(column: string, value: string): WorkCalendarDbQueryFilter<TResult>;
+  lte(column: string, value: string): WorkCalendarDbQueryFilter<TResult>;
+  is(column: string, value: null): WorkCalendarDbQueryFilter<TResult>;
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst?: boolean },
+  ): WorkCalendarDbQueryFilter<TResult>;
+  range(from: number, to: number): WorkCalendarDbQueryFilter<TResult>;
+  abortSignal?(signal: AbortSignal): WorkCalendarDbQueryFilter<TResult>;
+  select(columns: string): WorkCalendarDbQueryFilter<TResult>;
+  single(): Promise<{ data: TResult | null; error: { message: string } | null }>;
+  maybeSingle(): Promise<{ data: TResult | null; error: { message: string } | null }>;
 }
 
-export function isWorkEntryConflictError(error: unknown): error is WorkEntryConflictError {
-  if (error instanceof WorkEntryConflictError) return true;
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    ("code" in error
-      ? (error as { code: unknown }).code === WORK_ENTRY_CONFLICT_CODE
-      : "name" in error
-        ? (error as { name: unknown }).name === "WorkEntryConflictError"
-        : false)
-  );
+export interface WorkCalendarDbTable {
+  select(columns: string): WorkCalendarDbQueryFilter<WorkCalendarEntryRow>;
+  insert(values: WorkCalendarEntryInsert): {
+    select(columns: string): {
+      single(): Promise<{ data: WorkCalendarEntryRow | null; error: { message: string } | null }>;
+    };
+  };
+  update(values: WorkCalendarEntryUpdate): WorkCalendarDbQueryFilter<WorkCalendarEntryRow>;
 }
 
-interface WorkCalendarEntryInsert {
+export interface WorkCalendarRpcQuery<TResult = WorkCalendarEntryRow[]>
+  extends PromiseLike<{ data: TResult | null; error: { message: string } | null }> {
+  range(from: number, to: number): WorkCalendarRpcQuery<TResult>;
+  abortSignal?(signal: AbortSignal): WorkCalendarRpcQuery<TResult>;
+}
+
+export interface SupabaseWorkCalendarClient {
+  from(table: string): WorkCalendarDbTable;
+  rpc(
+    fn: string,
+    args?: Record<string, unknown>,
+  ):
+    | WorkCalendarRpcQuery<WorkCalendarEntryRow[]>
+    | Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+export interface WorkCalendarEntryInsert {
   owner_id: string;
   work_date: string;
   title: string;
@@ -42,7 +62,7 @@ interface WorkCalendarEntryInsert {
   blocked_reason?: string | null;
 }
 
-interface WorkCalendarEntryUpdate {
+export interface WorkCalendarEntryUpdate {
   work_date?: string;
   title?: string;
   status?: string;
@@ -64,7 +84,8 @@ async function paginateQuery(
     offset: number,
     limit: number,
   ) => Promise<{ data: WorkCalendarEntryRow[] | null; error: { message: string } | null }>,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  errorMessage: string,
 ): Promise<WorkCalendarEntryRow[]> {
   const allData: WorkCalendarEntryRow[] = [];
   let offset = 0;
@@ -75,7 +96,7 @@ async function paginateQuery(
     }
     const { data, error } = await fetchPage(offset, limit);
     if (error) {
-      throw new Error("Gagal memuat data pekerjaan.");
+      throw new Error(errorMessage);
     }
     if (!data || data.length === 0) {
       break;
@@ -90,49 +111,59 @@ async function paginateQuery(
 }
 
 export function createSupabaseWorkEntryRepository(
-  client: SupabaseClient,
+  client: SupabaseWorkCalendarClient,
 ): WorkEntryRepository {
   return {
     async listEntries({ ownerId, fromDate, toDate, signal }) {
-      const rows = await paginateQuery(async (offset, limit) => {
-        let query = client
-          .from("work_calendar_entries")
-          .select(WORK_ENTRY_SELECT_COLUMNS)
-          .eq("owner_id", ownerId)
-          .gte("work_date", fromDate)
-          .lte("work_date", toDate)
-          .is("deleted_at", null)
-          .order("work_date", { ascending: true })
-          .order("starts_at", { ascending: true, nullsFirst: true })
-          .order("created_at", { ascending: true })
-          .order("id", { ascending: true })
-          .range(offset, offset + limit - 1);
+      const rows = await paginateQuery(
+        async (offset, limit) => {
+          let query = client
+            .from("work_calendar_entries")
+            .select(WORK_ENTRY_SELECT_COLUMNS)
+            .eq("owner_id", ownerId)
+            .gte("work_date", fromDate)
+            .lte("work_date", toDate)
+            .is("deleted_at", null)
+            .order("work_date", { ascending: true })
+            .order("starts_at", { ascending: true, nullsFirst: true })
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + limit - 1);
 
-        if (signal && typeof (query as { abortSignal?: (s: AbortSignal) => unknown }).abortSignal === "function") {
-          query = (query as { abortSignal: (s: AbortSignal) => typeof query }).abortSignal(signal);
-        }
+          if (signal && "abortSignal" in query && typeof query.abortSignal === "function") {
+            query = query.abortSignal(signal);
+          }
 
-        return (await query) as { data: WorkCalendarEntryRow[] | null; error: { message: string } | null };
-      }, signal);
+          return (await query) as { data: WorkCalendarEntryRow[] | null; error: { message: string } | null };
+        },
+        signal,
+        "Gagal memuat data pekerjaan.",
+      );
 
       return rows.map(mapWorkEntryRow);
     },
 
     async listTeamEntries({ fromDate, toDate, signal }) {
-      const rows = await paginateQuery(async (offset, limit) => {
-        let query = client
-          .rpc("list_work_calendar_team_entries", {
+      const rows = await paginateQuery(
+        async (offset, limit) => {
+          let query = client.rpc("list_work_calendar_team_entries", {
             p_start_date: fromDate,
             p_end_date: toDate,
-          })
-          .range(offset, offset + limit - 1);
+          });
 
-        if (signal && typeof (query as { abortSignal?: (s: AbortSignal) => unknown }).abortSignal === "function") {
-          query = (query as { abortSignal: (s: AbortSignal) => typeof query }).abortSignal(signal);
-        }
+          if ("range" in query && typeof query.range === "function") {
+            query = query.range(offset, offset + limit - 1);
+          }
 
-        return (await query) as { data: WorkCalendarEntryRow[] | null; error: { message: string } | null };
-      }, signal);
+          if (signal && "abortSignal" in query && typeof query.abortSignal === "function") {
+            query = query.abortSignal(signal);
+          }
+
+          return (await query) as { data: WorkCalendarEntryRow[] | null; error: { message: string } | null };
+        },
+        signal,
+        "Gagal memuat data pekerjaan tim.",
+      );
 
       return rows.map(mapWorkEntryRow);
     },
@@ -207,10 +238,10 @@ export function createSupabaseWorkEntryRepository(
         throw new Error("expectedUpdatedAt is required for deleteEntry");
       }
 
-      const { data, error } = await client.rpc("soft_delete_work_calendar_entry", {
+      const { data, error } = (await client.rpc("soft_delete_work_calendar_entry", {
         p_entry_id: entryId,
         p_expected_updated_at: expectedUpdatedAt,
-      });
+      })) as { data: boolean | null; error: { message: string } | null };
 
       if (error) {
         throw new Error("Gagal menghapus pekerjaan.");
