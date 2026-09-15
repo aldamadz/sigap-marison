@@ -47,7 +47,6 @@ const createHarness = (): Harness => {
   const client = fakeClient("A");
 
   const deps: MarisonSyncDependencies = {
-    getSupabase: vi.fn(() => { record("getSupabase"); return client; }),
     deploymentEnvironment: "staging",
     readEnv: vi.fn((name: string) => (name === "STAGING_DEFAULT_USER_PASSWORD" ? VALID_PASSWORD : undefined)),
     cronToken: CRON_TOKEN,
@@ -112,7 +111,6 @@ describe("syncMarisonBranches", () => {
       "requireAdminUser",
       "assertBranchAvailable",
       "readJsonBody",
-      "getSupabase",
       "source:branches",
       "tracked:branches",
       "execute:branches",
@@ -147,7 +145,7 @@ describe("syncMarisonBranches", () => {
     expect(h.deps.requireAdminUser).not.toHaveBeenCalled();
     expect(h.deps.readJsonBody).not.toHaveBeenCalled();
     expect(h.deps.getMarisonBranchSyncSource).not.toHaveBeenCalled();
-    expect(h.deps.getSupabase).not.toHaveBeenCalled();
+    expect(h.deps.assertMarisonBranchSyncAvailable).not.toHaveBeenCalled();
   });
 
   it("auth gagal -> error diteruskan, tanpa confirm/source", async () => {
@@ -156,7 +154,7 @@ describe("syncMarisonBranches", () => {
     await expect(h.runtime.syncMarisonBranches(manualReq())).rejects.toBe(err);
     expect(h.deps.readJsonBody).not.toHaveBeenCalled();
     expect(h.deps.getMarisonBranchSyncSource).not.toHaveBeenCalled();
-    expect(h.deps.getSupabase).not.toHaveBeenCalled();
+    expect(h.deps.assertMarisonBranchSyncAvailable).not.toHaveBeenCalled();
   });
 
   it("infra gagal -> 500 sebelum confirm/source", async () => {
@@ -197,7 +195,6 @@ describe("syncMarisonProjects", () => {
       "requireAdminUser",
       "readJsonBody",
       "assertBranchAvailable",
-      "getSupabase",
       "source:projects",
       "tracked:projects",
       "execute:projects",
@@ -263,7 +260,6 @@ describe("syncMarisonEmployees", () => {
       "requireAdminUser",
       "assertEmployeeInfra",
       "readJsonBody",
-      "getSupabase",
       "source:employee",
       "tracked:directory",
       "execute:employee",
@@ -335,7 +331,6 @@ describe("syncMarisonDirectoryFromCron", () => {
     expect(h.order).toEqual([
       "assertEmployeeInfra",
       "assertEmployeeInfra",
-      "getSupabase",
       "source:employee",
       "tracked:directory",
       "execute:employee",
@@ -588,21 +583,93 @@ describe("fail-closed ordering", () => {
   });
 });
 
-// --- 13: validated reference stays after await ---
+// --- 13: TOCTOU — validated client is captured before the async boundary ---
 
-describe("validated reference stability", () => {
-  it("client tervalidasi sebelum await tetap dipakai executor meski getSupabase berubah", async () => {
+describe("TOCTOU client reference stability", () => {
+  it("branch: client dari assertion sebelum await tetap dipakai meski dependency berubah", async () => {
     const clientA = fakeClient("A");
     const clientB = fakeClient("B");
-    vi.mocked(h.deps.getSupabase).mockReturnValue(clientA);
-    vi.mocked(h.deps.getMarisonBranchSyncSource).mockImplementationOnce(async () => {
-      vi.mocked(h.deps.getSupabase).mockReturnValue(clientB);
-      return [{ id: "b1" }];
+    vi.mocked(h.deps.assertMarisonBranchSyncAvailable).mockReturnValueOnce(clientA);
+
+    const bodyGate = deferred<{ confirm: boolean }>();
+    vi.mocked(h.deps.readJsonBody).mockImplementationOnce(() => {
+      // Assertion sudah dijalankan (clientA tervalidasi) sebelum boundary ini.
+      vi.mocked(h.deps.assertMarisonBranchSyncAvailable).mockReturnValue(clientB);
+      return bodyGate.promise;
     });
-    await h.runtime.syncMarisonBranches(manualReq());
+
+    const pending = h.runtime.syncMarisonBranches(manualReq());
+    await waitFor(() => vi.mocked(h.deps.readJsonBody).mock.calls.length === 1);
+    bodyGate.resolve({ confirm: true });
+    await pending;
+
     const meta = vi.mocked(h.deps.runTrackedMarisonSync).mock.calls[0][0];
     expect(meta.supabase).toBe(clientA);
     expect(h.deps.executeMarisonBranchSync).toHaveBeenCalledWith(expect.objectContaining({ supabase: clientA }));
+  });
+
+  it("project: client dari assertion sebelum await tetap dipakai meski dependency berubah", async () => {
+    const clientA = fakeClient("A");
+    const clientB = fakeClient("B");
+    vi.mocked(h.deps.assertMarisonBranchSyncAvailable).mockReturnValueOnce(clientA);
+
+    const sourceGate = deferred<{ branches: unknown[]; projects: unknown[] }>();
+    vi.mocked(h.deps.getMarisonProjectSyncSource).mockImplementationOnce(() => {
+      // Assertion sudah dijalankan (clientA tervalidasi) sebelum boundary ini.
+      vi.mocked(h.deps.assertMarisonBranchSyncAvailable).mockReturnValue(clientB);
+      return sourceGate.promise;
+    });
+
+    const pending = h.runtime.syncMarisonProjects(manualReq());
+    await waitFor(() => vi.mocked(h.deps.getMarisonProjectSyncSource).mock.calls.length === 1);
+    sourceGate.resolve({ branches: [{ id: "b1" }], projects: [{ id: "p1" }] });
+    await pending;
+
+    const meta = vi.mocked(h.deps.runTrackedMarisonSync).mock.calls[0][0];
+    expect(meta.supabase).toBe(clientA);
+    expect(h.deps.executeMarisonProjectSync).toHaveBeenCalledWith(expect.objectContaining({ supabase: clientA }));
+  });
+
+  it("employee manual: client dari infra assertion sebelum await tetap dipakai meski dependency berubah", async () => {
+    const clientA = fakeClient("A");
+    const clientB = fakeClient("B");
+    vi.mocked(h.deps.assertMarisonEmployeeSyncInfraAvailable).mockReturnValueOnce(clientA);
+
+    const sourceGate = deferred<{ branches: unknown[]; employees: unknown[] }>();
+    vi.mocked(h.deps.getMarisonEmployeeSyncSource).mockImplementationOnce(() => {
+      // Write-availability sudah dijalankan (clientA tervalidasi) sebelum boundary ini.
+      vi.mocked(h.deps.assertMarisonEmployeeSyncInfraAvailable).mockReturnValue(clientB);
+      return sourceGate.promise;
+    });
+
+    const pending = h.runtime.syncMarisonEmployees(manualReq());
+    await waitFor(() => vi.mocked(h.deps.getMarisonEmployeeSyncSource).mock.calls.length === 1);
+    sourceGate.resolve({ branches: [{ id: "b1" }], employees: [{ id: "e1" }] });
+    await pending;
+
+    const meta = vi.mocked(h.deps.runTrackedMarisonSync).mock.calls[0][0];
+    expect(meta.supabase).toBe(clientA);
+    expect(h.deps.executeMarisonEmployeeSync).toHaveBeenCalledWith(expect.objectContaining({ supabase: clientA }));
+  });
+
+  it("cron: infra dipanggil dua kali dan executor memakai client dari write-availability kedua", async () => {
+    const clientFirst = fakeClient("first");
+    const clientSecond = fakeClient("second");
+    vi.mocked(h.deps.assertMarisonEmployeeSyncInfraAvailable)
+      .mockReturnValueOnce(clientFirst)
+      .mockReturnValueOnce(clientSecond);
+
+    await h.runtime.syncMarisonDirectoryFromCron({ headers: { "x-internal-sync-token": CRON_TOKEN } });
+
+    expect(h.deps.assertMarisonEmployeeSyncInfraAvailable).toHaveBeenCalledTimes(2);
+    const metas = vi.mocked(h.deps.runTrackedMarisonSync).mock.calls.map((c) => c[0]);
+    expect(metas).toHaveLength(2);
+    expect(metas[0].supabase).toBe(clientSecond);
+    expect(metas[1].supabase).toBe(clientSecond);
+    expect(h.deps.executeMarisonEmployeeSync).toHaveBeenCalledWith(expect.objectContaining({ supabase: clientSecond }));
+    expect(h.deps.executeMarisonProjectSync).toHaveBeenCalledWith(expect.objectContaining({ supabase: clientSecond }));
+    expect(clientFirst.from).not.toHaveBeenCalled();
+    expect(clientSecond.from).not.toHaveBeenCalled();
   });
 
   it("password tervalidasi sebelum await tetap dipakai executor meski env berubah", async () => {

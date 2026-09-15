@@ -17,14 +17,6 @@ export type MarisonTrackedSyncArgs = {
 };
 
 export type MarisonSyncDependencies = {
-  /**
-   * Returns the Supabase client for the current deployment. Callers must run
-   * the matching availability assertion first, which fails closed when the
-   * client or the service-role key is missing. The client is captured once per
-   * request before any `await` so the validated reference is what the executor
-   * receives.
-   */
-  getSupabase: () => SupabaseClientStructural;
   deploymentEnvironment: string;
   readEnv: (name: string) => string | undefined;
   /** Boot-locked cron token; captured at startup and never re-read. */
@@ -34,6 +26,12 @@ export type MarisonSyncDependencies = {
   requireAdminUser: (token: string) => Promise<{ id: string }>;
   assertSameOrigin: (req: unknown) => void;
   readJsonBody: (req: unknown, maxBytes?: number) => Promise<unknown>;
+  /**
+   * Availability assertions are the single source of the Supabase client for
+   * this runtime. They fail closed when the client or the service-role key is
+   * missing and return the validated client, which is captured before any
+   * `await` so the executor always receives that exact reference.
+   */
   assertMarisonBranchSyncAvailable: () => SupabaseClientStructural;
   assertMarisonEmployeeSyncInfraAvailable: () => SupabaseClientStructural;
   getMarisonBranchSyncSource: () => Promise<unknown[]>;
@@ -57,6 +55,11 @@ export type MarisonSyncDependencies = {
     employees: unknown[];
     defaultPassword: string;
   }) => unknown;
+};
+
+export type MarisonEmployeeSyncWriteAvailability = {
+  supabase: SupabaseClientStructural;
+  defaultPassword: string;
 };
 
 /**
@@ -126,19 +129,19 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
     return value;
   };
 
-  const assertMarisonEmployeeSyncWriteAvailable = (): string => {
-    base.assertMarisonEmployeeSyncInfraAvailable();
+  const assertMarisonEmployeeSyncWriteAvailable = (): MarisonEmployeeSyncWriteAvailability => {
+    const supabase = base.assertMarisonEmployeeSyncInfraAvailable();
     const defaultPassword = marisonDefaultPassword();
     if (!defaultPassword) {
       throw errorWithStatus("Konfigurasi sinkronisasi karyawan belum lengkap.", 503);
     }
-    return defaultPassword;
+    return { supabase, defaultPassword };
   };
 
   const syncMarisonBranches = async (req: unknown) => {
     base.assertSameOrigin(req);
     const user = await base.requireAdminUser(base.getBearerToken(req));
-    base.assertMarisonBranchSyncAvailable();
+    const supabase = base.assertMarisonBranchSyncAvailable();
     const payload = await base.readJsonBody(req, 4096);
     if (!isRecord(payload) || payload.confirm !== true) {
       throw errorWithStatus("Konfirmasi sinkronisasi diperlukan.", 400);
@@ -148,7 +151,6 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
     }
     marisonBranchSyncInFlight = true;
     try {
-      const supabase = base.getSupabase();
       const branches = await base.getMarisonBranchSyncSource();
       return await runTrackedMarisonSync({
         supabase,
@@ -173,13 +175,12 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
     if (!isRecord(body) || body.confirm !== true) {
       throw errorWithStatus("Konfirmasi sinkronisasi proyek wajib dikirim.", 400);
     }
-    base.assertMarisonBranchSyncAvailable();
+    const supabase = base.assertMarisonBranchSyncAvailable();
     if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
       throw conflictError();
     }
     marisonProjectSyncInFlight = true;
     try {
-      const supabase = base.getSupabase();
       const source = await base.getMarisonProjectSyncSource();
       return await runTrackedMarisonSync({
         supabase,
@@ -201,7 +202,7 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   const syncMarisonEmployees = async (req: unknown) => {
     base.assertSameOrigin(req);
     const user = await base.requireAdminUser(base.getBearerToken(req));
-    const defaultPassword = assertMarisonEmployeeSyncWriteAvailable();
+    const { supabase, defaultPassword } = assertMarisonEmployeeSyncWriteAvailable();
     const payload = await base.readJsonBody(req, 4096);
     if (!isRecord(payload) || payload.confirm !== true) {
       throw errorWithStatus("Konfirmasi sinkronisasi diperlukan.", 400);
@@ -211,7 +212,6 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
     }
     marisonEmployeeSyncInFlight = true;
     try {
-      const supabase = base.getSupabase();
       const source = await base.getMarisonEmployeeSyncSource();
       return await runTrackedMarisonSync({
         supabase,
@@ -239,14 +239,13 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
     if (!suppliedToken || base.sha256Hex(suppliedToken) !== base.sha256Hex(base.cronToken)) {
       throw errorWithStatus("Unauthorized", 401);
     }
-    const defaultPassword = assertMarisonEmployeeSyncWriteAvailable();
+    const { supabase, defaultPassword } = assertMarisonEmployeeSyncWriteAvailable();
     if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
       throw conflictError();
     }
     marisonEmployeeSyncInFlight = true;
     marisonProjectSyncInFlight = true;
     try {
-      const supabase = base.getSupabase();
       const source = await base.getMarisonEmployeeSyncSource();
       const directory = await runTrackedMarisonSync({
         supabase,

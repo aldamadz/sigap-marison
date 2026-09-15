@@ -2369,7 +2369,6 @@ const marisonPreviewRuntime = createMarisonPreviewRuntime({
 });
 
 const marisonSyncRuntime = createMarisonSyncRuntime({
-  getSupabase: () => supabase,
   deploymentEnvironment: marisonDeploymentEnvironment,
   readEnv: (name) => process.env[name],
   cronToken: marisonSyncCronToken,

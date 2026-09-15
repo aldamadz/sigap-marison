@@ -57,4 +57,25 @@ describe("Marison Sync Runtime Boundary", () => {
     const syncRuntime = read(MODULE);
     expect(syncRuntime).not.toContain("domain-runtime");
   });
+
+  it("tidak ada jalur client kedua: getSupabase dihapus dari module", () => {
+    const syncRuntime = read(MODULE);
+    expect(syncRuntime).not.toContain("getSupabase:");
+    expect(syncRuntime).not.toContain("base.getSupabase(");
+    expect(syncRuntime).not.toContain("getSupabase(");
+  });
+
+  it("client tidak pernah diambil lewat non-null assertion", () => {
+    const syncRuntime = read(MODULE);
+    expect(syncRuntime).not.toMatch(/\w+!\./);
+    expect(syncRuntime).not.toMatch(/\)!/);
+  });
+
+  it("domain-runtime factory tidak mengirim getSupabase", () => {
+    const server = read(SERVER);
+    const factoryStart = server.indexOf("createMarisonSyncRuntime({");
+    expect(factoryStart).toBeGreaterThanOrEqual(0);
+    const factoryArgs = server.slice(factoryStart, factoryStart + 2000);
+    expect(factoryArgs).not.toContain("getSupabase");
+  });
 });
