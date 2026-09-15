@@ -98,6 +98,7 @@ import { createInboxRuntime } from "./modules/surat/inbox-runtime.js";
 import { createAttentionRuntime } from "./modules/attention/attention-runtime.js";
 import { createMarisonApiClient } from "./modules/marison/marison-api-client.js";
 import { createMarisonPreviewRuntime } from "./modules/marison/marison-preview-runtime.js";
+import { createMarisonSyncRuntime } from "./modules/marison/marison-sync-runtime.js";
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -149,9 +150,6 @@ const passwordResetSendCooldowns = new Map();
 const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
-let marisonEmployeeSyncInFlight = false;
-let marisonBranchSyncInFlight = false;
-let marisonProjectSyncInFlight = false;
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -203,6 +201,7 @@ const secretMatches = (supplied, expected) => {
 export const resetDomainRuntimeDependenciesForTest = () => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
   marisonPreviewRuntime.resetOverrides();
+  marisonSyncRuntime.resetOverrides();
 };
 
 export const setDomainRuntimeDependenciesForTest = (dependencies) => {
@@ -215,6 +214,19 @@ export const setDomainRuntimeDependenciesForTest = (dependencies) => {
       getMarisonEmployeeSyncSource: dependencies.getMarisonEmployeeSyncSource,
       getMarisonProjectSyncSource: dependencies.getMarisonProjectSyncSource,
       getMarisonBranchSyncSource: dependencies.getMarisonBranchSyncSource,
+    });
+  }
+  if (
+    dependencies.runTrackedMarisonSync
+    || dependencies.executeMarisonBranchSync
+    || dependencies.executeMarisonProjectSync
+    || dependencies.executeMarisonEmployeeSync
+  ) {
+    marisonSyncRuntime.setDependencies({
+      runTrackedMarisonSync: dependencies.runTrackedMarisonSync,
+      executeMarisonBranchSync: dependencies.executeMarisonBranchSync,
+      executeMarisonProjectSync: dependencies.executeMarisonProjectSync,
+      executeMarisonEmployeeSync: dependencies.executeMarisonEmployeeSync,
     });
   }
 };
@@ -2356,181 +2368,26 @@ const marisonPreviewRuntime = createMarisonPreviewRuntime({
   previewMarisonEmployeeSync,
 });
 
-const syncMarisonBranches = async (req) => {
-  assertSameOrigin(req);
-  const user = await requireAdminUser(getBearerToken(req));
-  marisonPreviewRuntime.assertMarisonBranchSyncAvailable();
-  const payload = await readJsonBody(req, 4096);
-  if (payload?.confirm !== true) {
-    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
-    err.status = 400;
-    throw err;
-  }
-  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonBranchSyncInFlight = true;
-  try {
-    const branches = await marisonPreviewRuntime.getMarisonBranchSyncSource();
-    return await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "manual",
-      scope: "branches",
-      initiatedBy: user.id,
-      operation: () => executeMarisonBranchSync({
-        supabase,
-        branches,
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-  } finally {
-    marisonBranchSyncInFlight = false;
-  }
-};
-
-const syncMarisonProjects = async (req) => {
-  const user = await requireAdminUser(getBearerToken(req));
-  const body = await readJsonBody(req);
-  if (body?.confirm !== true) {
-    const err = new Error("Konfirmasi sinkronisasi proyek wajib dikirim.");
-    err.status = 400;
-    throw err;
-  }
-  marisonPreviewRuntime.assertMarisonBranchSyncAvailable();
-  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonProjectSyncInFlight = true;
-  try {
-    const source = await marisonPreviewRuntime.getMarisonProjectSyncSource();
-    return await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "manual",
-      scope: "projects",
-      initiatedBy: user.id,
-      operation: () => executeMarisonProjectSync({
-        supabase,
-        ...source,
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-  } finally {
-    marisonProjectSyncInFlight = false;
-  }
-};
-
-const marisonDefaultPassword = () => {
-  const value = process.env.STAGING_DEFAULT_USER_PASSWORD;
-  if (typeof value !== "string" || value.length < 8) return null;
-  return value;
-};
-
-const assertMarisonEmployeeSyncWriteAvailable = () => {
-  marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable();
-  if (!marisonDefaultPassword()) {
-    const err = new Error("Konfigurasi sinkronisasi karyawan belum lengkap.");
-    err.status = 503;
-    throw err;
-  }
-};
-
-const syncMarisonEmployees = async (req) => {
-  assertSameOrigin(req);
-  const user = await requireAdminUser(getBearerToken(req));
-  assertMarisonEmployeeSyncWriteAvailable();
-  const payload = await readJsonBody(req, 4096);
-  if (payload?.confirm !== true) {
-    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
-    err.status = 400;
-    throw err;
-  }
-  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonEmployeeSyncInFlight = true;
-  try {
-    const source = await marisonPreviewRuntime.getMarisonEmployeeSyncSource();
-    return await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "manual",
-      scope: "directory",
-      initiatedBy: user.id,
-      operation: () => executeMarisonEmployeeSync({
-        supabase,
-        ...source,
-        defaultPassword: marisonDefaultPassword(),
-      }),
-    });
-  } finally {
-    marisonEmployeeSyncInFlight = false;
-  }
-};
-
-const syncMarisonDirectoryFromCron = async (req) => {
-  marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable();
-  if (marisonSyncCronToken.length < 32) {
-    const err = new Error("Layanan sinkronisasi tidak tersedia.");
-    err.status = 503;
-    throw err;
-  }
-  const suppliedToken = String(req.headers["x-internal-sync-token"] || "");
-  if (!suppliedToken || sha256Hex(suppliedToken) !== sha256Hex(marisonSyncCronToken)) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  assertMarisonEmployeeSyncWriteAvailable();
-  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonEmployeeSyncInFlight = true;
-  marisonProjectSyncInFlight = true;
-  try {
-    const source = await marisonPreviewRuntime.getMarisonEmployeeSyncSource();
-    const directory = await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "cron",
-      scope: "directory",
-      operation: () => executeMarisonEmployeeSync({
-        supabase,
-        ...source,
-        defaultPassword: marisonDefaultPassword(),
-      }),
-    });
-    const projectSource = await marisonPreviewRuntime.getMarisonProjectSyncSource();
-    const projects = await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "cron",
-      scope: "projects",
-      operation: () => executeMarisonProjectSync({
-        supabase,
-        ...projectSource,
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-    return {
-      status: directory.status === "success" && projects.status === "success" ? "success" : "partial",
-      directory,
-      projects,
-    };
-  } finally {
-    marisonEmployeeSyncInFlight = false;
-    marisonProjectSyncInFlight = false;
-  }
-};
+const marisonSyncRuntime = createMarisonSyncRuntime({
+  getSupabase: () => supabase,
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  readEnv: (name) => process.env[name],
+  cronToken: marisonSyncCronToken,
+  sha256Hex,
+  getBearerToken,
+  requireAdminUser,
+  assertSameOrigin,
+  readJsonBody,
+  assertMarisonBranchSyncAvailable: marisonPreviewRuntime.assertMarisonBranchSyncAvailable,
+  assertMarisonEmployeeSyncInfraAvailable: marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable,
+  getMarisonBranchSyncSource: marisonPreviewRuntime.getMarisonBranchSyncSource,
+  getMarisonProjectSyncSource: marisonPreviewRuntime.getMarisonProjectSyncSource,
+  getMarisonEmployeeSyncSource: marisonPreviewRuntime.getMarisonEmployeeSyncSource,
+  runTrackedMarisonSync,
+  executeMarisonBranchSync,
+  executeMarisonProjectSync,
+  executeMarisonEmployeeSync,
+});
 
 const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
@@ -4704,7 +4561,7 @@ export const handleRequest = async (req, res) => {
       }
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/branches/sync") {
-        const result = await syncMarisonBranches(req);
+        const result = await marisonSyncRuntime.syncMarisonBranches(req);
         return sendJson(res, 200, result);
       }
 
@@ -4714,17 +4571,17 @@ export const handleRequest = async (req, res) => {
       }
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/projects/sync") {
-        const result = await syncMarisonProjects(req);
+        const result = await marisonSyncRuntime.syncMarisonProjects(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/employees/sync") {
-        const result = await syncMarisonEmployees(req);
+        const result = await marisonSyncRuntime.syncMarisonEmployees(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/internal/marison/directory-sync") {
-        const result = await syncMarisonDirectoryFromCron(req);
+        const result = await marisonSyncRuntime.syncMarisonDirectoryFromCron(req);
         return sendJson(res, 200, result);
       }
 
