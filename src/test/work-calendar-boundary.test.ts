@@ -39,7 +39,7 @@ const runtimeFiles = collectRuntimeFiles(featureDir).map((full) => ({
   source: readFileSync(full, "utf8"),
 }));
 
-describe("Work Calendar — batas modul CAL-03 F2", () => {
+describe("Work Calendar — batas modul CAL-03 F3", () => {
   it("menemukan berkas runtime untuk diaudit", () => {
     expect(runtimeFiles.length).toBeGreaterThan(0);
     expect(runtimeFiles.some((file) => file.path.endsWith("index.ts"))).toBe(true);
@@ -121,10 +121,31 @@ describe("Work Calendar — batas modul CAL-03 F2", () => {
     expect(barrelCode).not.toContain("createFixtureWorkEntryRepository");
   });
 
-  it("tidak terpasang pada route aplikasi", () => {
+  it("terpasang pada canonical route /calendar dan route legacy /agenda tidak terdaftar", () => {
     const app = readFileSync(join(root, "src", "App.tsx"), "utf8");
-    expect(app).not.toContain("features/work-calendar");
-    expect(app).toContain('<Route path="/agenda"');
+    expect(app).toContain('const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPage"));');
+    expect(app).toContain('<Route path="/calendar" element={<WorkCalendarPage />} />');
+    expect(app).not.toContain('<Route path="/agenda"');
+    expect(app).not.toContain("@/pages/agenda/AgendaPage");
+    expect(app).not.toContain("@/pages/calendar/CalendarPage");
+  });
+
+  it("sidebar hanya memiliki satu item Kalender Kerja pada /calendar tanpa menu Agenda", () => {
+    const sidebar = readFileSync(join(root, "src", "components", "layout", "Sidebar.tsx"), "utf8");
+    expect(sidebar).toContain("renderNavLink('/calendar', 'Kalender Kerja', Calendar)");
+    expect(sidebar).not.toContain("renderNavLink('/agenda'");
+    expect(sidebar).not.toContain("ClipboardList");
+  });
+
+  it("WorkCalendarPage tidak mengimpor modul agenda legacy", () => {
+    const page = readFileSync(
+      join(root, "src", "pages", "work-calendar", "WorkCalendarPage.tsx"),
+      "utf8",
+    );
+    const markers = findLegacyWorkCalendarImports(page);
+    expect(markers).toEqual([]);
+    expect(page).not.toContain("@/types/agenda");
+    expect(page).not.toContain("useAuth");
   });
 
   it("konstanta validasi frontend selaras dengan constraint migration database", () => {
@@ -155,5 +176,75 @@ describe("Work Calendar — batas modul CAL-03 F2", () => {
     for (const kind of WORK_ENTRY_KINDS) {
       expect(sql).toContain(`'${kind}'`);
     }
+  });
+
+  it("seluruh modul runtime dan test CAL-03 F3 bebas any, @ts-*, dan double cast", () => {
+    const cal03TestFiles = [
+      "src/test/work-calendar-boundary.test.ts",
+      "src/test/work-calendar-lib.test.ts",
+      "src/test/work-calendar-page.test.tsx",
+      "src/test/work-calendar-profile-repository.test.ts",
+      "src/test/work-calendar-workspace.test.tsx",
+    ];
+
+    const allFilesToCheck = [
+      ...runtimeFiles.map((f) => ({ path: f.path, source: f.source })),
+      ...cal03TestFiles.map((rel) => ({
+        path: rel,
+        source: readFileSync(join(root, rel), "utf8"),
+      })),
+    ];
+
+    const forbiddenPatterns = [
+      { label: "@ts-ignore", pattern: new RegExp("@" + "ts-ignore") },
+      { label: "@ts-nocheck", pattern: new RegExp("@" + "ts-nocheck") },
+      { label: "@ts-expect-error", pattern: new RegExp("@" + "ts-expect-error") },
+      { label: "as any", pattern: new RegExp("\\bas\\s+" + "any\\b") },
+      { label: ": any", pattern: new RegExp(":\\s*" + "any\\b") },
+      { label: "<any>", pattern: new RegExp("<" + "any>") },
+      { label: "as unknown as", pattern: new RegExp("\\bas\\s+unknown\\s+as\\b") },
+    ];
+
+    for (const file of allFilesToCheck) {
+      const content =
+        file.path === "src/test/work-calendar-boundary.test.ts"
+          ? file.source.slice(0, file.source.indexOf("seluruh modul runtime dan test CAL-03 F3 bebas"))
+          : file.source;
+
+      for (const { label, pattern } of forbiddenPatterns) {
+        const matches = pattern.test(content);
+        expect(
+          matches,
+          `File ${file.path} melanggar larangan: mengandung '${label}'`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("ketiga hierarchy (list_members, list_entries, entries_select) identik dan tidak memuat relaksasi is_active", () => {
+    const migrationsDir = join(root, "supabase", "migrations");
+    const migrationFiles = readdirSync(migrationsDir).filter((name) =>
+      name.endsWith("work_calendar_team_members.sql"),
+    );
+    expect(migrationFiles.length).toBe(1);
+
+    const sql = readFileSync(join(migrationsDir, migrationFiles[0]), "utf8");
+
+    // Guard: pastikan file ini bebas dari relaksasi coalesce(is_active) atau is_active is null
+    expect(sql).not.toMatch(/coalesce\s*\(\s*p\.is_active/i);
+    expect(sql).not.toMatch(/coalesce\s*\(\s*child\.is_active/i);
+    expect(sql).not.toMatch(/is_active\s*is\s*null/i);
+
+    // Verifikasi klausa WHERE dari root query di dalam subordinates
+    // Bentuk ini memastikan isolasi caller, pengecualian user terhapus, dan hanya true (bukan null) untuk is_active
+    const rootWhere = sql.match(/where p\.parent_id = \(select auth\.uid\(\)\)\s+and p\.id <> \(select auth\.uid\(\)\)\s+and p\.deleted_at is null\s+and p\.is_active is true/g);
+    expect(rootWhere).toBeTruthy();
+    expect(rootWhere!.length).toBe(3);
+
+    // Verifikasi klausa WHERE dari recursive query di dalam subordinates
+    // Bentuk ini memastikan cycle protection, isolasi caller, pengecualian user terhapus, dan hanya true untuk is_active
+    const recursiveWhere = sql.match(/where not \(child\.id = any\(s\.path\)\)\s+and child\.id <> \(select auth\.uid\(\)\)\s+and child\.deleted_at is null\s+and child\.is_active is true/g);
+    expect(recursiveWhere).toBeTruthy();
+    expect(recursiveWhere!.length).toBe(3);
   });
 });

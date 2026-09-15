@@ -7,8 +7,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 
 const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Ringkasan pekerjaan, antrean, dan performa persetujuan' },
-  '/calendar': { title: 'Kalender', subtitle: 'Kelola agenda dan jadwal kerja' },
-  '/agenda': { title: 'Agenda', subtitle: 'Kelola jadwal pribadi dan tim sesuai akses' },
+  '/calendar': { title: 'Kalender Kerja', subtitle: 'Kelola jadwal kerja mandiri dan tim' },
   '/hierarchy': { title: 'Organisasi', subtitle: 'Struktur hirarki karyawan' },
   '/audit-logs': { title: 'Audit Log', subtitle: 'Jejak audit administratif sistem' },
   '/settings': { title: 'Settings', subtitle: 'Configure your preferences' },

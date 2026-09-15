@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NavLink, useLocation } from 'react-router'
 import {
-  LayoutDashboard, Calendar, ClipboardList, Users, Activity, Settings,
+  LayoutDashboard, Calendar, Users, Activity, Settings,
   ChevronLeft, ChevronRight, Building2, LogOut, ShieldCheck, Loader2, FileSignature,
   Inbox, SearchCheck, ChevronDown, Mail, Database, Building, Tag, MapPin,
   GitMerge, Monitor, Briefcase, History, BarChart3, Network,
@@ -301,8 +301,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         {/* Main Navigation */}
         <div className="space-y-1">
           {renderNavLink('/dashboard', 'Dashboard', LayoutDashboard)}
-          {renderNavLink('/calendar', 'Kalender', Calendar)}
-          {renderNavLink('/agenda', 'Agenda', ClipboardList)}
+          {renderNavLink('/calendar', 'Kalender Kerja', Calendar)}
         </div>
 
         {/* Surat Section */}
