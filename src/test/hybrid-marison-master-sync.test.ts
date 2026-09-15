@@ -20,13 +20,14 @@ describe("Hybrid Marison master sync", () => {
   it("runs the staging cron at midnight Jakarta through the internal tracked route", () => {
     const worker = read("server/marison-sync-worker.mjs");
     const server = read("backend/src/domain-runtime.ts");
+    const syncRuntime = read("backend/src/modules/marison/marison-sync-runtime.ts");
     const compose = read("docker-compose.staging.yml");
 
     expect(worker).toContain('const timeZone = "Asia/Jakarta"');
     expect(worker).toContain('parts.hour === "00" && parts.minute === "00"');
     expect(server).toContain("/api/internal/marison/directory-sync");
-    expect(server).toContain('triggerType: "cron"');
-    expect(server).toContain('scope: "projects"');
+    expect(syncRuntime).toContain('triggerType: "cron"');
+    expect(syncRuntime).toContain('scope: "projects"');
     expect(compose).toContain("agenda-marison-sync-staging:");
     expect(compose).toContain('MARISON_SYNC_ENABLED: "true"');
   });
@@ -76,7 +77,7 @@ describe("Hybrid Marison master sync", () => {
     const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
     expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/projects")');
     expect(server).toContain("/api/integrations/marison/projects/sync");
-    expect(server).toContain('scope: "projects"');
+    expect(read("backend/src/modules/marison/marison-sync-runtime.ts")).toContain('scope: "projects"');
     expect(sync).toContain("export const previewMarisonProjectSync");
     expect(sync).toContain("export const executeMarisonProjectSync");
     expect(sync).toContain("Branch proyek external belum tersedia");
