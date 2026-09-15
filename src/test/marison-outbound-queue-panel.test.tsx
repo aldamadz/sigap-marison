@@ -14,7 +14,7 @@ vi.mock("@/services/marison-integration.service", async () => {
   return { ...actual, marisonIntegrationService: { listDispatches: vi.fn(), preflightDispatch: vi.fn(), reconcileDispatch: vi.fn(), createReplacement: vi.fn(), preflightReplacement: vi.fn() } };
 });
 
-const row = { id: "job-1", suratId: "surat-1", noSurat: "047/UAI/MKT.1.NKMZ7/VII/2026", title: "Unit test", environment: "staging" as const, generation: 1, replacementOfDispatchId: null, kind: "unit" as const, status: "failed_terminal" as const, attemptCount: 3, nextAttemptAt: null, lastAttemptAt: null, externalReference: null, errorCode: null, failureReason: "Resolution sources are required", reconciliationCount: 0, createdAt: "2026-08-03T00:00:00Z", updatedAt: "2026-08-03T00:00:00Z", postStartedAt: null, completedAt: null };
+const row = { id: "job-1", suratId: "surat-1", noSurat: "047/UAI/MKT.1.NKMZ7/VII/2026", title: "Unit test", environment: "staging", generation: 1, replacementOfDispatchId: null, kind: "unit", status: "failed_terminal", attemptCount: 3, nextAttemptAt: null, lastAttemptAt: null, externalReference: null, errorCode: null, failureReason: "Resolution sources are required", reconciliationCount: 0, createdAt: "2026-08-03T00:00:00Z", updatedAt: "2026-08-03T00:00:00Z", postStartedAt: null, completedAt: null } as any;
 const row422 = { ...row, id: "job-422", postStartedAt: "2026-08-03T00:01:00Z", errorCode: "marison_http_422", failureReason: "Marison menolak request dengan HTTP 422." };
 const renderPanel = () => render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MarisonOutboundQueuePanel /></QueryClientProvider></MemoryRouter>);
 
@@ -31,7 +31,7 @@ const eligiblePreflight = {
 describe("Marison outbound recovery dialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging" as const, page: 1, pageSize: 20, total: 1, items: [row] });
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row] });
     vi.mocked(marisonIntegrationService.reconcileDispatch).mockResolvedValue({ success: true });
     vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
   });
@@ -92,7 +92,7 @@ describe("Marison outbound recovery dialog", () => {
 describe("Marison outbound replacement preflight", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging" as const, page: 1, pageSize: 20, total: 1, items: [row422] });
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row422] });
     vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
   });
 
@@ -209,7 +209,7 @@ describe("Marison outbound replacement preflight", () => {
   it("stale response from job A does not overwrite job B dialog", async () => {
     let resolveA!: (value: any) => void;
     vi.mocked(marisonIntegrationService.preflightReplacement).mockReturnValue(new Promise((done) => { resolveA = done; }) as never);
-    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging" as const, page: 1, pageSize: 20, total: 1, items: [row422] });
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row422] });
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
     await act(async () => resolveA({ ...eligiblePreflight, vendorDiagnosis: { detailsAvailable: true, specificity: "area", summary: "Job A diagnosis", issues: [{ path: "", label: "Identitas external", message: "Job A NIK error", specificity: "area" as const }] } }));

@@ -1,4 +1,4 @@
-﻿import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   stubRuntimeEnv,
@@ -17,19 +17,19 @@ beforeEach(async () => {
   vi.stubEnv("MARISON_STAGING_BASE_URL", "https://example.test/api");
   vi.stubEnv("MARISON_STAGING_CLIENT_ID", "client");
   vi.stubEnv("MARISON_STAGING_CLIENT_SECRET", "secret");
-  
+
   datasourceFetchCalls.length = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as { url: string }).url);
     datasourceFetchCalls.push({ url: String(url), options: init || {} });
-    
+
     if (String(url).includes("/access-token")) {
       return { ok: true, status: 200, json: async () => ({ data: { access_token: "fake-token" } }) };
     }
-    
+
     return { ok: true, status: 200, json: async () => ({ data: [{ id: 1 }] }) };
   }));
-  
+
   booted = await bootDomainRuntime();
   vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-08T00:00:00.000Z").getTime());
 });
@@ -42,7 +42,7 @@ afterEach(async () => {
 
 describe("queryExternalDataSource boundary", () => {
   it("uses the correct canonical signature, preserves query string, avoids duplicate base paths, and has no timeout", async () => {
-    
+
 
     const chain = {
       select: () => chain,
@@ -59,7 +59,7 @@ describe("queryExternalDataSource boundary", () => {
         error: null
       })
     };
-    
+
     booted!.runtime.setDomainRuntimeDependenciesForTest({
       nowIso: () => "2026-09-08T00:00:00.000Z",
       supabase: {

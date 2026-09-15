@@ -1,4 +1,4 @@
-﻿import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createMarisonApiClient } from "../../backend/src/modules/marison/marison-api-client";
 
@@ -75,15 +75,15 @@ describe("Marison API client", () => {
     const now = 1_000;
     const fetchImpl = vi.fn().mockResolvedValue(json(token("one", 31)));
     const envValues = { ...staging };
-    const client = createMarisonApiClient({ 
-      deploymentEnvironment: "staging", 
-      readEnv: (name) => envValues[name], 
-      fetchImpl, 
-      nowMs: () => now, 
-      nowIso: () => "", 
-      timeoutSignal: AbortSignal.timeout 
+    const client = createMarisonApiClient({
+      deploymentEnvironment: "staging",
+      readEnv: (name) => envValues[name],
+      fetchImpl,
+      nowMs: () => now,
+      nowIso: () => "",
+      timeoutSignal: AbortSignal.timeout
     });
-    
+
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     await client.getMarisonAccessToken({ source_key: "x" }, "staging");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -162,12 +162,12 @@ describe("Marison API client", () => {
     });
     const resolvedUrl = new URL("https://external.marisonregency.id/api/unit?project_id=20&per_page=100");
     await resolvingClient.getMarisonExternalJson({ source_key: "unit" }, "production", resolvedUrl);
-    
+
     const req = fetchImpl.mock.calls[1];
     expect(req[0].toString()).toBe("https://external.marisonregency.id/api/unit?project_id=20&per_page=100");
     expect(req[0].toString()).not.toContain("/api/api/");
     expect((req[1] as RequestInit).signal).toBeUndefined();
-    
+
     const canonical = `GET:/api/unit:token:${createHash("sha256").update(Buffer.alloc(0)).digest("hex")}:2026-09-08T00:00:00.000Z`;
     expect((req[1] as RequestInit).headers).toEqual({
       Authorization: "Bearer token",
