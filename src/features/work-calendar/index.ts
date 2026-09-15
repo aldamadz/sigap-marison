@@ -66,11 +66,13 @@ export type { WorkCalendarDateRange } from "./lib/work-calendar-date";
 export {
   WORK_ENTRY_STATUS_META,
   WORK_ENTRY_STATUS_ORDER,
+  WORK_ENTRY_OVERDUE_META,
   compareWorkEntries,
   getWorkEntryStatusFollowUp,
   getWorkEntryStatusLabel,
   getWorkEntryStatusMeta,
   isFinalWorkEntryStatus,
+  isUnfinishedWorkEntryStatus,
   isWorkEntryOverdue,
 } from "./lib/work-entry-status";
 export type { WorkEntryStatusFollowUp, WorkEntryStatusMeta } from "./lib/work-entry-status";
@@ -96,10 +98,12 @@ export type {
 export {
   EMPTY_WORK_PROGRESS,
   WORK_MONTH_CELL_PREVIEW_LIMIT,
+  WORK_MONTH_MOBILE_CELL_PREVIEW_LIMIT,
   buildWorkCalendarDayCells,
   buildWorkCalendarDaySummaries,
   buildWorkEntryOwnerGroups,
   buildWorkEntryStates,
+  buildWorkProgressStatusRows,
   computeWorkCompletionPercent,
   computeWorkProgress,
   createWorkCalendarPermissions,

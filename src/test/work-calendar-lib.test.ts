@@ -27,16 +27,19 @@ import {
   getWorkEntryStatusFollowUp,
   getWorkEntryStatusLabel,
   isFinalWorkEntryStatus,
+  isUnfinishedWorkEntryStatus,
   isWorkEntryOverdue,
 } from "@/features/work-calendar/lib/work-entry-status";
 import {
   buildWorkEntryOwnerGroups,
+  buildWorkProgressStatusRows,
   computeWorkCompletionPercent,
   computeWorkProgress,
   createWorkCalendarPermissions,
   filterWorkEntriesByOwner,
   getWorkMonthCellPreview,
   isWorkCalendarTeamViewAvailable,
+  selectUnfinishedWorkEntries,
   WORK_MONTH_CELL_PREVIEW_LIMIT,
 } from "@/features/work-calendar/lib/work-progress";
 import {
@@ -162,11 +165,19 @@ describe("work-entry-status", () => {
     expect(getWorkEntryStatusLabel("blocked")).toBe("Terhambat");
   });
 
-  it("menandai status final dengan benar", () => {
+  it("menyatakan hanya completed sebagai status final", () => {
     expect(isFinalWorkEntryStatus("completed")).toBe(true);
-    expect(isFinalWorkEntryStatus("blocked")).toBe(true);
     expect(isFinalWorkEntryStatus("planned")).toBe(false);
     expect(isFinalWorkEntryStatus("in_progress")).toBe(false);
+    // Blocked bukan final: pekerjaannya masih aktif dan belum selesai.
+    expect(isFinalWorkEntryStatus("blocked")).toBe(false);
+  });
+
+  it("menyatakan blocked tetap belum selesai", () => {
+    expect(isUnfinishedWorkEntryStatus("planned")).toBe(true);
+    expect(isUnfinishedWorkEntryStatus("in_progress")).toBe(true);
+    expect(isUnfinishedWorkEntryStatus("blocked")).toBe(true);
+    expect(isUnfinishedWorkEntryStatus("completed")).toBe(false);
   });
 
   it("meminta input lanjutan hanya untuk completed dan blocked", () => {
@@ -184,7 +195,19 @@ describe("work-entry-status", () => {
     expect(isWorkEntryOverdue({ status: "planned", workDate: "2026-03-11" }, today)).toBe(false);
     // Status final tidak pernah overdue, meskipun tanggal sudah lewat.
     expect(isWorkEntryOverdue({ status: "completed", workDate: "2026-03-01" }, today)).toBe(false);
-    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-01" }, today)).toBe(false);
+  });
+
+  it("menandai blocked pada tanggal lampau sebagai overdue", () => {
+    const today = "2026-03-10";
+    // Blocked bukan final, jadi pekerjaan lampau yang terhambat tetap terlambat.
+    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-09" }, today)).toBe(true);
+    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-01" }, today)).toBe(true);
+  });
+
+  it("tidak menandai blocked hari ini sebagai overdue", () => {
+    const today = "2026-03-10";
+    expect(isWorkEntryOverdue({ status: "blocked", workDate: today }, today)).toBe(false);
+    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-11" }, today)).toBe(false);
   });
 
   it("mengurutkan entry secara stabil", () => {
@@ -215,6 +238,62 @@ describe("work-progress", () => {
       blocked: 1,
       overdue: 1,
     });
+  });
+
+  it("menjaga planned + inProgress + completed + blocked selalu sama dengan total", () => {
+    for (const sample of [
+      computeWorkProgress(entries, today),
+      computeWorkProgress([], today),
+      computeWorkProgress(
+        [
+          createFixtureWorkEntry({ id: "all-blocked", status: "blocked", workDate: today }),
+          createFixtureWorkEntry({ id: "all-completed", status: "completed", workDate: today }),
+        ],
+        today,
+      ),
+    ]) {
+      expect(sample.planned + sample.inProgress + sample.completed + sample.blocked).toBe(
+        sample.total,
+      );
+    }
+  });
+
+  it("menghitung overdue lintas status tanpa mengubah penjumlahan status", () => {
+    const mixed = [
+      createFixtureWorkEntry({ id: "late-planned", status: "planned", workDate: "2026-03-01" }),
+      createFixtureWorkEntry({ id: "late-blocked", status: "blocked", workDate: "2026-03-01" }),
+      createFixtureWorkEntry({ id: "done-late", status: "completed", workDate: "2026-03-01" }),
+    ];
+    const counts = computeWorkProgress(mixed, today);
+    expect(counts.overdue).toBe(2);
+    expect(counts.planned + counts.inProgress + counts.completed + counts.blocked).toBe(
+      counts.total,
+    );
+    // Persentase tetap hanya completed / total.
+    expect(computeWorkCompletionPercent(counts)).toBe(33);
+  });
+
+  it("membangun baris ringkasan dengan seluruh status dan overdue terpisah", () => {
+    const rows = buildWorkProgressStatusRows(computeWorkProgress(entries, today));
+    expect(rows.map((row) => row.key)).toEqual([
+      "planned",
+      "inProgress",
+      "completed",
+      "blocked",
+      "overdue",
+    ]);
+    const statusOnly = rows.filter((row) => row.key !== "overdue");
+    expect(statusOnly.reduce((sum, row) => sum + row.value, 0)).toBe(5);
+  });
+
+  it("menyertakan blocked sebagai pekerjaan yang belum selesai", () => {
+    const unfinished = selectUnfinishedWorkEntries([
+      createFixtureWorkEntry({ id: "u-planned", status: "planned" }),
+      createFixtureWorkEntry({ id: "u-progress", status: "in_progress" }),
+      createFixtureWorkEntry({ id: "u-blocked", status: "blocked" }),
+      createFixtureWorkEntry({ id: "u-completed", status: "completed" }),
+    ]);
+    expect(unfinished.map((entry) => entry.id)).toEqual(["u-planned", "u-progress", "u-blocked"]);
   });
 
   it("menghitung persentase selesai dengan aman untuk daftar kosong", () => {

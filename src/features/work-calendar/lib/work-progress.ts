@@ -17,7 +17,11 @@ import type {
   WorkEntryState,
   WorkProgressCounts,
 } from "../types/work-calendar";
-import { compareWorkEntries, isWorkEntryOverdue } from "./work-entry-status";
+import {
+  compareWorkEntries,
+  isUnfinishedWorkEntryStatus,
+  isWorkEntryOverdue,
+} from "./work-entry-status";
 
 export const EMPTY_WORK_PROGRESS: WorkProgressCounts = Object.freeze({
   total: 0,
@@ -70,15 +74,39 @@ export function computeWorkProgress(
   };
 }
 
-/** Persentase selesai 0-100; 0 bila tidak ada entry. */
+/**
+ * Persentase selesai 0-100; selalu `completed / total`. Overdue tidak pernah
+ * menambah atau mengurangi angka ini. 0 bila tidak ada entry.
+ */
 export function computeWorkCompletionPercent(counts: WorkProgressCounts): number {
   if (counts.total <= 0) return 0;
   return Math.round((counts.completed / counts.total) * 100);
 }
 
-/** Entry yang belum final (untuk panel "belum selesai"). */
+/**
+ * Entry yang belum selesai (untuk panel "belum selesai").
+ *
+ * Hanya `completed` yang final, sehingga `blocked` tetap termasuk di sini.
+ */
 export function selectUnfinishedWorkEntries(entries: readonly WorkEntry[]): WorkEntry[] {
-  return entries.filter((entry) => entry.status !== "completed" && entry.status !== "blocked");
+  return entries.filter((entry) => isUnfinishedWorkEntryStatus(entry.status));
+}
+
+/**
+ * Baris ringkasan progres: seluruh status tersimpan ditambah indikator
+ * overdue lintas status. planned + inProgress + completed + blocked selalu
+ * sama dengan total; overdue tidak ikut dijumlahkan.
+ */
+export function buildWorkProgressStatusRows(
+  counts: WorkProgressCounts,
+): ReadonlyArray<{ key: string; label: string; value: number }> {
+  return [
+    { key: "planned", label: "Direncanakan", value: counts.planned },
+    { key: "inProgress", label: "Berjalan", value: counts.inProgress },
+    { key: "completed", label: "Selesai", value: counts.completed },
+    { key: "blocked", label: "Terhambat", value: counts.blocked },
+    { key: "overdue", label: "Terlambat", value: counts.overdue },
+  ];
 }
 
 export function groupWorkEntriesByDate(entries: readonly WorkEntry[]): Map<WorkDate, WorkEntry[]> {
@@ -120,8 +148,11 @@ export function buildWorkCalendarDayCells(
   }));
 }
 
-/** Jumlah entry yang disembunyikan dari preview sel bulan. */
+/** Jumlah entry yang disembunyikan dari preview sel bulan versi desktop. */
 export const WORK_MONTH_CELL_PREVIEW_LIMIT = 2;
+
+/** Sel bulan versi mobile tidak menampilkan preview judul sama sekali. */
+export const WORK_MONTH_MOBILE_CELL_PREVIEW_LIMIT = 0;
 
 export function getWorkMonthCellPreview(
   entries: readonly WorkEntry[],
