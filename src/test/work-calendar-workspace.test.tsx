@@ -14,6 +14,7 @@ import {
 
 function renderWorkspace(options: {
   view?: WorkCalendarViewMode;
+  initialAnchorDate?: string;
   entries?: Parameters<typeof createFixtureWorkEntryRepository>[0];
   teamMembers?: typeof WORK_CALENDAR_FIXTURE_TEAM_MEMBERS;
   failOnList?: boolean;
@@ -28,7 +29,7 @@ function renderWorkspace(options: {
       repository={repository}
       teamMembers={options.teamMembers ?? WORK_CALENDAR_FIXTURE_TEAM_MEMBERS}
       initialView={options.view ?? "day"}
-      initialAnchorDate={WORK_CALENDAR_FIXTURE_TODAY}
+      initialAnchorDate={options.initialAnchorDate ?? WORK_CALENDAR_FIXTURE_TODAY}
       now={workCalendarFixtureNow}
     />,
   );
@@ -476,6 +477,143 @@ describe("WorkCalendarWorkspace — mode Tim", () => {
     renderWorkspace({ view: "team" });
     expect(await screen.findByTestId("work-team-row-user-bawahan-2")).toBeInTheDocument();
     expect(screen.getByTestId("work-team-row-user-bawahan-3")).toBeInTheDocument();
+  });
+
+  it("masuk ke Tim dari Minggu/Bulan menyetel anchorDate ke today", async () => {
+    const { repository } = renderWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-01",
+      entries: [],
+    });
+
+    const listTeamSpy = vi.spyOn(repository, "listTeamEntries");
+
+    const teamButton = screen.getByRole("button", { name: /^Tim$/i });
+    fireEvent.click(teamButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Hari Ini, Selasa, 10 Maret 2026",
+      );
+    });
+
+    expect(listTeamSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromDate: WORK_CALENDAR_FIXTURE_TODAY,
+        toDate: WORK_CALENDAR_FIXTURE_TODAY,
+      }),
+    );
+  });
+
+  it("navigasi previous/next pada Tim memindahkan tanggal tepat satu hari dan memicu fetch", async () => {
+    const { repository } = renderWorkspace({
+      view: "team",
+      initialAnchorDate: WORK_CALENDAR_FIXTURE_TODAY,
+      entries: [],
+    });
+
+    const listTeamSpy = vi.spyOn(repository, "listTeamEntries");
+
+    // Klik Previous (kemarin: 9 Maret)
+    const prevBtn = screen.getByRole("button", { name: "Rentang sebelumnya" });
+    fireEvent.click(prevBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Kemarin, Senin, 9 Maret 2026",
+      );
+    });
+
+    expect(listTeamSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromDate: "2026-03-09",
+        toDate: "2026-03-09",
+      }),
+    );
+
+    // Klik Next dua kali (9 Maret -> 10 Maret -> 11 Maret)
+    const nextBtn = screen.getByRole("button", { name: "Rentang berikutnya" });
+    fireEvent.click(nextBtn);
+    fireEvent.click(nextBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Besok, Rabu, 11 Maret 2026",
+      );
+    });
+
+    expect(listTeamSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromDate: "2026-03-11",
+        toDate: "2026-03-11",
+      }),
+    );
+  });
+
+  it("heading, summary, dan repository range pada Tim memakai tanggal yang sama", async () => {
+    const pastDate = "2026-03-05";
+    const teamEntryOnPastDate = createFixtureWorkEntry({
+      id: "team-past-1",
+      ownerId: "user-bawahan-1",
+      title: "Pekerjaan Masa Lalu",
+      workDate: pastDate,
+      status: "completed",
+    });
+
+    renderWorkspace({
+      view: "team",
+      initialAnchorDate: pastDate,
+      entries: [teamEntryOnPastDate],
+    });
+
+    // Label range toolbar memakai tanggal yang sama
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Kamis, 5 Maret 2026",
+      );
+    });
+
+    const row = await screen.findByTestId("work-team-row-user-bawahan-1");
+    // Metrik summary menghitung entry pada tanggal tersebut
+    expect(within(row).getByTestId("team-completed-user-bawahan-1")).toHaveTextContent("1");
+    expect(within(row).getByTestId("team-total-user-bawahan-1")).toHaveTextContent("1");
+  });
+
+  it("Hari Ini mengembalikan anchor Tim ke today dan tidak ada tombol navigasi no-op", async () => {
+    const { repository } = renderWorkspace({
+      view: "team",
+      initialAnchorDate: WORK_CALENDAR_FIXTURE_TODAY,
+      entries: [],
+    });
+
+    const listTeamSpy = vi.spyOn(repository, "listTeamEntries");
+
+    // Geser ke kemarin
+    const prevBtn = screen.getByRole("button", { name: "Rentang sebelumnya" });
+    fireEvent.click(prevBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Kemarin, Senin, 9 Maret 2026",
+      );
+    });
+
+    // Tekan Hari Ini
+    const todayBtn = screen.getByRole("button", { name: "Hari Ini" });
+    fireEvent.click(todayBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Hari Ini, Selasa, 10 Maret 2026",
+      );
+    });
+
+    expect(listTeamSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        fromDate: WORK_CALENDAR_FIXTURE_TODAY,
+        toDate: WORK_CALENDAR_FIXTURE_TODAY,
+      }),
+    );
   });
 });
 

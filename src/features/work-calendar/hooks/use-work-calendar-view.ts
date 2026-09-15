@@ -140,7 +140,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
 
   const goToPreviousRange = useCallback(() => {
     setAnchorDateState((current) => {
-      if (view === "day") return shiftWorkDate(current, -1);
+      if (view === "day" || view === "team") return shiftWorkDate(current, -1);
       if (view === "week") return shiftWorkDate(current, -7);
       if (view === "month") {
         const [year, month] = [Number(current.slice(0, 4)), Number(current.slice(5, 7))];
@@ -154,7 +154,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
 
   const goToNextRange = useCallback(() => {
     setAnchorDateState((current) => {
-      if (view === "day") return shiftWorkDate(current, 1);
+      if (view === "day" || view === "team") return shiftWorkDate(current, 1);
       if (view === "week") return shiftWorkDate(current, 7);
       if (view === "month") {
         const [year, month] = [Number(current.slice(0, 4)), Number(current.slice(5, 7))];
@@ -173,9 +173,12 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const setView = useCallback(
     (next: WorkCalendarViewMode) => {
       if (next === "team" && !isTeamViewAvailable) return;
+      if (next === "team") {
+        setAnchorDateState(todayWorkDate(readNow()));
+      }
       setViewState(next);
     },
-    [isTeamViewAvailable],
+    [isTeamViewAvailable, readNow],
   );
 
   const setAnchorDate = useCallback((date: WorkDate) => {

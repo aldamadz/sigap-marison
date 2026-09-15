@@ -1,50 +1,45 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorkEntryDraft, WorkEntryPatch, WorkEntryRepository } from "../types/work-calendar";
 import { WorkEntryConflictError } from "../lib/work-entry-conflict";
 import type { WorkCalendarEntryRow } from "./work-entry-row-mapper";
 import { mapWorkEntryRow } from "./work-entry-row-mapper";
 
-export interface WorkCalendarDbQueryFilter<TResult = WorkCalendarEntryRow>
-  extends PromiseLike<{ data: TResult[] | null; error: { message: string } | null }> {
-  eq(column: string, value: string): WorkCalendarDbQueryFilter<TResult>;
-  gte(column: string, value: string): WorkCalendarDbQueryFilter<TResult>;
-  lte(column: string, value: string): WorkCalendarDbQueryFilter<TResult>;
+export interface WorkCalendarDbQueryFilter<TResult = unknown>
+  extends PromiseLike<{ data: TResult; error: { message: string } | null }> {
+  eq(column: string, value: unknown): WorkCalendarDbQueryFilter<TResult>;
+  gte(column: string, value: unknown): WorkCalendarDbQueryFilter<TResult>;
+  lte(column: string, value: unknown): WorkCalendarDbQueryFilter<TResult>;
   is(column: string, value: null): WorkCalendarDbQueryFilter<TResult>;
   order(
     column: string,
-    options: { ascending: boolean; nullsFirst?: boolean },
+    options?: { ascending: boolean; nullsFirst?: boolean },
   ): WorkCalendarDbQueryFilter<TResult>;
   range(from: number, to: number): WorkCalendarDbQueryFilter<TResult>;
   abortSignal?(signal: AbortSignal): WorkCalendarDbQueryFilter<TResult>;
-  select(columns: string): WorkCalendarDbQueryFilter<TResult>;
-  single(): Promise<{ data: TResult | null; error: { message: string } | null }>;
-  maybeSingle(): Promise<{ data: TResult | null; error: { message: string } | null }>;
+  select(columns?: string): WorkCalendarDbQueryFilter<TResult>;
+  single(): PromiseLike<{ data: TResult | null; error: { message: string } | null }>;
+  maybeSingle(): PromiseLike<{ data: TResult | null; error: { message: string } | null }>;
 }
 
 export interface WorkCalendarDbTable {
-  select(columns: string): WorkCalendarDbQueryFilter<WorkCalendarEntryRow>;
-  insert(values: WorkCalendarEntryInsert): {
-    select(columns: string): {
-      single(): Promise<{ data: WorkCalendarEntryRow | null; error: { message: string } | null }>;
-    };
+  select(columns?: string): WorkCalendarDbQueryFilter<WorkCalendarEntryRow[] | null>;
+  insert(values: unknown): WorkCalendarDbQueryFilter<WorkCalendarEntryRow | null> & {
+    select(columns?: string): WorkCalendarDbQueryFilter<WorkCalendarEntryRow | null>;
   };
-  update(values: WorkCalendarEntryUpdate): WorkCalendarDbQueryFilter<WorkCalendarEntryRow>;
+  update(values: unknown): WorkCalendarDbQueryFilter<WorkCalendarEntryRow | null>;
 }
 
-export interface WorkCalendarRpcQuery<TResult = WorkCalendarEntryRow[]>
-  extends PromiseLike<{ data: TResult | null; error: { message: string } | null }> {
+export interface WorkCalendarRpcQuery<TResult = unknown>
+  extends PromiseLike<{ data: TResult; error: { message: string } | null }> {
   range(from: number, to: number): WorkCalendarRpcQuery<TResult>;
   abortSignal?(signal: AbortSignal): WorkCalendarRpcQuery<TResult>;
 }
 
 export interface SupabaseWorkCalendarClient {
   from(table: string): WorkCalendarDbTable;
-  rpc(
+  rpc<TResult = unknown>(
     fn: string,
     args?: Record<string, unknown>,
-  ):
-    | WorkCalendarRpcQuery<WorkCalendarEntryRow[]>
-    | Promise<{ data: unknown; error: { message: string } | null }>;
+  ): WorkCalendarRpcQuery<TResult>;
 }
 
 export interface WorkCalendarEntryInsert {
@@ -146,7 +141,7 @@ export function createSupabaseWorkEntryRepository(
     async listTeamEntries({ fromDate, toDate, signal }) {
       const rows = await paginateQuery(
         async (offset, limit) => {
-          let query = client.rpc("list_work_calendar_team_entries", {
+          let query = client.rpc<WorkCalendarEntryRow[] | null>("list_work_calendar_team_entries", {
             p_start_date: fromDate,
             p_end_date: toDate,
           });
@@ -159,7 +154,7 @@ export function createSupabaseWorkEntryRepository(
             query = query.abortSignal(signal);
           }
 
-          return (await query) as { data: WorkCalendarEntryRow[] | null; error: { message: string } | null };
+          return await query;
         },
         signal,
         "Gagal memuat data pekerjaan tim.",
@@ -220,12 +215,14 @@ export function createSupabaseWorkEntryRepository(
         .update(updates)
         .eq("id", entryId)
         .eq("updated_at", expectedUpdatedAt)
+        .is("deleted_at", null)
         .select(WORK_ENTRY_SELECT_COLUMNS)
         .maybeSingle();
 
       if (error) {
         throw new Error("Gagal memperbarui pekerjaan.");
       }
+
       if (!data) {
         throw new WorkEntryConflictError();
       }
@@ -238,15 +235,16 @@ export function createSupabaseWorkEntryRepository(
         throw new Error("expectedUpdatedAt is required for deleteEntry");
       }
 
-      const { data, error } = (await client.rpc("soft_delete_work_calendar_entry", {
+      const { data, error } = await client.rpc<boolean | null>("soft_delete_work_calendar_entry", {
         p_entry_id: entryId,
         p_expected_updated_at: expectedUpdatedAt,
-      })) as { data: boolean | null; error: { message: string } | null };
+      });
 
       if (error) {
         throw new Error("Gagal menghapus pekerjaan.");
       }
-      if (!data) {
+
+      if (data !== true) {
         throw new WorkEntryConflictError();
       }
     },
