@@ -3,7 +3,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import webpush from "web-push";
@@ -96,6 +96,7 @@ import { isActiveAdminProfile, isActiveProfile } from "./domain/profile-authoriz
 import { createBffRuntime } from "./modules/bff/bff-runtime.js";
 import { createInboxRuntime } from "./modules/surat/inbox-runtime.js";
 import { createAttentionRuntime } from "./modules/attention/attention-runtime.js";
+import { createMarisonApiClient } from "./modules/marison/marison-api-client.js";
 
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
@@ -142,7 +143,6 @@ let mailTransporter = null;
 
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
-const externalAccessTokenCache = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
 const passwordResetSendCooldowns = new Map();
@@ -194,7 +194,6 @@ if (webPushConfig.publicKey && webPushConfig.privateKey) {
 
 const hashFileViewToken = (token) => createHash("sha256").update(token).digest("hex");
 const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
-const hmacSha512Hex = (secret, value) => createHmac("sha512", secret).update(value).digest("hex");
 const secretMatches = (supplied, expected) => {
   const suppliedHash = createHash("sha256").update(String(supplied || "")).digest();
   const expectedHash = createHash("sha256").update(String(expected || "")).digest();
@@ -203,6 +202,7 @@ const secretMatches = (supplied, expected) => {
 
 export const setDomainRuntimeDependenciesForTest = (dependencies) => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
+  if (dependencies.nowIso) marisonApiClient.setDependencies({ nowIso: dependencies.nowIso });
   if (dependencies.supabase) supabase = dependencies.supabase;
   if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
 };
@@ -2314,123 +2314,23 @@ const fillEndpointTemplate = (template, variables = {}) => {
   return path.startsWith("/") ? path : `/${path}`;
 };
 
-const normalizeMarisonEnvironment = (value) => {
-  const environment = String(value || "").trim().toLowerCase();
-  if (!MARISON_ENVIRONMENTS.has(environment)) {
-    const err = new Error("Environment Marison tidak valid.");
-    err.status = 400;
-    throw err;
-  }
-  return environment;
-};
-
-const getMarisonEnvironmentState = async () => ({
-  environment: marisonDeploymentEnvironment,
-  updatedAt: null,
-  updatedBy: null,
-  locked: true,
+const marisonApiClient = createMarisonApiClient({
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  readEnv: (name) => process.env[name],
+  fetchImpl: (...args) => fetch(...args),
+  nowMs: () => Date.now(),
+  nowIso: () => new Date().toISOString(),
+  timeoutSignal: (milliseconds) => AbortSignal.timeout(milliseconds),
 });
-
-const getMarisonApiConfig = (environment) => {
-  const normalized = normalizeMarisonEnvironment(environment);
-  const prefix = normalized === "staging" ? "MARISON_STAGING" : "MARISON_PRODUCTION";
-  const defaultBaseUrl = normalized === "staging"
-    ? "https://marison-external.digivasi.com/api"
-    : "https://external.marisonregency.id/api";
-  return {
-    environment: normalized,
-    baseUrl: String(process.env[`${prefix}_BASE_URL`] || defaultBaseUrl).replace(/\/+$/, ""),
-    clientId: process.env[`${prefix}_CLIENT_ID`] || "",
-    clientSecret: process.env[`${prefix}_CLIENT_SECRET`] || "",
-  };
-};
-
-const getMarisonAccessToken = async (source, environment) => {
-  const config = getMarisonApiConfig(environment);
-  const { baseUrl, clientId, clientSecret } = config;
-  if (!clientId || !clientSecret) {
-    const err = new Error(`Credential API Marison ${config.environment} belum dikonfigurasi di server.`);
-    err.status = 500;
-    throw err;
-  }
-
-  const cacheKey = `${baseUrl}:${source.source_key}:${clientId}`;
-  const cached = externalAccessTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
-
-  const response = await fetch(`${baseUrl}/access-token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(payload?.message || "Gagal membuat access token API eksternal Marison.");
-    err.status = response.status;
-    throw err;
-  }
-
-  const token = payload?.data?.access_token;
-  if (!token) {
-    const err = new Error("Response access token API eksternal Marison tidak valid.");
-    err.status = 502;
-    throw err;
-  }
-
-  const expiresInRaw = payload?.data?.expires_in;
-  const expiresInSeconds = Number.parseInt(String(expiresInRaw ?? "900"), 10);
-  externalAccessTokenCache.set(cacheKey, {
-    token,
-    expiresAt: Date.now() + (Number.isFinite(expiresInSeconds) ? expiresInSeconds : 900) * 1000,
-  });
-  return token;
-};
-
-const getMarisonProtectedJson = async (environment, endpointPath) => {
-  const config = getMarisonApiConfig(environment);
-  const token = await getMarisonAccessToken({ source_key: "employee_sync" }, environment);
-  const url = new URL(`${config.baseUrl}${endpointPath}`);
-  const timestamp = new Date().toISOString();
-  const bodyHash = sha256Hex(Buffer.alloc(0));
-  const canonical = ["GET", url.pathname, token, bodyHash, timestamp].join(":");
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Timestamp": timestamp,
-      "X-Signature": hmacSha512Hex(token, canonical),
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(payload?.message || `Gagal mengambil ${url.pathname} dari API Marison.`);
-    err.status = response.status;
-    throw err;
-  }
-  return payload;
-};
-
-const getAllMarisonCollection = async (environment, pathname) => {
-  const rows = [];
-  for (let page = 1; page <= 100; page += 1) {
-    const payload = await getMarisonProtectedJson(
-      environment,
-      `${pathname}?per_page=100&page=${page}`
-    );
-    const pageRows = Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.data?.data)
-        ? payload.data.data
-        : [];
-    rows.push(...pageRows);
-    const totalPages = Number(payload?.meta?.total_pages || 1);
-    if (page >= totalPages || pageRows.length === 0) return rows;
-  }
-  const err = new Error(`Pagination ${pathname} melebihi batas aman.`);
-  err.status = 502;
-  throw err;
-};
+const {
+  normalizeMarisonEnvironment,
+  getMarisonEnvironmentState,
+  getMarisonApiConfig,
+  getMarisonAccessToken,
+  getMarisonProtectedJson,
+  getMarisonExternalJson,
+  getAllMarisonCollection,
+} = marisonApiClient;
 
 const getMarisonEmployeeSyncSource = async () => {
   const branches = await getAllMarisonCollection(marisonDeploymentEnvironment, "/branches");
@@ -2696,24 +2596,18 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
     }
   });
 
-  const headers = {};
-  if (source.auth_type === "marison_token_hmac_sha512") {
-    const token = await getMarisonAccessToken(source, state.environment);
-    const timestamp = new Date().toISOString();
-    const bodyHash = sha256Hex(Buffer.alloc(0));
-    const canonical = [method, url.pathname, token, bodyHash, timestamp].join(":");
-    headers.Authorization = `Bearer ${token}`;
-    headers["X-Timestamp"] = timestamp;
-    headers["X-Signature"] = hmacSha512Hex(token, canonical);
-  }
-
-  const response = await fetch(url, { method, headers });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(payload?.message || "Gagal mengambil data dari API eksternal.");
-    err.status = response.status;
-    throw err;
-  }
+  const payload = source.auth_type === "marison_token_hmac_sha512"
+    ? await getMarisonExternalJson(source, state.environment, url)
+    : await (async () => {
+      const response = await fetch(url, { method, headers: {} });
+      const responsePayload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = new Error(responsePayload?.message || "Gagal mengambil data dari API eksternal.");
+        err.status = response.status;
+        throw err;
+      }
+      return responsePayload;
+    })();
 
   const rawItems = getPathValue(payload, source.response_path) ?? [];
   const items = Array.isArray(rawItems)
