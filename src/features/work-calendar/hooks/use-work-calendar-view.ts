@@ -103,7 +103,6 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
         const result =
           view === "team"
             ? await repository.listTeamEntries({
-                managerId: currentUserId,
                 fromDate,
                 toDate,
                 signal: controller.signal,

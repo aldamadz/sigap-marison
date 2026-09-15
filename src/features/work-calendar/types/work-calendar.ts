@@ -70,9 +70,7 @@ export interface WorkEntryDraft {
 }
 
 /** Patch pembaruan entry. `ownerId` tidak dapat diubah dari UI. */
-export type WorkEntryPatch = Partial<Omit<WorkEntryDraft, "ownerId">> & {
-  completedAt?: WorkTimestamp | null;
-};
+export type WorkEntryPatch = Partial<Omit<WorkEntryDraft, "ownerId">>;
 
 /** Satu entry dengan status turunan overdue untuk tanggal acuan tertentu. */
 export interface WorkEntryState {
@@ -144,14 +142,13 @@ export interface WorkEntryRepository {
     signal?: AbortSignal;
   }): Promise<readonly WorkEntry[]>;
   listTeamEntries(input: {
-    managerId: WorkEntryOwnerId;
     fromDate: WorkDate;
     toDate: WorkDate;
     signal?: AbortSignal;
   }): Promise<readonly WorkEntry[]>;
   createEntry(input: WorkEntryDraft): Promise<WorkEntry>;
-  updateEntry(input: { entryId: WorkEntryId; patch: WorkEntryPatch }): Promise<WorkEntry>;
-  deleteEntry(input: { entryId: WorkEntryId }): Promise<void>;
+  updateEntry(input: { entryId: WorkEntryId; patch: WorkEntryPatch; expectedUpdatedAt: WorkTimestamp }): Promise<WorkEntry>;
+  deleteEntry(input: { entryId: WorkEntryId; expectedUpdatedAt: WorkTimestamp }): Promise<void>;
 }
 
 export interface WorkCalendarWorkspaceProps {

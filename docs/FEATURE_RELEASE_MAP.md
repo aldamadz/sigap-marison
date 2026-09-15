@@ -101,7 +101,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | AGD-02 | Filter agenda berdasar hirarki organisasi | Production + Staging | Agenda filter service | offices, profiles | Bergantung pada master organisasi |
 | CAL-01 | Kalender agenda dan navigasi tanggal | Production + Staging | Calendar page/components | Agenda | Aman ditarik sebagai UI bila agenda tetap ada |
 | CAL-02 | Export kalender | Production + Staging | Export service | Agenda/calendar | Aman ditarik terpisah |
-| CAL-03 | Unified Work Calendar — fondasi pengalaman kerja (F1) | Development branch | `src/features/work-calendar/**` (types, lib, hooks, components, testing fixtures), `src/test/work-calendar-*.test.*` | Belum ada; F1 sengaja tidak mengimpor agenda/kalender lama dan tidak memanggil Supabase | Belum tersambung ke route, sidebar, atau database sehingga belum ada yang ditarik dari production. Fase integrasi berikutnya menyuntikkan `WorkEntryRepository` dan migration tersendiri |
+| CAL-03 | Unified Work Calendar — fondasi database dan repository (F2) | Development branch | `src/features/work-calendar/**` (types, lib, hooks, components, data repository & mapper, testing fixtures), `supabase/migrations/*_work_calendar_entries.sql`, `supabase/tests/work_calendar_entries.integration.sql`, `src/test/work-calendar-*.test.*`, `src/test/supabase-work-entry-repository.test.ts` | `profiles` (hierarchy parent_id), audit logs; tabel `agendas` dan modul legacy tidak diubah | Belum tersambung ke route atau sidebar; migration belum diterapkan ke staging/production. Fase berikutnya (F3) melakukan integrasi dan route cutover |
 
 ### 4.3 Persuratan Inti
 
