@@ -97,10 +97,11 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | --- | --- | --- | --- | --- | --- |
 | DASH-01 | Dashboard ringkasan agenda dan surat | Production + Staging | Dashboard pages/services | Agenda, surat, attention | UI-only bila hanya menu yang ditarik |
 | DASH-02 | Aktivitas agenda per departemen | Production + Staging | BFF department activity | `agendas`, hierarchy office | Hapus endpoint dan widget bersama-sama |
-| AGD-01 | CRUD agenda dan status otomatis | Production + Staging | Agenda page/service | `agendas`, office hierarchy | Pertahankan data; nonaktifkan write lebih dahulu |
-| AGD-02 | Filter agenda berdasar hirarki organisasi | Production + Staging | Agenda filter service | offices, profiles | Bergantung pada master organisasi |
-| CAL-01 | Kalender agenda dan navigasi tanggal | Production + Staging | Calendar page/components | Agenda | Aman ditarik sebagai UI bila agenda tetap ada |
-| CAL-02 | Export kalender | Production + Staging | Export service | Agenda/calendar | Aman ditarik terpisah |
+| AGD-01 | CRUD agenda dan status otomatis | **Legacy**, Production + Staging; akan digantikan CAL-03 | Agenda page/service | `agendas`, office hierarchy | Legacy; dirombak/dihapus oleh CAL-03. Pertahankan data dan tabel `agendas`; auditor CAL-03A di `docs/WORK_CALENDAR_REDESIGN_BASELINE.md` |
+| AGD-02 | Filter agenda berdasar hirarki organisasi | **Legacy**, Production + Staging; akan digantikan CAL-03 | Agenda filter service | offices, profiles | Legacy; digantikan oleh Unified Work Calendar. Bergantung pada master organisasi |
+| CAL-01 | Kalender agenda dan navigasi tanggal | **Legacy**, Production + Staging; akan digantikan CAL-03 | Calendar page/components | Agenda | Legacy; route dan komponen dirombak oleh CAL-03. Aman ditarik sebagai UI bila data agenda tetap ada |
+| CAL-02 | Export kalender | **Legacy**, Production + Staging; akan digantikan CAL-03 | Export service | Agenda/calendar | Legacy; kontrak field export dievaluasi ulang pada CAL-03 |
+| CAL-03 | Unified Work Calendar (Agenda + Kalender menjadi satu **Kalender Kerja**) | Staging redesign; CAL-03A audit/characterization complete (docs + test only), belum ada perubahan runtime | Satu halaman `/calendar` (Hari Ini/Minggu/Bulan/Progres Tim + Arsip), domain kalender baru, route `/agenda` dihapus permanen tanpa redirect | AGD-01, AGD-02, CAL-01, CAL-02 (digantikan); `agendas`, `profiles` hierarchy, `AgendaParentFilter` (KEEP SHARED) | Atasan hanya membaca agenda bawahan (ditegakkan RLS: parent hanya SELECT descendants, tidak dapat UPDATE/DELETE baris bawahan). Pertahankan tabel dan data `agendas`; migration aditif forward-only pada CAL-03B. Audit CAL-03A: `docs/WORK_CALENDAR_REDESIGN_BASELINE.md`; production tidak disentuh |
 
 ### 4.3 Persuratan Inti
 
