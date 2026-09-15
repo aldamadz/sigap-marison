@@ -118,7 +118,7 @@ export function WorkCalendarWorkspace({  currentUser,
   const deleteTriggerIdRef = useRef<string | null>(null);
   const quickEntryInputRef = useRef<HTMLInputElement>(null);
 
-  const viewDate = calendar.view === "team" ? calendar.today : calendar.anchorDate;
+  const viewDate = calendar.anchorDate;
   const quickEntryDate = calendar.view === "day" ? calendar.anchorDate : calendar.today;
 
   const selectedEntry = useMemo(

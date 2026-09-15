@@ -50,8 +50,9 @@ create table if not exists public.profiles (
   role text not null default 'user',
   parent_id uuid references public.profiles(id),
   deleted_at timestamptz null,
-  is_active boolean not null default true
+  is_active boolean null default true
 );
+alter table public.profiles alter column is_active drop not null;
 alter table public.profiles enable row level security;
 alter table public.profiles force row level security;
 drop policy if exists profiles_select_authenticated on public.profiles;

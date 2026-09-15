@@ -57,8 +57,8 @@ describe("WorkCalendarProfileRepository & Mapper (CAL-03 F3)", () => {
   });
 
   describe("getCurrentProfile", () => {
-    it("mengembalikan null bila auth user tidak tersedia", async () => {
-      const mockClient: SupabaseWorkCalendarProfileClient = {
+    it("melempar error bila auth user tidak tersedia atau auth gagal", async () => {
+      const mockClientNoUser: SupabaseWorkCalendarProfileClient = {
         auth: {
           getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
         },
@@ -66,11 +66,49 @@ describe("WorkCalendarProfileRepository & Mapper (CAL-03 F3)", () => {
         rpc: vi.fn(),
       };
 
-      const repo = createSupabaseWorkCalendarProfileRepository(mockClient);
-      const profile = await repo.getCurrentProfile();
+      const repoNoUser = createSupabaseWorkCalendarProfileRepository(mockClientNoUser);
+      await expect(repoNoUser.getCurrentProfile()).rejects.toThrow("Gagal memverifikasi sesi pengguna.");
+      expect(mockClientNoUser.from).not.toHaveBeenCalled();
 
-      expect(profile).toBeNull();
-      expect(mockClient.from).not.toHaveBeenCalled();
+      const mockClientAuthErr: SupabaseWorkCalendarProfileClient = {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: { message: "JWT expired" } }),
+        },
+        from: vi.fn(),
+        rpc: vi.fn(),
+      };
+
+      const repoAuthErr = createSupabaseWorkCalendarProfileRepository(mockClientAuthErr);
+      await expect(repoAuthErr.getCurrentProfile()).rejects.toThrow("Gagal memverifikasi sesi pengguna.");
+    });
+
+    it("melempar error bila query profile database gagal", async () => {
+      const mockQueryBuilder: WorkCalendarProfileDbQuery = {
+        eq: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: "DB timeout" } }),
+        then: (onfulfilled, onrejected) =>
+          Promise.resolve({ data: null, error: { message: "DB timeout" } }).then(onfulfilled, onrejected),
+      };
+
+      const mockTable: WorkCalendarProfileDbTable = {
+        select: vi.fn().mockReturnValue(mockQueryBuilder),
+      };
+
+      const mockClient: SupabaseWorkCalendarProfileClient = {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "u1000000-0000-4000-8000-000000000001" } },
+            error: null,
+          }),
+        },
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
+
+      const repo = createSupabaseWorkCalendarProfileRepository(mockClient);
+      await expect(repo.getCurrentProfile()).rejects.toThrow("Gagal memuat profil pengguna.");
     });
 
     it("mengambil profil aktif yang tidak terhapus dan memetakan datanya", async () => {
@@ -123,7 +161,7 @@ describe("WorkCalendarProfileRepository & Mapper (CAL-03 F3)", () => {
       });
     });
 
-    it("mengembalikan null saat profil tidak ditemukan di database", async () => {
+    it("mengembalikan null saat profil tidak ditemukan di database (missing profile)", async () => {
       const mockQueryBuilder: WorkCalendarProfileDbQuery = {
         eq: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),

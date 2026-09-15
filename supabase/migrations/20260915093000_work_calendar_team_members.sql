@@ -16,7 +16,7 @@ begin
         where p.parent_id = (select auth.uid())
           and p.id <> (select auth.uid())
           and p.deleted_at is null
-          and coalesce(p.is_active, true) = true
+          and p.is_active is true
         union
         select child.id, child.full_name, child.job_title, s.path || child.id
         from public.profiles child
@@ -24,7 +24,7 @@ begin
         where not (child.id = any(s.path))
           and child.id <> (select auth.uid())
           and child.deleted_at is null
-          and coalesce(child.is_active, true) = true
+          and child.is_active is true
     ),
     deduped as (
         select distinct s.id, s.full_name, s.job_title

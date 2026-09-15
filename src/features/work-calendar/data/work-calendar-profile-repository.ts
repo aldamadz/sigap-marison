@@ -101,9 +101,17 @@ export function createSupabaseWorkCalendarProfileRepository(
 ): WorkCalendarProfileRepository {
   return {
     async getCurrentProfile(signal?: AbortSignal): Promise<WorkEntryOwner | null> {
+      if (signal?.aborted) {
+        throw new Error("Pencarian dibatalkan.");
+      }
+
       const { data: authData, error: authError } = await client.auth.getUser();
-      if (authError || !authData.user) {
-        return null;
+      if (authError || !authData?.user) {
+        throw new Error("Gagal memverifikasi sesi pengguna.");
+      }
+
+      if (signal?.aborted) {
+        throw new Error("Pencarian dibatalkan.");
       }
 
       let query = client
@@ -119,7 +127,11 @@ export function createSupabaseWorkCalendarProfileRepository(
 
       const { data, error } = await query.maybeSingle();
 
-      if (error || !data) {
+      if (error) {
+        throw new Error("Gagal memuat profil pengguna.");
+      }
+
+      if (!data) {
         return null;
       }
 

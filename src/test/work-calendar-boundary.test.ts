@@ -177,4 +177,47 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
       expect(sql).toContain(`'${kind}'`);
     }
   });
+
+  it("seluruh modul runtime dan test CAL-03 F3 bebas any, @ts-*, dan double cast", () => {
+    const cal03TestFiles = [
+      "src/test/work-calendar-boundary.test.ts",
+      "src/test/work-calendar-lib.test.ts",
+      "src/test/work-calendar-page.test.tsx",
+      "src/test/work-calendar-profile-repository.test.ts",
+      "src/test/work-calendar-workspace.test.tsx",
+    ];
+
+    const allFilesToCheck = [
+      ...runtimeFiles.map((f) => ({ path: f.path, source: f.source })),
+      ...cal03TestFiles.map((rel) => ({
+        path: rel,
+        source: readFileSync(join(root, rel), "utf8"),
+      })),
+    ];
+
+    const forbiddenPatterns = [
+      { label: "@ts-ignore", pattern: new RegExp("@" + "ts-ignore") },
+      { label: "@ts-nocheck", pattern: new RegExp("@" + "ts-nocheck") },
+      { label: "@ts-expect-error", pattern: new RegExp("@" + "ts-expect-error") },
+      { label: "as any", pattern: new RegExp("\\bas\\s+" + "any\\b") },
+      { label: ": any", pattern: new RegExp(":\\s*" + "any\\b") },
+      { label: "<any>", pattern: new RegExp("<" + "any>") },
+      { label: "as unknown as", pattern: new RegExp("\\bas\\s+unknown\\s+as\\b") },
+    ];
+
+    for (const file of allFilesToCheck) {
+      const content =
+        file.path === "src/test/work-calendar-boundary.test.ts"
+          ? file.source.slice(0, file.source.indexOf("seluruh modul runtime dan test CAL-03 F3 bebas"))
+          : file.source;
+
+      for (const { label, pattern } of forbiddenPatterns) {
+        const matches = pattern.test(content);
+        expect(
+          matches,
+          `File ${file.path} melanggar larangan: mengandung '${label}'`,
+        ).toBe(false);
+      }
+    }
+  });
 });
