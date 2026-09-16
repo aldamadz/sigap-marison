@@ -55,7 +55,7 @@ beforeEach(() => {
     if (table === "master_offices") return {
       select: () => ({ order: async () => ({ data: [{
         id: "office-a", name: "Sragen", kedudukan: "KCP",
-        marison_branch_id: 7, marison_synced_at: "2026-09-16T00:00:00Z", marison_review_required: false,
+        marison_branch_id: 8, marison_synced_at: "2026-09-16T00:00:00Z", marison_review_required: false,
       }], error: null }) }),
     };
     if (table === "master_entities") return {
@@ -96,7 +96,7 @@ describe("Master Proyek reused Marison ID", () => {
     await addProject("Proyek Lokal A");
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
       variant: "destructive",
-      description: "ID ini belum tersedia sebagai mapping payload staging yang valid untuk kantor proyek.",
+      description: "ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada mapping payload staging.",
     })));
     expect(mocks.inserted).toHaveLength(0);
     expect(mocks.saveMapping).not.toHaveBeenCalled();
@@ -120,6 +120,7 @@ describe("Master Proyek reused Marison ID", () => {
     expect(mocks.saveMapping).toHaveBeenNthCalledWith(2, expect.objectContaining({
       entityType: "project", recordId: "local-2", targetRecordId: "source-project",
     }));
+    expect(mocks.catalog).toHaveBeenCalledWith("project", "SRG", null);
   });
 
   it("keeps a partially saved project editable if mapping fails", async () => {
