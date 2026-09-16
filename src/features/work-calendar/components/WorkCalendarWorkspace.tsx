@@ -15,7 +15,7 @@
  * - mode Tim selalu read-only terhadap entry bawahan.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CalendarDays, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import type {
   WorkDate,
   WorkEntry,
   WorkEntryDraft,
+  WorkEntryOwner,
   WorkEntryPatch,
   WorkEntryStatus,
   WorkProgressCounts,
@@ -47,6 +48,7 @@ import {
   createWorkCalendarPermissions,
 } from "../lib/work-progress";
 import { normalizeWorkEntryText, validateWorkEntryInput } from "../lib/work-entry-validation";
+import { getWorkCalendarAddAction } from "../lib/work-calendar-add-action";
 import { useWorkCalendarDerivedView, useWorkCalendarView } from "../hooks/use-work-calendar-view";
 import { WorkCalendarToolbar } from "./WorkCalendarToolbar";
 import { QuickWorkEntry } from "./QuickWorkEntry";
@@ -54,8 +56,10 @@ import { DailyWorkView } from "./DailyWorkView";
 import { WeeklyWorkView } from "./WeeklyWorkView";
 import { MonthlyWorkView } from "./MonthlyWorkView";
 import { TeamProgressView } from "./TeamProgressView";
+import { TeamOverviewView } from "./TeamOverviewView";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 import { WorkEntryDetail } from "./WorkEntryDetail";
+import { useWorkTeamOverview } from "../hooks/use-work-team-overview";
 
 interface StatusPrompt {
   entryId: string;
@@ -71,6 +75,9 @@ export function WorkCalendarWorkspace({  currentUser,
   initialView,
   initialAnchorDate,
   now,
+  teamOverviewRepository,
+  isTeamViewAvailableOverride,
+  routeAdapter,
 }: WorkCalendarWorkspaceProps) {
   const calendar = useWorkCalendarView({
     repository,
@@ -79,7 +86,19 @@ export function WorkCalendarWorkspace({  currentUser,
     initialView: initialView ?? "day",
     initialAnchorDate,
     now,
+    loadTeamEntries: teamOverviewRepository === undefined,
+    isTeamViewAvailableOverride,
   });
+
+  const teamOverview = useWorkTeamOverview({
+    repository: teamOverviewRepository ?? null,
+    enabled: teamOverviewRepository !== undefined && calendar.view === "team",
+    // Tanggal tunggal mode Tim: selalu mengikuti tanggal acuan kalender.
+    workDate: calendar.anchorDate,
+    adapter: routeAdapter,
+  });
+
+  const teamDepartmentOptions = teamOverview.departmentOptions;
 
   const derived = useWorkCalendarDerivedView({
     view: calendar.view,
@@ -87,6 +106,7 @@ export function WorkCalendarWorkspace({  currentUser,
     today: calendar.today,
     entries: calendar.entries,
     visibleEntries: calendar.visibleEntries,
+    ownerFilterId: calendar.ownerFilterId,
     currentUserId: currentUser.id,
     teamMembers,
   });
@@ -96,6 +116,42 @@ export function WorkCalendarWorkspace({  currentUser,
     [permissions, currentUser.id],
   );
 
+  /**
+   * Sinkronisasi URL (React Router) untuk tanggal acuan dan tampilan:
+   * tanggal acuan selalu tercermin di query `date` dan tab di query `view`
+   * supaya refresh/deep link membuka konteks yang sama. Ditulis dengan
+   * `replace` agar history tetap fokus pada perubahan filter/halaman Tim.
+   */
+  useEffect(() => {
+    if (!routeAdapter) return;
+    routeAdapter.writeAnchorDate(calendar.anchorDate, { replace: true });
+    routeAdapter.writeView(calendar.view, { replace: true });
+  }, [routeAdapter, calendar.anchorDate, calendar.view]);
+
+  /**
+   * Adopsi navigasi luar (Back/Forward) untuk tanggal acuan dan tab. Navigasi
+   * pertama (mount) dilewati karena sudah ditangani `initialView`/
+   * `initialAnchorDate`.
+   */
+  const routeKey = routeAdapter?.key ?? null;
+  const lastRouteKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!routeAdapter || routeKey === null) return;
+    if (lastRouteKeyRef.current === null) {
+      lastRouteKeyRef.current = routeKey;
+      return;
+    }
+    if (lastRouteKeyRef.current === routeKey) return;
+    lastRouteKeyRef.current = routeKey;
+
+    const urlDate = routeAdapter.readAnchorDate();
+    if (urlDate && urlDate !== calendar.anchorDate) calendar.setAnchorDate(urlDate);
+    const urlView = routeAdapter.readView();
+    if (urlView && urlView !== calendar.view) calendar.setView(urlView);
+    // `calendar` sengaja tidak menjadi dependensi: adopsi hanya dipicu oleh
+    // perubahan kunci URL agar tidak ada loop umpan-balik.
+  }, [routeAdapter, routeKey]);
+
   const [quickSaving, setQuickSaving] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -103,6 +159,7 @@ export function WorkCalendarWorkspace({  currentUser,
   const [prompt, setPrompt] = useState<StatusPrompt | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [detailSaving, setDetailSaving] = useState(false);
+  /** Panel hari pada tampilan Bulan: tanggal yang sedang terbuka. */
   const [monthPanelDate, setMonthPanelDate] = useState<WorkDate | null>(null);
   const [expandedOwnerId, setExpandedOwnerId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
@@ -122,9 +179,35 @@ export function WorkCalendarWorkspace({  currentUser,
   const quickEntryDate = calendar.view === "day" ? calendar.anchorDate : calendar.today;
 
   const selectedEntry = useMemo(
-    () => calendar.entries.find((entry) => entry.id === selectedEntryId) ?? null,
-    [calendar.entries, selectedEntryId],
+    () =>
+      calendar.entries.find((entry) => entry.id === selectedEntryId) ??
+      teamOverview.memberEntries.find((entry) => entry.id === selectedEntryId) ??
+      null,
+    [calendar.entries, teamOverview.memberEntries, selectedEntryId],
   );
+
+  /**
+   * Peta pemilik untuk detail. Mode Tim server hanya menyediakan anggota dari
+   * pencarian terbatas dan halaman yang sedang tampil, sehingga nama diambil
+   * dari data halaman yang sudah dimuat — bukan dari seluruh roster.
+   */
+  const ownerById = useMemo(() => {
+    const map = new Map<string, WorkEntryOwner>();
+    for (const member of teamMembers ?? []) map.set(member.id, member);
+    for (const option of teamOverview.memberOptions) {
+      if (!map.has(option.id)) {
+        map.set(option.id, {
+          id: option.id,
+          name: option.label,
+          jobTitle: option.sublabel,
+        });
+      }
+    }
+    for (const member of teamOverview.data?.members ?? []) {
+      if (!map.has(member.owner.id)) map.set(member.owner.id, member.owner);
+    }
+    return map;
+  }, [teamMembers, teamOverview.memberOptions, teamOverview.data]);
 
   const monthPanelEntries = useMemo(() => {
     if (!monthPanelDate) return [] as WorkEntry[];
@@ -373,9 +456,14 @@ export function WorkCalendarWorkspace({  currentUser,
   );
 
   const handleAdd = useCallback(() => {
-    if (calendar.view !== "day" || calendar.anchorDate !== calendar.today) {
-      calendar.setView("day");
-      calendar.setAnchorDate(calendar.today);
+    const action = getWorkCalendarAddAction({
+      view: calendar.view,
+      anchorDate: calendar.anchorDate,
+      today: calendar.today,
+    });
+    if (calendar.view !== action.targetView || calendar.anchorDate !== action.targetDate) {
+      calendar.setView(action.targetView);
+      calendar.setAnchorDate(action.targetDate);
     }
     // Fokus dipindahkan setelah render ulang agar input sudah terpasang.
     window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
@@ -386,6 +474,24 @@ export function WorkCalendarWorkspace({  currentUser,
     setSelectedEntryId(null);
     setPrompt(null);
   }, []);
+
+  /**
+   * Aksi "Tambahkan pekerjaan ke tanggal ini" pada panel Bulan: pindah ke
+   * tampilan Hari pada tanggal panel, lalu fokuskan quick entry. Tanggal
+   * target adalah tanggal panel sehingga tidak pernah berbeda dari label.
+   */
+  const handleAddToMonthPanelDate = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (!monthPanelDate) return;
+      const date = monthPanelDate;
+      calendar.setView("day");
+      calendar.setAnchorDate(date);
+      setMonthPanelDate(null);
+      window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
+      event.currentTarget.blur();
+    },
+    [calendar, monthPanelDate],
+  );
 
   const openDayFromWeek = useCallback(
     (date: WorkDate) => {
@@ -423,8 +529,14 @@ export function WorkCalendarWorkspace({  currentUser,
         ? `Bulan ${calendar.anchorDate.slice(0, 7)}`
         : viewDate;
 
+  const addAction = getWorkCalendarAddAction({
+    view: calendar.view,
+    anchorDate: calendar.anchorDate,
+    today: calendar.today,
+  });
+
   return (
-    <div className="sigap-page">
+    <div className="sigap-page work-calendar-scope">
       <WorkCalendarToolbar
         view={calendar.view}
         anchorDate={calendar.anchorDate}
@@ -433,6 +545,8 @@ export function WorkCalendarWorkspace({  currentUser,
         isTeamViewAvailable={calendar.isTeamViewAvailable}
         ownerFilterId={calendar.ownerFilterId}
         teamMembers={teamMembers ?? []}
+        showOwnerFilter={teamOverviewRepository === undefined}
+        addLabel={addAction.label}
         onSelectView={handleSelectView}
         onPrevious={calendar.goToPreviousRange}
         onNext={calendar.goToNextRange}
@@ -513,13 +627,15 @@ export function WorkCalendarWorkspace({  currentUser,
         />
       )}
 
+      {/* Detail pekerjaan dibuka dari judul pada semua tampilan non-Tim
+          (Hari, Minggu, Bulan). Mode Tim punya panel read-only terpisah. */}
       {!calendar.isLoading &&
         !calendar.error &&
-        (calendar.view === "day" || calendar.view === "week") &&
+        calendar.view !== "team" &&
         selectedEntry && (
           <WorkEntryDetail
             entry={selectedEntry}
-            owner={(teamMembers ?? []).find((member) => member.id === selectedEntry.ownerId)}
+            owner={ownerById.get(selectedEntry.ownerId)}
             today={calendar.today}
             readOnly={!effectivePermissions.canEditEntry(selectedEntry)}
             isSaving={detailSaving}
@@ -601,11 +717,8 @@ export function WorkCalendarWorkspace({  currentUser,
                 type="button"
                 size="sm"
                 className="rounded-sm"
-                onClick={() => {
-                  calendar.setView("day");
-                  calendar.setAnchorDate(monthPanelDate);
-                  setMonthPanelDate(null);
-                }}
+                data-testid="work-month-panel-add"
+                onClick={handleAddToMonthPanelDate}
               >
                 <Plus aria-hidden="true" />
                 Tambahkan pekerjaan ke tanggal ini
@@ -616,20 +729,31 @@ export function WorkCalendarWorkspace({  currentUser,
       )}
 
       {!calendar.isLoading && !calendar.error && calendar.view === "team" && (
-        <TeamProgressView
-          groups={derived.ownerGroups}
-          interactions={interactions}
-          expandedOwnerId={expandedOwnerId}
-          onToggleOwner={(ownerId) =>
-            setExpandedOwnerId((current) => (current === ownerId ? null : ownerId))
-          }
-        />
+        teamOverviewRepository !== undefined ? (
+          <TeamOverviewView
+            overview={teamOverview}
+            interactions={interactions}
+            workDate={calendar.anchorDate}
+            departmentOptions={teamDepartmentOptions}
+          />
+        ) : (
+          <TeamProgressView
+            groups={derived.ownerGroups}
+            interactions={interactions}
+            expandedOwnerId={expandedOwnerId}
+            isOwnerFiltered={derived.ownerFilter.isOwnerFiltered}
+            selectedOwner={derived.ownerFilter.selectedOwner}
+            onToggleOwner={(ownerId) =>
+              setExpandedOwnerId((current) => (current === ownerId ? null : ownerId))
+            }
+          />
+        )
       )}
 
       {selectedEntry && calendar.view === "team" && (
         <WorkEntryDetail
           entry={selectedEntry}
-          owner={(teamMembers ?? []).find((member) => member.id === selectedEntry.ownerId)}
+          owner={ownerById.get(selectedEntry.ownerId)}
           today={calendar.today}
           readOnly
           isSaving={false}
@@ -638,10 +762,9 @@ export function WorkCalendarWorkspace({  currentUser,
         />
       )}
 
-      {calendar.ownerFilterId !== "all" && calendar.view === "team" && (
+      {derived.ownerFilter.isOwnerFiltered && calendar.view === "team" && (
         <p className="sr-only" data-testid="work-calendar-owner-filter-state">
-          Filter pemilik aktif:{" "}
-          {(teamMembers ?? []).find((member) => member.id === calendar.ownerFilterId)?.name ?? ""}
+          Filter pemilik aktif: {derived.ownerFilter.selectedOwner?.name ?? ""}
         </p>
       )}
 
@@ -658,6 +781,7 @@ export function WorkCalendarWorkspace({  currentUser,
         }}
       >
         <AlertDialogContent
+          className="work-calendar-scope"
           onCloseAutoFocus={(event) => {
             // Pastikan fokus tidak hilang setelah Batal/Esc.
             event.preventDefault();

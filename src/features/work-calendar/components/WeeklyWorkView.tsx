@@ -11,6 +11,8 @@ import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkCalendarDaySummary, WorkDate } from "../types/work-calendar";
 import { formatWorkDateShort, getDayName } from "../lib/work-calendar-date";
+import { getWorkWeekDayPreview } from "../lib/work-progress";
+import { useWorkWeekPreviewLimit } from "../hooks/use-work-week-preview-limit";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 
 export interface WeeklyWorkViewProps {
@@ -20,12 +22,21 @@ export interface WeeklyWorkViewProps {
 }
 
 export function WeeklyWorkView({ summaries, interactions, onSelectDate }: WeeklyWorkViewProps) {
+  // Satu daftar preview untuk mobile dan desktop: batasnya dihitung di JS
+  // supaya tidak ada DOM aksesibel ganda antar layout.
+  const previewLimit = useWorkWeekPreviewLimit();
+
   return (
     <section aria-label="Tampilan minggu" className="space-y-2">
       <div className="grid grid-cols-1 gap-2 md:grid-cols-7">
         {summaries.map((summary) => {
           const isToday = summary.date === interactions.today;
           const headingId = `work-week-heading-${summary.date}`;
+          const { preview, hiddenCount } = getWorkWeekDayPreview(
+            summary.entries,
+            interactions.today,
+            previewLimit,
+          );
           return (
             <div
               key={summary.date}
@@ -66,13 +77,30 @@ export function WeeklyWorkView({ summaries, interactions, onSelectDate }: Weekly
                     Kosong
                   </p>
                 ) : (
-                  <WorkEntryList
-                    entries={summary.entries}
-                    emptyLabel="Kosong"
-                    labelledBy={headingId}
-                    variant="compact"
-                    {...interactions}
-                  />
+                  <>
+                    {/* Preview dibatasi (4 desktop/tablet, 3 mobile) supaya
+                        kolom tidak tumbuh tanpa batas; tidak ada scroll
+                        internal. Seluruh entry tetap dihitung pada agregat
+                        progres di atas. */}
+                    <WorkEntryList
+                      entries={preview}
+                      emptyLabel="Kosong"
+                      labelledBy={headingId}
+                      variant="compact"
+                      {...interactions}
+                    />
+                    {hiddenCount > 0 && (
+                      <button
+                        type="button"
+                        data-testid={`work-week-more-${summary.date}`}
+                        onClick={() => onSelectDate(summary.date)}
+                        aria-label={`Buka tampilan hari ${formatWorkDateShort(summary.date)} untuk ${hiddenCount} pekerjaan lainnya`}
+                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm px-2 text-[11px] font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        +{hiddenCount} pekerjaan lainnya
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
