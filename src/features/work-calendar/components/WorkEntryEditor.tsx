@@ -74,7 +74,7 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
   const errorText = (key: keyof WorkEntryFieldErrors) => errors[key] ?? null;
 
   return (
-    <div className="space-y-3 rounded-sm border border-input bg-muted/30 p-3">
+    <div className="space-y-3 rounded-sm border border-input bg-muted p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">Detail pekerjaan</h3>
         <Button

@@ -88,6 +88,8 @@ interface WorkEntryRowControlsProps {
   compact: boolean;
   onRequestStatus: (status: WorkEntryStatus) => void;
   onStartEditTitle: () => void;
+  /** Mencegah Radix mengembalikan fokus ke trigger saat editor judul dibuka. */
+  onCloseAutoFocus: (event: Event) => void;
   onOpenDetail: () => void;
   onMoveToDate: (date: WorkDate) => void;
   onDelete: () => void;
@@ -106,6 +108,7 @@ function WorkEntryRowControls({
   compact,
   onRequestStatus,
   onStartEditTitle,
+  onCloseAutoFocus,
   onOpenDetail,
   onMoveToDate,
   onDelete,
@@ -126,7 +129,13 @@ function WorkEntryRowControls({
               data-active-status={entry.status}
               aria-label={`Ubah status pekerjaan ${entry.title}. Status saat ini ${statusMeta.label}.`}
               className={cn(
-                "h-11 gap-1.5 rounded-sm px-2 font-medium",
+                "h-11 min-w-touch gap-1.5 rounded-sm px-2 font-medium",
+                // Badge status memberi bentuk + label + warna sehingga status
+                // tetap dibedakan tanpa mengandalkan warna saja, juga pada
+                // mode gelap. Warna teks dipaksa ke token status agar
+                // kontrasnya tidak diturunkan oleh varian outline.
+                statusMeta.badgeClassName,
+                "hover:brightness-110 dark:hover:brightness-125",
                 compact && "w-11 justify-center px-0",
               )}
             >
@@ -140,11 +149,11 @@ function WorkEntryRowControls({
                 </span>
               )}
               {!compact && (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="work-calendar-scope w-56">
             <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
               Status pekerjaan
             </DropdownMenuLabel>
@@ -184,14 +193,18 @@ function WorkEntryRowControls({
             type="button"
             variant="ghost"
             size="icon"
-            className="shrink-0 rounded-sm"
+            className="w-11 shrink-0 rounded-sm"
             data-work-entry-menu={entry.id}
             aria-label={`Menu tindakan untuk ${entry.title}`}
           >
             <Ellipsis aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent
+          align="end"
+          className="work-calendar-scope w-56"
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
             {readOnly ? "Entry bawahan" : "Tindakan"}
           </DropdownMenuLabel>
@@ -210,7 +223,7 @@ function WorkEntryRowControls({
                   <CalendarClock className="mr-2" aria-hidden="true" />
                   Pindahkan tanggal
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-52">
+                <DropdownMenuSubContent className="work-calendar-scope w-52">
                   {workWeekDates(entry.workDate).map((date) => (
                     <DropdownMenuItem
                       key={date}
@@ -268,6 +281,8 @@ export function WorkEntryRow({
   const [followUpDraft, setFollowUpDraft] = useState("");
   const followUpRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  /** Menandai bahwa menu ditutup karena ingin memulai edit judul. */
+  const isStartingTitleEditRef = useRef(false);
 
   useEffect(() => {
     if (!isEditingTitle) setTitleDraft(entry.title);
@@ -308,7 +323,25 @@ export function WorkEntryRow({
       isSaving={isSaving}
       compact={isCompact}
       onRequestStatus={onRequestStatus}
-      onStartEditTitle={() => setIsEditingTitle(true)}
+      onStartEditTitle={() => {
+        // Editor judul baru dibuka setelah menu benar-benar tertutup supaya
+        // pemulihan fokus Radix tidak langsung memblur input judul.
+        isStartingTitleEditRef.current = true;
+        // Fallback bila `onCloseAutoFocus` tidak dipanggil (mis. klik pointer
+        // tanpa fokus item). Ref dikosongkan oleh `onCloseAutoFocus` bila
+        // handler itu memang berjalan.
+        window.requestAnimationFrame(() => {
+          if (!isStartingTitleEditRef.current) return;
+          isStartingTitleEditRef.current = false;
+          setIsEditingTitle(true);
+        });
+      }}
+      onCloseAutoFocus={(event) => {
+        if (!isStartingTitleEditRef.current) return;
+        isStartingTitleEditRef.current = false;
+        event.preventDefault();
+        setIsEditingTitle(true);
+      }}
       onOpenDetail={onOpenDetail}
       onMoveToDate={onMoveToDate}
       onDelete={onDelete}
@@ -320,11 +353,12 @@ export function WorkEntryRow({
       data-testid={`work-entry-row-${entry.id}`}
       data-owner-id={entry.ownerId}
       data-entry-status={entry.status}
+      data-readonly={readOnly ? "true" : "false"}
       data-row-variant={variant}
       className={cn(
         "rounded-sm border bg-card",
         isCompact ? "px-1.5 py-1.5" : "px-3 py-2.5",
-        overdue ? "border-overdue/40" : "border-border",
+        overdue ? "border-overdue/60" : "border-border",
       )}
     >
       <div className={cn("flex items-start", isCompact ? "gap-1" : "gap-2")}>
@@ -354,25 +388,22 @@ export function WorkEntryRow({
               className="h-11 w-full rounded-sm border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           ) : (
+            // Kontrak interaksi CAL-03 F4A (koreksi review): klik judul
+            // membuka detail, bukan editor judul inline. Editor judul hanya
+            // dimulai dari menu "..." → "Ubah judul" atau dari detail.
             <button
               type="button"
-              disabled={readOnly}
-              onClick={() => {
-                if (readOnly) return;
-                setIsEditingTitle(true);
-              }}
-              aria-label={
-                readOnly
-                  ? `Pekerjaan ${entry.title}`
-                  : `Ubah judul pekerjaan ${entry.title}. Tekan Enter untuk mengubah.`
-              }
+              data-testid={`work-entry-title-${entry.id}`}
+              onClick={onOpenDetail}
+              aria-label={`Buka detail pekerjaan: ${entry.title}`}
               className={cn(
                 "flex w-full min-h-touch items-center rounded-sm text-left font-medium leading-snug text-foreground",
                 isCompact ? "text-xs" : "text-sm",
-                readOnly
-                  ? "cursor-default"
-                  : "hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                entry.status === "completed" && "text-muted-foreground line-through",
+                "hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                // Judul selesai tetap `foreground` penuh supaya terbaca di
+                // dark mode; status "Selesai" pada badge adalah indikator
+                // utamanya, jadi hanya diberi efek visual ringan.
+                entry.status === "completed" && "line-through decoration-muted-foreground/60",
               )}
             >
               <span className="min-w-0 break-words">{entry.title}</span>
@@ -419,8 +450,8 @@ export function WorkEntryRow({
           </div>
 
           {entry.realization && (
-            <p data-testid={`work-entry-realization-${entry.id}`} className="text-xs text-foreground/80">
-              <span className="font-medium">Hasil: </span>
+            <p data-testid={`work-entry-realization-${entry.id}`} className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Hasil: </span>
               {entry.realization}
             </p>
           )}
@@ -433,7 +464,7 @@ export function WorkEntryRow({
           )}
 
           {promptType !== null && (
-            <div className="space-y-1.5 rounded-sm border border-input bg-muted/40 p-2">
+            <div className="space-y-1.5 rounded-sm border border-border bg-muted p-2">
               <label
                 htmlFor={`work-entry-follow-up-${entry.id}`}
                 className="block text-xs font-medium text-foreground"
@@ -446,6 +477,11 @@ export function WorkEntryRow({
                 ref={followUpRef}
                 value={followUpDraft}
                 rows={2}
+                placeholder={
+                  promptType === "realization"
+                    ? "Tulis hasil pekerjaan..."
+                    : "Tulis alasan terhambat..."
+                }
                 onChange={(event) => setFollowUpDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
@@ -458,7 +494,7 @@ export function WorkEntryRow({
                     onSubmitFollowUp(followUpDraft);
                   }
                 }}
-                className="w-full resize-none rounded-sm border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full resize-none rounded-sm border border-input bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <Button

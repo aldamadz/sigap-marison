@@ -1,12 +1,79 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
+
 import WorkCalendarPage from "@/pages/work-calendar/WorkCalendarPage";
 import { supabase } from "@/lib/supabase";
-import type {
-  WorkCalendarProfileRow,
-  WorkCalendarTeamMemberRow,
-} from "@/features/work-calendar/data/work-calendar-profile-repository";
+import type { WorkCalendarProfileRow } from "@/features/work-calendar/data/work-calendar-profile-repository";
 import type { WorkCalendarEntryRow } from "@/features/work-calendar/data/work-entry-row-mapper";
+import type {
+  WorkTeamOverviewMemberSearchRow,
+  WorkTeamOverviewOptionRow,
+  WorkTeamOverviewRow,
+} from "@/features/work-calendar/data/supabase-work-team-overview-repository";
+
+/**
+ * Radix Select dirender lewat Portal dan memakai pointer capture,
+ * ResizeObserver, serta scrollIntoView yang tidak disediakan jsdom.
+ */
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as typeof ResizeObserver;
+}
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {};
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
+/** Probe React Router untuk mengamati URL dan mensimulasikan Back/Forward. */
+const routeProbe: { search: string; back: () => void; forward: () => void } = {
+  search: "",
+  back: () => {},
+  forward: () => {},
+};
+
+function RouteProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  routeProbe.search = location.search;
+  routeProbe.back = () => navigate(-1);
+  routeProbe.forward = () => navigate(1);
+  return <output data-testid="route-search">{location.search}</output>;
+}
+
+/**
+ * Route nyata `WorkCalendarPage` sekarang memakai React Router untuk state
+ * mode Tim (`useSearchParams`/`useNavigate`), jadi setiap render dibungkus
+ * router in-memory pada path `/calendar`.
+ */
+function renderPage(initialEntry = "/calendar") {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route
+          path="/calendar"
+          element={
+            <>
+              <WorkCalendarPage />
+              <RouteProbe />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 vi.mock("@/lib/supabase", () => {
   return {
@@ -33,23 +100,18 @@ function createMockQueryBuilder<T>(result: { data: T; error: { message: string }
     single: vi.fn().mockResolvedValue(result),
     maybeSingle: vi.fn().mockResolvedValue(result),
     then: <TResult1 = { data: T; error: { message: string } | null }, TResult2 = never>(
-      onfulfilled?: ((value: { data: T; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
+      onfulfilled?:
+        | ((value: { data: T; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>)
+        | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
     ): Promise<TResult1 | TResult2> => Promise.resolve(result).then(onfulfilled, onrejected),
   };
   return builder;
 }
 
-function createMockRpcBuilder<T>(result: { data: T; error: { message: string } | null }) {
-  const builder = {
-    range: vi.fn().mockImplementation(() => builder),
-    abortSignal: vi.fn().mockImplementation(() => builder),
-    then: <TResult1 = { data: T; error: { message: string } | null }, TResult2 = never>(
-      onfulfilled?: ((value: { data: T; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
-      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-    ): Promise<TResult1 | TResult2> => Promise.resolve(result).then(onfulfilled, onrejected),
-  };
-  return builder;
+interface RpcCall {
+  fn: string;
+  args: Record<string, unknown> | undefined;
 }
 
 function setupDefaultMocks(options?: {
@@ -57,26 +119,30 @@ function setupDefaultMocks(options?: {
   authError?: { message: string } | null;
   profile?: WorkCalendarProfileRow | null;
   profileError?: { message: string } | null;
-  teamMembers?: WorkCalendarTeamMemberRow[] | null;
-  teamError?: { message: string } | null;
+  /** Hasil probe `has_work_calendar_team_members`. */
+  isTeamAvailable?: boolean;
+  probeError?: { message: string } | null;
+  overviewRows?: WorkTeamOverviewRow[];
+  optionRows?: WorkTeamOverviewOptionRow[];
+  memberSearchRows?: WorkTeamOverviewMemberSearchRow[];
   entries?: WorkCalendarEntryRow[];
 }) {
   const authUser = options && "authUser" in options ? options.authUser : { id: "u-valid-1" };
   const authError = options?.authError ?? null;
-  const profile = options && "profile" in options ? options.profile : {
-    id: "u-valid-1",
-    full_name: "Budi Pratama",
-    job_title: "Senior Developer",
-  };
+  const profile =
+    options && "profile" in options
+      ? options.profile
+      : {
+          id: "u-valid-1",
+          full_name: "Budi Pratama",
+          job_title: "Senior Developer",
+        };
   const profileError = options?.profileError ?? null;
-  const teamMembers = options?.teamMembers ?? [
-    {
-      id: "u-sub-1",
-      full_name: "Alice Subordinate",
-      job_title: "Junior Dev",
-    },
-  ];
-  const teamError = options?.teamError ?? null;
+  const isTeamAvailable = options?.isTeamAvailable ?? true;
+  const probeError = options?.probeError ?? null;
+  const overviewRows = options?.overviewRows ?? [];
+  const optionRows = options?.optionRows ?? [];
+  const memberSearchRows = options?.memberSearchRows ?? [];
   const entries = options?.entries ?? [];
 
   vi.mocked(supabase.auth.getUser).mockResolvedValue({
@@ -105,14 +171,49 @@ function setupDefaultMocks(options?: {
     };
   });
 
-  const teamRpc = createMockRpcBuilder<WorkCalendarTeamMemberRow[] | null>({
-    data: teamMembers,
-    error: teamError,
-  });
+  const calls: RpcCall[] = [];
 
-  vi.mocked(supabase.rpc).mockReturnValue(teamRpc);
+  function createRpcQuery<TResult>(result: { data: TResult; error: { message: string } | null }) {
+    const query = {
+      range: vi.fn().mockImplementation(() => query),
+      abortSignal: vi.fn().mockImplementation(() => query),
+      then: <
+        TResult1 = { data: TResult; error: { message: string } | null },
+        TResult2 = never,
+      >(
+        onfulfilled?:
+          | ((value: {
+              data: TResult;
+              error: { message: string } | null;
+            }) => TResult1 | PromiseLike<TResult1>)
+          | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ): Promise<TResult1 | TResult2> => Promise.resolve(result).then(onfulfilled, onrejected),
+    };
+    return query;
+  }
 
-  return { profileQuery, entriesQuery, teamRpc };
+  vi.mocked(supabase.rpc).mockImplementation(((
+    fn: string,
+    args?: Record<string, unknown>,
+  ) => {
+    calls.push({ fn, args });
+    if (fn === "has_work_calendar_team_members") {
+      return createRpcQuery({ data: isTeamAvailable, error: probeError });
+    }
+    if (fn === "list_work_calendar_team_overview") {
+      return createRpcQuery({ data: overviewRows, error: null });
+    }
+    if (fn === "list_work_calendar_team_overview_options") {
+      return createRpcQuery({ data: optionRows, error: null });
+    }
+    if (fn === "search_work_calendar_team_members") {
+      return createRpcQuery({ data: memberSearchRows, error: null });
+    }
+    return createRpcQuery({ data: [], error: null });
+  }) as never);
+
+  return { profileQuery, entriesQuery, calls };
 }
 
 describe("WorkCalendarPage (CAL-03 F3)", () => {
@@ -121,11 +222,9 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
   });
 
   it("1. menampilkan status loading saat inisialisasi sesi dan profil", async () => {
-    vi.mocked(supabase.auth.getUser).mockImplementation(
-      () => new Promise(() => {}),
-    );
+    vi.mocked(supabase.auth.getUser).mockImplementation(() => new Promise(() => {}));
 
-    render(<WorkCalendarPage />);
+    renderPage();
 
     expect(screen.getByRole("status", { name: "Memuat Kalender Kerja" })).toBeInTheDocument();
     expect(screen.getByText("Menyiapkan Kalender Kerja...")).toBeInTheDocument();
@@ -138,7 +237,7 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
       profileError: null,
     });
 
-    render(<WorkCalendarPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText("Profil Pengguna Tidak Ditemukan")).toBeInTheDocument();
@@ -158,7 +257,7 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
       authError: { message: "Invalid JWT token" },
     });
 
-    render(<WorkCalendarPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText("Gagal Memuat Kalender Kerja")).toBeInTheDocument();
@@ -175,7 +274,7 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
       profileError: { message: "connection timeout" },
     });
 
-    render(<WorkCalendarPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText("Gagal Memuat Kalender Kerja")).toBeInTheDocument();
@@ -186,37 +285,76 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
     expect(screen.getByRole("button", { name: /Coba Lagi/i })).toBeInTheDocument();
   });
 
-  it("5. RPC team members error -> menampilkan error state", async () => {
-    setupDefaultMocks({
-      teamMembers: null,
-      teamError: { message: "function does not exist" },
+  it("5. probe tim gagal -> kalender tetap tampil dan tab Tim disembunyikan", async () => {
+    const { calls } = setupDefaultMocks({
+      probeError: { message: "function does not exist" },
     });
 
-    render(<WorkCalendarPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Gagal Memuat Kalender Kerja")).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText("Profil Pengguna Tidak Ditemukan")).not.toBeInTheDocument();
-    expect(screen.getByText("Gagal memuat daftar anggota tim.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Coba Lagi/i })).toBeInTheDocument();
-  });
-
-  it("6. merender WorkCalendarWorkspace saat profil dan tim valid (ready state)", async () => {
-    setupDefaultMocks();
-
-    render(<WorkCalendarPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByRole("group", { name: "Pilih rentang tampilan" })).toBeInTheDocument();
     });
 
-    expect(screen.getByPlaceholderText("Apa yang akan dikerjakan?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tim" })).toBeInTheDocument();
+    // Kalender pribadi tidak diblokir oleh kegagalan probe.
+    expect(screen.queryByText("Gagal Memuat Kalender Kerja")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tim" })).not.toBeInTheDocument();
+
+    // Bootstrap tidak pernah memuat daftar anggota.
+    expect(calls.some((call) => call.fn === "list_work_calendar_team_members")).toBe(false);
   });
 
-  it("7. retry dari error state dapat mencapai ready state", async () => {
+  it("6. bootstrap tidak memuat seluruh anggota maupun team entries", async () => {
+    const { calls } = setupDefaultMocks({ isTeamAvailable: true });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Tim" })).toBeInTheDocument();
+    });
+
+    expect(calls.some((call) => call.fn === "has_work_calendar_team_members")).toBe(true);
+    expect(calls.some((call) => call.fn === "list_work_calendar_team_members")).toBe(false);
+    expect(calls.some((call) => call.fn === "list_work_calendar_team_overview")).toBe(false);
+  });
+
+  it("7. tab Tim pada route nyata memanggil RPC overview, bukan listTeamEntries lama", async () => {
+    const { calls } = setupDefaultMocks({
+      isTeamAvailable: true,
+      overviewRows: [],
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tim" }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.fn === "list_work_calendar_team_overview")).toBe(true);
+    });
+
+    const overviewCall = calls.find((call) => call.fn === "list_work_calendar_team_overview");
+    expect(overviewCall?.args).toMatchObject({ p_work_date: expect.any(String) });
+    // RPC anggota lama tidak pernah dipakai sebagai sumber daftar tim.
+    expect(calls.some((call) => call.fn === "list_work_calendar_team_members")).toBe(false);
+  });
+
+  it("8. deep link view=team&date memulihkan tab dan tanggal", async () => {
+    const { calls } = setupDefaultMocks({
+      isTeamAvailable: true,
+    });
+
+    renderPage("/calendar?view=team&date=2026-09-15");
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.fn === "list_work_calendar_team_overview")).toBe(true);
+    });
+
+    const overviewCall = calls.find((call) => call.fn === "list_work_calendar_team_overview");
+    expect(overviewCall?.args).toMatchObject({ p_work_date: "2026-09-15" });
+    expect(await screen.findByTestId("work-team-overview")).toBeInTheDocument();
+  });
+
+  it("9. retry dari error state dapat mencapai ready state", async () => {
     let attempt = 0;
     vi.mocked(supabase.auth.getUser).mockImplementation(async () => {
       attempt++;
@@ -251,13 +389,18 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
       };
     });
 
-    const teamRpc = createMockRpcBuilder<WorkCalendarTeamMemberRow[] | null>({
-      data: [],
-      error: null,
-    });
-    vi.mocked(supabase.rpc).mockReturnValue(teamRpc);
+    vi.mocked(supabase.rpc).mockImplementation(((() => {
+      const query = {
+        range: vi.fn().mockImplementation(() => query),
+        abortSignal: vi.fn().mockImplementation(() => query),
+        then: (
+          onfulfilled?: ((value: { data: unknown; error: null }) => unknown) | null,
+        ) => Promise.resolve({ data: false, error: null }).then(onfulfilled),
+      };
+      return query;
+    }) as never) as never);
 
-    render(<WorkCalendarPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText("Gagal Memuat Kalender Kerja")).toBeInTheDocument();
@@ -271,7 +414,7 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
     });
   });
 
-  it("8. request yang aborted saat unmount tidak mengubah state atau memicu error", async () => {
+  it("10. request yang aborted saat unmount tidak mengubah state atau memicu error", async () => {
     let resolveAuthPromise!: (val: { data: { user: { id: string } }; error: null }) => void;
     vi.mocked(supabase.auth.getUser).mockImplementation(
       () =>
@@ -280,7 +423,7 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
         }),
     );
 
-    const { unmount } = render(<WorkCalendarPage />);
+    const { unmount } = renderPage();
     expect(screen.getByRole("status", { name: "Memuat Kalender Kerja" })).toBeInTheDocument();
 
     unmount();
@@ -290,5 +433,144 @@ describe("WorkCalendarPage (CAL-03 F3)", () => {
 
     // Tidak boleh crash atau throw unhandled error
     expect(screen.queryByText("Gagal Memuat Kalender Kerja")).not.toBeInTheDocument();
+  });
+
+  it("11. memilih kantor menulis parameter ke URL dan Back memulihkannya", async () => {
+    const optionRows: WorkTeamOverviewOptionRow[] = [
+      {
+        option_kind: "office",
+        option_id: "office-a",
+        option_label: "Kantor Pusat",
+        option_sublabel: "",
+        office_id: "office-a",
+        department_id: null,
+        member_count: 31,
+      },
+      {
+        option_kind: "office",
+        option_id: "office-b",
+        option_label: "Kantor Bandung",
+        option_sublabel: "",
+        office_id: "office-b",
+        department_id: null,
+        member_count: 12,
+      },
+    ];
+
+    const { calls } = setupDefaultMocks({
+      isTeamAvailable: true,
+      optionRows,
+    });
+
+    renderPage("/calendar?view=team&date=2026-09-15");
+    await screen.findByTestId("work-team-overview");
+    await waitFor(() =>
+      expect(calls.some((call) => call.fn === "list_work_calendar_team_overview_options")).toBe(
+        true,
+      ),
+    );
+
+    const officeTrigger = screen.getByLabelText("Filter kantor");
+    officeTrigger.focus();
+    fireEvent.keyDown(officeTrigger, { key: "Enter" });
+    const listbox = await screen.findByRole("listbox");
+    const option = within(listbox).getByRole("option", { name: /Kantor Bandung/i });
+    option.focus();
+    fireEvent.keyDown(option, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(routeProbe.search).toContain("office=office-b");
+    });
+    // Parameter lain milik route tidak boleh hilang.
+    expect(routeProbe.search).toContain("view=team");
+    expect(routeProbe.search).toContain("date=2026-09-15");
+
+    await waitFor(() => {
+      const last = [...calls]
+        .reverse()
+        .find((call) => call.fn === "list_work_calendar_team_overview");
+      expect(last?.args).toMatchObject({
+        p_office_id: "office-b",
+        p_work_date: "2026-09-15",
+      });
+    });
+
+    // Back mengembalikan filter ke keadaan tanpa kantor.
+    routeProbe.back();
+
+    await waitFor(() => {
+      const last = [...calls]
+        .reverse()
+        .find((call) => call.fn === "list_work_calendar_team_overview");
+      expect(last?.args).toMatchObject({ p_office_id: null });
+    });
+    expect(routeProbe.search).not.toContain("office=office-b");
+  });
+
+  it("12. tanggal dari URL menjadi tanggal tunggal untuk query, agregat, dan heading", async () => {
+    const { calls } = setupDefaultMocks({
+      isTeamAvailable: true,
+      overviewRows: [],
+    });
+
+    renderPage("/calendar?view=team&date=2026-09-08");
+    await screen.findByTestId("work-team-overview");
+
+    await waitFor(() => {
+      const overviewCall = calls.find((call) => call.fn === "list_work_calendar_team_overview");
+      expect(overviewCall?.args).toMatchObject({ p_work_date: "2026-09-08" });
+    });
+
+    // URL tetap mempertahankan tanggal yang sama (bukan direset ke hari ini).
+    expect(routeProbe.search).toContain("date=2026-09-08");
+    expect(routeProbe.search).toContain("view=team");
+  });
+
+  it("13. pengguna tanpa bawahan tidak pernah melihat tab Tim", async () => {
+    const { calls } = setupDefaultMocks({ isTeamAvailable: false });
+
+    renderPage("/calendar?view=team&date=2026-09-15");
+
+    await waitFor(() => {
+      expect(screen.getByRole("group", { name: "Pilih rentang tampilan" })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: "Tim" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("work-team-overview")).not.toBeInTheDocument();
+    // Deep link `view=team` tidak memaksa mode Tim atau query overview.
+    expect(calls.some((call) => call.fn === "list_work_calendar_team_overview")).toBe(false);
+  });
+
+  it("14. filter anggota terlarang dari URL dibuang tanpa permintaan tak terotorisasi", async () => {
+    const { calls } = setupDefaultMocks({
+      isTeamAvailable: true,
+      memberSearchRows: [],
+    });
+
+    renderPage("/calendar?view=team&date=2026-09-15&member=00000000-0000-4000-8000-000000000999");
+    await screen.findByTestId("work-team-overview");
+
+    // Anggota di luar hierarki diresolusi lewat RPC tunggal dan dibuang.
+    await waitFor(() => {
+      expect(calls.some((call) => call.fn === "get_work_calendar_team_member")).toBe(true);
+    });
+    await waitFor(() => {
+      const last = [...calls]
+        .reverse()
+        .find((call) => call.fn === "list_work_calendar_team_overview");
+      expect(last?.args).toMatchObject({ p_member_id: null });
+    });
+    await waitFor(() => {
+      expect(routeProbe.search).not.toContain("member=");
+    });
+  });
+
+  it("15. bootstrap tidak pernah memuat pencarian anggota secara eager", async () => {
+    const { calls } = setupDefaultMocks({ isTeamAvailable: true });
+
+    renderPage("/calendar?view=team&date=2026-09-15");
+    await screen.findByTestId("work-team-overview");
+
+    expect(calls.some((call) => call.fn === "search_work_calendar_team_members")).toBe(false);
   });
 });

@@ -29,6 +29,8 @@ import {
   buildWorkEntryOwnerGroups,
   filterWorkEntriesByOwner,
   isWorkCalendarTeamViewAvailable,
+  resolveWorkEntryOwnerFilter,
+  type WorkEntryOwnerFilterState,
 } from "../lib/work-progress";
 
 export interface UseWorkCalendarViewInput {
@@ -38,6 +40,13 @@ export interface UseWorkCalendarViewInput {
   initialView?: WorkCalendarViewMode;
   initialAnchorDate?: WorkDate;
   now?: () => Date;
+  /**
+   * Mode Tim server-side: entry tim tidak diambil massal lewat
+   * `listTeamEntries`. Daftar anggota dan pekerjaannya dimuat terpisah.
+   */
+  loadTeamEntries?: boolean;
+  /** Sumber kebenaran ketersediaan tab Tim di luar `teamMembers`. */
+  isTeamViewAvailableOverride?: boolean;
 }
 
 export interface UseWorkCalendarViewResult {
@@ -65,21 +74,46 @@ export interface UseWorkCalendarViewResult {
 
 export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCalendarViewResult {
   const { repository, currentUserId, teamMembers, initialView, initialAnchorDate, now } = input;
+  const loadTeamEntries = input.loadTeamEntries ?? true;
 
   const readNow = useCallback(() => (now ? now() : new Date()), [now]);
 
   const [today, setToday] = useState<WorkDate>(() => todayWorkDate(readNow()));
-  const [view, setViewState] = useState<WorkCalendarViewMode>(initialView ?? "day");
+  const [view, setViewState] = useState<WorkCalendarViewMode>(() => {
+    const requested = initialView ?? "day";
+    // Deep link ke tab Tim tidak pernah mengaktifkan tab yang tidak tersedia.
+    if (requested === "team") {
+      const available =
+        input.isTeamViewAvailableOverride ?? isWorkCalendarTeamViewAvailable(teamMembers);
+      return available ? "team" : "day";
+    }
+    return requested;
+  });
   const [anchorDate, setAnchorDateState] = useState<WorkDate>(
     () => initialAnchorDate ?? todayWorkDate(readNow()),
   );
-  const [ownerFilterId, setOwnerFilterId] = useState<WorkEntryOwnerId | "all">("all");
+  const [ownerFilterIdState, setOwnerFilterIdState] = useState<WorkEntryOwnerId | "all">("all");
   const [entries, setEntries] = useState<readonly WorkEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
-  const isTeamViewAvailable = isWorkCalendarTeamViewAvailable(teamMembers);
+  const isTeamViewAvailable =
+    input.isTeamViewAvailableOverride ?? isWorkCalendarTeamViewAvailable(teamMembers);
+
+  /**
+   * Keamanan filter: bila anggota yang dipilih hilang dari daftar (misalnya
+   * struktur tim berubah), filter dibersihkan ke "Semua anggota". Nilai yang
+   * dikembalikan juga sudah aman pada render pertama, jadi tidak pernah ada
+   * frame dengan filter menggantung.
+   */
+  const ownerFilterState = resolveWorkEntryOwnerFilter(ownerFilterIdState, teamMembers ?? []);
+  const isOwnerFilterAvailable = ownerFilterIdState === ownerFilterState.effectiveOwnerFilterId;
+  const ownerFilterId: WorkEntryOwnerId | "all" = ownerFilterState.effectiveOwnerFilterId;
+
+  useEffect(() => {
+    if (!isOwnerFilterAvailable) setOwnerFilterIdState("all");
+  }, [isOwnerFilterAvailable]);
 
   const dateRange = useMemo(
     () => getWorkCalendarDateRange(view === "team" ? "day" : view, anchorDate),
@@ -101,18 +135,20 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
     const load = async (): Promise<void> => {
       try {
         const result =
-          view === "team"
-            ? await repository.listTeamEntries({
-                fromDate,
-                toDate,
-                signal: controller.signal,
-              })
-            : await repository.listEntries({
-                ownerId: currentUserId,
-                fromDate,
-                toDate,
-                signal: controller.signal,
-              });
+          view === "team" && !loadTeamEntries
+            ? []
+            : view === "team"
+              ? await repository.listTeamEntries({
+                  fromDate,
+                  toDate,
+                  signal: controller.signal,
+                })
+              : await repository.listEntries({
+                  ownerId: currentUserId,
+                  fromDate,
+                  toDate,
+                  signal: controller.signal,
+                });
         if (!active || requestRef.current !== requestId) return;
         setEntries(result);
       } catch (thrown) {
@@ -131,7 +167,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
       active = false;
       controller.abort();
     };
-  }, [repository, view, fromDate, toDate, currentUserId, reloadToken]);
+  }, [repository, view, fromDate, toDate, currentUserId, reloadToken, loadTeamEntries]);
 
   // Jam dinding tidak dipakai untuk perhitungan; hanya untuk menyegarkan `today`.
   useEffect(() => {
@@ -173,6 +209,9 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const setView = useCallback(
     (next: WorkCalendarViewMode) => {
       if (next === "team" && !isTeamViewAvailable) return;
+      // Masuk ke Tim menyetel tanggal acuan ke hari ini supaya heading, query
+      // overview, agregat, detail lazy, dan `date` di URL menunjuk tanggal yang
+      // sama. Tanggal tunggal tetap `anchorDate` (bukan tanggal terpisah).
       if (next === "team") {
         setAnchorDateState(todayWorkDate(readNow()));
       }
@@ -209,6 +248,8 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const visibleEntries = useMemo(() => {
     if (view !== "team" || ownerFilterId === "all") return entries;
     return filterWorkEntriesByOwner(entries, ownerFilterId);
+    // `ownerFilterId` sudah aman (fallback "all") sehingga tidak pernah
+    // menyaring dengan id anggota yang sudah tidak tersedia.
   }, [entries, view, ownerFilterId]);
 
   return {
@@ -221,7 +262,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
     goToToday,
     today,
     ownerFilterId,
-    setOwnerFilterId,
+    setOwnerFilterId: setOwnerFilterIdState,
     entries,
     ownEntries,
     visibleEntries,
@@ -238,6 +279,8 @@ export interface WorkCalendarDerivedView {
   daySummaries: ReturnType<typeof buildWorkCalendarDaySummaries>;
   monthCells: ReturnType<typeof buildWorkCalendarDayCells>;
   ownerGroups: ReturnType<typeof buildWorkEntryOwnerGroups>;
+  /** Status filter pemilik efektif; sumber kebenaran mode Tim. */
+  ownerFilter: WorkEntryOwnerFilterState;
   weekDates: readonly WorkDate[];
   monthDates: readonly WorkDate[];
 }
@@ -249,16 +292,35 @@ export function useWorkCalendarDerivedView(input: {
   today: WorkDate;
   entries: readonly WorkEntry[];
   visibleEntries: readonly WorkEntry[];
+  ownerFilterId: WorkEntryOwnerId | "all";
   currentUserId: WorkEntryOwnerId;
   teamMembers?: readonly WorkEntryOwner[];
 }): WorkCalendarDerivedView {
-  const { view, anchorDate, today, entries, visibleEntries, currentUserId, teamMembers } = input;
+  const {
+    view,
+    anchorDate,
+    today,
+    entries,
+    visibleEntries,
+    ownerFilterId,
+    currentUserId,
+    teamMembers,
+  } = input;
+
+  // Filter selalu dievaluasi terhadap anggota yang benar-benar tersedia. Bila
+  // anggota terpilih hilang, kelompok jatuh kembali ke "Semua anggota" dan
+  // state filter dibersihkan lewat efek penyelaras di hook tampilan.
+  // `ownerFilterId` sudah merupakan nilai efektif dari `useWorkCalendarView`.
+  const effectiveOwnerFilterId = ownerFilterId;
 
   return useMemo(() => {
     const weekDates = workWeekDates(anchorDate);
     const monthDates = workMonthDates(anchorDate);
     const scopeDates = view === "month" ? monthDates : view === "week" ? weekDates : [anchorDate];
     const scopeEntries = view === "team" ? visibleEntries : entries;
+    // Status filter dihitung di dalam memo supaya identitas objeknya stabil
+    // dan turunan tidak dihitung ulang tiap render.
+    const ownerFilter = resolveWorkEntryOwnerFilter(effectiveOwnerFilterId, teamMembers ?? []);
 
     return {
       daySummaries: buildWorkCalendarDaySummaries(scopeEntries, scopeDates, today),
@@ -268,9 +330,26 @@ export function useWorkCalendarDerivedView(input: {
         today,
         Number(anchorDate.slice(5, 7)),
       ),
-      ownerGroups: buildWorkEntryOwnerGroups(entries, teamMembers ?? [], currentUserId),
+      // Kelompok dibangun dari `visibleEntries`, bukan seluruh `entries`,
+      // supaya metrik dan daftar hanya berasal dari anggota yang tersaring.
+      ownerGroups: buildWorkEntryOwnerGroups(
+        visibleEntries,
+        teamMembers ?? [],
+        currentUserId,
+        effectiveOwnerFilterId,
+      ),
+      ownerFilter,
       weekDates,
       monthDates,
     };
-  }, [view, anchorDate, today, entries, visibleEntries, currentUserId, teamMembers]);
+  }, [
+    view,
+    anchorDate,
+    today,
+    entries,
+    visibleEntries,
+    effectiveOwnerFilterId,
+    currentUserId,
+    teamMembers,
+  ]);
 }
