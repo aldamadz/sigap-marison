@@ -82,6 +82,28 @@ describe("resolveStagingProjectReadiness", () => {
     expect(result.branchSource).toBe("staging_mapping");
   });
 
+  it("uses the mapped project's branch for a requester from another office", () => {
+    const result = resolveStagingProjectReadiness({
+      directProject: null,
+      mappedProject: {
+        projectId: 23,
+        synced: true,
+        reviewBlocked: false,
+        officeBranchId: 14,
+        officeSynced: true,
+      },
+      officeMappingBranchId: 1,
+      effectiveBranchExistsSynced: branchExists,
+    });
+
+    expect(result).toEqual({
+      ready: true,
+      projectId: 23,
+      branchId: 14,
+      branchSource: "staging_mapping",
+    });
+  });
+
   it("fails closed when the office mapping branch does not match the project office branch", () => {
     // Bandung → Pusat (1) tapi proyek langsung memakai branch 14 → "tidak cocok"
     const result = resolveStagingProjectReadiness({

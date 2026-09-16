@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 const migration = readFileSync("supabase/migrations/20260731100000_marison_outbound_payload_mappings.sql", "utf8");
 const auditActionFixMigration = readFileSync("supabase/migrations/20260731145000_fix_marison_payload_mapping_audit_action.sql", "utf8");
 const externalIdentityReadinessMigration = readFileSync("supabase/migrations/20260731170000_mrn16_external_identity_readiness.sql", "utf8");
+const crossOfficeProjectMappingMigration = readFileSync("supabase/migrations/20260916160000_staging_cross_office_project_mapping.sql", "utf8");
 const sql = `
 create extension if not exists pgcrypto;
 do $$ begin create role anon; exception when duplicate_object then null; end $$;
@@ -72,6 +73,56 @@ do $$ declare c int; begin select count(*) into c from public.activity_logs wher
 delete from public.profiles where id = '00000000-0000-0000-0000-000000000003';
 do $$ declare c int; begin select count(*) into c from public.marison_outbound_record_mappings where target_record_id = '00000000-0000-0000-0000-000000000003'; if c <> 0 then raise exception 'target cleanup failed'; end if; end $$;
 select 'MRN-16 SQL integration passed' as result;
+alter function public.configure_marison_payload_mapping(uuid,text,text,uuid,uuid,text,timestamptz)
+  rename to configure_marison_payload_mapping_strict;
+${crossOfficeProjectMappingMigration}
+insert into public.master_projects(id, name, code, office_id) values
+ ('20000000-0000-0000-0000-000000000004', 'Bandung Local Project', 'BDG-P', '10000000-0000-0000-0000-000000000003');
+do $$ declare result jsonb; begin
+ select public.configure_marison_payload_mapping_strict(
+  '00000000-0000-0000-0000-000000000001','staging','project',
+  '20000000-0000-0000-0000-000000000004',
+  '20000000-0000-0000-0000-000000000001','cross-office staging test') into result;
+ if result->>'target_record_id' <> '20000000-0000-0000-0000-000000000001' then
+  raise exception 'cross-office target was not saved';
+ end if;
+end $$;
+do $$ declare result record; begin
+ select * into result from public.get_marison_payload_mappings(
+  '00000000-0000-0000-0000-000000000001','staging','project')
+ where record_id='20000000-0000-0000-0000-000000000004';
+ if result.mapping_valid is not true or result.mapped_external_id <> 25 or result.mapped_branch_id <> 12 then
+  raise exception 'cross-office target project or branch is invalid';
+ end if;
+ if public.marison_payload_effective_branch_id('10000000-0000-0000-0000-000000000003') <> 13 then
+  raise exception 'local office branch mapping was altered';
+ end if;
+end $$;
+do $$ begin
+ perform public.configure_marison_payload_mapping_strict(
+  '00000000-0000-0000-0000-000000000002','staging','project',
+  '20000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000001','non-admin');
+ raise exception 'non-admin mapping guard failed';
+ exception when others then if sqlstate <> '42501' then raise; end if;
+end $$;
+do $$ begin
+ perform public.configure_marison_payload_mapping_strict(
+  '00000000-0000-0000-0000-000000000001','production','project',
+  '20000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000001','production');
+ raise exception 'production mapping guard failed';
+ exception when others then if sqlstate <> '22023' then raise; end if;
+end $$;
+do $$ begin
+ perform public.configure_marison_payload_mapping_strict(
+  '00000000-0000-0000-0000-000000000001','staging','project',
+  '20000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000001','self mapping');
+ raise exception 'self mapping guard failed';
+ exception when others then if sqlstate <> '22023' then raise; end if;
+end $$;
+select 'MRN-13 cross-office project mapping passed' as result;
 `;
 
 const run = (args, input = "") => {

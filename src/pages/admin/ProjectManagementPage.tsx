@@ -23,7 +23,7 @@ import {
   MasterReviewStatus,
   masterReviewRowClass,
 } from "@/components/admin/MasterReviewStatus";
-import { normalizeManualProjectMapping } from "@/lib/master-project-mapping";
+import { normalizeManualProjectMapping, planManualProjectMapping } from "@/lib/master-project-mapping";
 import { MarisonPayloadMappingCell } from "@/components/admin/MarisonPayloadMappingCell";
 import { marisonPayloadMappingService, type MarisonPayloadMapping } from "@/services/marison-payload-mapping.service";
 import { matchesMarisonPayloadMappingFilter } from "@/lib/marison-payload-mapping";
@@ -39,7 +39,6 @@ export default function MasterProjectManagementPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [overrides, setOverrides] = useState<MarisonPayloadMapping[]>([]);
-  const [officeMappings, setOfficeMappings] = useState<MarisonPayloadMapping[]>([]);
   const [overrideFilter, setOverrideFilter] = useState("all");
 
   const [formData, setFormData] = useState({
@@ -55,7 +54,7 @@ export default function MasterProjectManagementPage() {
     try {
       setLoading(true);
       const [offRes, entRes] = await Promise.all([
-        supabase.from("master_offices").select("id, name, kedudukan").order("name"),
+        supabase.from("master_offices").select("id, name, kedudukan, marison_branch_id, marison_synced_at, marison_review_required").order("name"),
         supabase.from("master_entities").select("id, name").order("name")
       ]);
 
@@ -73,12 +72,7 @@ export default function MasterProjectManagementPage() {
 
       if (error) throw error;
       setProjects(data || []);
-      const [projectMappings, officeMappingRows] = await Promise.all([
-        marisonPayloadMappingService.list('project'),
-        marisonPayloadMappingService.list('office'),
-      ]);
-      setOverrides(projectMappings);
-      setOfficeMappings(officeMappingRows);
+      setOverrides(await marisonPayloadMappingService.list('project'));
     } catch (error: any) {
       toast({ variant: "destructive", title: "Gagal Memuat", description: error.message });
     } finally {
@@ -125,16 +119,26 @@ export default function MasterProjectManagementPage() {
         projectId: formData.marison_project_id,
         projectCode: formData.marison_project_code,
       });
+      let existingMarisonProject = null;
       if (externalMapping.marison_project_id != null) {
         let duplicateQuery = supabase
           .from("master_projects")
-          .select("id,name")
+          .select("id,name,code,marison_project_code,marison_synced_at,marison_review_required,master_offices(marison_branch_id,marison_synced_at,marison_review_required)")
           .eq("marison_project_id", externalMapping.marison_project_id);
         if (selectedItem?.id) duplicateQuery = duplicateQuery.neq("id", selectedItem.id);
         const { data: duplicate, error: duplicateError } = await duplicateQuery.maybeSingle();
         if (duplicateError) throw duplicateError;
-        if (duplicate) {
-          throw new Error(`ID Proyek Marison sudah dipakai oleh ${duplicate.name}.`);
+        existingMarisonProject = duplicate;
+      }
+      const mappingPlan = planManualProjectMapping(externalMapping, existingMarisonProject);
+      if (mappingPlan.targetRecordId) {
+        const candidates = await marisonPayloadMappingService.catalog(
+          "project",
+          existingMarisonProject.code || existingMarisonProject.name,
+          null,
+        );
+        if (!candidates.some((candidate) => candidate.id === mappingPlan.targetRecordId && candidate.valid)) {
+          throw new Error("ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada mapping payload staging.");
         }
       }
       const payload = { 
@@ -142,17 +146,33 @@ export default function MasterProjectManagementPage() {
         code: formData.code.trim().toUpperCase(),
         office_id: formData.office_id,
         entity_id: formData.entity_id === "none" || !formData.entity_id ? null : formData.entity_id,
-        ...externalMapping,
+        ...mappingPlan.projectMapping,
       };
 
-      const { error } = selectedItem 
-        ? await supabase.from("master_projects").update(payload).eq("id", selectedItem.id)
-        : await supabase.from("master_projects").insert([payload]);
+      const { data: savedProject, error } = selectedItem
+        ? await supabase.from("master_projects").update(payload).eq("id", selectedItem.id).select("id").single()
+        : await supabase.from("master_projects").insert([payload]).select("id").single();
 
       if (error) throw error;
-      toast({ title: "Berhasil", description: "Data proyek telah disimpan" });
+      if (mappingPlan.targetRecordId) {
+        setSelectedItem({ ...payload, id: savedProject.id });
+        const existingMapping = overrides.find((item) => item.entity_type === "project" && item.record_id === savedProject.id);
+        try {
+          await marisonPayloadMappingService.save({
+            entityType: "project",
+            recordId: savedProject.id,
+            targetRecordId: mappingPlan.targetRecordId,
+            expectedUpdatedAt: existingMapping?.updated_at,
+            reason: `Memakai bersama ID Proyek Marison ${externalMapping.marison_project_id} untuk ${payload.name} dari ${existingMarisonProject.name}.`,
+          });
+        } catch (mappingError) {
+          void loadData();
+          throw new Error(`Proyek tersimpan, tetapi pemetaan ID Marison gagal: ${mappingError instanceof Error ? mappingError.message : "coba lagi"}. Coba simpan kembali atau perbaiki pada kolom Mapping Payload Staging.`);
+        }
+      }
+      toast({ title: "Berhasil", description: mappingPlan.targetRecordId ? "Proyek tersimpan dan memakai ID Marison yang sama melalui mapping staging." : "Data proyek telah disimpan" });
       setIsModalOpen(false);
-      loadData();
+      void loadData();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Gagal Simpan", description: error.message });
     } finally { setLoading(false); }
@@ -183,18 +203,6 @@ export default function MasterProjectManagementPage() {
       ? item.marison_review_reasons.filter(Boolean)
       : [];
     return reasons.length > 0 ? reasons.join(" · ") : "Lengkap";
-  };
-
-  const getEffectiveOfficeBranchId = (project: any) => {
-    const officeMapping = officeMappings.find((entry) =>
-      entry.entity_type === "office" && entry.record_id === project.office_id);
-    if (officeMapping?.mapping_valid) return officeMapping.mapped_branch_id;
-    if (
-      project.master_offices?.marison_branch_id
-      && project.master_offices?.marison_synced_at
-
-    ) return project.master_offices.marison_branch_id;
-    return null;
   };
 
   const filteredProjects = projects
@@ -319,11 +327,11 @@ export default function MasterProjectManagementPage() {
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Manual SIGAP</span>
-                  )}
+                  ) : overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id && entry.mapping_valid) ? (
+                    <span className="text-xs text-foreground">ID {overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapped_external_id} via mapping staging</span>
+                  ) : <span className="text-xs text-muted-foreground">Manual SIGAP</span>}
                 </TableCell>
-                  <TableCell><MarisonPayloadMappingCell entityType="project" recordId={item.id} sigapLabel={`${item.name} / ${item.code || '-'}`} externalIdentity={item.marison_project_id > 0 && item.master_offices?.marison_branch_id > 0 ? `Project ${item.marison_project_id} / Branch ${item.master_offices.marison_branch_id}` : '-'} source={item.marison_project_id} sourceValid={Boolean(item.marison_project_id > 0 && item.marison_synced_at && item.master_offices?.marison_branch_id > 0 && item.master_offices?.marison_synced_at)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapping_valid)} effectiveBranchId={getEffectiveOfficeBranchId(item)} field="project" override={overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)), next] : current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)))} /></TableCell>
+                  <TableCell><MarisonPayloadMappingCell entityType="project" recordId={item.id} sigapLabel={`${item.name} / ${item.code || '-'}`} externalIdentity={item.marison_project_id > 0 && item.master_offices?.marison_branch_id > 0 ? `Project ${item.marison_project_id} / Branch ${item.master_offices.marison_branch_id}` : '-'} source={item.marison_project_id} sourceValid={Boolean(item.marison_project_id > 0 && item.marison_synced_at && item.master_offices?.marison_branch_id > 0 && item.master_offices?.marison_synced_at)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapping_valid)} field="project" override={overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)), next] : current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)))} /></TableCell>
                 <TableCell>
                   <span className="rounded border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
                     {item.master_entities?.name || "-"}
@@ -410,7 +418,7 @@ export default function MasterProjectManagementPage() {
               <div>
                 <p className="text-sm font-semibold">Mapping Marison</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Kosongkan jika proyek hanya digunakan di SIGAP. Isi berdasarkan data API staging agar proyek dapat dipakai untuk integrasi Non Unit.
+                  Kosongkan jika proyek hanya digunakan di SIGAP. ID yang sudah dipakai proyek lain dapat digunakan bersama lewat mapping payload staging; branch outbound mengikuti proyek Marison tujuan, bukan kantor lokal.
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
