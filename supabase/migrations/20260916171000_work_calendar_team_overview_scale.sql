@@ -1,6 +1,6 @@
 -- CAL-03 F4A Director Scale — route integration correction.
 --
--- Why this exists (follow-up to 20260916120000):
+-- Why this exists (follow-up to 20260916170000):
 --   1. The bootstrap of the Director Scale team tab eagerly loaded the whole
 --      subordinate roster through list_work_calendar_team_members. For a
 --      Direktur Utama with hundreds of descendants that is still too much for
@@ -300,7 +300,7 @@ grant execute on function public.get_work_calendar_team_member(uuid) to authenti
 -- ---------------------------------------------------------------------------
 -- list_work_calendar_team_overview (replaced)
 --
--- Same contract as 20260916120000, with one correction: the offset is clamped
+-- Same contract as 20260916170000, with one correction: the offset is clamped
 -- to the last available page of the filtered set. Before this, requesting a
 -- page beyond the range returned zero rows, which the client could not tell
 -- apart from "no members match" and therefore reported total_count = 0.
