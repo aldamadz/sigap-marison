@@ -23,7 +23,6 @@ type Props = {
   catalog?: MarisonMappingCatalog[];
   sourceValid: boolean;
   mappingValid: boolean;
-  effectiveBranchId?: number | null;
 };
 
 export function MarisonPayloadMappingCell({
@@ -38,7 +37,6 @@ export function MarisonPayloadMappingCell({
   catalog = [],
   sourceValid,
   mappingValid,
-  effectiveBranchId,
 }: Props) {
   const appDialog = useAppDialog();
   const [value, setValue] = useState(override?.target_record_id || '');
@@ -67,15 +65,10 @@ export function MarisonPayloadMappingCell({
     let active = true;
     const timer = window.setTimeout(() => {
       if (query.trim().length < 2) return;
-      if (field === 'project' && !effectiveBranchId) {
-        setRemoteCatalog([]);
-        setError('Kantor proyek belum memiliki branch efektif untuk memfilter katalog.');
-        return;
-      }
       setCatalogLoading(true);
       setError('');
       void marisonPayloadMappingService
-        .catalog(entityType, query, field === 'project' ? effectiveBranchId : null)
+        .catalog(entityType, query, null)
         .then((items) => { if (active) setRemoteCatalog(items); })
         .catch((catalogError) => {
           if (active) setError(catalogError instanceof Error ? catalogError.message : 'Katalog mapping gagal dimuat');
@@ -86,7 +79,7 @@ export function MarisonPayloadMappingCell({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [effectiveBranchId, entityType, field, query]);
+  }, [entityType, query]);
 
   useEffect(() => {
     setValue(override?.target_record_id || '');
@@ -207,6 +200,7 @@ export function MarisonPayloadMappingCell({
                 }}
               >
                 {item.name} {item.nik ? `- ${item.nik}` : item.external_id ? `- ID ${item.external_id}` : ''}
+                {field === 'project' && item.office_name ? ` / ${item.office_name}` : ''}
               </button>
             )) : (
               <p className="px-2 py-1 text-xs text-muted-foreground">Tidak ada kandidat valid.</p>
