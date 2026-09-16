@@ -88,6 +88,8 @@ interface WorkEntryRowControlsProps {
   compact: boolean;
   onRequestStatus: (status: WorkEntryStatus) => void;
   onStartEditTitle: () => void;
+  /** Mencegah Radix mengembalikan fokus ke trigger saat editor judul dibuka. */
+  onCloseAutoFocus: (event: Event) => void;
   onOpenDetail: () => void;
   onMoveToDate: (date: WorkDate) => void;
   onDelete: () => void;
@@ -106,6 +108,7 @@ function WorkEntryRowControls({
   compact,
   onRequestStatus,
   onStartEditTitle,
+  onCloseAutoFocus,
   onOpenDetail,
   onMoveToDate,
   onDelete,
@@ -197,7 +200,11 @@ function WorkEntryRowControls({
             <Ellipsis aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="work-calendar-scope w-56">
+        <DropdownMenuContent
+          align="end"
+          className="work-calendar-scope w-56"
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
             {readOnly ? "Entry bawahan" : "Tindakan"}
           </DropdownMenuLabel>
@@ -274,6 +281,8 @@ export function WorkEntryRow({
   const [followUpDraft, setFollowUpDraft] = useState("");
   const followUpRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  /** Menandai bahwa menu ditutup karena ingin memulai edit judul. */
+  const isStartingTitleEditRef = useRef(false);
 
   useEffect(() => {
     if (!isEditingTitle) setTitleDraft(entry.title);
@@ -314,7 +323,25 @@ export function WorkEntryRow({
       isSaving={isSaving}
       compact={isCompact}
       onRequestStatus={onRequestStatus}
-      onStartEditTitle={() => setIsEditingTitle(true)}
+      onStartEditTitle={() => {
+        // Editor judul baru dibuka setelah menu benar-benar tertutup supaya
+        // pemulihan fokus Radix tidak langsung memblur input judul.
+        isStartingTitleEditRef.current = true;
+        // Fallback bila `onCloseAutoFocus` tidak dipanggil (mis. klik pointer
+        // tanpa fokus item). Ref dikosongkan oleh `onCloseAutoFocus` bila
+        // handler itu memang berjalan.
+        window.requestAnimationFrame(() => {
+          if (!isStartingTitleEditRef.current) return;
+          isStartingTitleEditRef.current = false;
+          setIsEditingTitle(true);
+        });
+      }}
+      onCloseAutoFocus={(event) => {
+        if (!isStartingTitleEditRef.current) return;
+        isStartingTitleEditRef.current = false;
+        event.preventDefault();
+        setIsEditingTitle(true);
+      }}
       onOpenDetail={onOpenDetail}
       onMoveToDate={onMoveToDate}
       onDelete={onDelete}
@@ -361,24 +388,18 @@ export function WorkEntryRow({
               className="h-11 w-full rounded-sm border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           ) : (
+            // Kontrak interaksi CAL-03 F4A (koreksi review): klik judul
+            // membuka detail, bukan editor judul inline. Editor judul hanya
+            // dimulai dari menu "..." → "Ubah judul" atau dari detail.
             <button
               type="button"
-              disabled={readOnly}
-              onClick={() => {
-                if (readOnly) return;
-                setIsEditingTitle(true);
-              }}
-              aria-label={
-                readOnly
-                  ? `Pekerjaan ${entry.title}`
-                  : `Ubah judul pekerjaan ${entry.title}. Tekan Enter untuk mengubah.`
-              }
+              data-testid={`work-entry-title-${entry.id}`}
+              onClick={onOpenDetail}
+              aria-label={`Buka detail pekerjaan: ${entry.title}`}
               className={cn(
                 "flex w-full min-h-touch items-center rounded-sm text-left font-medium leading-snug text-foreground",
                 isCompact ? "text-xs" : "text-sm",
-                readOnly
-                  ? "cursor-default"
-                  : "hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 // Judul selesai tetap `foreground` penuh supaya terbaca di
                 // dark mode; status "Selesai" pada badge adalah indikator
                 // utamanya, jadi hanya diberi efek visual ringan.

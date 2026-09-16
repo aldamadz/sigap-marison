@@ -5,13 +5,14 @@
  * bawahan) tidak ada tombol ubah, sesuai aturan subordinate read-only.
  */
 
-import { useState } from "react";
-import { CalendarDays, Hourglass, MapPin, Pencil, StickyNote, UserRound, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CalendarDays, Check, Hourglass, MapPin, Pencil, StickyNote, UserRound, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { WorkEntry, WorkEntryPatch, WorkEntryOwner } from "../types/work-calendar";
 import { formatWorkDateFull, formatWorkTimeLabelFromIso } from "../lib/work-calendar-date";
 import { getWorkEntryStatusLabel, isWorkEntryOverdue } from "../lib/work-entry-status";
+import { normalizeWorkEntryTitle, WORK_ENTRY_TITLE_MAX_LENGTH } from "../lib/work-entry-validation";
 import { WorkEntryStatusGlyph } from "./WorkEntryStatusGlyph";
 import { WorkEntryEditor } from "./WorkEntryEditor";
 
@@ -35,9 +36,35 @@ export function WorkEntryDetail({
   onClose,
 }: WorkEntryDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+  /**
+   * Edit judul eksplisit dari panel detail. Klik judul pada baris kini membuka
+   * detail, jadi detail menyediakan aksi "Ubah judul" tersendiri untuk
+   * pekerjaan sendiri.
+   */
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(entry.title);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const overdue = isWorkEntryOverdue(entry, today);
   const startLabel = formatWorkTimeLabelFromIso(entry.startsAt);
   const endLabel = formatWorkTimeLabelFromIso(entry.endsAt);
+
+  useEffect(() => {
+    if (!isEditingTitle) setTitleDraft(entry.title);
+  }, [entry.title, isEditingTitle]);
+
+  useEffect(() => {
+    if (isEditingTitle) titleInputRef.current?.focus();
+  }, [isEditingTitle]);
+
+  const commitTitle = () => {
+    const normalized = normalizeWorkEntryTitle(titleDraft);
+    setIsEditingTitle(false);
+    if (normalized.length === 0 || normalized === entry.title) {
+      setTitleDraft(entry.title);
+      return;
+    }
+    onSave({ title: normalized });
+  };
 
   return (
     <section
@@ -53,6 +80,57 @@ export function WorkEntryDetail({
           >
             {entry.title}
           </h3>
+          {isEditingTitle && !readOnly && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <label htmlFor={`work-entry-detail-title-input-${entry.id}`} className="sr-only">
+                Judul pekerjaan
+              </label>
+              <input
+                id={`work-entry-detail-title-input-${entry.id}`}
+                ref={titleInputRef}
+                value={titleDraft}
+                maxLength={WORK_ENTRY_TITLE_MAX_LENGTH}
+                aria-label={`Ubah judul pekerjaan ${entry.title}`}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitTitle();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setTitleDraft(entry.title);
+                    setIsEditingTitle(false);
+                  }
+                }}
+                className="h-11 w-full min-w-0 rounded-sm border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring sm:w-64"
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-sm"
+                data-testid={`work-entry-detail-save-title-${entry.id}`}
+                onClick={commitTitle}
+                disabled={isSaving || titleDraft.trim().length === 0}
+              >
+                <Check aria-hidden="true" />
+                Simpan judul
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-sm"
+                onClick={() => {
+                  setTitleDraft(entry.title);
+                  setIsEditingTitle(false);
+                }}
+              >
+                <X aria-hidden="true" />
+                Batal
+              </Button>
+            </div>
+          )}
           <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <WorkEntryStatusGlyph status={entry.status} />
             {getWorkEntryStatusLabel(entry.status)}
@@ -64,18 +142,34 @@ export function WorkEntryDetail({
             )}
           </p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {!readOnly && !isEditing && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-sm"
-              onClick={() => setIsEditing(true)}
-            >
-              <Pencil aria-hidden="true" />
-              Ubah detail
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-sm"
+                data-testid={`work-entry-detail-edit-title-${entry.id}`}
+                onClick={() => {
+                  setTitleDraft(entry.title);
+                  setIsEditingTitle(true);
+                }}
+              >
+                <Pencil aria-hidden="true" />
+                Ubah judul
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-sm"
+                onClick={() => setIsEditing(true)}
+              >
+                <Pencil aria-hidden="true" />
+                Ubah detail
+              </Button>
+            </>
           )}
           <Button
             type="button"

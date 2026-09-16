@@ -173,6 +173,111 @@ export function buildWorkEntryStates(
 }
 
 /**
+ * Batas preview pekerjaan per hari pada tampilan Minggu.
+ *
+ * Desktop/tablet memuat empat preview, mobile tiga preview. Kontrak ini
+ * menggantikan scroll internal per kolom: kolom Minggu selalu punya tinggi
+ * terbatas dan sisa pekerjaan dibuka lewat tombol "+N pekerjaan lainnya".
+ */
+export const WORK_WEEK_PREVIEW_LIMIT_DESKTOP = 4;
+export const WORK_WEEK_PREVIEW_LIMIT_MOBILE = 3;
+
+export function getWorkWeekPreviewLimit(isMobile: boolean): number {
+  return isMobile ? WORK_WEEK_PREVIEW_LIMIT_MOBILE : WORK_WEEK_PREVIEW_LIMIT_DESKTOP;
+}
+
+/**
+ * Prioritas preview Minggu: terhambat/terlambat, berjalan, direncanakan,
+ * lalu selesai. `overdue` adalah derived state sehingga status tersimpan
+ * tetap menjadi penentu utama.
+ */
+export function getWorkWeekEntryPriority(
+  entry: WorkEntry,
+  today: WorkDate,
+): 0 | 1 | 2 | 3 {
+  if (entry.status === "blocked" || isWorkEntryOverdue(entry, today)) return 0;
+  if (entry.status === "in_progress") return 1;
+  if (entry.status === "planned") return 2;
+  return 3;
+}
+
+/**
+ * Urutkan preview Minggu menurut prioritas status, lalu urutan kanonik
+ * (`compareWorkEntries`) di dalam kategori yang sama.
+ *
+ * Implementasi: urutkan kanonik lebih dulu, lalu stable-sort menurut
+ * prioritas. Karena `Array.prototype.sort` stabil, urutan kanonik tetap
+ * terjaga di dalam satu kategori dan hasilnya deterministik.
+ */
+export function sortWorkWeekPreviewEntries(
+  entries: readonly WorkEntry[],
+  today: WorkDate,
+): WorkEntry[] {
+  return entries
+    .slice()
+    .sort(compareWorkEntries)
+    .sort(
+      (left, right) =>
+        getWorkWeekEntryPriority(left, today) - getWorkWeekEntryPriority(right, today),
+    );
+}
+
+/**
+ * Potong daftar entry satu hari menjadi preview + jumlah yang disembunyikan.
+ * `total` selalu dihitung dari seluruh entry supaya agregat progres tetap
+ * memakai total yang benar meski preview dibatasi.
+ */
+export function getWorkWeekDayPreview(
+  entries: readonly WorkEntry[],
+  today: WorkDate,
+  limit: number,
+): { preview: WorkEntry[]; hiddenCount: number; total: number } {
+  const safeLimit = Math.max(0, limit);
+  const sorted = sortWorkWeekPreviewEntries(entries, today);
+  return {
+    preview: sorted.slice(0, safeLimit),
+    hiddenCount: Math.max(0, sorted.length - safeLimit),
+    total: entries.length,
+  };
+}
+
+export interface WorkEntryOwnerFilterState {
+  /** Filter efektif setelah fallback; `"all"` berarti seluruh anggota. */
+  effectiveOwnerFilterId: WorkEntryOwnerId | "all";
+  /** `true` hanya bila filter menunjuk anggota yang benar-benar tersedia. */
+  isOwnerFiltered: boolean;
+  /** Anggota yang sedang difilter, atau `null` saat "Semua anggota". */
+  selectedOwner: WorkEntryOwner | null;
+}
+
+/**
+ * Sumber kebenaran status filter pemilik mode Tim.
+ *
+ * Kontrak CAL-03 F4A (koreksi review):
+ * - filter dianggap aktif **hanya** bila id menunjuk anggota yang tersedia,
+ *   bukan karena jumlah kelompok hasil render;
+ * - id yang tidak tersedia jatuh kembali ke "Semua anggota" sehingga nama
+ *   mentah/UUID tidak pernah tampil;
+ * - `isOwnerFiltered` dipakai komponen untuk memutuskan catatan filter, bukan
+ *   `groups.length === 1`.
+ */
+export function resolveWorkEntryOwnerFilter(
+  ownerFilterId: WorkEntryOwnerId | "all",
+  owners: readonly WorkEntryOwner[],
+): WorkEntryOwnerFilterState {
+  const selectedOwner =
+    ownerFilterId === "all"
+      ? null
+      : (owners.find((owner) => owner.id === ownerFilterId) ?? null);
+
+  return {
+    effectiveOwnerFilterId: selectedOwner ? selectedOwner.id : "all",
+    isOwnerFiltered: selectedOwner !== null,
+    selectedOwner,
+  };
+}
+
+/**
  * Kelompokkan entry milik tim per anggota. Anggota tanpa entry tetap muncul
  * dengan daftar kosong agar baris progress stabil.
  *

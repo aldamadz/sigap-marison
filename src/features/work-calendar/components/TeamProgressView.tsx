@@ -16,7 +16,12 @@
 import { ChevronDown, ChevronRight, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { WorkProgressCounts, WorkEntryOwnerGroup, WorkDate } from "../types/work-calendar";
+import type {
+  WorkProgressCounts,
+  WorkEntryOwner,
+  WorkEntryOwnerGroup,
+  WorkDate,
+} from "../types/work-calendar";
 import { computeWorkCompletionPercent, computeWorkProgress } from "../lib/work-progress";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 
@@ -24,6 +29,14 @@ export interface TeamProgressViewProps {
   groups: readonly WorkEntryOwnerGroup[];
   interactions: WorkCalendarViewInteractionProps;
   expandedOwnerId: string | null;
+  /**
+   * Sumber kebenaran filter pemilik. Filter dianggap aktif hanya bila nilai ini
+   * `true`, bukan karena jumlah kelompok hasil render (mis. atasan dengan satu
+   * bawahan pada "Semua anggota").
+   */
+  isOwnerFiltered: boolean;
+  /** Anggota yang sedang difilter; `null` saat "Semua anggota". */
+  selectedOwner: WorkEntryOwner | null;
   onToggleOwner: (ownerId: string) => void;
 }
 
@@ -193,9 +206,14 @@ export function TeamProgressView({
   groups,
   interactions,
   expandedOwnerId,
+  isOwnerFiltered,
+  selectedOwner,
   onToggleOwner,
 }: TeamProgressViewProps) {
-  const isFilteredToSingleOwner = groups.length === 1;
+  // Filter aktif ditentukan oleh `isOwnerFiltered` (efektif dari ownerFilterId),
+  // bukan dari `groups.length === 1`. Atasan dengan tepat satu bawahan yang
+  // masih memilih "Semua anggota" tidak boleh melihat catatan filter.
+  const filteredOwner = isOwnerFiltered ? (selectedOwner ?? groups[0]?.owner ?? null) : null;
 
   return (
     <section aria-label="Tampilan tim" className="space-y-2">
@@ -213,12 +231,9 @@ export function TeamProgressView({
         </p>
       ) : (
         <>
-          {isFilteredToSingleOwner && (
-            <p
-              data-testid="work-team-filter-note"
-              className="text-xs text-muted-foreground"
-            >
-              Menampilkan pekerjaan {groups[0].owner.name} saja.
+          {filteredOwner && (
+            <p data-testid="work-team-filter-note" className="text-xs text-muted-foreground">
+              Menampilkan pekerjaan {filteredOwner.name} saja.
             </p>
           )}
 
@@ -228,7 +243,10 @@ export function TeamProgressView({
                 key={group.owner.id}
                 group={group}
                 interactions={interactions}
-                isExpanded={expandedOwnerId === group.owner.id || groups.length === 1}
+                isExpanded={
+                  expandedOwnerId === group.owner.id ||
+                  (isOwnerFiltered && groups.length === 1)
+                }
                 onToggle={() => onToggleOwner(group.owner.id)}
               />
             ))}

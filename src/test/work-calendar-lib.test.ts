@@ -39,9 +39,15 @@ import {
   createWorkCalendarPermissions,
   filterWorkEntriesByOwner,
   getWorkMonthCellPreview,
+  getWorkWeekDayPreview,
+  getWorkWeekEntryPriority,
+  getWorkWeekPreviewLimit,
   isWorkCalendarTeamViewAvailable,
+  resolveWorkEntryOwnerFilter,
   selectUnfinishedWorkEntries,
   WORK_MONTH_CELL_PREVIEW_LIMIT,
+  WORK_WEEK_PREVIEW_LIMIT_DESKTOP,
+  WORK_WEEK_PREVIEW_LIMIT_MOBILE,
 } from "@/features/work-calendar/lib/work-progress";
 import {
   getWorkCalendarAddAction,
@@ -421,6 +427,118 @@ describe("work-progress", () => {
     expect(groups).toHaveLength(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS.length);
     expect(groups.every((group) => group.entries.length === 0)).toBe(true);
     expect(groups.map((group) => group.owner.name)).not.toContain("11111111-2222-3333-4444-555555555555");
+  });
+
+  it("CAL-03 F4A koreksi: satu bawahan pada 'Semua anggota' bukan filter aktif", () => {
+    const singleSubordinate = [WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0]];
+
+    // Atasan dengan tepat satu bawahan tetap "Semua anggota".
+    const allState = resolveWorkEntryOwnerFilter("all", singleSubordinate);
+    expect(allState.isOwnerFiltered).toBe(false);
+    expect(allState.effectiveOwnerFilterId).toBe("all");
+    expect(allState.selectedOwner).toBeNull();
+
+    // Filter eksplisit pada satu bawahan barulah dianggap aktif.
+    const filteredState = resolveWorkEntryOwnerFilter(
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id,
+      singleSubordinate,
+    );
+    expect(filteredState.isOwnerFiltered).toBe(true);
+    expect(filteredState.effectiveOwnerFilterId).toBe(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id);
+    expect(filteredState.selectedOwner?.name).toBe("Sinta Maharani");
+  });
+
+  it("CAL-03 F4A koreksi: anggota hilang mengembalikan filter ke 'Semua anggota'", () => {
+    const withoutBimo = [WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0], WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[2]];
+    const state = resolveWorkEntryOwnerFilter(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[1].id, withoutBimo);
+    expect(state.effectiveOwnerFilterId).toBe("all");
+    expect(state.isOwnerFiltered).toBe(false);
+    expect(state.selectedOwner).toBeNull();
+  });
+
+  it("CAL-03 F4A koreksi: filter aktif tanpa entry tetap punya kelompok kosong", () => {
+    const state = resolveWorkEntryOwnerFilter(
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[2].id,
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+    );
+    const groups = buildWorkEntryOwnerGroups(
+      [],
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+      WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      state.effectiveOwnerFilterId,
+    );
+    expect(state.isOwnerFiltered).toBe(true);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].entries).toHaveLength(0);
+  });
+
+  it("CAL-03 F4A: batas preview Minggu 4 desktop/tablet dan 3 mobile", () => {
+    expect(WORK_WEEK_PREVIEW_LIMIT_DESKTOP).toBe(4);
+    expect(WORK_WEEK_PREVIEW_LIMIT_MOBILE).toBe(3);
+    expect(getWorkWeekPreviewLimit(false)).toBe(4);
+    expect(getWorkWeekPreviewLimit(true)).toBe(3);
+  });
+
+  it("CAL-03 F4A: preview Minggu menghitung +N dan menjaga total seluruh entry", () => {
+    const many = Array.from({ length: 6 }, (_, index) =>
+      createFixtureWorkEntry({ id: `week-${index}`, title: `Pekerjaan ${index}` }),
+    );
+
+    const desktop = getWorkWeekDayPreview(many, WORK_CALENDAR_FIXTURE_TODAY, 4);
+    expect(desktop.preview).toHaveLength(4);
+    expect(desktop.hiddenCount).toBe(2);
+    expect(desktop.total).toBe(6);
+
+    const mobile = getWorkWeekDayPreview(many, WORK_CALENDAR_FIXTURE_TODAY, 3);
+    expect(mobile.preview).toHaveLength(3);
+    expect(mobile.hiddenCount).toBe(3);
+    expect(mobile.total).toBe(6);
+
+    // Seluruh entry tetap masuk agregat progres meski preview dibatasi.
+    expect(computeWorkProgress(many, WORK_CALENDAR_FIXTURE_TODAY).total).toBe(6);
+    expect(getWorkWeekDayPreview([], WORK_CALENDAR_FIXTURE_TODAY, 4).hiddenCount).toBe(0);
+  });
+
+  it("CAL-03 F4A: prioritas preview Minggu terhambat/terlambat lalu berjalan/rencana/selesai", () => {
+    const today = WORK_CALENDAR_FIXTURE_TODAY;
+    const planned = createFixtureWorkEntry({ id: "p", status: "planned" });
+    const inProgress = createFixtureWorkEntry({ id: "i", status: "in_progress" });
+    const completed = createFixtureWorkEntry({ id: "c", status: "completed" });
+    const blocked = createFixtureWorkEntry({ id: "b", status: "blocked" });
+    const overdue = createFixtureWorkEntry({
+      id: "o",
+      status: "planned",
+      workDate: shiftWorkDate(today, -3),
+    });
+
+    expect(getWorkWeekEntryPriority(blocked, today)).toBe(0);
+    expect(getWorkWeekEntryPriority(overdue, today)).toBe(0);
+    expect(getWorkWeekEntryPriority(inProgress, today)).toBe(1);
+    expect(getWorkWeekEntryPriority(planned, today)).toBe(2);
+    expect(getWorkWeekEntryPriority(completed, today)).toBe(3);
+
+    const { preview } = getWorkWeekDayPreview(
+      [completed, planned, inProgress, blocked, overdue],
+      today,
+      5,
+    );
+    expect(preview.slice(0, 2).map((entry) => entry.id).sort()).toEqual(["b", "o"]);
+    expect(preview[2].id).toBe("i");
+    expect(preview[3].id).toBe("p");
+    expect(preview[4].id).toBe("c");
+  });
+
+  it("CAL-03 F4A: urutan preview Minggu stabil untuk input yang sama", () => {
+    const today = WORK_CALENDAR_FIXTURE_TODAY;
+    const entries = [
+      createFixtureWorkEntry({ id: "x1", status: "planned", createdAt: "2026-03-10T01:00:00.000Z" }),
+      createFixtureWorkEntry({ id: "x2", status: "planned", createdAt: "2026-03-10T00:30:00.000Z" }),
+      createFixtureWorkEntry({ id: "x3", status: "blocked" }),
+    ];
+    const first = getWorkWeekDayPreview(entries, today, 3).preview.map((entry) => entry.id);
+    const second = getWorkWeekDayPreview(entries.slice().reverse(), today, 3).preview.map((e) => e.id);
+    expect(first).toEqual(["x3", "x2", "x1"]);
+    expect(second).toEqual(first);
   });
 
   it("menyembunyikan mode Tim saat tidak ada bawahan", () => {

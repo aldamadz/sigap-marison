@@ -362,8 +362,67 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
       /ownerGroups:\s*buildWorkEntryOwnerGroups\(\s*entries,/,
     );
 
-    // Nilai filter yang tidak tersedia jatuh kembali ke "all" sebelum dipakai.
-    expect(hook).toContain('const ownerFilterId: WorkEntryOwnerId | "all" = isOwnerFilterAvailable ? ownerFilterIdState : "all";');
+    // Nilai filter yang tidak tersedia jatuh kembali ke "all" sebelum dipakai,
+    // lewat satu sumber kebenaran `resolveWorkEntryOwnerFilter`.
+    expect(hook).toContain("resolveWorkEntryOwnerFilter(");
+    expect(hook).not.toMatch(/ownerFilterId:\s*isOwnerFilterAvailable\s*\?/);
+  });
+
+  it("status filter Tim ditentukan filter efektif, bukan jumlah kelompok", () => {
+    const team = readFileSync(
+      join(featureDir, "components", "TeamProgressView.tsx"),
+      "utf8",
+    );
+
+    // Regresi review: `groups.length === 1` salah menandai "Semua anggota"
+    // sebagai filter tunggal ketika atasan punya tepat satu bawahan.
+    expect(team).not.toMatch(/isFilteredToSingleOwner\s*=\s*groups\.length\s*===\s*1/);
+    expect(team).toContain("isOwnerFiltered");
+    expect(team).not.toMatch(/\{\s*isOwnerFiltered\s*&&\s*groups\.length === 1\s*\}/);
+
+    const workspace = readFileSync(
+      join(featureDir, "components", "WorkCalendarWorkspace.tsx"),
+      "utf8",
+    );
+    expect(workspace).toContain("derived.ownerFilter.isOwnerFiltered");
+    expect(workspace).toContain("derived.ownerFilter.selectedOwner");
+
+    const progress = readFileSync(join(featureDir, "lib", "work-progress.ts"), "utf8");
+    expect(progress).toContain("export function resolveWorkEntryOwnerFilter");
+    expect(progress).toContain("isOwnerFiltered");
+  });
+
+  it("klik judul membuka detail dan editor judul hanya lewat aksi eksplisit", () => {
+    const row = readFileSync(join(featureDir, "components", "WorkEntryRow.tsx"), "utf8");
+
+    // Kontrak review: judul adalah tombol "Buka detail pekerjaan: <judul>".
+    expect(row).toContain("aria-label={`Buka detail pekerjaan: ${entry.title}`}");
+    expect(row).toContain("onClick={onOpenDetail}");
+    expect(row).not.toMatch(/aria-label=\{\s*readOnly\s*\?/);
+    // Judul tidak lagi memulai editor inline dan tidak lagi dinonaktifkan
+    // untuk entry bawahan (read-only tetap bisa membuka detail).
+    const titleButton = row.slice(row.indexOf("data-testid={`work-entry-title-"));
+    expect(titleButton.slice(0, 600)).not.toContain("setIsEditingTitle(true)");
+
+    const detail = readFileSync(
+      join(featureDir, "components", "WorkEntryDetail.tsx"),
+      "utf8",
+    );
+    expect(detail).toContain("work-entry-detail-edit-title-");
+    expect(detail).toContain("commitTitle");
+  });
+
+  it("tampilan Minggu membatasi preview lewat selector murni tanpa scroll internal", () => {
+    const week = readFileSync(join(featureDir, "components", "WeeklyWorkView.tsx"), "utf8");
+    expect(week).toContain("getWorkWeekDayPreview(");
+    expect(week).toContain("work-week-more-");
+    expect(week).not.toMatch(/overflow-(auto|scroll|y-auto)/);
+
+    const progress = readFileSync(join(featureDir, "lib", "work-progress.ts"), "utf8");
+    expect(progress).toContain("WORK_WEEK_PREVIEW_LIMIT_DESKTOP = 4");
+    expect(progress).toContain("WORK_WEEK_PREVIEW_LIMIT_MOBILE = 3");
+    expect(progress).toContain("export function getWorkWeekDayPreview");
+    expect(progress).toContain("export function getWorkWeekEntryPriority");
   });
 
   it("aksi tambah dikendalikan satu kontrak kontekstual dan tidak tampil pada Hari", () => {

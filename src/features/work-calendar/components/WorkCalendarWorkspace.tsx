@@ -546,9 +546,11 @@ export function WorkCalendarWorkspace({  currentUser,
         />
       )}
 
+      {/* Detail pekerjaan dibuka dari judul pada semua tampilan non-Tim
+          (Hari, Minggu, Bulan). Mode Tim punya panel read-only terpisah. */}
       {!calendar.isLoading &&
         !calendar.error &&
-        (calendar.view === "day" || calendar.view === "week") &&
+        calendar.view !== "team" &&
         selectedEntry && (
           <WorkEntryDetail
             entry={selectedEntry}
@@ -650,6 +652,8 @@ export function WorkCalendarWorkspace({  currentUser,
           groups={derived.ownerGroups}
           interactions={interactions}
           expandedOwnerId={expandedOwnerId}
+          isOwnerFiltered={derived.ownerFilter.isOwnerFiltered}
+          selectedOwner={derived.ownerFilter.selectedOwner}
           onToggleOwner={(ownerId) =>
             setExpandedOwnerId((current) => (current === ownerId ? null : ownerId))
           }
@@ -668,10 +672,9 @@ export function WorkCalendarWorkspace({  currentUser,
         />
       )}
 
-      {calendar.ownerFilterId !== "all" && calendar.view === "team" && (
+      {derived.ownerFilter.isOwnerFiltered && calendar.view === "team" && (
         <p className="sr-only" data-testid="work-calendar-owner-filter-state">
-          Filter pemilik aktif:{" "}
-          {(teamMembers ?? []).find((member) => member.id === calendar.ownerFilterId)?.name ?? ""}
+          Filter pemilik aktif: {derived.ownerFilter.selectedOwner?.name ?? ""}
         </p>
       )}
 

@@ -29,6 +29,8 @@ import {
   buildWorkEntryOwnerGroups,
   filterWorkEntriesByOwner,
   isWorkCalendarTeamViewAvailable,
+  resolveWorkEntryOwnerFilter,
+  type WorkEntryOwnerFilterState,
 } from "../lib/work-progress";
 
 export interface UseWorkCalendarViewInput {
@@ -87,10 +89,9 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
    * dikembalikan juga sudah aman pada render pertama, jadi tidak pernah ada
    * frame dengan filter menggantung.
    */
-  const isOwnerFilterAvailable =
-    ownerFilterIdState === "all" ||
-    (teamMembers ?? []).some((member) => member.id === ownerFilterIdState);
-  const ownerFilterId: WorkEntryOwnerId | "all" = isOwnerFilterAvailable ? ownerFilterIdState : "all";
+  const ownerFilterState = resolveWorkEntryOwnerFilter(ownerFilterIdState, teamMembers ?? []);
+  const isOwnerFilterAvailable = ownerFilterIdState === ownerFilterState.effectiveOwnerFilterId;
+  const ownerFilterId: WorkEntryOwnerId | "all" = ownerFilterState.effectiveOwnerFilterId;
 
   useEffect(() => {
     if (!isOwnerFilterAvailable) setOwnerFilterIdState("all");
@@ -255,6 +256,8 @@ export interface WorkCalendarDerivedView {
   daySummaries: ReturnType<typeof buildWorkCalendarDaySummaries>;
   monthCells: ReturnType<typeof buildWorkCalendarDayCells>;
   ownerGroups: ReturnType<typeof buildWorkEntryOwnerGroups>;
+  /** Status filter pemilik efektif; sumber kebenaran mode Tim. */
+  ownerFilter: WorkEntryOwnerFilterState;
   weekDates: readonly WorkDate[];
   monthDates: readonly WorkDate[];
 }
@@ -284,17 +287,17 @@ export function useWorkCalendarDerivedView(input: {
   // Filter selalu dievaluasi terhadap anggota yang benar-benar tersedia. Bila
   // anggota terpilih hilang, kelompok jatuh kembali ke "Semua anggota" dan
   // state filter dibersihkan lewat efek penyelaras di hook tampilan.
-  const effectiveOwnerFilterId =
-    ownerFilterId === "all" ||
-    (teamMembers ?? []).some((member) => member.id === ownerFilterId)
-      ? ownerFilterId
-      : "all";
+  // `ownerFilterId` sudah merupakan nilai efektif dari `useWorkCalendarView`.
+  const effectiveOwnerFilterId = ownerFilterId;
 
   return useMemo(() => {
     const weekDates = workWeekDates(anchorDate);
     const monthDates = workMonthDates(anchorDate);
     const scopeDates = view === "month" ? monthDates : view === "week" ? weekDates : [anchorDate];
     const scopeEntries = view === "team" ? visibleEntries : entries;
+    // Status filter dihitung di dalam memo supaya identitas objeknya stabil
+    // dan turunan tidak dihitung ulang tiap render.
+    const ownerFilter = resolveWorkEntryOwnerFilter(effectiveOwnerFilterId, teamMembers ?? []);
 
     return {
       daySummaries: buildWorkCalendarDaySummaries(scopeEntries, scopeDates, today),
@@ -312,6 +315,7 @@ export function useWorkCalendarDerivedView(input: {
         currentUserId,
         effectiveOwnerFilterId,
       ),
+      ownerFilter,
       weekDates,
       monthDates,
     };
