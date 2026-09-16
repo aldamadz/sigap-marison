@@ -48,6 +48,12 @@ export interface WorkCalendarToolbarProps {
   isTeamViewAvailable: boolean;
   ownerFilterId: WorkEntryOwnerId | "all";
   teamMembers: readonly WorkEntryOwner[];
+  /**
+   * Mode Tim server-side mengelola filter anggota sendiri, sehingga filter
+   * pemilik pada toolbar disembunyikan agar tidak ada dua kontrol filter
+   * anggota yang saling bertentangan.
+   */
+  showOwnerFilter?: boolean;
   /** Label aksi tambah kontekstual untuk view aktif. */
   addLabel: string;
   onSelectView: (view: WorkCalendarViewMode) => void;
@@ -66,6 +72,7 @@ export function WorkCalendarToolbar({
   isTeamViewAvailable,
   ownerFilterId,
   teamMembers,
+  showOwnerFilter = true,
   addLabel,
   onSelectView,
   onPrevious,
@@ -153,7 +160,7 @@ export function WorkCalendarToolbar({
             )}
           </div>
 
-          {view === "team" && isTeamViewAvailable && (
+          {view === "team" && isTeamViewAvailable && showOwnerFilter && (
             <div className="w-full sm:w-56">
               <label htmlFor="work-calendar-owner-filter" className="sr-only">
                 Filter pemilik pekerjaan

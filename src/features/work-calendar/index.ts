@@ -18,6 +18,11 @@ export { DailyWorkView } from "./components/DailyWorkView";
 export { WeeklyWorkView } from "./components/WeeklyWorkView";
 export { MonthlyWorkView } from "./components/MonthlyWorkView";
 export { TeamProgressView } from "./components/TeamProgressView";
+export { TeamOverviewView } from "./components/TeamOverviewView";
+export {
+  TeamOverviewFilterBar,
+  TeamOverviewFilterPanel,
+} from "./components/TeamOverviewFilters";
 export { DailyProgressSummary } from "./components/DailyProgressSummary";
 
 export { createSupabaseWorkEntryRepository } from "./data/supabase-work-entry-repository";
@@ -27,6 +32,19 @@ export type {
   WorkCalendarDbTable,
   WorkCalendarRpcQuery,
 } from "./data/supabase-work-entry-repository";
+export {
+  WORK_TEAM_OVERVIEW_UNNAMED_LABEL,
+  createSupabaseWorkTeamOverviewRepository,
+  mapWorkTeamOverviewOptionRow,
+  mapWorkTeamOverviewRow,
+  resolveWorkTeamOverviewMemberName,
+} from "./data/supabase-work-team-overview-repository";
+export type {
+  SupabaseWorkTeamOverviewClient,
+  WorkTeamOverviewOptionRow,
+  WorkTeamOverviewRow,
+  WorkTeamOverviewRpcQuery,
+} from "./data/supabase-work-team-overview-repository";
 export {
   createSupabaseWorkCalendarProfileRepository,
   mapProfileRowToOwner,
@@ -54,6 +72,37 @@ export type {
   UseWorkCalendarViewResult,
   WorkCalendarDerivedView,
 } from "./hooks/use-work-calendar-view";
+
+export { useWorkTeamOverview } from "./hooks/use-work-team-overview";
+export type {
+  UseWorkTeamOverviewInput,
+  UseWorkTeamOverviewResult,
+  WorkTeamOverviewFilterChange,
+  WorkTeamOverviewStatus,
+} from "./hooks/use-work-team-overview";
+export { useWorkTeamOverviewCompact } from "./hooks/use-work-team-overview-compact";
+
+export {
+  applyWorkTeamOverviewFilterChange,
+  clampWorkTeamOverviewPage,
+  clampWorkTeamOverviewPageSize,
+  countActiveWorkTeamOverviewFilters,
+  createWorkTeamOverviewFilters,
+  getWorkTeamOverviewPageCount,
+  isWorkTeamOverviewSort,
+  isWorkTeamOverviewStatusFilter,
+  listWorkTeamOverviewDepartmentOptions,
+  listWorkTeamOverviewMemberOptions,
+  normalizeWorkTeamOverviewSearch,
+  readWorkTeamOverviewUrlState,
+  reconcileWorkTeamOverviewFilters,
+  toWorkTeamOverviewDbStatus,
+  writeWorkTeamOverviewUrlState,
+} from "./lib/work-team-overview";
+export type {
+  ReadWorkTeamOverviewUrlInput,
+  WorkTeamOverviewUrlState,
+} from "./lib/work-team-overview";
 
 export {
   WORK_CALENDAR_TIME_ZONE,
@@ -169,3 +218,17 @@ export type {
   WorkProgressCounts,
   WorkTimestamp,
 } from "./types/work-calendar";
+
+export { WORK_TEAM_OVERVIEW_SORTS, WORK_TEAM_OVERVIEW_STATUS_FILTERS } from "./types/work-team-overview";
+export type {
+  WorkTeamOverviewEntryQuery,
+  WorkTeamOverviewFilters,
+  WorkTeamOverviewMember,
+  WorkTeamOverviewOption,
+  WorkTeamOverviewOptionKind,
+  WorkTeamOverviewPage,
+  WorkTeamOverviewQuery,
+  WorkTeamOverviewRepository,
+  WorkTeamOverviewSort,
+  WorkTeamOverviewStatusFilter,
+} from "./types/work-team-overview";

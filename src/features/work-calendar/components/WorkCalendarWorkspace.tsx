@@ -15,7 +15,7 @@
  * - mode Tim selalu read-only terhadap entry bawahan.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CalendarDays, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import type {
   WorkDate,
   WorkEntry,
   WorkEntryDraft,
+  WorkEntryOwner,
   WorkEntryPatch,
   WorkEntryStatus,
   WorkProgressCounts,
@@ -55,8 +56,11 @@ import { DailyWorkView } from "./DailyWorkView";
 import { WeeklyWorkView } from "./WeeklyWorkView";
 import { MonthlyWorkView } from "./MonthlyWorkView";
 import { TeamProgressView } from "./TeamProgressView";
+import { TeamOverviewView } from "./TeamOverviewView";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 import { WorkEntryDetail } from "./WorkEntryDetail";
+import { useWorkTeamOverview } from "../hooks/use-work-team-overview";
+import { listWorkTeamOverviewDepartmentOptions } from "../lib/work-team-overview";
 
 interface StatusPrompt {
   entryId: string;
@@ -72,6 +76,8 @@ export function WorkCalendarWorkspace({  currentUser,
   initialView,
   initialAnchorDate,
   now,
+  teamOverviewRepository,
+  syncTeamFiltersToUrl,
 }: WorkCalendarWorkspaceProps) {
   const calendar = useWorkCalendarView({
     repository,
@@ -80,7 +86,21 @@ export function WorkCalendarWorkspace({  currentUser,
     initialView: initialView ?? "day",
     initialAnchorDate,
     now,
+    loadTeamEntries: teamOverviewRepository === undefined,
   });
+
+  const teamOverview = useWorkTeamOverview({
+    repository: teamOverviewRepository ?? null,
+    enabled: teamOverviewRepository !== undefined && calendar.view === "team",
+    workDate: calendar.today,
+    syncUrl: syncTeamFiltersToUrl ?? false,
+  });
+
+  const teamDepartmentOptions = useMemo(
+    () =>
+      listWorkTeamOverviewDepartmentOptions(teamOverview.options, teamOverview.filters.officeId),
+    [teamOverview.options, teamOverview.filters.officeId],
+  );
 
   const derived = useWorkCalendarDerivedView({
     view: calendar.view,
@@ -125,9 +145,32 @@ export function WorkCalendarWorkspace({  currentUser,
   const quickEntryDate = calendar.view === "day" ? calendar.anchorDate : calendar.today;
 
   const selectedEntry = useMemo(
-    () => calendar.entries.find((entry) => entry.id === selectedEntryId) ?? null,
-    [calendar.entries, selectedEntryId],
+    () =>
+      calendar.entries.find((entry) => entry.id === selectedEntryId) ??
+      teamOverview.memberEntries.find((entry) => entry.id === selectedEntryId) ??
+      null,
+    [calendar.entries, teamOverview.memberEntries, selectedEntryId],
   );
+
+  /**
+   * Peta pemilik untuk detail. Mode Tim server memakai opsi anggota yang
+   * terotorisasi, sehingga nama selalu tersedia tanpa memuat semua entry.
+   */
+  const ownerById = useMemo(() => {
+    const map = new Map<string, WorkEntryOwner>();
+    for (const member of teamMembers ?? []) map.set(member.id, member);
+    for (const option of teamOverview.options) {
+      if (option.kind !== "member") continue;
+      if (!map.has(option.id)) {
+        map.set(option.id, {
+          id: option.id,
+          name: option.label,
+          jobTitle: option.sublabel,
+        });
+      }
+    }
+    return map;
+  }, [teamMembers, teamOverview.options]);
 
   const monthPanelEntries = useMemo(() => {
     if (!monthPanelDate) return [] as WorkEntry[];
@@ -465,6 +508,7 @@ export function WorkCalendarWorkspace({  currentUser,
         isTeamViewAvailable={calendar.isTeamViewAvailable}
         ownerFilterId={calendar.ownerFilterId}
         teamMembers={teamMembers ?? []}
+        showOwnerFilter={teamOverviewRepository === undefined}
         addLabel={addAction.label}
         onSelectView={handleSelectView}
         onPrevious={calendar.goToPreviousRange}
@@ -554,7 +598,7 @@ export function WorkCalendarWorkspace({  currentUser,
         selectedEntry && (
           <WorkEntryDetail
             entry={selectedEntry}
-            owner={(teamMembers ?? []).find((member) => member.id === selectedEntry.ownerId)}
+            owner={ownerById.get(selectedEntry.ownerId)}
             today={calendar.today}
             readOnly={!effectivePermissions.canEditEntry(selectedEntry)}
             isSaving={detailSaving}
@@ -648,22 +692,31 @@ export function WorkCalendarWorkspace({  currentUser,
       )}
 
       {!calendar.isLoading && !calendar.error && calendar.view === "team" && (
-        <TeamProgressView
-          groups={derived.ownerGroups}
-          interactions={interactions}
-          expandedOwnerId={expandedOwnerId}
-          isOwnerFiltered={derived.ownerFilter.isOwnerFiltered}
-          selectedOwner={derived.ownerFilter.selectedOwner}
-          onToggleOwner={(ownerId) =>
-            setExpandedOwnerId((current) => (current === ownerId ? null : ownerId))
-          }
-        />
+        teamOverviewRepository !== undefined ? (
+          <TeamOverviewView
+            overview={teamOverview}
+            interactions={interactions}
+            workDate={calendar.today}
+            departmentOptions={teamDepartmentOptions}
+          />
+        ) : (
+          <TeamProgressView
+            groups={derived.ownerGroups}
+            interactions={interactions}
+            expandedOwnerId={expandedOwnerId}
+            isOwnerFiltered={derived.ownerFilter.isOwnerFiltered}
+            selectedOwner={derived.ownerFilter.selectedOwner}
+            onToggleOwner={(ownerId) =>
+              setExpandedOwnerId((current) => (current === ownerId ? null : ownerId))
+            }
+          />
+        )
       )}
 
       {selectedEntry && calendar.view === "team" && (
         <WorkEntryDetail
           entry={selectedEntry}
-          owner={(teamMembers ?? []).find((member) => member.id === selectedEntry.ownerId)}
+          owner={ownerById.get(selectedEntry.ownerId)}
           today={calendar.today}
           readOnly
           isSaving={false}

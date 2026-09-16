@@ -42,13 +42,36 @@ as $$ select current_setting('role', true) $$;
 grant execute on function auth.uid() to authenticated, anon;
 grant execute on function auth.role() to authenticated, anon;
 
+-- Canonical organization master data. These mirror the staging schema shapes
+-- used by CAL-03 F4A team overview: offices and departments are global master
+-- data with authenticated read; departments have no office/entity parent.
+create table if not exists public.master_offices (
+  id uuid primary key,
+  code text,
+  name text not null,
+  kedudukan text null,
+  parent_id uuid null references public.master_offices(id)
+);
+grant select on public.master_offices to authenticated;
+
+create table if not exists public.master_departments (
+  id uuid primary key,
+  name text not null,
+  code text null,
+  dept_index integer null
+);
+grant select on public.master_departments to authenticated;
+
 create table if not exists public.profiles (
   id uuid primary key,
   email text,
+  nik text,
   full_name text,
   job_title text,
   role text not null default 'user',
   parent_id uuid references public.profiles(id),
+  office_id uuid null references public.master_offices(id),
+  department_id uuid null references public.master_departments(id),
   deleted_at timestamptz null,
   is_active boolean null default true
 );
@@ -198,7 +221,8 @@ try {
 
   if (
     !output.includes("CAL-03 work calendar integration: all assertions passed") ||
-    !output.includes("CAL-03 team members integration: all assertions passed")
+    !output.includes("CAL-03 team members integration: all assertions passed") ||
+    !output.includes("CAL-03 team overview integration: all assertions passed")
   ) {
     throw new Error("SQL runner did not see all success markers.\n" + output);
   }

@@ -12,11 +12,29 @@ import type {
   WorkEntryOwnerId,
   WorkEntryRepository,
   WorkDate,
+  WorkProgressCounts,
 } from "../types/work-calendar";
+import type {
+  WorkTeamOverviewMember,
+  WorkTeamOverviewOption,
+  WorkTeamOverviewRepository,
+} from "../types/work-team-overview";
 import { isWorkDateWithin, shiftWorkDate } from "../lib/work-calendar-date";
 import { WorkEntryConflictError } from "../lib/work-entry-conflict";
+import { computeWorkProgress } from "../lib/work-progress";
 
 export const WORK_CALENDAR_FIXTURE_TODAY: WorkDate = "2026-03-10";
+
+/** Id dimensi organisasi untuk fixture Team Overview. */
+export const WORK_CALENDAR_FIXTURE_OFFICE_A_ID = "office-a";
+export const WORK_CALENDAR_FIXTURE_OFFICE_B_ID = "office-b";
+export const WORK_CALENDAR_FIXTURE_DEPARTMENT_FINANCE_ID = "dept-finance";
+export const WORK_CALENDAR_FIXTURE_DEPARTMENT_OPS_ID = "dept-ops";
+
+const OFFICE_A_ID = WORK_CALENDAR_FIXTURE_OFFICE_A_ID;
+const OFFICE_B_ID = WORK_CALENDAR_FIXTURE_OFFICE_B_ID;
+const DEPT_FINANCE_ID = WORK_CALENDAR_FIXTURE_DEPARTMENT_FINANCE_ID;
+const DEPT_OPS_ID = WORK_CALENDAR_FIXTURE_DEPARTMENT_OPS_ID;
 
 /** Waktu tetap agar fixture tidak bergantung jam dinding. */
 export function workCalendarFixtureNow(): Date {
@@ -245,6 +263,192 @@ export function createFixtureWorkEntryRepository(
         throw new WorkEntryConflictError("Data telah berubah");
       }
       store.set(entryId, { ...current, deletedAt: new Date().toISOString() });
+    },
+  };
+}
+
+/**
+ * Repository in-memory Team Overview untuk test dan visual verification
+ * (CAL-03 F4A). Meniru kontrak server-side: paginasi, agregat seluruh hasil
+ * filter, opsi terotorisasi, dan pemuatan pekerjaan anggota per tanggal.
+ *
+ * Fixture ini sengaja tidak menambahkan anggota di luar `seed`, sehingga
+ * perilaku "filter hanya mempersempit" dapat diuji.
+ */
+export function createFixtureWorkTeamOverviewRepository(
+  seed: readonly WorkEntry[] = createFixtureWorkEntries(),
+  options: {
+    members?: readonly WorkTeamOverviewOption[];
+    failOnOverview?: boolean;
+    failOnOptions?: boolean;
+    failOnMemberEntries?: boolean;
+    /** Memberi jeda agar test dapat mengamati pembatalan permintaan lama. */
+    delayMs?: number;
+    signalRef?: { current: AbortSignal | null };
+  } = {},
+): WorkTeamOverviewRepository {
+  const providedOptions = options.members;
+  const defaultMemberOptions: readonly WorkTeamOverviewOption[] =
+    WORK_CALENDAR_FIXTURE_TEAM_MEMBERS.map<WorkTeamOverviewOption>((member, index) => ({
+      kind: "member",
+      id: member.id,
+      label: member.name,
+      sublabel: member.jobTitle,
+      officeId: index % 2 === 0 ? OFFICE_A_ID : OFFICE_B_ID,
+      departmentId: index % 2 === 0 ? DEPT_FINANCE_ID : DEPT_OPS_ID,
+      memberCount: 0,
+    }));
+
+  const sourceOptions: readonly WorkTeamOverviewOption[] =
+    providedOptions ?? defaultMemberOptions;
+  const memberOptions = sourceOptions.filter((option) => option.kind === "member");
+
+  const officeOptions: readonly WorkTeamOverviewOption[] =
+    providedOptions !== undefined
+      ? providedOptions.filter((option) => option.kind === "office")
+      : [
+          {
+            kind: "office",
+            id: OFFICE_A_ID,
+            label: "Kantor Pusat",
+            sublabel: null,
+            officeId: OFFICE_A_ID,
+            departmentId: null,
+            memberCount: memberOptions.filter((option) => option.officeId === OFFICE_A_ID)
+              .length,
+          },
+          {
+            kind: "office",
+            id: OFFICE_B_ID,
+            label: "Kantor Bandung",
+            sublabel: null,
+            officeId: OFFICE_B_ID,
+            departmentId: null,
+            memberCount: memberOptions.filter((option) => option.officeId === OFFICE_B_ID)
+              .length,
+          },
+        ];
+
+  const departmentOptions: readonly WorkTeamOverviewOption[] =
+    providedOptions !== undefined
+      ? providedOptions.filter((option) => option.kind === "department")
+      : [
+          {
+            kind: "department",
+            id: DEPT_FINANCE_ID,
+            label: "Keuangan",
+            sublabel: null,
+            officeId: null,
+            departmentId: DEPT_FINANCE_ID,
+            memberCount: 0,
+          },
+          {
+            kind: "department",
+            id: DEPT_OPS_ID,
+            label: "Operasional",
+            sublabel: null,
+            officeId: null,
+            departmentId: DEPT_OPS_ID,
+            memberCount: 0,
+          },
+        ];
+
+  const delay = async (signal: AbortSignal | undefined): Promise<void> => {
+    if (options.signalRef) options.signalRef.current = signal ?? null;
+    if (!options.delayMs) return;
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, options.delayMs);
+      signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        const error = new Error("Dibatalkan.");
+        error.name = "AbortError";
+        reject(error);
+      });
+    });
+  };
+
+  const entriesFor = (memberId: string, date: WorkDate): WorkEntry[] =>
+    seed.filter(
+      (entry) => entry.deletedAt === null && entry.ownerId === memberId && entry.workDate === date,
+    );
+
+  return {
+    async listAuthorizedOrganizationOptions(signal) {
+      await delay(signal);
+      if (options.failOnOptions) throw new Error("Gagal memuat pilihan organisasi (fixture).");
+      return [...officeOptions, ...departmentOptions, ...memberOptions];
+    },
+
+    async listTeamOverview({ filters, page, pageSize, signal }) {
+      await delay(signal);
+      if (options.failOnOverview) throw new Error("Gagal memuat ringkasan tim (fixture).");
+
+      const search = filters.search.trim().toLowerCase();
+      const candidates = memberOptions.filter((option) => {
+        if (filters.officeId && option.officeId !== filters.officeId) return false;
+        if (filters.departmentId && option.departmentId !== filters.departmentId) return false;
+        if (filters.memberId && option.id !== filters.memberId) return false;
+        if (search.length > 0) {
+          const haystack = `${option.label} ${option.sublabel ?? ""}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        return true;
+      });
+
+      const withProgress = candidates.map((option) => ({
+        option,
+        entries: entriesFor(option.id, filters.workDate),
+      }));
+
+      const statusFiltered = withProgress.filter(({ entries }) => {
+        if (filters.status === "all") return true;
+        return entries.some((entry) => entry.status === filters.status);
+      });
+
+      const aggregate = statusFiltered.reduce<WorkProgressCounts>(
+        (accumulator, { entries }) => {
+          const progress = computeWorkProgress(entries, filters.workDate);
+          return {
+            total: accumulator.total + progress.total,
+            planned: accumulator.planned + progress.planned,
+            inProgress: accumulator.inProgress + progress.inProgress,
+            completed: accumulator.completed + progress.completed,
+            blocked: accumulator.blocked + progress.blocked,
+            overdue: accumulator.overdue + progress.overdue,
+          };
+        },
+        { total: 0, planned: 0, inProgress: 0, completed: 0, blocked: 0, overdue: 0 },
+      );
+
+      const offset = (page - 1) * pageSize;
+      const members = statusFiltered.slice(offset, offset + pageSize).map<WorkTeamOverviewMember>(
+        ({ option, entries }) => ({
+          owner: { id: option.id, name: option.label, jobTitle: option.sublabel },
+          officeId: option.officeId,
+          officeName: officeOptions.find((office) => office.id === option.officeId)?.label ?? null,
+          departmentId: option.departmentId,
+          departmentName:
+            departmentOptions.find((department) => department.id === option.departmentId)?.label ??
+            null,
+          progress: computeWorkProgress(entries, filters.workDate),
+        }),
+      );
+
+      return {
+        members,
+        totalCount: statusFiltered.length,
+        aggregate,
+        page,
+        pageSize,
+      };
+    },
+
+    async listTeamMemberEntries({ memberId, date, signal }) {
+      await delay(signal);
+      if (options.failOnMemberEntries) {
+        throw new Error("Gagal memuat pekerjaan anggota (fixture).");
+      }
+      return entriesFor(memberId, date);
     },
   };
 }

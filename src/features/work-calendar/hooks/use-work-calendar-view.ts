@@ -40,6 +40,13 @@ export interface UseWorkCalendarViewInput {
   initialView?: WorkCalendarViewMode;
   initialAnchorDate?: WorkDate;
   now?: () => Date;
+  /**
+   * Mode Tim server-side: entry tim tidak diambil massal lewat
+   * `listTeamEntries`. Daftar anggota dan pekerjaannya dimuat terpisah.
+   */
+  loadTeamEntries?: boolean;
+  /** Sumber kebenaran ketersediaan tab Tim di luar `teamMembers`. */
+  isTeamViewAvailableOverride?: boolean;
 }
 
 export interface UseWorkCalendarViewResult {
@@ -67,6 +74,7 @@ export interface UseWorkCalendarViewResult {
 
 export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCalendarViewResult {
   const { repository, currentUserId, teamMembers, initialView, initialAnchorDate, now } = input;
+  const loadTeamEntries = input.loadTeamEntries ?? true;
 
   const readNow = useCallback(() => (now ? now() : new Date()), [now]);
 
@@ -81,7 +89,8 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const [error, setError] = useState<Error | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
-  const isTeamViewAvailable = isWorkCalendarTeamViewAvailable(teamMembers);
+  const isTeamViewAvailable =
+    input.isTeamViewAvailableOverride ?? isWorkCalendarTeamViewAvailable(teamMembers);
 
   /**
    * Keamanan filter: bila anggota yang dipilih hilang dari daftar (misalnya
@@ -117,18 +126,20 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
     const load = async (): Promise<void> => {
       try {
         const result =
-          view === "team"
-            ? await repository.listTeamEntries({
-                fromDate,
-                toDate,
-                signal: controller.signal,
-              })
-            : await repository.listEntries({
-                ownerId: currentUserId,
-                fromDate,
-                toDate,
-                signal: controller.signal,
-              });
+          view === "team" && !loadTeamEntries
+            ? []
+            : view === "team"
+              ? await repository.listTeamEntries({
+                  fromDate,
+                  toDate,
+                  signal: controller.signal,
+                })
+              : await repository.listEntries({
+                  ownerId: currentUserId,
+                  fromDate,
+                  toDate,
+                  signal: controller.signal,
+                });
         if (!active || requestRef.current !== requestId) return;
         setEntries(result);
       } catch (thrown) {
@@ -147,7 +158,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
       active = false;
       controller.abort();
     };
-  }, [repository, view, fromDate, toDate, currentUserId, reloadToken]);
+  }, [repository, view, fromDate, toDate, currentUserId, reloadToken, loadTeamEntries]);
 
   // Jam dinding tidak dipakai untuk perhitungan; hanya untuk menyegarkan `today`.
   useEffect(() => {

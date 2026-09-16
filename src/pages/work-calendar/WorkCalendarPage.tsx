@@ -6,8 +6,10 @@ import {
   WorkCalendarWorkspace,
   createSupabaseWorkCalendarProfileRepository,
   createSupabaseWorkEntryRepository,
+  createSupabaseWorkTeamOverviewRepository,
   type SupabaseWorkCalendarClient,
   type SupabaseWorkCalendarProfileClient,
+  type SupabaseWorkTeamOverviewClient,
   type WorkEntryOwner,
 } from "@/features/work-calendar";
 
@@ -27,6 +29,11 @@ export default function WorkCalendarPage() {
 
   const profileRepository = useMemo(
     () => createSupabaseWorkCalendarProfileRepository(supabase as SupabaseWorkCalendarProfileClient),
+    [],
+  );
+
+  const teamOverviewRepository = useMemo(
+    () => createSupabaseWorkTeamOverviewRepository(supabase as SupabaseWorkTeamOverviewClient),
     [],
   );
 

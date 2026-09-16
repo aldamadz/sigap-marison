@@ -184,6 +184,8 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
       "src/test/work-calendar-lib.test.ts",
       "src/test/work-calendar-page.test.tsx",
       "src/test/work-calendar-profile-repository.test.ts",
+      "src/test/work-calendar-team-overview.test.ts",
+      "src/test/work-calendar-team-overview-view.test.tsx",
       "src/test/work-calendar-workspace.test.tsx",
     ];
 
