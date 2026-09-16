@@ -47,6 +47,7 @@ import {
   createWorkCalendarPermissions,
 } from "../lib/work-progress";
 import { normalizeWorkEntryText, validateWorkEntryInput } from "../lib/work-entry-validation";
+import { getWorkCalendarAddAction } from "../lib/work-calendar-add-action";
 import { useWorkCalendarDerivedView, useWorkCalendarView } from "../hooks/use-work-calendar-view";
 import { WorkCalendarToolbar } from "./WorkCalendarToolbar";
 import { QuickWorkEntry } from "./QuickWorkEntry";
@@ -87,6 +88,7 @@ export function WorkCalendarWorkspace({  currentUser,
     today: calendar.today,
     entries: calendar.entries,
     visibleEntries: calendar.visibleEntries,
+    ownerFilterId: calendar.ownerFilterId,
     currentUserId: currentUser.id,
     teamMembers,
   });
@@ -103,6 +105,7 @@ export function WorkCalendarWorkspace({  currentUser,
   const [prompt, setPrompt] = useState<StatusPrompt | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [detailSaving, setDetailSaving] = useState(false);
+  /** Panel hari pada tampilan Bulan: tanggal yang sedang terbuka. */
   const [monthPanelDate, setMonthPanelDate] = useState<WorkDate | null>(null);
   const [expandedOwnerId, setExpandedOwnerId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
@@ -373,9 +376,14 @@ export function WorkCalendarWorkspace({  currentUser,
   );
 
   const handleAdd = useCallback(() => {
-    if (calendar.view !== "day" || calendar.anchorDate !== calendar.today) {
-      calendar.setView("day");
-      calendar.setAnchorDate(calendar.today);
+    const action = getWorkCalendarAddAction({
+      view: calendar.view,
+      anchorDate: calendar.anchorDate,
+      today: calendar.today,
+    });
+    if (calendar.view !== action.targetView || calendar.anchorDate !== action.targetDate) {
+      calendar.setView(action.targetView);
+      calendar.setAnchorDate(action.targetDate);
     }
     // Fokus dipindahkan setelah render ulang agar input sudah terpasang.
     window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
@@ -386,6 +394,24 @@ export function WorkCalendarWorkspace({  currentUser,
     setSelectedEntryId(null);
     setPrompt(null);
   }, []);
+
+  /**
+   * Aksi "Tambahkan pekerjaan ke tanggal ini" pada panel Bulan: pindah ke
+   * tampilan Hari pada tanggal panel, lalu fokuskan quick entry. Tanggal
+   * target adalah tanggal panel sehingga tidak pernah berbeda dari label.
+   */
+  const handleAddToMonthPanelDate = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (!monthPanelDate) return;
+      const date = monthPanelDate;
+      calendar.setView("day");
+      calendar.setAnchorDate(date);
+      setMonthPanelDate(null);
+      window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
+      event.currentTarget.blur();
+    },
+    [calendar, monthPanelDate],
+  );
 
   const openDayFromWeek = useCallback(
     (date: WorkDate) => {
@@ -423,8 +449,14 @@ export function WorkCalendarWorkspace({  currentUser,
         ? `Bulan ${calendar.anchorDate.slice(0, 7)}`
         : viewDate;
 
+  const addAction = getWorkCalendarAddAction({
+    view: calendar.view,
+    anchorDate: calendar.anchorDate,
+    today: calendar.today,
+  });
+
   return (
-    <div className="sigap-page">
+    <div className="sigap-page work-calendar-scope">
       <WorkCalendarToolbar
         view={calendar.view}
         anchorDate={calendar.anchorDate}
@@ -433,6 +465,7 @@ export function WorkCalendarWorkspace({  currentUser,
         isTeamViewAvailable={calendar.isTeamViewAvailable}
         ownerFilterId={calendar.ownerFilterId}
         teamMembers={teamMembers ?? []}
+        addLabel={addAction.label}
         onSelectView={handleSelectView}
         onPrevious={calendar.goToPreviousRange}
         onNext={calendar.goToNextRange}
@@ -601,11 +634,8 @@ export function WorkCalendarWorkspace({  currentUser,
                 type="button"
                 size="sm"
                 className="rounded-sm"
-                onClick={() => {
-                  calendar.setView("day");
-                  calendar.setAnchorDate(monthPanelDate);
-                  setMonthPanelDate(null);
-                }}
+                data-testid="work-month-panel-add"
+                onClick={handleAddToMonthPanelDate}
               >
                 <Plus aria-hidden="true" />
                 Tambahkan pekerjaan ke tanggal ini
@@ -658,6 +688,7 @@ export function WorkCalendarWorkspace({  currentUser,
         }}
       >
         <AlertDialogContent
+          className="work-calendar-scope"
           onCloseAutoFocus={(event) => {
             // Pastikan fokus tidak hilang setelah Batal/Esc.
             event.preventDefault();

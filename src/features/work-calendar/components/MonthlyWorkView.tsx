@@ -64,7 +64,10 @@ export function MonthlyWorkView({ cells, today, onOpenDay }: MonthlyWorkViewProp
                 data-testid={`work-month-open-${cell.date}`}
                 onClick={() => onOpenDay(cell.date)}
                 aria-label={`Buka daftar pekerjaan ${cell.date}`}
-                className="flex min-h-touch min-w-0 items-center justify-between gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                // `-mx-1.5 px-1.5` memperluas area sentuh sampai tepi sel
+                // supaya target >= 44px pada grid 7 kolom di layar sempit,
+                // tanpa menggeser satu pun teks di dalamnya.
+                className="-mx-1.5 flex min-h-touch min-w-0 items-center justify-between gap-1 rounded-sm px-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span
                   className={cn(

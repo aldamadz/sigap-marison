@@ -16,7 +16,7 @@
 import { ChevronDown, ChevronRight, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { WorkProgressCounts, WorkEntryOwnerGroup } from "../types/work-calendar";
+import type { WorkProgressCounts, WorkEntryOwnerGroup, WorkDate } from "../types/work-calendar";
 import { computeWorkCompletionPercent, computeWorkProgress } from "../lib/work-progress";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 
@@ -25,6 +25,43 @@ export interface TeamProgressViewProps {
   interactions: WorkCalendarViewInteractionProps;
   expandedOwnerId: string | null;
   onToggleOwner: (ownerId: string) => void;
+}
+
+/** Ringkasan progres kelompok yang sedang tampil (bukan seluruh tim). */
+export function TeamScopeProgress({
+  groups,
+  today,
+}: {
+  groups: readonly WorkEntryOwnerGroup[];
+  today: WorkDate;
+}) {
+  const progress = computeWorkProgress(
+    groups.flatMap((group) => group.entries),
+    today,
+  );
+  const percent = computeWorkCompletionPercent(progress);
+
+  return (
+    <p
+      data-testid="work-team-scope-progress"
+      className="rounded-sm border border-border bg-card px-3 py-2 text-xs text-muted-foreground"
+    >
+      <span className="font-semibold text-foreground" data-testid="team-scope-completed">
+        {progress.completed}
+      </span>{" "}
+      selesai dari{" "}
+      <span className="font-semibold text-foreground" data-testid="team-scope-total">
+        {progress.total}
+      </span>{" "}
+      pekerjaan anggota yang ditampilkan ({percent}%)
+      {progress.overdue > 0 ? (
+        <>
+          {" "}
+          · <span className="font-medium text-overdue">{progress.overdue} terlambat</span>
+        </>
+      ) : null}
+    </p>
+  );
 }
 
 function TeamMetrics({ ownerId, progress }: { ownerId: string; progress: WorkProgressCounts }) {
@@ -158,29 +195,46 @@ export function TeamProgressView({
   expandedOwnerId,
   onToggleOwner,
 }: TeamProgressViewProps) {
-  if (groups.length === 0) {
-    return (
-      <p className="rounded-sm border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-        <Users className="mx-auto mb-1.5 h-4 w-4" aria-hidden="true" />
-        Belum ada anggota tim yang dapat ditampilkan.
-      </p>
-    );
-  }
+  const isFilteredToSingleOwner = groups.length === 1;
 
   return (
     <section aria-label="Tampilan tim" className="space-y-2">
       <h2 className="sr-only">Progres pekerjaan tim</h2>
-      <ul className="space-y-2">
-        {groups.map((group) => (
-          <TeamOwnerRow
-            key={group.owner.id}
-            group={group}
-            interactions={interactions}
-            isExpanded={expandedOwnerId === group.owner.id}
-            onToggle={() => onToggleOwner(group.owner.id)}
-          />
-        ))}
-      </ul>
+
+      <TeamScopeProgress groups={groups} today={interactions.today} />
+
+      {groups.length === 0 ? (
+        <p
+          data-testid="work-team-empty"
+          className="rounded-sm border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground"
+        >
+          <Users className="mx-auto mb-1.5 h-4 w-4" aria-hidden="true" />
+          Belum ada anggota tim yang dapat ditampilkan.
+        </p>
+      ) : (
+        <>
+          {isFilteredToSingleOwner && (
+            <p
+              data-testid="work-team-filter-note"
+              className="text-xs text-muted-foreground"
+            >
+              Menampilkan pekerjaan {groups[0].owner.name} saja.
+            </p>
+          )}
+
+          <ul className="space-y-2">
+            {groups.map((group) => (
+              <TeamOwnerRow
+                key={group.owner.id}
+                group={group}
+                interactions={interactions}
+                isExpanded={expandedOwnerId === group.owner.id || groups.length === 1}
+                onToggle={() => onToggleOwner(group.owner.id)}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }

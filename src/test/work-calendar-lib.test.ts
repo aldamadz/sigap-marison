@@ -35,6 +35,7 @@ import {
   buildWorkProgressStatusRows,
   computeWorkCompletionPercent,
   computeWorkProgress,
+  computeWorkEntryOwnerGroupsProgress,
   createWorkCalendarPermissions,
   filterWorkEntriesByOwner,
   getWorkMonthCellPreview,
@@ -43,6 +44,10 @@ import {
   WORK_MONTH_CELL_PREVIEW_LIMIT,
 } from "@/features/work-calendar/lib/work-progress";
 import {
+  getWorkCalendarAddAction,
+  shouldShowToolbarAdd,
+} from "@/features/work-calendar/lib/work-calendar-add-action";
+import {
   canQuickCreateWorkEntry,
   normalizeWorkEntryTitle,
   validateWorkEntryInput,
@@ -50,6 +55,7 @@ import {
 import {
   WORK_CALENDAR_FIXTURE_CURRENT_USER,
   WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+  WORK_CALENDAR_FIXTURE_TODAY,
   createFixtureWorkEntry,
 } from "@/features/work-calendar/testing/work-calendar-fixtures";
 
@@ -331,6 +337,92 @@ describe("work-progress", () => {
     expect(groups[1].entries).toHaveLength(0);
   });
 
+  it("CAL-03 F4A: filter pemilik menyaring kelompok, metrik, dan daftar pada sumbernya", () => {
+    const entries = [
+      createFixtureWorkEntry({ id: "own", ownerId: WORK_CALENDAR_FIXTURE_CURRENT_USER.id }),
+      createFixtureWorkEntry({
+        id: "a1",
+        ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id,
+        status: "completed",
+      }),
+      createFixtureWorkEntry({ id: "a2", ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id }),
+      createFixtureWorkEntry({
+        id: "b1",
+        ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[1].id,
+        status: "blocked",
+      }),
+    ];
+
+    const all = buildWorkEntryOwnerGroups(
+      entries,
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+      WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      "all",
+    );
+    expect(all).toHaveLength(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS.length);
+    expect(all.map((group) => group.entries.length)).toEqual([2, 1, 0]);
+
+    const filtered = buildWorkEntryOwnerGroups(
+      entries,
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+      WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id,
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].owner.id).toBe(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id);
+    expect(filtered[0].entries.map((entry) => entry.id)).toEqual(["a1", "a2"]);
+    // Metrik dihitung dari daftar yang sudah tersaring, bukan dari seluruh tim.
+    expect(computeWorkEntryOwnerGroupsProgress(filtered, WORK_CALENDAR_FIXTURE_TODAY)).toMatchObject({
+      total: 2,
+      completed: 1,
+      blocked: 0,
+    });
+    expect(
+      computeWorkEntryOwnerGroupsProgress(all, WORK_CALENDAR_FIXTURE_TODAY),
+    ).toMatchObject({ total: 3, completed: 1, blocked: 1 });
+  });
+
+  it("CAL-03 F4A: anggota tanpa entry tetap tampil dengan progres nol", () => {
+    const groups = buildWorkEntryOwnerGroups(
+      [],
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+      WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[2].id,
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].entries).toHaveLength(0);
+    expect(computeWorkEntryOwnerGroupsProgress(groups, WORK_CALENDAR_FIXTURE_TODAY)).toMatchObject({
+      total: 0,
+      completed: 0,
+    });
+    expect(computeWorkCompletionPercent(computeWorkProgress([], WORK_CALENDAR_FIXTURE_TODAY))).toBe(0);
+  });
+
+  it("CAL-03 F4A: filter yang tidak tersedia jatuh kembali ke semua anggota", () => {
+    const groups = buildWorkEntryOwnerGroups(
+      [createFixtureWorkEntry({ id: "a1", ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0].id })],
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+      WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      "user-yang-sudah-tidak-ada",
+    );
+    expect(groups).toHaveLength(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS.length);
+    expect(groups[0].entries).toHaveLength(1);
+  });
+
+  it("CAL-03 F4A: id pemilik tanpa nama tidak pernah menjadi baris tim", () => {
+    // Entry milik id yang tidak ada pada daftar anggota tidak boleh membuat
+    // kelompok baru; UUID mentah tidak pernah muncul sebagai nama.
+    const groups = buildWorkEntryOwnerGroups(
+      [createFixtureWorkEntry({ id: "ghost", ownerId: "11111111-2222-3333-4444-555555555555" })],
+      WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
+      WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      "all",
+    );
+    expect(groups).toHaveLength(WORK_CALENDAR_FIXTURE_TEAM_MEMBERS.length);
+    expect(groups.every((group) => group.entries.length === 0)).toBe(true);
+    expect(groups.map((group) => group.owner.name)).not.toContain("11111111-2222-3333-4444-555555555555");
+  });
+
   it("menyembunyikan mode Tim saat tidak ada bawahan", () => {
     expect(isWorkCalendarTeamViewAvailable([])).toBe(false);
     expect(isWorkCalendarTeamViewAvailable(undefined)).toBe(false);
@@ -441,5 +533,45 @@ describe("work-entry-validation", () => {
       kind: "agenda" as never,
     });
     expect(invalidKind.ok).toBe(false);
+  });
+});
+
+describe("work-calendar-add-action (CAL-03 F4A scope C)", () => {
+  const anchor = "2026-03-05";
+  const today = WORK_CALENDAR_FIXTURE_TODAY;
+
+  it("menyembunyikan aksi toolbar pada tampilan Hari agar tidak duplikat", () => {
+    // Tampilan Hari sudah punya tombol Tambah pada quick entry.
+    expect(shouldShowToolbarAdd("day")).toBe(false);
+    expect(shouldShowToolbarAdd("week")).toBe(true);
+    expect(shouldShowToolbarAdd("month")).toBe(true);
+    expect(shouldShowToolbarAdd("team")).toBe(true);
+  });
+
+  it("memberi label eksplisit dan tanggal target yang benar per tampilan", () => {
+    expect(getWorkCalendarAddAction({ view: "week", anchorDate: anchor, today })).toEqual({
+      label: "Tambah hari ini",
+      targetDate: today,
+      targetView: "day",
+    });
+    expect(getWorkCalendarAddAction({ view: "month", anchorDate: anchor, today })).toEqual({
+      label: "Tambah hari ini",
+      targetDate: today,
+      targetView: "day",
+    });
+    // Label Tim menegaskan ini pekerjaan milik pengguna, bukan bawahan.
+    expect(getWorkCalendarAddAction({ view: "team", anchorDate: anchor, today })).toEqual({
+      label: "Tambah pekerjaan saya",
+      targetDate: today,
+      targetView: "day",
+    });
+  });
+
+  it("pada tampilan Hari memakai tanggal yang sedang dilihat", () => {
+    expect(getWorkCalendarAddAction({ view: "day", anchorDate: anchor, today })).toEqual({
+      label: "Tambah pekerjaan",
+      targetDate: anchor,
+      targetView: "day",
+    });
   });
 });

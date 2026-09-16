@@ -31,6 +31,7 @@ import {
   formatWorkMonthLabel,
   formatWorkWeekRangeLabel,
 } from "../lib/work-calendar-date";
+import { shouldShowToolbarAdd } from "../lib/work-calendar-add-action";
 
 const VIEW_OPTIONS: ReadonlyArray<{ view: WorkCalendarViewMode; label: string }> = [
   { view: "day", label: "Hari" },
@@ -47,6 +48,8 @@ export interface WorkCalendarToolbarProps {
   isTeamViewAvailable: boolean;
   ownerFilterId: WorkEntryOwnerId | "all";
   teamMembers: readonly WorkEntryOwner[];
+  /** Label aksi tambah kontekstual untuk view aktif. */
+  addLabel: string;
   onSelectView: (view: WorkCalendarViewMode) => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -63,6 +66,7 @@ export function WorkCalendarToolbar({
   isTeamViewAvailable,
   ownerFilterId,
   teamMembers,
+  addLabel,
   onSelectView,
   onPrevious,
   onNext,
@@ -76,6 +80,7 @@ export function WorkCalendarToolbar({
       : view === "month"
         ? formatWorkMonthLabel(anchorDate)
         : formatWorkDateHeading(anchorDate, today);
+  const showAdd = shouldShowToolbarAdd(view);
 
   return (
     <div className="sigap-toolbar">
@@ -85,7 +90,7 @@ export function WorkCalendarToolbar({
             type="button"
             variant="outline"
             size="icon"
-            className="shrink-0 rounded-sm"
+            className="w-11 shrink-0 rounded-sm"
             onClick={onPrevious}
             aria-label="Rentang sebelumnya"
           >
@@ -95,7 +100,7 @@ export function WorkCalendarToolbar({
             type="button"
             variant="outline"
             size="icon"
-            className="shrink-0 rounded-sm"
+            className="w-11 shrink-0 rounded-sm"
             onClick={onNext}
             aria-label="Rentang berikutnya"
           >
@@ -157,7 +162,7 @@ export function WorkCalendarToolbar({
                 <SelectTrigger id="work-calendar-owner-filter" className="h-11 rounded-sm" aria-label="Filter pemilik pekerjaan">
                   <SelectValue placeholder="Semua anggota" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="work-calendar-scope">
                   <SelectItem value="all">Semua anggota</SelectItem>
                   {teamMembers.map((member) => (
                     <SelectItem key={member.id} value={member.id}>
@@ -169,15 +174,18 @@ export function WorkCalendarToolbar({
             </div>
           )}
 
-          <Button
-            type="button"
-            className="shrink-0 rounded-sm"
-            onClick={onAdd}
-            aria-label="Tambah pekerjaan"
-          >
-            <Plus aria-hidden="true" />
-            Tambah
-          </Button>
+          {showAdd && (
+            <Button
+              type="button"
+              data-testid="work-calendar-toolbar-add"
+              className="shrink-0 rounded-sm"
+              onClick={onAdd}
+              aria-label={addLabel}
+            >
+              <Plus aria-hidden="true" />
+              {addLabel}
+            </Button>
+          )}
         </div>
       </div>
     </div>

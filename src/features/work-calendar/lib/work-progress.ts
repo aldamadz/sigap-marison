@@ -175,31 +175,36 @@ export function buildWorkEntryStates(
 /**
  * Kelompokkan entry milik tim per anggota. Anggota tanpa entry tetap muncul
  * dengan daftar kosong agar baris progress stabil.
+ *
+ * Kontrak CAL-03 F4A:
+ * - `ownerFilter` menyaring kelompok pada sumbernya, bukan setelah render,
+ *   sehingga metrik, rasio, dan daftar pekerjaan hanya berasal dari anggota
+ *   terpilih;
+ * - hanya anggota pada `owners` yang pernah ditampilkan. Entry milik id yang
+ *   tidak dikenal diabaikan supaya UUID mentah tidak pernah menjadi nama;
+ * - bila `ownerFilter` menunjuk anggota yang tidak tersedia, seluruh anggota
+ *   ditampilkan kembali (fallback aman ke "Semua anggota").
  */
 export function buildWorkEntryOwnerGroups(
   entries: readonly WorkEntry[],
   owners: readonly WorkEntryOwner[],
   currentUserId: WorkEntryOwnerId,
+  ownerFilter: WorkEntryOwnerId | "all" = "all",
 ): WorkEntryOwnerGroup[] {
+  const selectedOwners =
+    ownerFilter !== "all" && owners.some((owner) => owner.id === ownerFilter)
+      ? owners.filter((owner) => owner.id === ownerFilter)
+      : owners;
+
+  const visibleOwnerIds = new Set(selectedOwners.map((owner) => owner.id));
   const byOwner = new Map<WorkEntryOwnerId, WorkEntry[]>();
-  for (const owner of owners) byOwner.set(owner.id, []);
+  for (const owner of selectedOwners) byOwner.set(owner.id, []);
   for (const entry of entries) {
-    const bucket = byOwner.get(entry.ownerId);
-    if (bucket) {
-      bucket.push(entry);
-    } else {
-      byOwner.set(entry.ownerId, [entry]);
-    }
+    if (!visibleOwnerIds.has(entry.ownerId)) continue;
+    byOwner.get(entry.ownerId)?.push(entry);
   }
 
-  const known = owners.map((owner) => owner.id);
-  const unknownOwners = [...byOwner.keys()].filter((ownerId) => !known.includes(ownerId));
-  const allOwners: WorkEntryOwner[] = [
-    ...owners,
-    ...unknownOwners.map((ownerId) => ({ id: ownerId, name: ownerId, jobTitle: null })),
-  ];
-
-  return allOwners.map((owner) => {
+  return selectedOwners.map((owner) => {
     const ownerEntries = (byOwner.get(owner.id) ?? []).slice().sort(compareWorkEntries);
     return {
       owner,
@@ -208,6 +213,20 @@ export function buildWorkEntryOwnerGroups(
       isTeamMember: owner.id !== currentUserId,
     };
   });
+}
+
+/**
+ * Progres gabungan untuk kelompok yang sedang tampil. Dipakai mode Tim agar
+ * ringkasan tidak pernah memakai entry milik anggota yang tersaring keluar.
+ */
+export function computeWorkEntryOwnerGroupsProgress(
+  groups: readonly WorkEntryOwnerGroup[],
+  today: WorkDate,
+): WorkProgressCounts {
+  return computeWorkProgress(
+    groups.flatMap((group) => group.entries),
+    today,
+  );
 }
 
 /** Filter pemilik untuk mode Tim dan mode pribadi. */

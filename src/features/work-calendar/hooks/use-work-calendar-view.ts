@@ -73,13 +73,28 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const [anchorDate, setAnchorDateState] = useState<WorkDate>(
     () => initialAnchorDate ?? todayWorkDate(readNow()),
   );
-  const [ownerFilterId, setOwnerFilterId] = useState<WorkEntryOwnerId | "all">("all");
+  const [ownerFilterIdState, setOwnerFilterIdState] = useState<WorkEntryOwnerId | "all">("all");
   const [entries, setEntries] = useState<readonly WorkEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const isTeamViewAvailable = isWorkCalendarTeamViewAvailable(teamMembers);
+
+  /**
+   * Keamanan filter: bila anggota yang dipilih hilang dari daftar (misalnya
+   * struktur tim berubah), filter dibersihkan ke "Semua anggota". Nilai yang
+   * dikembalikan juga sudah aman pada render pertama, jadi tidak pernah ada
+   * frame dengan filter menggantung.
+   */
+  const isOwnerFilterAvailable =
+    ownerFilterIdState === "all" ||
+    (teamMembers ?? []).some((member) => member.id === ownerFilterIdState);
+  const ownerFilterId: WorkEntryOwnerId | "all" = isOwnerFilterAvailable ? ownerFilterIdState : "all";
+
+  useEffect(() => {
+    if (!isOwnerFilterAvailable) setOwnerFilterIdState("all");
+  }, [isOwnerFilterAvailable]);
 
   const dateRange = useMemo(
     () => getWorkCalendarDateRange(view === "team" ? "day" : view, anchorDate),
@@ -209,6 +224,8 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const visibleEntries = useMemo(() => {
     if (view !== "team" || ownerFilterId === "all") return entries;
     return filterWorkEntriesByOwner(entries, ownerFilterId);
+    // `ownerFilterId` sudah aman (fallback "all") sehingga tidak pernah
+    // menyaring dengan id anggota yang sudah tidak tersedia.
   }, [entries, view, ownerFilterId]);
 
   return {
@@ -221,7 +238,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
     goToToday,
     today,
     ownerFilterId,
-    setOwnerFilterId,
+    setOwnerFilterId: setOwnerFilterIdState,
     entries,
     ownEntries,
     visibleEntries,
@@ -249,10 +266,29 @@ export function useWorkCalendarDerivedView(input: {
   today: WorkDate;
   entries: readonly WorkEntry[];
   visibleEntries: readonly WorkEntry[];
+  ownerFilterId: WorkEntryOwnerId | "all";
   currentUserId: WorkEntryOwnerId;
   teamMembers?: readonly WorkEntryOwner[];
 }): WorkCalendarDerivedView {
-  const { view, anchorDate, today, entries, visibleEntries, currentUserId, teamMembers } = input;
+  const {
+    view,
+    anchorDate,
+    today,
+    entries,
+    visibleEntries,
+    ownerFilterId,
+    currentUserId,
+    teamMembers,
+  } = input;
+
+  // Filter selalu dievaluasi terhadap anggota yang benar-benar tersedia. Bila
+  // anggota terpilih hilang, kelompok jatuh kembali ke "Semua anggota" dan
+  // state filter dibersihkan lewat efek penyelaras di hook tampilan.
+  const effectiveOwnerFilterId =
+    ownerFilterId === "all" ||
+    (teamMembers ?? []).some((member) => member.id === ownerFilterId)
+      ? ownerFilterId
+      : "all";
 
   return useMemo(() => {
     const weekDates = workWeekDates(anchorDate);
@@ -268,9 +304,25 @@ export function useWorkCalendarDerivedView(input: {
         today,
         Number(anchorDate.slice(5, 7)),
       ),
-      ownerGroups: buildWorkEntryOwnerGroups(entries, teamMembers ?? [], currentUserId),
+      // Kelompok dibangun dari `visibleEntries`, bukan seluruh `entries`,
+      // supaya metrik dan daftar hanya berasal dari anggota yang tersaring.
+      ownerGroups: buildWorkEntryOwnerGroups(
+        visibleEntries,
+        teamMembers ?? [],
+        currentUserId,
+        effectiveOwnerFilterId,
+      ),
       weekDates,
       monthDates,
     };
-  }, [view, anchorDate, today, entries, visibleEntries, currentUserId, teamMembers]);
+  }, [
+    view,
+    anchorDate,
+    today,
+    entries,
+    visibleEntries,
+    effectiveOwnerFilterId,
+    currentUserId,
+    teamMembers,
+  ]);
 }

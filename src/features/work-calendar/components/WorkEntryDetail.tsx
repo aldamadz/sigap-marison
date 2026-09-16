@@ -43,7 +43,7 @@ export function WorkEntryDetail({
     <section
       aria-labelledby={`work-entry-detail-title-${entry.id}`}
       data-testid={`work-entry-detail-${entry.id}`}
-      className="rounded-sm border border-border bg-card p-3"
+      className="rounded-sm border border-border bg-card p-3 shadow-[var(--shadow-card)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">

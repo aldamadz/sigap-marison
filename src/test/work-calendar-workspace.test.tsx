@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { WorkCalendarWorkspace } from "@/features/work-calendar/components/WorkCalendarWorkspace";
@@ -11,6 +11,31 @@ import {
   createFixtureWorkEntryRepository,
   workCalendarFixtureNow,
 } from "@/features/work-calendar/testing/work-calendar-fixtures";
+
+/**
+ * Konten Radix Select dirender lewat Portal dan memakai pointer capture,
+ * ResizeObserver, serta scrollIntoView yang tidak disediakan jsdom. Polyfill
+ * ini hanya untuk test; runtime produksi memakai implementasi browser asli.
+ */
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as typeof ResizeObserver;
+}
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {};
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
 
 function renderWorkspace(options: {
   view?: WorkCalendarViewMode;
@@ -58,6 +83,34 @@ async function openActionMenu(row: HTMLElement): Promise<void> {
   menuButton.focus();
   fireEvent.keyDown(menuButton, { key: "Enter" });
   await screen.findByRole("menu");
+}
+
+/**
+ * Memilih anggota pada filter pemilik mode Tim. Radix Select dibuka dengan
+ * keyboard (Enter) dan opsinya dipilih dengan Enter supaya test tidak
+ * bergantung pada pointer capture yang tidak ada di jsdom.
+ */
+async function selectOwnerFilter(
+  trigger: HTMLElement,
+  optionName: RegExp | string,
+): Promise<void> {
+  trigger.focus();
+  expect(trigger).toHaveFocus();
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  const listbox = await screen.findByRole("listbox");
+  const option = within(listbox).getByRole("option", { name: optionName });
+  option.focus();
+  fireEvent.keyDown(option, { key: "Enter" });
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+}
+
+/** Menunggu callback `requestAnimationFrame` (pergeseran fokus) diproses. */
+async function flushAnimationFrame(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
 }
 
 describe("WorkCalendarWorkspace — quick entry", () => {
@@ -617,6 +670,355 @@ describe("WorkCalendarWorkspace — mode Tim", () => {
   });
 });
 
+describe("WorkCalendarWorkspace — CAL-03 F4A filter Tim", () => {
+  const ownerFilterTrigger = () => screen.getByLabelText("Filter pemilik pekerjaan");
+
+  it("menampilkan seluruh bawahan aktif pada 'Semua anggota'", async () => {
+    renderWorkspace({ view: "team" });
+
+    for (const member of WORK_CALENDAR_FIXTURE_TEAM_MEMBERS) {
+      expect(await screen.findByTestId(`work-team-row-${member.id}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId("work-team-filter-note")).not.toBeInTheDocument();
+  });
+
+  it("menyaring daftar, metrik, dan ringkasan ke satu anggota lalu kembali ke semua", async () => {
+    const { repository } = renderWorkspace({ view: "team" });
+    const listTeamSpy = vi.spyOn(repository, "listTeamEntries");
+
+    // Bimo (bawahan-2) punya satu planned dan satu blocked; bawahan lain
+    // punya entry berbeda sehingga penyaringan terlihat pada angka, bukan
+    // hanya pada nilai dropdown.
+    expect(await screen.findByTestId("work-team-row-user-bawahan-2")).toBeInTheDocument();
+
+    await selectOwnerFilter(ownerFilterTrigger(), "Bimo Nugroho");
+
+    const filteredRow = await screen.findByTestId("work-team-row-user-bawahan-2");
+    expect(within(filteredRow).getByTestId("team-planned-user-bawahan-2")).toHaveTextContent("1");
+    expect(within(filteredRow).getByTestId("team-blocked-user-bawahan-2")).toHaveTextContent("1");
+    expect(within(filteredRow).getByTestId("team-total-user-bawahan-2")).toHaveTextContent("2");
+
+    // Ringkasan lingkup hanya memuat entry anggota terpilih (2), bukan seluruh
+    // tim (5 entry pada tanggal fixture).
+    expect(screen.getByTestId("work-team-scope-progress")).toHaveTextContent(
+      "0 selesai dari 2 pekerjaan",
+    );
+
+    // Anggota lain benar-benar hilang dari daftar, bukan sekadar disembunyikan
+    // secara visual.
+    expect(screen.queryByTestId("work-team-row-user-bawahan-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("work-team-row-user-bawahan-3")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("work-team-filter-note")).toHaveTextContent(
+      "Menampilkan pekerjaan Bimo Nugroho saja.",
+    );
+
+    // Kembali ke "Semua anggota": daftar dan ringkasan pulih.
+    await selectOwnerFilter(ownerFilterTrigger(), "Semua anggota");
+
+    for (const member of WORK_CALENDAR_FIXTURE_TEAM_MEMBERS) {
+      expect(await screen.findByTestId(`work-team-row-${member.id}`)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("work-team-scope-progress")).toHaveTextContent(
+      "2 selesai dari 5 pekerjaan",
+    );
+  });
+
+  it("tetap menampilkan anggota tanpa entry dengan empty state dan progres nol", async () => {
+    renderWorkspace({
+      view: "team",
+      entries: [
+        createFixtureWorkEntry({
+          id: "only-b1",
+          ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[1].id,
+          title: "Pekerjaan Bimo",
+        }),
+      ],
+    });
+
+    await selectOwnerFilter(ownerFilterTrigger(), "Sinta Maharani");
+
+    const row = await screen.findByTestId("work-team-row-user-bawahan-1");
+    expect(within(row).getByTestId("team-total-user-bawahan-1")).toHaveTextContent("0");
+    expect(within(row).getByTestId("team-ratio-label-user-bawahan-1")).toHaveTextContent("0");
+    // Satu anggota terpilih otomatis terbuka sehingga empty state terlihat.
+    expect(await screen.findByTestId("work-entry-empty")).toHaveTextContent(
+      "Belum ada pekerjaan tercatat untuk anggota ini.",
+    );
+    expect(screen.getByTestId("work-team-scope-progress")).toHaveTextContent(
+      "0 selesai dari 0 pekerjaan",
+    );
+  });
+
+  it("mempertahankan filter saat berpindah tanggal dan memuat tanggal baru", async () => {
+    const { repository } = renderWorkspace({ view: "team" });
+    const listTeamSpy = vi.spyOn(repository, "listTeamEntries");
+
+    await selectOwnerFilter(ownerFilterTrigger(), "Dewi Lestari");
+    expect(await screen.findByTestId("work-team-row-user-bawahan-3")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rentang sebelumnya" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Kemarin, Senin, 9 Maret 2026",
+      );
+    });
+    expect(listTeamSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ fromDate: "2026-03-09", toDate: "2026-03-09" }),
+    );
+    // Filter tidak kembali ke "Semua anggota" setelah fetch tanggal baru.
+    expect(ownerFilterTrigger()).toHaveTextContent("Dewi Lestari");
+    expect(screen.getByTestId("work-team-filter-note")).toHaveTextContent(
+      "Menampilkan pekerjaan Dewi Lestari saja.",
+    );
+    expect(screen.queryByTestId("work-team-row-user-bawahan-1")).not.toBeInTheDocument();
+  });
+
+  it("jatuh kembali ke 'Semua anggota' bila anggota terpilih hilang dari daftar", async () => {
+    const { rerender } = renderWorkspace({
+      view: "team",
+      entries: [
+        createFixtureWorkEntry({
+          id: "b1",
+          ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[1].id,
+          title: "Pekerjaan Bimo",
+        }),
+      ],
+    });
+
+    await selectOwnerFilter(ownerFilterTrigger(), "Bimo Nugroho");
+    expect(await screen.findByTestId("work-team-row-user-bawahan-2")).toBeInTheDocument();
+
+    // Struktur tim berubah dan Bimo tidak lagi menjadi bawahan.
+    const repository = createFixtureWorkEntryRepository([
+      createFixtureWorkEntry({
+        id: "b1",
+        ownerId: WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[1].id,
+        title: "Pekerjaan Bimo",
+      }),
+    ]);
+    rerender(
+      <WorkCalendarWorkspace
+        currentUser={WORK_CALENDAR_FIXTURE_CURRENT_USER}
+        repository={repository}
+        teamMembers={[WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[0], WORK_CALENDAR_FIXTURE_TEAM_MEMBERS[2]]}
+        initialView="team"
+        initialAnchorDate={WORK_CALENDAR_FIXTURE_TODAY}
+        now={workCalendarFixtureNow}
+      />,
+    );
+
+    // Fallback aman: filter tidak menggantung pada id yang sudah tidak ada.
+    await waitFor(() => expect(ownerFilterTrigger()).toHaveTextContent("Semua anggota"));
+    expect(await screen.findByTestId("work-team-row-user-bawahan-1")).toBeInTheDocument();
+    expect(screen.getByTestId("work-team-row-user-bawahan-3")).toBeInTheDocument();
+    expect(screen.queryByTestId("work-team-row-user-bawahan-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("work-calendar-owner-filter-state")).not.toBeInTheDocument();
+  });
+
+  it("tidak pernah menampilkan UUID mentah sebagai nama anggota", async () => {
+    renderWorkspace({
+      view: "team",
+      entries: [
+        createFixtureWorkEntry({
+          id: "ghost",
+          ownerId: "11111111-2222-3333-4444-555555555555",
+          title: "Pekerjaan pemilik tak dikenal",
+        }),
+      ],
+    });
+
+    await screen.findByTestId("work-team-row-user-bawahan-1");
+    const text = document.body.textContent ?? "";
+    expect(text).not.toContain("11111111-2222-3333-4444-555555555555");
+    // Entry pemilik tak dikenal tidak boleh membocorkan judulnya sebagai
+    // kelompok tanpa nama.
+    expect(text).not.toContain("Pekerjaan pemilik tak dikenal");
+  });
+
+  it("mempertahankan entry bawahan tetap read-only saat filter aktif", async () => {
+    renderWorkspace({ view: "team" });
+
+    await selectOwnerFilter(ownerFilterTrigger(), "Sinta Maharani");
+
+    const row = await screen.findByTestId("work-team-row-user-bawahan-1");
+    const entryRow = await screen.findByTestId("work-entry-row-team-1");
+    expect(entryRow).toHaveAttribute("data-readonly", "true");
+    expect(within(entryRow).queryByTestId(/^work-entry-status-control-/)).not.toBeInTheDocument();
+
+    await openActionMenu(entryRow);
+
+    expect(await screen.findByRole("menuitem", { name: /Lihat detail/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Hapus/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Ubah judul/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Pindahkan tanggal/i })).not.toBeInTheDocument();
+    expect(within(row).getByText("Sinta Maharani")).toBeInTheDocument();
+  });
+});
+
+describe("WorkCalendarWorkspace — CAL-03 F4A aksi tambah kontekstual", () => {
+  it("tidak menampilkan aksi toolbar duplikat pada tampilan Hari", async () => {
+    renderWorkspace({ view: "day", entries: [] });
+
+    await screen.findByTestId("work-entry-empty");
+    expect(screen.queryByTestId("work-calendar-toolbar-add")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tambah" })).toBeInTheDocument();
+    expect(quickInput()).toHaveAttribute("placeholder", "Apa yang akan dikerjakan?");
+  });
+
+  it("berlabel 'Tambah hari ini' pada Minggu dan memindahkan tanggal target ke today", async () => {
+    const { repository } = renderWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-01",
+      entries: [],
+    });
+
+    const addButton = await screen.findByTestId("work-calendar-toolbar-add");
+    expect(addButton).toHaveAccessibleName("Tambah hari ini");
+
+    const created: string[] = [];
+    const originalCreate = repository.createEntry;
+    repository.createEntry = async (draft) => {
+      created.push(draft.workDate);
+      return originalCreate(draft);
+    };
+
+    fireEvent.click(addButton);
+    await flushAnimationFrame();
+
+    // Aksi berpindah ke tampilan Hari pada today, bukan anchor Minggu.
+    await waitFor(() => {
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Hari Ini, Selasa, 10 Maret 2026",
+      );
+    });
+    await waitFor(() => expect(quickInput()).toHaveFocus());
+
+    fireEvent.change(quickInput(), { target: { value: "Pekerjaan dari Minggu" } });
+    fireEvent.keyDown(quickInput(), { key: "Enter" });
+    await waitFor(() => expect(created).toEqual([WORK_CALENDAR_FIXTURE_TODAY]));
+  });
+
+  it("berlabel 'Tambah pekerjaan saya' pada Tim dan tidak membuat pekerjaan bawahan", async () => {
+    const { repository } = renderWorkspace({ view: "team", entries: [] });
+
+    const addButton = await screen.findByTestId("work-calendar-toolbar-add");
+    expect(addButton).toHaveAccessibleName("Tambah pekerjaan saya");
+
+    const drafts: Array<{ ownerId: string; workDate: string }> = [];
+    const originalCreate = repository.createEntry;
+    repository.createEntry = async (draft) => {
+      drafts.push({ ownerId: draft.ownerId, workDate: draft.workDate });
+      return originalCreate(draft);
+    };
+
+    fireEvent.click(addButton);
+    await flushAnimationFrame();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Hari Ini, Selasa, 10 Maret 2026",
+      ),
+    );
+    await waitFor(() => expect(quickInput()).toHaveFocus());
+
+    fireEvent.change(quickInput(), { target: { value: "Pekerjaan saya dari Tim" } });
+    fireEvent.keyDown(quickInput(), { key: "Enter" });
+
+    await waitFor(() => expect(drafts).toHaveLength(1));
+    expect(drafts[0]).toEqual({
+      ownerId: WORK_CALENDAR_FIXTURE_CURRENT_USER.id,
+      workDate: WORK_CALENDAR_FIXTURE_TODAY,
+    });
+  });
+
+  it("panel Bulan mempertahankan aksi 'Tambahkan pekerjaan ke tanggal ini' beserta tanggalnya", async () => {
+    const { repository } = renderWorkspace({
+      view: "month",
+      entries: [
+        createFixtureWorkEntry({
+          id: "panel-1",
+          title: "Pekerjaan panel satu",
+          workDate: WORK_CALENDAR_FIXTURE_TODAY,
+        }),
+        createFixtureWorkEntry({
+          id: "panel-2",
+          title: "Pekerjaan panel dua",
+          workDate: WORK_CALENDAR_FIXTURE_TODAY,
+        }),
+        createFixtureWorkEntry({
+          id: "panel-3",
+          title: "Pekerjaan panel tiga",
+          workDate: WORK_CALENDAR_FIXTURE_TODAY,
+        }),
+      ],
+    });
+
+    fireEvent.click(await screen.findByTestId(`work-month-more-${WORK_CALENDAR_FIXTURE_TODAY}`));
+    const panel = await screen.findByTestId("work-month-day-panel");
+
+    const created: string[] = [];
+    const originalCreate = repository.createEntry;
+    repository.createEntry = async (draft) => {
+      created.push(draft.workDate);
+      return originalCreate(draft);
+    };
+
+    fireEvent.click(within(panel).getByTestId("work-month-panel-add"));
+    await flushAnimationFrame();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
+        "Hari Ini, Selasa, 10 Maret 2026",
+      ),
+    );
+    await waitFor(() => expect(quickInput()).toHaveFocus());
+    expect(screen.queryByTestId("work-month-day-panel")).not.toBeInTheDocument();
+
+    fireEvent.change(quickInput(), { target: { value: "Pekerjaan dari panel bulan" } });
+    fireEvent.keyDown(quickInput(), { key: "Enter" });
+
+    // Tanggal target sama dengan tanggal panel, bukan selalu today.
+    await waitFor(() => expect(created).toEqual([WORK_CALENDAR_FIXTURE_TODAY]));
+  });
+});
+
+describe("WorkCalendarWorkspace — CAL-03 F4A keterbacaan dark mode", () => {
+  it("tidak memakai muted penuh pada judul selesai dan tetap menyediakan badge status", async () => {
+    renderWorkspace({
+      entries: [
+        createFixtureWorkEntry({
+          id: "done-1",
+          title: "Laporan selesai dibaca",
+          status: "completed",
+          realization: "Sudah dikirim.",
+        }),
+      ],
+    });
+
+    const row = await screen.findByTestId("work-entry-row-done-1");
+    const titleButton = within(row).getByRole("button", {
+      name: /^Ubah judul pekerjaan Laporan selesai dibaca/i,
+    });
+    expect(titleButton).toHaveClass("text-foreground");
+    expect(titleButton).not.toHaveClass("text-muted-foreground");
+    // Efek selesai hanya dekorasi ringan, bukan warna teks yang diredupkan.
+    expect(titleButton.className).toContain("line-through");
+
+    // Status tetap dikenali lewat ikon + label + badge, bukan warna saja.
+    const statusControl = within(row).getByTestId("work-entry-status-control-done-1");
+    expect(statusControl).toHaveTextContent("Selesai");
+    expect(within(row).getByTestId("work-entry-status-label-done-1")).toHaveTextContent("Selesai");
+  });
+
+  it("memberi kelas scope Work Calendar pada root agar token dark-mode terbatas", async () => {
+    const { container } = renderWorkspace({ entries: [] });
+    await screen.findByTestId("work-entry-empty");
+    const root = container.querySelector(".work-calendar-scope");
+    expect(root).not.toBeNull();
+  });
+});
+
 describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
   it("menampilkan tujuh hari pada mode Minggu", async () => {
     renderWorkspace({ view: "week", entries: [] });
@@ -804,7 +1206,10 @@ describe("WorkCalendarWorkspace — aksesibilitas", () => {
     expect(screen.getByRole("button", { name: "Rentang berikutnya" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hari Ini" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Pilih rentang tampilan" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tambah pekerjaan" })).toBeInTheDocument();
+    // Tampilan Hari memakai tombol Tambah milik quick entry, bukan aksi
+    // toolbar duplikat (CAL-03 F4A scope C).
+    expect(screen.queryByTestId("work-calendar-toolbar-add")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tambah" })).toBeInTheDocument();
   });
 
   it("mengubah status melalui keyboard dari kontrol status", async () => {

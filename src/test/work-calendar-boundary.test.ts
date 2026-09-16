@@ -248,3 +248,148 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
     expect(recursiveWhere!.length).toBe(3);
   });
 });
+
+describe("Work Calendar — batas CAL-03 F4A", () => {
+  it("menyimpan override dark-mode di scope Work Calendar, bukan token global", () => {
+    const css = readFileSync(join(root, "src", "index.css"), "utf8");
+
+    // Scope terang dan gelap harus ada supaya permukaan Work Calendar
+    // terpisah dari halaman lain.
+    expect(css).toContain(".work-calendar-scope {");
+    expect(css).toContain(".dark .work-calendar-scope {");
+
+    // Override harus berada di dalam scope, bukan mengubah `:root`/`.dark`
+    // global; guard ini mencegah refactor yang menaikkan token ke global.
+    const scopeBlock = css.slice(css.indexOf(".dark .work-calendar-scope {"));
+    const scopeEnd = scopeBlock.indexOf("}");
+    const scopeDeclarations = scopeBlock.slice(0, scopeEnd);
+    for (const token of [
+      "--card:",
+      "--popover:",
+      "--muted-foreground:",
+      "--border:",
+      "--input:",
+      "--success:",
+      "--pending:",
+      "--overdue:",
+      "--destructive-foreground:",
+      // Regresi yang pernah terjadi: `--primary` hanya di-override di scope
+      // terang, sehingga nilai terang (gelap) terbawa ke tema gelap dan
+      // `text-primary` pada chip/hover hanya 3.42:1.
+      "--primary:",
+    ]) {
+      expect(scopeDeclarations).toContain(token);
+    }
+
+    // Scope terang juga wajib menurunkan `--destructive`; tanpa itu teks
+    // "Terhambat" pada chip destructive/10 hanya 4.12:1.
+    const lightScope = css.slice(
+      css.indexOf(".work-calendar-scope {"),
+      css.indexOf(".dark .work-calendar-scope {"),
+    );
+    expect(lightScope).toContain("--destructive:");
+    expect(lightScope).toContain("--primary:");
+
+    // Token global tidak boleh menerima nilai spesifik Work Calendar.
+    const globalRoot = css.slice(0, css.indexOf(".work-calendar-scope"));
+    expect(globalRoot).not.toContain("--destructive-foreground: 222 47% 6%");
+    expect(globalRoot).not.toContain("--primary: 126 55% 30%");
+  });
+
+  it("menjaga target sentuh kontrol Work Calendar minimal 44px", () => {
+    const iconControls: ReadonlyArray<readonly [string, string]> = [
+      ["components/WorkCalendarToolbar.tsx", 'className="w-11 shrink-0 rounded-sm"'],
+      ["components/WorkEntryRow.tsx", 'className="w-11 shrink-0 rounded-sm"'],
+      ["components/WorkEntryRow.tsx", '"h-11 min-w-touch gap-1.5 rounded-sm px-2 font-medium"'],
+    ];
+    for (const [file, marker] of iconControls) {
+      const source = readFileSync(join(featureDir, file), "utf8");
+      expect(source).toContain(marker);
+    }
+
+    // Sel bulan memakai margin negatif agar area sentuh mencapai tepi sel
+    // (>= 44px) pada grid 7 kolom di layar sempit.
+    const month = readFileSync(join(featureDir, "components", "MonthlyWorkView.tsx"), "utf8");
+    expect(month).toContain("-mx-1.5 flex min-h-touch min-w-0");
+  });
+
+  it("menyediakan kelas scope pada seluruh permukaan portal Work Calendar", () => {
+    const workspace = readFileSync(
+      join(featureDir, "components", "WorkCalendarWorkspace.tsx"),
+      "utf8",
+    );
+    expect(workspace).toContain('className="sigap-page work-calendar-scope"');
+    expect(workspace).toContain('className="work-calendar-scope"');
+
+    for (const [file, marker] of [
+      ["components/WorkCalendarToolbar.tsx", 'className="work-calendar-scope"'],
+      ["components/WorkEntryRow.tsx", 'className="work-calendar-scope w-56"'],
+    ] as const) {
+      const source = readFileSync(join(featureDir, file), "utf8");
+      expect(source).toContain(marker);
+    }
+  });
+
+  it("judul selesai tetap memakai warna teks utama, bukan muted penuh", () => {
+    const row = readFileSync(join(featureDir, "components", "WorkEntryRow.tsx"), "utf8");
+
+    // Guard: kombinasi `text-muted-foreground` + `line-through` pada judul
+    // completed membuat judul sulit dibaca di dark mode dan tidak boleh
+    // kembali.
+    expect(row).toContain("entry.status === \"completed\" && \"line-through decoration-muted-foreground/60\"");
+    expect(row).not.toMatch(
+      /entry\.status === "completed"[^\n]*text-muted-foreground/,
+    );
+
+    // Status tetap dibedakan tanpa warna: badge memakai ikon + label.
+    const statusSource = readFileSync(join(featureDir, "lib", "work-entry-status.ts"), "utf8");
+    expect(statusSource).toContain("badgeClassName");
+    expect(statusSource).toContain("icon:");
+    expect(statusSource).toContain("label:");
+  });
+
+  it("filter Tim dibangun dari entry yang sudah tersaring, bukan seluruh entry", () => {
+    const hook = readFileSync(join(featureDir, "hooks", "use-work-calendar-view.ts"), "utf8");
+
+    // Akar masalah F4A: kelompok pemilik dibangun dari `entries` yang belum
+    // difilter sehingga metrik tetap menghitung anggota lain.
+    const groupsCall = hook.match(
+      /ownerGroups:\s*buildWorkEntryOwnerGroups\(\s*([A-Za-z0-9_.]+),/,
+    );
+    expect(groupsCall).not.toBeNull();
+    expect(groupsCall?.[1]).toBe("visibleEntries");
+    expect(hook).not.toMatch(
+      /ownerGroups:\s*buildWorkEntryOwnerGroups\(\s*entries,/,
+    );
+
+    // Nilai filter yang tidak tersedia jatuh kembali ke "all" sebelum dipakai.
+    expect(hook).toContain('const ownerFilterId: WorkEntryOwnerId | "all" = isOwnerFilterAvailable ? ownerFilterIdState : "all";');
+  });
+
+  it("aksi tambah dikendalikan satu kontrak kontekstual dan tidak tampil pada Hari", () => {
+    const addAction = readFileSync(
+      join(featureDir, "lib", "work-calendar-add-action.ts"),
+      "utf8",
+    );
+    expect(addAction).toContain("shouldShowToolbarAdd");
+    expect(addAction).toContain('"Tambah hari ini"');
+    expect(addAction).toContain('"Tambah pekerjaan saya"');
+
+    const toolbar = readFileSync(
+      join(featureDir, "components", "WorkCalendarToolbar.tsx"),
+      "utf8",
+    );
+    expect(toolbar).toContain("shouldShowToolbarAdd(view)");
+    expect(toolbar).toContain('data-testid="work-calendar-toolbar-add"');
+    // Label tidak boleh lagi berupa teks statis "Tambah".
+    expect(toolbar).not.toMatch(/>\s*Tambah\s*</);
+
+    const workspace = readFileSync(
+      join(featureDir, "components", "WorkCalendarWorkspace.tsx"),
+      "utf8",
+    );
+    expect(workspace).toContain("getWorkCalendarAddAction({");
+    expect(workspace).toContain('data-testid="work-month-panel-add"');
+    expect(workspace).toContain("Tambahkan pekerjaan ke tanggal ini");
+  });
+});
