@@ -19,7 +19,15 @@ import type {
   WorkTeamOverviewRepository,
 } from "../types/work-team-overview";
 import { WORK_TEAM_OVERVIEW_OPTION_KINDS } from "../types/work-team-overview";
-import { toWorkTeamOverviewDbStatus } from "../lib/work-team-overview";
+import {
+  WORK_TEAM_OVERVIEW_MEMBER_SEARCH_LIMIT,
+  WORK_TEAM_OVERVIEW_MEMBER_SEARCH_MAX_LIMIT,
+} from "../types/work-team-overview";
+import {
+  clampWorkTeamOverviewPage,
+  getWorkTeamOverviewPageCount,
+  toWorkTeamOverviewDbStatus,
+} from "../lib/work-team-overview";
 import type { WorkCalendarEntryRow } from "./work-entry-row-mapper";
 import { mapWorkEntryRow } from "./work-entry-row-mapper";
 
@@ -70,9 +78,22 @@ export interface WorkTeamOverviewOptionRow {
   member_count: number | string | null;
 }
 
+/** Baris mentah dari `search_work_calendar_team_members`. */
+export interface WorkTeamOverviewMemberSearchRow {
+  member_id: string | null;
+  full_name: string | null;
+  job_title: string | null;
+  office_id: string | null;
+  department_id: string | null;
+  total_count: number | string | null;
+}
+
 const OVERVIEW_RPC = "list_work_calendar_team_overview";
 const OPTIONS_RPC = "list_work_calendar_team_overview_options";
 const MEMBER_ENTRIES_RPC = "list_work_calendar_member_entries";
+const AVAILABILITY_RPC = "has_work_calendar_team_members";
+const MEMBER_SEARCH_RPC = "search_work_calendar_team_members";
+const MEMBER_BY_ID_RPC = "get_work_calendar_team_member";
 
 /** Nama tampilan cadangan; tidak pernah memakai UUID mentah. */
 export const WORK_TEAM_OVERVIEW_UNNAMED_LABEL = "Anggota tanpa nama";
@@ -168,6 +189,25 @@ export function mapWorkTeamOverviewOptionRow(
   };
 }
 
+/** Baris anggota dari pencarian terotorisasi → opsi filter `member`. */
+export function mapWorkTeamOverviewMemberSearchRow(
+  row: WorkTeamOverviewMemberSearchRow,
+): WorkTeamOverviewOption {
+  if (!row.member_id) {
+    throw new Error("Data pencarian anggota tidak valid: anggota tanpa id.");
+  }
+
+  return {
+    kind: "member",
+    id: row.member_id,
+    label: normalizeOptionalText(row.full_name) ?? WORK_TEAM_OVERVIEW_UNNAMED_LABEL,
+    sublabel: normalizeOptionalText(row.job_title),
+    officeId: readNullableId(row.office_id, "office_id"),
+    departmentId: readNullableId(row.department_id, "department_id"),
+    memberCount: 1,
+  };
+}
+
 function mapOverviewPage(
   rows: readonly WorkTeamOverviewRow[],
   page: number,
@@ -188,9 +228,10 @@ function mapOverviewPage(
     };
   }
 
+  const totalCount = readCount(first.total_count, "total_count");
   return {
     members,
-    totalCount: readCount(first.total_count, "total_count"),
+    totalCount,
     aggregate: {
       total: readCount(first.aggregate_total, "aggregate_total"),
       planned: readCount(first.aggregate_planned, "aggregate_planned"),
@@ -199,7 +240,10 @@ function mapOverviewPage(
       blocked: readCount(first.aggregate_blocked, "aggregate_blocked"),
       overdue: readCount(first.aggregate_overdue, "aggregate_overdue"),
     },
-    page,
+    // Server meng-clamp offset di luar rentang ke halaman terakhir; halaman
+    // yang dilaporkan ikut di-clamp supaya UI tidak menampilkan nomor halaman
+    // yang tidak pernah dimuat.
+    page: Math.min(clampWorkTeamOverviewPage(page), getWorkTeamOverviewPageCount(totalCount, pageSize)),
     pageSize,
   };
 }
@@ -208,6 +252,21 @@ export function createSupabaseWorkTeamOverviewRepository(
   client: SupabaseWorkTeamOverviewClient,
 ): WorkTeamOverviewRepository {
   return {
+    async hasAuthorizedTeamMembers(signal) {
+      let query = client.rpc<boolean | null>(AVAILABILITY_RPC);
+
+      if (signal && typeof query.abortSignal === "function") {
+        query = query.abortSignal(signal);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        throw new Error("Gagal memeriksa ketersediaan tim.");
+      }
+
+      return data === true;
+    },
+
     async listTeamOverview({ filters, page, pageSize, sort, signal }) {
       const dbStatus = toWorkTeamOverviewDbStatus(filters.status);
 
@@ -248,6 +307,58 @@ export function createSupabaseWorkTeamOverviewRepository(
       }
 
       return (data ?? []).map(mapWorkTeamOverviewOptionRow);
+    },
+
+    async searchTeamMembers({ search, officeId, departmentId, offset, limit, signal }) {
+      const boundedLimit = Math.min(
+        Math.max(Math.trunc(limit ?? WORK_TEAM_OVERVIEW_MEMBER_SEARCH_LIMIT), 1),
+        WORK_TEAM_OVERVIEW_MEMBER_SEARCH_MAX_LIMIT,
+      );
+      const boundedOffset = Math.max(Math.trunc(offset), 0);
+      const trimmed = search.trim();
+
+      let query = client.rpc<WorkTeamOverviewMemberSearchRow[] | null>(MEMBER_SEARCH_RPC, {
+        p_search: trimmed.length > 0 ? trimmed : null,
+        p_limit: boundedLimit,
+        p_offset: boundedOffset,
+        p_office_id: officeId,
+        p_department_id: departmentId,
+      });
+
+      if (signal && typeof query.abortSignal === "function") {
+        query = query.abortSignal(signal);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        throw new Error("Gagal mencari anggota tim.");
+      }
+
+      const rows = data ?? [];
+      return {
+        members: rows.map(mapWorkTeamOverviewMemberSearchRow),
+        totalCount: rows.length > 0 ? readCount(rows[0].total_count, "total_count") : 0,
+        offset: boundedOffset,
+        limit: boundedLimit,
+      };
+    },
+
+    async getAuthorizedTeamMember(memberId, signal) {
+      let query = client.rpc<WorkTeamOverviewMemberSearchRow[] | null>(MEMBER_BY_ID_RPC, {
+        p_member_id: memberId,
+      });
+
+      if (signal && typeof query.abortSignal === "function") {
+        query = query.abortSignal(signal);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        throw new Error("Gagal memuat anggota tim.");
+      }
+
+      const row = (data ?? [])[0];
+      return row ? mapWorkTeamOverviewMemberSearchRow(row) : null;
     },
 
     async listTeamMemberEntries({ memberId, date, signal }: WorkTeamOverviewEntryQuery) {

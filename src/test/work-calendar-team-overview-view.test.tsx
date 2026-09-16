@@ -155,8 +155,7 @@ describe("WorkCalendarWorkspace — Team Overview server-side (CAL-03 F4A)", () 
     expect(await screen.findByText("Rekap operasional harian")).toBeInTheDocument();
   });
 
-  it("hanya satu detail anggota terbuka pada satu waktu", async () => {
-    renderWorkspace();
+  it("hanya satu detail anggota terbuka pada satu waktu", async () => {    renderWorkspace();
 
     await screen.findByTestId("work-team-overview");
 
@@ -239,6 +238,52 @@ describe("WorkCalendarWorkspace — Team Overview server-side (CAL-03 F4A)", () 
       expect(screen.getByText("Dewi Lestari")).toBeInTheDocument();
     });
     expect(screen.queryByText("Bimo Nugroho")).not.toBeInTheDocument();
+  });
+
+  it("pemilih anggota memakai pencarian terbatas server, bukan seluruh roster", async () => {
+    renderWorkspace();
+    await screen.findByTestId("work-team-overview");
+
+    // Sebelum pemilih dibuka, tidak ada opsi anggota yang dimuat.
+    expect(screen.queryByTestId("team-overview-member-results")).not.toBeInTheDocument();
+
+    const picker = screen.getByLabelText("Cari dan pilih anggota");
+    picker.focus();
+    fireEvent.focus(picker);
+
+    const results = await screen.findByTestId("team-overview-member-results");
+    await waitFor(() =>
+      expect(
+        within(results).getByTestId("team-overview-member-option-user-bawahan-1"),
+      ).toBeInTheDocument(),
+    );
+
+    fireEvent.change(picker, { target: { value: "Dewi" } });
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("team-overview-member-results")).queryByTestId(
+          "team-overview-member-option-user-bawahan-1",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      within(screen.getByTestId("team-overview-member-results")).getByTestId(
+        "team-overview-member-option-user-bawahan-3",
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("team-overview-member-selected")).toHaveTextContent(
+        "Dewi Lestari",
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("team-overview-filter-count")).toHaveTextContent(
+        "1 filter aktif",
+      );
+    });
   });
 
   it("menampilkan state kosong ketika tidak ada anggota yang cocok", async () => {

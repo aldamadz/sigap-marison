@@ -15,13 +15,17 @@ import {
   WORK_TEAM_OVERVIEW_DEFAULT_PAGE_SIZE,
   WORK_TEAM_OVERVIEW_DB_STATUSES,
   WORK_TEAM_OVERVIEW_MAX_PAGE_SIZE,
+  WORK_TEAM_OVERVIEW_MEMBER_SEARCH_PAGE_SIZE,
   WORK_TEAM_OVERVIEW_SORTS,
   WORK_TEAM_OVERVIEW_STATUS_FILTERS,
   type WorkTeamOverviewFilters,
   type WorkTeamOverviewOption,
   type WorkTeamOverviewSort,
   type WorkTeamOverviewStatusFilter,
+  type WorkTeamOverviewUrlState,
 } from "../types/work-team-overview";
+
+export type { WorkTeamOverviewUrlState };
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -141,30 +145,55 @@ export function applyWorkTeamOverviewFilterChange(
 /**
  * Departemen yang tersedia untuk Kantor terpilih.
  *
- * Department di schema canonical bersifat global (tidak punya `office_id`).
- * Karena itu daftar ini diturunkan dari relasi yang benar-benar ada, yaitu
- * baris anggota: departemen dianggap tersedia untuk sebuah kantor hanya bila
- * ada anggota terotorisasi di kantor itu yang memakai departemen tersebut.
- * Pendekatan ini tidak mengarang relasi baru dan tidak memperluas data.
+ * Department bersifat global (tidak punya `office_id`), jadi relasi
+ * Kantor<->Departemen hanya terlihat lewat anggota. RPC opsi mengirim satu baris
+ * per pasangan (departemen, kantor) dengan `member_count` yang sudah dipersempit
+ * ke kantor tersebut, sehingga cascading tidak perlu menebak relasi baru.
+ *
+ * Opsi departemen tanpa `officeId` (legacy/berlaku global) tetap ditampilkan
+ * hanya saat tidak ada kantor terpilih, supaya tidak menyarankan departemen yang
+ * tidak punya anggota di kantor aktif.
  */
 export function listWorkTeamOverviewDepartmentOptions(
   options: readonly WorkTeamOverviewOption[],
   officeId: string | null,
 ): readonly WorkTeamOverviewOption[] {
-  const memberOptions = options.filter((option) => option.kind === "member");
-  const availableIds = new Set(
-    memberOptions
-      .filter((option) => !officeId || option.officeId === officeId)
-      .map((option) => option.departmentId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
-  );
+  const departments = options.filter((option) => option.kind === "department");
+  if (!officeId) return departments;
 
-  return options.filter(
-    (option) => option.kind === "department" && availableIds.has(option.id),
-  );
+  return departments.filter((option) => option.officeId === officeId);
 }
 
-/** Anggota yang cocok dengan filter Kantor/Departemen yang sedang aktif. */
+/**
+ * Satu opsi departemen per departemen, digabung lintas kantor. Bila `officeId`
+ * diisi, hanya departemen yang punya anggota di kantor tersebut yang disertakan.
+ */
+export function listWorkTeamOverviewUniqueDepartmentOptions(
+  options: readonly WorkTeamOverviewOption[],
+  officeId: string | null = null,
+): readonly WorkTeamOverviewOption[] {
+  const seen = new Map<string, WorkTeamOverviewOption>();
+  for (const option of options) {
+    if (option.kind !== "department") continue;
+    if (officeId && option.officeId !== officeId) continue;
+    const existing = seen.get(option.id);
+    if (existing) {
+      seen.set(option.id, {
+        ...existing,
+        memberCount: existing.memberCount + option.memberCount,
+      });
+      continue;
+    }
+    seen.set(option.id, option);
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Anggota yang cocok dengan filter Kantor/Departemen yang sedang aktif.
+ * `memberOptions` berasal dari pencarian terotorisasi yang sudah dibatasi,
+ * bukan dari daftar seluruh anggota.
+ */
 export function listWorkTeamOverviewMemberOptions(
   options: readonly WorkTeamOverviewOption[],
   filters: Pick<WorkTeamOverviewFilters, "officeId" | "departmentId">,
@@ -180,9 +209,13 @@ export function listWorkTeamOverviewMemberOptions(
 }
 
 /**
- * Buang pilihan yang tidak lagi valid terhadap opsi terbaru (mis. anggota
- * keluar dari cakupan, atau departemen tidak lagi punya anggota di kantor
- * terpilih). Selalu fail-closed: nilai tidak valid menjadi `null`.
+ * Buang pilihan Kantor/Departemen yang tidak lagi valid terhadap opsi terbaru
+ * (mis. anggota keluar dari cakupan, atau departemen tidak lagi punya anggota
+ * di kantor terpilih). Selalu fail-closed: nilai tidak valid menjadi `null`.
+ *
+ * `memberId` sengaja TIDAK direkonsiliasi di sini: daftar anggota tidak lagi
+ * dimuat seluruhnya sebagai opsi, sehingga validitasnya diperiksa secara
+ * asinkron lewat `getAuthorizedTeamMember` (lihat `useWorkTeamOverview`).
  */
 export function reconcileWorkTeamOverviewFilters(
   filters: WorkTeamOverviewFilters,
@@ -205,23 +238,18 @@ export function reconcileWorkTeamOverviewFilters(
       ? filters.departmentId
       : null;
 
-  const memberIds = new Set(
-    listWorkTeamOverviewMemberOptions(options, { officeId, departmentId }).map(
-      (option) => option.id,
-    ),
-  );
-  const memberId =
-    filters.memberId && memberIds.has(filters.memberId) ? filters.memberId : null;
-
-  if (
-    officeId === filters.officeId &&
-    departmentId === filters.departmentId &&
-    memberId === filters.memberId
-  ) {
+  if (officeId === filters.officeId && departmentId === filters.departmentId) {
     return filters;
   }
 
-  return { ...filters, officeId, departmentId, memberId };
+  return {
+    ...filters,
+    officeId,
+    departmentId,
+    // Departemen yang berubah juga membatalkan anggota, karena anggota
+    // direkonsiliasi terhadap konteks organisasi yang tersedia.
+    memberId: departmentId === filters.departmentId ? filters.memberId : null,
+  };
 }
 
 export function clampWorkTeamOverviewPageSize(value: number): number {
@@ -247,6 +275,27 @@ export function getWorkTeamOverviewPageCount(
   return Math.max(1, Math.ceil(totalCount / size));
 }
 
+/** Ukuran halaman untuk daftar anggota terbatas. */
+export function getWorkTeamOverviewMemberSearchPageSize(): number {
+  return WORK_TEAM_OVERVIEW_MEMBER_SEARCH_PAGE_SIZE;
+}
+
+/** Jumlah halaman hasil pencarian anggota yang dibatasi. */
+export function getWorkTeamOverviewMemberSearchPageCount(
+  totalCount: number,
+  limit: number = WORK_TEAM_OVERVIEW_MEMBER_SEARCH_PAGE_SIZE,
+): number {
+  if (!Number.isFinite(totalCount) || totalCount <= 0) return 1;
+  const safeLimit = limit < 1 ? WORK_TEAM_OVERVIEW_MEMBER_SEARCH_PAGE_SIZE : Math.floor(limit);
+  return Math.max(1, Math.ceil(totalCount / safeLimit));
+}
+
+/**
+ * Mode pencarian anggota. `typing` dipakai untuk pencarian teks pengguna dan
+ * dibatasi jauh lebih ketat karena hasilnya berubah setiap ketikan.
+ */
+export type WorkTeamOverviewMemberSearchMode = "filters" | "list" | "status" | "typing";
+
 /* ------------------------------------------------------------------------- */
 /* Sinkronisasi URL query                                                    */
 /* ------------------------------------------------------------------------- */
@@ -262,11 +311,8 @@ const QUERY_KEYS = {
   page: "page",
 } as const;
 
-export interface WorkTeamOverviewUrlState {
-  filters: WorkTeamOverviewFilters;
-  sort: WorkTeamOverviewSort;
-  page: number;
-}
+/** Kunci yang dimiliki route Work Calendar; sisanya tidak boleh dihapus. */
+export const WORK_TEAM_OVERVIEW_QUERY_KEYS: readonly string[] = Object.values(QUERY_KEYS);
 
 export interface ReadWorkTeamOverviewUrlInput {
   search: string;
@@ -277,6 +323,9 @@ export interface ReadWorkTeamOverviewUrlInput {
  * Baca state dari `location.search`. Nilai tidak dikenal selalu jatuh ke
  * default, bukan melempar error, supaya URL yang diubah manual tidak merusak
  * halaman.
+ *
+ * Id/tanggal dari URL hanya divalidasi bentuknya di sini; rekonsiliasi dengan
+ * opsi terotorisasi dilakukan terpisah lewat `reconcileWorkTeamOverviewFilters`.
  */
 export function readWorkTeamOverviewUrlState(
   input: ReadWorkTeamOverviewUrlInput,
@@ -313,27 +362,96 @@ export function readWorkTeamOverviewUrlState(
 }
 
 /**
+ * Tulis state ke objek `URLSearchParams`, mempertahankan parameter lain milik
+ * route (mis. penanda tanggal global) dan hanya menimpa kunci Tim Overview.
+ * `date` selalu ditulis supaya refresh/back mempertahankan konteks tanggal.
+ */
+export function applyWorkTeamOverviewUrlState(
+  params: URLSearchParams,
+  state: WorkTeamOverviewUrlState,
+): URLSearchParams {
+  const next = new URLSearchParams(params.toString());
+  const { filters } = state;
+
+  const setOrDelete = (key: string, value: string | null): void => {
+    if (value === null) next.delete(key);
+    else next.set(key, value);
+  };
+
+  setOrDelete(QUERY_KEYS.office, isNonEmptyId(filters.officeId) ? filters.officeId : null);
+  setOrDelete(
+    QUERY_KEYS.department,
+    isNonEmptyId(filters.departmentId) ? filters.departmentId : null,
+  );
+  setOrDelete(QUERY_KEYS.member, isNonEmptyId(filters.memberId) ? filters.memberId : null);
+  setOrDelete(
+    QUERY_KEYS.search,
+    filters.search.trim().length > 0
+      ? normalizeWorkTeamOverviewSearch(filters.search)
+      : null,
+  );
+  setOrDelete(QUERY_KEYS.status, filters.status !== "all" ? filters.status : null);
+  setOrDelete(QUERY_KEYS.workDate, ISO_DATE_PATTERN.test(filters.workDate) ? filters.workDate : null);
+  setOrDelete(QUERY_KEYS.sort, state.sort !== "priority" ? state.sort : null);
+  setOrDelete(QUERY_KEYS.page, state.page > 1 ? String(state.page) : null);
+
+  return next;
+}
+
+/**
  * Tulis state ke string query (tanpa `?`). Hanya nilai non-default yang
  * ditulis supaya URL tetap ringkas dan mudah dibaca.
  */
 export function writeWorkTeamOverviewUrlState(state: WorkTeamOverviewUrlState): string {
-  const params = new URLSearchParams();
-  const { filters } = state;
+  return applyWorkTeamOverviewUrlState(new URLSearchParams(), state).toString();
+}
 
-  if (isNonEmptyId(filters.officeId)) params.set(QUERY_KEYS.office, filters.officeId);
-  if (isNonEmptyId(filters.departmentId)) {
-    params.set(QUERY_KEYS.department, filters.departmentId);
-  }
-  if (isNonEmptyId(filters.memberId)) params.set(QUERY_KEYS.member, filters.memberId);
-  if (filters.search.trim().length > 0) {
-    params.set(QUERY_KEYS.search, normalizeWorkTeamOverviewSearch(filters.search));
-  }
-  if (filters.status !== "all") params.set(QUERY_KEYS.status, filters.status);
-  if (ISO_DATE_PATTERN.test(filters.workDate)) {
-    params.set(QUERY_KEYS.workDate, filters.workDate);
-  }
-  if (state.sort !== "priority") params.set(QUERY_KEYS.sort, state.sort);
-  if (state.page > 1) params.set(QUERY_KEYS.page, String(state.page));
+/**
+ * Bandingkan dua state Tim secara nilai. Dipakai untuk menekan tulis-ulang URL
+ * dan penerapan state dari luar yang sebenarnya identik (Back/Forward).
+ */
+export function isSameWorkTeamOverviewUrlState(
+  left: WorkTeamOverviewUrlState,
+  right: WorkTeamOverviewUrlState,
+): boolean {
+  return (
+    left.page === right.page &&
+    left.sort === right.sort &&
+    isSameWorkTeamOverviewFilters(left.filters, right.filters)
+  );
+}
 
-  return params.toString();
+export function isSameWorkTeamOverviewFilters(
+  left: WorkTeamOverviewFilters,
+  right: WorkTeamOverviewFilters,
+): boolean {
+  return (
+    left.officeId === right.officeId &&
+    left.departmentId === right.departmentId &&
+    left.memberId === right.memberId &&
+    left.search === right.search &&
+    left.status === right.status &&
+    left.workDate === right.workDate
+  );
+}
+
+/** Satu halaman hasil pencarian anggota yang sudah dibatasi. */
+export interface WorkTeamOverviewMemberSearchSlice {
+  members: readonly WorkTeamOverviewOption[];
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export function sliceWorkTeamOverviewMembers(
+  members: readonly WorkTeamOverviewOption[],
+  totalCount: number,
+  offset: number,
+  limit: number,
+): WorkTeamOverviewMemberSearchSlice {
+  const end = offset + limit;
+  return {
+    members: members.slice(0, limit),
+    totalCount,
+    hasMore: members.length >= limit && end < totalCount,
+  };
 }

@@ -11,7 +11,10 @@
  * adalah timestamp ISO-8601.
  */
 
-import type { WorkTeamOverviewRepository } from "./work-team-overview";
+import type {
+  WorkTeamOverviewRepository,
+  WorkTeamOverviewRouteAdapter,
+} from "./work-team-overview";
 
 export const WORK_ENTRY_STATUSES = ["planned", "in_progress", "completed", "blocked"] as const;
 
@@ -168,6 +171,14 @@ export interface WorkCalendarWorkspaceProps {
    * pekerjaan organisasi sekaligus.
    */
   teamOverviewRepository?: WorkTeamOverviewRepository;
-  /** Sinkronkan filter Tim ke URL query (dipakai halaman, mati pada test). */
-  syncTeamFiltersToUrl?: boolean;
+  /**
+   * Sumber kebenaran ketersediaan tab Tim. Halaman mengisinya dari probe
+   * boolean sehingga bootstrap tidak perlu memuat daftar anggota.
+   */
+  isTeamViewAvailableOverride?: boolean;
+  /**
+   * Binding URL React Router untuk mode Tim (filter/halaman masuk history,
+   * Back/Forward/deep link memulihkan state). Kosong berarti tanpa URL sync.
+   */
+  routeAdapter?: WorkTeamOverviewRouteAdapter;
 }

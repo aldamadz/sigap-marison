@@ -236,8 +236,10 @@ export function TeamOverviewView({
   departmentOptions,
 }: TeamOverviewViewProps) {
   const isCompact = useWorkTeamOverviewCompact();
-  const members = overview.data?.members ?? [];
-  const totalCount = overview.data?.totalCount ?? 0;
+  // Anggota halaman lama tidak pernah dirender sebagai hasil halaman baru:
+  // selama permintaan berjalan, daftar dikosongkan sampai data baru tiba.
+  const members = overview.status === "ready" ? overview.data?.members ?? [] : [];
+  const totalCount = overview.status === "ready" ? overview.data?.totalCount ?? 0 : 0;
   const aggregate: WorkProgressCounts = overview.data?.aggregate ?? EMPTY_WORK_PROGRESS;
 
   // Pekerjaan anggota yang sedang terbuka dimuat ulang lewat tombol ini.
@@ -255,7 +257,9 @@ export function TeamOverviewView({
         />
       )}
 
-      <TeamAggregateProgress progress={aggregate} totalCount={totalCount} workDate={workDate} />
+      {overview.status === "ready" && (
+        <TeamAggregateProgress progress={aggregate} totalCount={totalCount} workDate={workDate} />
+      )}
 
       {overview.status === "loading" && (
         <p role="status" className="text-xs text-muted-foreground">

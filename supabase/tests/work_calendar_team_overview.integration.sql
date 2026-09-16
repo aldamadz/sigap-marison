@@ -431,10 +431,12 @@ begin
   -- 11. Organization options are scoped to the authorized hierarchy
   -- ==========================================================================
   select count(*) into v_count from public.list_work_calendar_team_overview_options();
-  -- 3 offices (Solo, Bandung, Pusat) + 2 departments (Operasional, Keuangan)
-  -- + 31 members = 36. Direksi has no authorized member, so it is absent.
-  if v_count <> 36 then
-    raise exception 'Assertion failed: authorized options expected 36, got %', v_count;
+  -- 3 offices (Solo, Bandung, Pusat) + 3 (department, office) pairs
+  -- (Operasional@Solo, Operasional@Pusat, Keuangan@Bandung) = 6. Direksi has no
+  -- authorized member, so it is absent. Member rows are deliberately NOT
+  -- returned anymore: a roster must go through the bounded search RPC.
+  if v_count <> 6 then
+    raise exception 'Assertion failed: authorized options expected 6, got %', v_count;
   end if;
 
   select member_count into v_total from public.list_work_calendar_team_overview_options()
@@ -443,11 +445,28 @@ begin
     raise exception 'Assertion failed: office option Solo expected 13 members, got %', v_total;
   end if;
 
+  -- A department row is emitted per (department, office) pair so the Kantor ->
+  -- Departemen cascade never has to invent a relation that does not exist.
+  select member_count into v_total from public.list_work_calendar_team_overview_options()
+  where option_kind = 'department'
+    and option_id = v_dept_ops
+    and office_id = v_office_solo;
+  if v_total <> 13 then
+    raise exception 'Assertion failed: Operasional@Solo expected 13 members, got %', v_total;
+  end if;
+
+  select count(*) into v_count from public.list_work_calendar_team_overview_options()
+  where option_kind = 'department' and office_id is null;
+  if v_count <> 0 then
+    raise exception 'Assertion failed: department options must always carry an office_id, got %', v_count;
+  end if;
+
+  -- Options never expose member names or ids, in or out of scope.
   if exists (
     select 1 from public.list_work_calendar_team_overview_options()
-    where option_kind = 'member' and option_id = v_outside
+    where option_kind = 'member'
   ) then
-    raise exception 'Assertion failed: options leaked an out-of-scope member';
+    raise exception 'Assertion failed: options leaked member rows';
   end if;
 
   -- ==========================================================================

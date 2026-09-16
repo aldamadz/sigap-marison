@@ -332,26 +332,33 @@ export function createFixtureWorkTeamOverviewRepository(
   const departmentOptions: readonly WorkTeamOverviewOption[] =
     providedOptions !== undefined
       ? providedOptions.filter((option) => option.kind === "department")
-      : [
-          {
-            kind: "department",
-            id: DEPT_FINANCE_ID,
-            label: "Keuangan",
-            sublabel: null,
-            officeId: null,
-            departmentId: DEPT_FINANCE_ID,
-            memberCount: 0,
-          },
-          {
-            kind: "department",
-            id: DEPT_OPS_ID,
-            label: "Operasional",
-            sublabel: null,
-            officeId: null,
-            departmentId: DEPT_OPS_ID,
-            memberCount: 0,
-          },
-        ];
+      : (() => {
+          // Meniru RPC: satu baris departemen per pasangan (departemen, kantor)
+          // dengan `member_count` yang dipersempit ke kantor tersebut, supaya
+          // cascading Kantor -> Departemen konsisten dengan server.
+          const pairs = new Map<string, WorkTeamOverviewOption>();
+          for (const member of memberOptions) {
+            if (member.departmentId === null || member.officeId === null) continue;
+            const key = `${member.departmentId}::${member.officeId}`;
+            const label =
+              member.departmentId === DEPT_FINANCE_ID
+                ? "Keuangan"
+                : member.departmentId === DEPT_OPS_ID
+                  ? "Operasional"
+                  : member.departmentId;
+            const existing = pairs.get(key);
+            pairs.set(key, {
+              kind: "department",
+              id: member.departmentId,
+              label,
+              sublabel: null,
+              officeId: member.officeId,
+              departmentId: member.departmentId,
+              memberCount: (existing?.memberCount ?? 0) + 1,
+            });
+          }
+          return [...pairs.values()];
+        })();
 
   const delay = async (signal: AbortSignal | undefined): Promise<void> => {
     if (options.signalRef) options.signalRef.current = signal ?? null;
@@ -373,10 +380,44 @@ export function createFixtureWorkTeamOverviewRepository(
     );
 
   return {
+    async hasAuthorizedTeamMembers(signal) {
+      await delay(signal);
+      if (options.failOnOptions) return false;
+      return memberOptions.length > 0;
+    },
+
     async listAuthorizedOrganizationOptions(signal) {
       await delay(signal);
       if (options.failOnOptions) throw new Error("Gagal memuat pilihan organisasi (fixture).");
-      return [...officeOptions, ...departmentOptions, ...memberOptions];
+      return [...officeOptions, ...departmentOptions];
+    },
+
+    async searchTeamMembers({ search, officeId, departmentId, offset, limit, signal }) {
+      await delay(signal);
+      if (options.failOnOptions) throw new Error("Gagal mencari anggota tim (fixture).");
+      const limitValue = limit ?? 25;
+      const term = search.trim().toLowerCase();
+      const matched = memberOptions.filter((option) => {
+        if (officeId && option.officeId !== officeId) return false;
+        if (departmentId && option.departmentId !== departmentId) return false;
+        if (term.length > 0) {
+          const haystack = `${option.label} ${option.sublabel ?? ""}`.toLowerCase();
+          if (!haystack.includes(term)) return false;
+        }
+        return true;
+      });
+      const start = Math.max(offset, 0);
+      return {
+        members: matched.slice(start, start + limitValue),
+        totalCount: matched.length,
+        offset: start,
+        limit: limitValue,
+      };
+    },
+
+    async getAuthorizedTeamMember(memberId, signal) {
+      await delay(signal);
+      return memberOptions.find((option) => option.id === memberId) ?? null;
     },
 
     async listTeamOverview({ filters, page, pageSize, signal }) {
@@ -420,7 +461,12 @@ export function createFixtureWorkTeamOverviewRepository(
         { total: 0, planned: 0, inProgress: 0, completed: 0, blocked: 0, overdue: 0 },
       );
 
-      const offset = (page - 1) * pageSize;
+      const totalCount = statusFiltered.length;
+      // Meniru clamp server: offset di luar rentang dipetakan ke halaman
+      // terakhir, dan halaman yang dilaporkan ikut di-clamp.
+      const lastPageOffset =
+        totalCount === 0 ? 0 : Math.floor((totalCount - 1) / pageSize) * pageSize;
+      const offset = Math.min(Math.max((page - 1) * pageSize, 0), lastPageOffset);
       const members = statusFiltered.slice(offset, offset + pageSize).map<WorkTeamOverviewMember>(
         ({ option, entries }) => ({
           owner: { id: option.id, name: option.label, jobTitle: option.sublabel },
@@ -436,9 +482,9 @@ export function createFixtureWorkTeamOverviewRepository(
 
       return {
         members,
-        totalCount: statusFiltered.length,
+        totalCount,
         aggregate,
-        page,
+        page: Math.min(Math.max(page, 1), Math.max(Math.ceil(totalCount / pageSize), 1)),
         pageSize,
       };
     },

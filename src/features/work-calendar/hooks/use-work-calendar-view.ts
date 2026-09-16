@@ -79,7 +79,16 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const readNow = useCallback(() => (now ? now() : new Date()), [now]);
 
   const [today, setToday] = useState<WorkDate>(() => todayWorkDate(readNow()));
-  const [view, setViewState] = useState<WorkCalendarViewMode>(initialView ?? "day");
+  const [view, setViewState] = useState<WorkCalendarViewMode>(() => {
+    const requested = initialView ?? "day";
+    // Deep link ke tab Tim tidak pernah mengaktifkan tab yang tidak tersedia.
+    if (requested === "team") {
+      const available =
+        input.isTeamViewAvailableOverride ?? isWorkCalendarTeamViewAvailable(teamMembers);
+      return available ? "team" : "day";
+    }
+    return requested;
+  });
   const [anchorDate, setAnchorDateState] = useState<WorkDate>(
     () => initialAnchorDate ?? todayWorkDate(readNow()),
   );
@@ -200,6 +209,9 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   const setView = useCallback(
     (next: WorkCalendarViewMode) => {
       if (next === "team" && !isTeamViewAvailable) return;
+      // Masuk ke Tim menyetel tanggal acuan ke hari ini supaya heading, query
+      // overview, agregat, detail lazy, dan `date` di URL menunjuk tanggal yang
+      // sama. Tanggal tunggal tetap `anchorDate` (bukan tanggal terpisah).
       if (next === "team") {
         setAnchorDateState(todayWorkDate(readNow()));
       }

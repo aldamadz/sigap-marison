@@ -60,7 +60,6 @@ import { TeamOverviewView } from "./TeamOverviewView";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 import { WorkEntryDetail } from "./WorkEntryDetail";
 import { useWorkTeamOverview } from "../hooks/use-work-team-overview";
-import { listWorkTeamOverviewDepartmentOptions } from "../lib/work-team-overview";
 
 interface StatusPrompt {
   entryId: string;
@@ -77,7 +76,8 @@ export function WorkCalendarWorkspace({  currentUser,
   initialAnchorDate,
   now,
   teamOverviewRepository,
-  syncTeamFiltersToUrl,
+  isTeamViewAvailableOverride,
+  routeAdapter,
 }: WorkCalendarWorkspaceProps) {
   const calendar = useWorkCalendarView({
     repository,
@@ -87,20 +87,18 @@ export function WorkCalendarWorkspace({  currentUser,
     initialAnchorDate,
     now,
     loadTeamEntries: teamOverviewRepository === undefined,
+    isTeamViewAvailableOverride,
   });
 
   const teamOverview = useWorkTeamOverview({
     repository: teamOverviewRepository ?? null,
     enabled: teamOverviewRepository !== undefined && calendar.view === "team",
-    workDate: calendar.today,
-    syncUrl: syncTeamFiltersToUrl ?? false,
+    // Tanggal tunggal mode Tim: selalu mengikuti tanggal acuan kalender.
+    workDate: calendar.anchorDate,
+    adapter: routeAdapter,
   });
 
-  const teamDepartmentOptions = useMemo(
-    () =>
-      listWorkTeamOverviewDepartmentOptions(teamOverview.options, teamOverview.filters.officeId),
-    [teamOverview.options, teamOverview.filters.officeId],
-  );
+  const teamDepartmentOptions = teamOverview.departmentOptions;
 
   const derived = useWorkCalendarDerivedView({
     view: calendar.view,
@@ -117,6 +115,42 @@ export function WorkCalendarWorkspace({  currentUser,
     () => permissions ?? createWorkCalendarPermissions(currentUser.id),
     [permissions, currentUser.id],
   );
+
+  /**
+   * Sinkronisasi URL (React Router) untuk tanggal acuan dan tampilan:
+   * tanggal acuan selalu tercermin di query `date` dan tab di query `view`
+   * supaya refresh/deep link membuka konteks yang sama. Ditulis dengan
+   * `replace` agar history tetap fokus pada perubahan filter/halaman Tim.
+   */
+  useEffect(() => {
+    if (!routeAdapter) return;
+    routeAdapter.writeAnchorDate(calendar.anchorDate, { replace: true });
+    routeAdapter.writeView(calendar.view, { replace: true });
+  }, [routeAdapter, calendar.anchorDate, calendar.view]);
+
+  /**
+   * Adopsi navigasi luar (Back/Forward) untuk tanggal acuan dan tab. Navigasi
+   * pertama (mount) dilewati karena sudah ditangani `initialView`/
+   * `initialAnchorDate`.
+   */
+  const routeKey = routeAdapter?.key ?? null;
+  const lastRouteKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!routeAdapter || routeKey === null) return;
+    if (lastRouteKeyRef.current === null) {
+      lastRouteKeyRef.current = routeKey;
+      return;
+    }
+    if (lastRouteKeyRef.current === routeKey) return;
+    lastRouteKeyRef.current = routeKey;
+
+    const urlDate = routeAdapter.readAnchorDate();
+    if (urlDate && urlDate !== calendar.anchorDate) calendar.setAnchorDate(urlDate);
+    const urlView = routeAdapter.readView();
+    if (urlView && urlView !== calendar.view) calendar.setView(urlView);
+    // `calendar` sengaja tidak menjadi dependensi: adopsi hanya dipicu oleh
+    // perubahan kunci URL agar tidak ada loop umpan-balik.
+  }, [routeAdapter, routeKey]);
 
   const [quickSaving, setQuickSaving] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
@@ -153,14 +187,14 @@ export function WorkCalendarWorkspace({  currentUser,
   );
 
   /**
-   * Peta pemilik untuk detail. Mode Tim server memakai opsi anggota yang
-   * terotorisasi, sehingga nama selalu tersedia tanpa memuat semua entry.
+   * Peta pemilik untuk detail. Mode Tim server hanya menyediakan anggota dari
+   * pencarian terbatas dan halaman yang sedang tampil, sehingga nama diambil
+   * dari data halaman yang sudah dimuat — bukan dari seluruh roster.
    */
   const ownerById = useMemo(() => {
     const map = new Map<string, WorkEntryOwner>();
     for (const member of teamMembers ?? []) map.set(member.id, member);
-    for (const option of teamOverview.options) {
-      if (option.kind !== "member") continue;
+    for (const option of teamOverview.memberOptions) {
       if (!map.has(option.id)) {
         map.set(option.id, {
           id: option.id,
@@ -169,8 +203,11 @@ export function WorkCalendarWorkspace({  currentUser,
         });
       }
     }
+    for (const member of teamOverview.data?.members ?? []) {
+      if (!map.has(member.owner.id)) map.set(member.owner.id, member.owner);
+    }
     return map;
-  }, [teamMembers, teamOverview.options]);
+  }, [teamMembers, teamOverview.memberOptions, teamOverview.data]);
 
   const monthPanelEntries = useMemo(() => {
     if (!monthPanelDate) return [] as WorkEntry[];
@@ -696,7 +733,7 @@ export function WorkCalendarWorkspace({  currentUser,
           <TeamOverviewView
             overview={teamOverview}
             interactions={interactions}
-            workDate={calendar.today}
+            workDate={calendar.anchorDate}
             departmentOptions={teamDepartmentOptions}
           />
         ) : (

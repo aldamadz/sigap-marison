@@ -11,6 +11,7 @@
  */
 
 import type {
+  WorkCalendarViewMode,
   WorkDate,
   WorkEntry,
   WorkEntryOwner,
@@ -55,6 +56,12 @@ export type WorkTeamOverviewDbStatus =
 /** Ukuran halaman default dan batas maksimum (selaras dengan RPC). */
 export const WORK_TEAM_OVERVIEW_DEFAULT_PAGE_SIZE = 25;
 export const WORK_TEAM_OVERVIEW_MAX_PAGE_SIZE = 100;
+
+/** Batas pencarian Anggota terotorisasi; selaras dengan batas RPC. */
+export const WORK_TEAM_OVERVIEW_MEMBER_SEARCH_LIMIT = 25;
+export const WORK_TEAM_OVERVIEW_MEMBER_SEARCH_MAX_LIMIT = 50;
+/** Batas member yang ditampilkan per mode pencarian anggota. */
+export const WORK_TEAM_OVERVIEW_MEMBER_SEARCH_PAGE_SIZE = 20;
 
 export interface WorkTeamOverviewFilters {
   officeId: string | null;
@@ -118,14 +125,84 @@ export interface WorkTeamOverviewEntryQuery {
 }
 
 /**
+ * Pencarian Anggota terotorisasi, dibatasi dan dipaginasi. Dipakai supaya
+ * daftar anggota tidak pernah dimuat seluruhnya ke klien. Kantor/departemen
+ * ikut dikirim supaya pencarian menghormati cascading yang sama dengan
+ * daftar tim.
+ */
+export interface WorkTeamOverviewMemberSearchQuery {
+  search: string;
+  officeId: string | null;
+  departmentId: string | null;
+  offset: number;
+  limit?: number;
+  signal?: AbortSignal;
+}
+
+export interface WorkTeamOverviewMemberSearchPage {
+  members: readonly WorkTeamOverviewOption[];
+  /** Jumlah seluruh anggota terotorisasi yang cocok, bukan hanya halaman ini. */
+  totalCount: number;
+  offset: number;
+  limit: number;
+}
+
+/** State Tim yang dipulihkan dari/ditulis ke URL query. */
+export interface WorkTeamOverviewUrlState {
+  filters: WorkTeamOverviewFilters;
+  sort: WorkTeamOverviewSort;
+  page: number;
+}
+
+/**
+ * Adapter navigasi URL untuk mode Tim. Diimplementasikan di layer hook dengan
+ * React Router; didefinisikan di sini agar tipe workspace tidak bergantung
+ * pada modul hook.
+ */
+export interface WorkTeamOverviewRouteWriteOptions {
+  /** `true` mengganti entri history saat ini (mis. ketikan pencarian). */
+  replace?: boolean;
+}
+
+export interface WorkTeamOverviewRouteAdapter {
+  /** Kunci URL terkini; berubah pada setiap navigasi termasuk Back/Forward. */
+  key: string;
+  read(fallbackDate: WorkDate): WorkTeamOverviewUrlState;
+  /** Tampilan dari URL, bila valid. */
+  readView(): WorkCalendarViewMode | null;
+  /** Tanggal acuan dari URL, bila valid. */
+  readAnchorDate(): WorkDate | null;
+  write(state: WorkTeamOverviewUrlState, options?: WorkTeamOverviewRouteWriteOptions): void;
+  writeAnchorDate(date: WorkDate, options?: WorkTeamOverviewRouteWriteOptions): void;
+  writeView(
+    view: WorkCalendarViewMode,
+    options?: WorkTeamOverviewRouteWriteOptions,
+  ): void;
+}
+
+/**
  * Sumber data Team Overview. Semua metode menerima `AbortSignal` supaya
  * perubahan filter/halaman dapat membatalkan permintaan lama.
+ *
+ * `hasAuthorizedTeamMembers` sengaja hanya mengembalikan boolean: bootstrap
+ * halaman tidak boleh memuat daftar nama anggota untuk memutuskan tab Tim.
  */
 export interface WorkTeamOverviewRepository {
+  /** Apakah actor punya minimal satu bawahan aktif tanpa memuat nama. */
+  hasAuthorizedTeamMembers(signal?: AbortSignal): Promise<boolean>;
   listTeamOverview(query: WorkTeamOverviewQuery): Promise<WorkTeamOverviewPage>;
   listAuthorizedOrganizationOptions(
     signal?: AbortSignal,
   ): Promise<readonly WorkTeamOverviewOption[]>;
+  /** Pencarian anggota terotorisasi yang dibatasi dan dipaginasi. */
+  searchTeamMembers(
+    query: WorkTeamOverviewMemberSearchQuery,
+  ): Promise<WorkTeamOverviewMemberSearchPage>;
+  /** Resolusi satu anggota terotorisasi; `null` bila di luar cakupan. */
+  getAuthorizedTeamMember(
+    memberId: string,
+    signal?: AbortSignal,
+  ): Promise<WorkTeamOverviewOption | null>;
   listTeamMemberEntries(
     query: WorkTeamOverviewEntryQuery,
   ): Promise<readonly WorkEntry[]>;

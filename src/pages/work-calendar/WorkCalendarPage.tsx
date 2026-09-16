@@ -7,6 +7,7 @@ import {
   createSupabaseWorkCalendarProfileRepository,
   createSupabaseWorkEntryRepository,
   createSupabaseWorkTeamOverviewRepository,
+  useWorkCalendarRouteBinding,
   type SupabaseWorkCalendarClient,
   type SupabaseWorkCalendarProfileClient,
   type SupabaseWorkTeamOverviewClient,
@@ -17,10 +18,22 @@ type BootstrapState =
   | { status: "loading" }
   | { status: "missing_profile" }
   | { status: "error"; message: string }
-  | { status: "ready"; currentUser: WorkEntryOwner; teamMembers: readonly WorkEntryOwner[] };
+  | { status: "ready"; currentUser: WorkEntryOwner; isTeamViewAvailable: boolean };
 
+/**
+ * Bootstrap Director Scale sengaja minimal:
+ * - hanya memuat profil pengguna sendiri;
+ * - ketersediaan tab Tim diperiksa lewat probe boolean
+ *   (`has_work_calendar_team_members`), BUKAN dengan memuat daftar seluruh
+ *   anggota. Opsi Kantor/Departemen dan pencarian Anggota dimuat saat tab Tim
+ *   benar-benar dibuka.
+ *
+ * Route ini juga menyediakan binding URL React Router sehingga mode Tim masuk
+ * history sesuai kebutuhan dan Back/Forward/deep link memulihkan state.
+ */
 export default function WorkCalendarPage() {
   const [state, setState] = useState<BootstrapState>({ status: "loading" });
+  const route = useWorkCalendarRouteBinding();
 
   const repository = useMemo(
     () => createSupabaseWorkEntryRepository(supabase as SupabaseWorkCalendarClient),
@@ -49,24 +62,32 @@ export default function WorkCalendarPage() {
           return;
         }
 
-        const teamMembers = await profileRepository.listTeamMembers(signal);
+        // Probe boolean: tidak ada nama anggota yang dibaca di sini.
+        let isTeamViewAvailable = false;
+        try {
+          isTeamViewAvailable = await teamOverviewRepository.hasAuthorizedTeamMembers(signal);
+        } catch {
+          // Kegagalan probe tidak boleh memblokir kalender pribadi; tab Tim
+          // cukup disembunyikan sampai probe berhasil.
+          isTeamViewAvailable = false;
+        }
         if (signal?.aborted) return;
 
         setState({
           status: "ready",
           currentUser: profile,
-          teamMembers,
+          isTeamViewAvailable,
         });
       } catch (thrown) {
         if (signal?.aborted) return;
         const message =
           thrown instanceof Error && thrown.message
             ? thrown.message
-            : "Gagal memuat profil dan struktur tim kalender.";
+            : "Gagal memuat profil kerja pengguna.";
         setState({ status: "error", message });
       }
     },
-    [profileRepository],
+    [profileRepository, teamOverviewRepository],
   );
 
   useEffect(() => {
@@ -142,7 +163,11 @@ export default function WorkCalendarPage() {
     <WorkCalendarWorkspace
       currentUser={state.currentUser}
       repository={repository}
-      teamMembers={state.teamMembers}
+      teamOverviewRepository={teamOverviewRepository}
+      isTeamViewAvailableOverride={state.isTeamViewAvailable}
+      initialView={route.initialView ?? "day"}
+      initialAnchorDate={route.initialAnchorDate ?? undefined}
+      routeAdapter={route.adapter}
     />
   );
 }

@@ -37,6 +37,7 @@ import type {
 } from "../types/work-team-overview";
 import { WORK_TEAM_OVERVIEW_SORTS } from "../types/work-team-overview";
 import type { UseWorkTeamOverviewResult } from "../hooks/use-work-team-overview";
+import { TeamOverviewMemberPicker } from "./TeamOverviewMemberPicker";
 
 const STATUS_OPTIONS: readonly {
   value: WorkTeamOverviewFilters["status"];
@@ -79,8 +80,7 @@ export function TeamOverviewFilterPanel({
   departmentOptions,
   variant,
 }: TeamOverviewFilterPanelProps) {
-  const { filters, options, memberOptions, optionsStatus, optionsError, activeFilterCount } =
-    overview;
+  const { filters, options, optionsStatus, optionsError, activeFilterCount } = overview;
   const disabled = optionsStatus === "loading";
 
   const officeOptions = options.filter((option) => option.kind === "office");
@@ -147,29 +147,7 @@ export function TeamOverviewFilterPanel({
           </Select>
         </label>
 
-        <label className="space-y-1 text-xs font-medium text-muted-foreground">
-          <span>Anggota</span>
-          <Select
-            value={toSelectValue(filters.memberId)}
-            disabled={disabled || memberOptions.length === 0}
-            onValueChange={(value) =>
-              overview.setFilter({ type: "member", value: fromSelectValue(value) })
-            }
-          >
-            <SelectTrigger aria-label="Filter anggota" className="h-11 rounded-sm">
-              <SelectValue placeholder="Semua anggota" />
-            </SelectTrigger>
-            <SelectContent className="work-calendar-scope">
-              <SelectItem value={ALL_VALUE}>Semua anggota</SelectItem>
-              {memberOptions.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                  {option.sublabel ? ` — ${option.sublabel}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
+        <TeamOverviewMemberPicker overview={overview} />
 
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Status</span>

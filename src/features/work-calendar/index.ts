@@ -80,6 +80,8 @@ export type {
   WorkTeamOverviewFilterChange,
   WorkTeamOverviewStatus,
 } from "./hooks/use-work-team-overview";
+export { useWorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
+export type { WorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
 export { useWorkTeamOverviewCompact } from "./hooks/use-work-team-overview-compact";
 
 export {

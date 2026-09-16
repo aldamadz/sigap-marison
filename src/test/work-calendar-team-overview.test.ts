@@ -180,18 +180,27 @@ const OPTIONS: readonly WorkTeamOverviewOption[] = [
     id: "dept-finance",
     label: "Keuangan",
     sublabel: null,
-    officeId: null,
+    officeId: "office-a",
     departmentId: "dept-finance",
-    memberCount: 0,
+    memberCount: 1,
   },
   {
     kind: "department",
     id: "dept-ops",
     label: "Operasional",
     sublabel: null,
-    officeId: null,
+    officeId: "office-a",
     departmentId: "dept-ops",
-    memberCount: 0,
+    memberCount: 1,
+  },
+  {
+    kind: "department",
+    id: "dept-finance",
+    label: "Keuangan",
+    sublabel: null,
+    officeId: "office-b",
+    departmentId: "dept-finance",
+    memberCount: 1,
   },
   {
     kind: "member",
@@ -419,6 +428,9 @@ describe("repository Supabase Team Overview", () => {
     overview?: { data: unknown; error: { message: string } | null };
     options?: { data: unknown; error: { message: string } | null };
     entries?: { data: unknown; error: { message: string } | null };
+    availability?: { data: unknown; error: { message: string } | null };
+    memberSearch?: { data: unknown; error: { message: string } | null };
+    memberById?: { data: unknown; error: { message: string } | null };
   }) {
     const abortSignals: AbortSignal[] = [];
     const calls: { fn: string; args: Record<string, unknown> | undefined }[] = [];
@@ -434,7 +446,13 @@ describe("repository Supabase Team Overview", () => {
             ? handlers.overview
             : fn === "list_work_calendar_team_overview_options"
               ? handlers.options
-              : handlers.entries;
+              : fn === "has_work_calendar_team_members"
+                ? handlers.availability
+                : fn === "search_work_calendar_team_members"
+                  ? handlers.memberSearch
+                  : fn === "get_work_calendar_team_member"
+                    ? handlers.memberById
+                    : handlers.entries;
         const result = source as { data: TResult; error: { message: string } | null };
 
         const query: WorkTeamOverviewRpcQuery<TResult> = {
@@ -617,5 +635,109 @@ describe("repository Supabase Team Overview", () => {
     await expect(repository.listAuthorizedOrganizationOptions()).rejects.toThrow(
       "Gagal memuat pilihan organisasi.",
     );
+  });
+
+  it("clamp halaman yang dilaporkan ketika offset di luar rentang", async () => {
+    const { client } = createClient({
+      overview: { data: [createOverviewRow({ total_count: 30 })], error: null },
+    });
+    const repository = createSupabaseWorkTeamOverviewRepository(client);
+
+    const page = await repository.listTeamOverview({
+      filters: createWorkTeamOverviewFilters(DATE),
+      page: 99,
+      pageSize: 25,
+      sort: "priority",
+    });
+
+    // Halaman dilaporkan sebagai halaman terakhir yang benar-benar dimuat,
+    // bukan nomor halaman yang diminta.
+    expect(page.page).toBe(2);
+    expect(page.totalCount).toBe(30);
+  });
+
+  it("probe ketersediaan tim mengembalikan boolean tanpa daftar anggota", async () => {
+    const { client, calls } = createClient({ availability: { data: true, error: null } });
+    const repository = createSupabaseWorkTeamOverviewRepository(client);
+
+    await expect(repository.hasAuthorizedTeamMembers()).resolves.toBe(true);
+    expect(calls[0].fn).toBe("has_work_calendar_team_members");
+    expect(calls[0].args).toBeUndefined();
+  });
+
+  it("probe ketersediaan tim melempar error terkontrol saat gagal", async () => {
+    const { client } = createClient({
+      availability: { data: null, error: { message: "boom" } },
+    });
+    const repository = createSupabaseWorkTeamOverviewRepository(client);
+
+    // Repository tidak menebak ketersediaan; pemanggil (route) yang memutuskan
+    // menyembunyikan tab Tim. Dengan begitu kegagalan tidak pernah dilaporkan
+    // seolah-olah "pengguna memang tidak punya bawahan".
+    await expect(repository.hasAuthorizedTeamMembers()).rejects.toThrow(
+      "Gagal memeriksa ketersediaan tim.",
+    );
+  });
+
+  it("pencarian anggota mengirim batas, offset, dan filter organisasi", async () => {
+    const { client, calls } = createClient({
+      memberSearch: {
+        data: [
+          {
+            member_id: "member-9",
+            full_name: "Anggota Sembilan",
+            job_title: "Staf",
+            office_id: "office-a",
+            department_id: "dept-finance",
+            total_count: 30,
+          },
+        ],
+        error: null,
+      },
+    });
+    const repository = createSupabaseWorkTeamOverviewRepository(client);
+
+    const result = await repository.searchTeamMembers({
+      search: "  sembilan ",
+      officeId: "office-a",
+      departmentId: "dept-finance",
+      offset: 0,
+      limit: 20,
+    });
+
+    expect(calls[0].fn).toBe("search_work_calendar_team_members");
+    expect(calls[0].args).toEqual({
+      p_search: "sembilan",
+      p_limit: 20,
+      p_offset: 0,
+      p_office_id: "office-a",
+      p_department_id: "dept-finance",
+    });
+    expect(result.totalCount).toBe(30);
+    expect(result.members[0]).toMatchObject({ kind: "member", id: "member-9" });
+  });
+
+  it("pencarian anggota selalu dibatasi keras maksimum", async () => {
+    const { client, calls } = createClient({ memberSearch: { data: [], error: null } });
+    const repository = createSupabaseWorkTeamOverviewRepository(client);
+
+    await repository.searchTeamMembers({
+      search: "",
+      officeId: null,
+      departmentId: null,
+      offset: -5,
+      limit: 500,
+    });
+
+    expect(calls[0].args).toMatchObject({ p_limit: 50, p_offset: 0, p_search: null });
+  });
+
+  it("resolusi anggota tunggal mengembalikan null di luar hierarki", async () => {
+    const { client, calls } = createClient({ memberById: { data: [], error: null } });
+    const repository = createSupabaseWorkTeamOverviewRepository(client);
+
+    await expect(repository.getAuthorizedTeamMember("member-x")).resolves.toBeNull();
+    expect(calls[0].fn).toBe("get_work_calendar_team_member");
+    expect(calls[0].args).toEqual({ p_member_id: "member-x" });
   });
 });

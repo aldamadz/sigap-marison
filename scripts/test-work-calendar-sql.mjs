@@ -222,7 +222,8 @@ try {
   if (
     !output.includes("CAL-03 work calendar integration: all assertions passed") ||
     !output.includes("CAL-03 team members integration: all assertions passed") ||
-    !output.includes("CAL-03 team overview integration: all assertions passed")
+    !output.includes("CAL-03 team overview integration: all assertions passed") ||
+    !output.includes("CAL-03 team overview scale integration: all assertions passed")
   ) {
     throw new Error("SQL runner did not see all success markers.\n" + output);
   }
