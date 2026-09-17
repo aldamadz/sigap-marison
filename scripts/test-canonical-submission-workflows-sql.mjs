@@ -1,0 +1,228 @@
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+
+const migrations = [
+  "supabase/migrations/20260917130000_canonical_submission_workflow_contract.sql",
+  "supabase/migrations/20260917131000_atomic_configured_checker_input.sql",
+  "supabase/migrations/20260917132000_optional_branch_signer_fallback.sql",
+  "supabase/migrations/20260917133000_seed_canonical_submission_workflows.sql",
+].map((file) => readFileSync(file, "utf8")).join("\n\n");
+const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
+
+const sql = `
+create extension if not exists pgcrypto;
+do $$ begin create role anon; exception when duplicate_object then null; end $$;
+do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
+do $$ begin create role service_role; exception when duplicate_object then null; end $$;
+create schema if not exists auth;
+create or replace function auth.uid() returns uuid language sql stable set search_path = ''
+as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+
+create table public.master_departments (id uuid primary key, name text not null unique);
+create table public.master_offices (id uuid primary key, name text not null, kedudukan text);
+create table public.profiles (
+  id uuid primary key, full_name text, job_title text, role text default 'user',
+  office_id uuid references public.master_offices(id),
+  department_id uuid references public.master_departments(id),
+  is_active boolean default true, deleted_at timestamptz
+);
+create table public.master_forms (
+  id uuid primary key, nama_form text not null, nomor_form text, created_at timestamptz default now()
+);
+create table public.approval_route_steps (
+  id uuid primary key default gen_random_uuid(),
+  action_type text not null default 'approval' check (action_type in ('approval','unit_allocation'))
+);
+create table public.form_usages (
+  id uuid primary key default gen_random_uuid(), form_id uuid references public.master_forms(id),
+  name text not null, description text, route_id uuid, request_category text not null,
+  scope_type text not null default 'all', status text not null default 'draft', sort_order integer default 0,
+  created_by uuid, created_at timestamptz default now(), updated_at timestamptz default now(),
+  external_revision_policy jsonb not null default '{"recipient_type":"requester","recipient_step_order":null,"approval_restart_step":1}'::jsonb
+);
+create table public.form_usage_departments (
+  usage_id uuid references public.form_usages(id) on delete cascade,
+  department_id uuid references public.master_departments(id), primary key (usage_id, department_id)
+);
+create table public.form_usage_steps (
+  id uuid primary key default gen_random_uuid(), usage_id uuid references public.form_usages(id) on delete cascade,
+  route_step_id uuid, step_order integer not null, role_name text not null, label text not null,
+  signer_department_id uuid references public.master_departments(id),
+  action_type text not null default 'approval' check (action_type in ('approval','unit_allocation')),
+  candidate_scope text not null default 'manual', created_at timestamptz default now(),
+  unique (usage_id, step_order)
+);
+create table public.form_usage_step_users (
+  usage_step_id uuid references public.form_usage_steps(id) on delete cascade,
+  user_id uuid references public.profiles(id), primary key (usage_step_id, user_id)
+);
+create table public.form_usage_step_verifiers (
+  usage_step_id uuid references public.form_usage_steps(id) on delete cascade,
+  user_id uuid references public.profiles(id), primary key (usage_step_id, user_id)
+);
+create table public.form_usage_attachment_requirements (
+  id uuid primary key default gen_random_uuid(), usage_id uuid references public.form_usages(id),
+  usage_step_id uuid references public.form_usage_steps(id), stage_order integer not null default 0,
+  requirement_key text not null, label text not null, is_required boolean default true,
+  allow_multiple boolean default false, min_files integer default 1, max_files integer default 1,
+  allowed_types text[] default array[]::text[], max_size_bytes bigint, sort_order integer default 0,
+  unique (usage_id, stage_order, requirement_key)
+);
+create table public.surat_registrasi (
+  id uuid primary key default gen_random_uuid(), form_usage_id uuid references public.form_usages(id),
+  office_id uuid references public.master_offices(id), dept_id uuid references public.master_departments(id),
+  represented_department_id uuid, created_by uuid references public.profiles(id), status text default 'PROSES',
+  current_step integer default 1, form_input_data jsonb default '{}'::jsonb,
+  data_snapshot jsonb default '{}'::jsonb, updated_at timestamptz default now()
+);
+create table public.surat_signatures (
+  id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
+  user_id uuid references public.profiles(id), form_usage_step_id uuid references public.form_usage_steps(id),
+  step_order integer default 1, role_name text default 'membuat', label_jabatan text,
+  is_signed boolean default false, action_type text not null default 'approval' check (action_type in ('approval','unit_allocation')),
+  requires_unit_allocation boolean default false, attachment_requirements_snapshot jsonb default '[]'::jsonb,
+  verifier_snapshot jsonb default '[]'::jsonb, verification_required boolean default false,
+  verification_status text default 'not_required', verified_at timestamptz, verified_by uuid,
+  verification_note text
+);
+create table public.surat_attachments (
+  id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
+  signature_id uuid references public.surat_signatures(id), stage text, requirement_key text
+);
+create table public.surat_revision_events (
+  id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
+  status text, target_type text, target_user_ids uuid[] default array[]::uuid[], created_at timestamptz default now()
+);
+
+create or replace function public.is_current_user_admin() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'
+    and is_active is true and deleted_at is null)
+$$;
+create or replace function public.can_read_surat(p_surat_id uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.surat_registrasi where id = p_surat_id and created_by = auth.uid())
+$$;
+
+create or replace function public.is_valid_external_revision_policy(p_policy jsonb)
+returns boolean language sql immutable set search_path = '' as $$
+  select jsonb_typeof(p_policy) = 'object'
+    and coalesce(p_policy->>'recipient_type','') in ('requester','signer')
+    and coalesce(p_policy->>'approval_restart_step','') ~ '^[1-8]$'
+$$;
+create or replace function public.save_form_usage_config_pre_external_revision_policy(
+  p_usage_id uuid, p_payload jsonb, p_department_ids uuid[], p_steps jsonb,
+  p_attachments jsonb, p_verifiers jsonb default '[]'::jsonb
+) returns uuid language plpgsql security definer set search_path = '' as $$
+declare
+  v_usage_id uuid := p_usage_id;
+  v_step jsonb;
+begin
+  if v_usage_id is null then
+    insert into public.form_usages (form_id, name, request_category, scope_type)
+    values ('10000000-0000-4000-8000-000000000001', p_payload->>'name', 'non_asset', 'pusat')
+    returning id into v_usage_id;
+  end if;
+  for v_step in select value from jsonb_array_elements(p_steps)
+  loop
+    insert into public.form_usage_steps (usage_id, step_order, role_name, label, action_type)
+    values (
+      v_usage_id, (v_step->>'step_order')::integer,
+      v_step->>'role_name', v_step->>'label', v_step->>'action_type'
+    );
+  end loop;
+  return v_usage_id;
+end $$;
+create or replace function public.save_form_usage_config(
+  p_usage_id uuid, p_payload jsonb, p_department_ids uuid[], p_steps jsonb,
+  p_attachments jsonb, p_verifiers jsonb default '[]'::jsonb
+) returns uuid language plpgsql as $$ begin return coalesce(p_usage_id, gen_random_uuid()); end $$;
+create or replace function public.resolve_surat_process_revision(p_event_id uuid, p_note text)
+returns boolean language sql as $$ select true $$;
+create or replace function public.validate_form_usage_signature() returns trigger language plpgsql as $$ begin return new; end $$;
+create trigger validate_form_usage_signature_before_write before insert or update on public.surat_signatures
+for each row execute function public.validate_form_usage_signature();
+
+insert into public.master_departments (id,name) values
+ ('30000000-0000-4000-8000-000000000001','Marketing'),
+ ('30000000-0000-4000-8000-000000000002','HRD & GA'),
+ ('30000000-0000-4000-8000-000000000003','Direksi'),
+ ('30000000-0000-4000-8000-000000000004','Perencanaan'),
+ ('30000000-0000-4000-8000-000000000005','Keuangan & Akuntansi'),
+ ('30000000-0000-4000-8000-000000000006','Branch Manager'),
+ ('30000000-0000-4000-8000-000000000007','Teknik (Cabang)'),
+ ('30000000-0000-4000-8000-000000000008','Umum & Keuangan (Cabang)');
+insert into public.master_offices (id,name,kedudukan) values
+ ('20000000-0000-4000-8000-000000000001','Kantor Pusat','Pusat'),
+ ('20000000-0000-4000-8000-000000000002','Cabang A','KC'),
+ ('20000000-0000-4000-8000-000000000003','Cabang B','KC'),
+ ('20000000-0000-4000-8000-000000000004','Cabang Tanpa BM','KC');
+insert into public.master_forms (id,nama_form) values
+ ('10000000-0000-4000-8000-000000000001','FORM PERMINTAAN BARANG & JASA');
+insert into public.profiles (id,full_name,job_title,role,office_id,department_id) values
+ ('40000000-0000-4000-8000-000000000001','Assistant Marketing','Assistant Manager Marketing','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001'),
+ ('40000000-0000-4000-8000-000000000002','Manager Marketing','Manager Marketing','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001'),
+ ('40000000-0000-4000-8000-000000000003','Manager Planning','Staff','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000004'),
+ ('40000000-0000-4000-8000-000000000005','Admin Planning','Staff Admin Perencanaan','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000004'),
+ ('40000000-0000-4000-8000-000000000006','Manager Finance','Manager','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000005'),
+ ('40000000-0000-4000-8000-000000000007','Manager HRD','Manager','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002'),
+ ('40000000-0000-4000-8000-000000000010','Director A','Direktur Utama','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000003'),
+ ('40000000-0000-4000-8000-000000000011','Director B','Direktur I','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000003'),
+ ('40000000-0000-4000-8000-000000000012','Director C','Direktur II','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000003'),
+ ('40000000-0000-4000-8000-000000000013','SPV A','Supervisor Teknik','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000007'),
+ ('40000000-0000-4000-8000-000000000014','ABM A','Assistant Branch Manager','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000006'),
+ ('40000000-0000-4000-8000-000000000015','BM A','Branch Manager','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000006'),
+ ('40000000-0000-4000-8000-000000000016','SPV B','Supervisor Teknik','user','20000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000007'),
+ ('40000000-0000-4000-8000-000000000017','ABM B','Assistant Branch Manager','user','20000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000006'),
+ ('40000000-0000-4000-8000-000000000018','BM B','Branch Manager','user','20000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000006'),
+ ('40000000-0000-4000-8000-000000000020','Branch Requester','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000007'),
+ ('40000000-0000-4000-8000-000000000021','Other Branch User','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000008'),
+ ('40000000-0000-4000-8000-000000000022','Branch D Supervisor','Supervisor Teknik','user','20000000-0000-4000-8000-000000000004','30000000-0000-4000-8000-000000000007');
+
+insert into public.form_usages (id,form_id,name,request_category,scope_type,status) values
+ ('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','Legacy Pusat Asset','asset','pusat','active'),
+ ('50000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000001','Rekomendasi Peremajaan Aset','non_asset','pusat','active'),
+ ('50000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','Permohonan Aset (Pusat)','asset','pusat','active'),
+ ('50000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','Permohonan Order Bangun Marketing','unit','pusat','active'),
+ ('50000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','Permohonan Teknik Cabang','non_unit','cabang','active');
+insert into public.form_usage_steps (id,usage_id,step_order,role_name,label,action_type,candidate_scope) values
+ ('60000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002',1,'memeriksa','Pimpinan Departemen','approval','head_office'),
+ ('60000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000003',3,'memeriksa','Mgr. Perencanaan','unit_allocation','head_office'),
+ ('60000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000004',3,'memeriksa','Mgr. Perencanaan','approval','head_office');
+insert into public.form_usage_step_users values
+ ('60000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003'),
+ ('60000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000006'),
+ ('60000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000003'),
+ ('60000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000003');
+insert into public.form_usage_step_verifiers values
+ ('60000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000005');
+
+${migrations}
+${assertions}
+`;
+
+const run = (args, input = "") => {
+  const result = spawnSync("docker", args, { input, encoding: "utf8", timeout: 180_000 });
+  if (result.status !== 0) {
+    throw new Error(`docker ${args.join(" ")} exited ${result.status}\n${result.stderr || ""}\n${result.stdout || ""}`);
+  }
+  return `${result.stdout || ""}\n${result.stderr || ""}`;
+};
+
+const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
+try {
+  let ready = false;
+  for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {
+    const probe = spawnSync("docker", ["exec", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-Atqc", "select 1"], { encoding: "utf8" });
+    ready = probe.status === 0 && probe.stdout.trim() === "1";
+    if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  }
+  if (!ready) throw new Error("Disposable PostgreSQL did not become ready.");
+  const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], sql);
+  if (!output.includes("SUR-17 canonical submission workflows: all assertions passed")) {
+    throw new Error(`SQL success marker missing.\n${output}`);
+  }
+  process.stdout.write(output);
+} finally {
+  spawnSync("docker", ["rm", "-f", id], { encoding: "utf8" });
+}

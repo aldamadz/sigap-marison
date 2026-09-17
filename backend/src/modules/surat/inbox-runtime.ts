@@ -1,7 +1,7 @@
 export const INBOX_DETAIL_SELECT = `
   id, surat_id, user_id, role_name, label_jabatan, step_order, is_signed, action_type,
   requires_unit_allocation, available_at, signer_snapshot,
-  attachment_requirements_snapshot,
+  input_schema_snapshot, attachment_requirements_snapshot,
   verification_required, verification_status, verified_at, verified_by,
   verification_note, verifier_snapshot,
   surat_registrasi!inner (
@@ -141,6 +141,7 @@ type InboxDetailRow = {
   available_at: string;
   signer_snapshot: unknown;
   attachment_requirements_snapshot: unknown;
+  input_schema_snapshot: unknown;
   verification_required: boolean;
   verification_status: string;
   verified_at: string;
