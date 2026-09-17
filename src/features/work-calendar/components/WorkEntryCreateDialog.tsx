@@ -17,7 +17,7 @@ import { useRef, useState } from "react";
 import { CalendarPlus, Check, LoaderCircle, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { WorkDate, WorkTimestamp } from "../types/work-calendar";
+import type { WorkDate, WorkEntryColorSwatch, WorkTimestamp } from "../types/work-calendar";
 import {
   WORK_ENTRY_LOCATION_MAX_LENGTH,
   WORK_ENTRY_NOTES_MAX_LENGTH,
@@ -27,6 +27,7 @@ import {
 } from "../lib/work-entry-validation";
 import { parseWorkDateTimeInput } from "../lib/work-calendar-date";
 import { WorkCalendarModal } from "./WorkCalendarModal";
+import { WorkEntryColorPicker } from "./WorkEntryColorPicker";
 
 /** Nilai yang dikumpulkan editor; pemanggil melengkapinya menjadi draft. */
 export interface WorkEntryCreateInput {
@@ -37,6 +38,8 @@ export interface WorkEntryCreateInput {
   endsAt: WorkTimestamp | null;
   location: string | null;
   notes: string | null;
+  dueDate: WorkDate | null;
+  colorSwatch: WorkEntryColorSwatch | null;
 }
 
 export interface WorkEntryCreateDialogProps {
@@ -69,6 +72,8 @@ export function WorkEntryCreateDialog({
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [colorSwatch, setColorSwatch] = useState<WorkEntryColorSwatch | null>(null);
   const [errors, setErrors] = useState<WorkEntryFieldErrors>({});
 
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +96,8 @@ export function WorkEntryCreateDialog({
       notes,
       location,
       workDate,
+      dueDate: dueDate || null,
+      colorSwatch,
     });
 
     if (!validation.ok) {
@@ -111,6 +118,8 @@ export function WorkEntryCreateDialog({
           endsAt,
           location: location.trim() || null,
           notes: notes.trim() || null,
+          dueDate: dueDate || null,
+          colorSwatch,
         });
       } finally {
         submittingRef.current = false;
@@ -305,6 +314,37 @@ export function WorkEntryCreateDialog({
             />
             {errorText("notes") && <p className="text-xs text-destructive">{errorText("notes")}</p>}
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label
+                htmlFor="work-entry-create-due-date"
+                className="block text-xs font-medium text-foreground"
+              >
+                Tenggat
+              </label>
+              <input
+                id="work-entry-create-due-date"
+                data-testid="work-entry-create-due-date"
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                className="h-11 w-full rounded-sm border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground">
+                Opsional. Tanpa tenggat, tanggal kerja menjadi tenggat.
+              </p>
+              {errorText("dueDate") && (
+                <p className="text-xs text-destructive">{errorText("dueDate")}</p>
+              )}
+            </div>
+          </div>
+
+          <WorkEntryColorPicker
+            idPrefix="work-entry-create"
+            value={colorSwatch}
+            onChange={setColorSwatch}
+          />
 
           {error && (
             <p

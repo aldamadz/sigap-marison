@@ -593,15 +593,22 @@ describe("WorkCalendarWorkspace — CAL-03 F4B fokus, Escape, overlay", () => {
 
     fireEvent.click(await screen.findByTestId("work-entry-title-fx-4"));
     const panel = await screen.findByTestId("work-entry-detail-fx-4");
-    const close = screen.getByTestId("work-entry-detail-close-fx-4");
 
-    close.focus();
-    expect(close).toHaveFocus();
+    // F5 menambahkan aksi siklus hidup di dalam panel, sehingga tombol tutup
+    // bukan lagi elemen fokusable terakhir. Uji trap dari elemen terakhir.
+    const focusables = panel.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    const last = focusables.item(focusables.length - 1);
+    expect(last).not.toBeNull();
+
+    last.focus();
+    expect(last).toHaveFocus();
     // Tab dari elemen fokusable terakhir di panel harus berputar ke elemen
     // pertama di dalam panel, bukan berpindah ke dokumen di luar.
-    fireEvent.keyDown(close, { key: "Tab" });
+    fireEvent.keyDown(last, { key: "Tab" });
     expect(panel.contains(document.activeElement)).toBe(true);
-    expect(document.activeElement).not.toBe(close);
+    expect(document.activeElement).not.toBe(last);
   });
 
   it("memilih entry lain mengganti isi panel tanpa menumpuk dialog", async () => {
