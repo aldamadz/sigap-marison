@@ -37,9 +37,21 @@ import { isParentUser } from '@/services';
 import { ActivityLog } from '@/types/agenda';
 
 import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/lib/supabase';
+import {
+  WorkCalendarDashboardWidget,
+  buildWorkCalendarDashboardSummary,
+  createSupabaseWorkCalendarDashboardRepository,
+  todayWorkDate,
+  type SupabaseWorkCalendarDashboardClient,
+} from '@/features/work-calendar';
 
 // ── Tipe periode ──────────────────────────────────────────────────────────────
 type PeriodMode = 'month' | 'week';
+
+const workCalendarRepository = createSupabaseWorkCalendarDashboardRepository(
+  supabase as SupabaseWorkCalendarDashboardClient,
+);
 
 // ── Helper: label + range dari satu periode ───────────────────────────────────
 const getPeriodRange = (mode: PeriodMode, anchor: Date) => {
@@ -229,6 +241,30 @@ const Dashboard = () => {
     ...queryBase,
   });
 
+  // ── CAL-03 F7: widget ringkasan Kalender Kerja ────────────────────────────
+  const today = useMemo(() => todayWorkDate(), []);
+
+  const { data: workCalendarEntries = [], isLoading: workCalendarLoading, error: workCalendarError } = useQuery({
+    queryKey: ['work-calendar-dashboard', selectedUserId, today],
+    queryFn: ({ signal }) =>
+      workCalendarRepository.listDashboardEntries({
+        ownerId: selectedUserId as string,
+        today,
+        signal,
+      }),
+    enabled: isReady && !!selectedUserId,
+    ...queryBase,
+  });
+
+  const workCalendarSummary = useMemo(
+    () => buildWorkCalendarDashboardSummary(workCalendarEntries, today),
+    [workCalendarEntries, today],
+  );
+
+  const workCalendarErrorMessage = workCalendarError
+    ? 'Gagal memuat ringkasan Kalender Kerja.'
+    : null;
+
   if (authLoading || !isReady) {
     return (
       <div className="sigap-page">
@@ -306,6 +342,14 @@ const Dashboard = () => {
           <DepartmentChart data={departmentData} />
         </div>
       </section>
+
+      {/* ── CAL-03 F7: Ringkasan Kalender Kerja ────────────────────────────── */}
+      <WorkCalendarDashboardWidget
+        summary={workCalendarSummary}
+        today={today}
+        loading={workCalendarLoading}
+        error={workCalendarErrorMessage}
+      />
 
       <RecentActivity logs={recentActivities} />
     </div>

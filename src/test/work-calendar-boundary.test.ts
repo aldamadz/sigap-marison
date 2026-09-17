@@ -189,6 +189,7 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
       "src/test/work-calendar-interaction-ux.test.tsx",
       "src/test/work-calendar-lib.test.ts",
       "src/test/work-calendar-lifecycle.test.tsx",
+      "src/test/work-calendar-notifications.test.tsx",
       "src/test/work-calendar-page.test.tsx",
       "src/test/work-calendar-profile-repository.test.ts",
       "src/test/work-calendar-settings-repository.test.ts",
@@ -829,5 +830,155 @@ describe("Work Calendar — batas CAL-03 F6 hari kerja dan libur", () => {
     );
     expect(page).toContain("createSupabaseWorkCalendarSettingsRepository");
     expect(page).toContain("settingsRepository={settingsRepository}");
+  });
+});
+
+describe("Work Calendar — batas CAL-03 F7 dashboard dan notifikasi", () => {
+  const migrationsDir = join(root, "supabase", "migrations");
+
+  it("hanya satu migration notifikasi dan memakai tabel notifications bersama", () => {
+    const files = readdirSync(migrationsDir).filter((name) =>
+      name.endsWith("work_calendar_notifications.sql"),
+    );
+    expect(files.length).toBe(1);
+
+    const sql = readFileSync(join(migrationsDir, files[0]), "utf8");
+
+    // Reuse tabel `notifications`, bukan tabel baru.
+    expect(sql).toContain("create table if not exists public.notifications");
+    expect(sql).toContain("create unique index if not exists uq_notifications_work_calendar_dedupe");
+    expect(sql).toContain("(data->>'dedupe_key')");
+    expect(sql).toContain("create index if not exists idx_notifications_work_calendar_category");
+
+    // Generator on-demand, idempotent, dan aman.
+    expect(sql).toContain("create or replace function public.generate_work_calendar_notifications");
+    expect(sql).toContain("security definer");
+    expect(sql).toContain("set search_path = public");
+    expect(sql).toContain("when unique_violation then");
+  });
+
+  it("helper internal tidak diekspos dan hanya tiga RPC publik yang diberi grant", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "20260918120000_work_calendar_notifications.sql"),
+      "utf8",
+    );
+
+    // Helper p_user_id tidak boleh bisa dipanggil klien.
+    expect(sql).toContain(
+      "revoke all on function public.work_calendar_emit_notification(uuid, text, text, text, text, text, text, uuid[], integer) from public, anon, authenticated",
+    );
+
+    const grants = [...sql.matchAll(/grant execute on function public\.([a-z_]+)\(/g)].map(
+      (match) => match[1],
+    );
+    expect(grants.sort()).toEqual([
+      "generate_work_calendar_notifications",
+      "get_my_recent_work_calendar_events",
+      "get_work_calendar_dashboard_entries",
+    ]);
+  });
+
+  it("anti-spam memakai debounce jam dan batching satu notifikasi per kategori per hari", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "20260918120000_work_calendar_notifications.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain("p_debounce_hours integer default 6");
+    expect(sql).toContain("make_interval(hours => greatest(p_debounce_hours, 0))");
+    expect(sql).toContain("'work-calendar:deadline_overdue:' || v_user::text || ':' || v_today::text");
+    expect(sql).toContain("'work-calendar:follow_up_reminder:' || v_user::text || ':' || v_today::text");
+    expect(sql).toContain("'work-calendar:blocked_escalation:' || v_user::text || ':' || v_today::text");
+  });
+
+  it("eskalasi ke atasan memakai hari kerja dan mengabaikan weekend serta libur", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "20260918120000_work_calendar_notifications.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain("create or replace function public.work_calendar_count_work_days");
+    expect(sql).toContain("extract(isodow from day)::integer");
+    expect(sql).toContain("from public.holidays h");
+    expect(sql).toContain("public.work_calendar_work_days_for_user(v_user)");
+    expect(sql).toContain("with recursive subordinates as");
+
+    // Helper hari kerja tidak diberi hak ke authenticated.
+    expect(sql).toContain(
+      "revoke all on function public.work_calendar_count_work_days(date, date, integer[]) from public, anon, authenticated",
+    );
+  });
+
+  it("migration F7 diuji lewat test SQL khusus dan ikut harness", () => {
+    const testSql = readFileSync(
+      join(root, "supabase", "tests", "work_calendar_notifications.integration.sql"),
+      "utf8",
+    );
+    expect(testSql).toContain("all assertions passed");
+    expect(testSql).toContain("deadline_overdue");
+    expect(testSql).toContain("blocked_escalation");
+
+    const harness = readFileSync(
+      join(root, "scripts", "test-work-calendar-sql.mjs"),
+      "utf8",
+    );
+    expect(harness).toContain("CAL-03 work calendar notifications integration: all assertions passed");
+    expect(harness).toContain('name.includes("work_calendar")');
+  });
+
+  it("widget dan notifikasi memakai helper murni lintas permukaan", () => {
+    // Widget dashboard dirender di Dashboard, bukan ditanam di feature dir.
+    const dashboard = readFileSync(
+      join(root, "src", "components", "dashboard", "Dashboard.tsx"),
+      "utf8",
+    );
+    expect(dashboard).toContain("<WorkCalendarDashboardWidget");
+    expect(dashboard).toContain("buildWorkCalendarDashboardSummary(");
+
+    // Lonceng: badge angka + ikon kategori kalender dari helper murni.
+    const header = readFileSync(
+      join(root, "src", "components", "layout", "Header.tsx"),
+      "utf8",
+    );
+    expect(header).toContain('data-testid="notification-unread-badge"');
+    expect(header).toContain("formatUnreadBadge(unreadCount)");
+    expect(header).not.toMatch(/unreadCount\s*>\s*0\s*&&\s*\(\s*<span className="absolute top-1\.5/);
+    expect(header).toContain("getWorkCalendarNotificationMeta");
+    expect(header).toContain("readWorkCalendarNotificationCategory");
+
+    // Generator dijalankan on-demand sebelum daftar dimuat.
+    expect(header).toContain("generateWorkCalendarNotifications");
+
+    // Aktivitas Terbaru menggabungkan work_calendar_events.
+    const recent = readFileSync(
+      join(root, "src", "components", "dashboard", "RecentActivity.tsx"),
+      "utf8",
+    );
+    expect(recent).toContain("work_calendar_events");
+
+    const service = readFileSync(
+      join(root, "src", "services", "dashboard.service.ts"),
+      "utf8",
+    );
+    expect(service).toContain("listRecentActivity");
+  });
+
+  it("repository dashboard hanya memanggil RPC publik dan tidak menulis tabel", () => {
+    const source = readFileSync(
+      join(featureDir, "data", "supabase-work-calendar-dashboard-repository.ts"),
+      "utf8",
+    );
+
+    for (const rpc of [
+      "get_work_calendar_dashboard_entries",
+      "get_my_recent_work_calendar_events",
+      "generate_work_calendar_notifications",
+    ]) {
+      expect(source).toContain(`"${rpc}"`);
+    }
+    expect(source).not.toContain(".insert(");
+    expect(source).not.toContain(".update(");
+    expect(source).not.toContain(".delete(");
+    expect(source).not.toContain("work_calendar_emit_notification");
   });
 });

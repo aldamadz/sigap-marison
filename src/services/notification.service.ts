@@ -1,4 +1,8 @@
 import { supabase } from '@/lib/supabase'
+import {
+  createSupabaseWorkCalendarDashboardRepository,
+  type SupabaseWorkCalendarDashboardClient,
+} from '@/features/work-calendar/data/supabase-work-calendar-dashboard-repository'
 
 const getCurrentUserId = async () => {
   const { data: { user }, error } = await supabase.auth.getUser()
@@ -139,5 +143,19 @@ export const notificationService = {
       console.error('Delete all notifications error:', error)
       throw error
     }
+  },
+
+  /**
+   * CAL-03 F7: hasilkan notifikasi Work Calendar secara on-demand.
+   *
+   * Generator bersifat idempotent (dedupe + debounce di database), jadi aman
+   * dipanggil sesering apa pun; kesalahan tidak boleh memblokir pemuatan
+   * notifikasi, sehingga pemanggil menangani error secara terpisah.
+   */
+  async generateWorkCalendarNotifications() {
+    const repository = createSupabaseWorkCalendarDashboardRepository(
+      supabase as SupabaseWorkCalendarDashboardClient,
+    )
+    return repository.generateNotifications()
   }
 }

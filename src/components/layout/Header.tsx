@@ -9,6 +9,11 @@ import { id as localeID } from 'date-fns/locale'
 import { useNavigate } from 'react-router'
 import { notificationService } from '@/services/notification.service'
 import { useAttention } from '@/providers/AttentionProvider'
+import {
+  getWorkCalendarNotificationMeta,
+  readWorkCalendarNotificationCategory,
+  type WorkCalendarNotificationCategory,
+} from '@/features/work-calendar'
 
 interface Notification {
   id: string
@@ -19,6 +24,8 @@ interface Notification {
   isRead: boolean
   url?: string
   dbId?: string
+  /** Kategori CAL-03 F7; diisi hanya untuk notifikasi Kalender Kerja. */
+  calendarCategory?: WorkCalendarNotificationCategory
 }
 
 const mapDbNotification = (row: any): Notification => {
@@ -30,6 +37,8 @@ const mapDbNotification = (row: any): Notification => {
     feedback: 'feedback',
   }
 
+  const calendarCategory = readWorkCalendarNotificationCategory(row.data)
+
   return {
     id: `db-${row.id}`,
     dbId: row.id,
@@ -39,7 +48,43 @@ const mapDbNotification = (row: any): Notification => {
     time: new Date(row.created_at),
     isRead: !!row.is_read,
     url: row.link || '/surat/monitoring',
+    ...(calendarCategory ? { calendarCategory } : {}),
   }
+}
+
+/** Badge angka pada ikon lonceng; `99+` menjaga lebar tetap stabil. */
+const formatUnreadBadge = (count: number): string => (count > 99 ? '99+' : String(count))
+
+/**
+ * Ikon notifikasi. Notifikasi Kalender Kerja (CAL-03 F7) memakai ikon per
+ * kategori; notifikasi lain tetap memakai ikon per tipe lama.
+ */
+const renderNotificationIcon = (n: Notification) => {
+  if (n.calendarCategory) {
+    const meta = getWorkCalendarNotificationMeta(n.calendarCategory)
+    return (
+      <div className={cn('p-2 rounded-lg h-fit shrink-0', meta.iconClassName)}>
+        <meta.icon className="w-4 h-4" />
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn(
+      'p-2 rounded-lg h-fit shrink-0',
+      n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
+      n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
+      n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
+      n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
+                                    'bg-emerald-500/10 text-emerald-600'
+    )}>
+      {n.type === 'incoming'  && <Inbox       className="w-4 h-4" />}
+      {n.type === 'rejected'  && <AlertCircle className="w-4 h-4" />}
+      {n.type === 'stamped'   && <Clock       className="w-4 h-4" />}
+      {n.type === 'feedback'  && <MessageSquare className="w-4 h-4" />}
+      {n.type === 'completed' && <FileCheck   className="w-4 h-4" />}
+    </div>
+  )
 }
 
 interface HeaderProps {
@@ -90,6 +135,9 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
 
   const loadNotifications = useCallback(async () => {
     try {
+      // CAL-03 F7: generator idempotent dijalankan on-demand sebelum memuat
+      // daftar, jadi notifikasi tenggat/eskalasi/pengingat selalu terbaru.
+      await notificationService.generateWorkCalendarNotifications().catch(() => 0)
       const rows = await notificationService.getMyNotifications()
       const mapped = rows.map(mapDbNotification)
       const nextUnread = mapped.filter((item) => !item.isRead).length
@@ -173,7 +221,12 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
               >
                 <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
+                  <span
+                    data-testid="notification-unread-badge"
+                    className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-destructive px-0.5 text-[10px] font-semibold leading-none text-destructive-foreground"
+                  >
+                    {formatUnreadBadge(unreadCount)}
+                  </span>
                 )}
               </Button>
             </SheetTrigger>
@@ -223,20 +276,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
                         !n.isRead ? 'bg-primary/[0.03]' : 'opacity-60'
                       )}
                     >
-                      <div className={cn(
-                        'p-2 rounded-lg h-fit shrink-0',
-                        n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
-                        n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
-                        n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
-                        n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
-                                                      'bg-emerald-500/10 text-emerald-600'
-                      )}>
-                        {n.type === 'incoming'  && <Inbox       className="w-4 h-4" />}
-                        {n.type === 'rejected'  && <AlertCircle className="w-4 h-4" />}
-                        {n.type === 'stamped'   && <Clock       className="w-4 h-4" />}
-                        {n.type === 'feedback'  && <MessageSquare className="w-4 h-4" />}
-                        {n.type === 'completed' && <FileCheck   className="w-4 h-4" />}
-                      </div>
+                      {renderNotificationIcon(n)}
 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium leading-tight mb-1 truncate">
@@ -270,7 +310,12 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
               >
                 <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
+                  <span
+                    data-testid="notification-unread-badge"
+                    className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-destructive px-0.5 text-[10px] font-semibold leading-none text-destructive-foreground"
+                  >
+                    {formatUnreadBadge(unreadCount)}
+                  </span>
                 )}
               </Button>
             </PopoverTrigger>
@@ -319,20 +364,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
                         !n.isRead ? 'bg-primary/[0.03]' : 'opacity-60'
                       )}
                     >
-                      <div className={cn(
-                        'p-2 rounded-lg h-fit shrink-0',
-                        n.type === 'incoming'  ? 'bg-blue-500/10 text-blue-600'    :
-                        n.type === 'rejected'  ? 'bg-red-500/10 text-red-600'      :
-                        n.type === 'stamped'   ? 'bg-amber-500/10 text-amber-600'  :
-                        n.type === 'feedback'  ? 'bg-purple-500/10 text-purple-600':
-                                                      'bg-emerald-500/10 text-emerald-600'
-                      )}>
-                        {n.type === 'incoming'  && <Inbox       className="w-4 h-4" />}
-                        {n.type === 'rejected'  && <AlertCircle className="w-4 h-4" />}
-                        {n.type === 'stamped'   && <Clock       className="w-4 h-4" />}
-                        {n.type === 'feedback'  && <MessageSquare className="w-4 h-4" />}
-                        {n.type === 'completed' && <FileCheck   className="w-4 h-4" />}
-                      </div>
+                      {renderNotificationIcon(n)}
 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium leading-tight mb-1 truncate">
