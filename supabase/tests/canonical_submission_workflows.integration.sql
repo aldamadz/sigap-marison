@@ -17,6 +17,30 @@ begin
     where name = 'Rekomendasi Peremajaan Aset' and status = 'active' and is_system_template is true
   ) then raise exception 'linked recommendation template must remain available for in-flight work'; end if;
 
+  select count(*) into v_count
+  from public.form_usages usage
+  where usage.status = 'active'
+    and usage.request_category = 'asset'
+    and usage.name in (
+      'Pengajuan Aset - Kantor Pusat',
+      'Pengajuan Aset HRD & GA - Kantor Pusat',
+      'Pengajuan Aset - Kantor Cabang'
+    )
+    and usage.recommendation_config @> jsonb_build_object(
+      'enabled', true,
+      'optional', true,
+      'required_before_step', 3,
+      'form_id', '10000000-0000-4000-8000-000000000002'::uuid,
+      'usage_id', '50000000-0000-4000-8000-000000000005'::uuid,
+      'department_id', '30000000-0000-4000-8000-000000000009'::uuid,
+      'letter_type_id', '70000000-0000-4000-8000-000000000001'::uuid,
+      'entity_id', '80000000-0000-4000-8000-000000000001'::uuid,
+      'template_name', 'Rekomendasi Peremajaan Aset'
+    );
+  if v_count <> 3 then
+    raise exception 'asset recommendation configuration is incomplete for % of 3 canonical workflows', 3 - v_count;
+  end if;
+
   if exists (select 1 from public.form_usages where name like 'Legacy %' and status <> 'archived') then
     raise exception 'legacy usage was not archived';
   end if;
