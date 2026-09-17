@@ -1,5 +1,10 @@
-import type { WorkEntry, WorkEntryKind, WorkEntryStatus } from "../types/work-calendar";
-import { WORK_ENTRY_KINDS, WORK_ENTRY_STATUSES } from "../types/work-calendar";
+import type {
+  WorkEntry,
+  WorkEntryColorSwatch,
+  WorkEntryKind,
+  WorkEntryStatus,
+} from "../types/work-calendar";
+import { WORK_ENTRY_COLOR_SWATCHES, WORK_ENTRY_KINDS, WORK_ENTRY_STATUSES } from "../types/work-calendar";
 
 export interface WorkCalendarEntryRow {
   id: string;
@@ -16,6 +21,8 @@ export interface WorkCalendarEntryRow {
   ends_at: string | null;
   blocked_reason: string | null;
   completed_at: string | null;
+  due_date: string | null;
+  color_swatch: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -27,6 +34,17 @@ function isValidStatus(value: unknown): value is WorkEntryStatus {
 
 function isValidKind(value: unknown): value is WorkEntryKind {
   return typeof value === "string" && (WORK_ENTRY_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Warna dari database dipetakan secara toleran: nilai di luar palet aplikasi
+ * (mis. palet ditambah di server lebih dulu) tidak boleh menggagalkan seluruh
+ * pemuatan kalender, cukup dianggap tanpa penanda.
+ */
+function mapColorSwatch(value: unknown): WorkEntryColorSwatch | null {
+  return typeof value === "string" && (WORK_ENTRY_COLOR_SWATCHES as readonly string[]).includes(value)
+    ? (value as WorkEntryColorSwatch)
+    : null;
 }
 
 export function mapWorkEntryRow(row: WorkCalendarEntryRow): WorkEntry {
@@ -53,6 +71,8 @@ export function mapWorkEntryRow(row: WorkCalendarEntryRow): WorkEntry {
     endsAt: row.ends_at,
     blockedReason: row.blocked_reason,
     completedAt: row.completed_at,
+    dueDate: row.due_date,
+    colorSwatch: mapColorSwatch(row.color_swatch),
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

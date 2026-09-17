@@ -25,6 +25,36 @@ export const WORK_ENTRY_KINDS = ["work", "event", "availability"] as const;
 
 export type WorkEntryKind = (typeof WORK_ENTRY_KINDS)[number];
 
+/**
+ * Palet warna statis untuk penanda pekerjaan (CAL-03 F5).
+ *
+ * Palet sengaja tetap dan kecil supaya:
+ * - kontras teks/ikon tetap terjamin pada mode terang dan gelap;
+ * - makna tidak bergantung pada warna saja (setiap swatch punya label teks);
+ * - nilai yang disimpan di database selalu dapat dipetakan ke tampilan.
+ * Nilai ini harus sama dengan constraint `work_calendar_entries_color_swatch_check`.
+ */
+export const WORK_ENTRY_COLOR_SWATCHES = [
+  "slate",
+  "blue",
+  "teal",
+  "amber",
+  "rose",
+  "violet",
+] as const;
+
+export type WorkEntryColorSwatch = (typeof WORK_ENTRY_COLOR_SWATCHES)[number];
+
+/** Jenis peristiwa siklus hidup yang dicatat pada `work_calendar_events`. */
+export const WORK_ENTRY_EVENT_TYPES = [
+  "created",
+  "status_changed",
+  "schedule_changed",
+  "due_date_changed",
+] as const;
+
+export type WorkEntryEventType = (typeof WORK_ENTRY_EVENT_TYPES)[number];
+
 export const WORK_CALENDAR_VIEW_MODES = ["day", "week", "month", "team"] as const;
 
 export type WorkCalendarViewMode = (typeof WORK_CALENDAR_VIEW_MODES)[number];
@@ -53,6 +83,10 @@ export interface WorkEntry {
   endsAt: WorkTimestamp | null;
   blockedReason: string | null;
   completedAt: WorkTimestamp | null;
+  /** Tenggat opsional; `null` berarti tenggat mengikuti `workDate`. */
+  dueDate: WorkDate | null;
+  /** Penanda warna statis; `null` berarti tanpa penanda. */
+  colorSwatch: WorkEntryColorSwatch | null;
   deletedAt: WorkTimestamp | null;
   createdAt: WorkTimestamp;
   updatedAt: WorkTimestamp;
@@ -72,6 +106,8 @@ export interface WorkEntryDraft {
   startsAt?: WorkTimestamp | null;
   endsAt?: WorkTimestamp | null;
   blockedReason?: string | null;
+  dueDate?: WorkDate | null;
+  colorSwatch?: WorkEntryColorSwatch | null;
 }
 
 /** Patch pembaruan entry. `ownerId` tidak dapat diubah dari UI. */
@@ -104,6 +140,30 @@ export interface WorkProgressCounts {
   completed: number;
   blocked: number;
   overdue: number;
+}
+
+/**
+ * Satu peristiwa siklus hidup pekerjaan (CAL-03 F5).
+ *
+ * Peristiwa ditulis oleh trigger database, bukan oleh klien, sehingga
+ * riwayat tidak dapat dipalsukan atau dilewati. `detail` memuat hasil
+ * pekerjaan (transisi ke `completed`) atau alasan terhambat (transisi ke
+ * `blocked`).
+ */
+export interface WorkEntryEvent {
+  id: string;
+  entryId: WorkEntryId;
+  ownerId: WorkEntryOwnerId;
+  type: WorkEntryEventType;
+  fromStatus: WorkEntryStatus | null;
+  toStatus: WorkEntryStatus | null;
+  fromWorkDate: WorkDate | null;
+  toWorkDate: WorkDate | null;
+  fromDueDate: WorkDate | null;
+  toDueDate: WorkDate | null;
+  detail: string | null;
+  actorId: WorkEntryOwnerId | null;
+  createdAt: WorkTimestamp;
 }
 
 export interface WorkCalendarDaySummary {
@@ -161,6 +221,15 @@ export interface WorkEntryRepository {
    * pemanggil tidak boleh menampilkan data apa pun dalam kasus itu.
    */
   getEntryById(input: { entryId: WorkEntryId; signal?: AbortSignal }): Promise<WorkEntry | null>;
+  /**
+   * Riwayat peristiwa satu entry, urut dari terlama ke terbaru (CAL-03 F5).
+   * Implementasi hanya melakukan SELECT sehingga RLS yang berlaku menentukan
+   * cakupan: pekerjaan sendiri atau pekerjaan bawahan yang terotorisasi.
+   */
+  listEntryEvents(input: {
+    entryId: WorkEntryId;
+    signal?: AbortSignal;
+  }): Promise<readonly WorkEntryEvent[]>;
   createEntry(input: WorkEntryDraft): Promise<WorkEntry>;
   updateEntry(input: { entryId: WorkEntryId; patch: WorkEntryPatch; expectedUpdatedAt: WorkTimestamp }): Promise<WorkEntry>;
   deleteEntry(input: { entryId: WorkEntryId; expectedUpdatedAt: WorkTimestamp }): Promise<void>;

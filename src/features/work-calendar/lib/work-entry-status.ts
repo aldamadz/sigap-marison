@@ -21,7 +21,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { WorkEntry, WorkEntryStatus } from "../types/work-calendar";
+import type { WorkDate, WorkEntry, WorkEntryStatus } from "../types/work-calendar";
+import { formatWorkDateKey } from "./work-calendar-date";
 
 export interface WorkEntryStatusMeta {
   status: WorkEntryStatus;
@@ -114,15 +115,45 @@ export function isUnfinishedWorkEntryStatus(status: WorkEntryStatus): boolean {
 }
 
 /**
- * Overdue diturunkan: status belum selesai dan tanggal kerja sudah lewat
- * dibanding `today`. Entry `blocked` pada tanggal lampau tetap overdue.
+ * Tenggat efektif sebuah pekerjaan (CAL-03 F5): `dueDate` bila diisi,
+ * jika tidak `workDate` (tenggat default = tanggal kerja).
  */
-export function isWorkEntryOverdue(
-  entry: Pick<WorkEntry, "status" | "workDate">,
-  today: string,
-): boolean {
+export function getWorkEntryEffectiveDueDate(
+  entry: Pick<WorkEntry, "workDate"> & { dueDate?: WorkDate | null },
+): WorkDate {
+  return entry.dueDate ?? entry.workDate;
+}
+
+/** Status pekerjaan + tanggal yang dibutuhkan indikator terlambat. */
+export type WorkEntryDeadlineInput = Pick<WorkEntry, "status" | "workDate"> & {
+  dueDate?: WorkDate | null;
+};
+
+/**
+ * Overdue diturunkan: status belum selesai dan tenggat efektif
+ * (`dueDate ?? workDate`) sudah lewat dibanding `today`. Entry `blocked`
+ * pada tanggal lampau tetap overdue.
+ *
+ * `dueDate` bersifat opsional agar pemanggil lama yang hanya memiliki
+ * `workDate` tetap kompatibel: tanpa tenggat, overdue mengikuti tanggal kerja.
+ */
+export function isWorkEntryOverdue(entry: WorkEntryDeadlineInput, today: string): boolean {
   if (isFinalWorkEntryStatus(entry.status)) return false;
-  return entry.workDate < today;
+  return getWorkEntryEffectiveDueDate(entry) < today;
+}
+
+/**
+ * Indikator "selesai terlambat" (CAL-03 F5): membandingkan tanggal
+ * penyelesaian dengan `due_date`. Pekerjaan yang selesai pada atau sebelum
+ * tenggat tidak pernah terlambat, dan pekerjaan tanpa tenggat eksplisit
+ * (atau tanpa `completedAt`) tidak dinilai terlambat.
+ */
+export function isWorkEntryCompletedLate(
+  entry: Pick<WorkEntry, "status" | "completedAt"> & { dueDate?: WorkDate | null },
+): boolean {
+  if (entry.status !== "completed" || !entry.dueDate || !entry.completedAt) return false;
+  const completedDate = formatWorkDateKey(new Date(entry.completedAt));
+  return completedDate > entry.dueDate;
 }
 
 /**
