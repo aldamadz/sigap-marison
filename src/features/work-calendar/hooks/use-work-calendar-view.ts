@@ -94,7 +94,13 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
   );
   const [ownerFilterIdState, setOwnerFilterIdState] = useState<WorkEntryOwnerId | "all">("all");
   const [entries, setEntries] = useState<readonly WorkEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  /**
+   * Pemuatan selalu dimulai pada mount, jadi status awalnya `true`. Bila
+   * dibiarkan `false`, akan ada satu render dengan data kosong yang tampak
+   * "sudah selesai dimuat"; deep link `?entry=` dapat dibuang keliru pada
+   * render itu sebelum data pertama tiba (CAL-03 F4B).
+   */
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 

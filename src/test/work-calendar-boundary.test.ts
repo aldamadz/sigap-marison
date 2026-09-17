@@ -181,6 +181,7 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
   it("seluruh modul runtime dan test CAL-03 F3 bebas any, @ts-*, dan double cast", () => {
     const cal03TestFiles = [
       "src/test/work-calendar-boundary.test.ts",
+      "src/test/work-calendar-interaction-ux.test.tsx",
       "src/test/work-calendar-lib.test.ts",
       "src/test/work-calendar-page.test.tsx",
       "src/test/work-calendar-profile-repository.test.ts",
@@ -452,5 +453,126 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
     expect(workspace).toContain("getWorkCalendarAddAction({");
     expect(workspace).toContain('data-testid="work-month-panel-add"');
     expect(workspace).toContain("Tambahkan pekerjaan ke tanggal ini");
+  });
+});
+
+describe("Work Calendar — batas CAL-03 F4B", () => {
+  it("tidak menambah migration atau menyentuh lingkungan produksi", () => {
+    const migrationsDir = join(root, "supabase", "migrations");
+    const names = readdirSync(migrationsDir);
+    // F4B murni UI: tidak boleh ada migration baru untuk fitur ini.
+    expect(names.filter((name) => /work_entry_selection|entry_selection/i.test(name))).toEqual([]);
+  });
+
+  it("selection entry memakai query `entry` dan tidak menambah key lain", () => {
+    const selection = readFileSync(
+      join(featureDir, "lib", "work-entry-selection.ts"),
+      "utf8",
+    );
+    expect(selection).toContain('WORK_ENTRY_QUERY_KEY = "entry"');
+    expect(selection).not.toMatch(/WORK_ENTRY_QUERY_KEY = "(?!entry)/);
+
+    const routeState = readFileSync(
+      join(featureDir, "hooks", "use-work-calendar-route-state.ts"),
+      "utf8",
+    );
+    expect(routeState).toContain("writeEntryId(entryId");
+    expect(routeState).toContain("readEntryId(");
+    // Penulisan entry hanya menyentuh kuncinya sendiri.
+    const writer = routeState.slice(routeState.indexOf("writeEntryId(entryId"));
+    expect(writer.slice(0, 500)).toContain("params.delete(WORK_ENTRY_QUERY_KEY)");
+    expect(writer.slice(0, 500)).toContain("params.set(WORK_ENTRY_QUERY_KEY, normalized)");
+    expect(writer.slice(0, 500)).not.toContain('params.delete("date")');
+    expect(writer.slice(0, 500)).not.toContain('params.delete("view")');
+  });
+
+  it("motion memakai Framer Motion terbatas tanpa animasi layout besar", () => {
+    const motion = readFileSync(
+      join(featureDir, "components", "WorkCalendarMotion.tsx"),
+      "utf8",
+    );
+    expect(motion).toContain("useReducedMotion");
+    expect(motion).toContain("AnimatePresence");
+    // Tidak ada animasi layout (`layout`/`layoutId`) yang dapat mengganggu.
+    // Pola sengaja mencari pemakaian prop, bukan penyebutan di dokumentasi.
+    expect(motion).not.toMatch(/layoutId\s*[:=]/);
+    expect(motion).not.toMatch(/layout\s*=/);
+  });
+
+  it("detail selalu dirender lewat satu panel aksesibel dengan header lengket", () => {
+    const detail = readFileSync(
+      join(featureDir, "components", "WorkEntryDetail.tsx"),
+      "utf8",
+    );
+    expect(detail).toContain('role="dialog"');
+    expect(detail).toContain("aria-modal={true}");
+    expect(detail).toContain("useWorkCalendarFocusTrap(");
+    // Overlay dan panel dirender langsung, bukan AnimatePresence internal,
+    // supaya exit animation dikendalikan workspace.
+    expect(detail).not.toMatch(/<AnimatePresence>\s*<WorkCalendarOverlay/);
+    // Lebar side sheet desktop/tablet.
+    expect(detail).toContain("sm:min-w-[480px]");
+    expect(detail).toContain("sm:w-[min(560px,92vw)]");
+  });
+
+  it("Quick Add tidak memakai drawer pihak ketiga dan aman virtual keyboard", () => {
+    const surface = readFileSync(
+      join(featureDir, "components", "QuickAddSurface.tsx"),
+      "utf8",
+    );
+    // Tidak memakai vaul/drawer; mobile memakai bottom sheet sendiri.
+    expect(surface).not.toMatch(/from ["']vaul["']/);
+    expect(surface).not.toMatch(/from ["']@\/components\/ui\/drawer["']/);
+    expect(surface).toContain("max-h-[85dvh]");
+    expect(surface).toContain("PopoverAnchor");
+    expect(surface).toContain("virtualRef");
+
+    const panel = readFileSync(
+      join(featureDir, "components", "QuickAddPanel.tsx"),
+      "utf8",
+    );
+    // Anti double-submit dan tanggal target selalu terlihat.
+    expect(panel).toContain("submittingRef");
+    expect(panel).toContain("work-calendar-quick-add-date");
+    expect(panel).toContain('event.key === "Enter"');
+    expect(panel).toContain('event.key === "Escape"');
+  });
+
+  it("permukaan Minggu/Bulan menghentikan propagasi agar tidak ada entry ganda", () => {
+    const week = readFileSync(
+      join(featureDir, "components", "WeeklyWorkView.tsx"),
+      "utf8",
+    );
+    expect(week).toContain("work-week-quick-add-");
+    expect(week).toContain("event.stopPropagation()");
+    expect(week).toContain("event.defaultPrevented");
+
+    const month = readFileSync(
+      join(featureDir, "components", "MonthlyWorkView.tsx"),
+      "utf8",
+    );
+    expect(month).toContain("work-month-quick-add-");
+    expect(month).toContain("work-month-preview-");
+    expect(month).toContain("event.stopPropagation()");
+    expect(month).toContain("event.defaultPrevented");
+  });
+
+  it("permukaan fixed dipindahkan ke body agar tidak terkena `space-y-5` `.sigap-page`", () => {
+    const motion = readFileSync(
+      join(featureDir, "components", "WorkCalendarMotion.tsx"),
+      "utf8",
+    );
+    // Regresi layout: `.sigap-page` memakai `space-y-5`, sehingga anak kedua
+    // dan seterusnya mendapat `margin-top: 20px`. Overlay/sheet `fixed` yang
+    // tetap menjadi anaknya bergeser 20px (terpotong) dan overlay menyisakan
+    // celah yang tidak menutup. Solusinya portal ke `document.body`.
+    expect(motion).toContain("createPortal");
+    expect(motion).toContain("renderFixedSurface");
+
+    // Overlay dan panel memakai helper portal itu; bukan dirender langsung.
+    const overlay = motion.slice(motion.indexOf("export function WorkCalendarOverlay"));
+    expect(overlay.slice(0, 900)).toContain("renderFixedSurface(");
+    const panel = motion.slice(motion.indexOf("export const WorkCalendarSlidePanel"));
+    expect(panel.slice(0, 1400)).toContain("renderFixedSurface(");
   });
 });

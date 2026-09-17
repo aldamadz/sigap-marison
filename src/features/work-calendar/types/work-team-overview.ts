@@ -172,12 +172,20 @@ export interface WorkTeamOverviewRouteAdapter {
   readView(): WorkCalendarViewMode | null;
   /** Tanggal acuan dari URL, bila valid. */
   readAnchorDate(): WorkDate | null;
+  /**
+   * Id entry terpilih dari URL, bila ada (CAL-03 F4B). Adapter ini memang
+   * adapter route Unified Work Calendar, sehingga seleksi detail/Quick Add
+   * memakai jalur URL yang sama dan tidak perlu adapter kedua.
+   */
+  readEntryId(): string | null;
   write(state: WorkTeamOverviewUrlState, options?: WorkTeamOverviewRouteWriteOptions): void;
   writeAnchorDate(date: WorkDate, options?: WorkTeamOverviewRouteWriteOptions): void;
   writeView(
     view: WorkCalendarViewMode,
     options?: WorkTeamOverviewRouteWriteOptions,
   ): void;
+  /** Tulis/hapus `entry` tanpa menyentuh parameter lain milik route. */
+  writeEntryId(entryId: string | null, options?: WorkTeamOverviewRouteWriteOptions): void;
 }
 
 /**

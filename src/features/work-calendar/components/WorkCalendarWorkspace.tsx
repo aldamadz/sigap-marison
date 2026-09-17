@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CalendarDays, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,6 +60,15 @@ import { TeamProgressView } from "./TeamProgressView";
 import { TeamOverviewView } from "./TeamOverviewView";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 import { WorkEntryDetail } from "./WorkEntryDetail";
+import { QuickAddPanel } from "./QuickAddPanel";
+import { QuickAddSurface } from "./QuickAddSurface";
+import { AnimatePresence } from "./WorkCalendarMotion";
+import { useWorkCalendarCompact } from "../hooks/use-work-calendar-compact";
+import {
+  normalizeWorkEntryQueryId,
+  resolveSelectedWorkEntry,
+  shouldDiscardWorkEntryQueryId,
+} from "../lib/work-entry-selection";
 import { useWorkTeamOverview } from "../hooks/use-work-team-overview";
 
 interface StatusPrompt {
@@ -152,17 +162,40 @@ export function WorkCalendarWorkspace({  currentUser,
     // perubahan kunci URL agar tidak ada loop umpan-balik.
   }, [routeAdapter, routeKey]);
 
+  /**
+   * Seleksi detail selalu berasal dari URL (`?entry=<id>`) bila binding route
+   * tersedia, sehingga refresh/deep link/Back/Forward konsisten (CAL-03 F4B).
+   * Tanpa binding route (mis. workspace dipakai tertanam pada test/harness),
+   * seleksi jatuh ke state lokal supaya kontrak UI tetap sama.
+   */
+  const [internalSelectedEntryId, setInternalSelectedEntryId] = useState<string | null>(null);
+  const selectedEntryId = routeAdapter ? routeAdapter.readEntryId() : internalSelectedEntryId;
+  const selectedEntryIdRef = useRef<string | null>(null);
+  selectedEntryIdRef.current = selectedEntryId;
+
   const [quickSaving, setQuickSaving] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [savingEntryId, setSavingEntryId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<StatusPrompt | null>(null);
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [detailSaving, setDetailSaving] = useState(false);
   /** Panel hari pada tampilan Bulan: tanggal yang sedang terbuka. */
   const [monthPanelDate, setMonthPanelDate] = useState<WorkDate | null>(null);
   const [expandedOwnerId, setExpandedOwnerId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
+  /**
+   * Quick Add kontekstual (CAL-03 F4B): tanggal target + area pemicu. `anchor`
+   * adalah elemen tanggal yang diklik (dipakai popover desktop); `rect`
+   * dipakai saat area pemicu tidak lagi tersedia. Tidak ada entry ganda: satu
+   * tanggal hanya bisa punya satu panel pada satu waktu.
+   */
+  const [quickAddTarget, setQuickAddTarget] = useState<{
+    date: WorkDate;
+    anchor: HTMLElement | null;
+  } | null>(null);
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+  const [quickAddError, setQuickAddError] = useState<string | null>(null);
+  const isCompact = useWorkCalendarCompact();
   /**
    * Entry yang menunggu konfirmasi hapus. Selama state ini terisi, tidak ada
    * pemanggilan `repository.deleteEntry`. `AlertDialog` memakai `open` yang
@@ -180,11 +213,18 @@ export function WorkCalendarWorkspace({  currentUser,
 
   const selectedEntry = useMemo(
     () =>
-      calendar.entries.find((entry) => entry.id === selectedEntryId) ??
-      teamOverview.memberEntries.find((entry) => entry.id === selectedEntryId) ??
-      null,
+      resolveSelectedWorkEntry({
+        requestedId: selectedEntryId,
+        entries: calendar.entries,
+        extraEntries: teamOverview.memberEntries,
+      }),
     [calendar.entries, teamOverview.memberEntries, selectedEntryId],
   );
+
+  /** Data yang relevan untuk detail sudah selesai dimuat. */
+  const detailDataReady =
+    !calendar.isLoading &&
+    (calendar.view !== "team" || teamOverview.status !== "loading");
 
   /**
    * Peta pemilik untuk detail. Mode Tim server hanya menyediakan anggota dari
@@ -391,6 +431,61 @@ export function WorkCalendarWorkspace({  currentUser,
     setMutationError(null);
   }, []);
 
+  // ==== Seleksi detail lewat URL (CAL-03 F4B) ====
+
+  /**
+   * Membuka detail: push history baru sehingga Browser Back menutup panel,
+   * bukan kembali ke halaman sebelumnya. Tanpa binding route, seleksi hanya
+   * disimpan di state lokal.
+   */
+  const openEntryDetail = useCallback(
+    (entry: WorkEntry) => {
+      setMonthPanelDate(null);
+      setQuickAddTarget(null);
+      if (routeAdapter) {
+        routeAdapter.writeEntryId(entry.id, { replace: false });
+        return;
+      }
+      setInternalSelectedEntryId(entry.id);
+    },
+    [routeAdapter],
+  );
+
+  /**
+   * Menutup detail: replace supaya entri history "detail terbuka" tidak
+   * tertinggal dan tidak dapat dibuka ulang oleh Forward.
+   */
+  const closeEntryDetail = useCallback(() => {
+    if (routeAdapter) {
+      routeAdapter.writeEntryId(null, { replace: true });
+      return;
+    }
+    setInternalSelectedEntryId(null);
+  }, [routeAdapter]);
+
+  /**
+   * Perlindungan deep link: id `entry` yang tidak dapat diresolusi (tidak ada
+   * atau bukan hak pengguna) dibuang dari URL — tetapi hanya setelah data
+   * selesai dimuat, supaya deep link valid tidak terhapus saat loading.
+   * Tanpa binding route, id lokal yang tidak lagi ada cukup dibersihkan.
+   */
+  useEffect(() => {
+    if (
+      !shouldDiscardWorkEntryQueryId({
+        requestedId: selectedEntryId,
+        resolvedEntry: selectedEntry,
+        dataReady: detailDataReady,
+      })
+    ) {
+      return;
+    }
+    if (routeAdapter) {
+      routeAdapter.writeEntryId(null, { replace: true });
+      return;
+    }
+    setInternalSelectedEntryId(null);
+  }, [routeAdapter, selectedEntryId, selectedEntry, detailDataReady]);
+
   const handleDelete = useCallback(
     async (entry: WorkEntry) => {
       setIsDeleting(true);
@@ -401,7 +496,7 @@ export function WorkCalendarWorkspace({  currentUser,
           expectedUpdatedAt: entry.updatedAt,
         });
         calendar.removeLocalEntry(entry.id);
-        if (selectedEntryId === entry.id) setSelectedEntryId(null);
+        if (selectedEntryIdRef.current === entry.id) closeEntryDetail();
         if (prompt?.entryId === entry.id) setPrompt(null);
       } catch (thrown) {
         setMutationError(
@@ -418,7 +513,7 @@ export function WorkCalendarWorkspace({  currentUser,
         setPendingDeleteEntryId(null);
       }
     },
-    [calendar, prompt, repository, selectedEntryId],
+    [calendar, closeEntryDetail, prompt, repository],
   );
 
   const pendingDeleteEntry = useMemo(
@@ -438,9 +533,76 @@ export function WorkCalendarWorkspace({  currentUser,
       setDetailSaving(true);
       const ok = await patchEntry(entry, patch);
       setDetailSaving(false);
-      if (ok) setSelectedEntryId(null);
+      if (ok) closeEntryDetail();
     },
-    [patchEntry],
+    [closeEntryDetail, patchEntry],
+  );
+
+  // ==== Quick Add kontekstual (Minggu/Bulan) ====
+
+  /**
+   * Membuka Quick Add untuk satu tanggal. `event.currentTarget` disimpan
+   * sebagai anchor popover desktop; bottom sheet mobile tidak memakainya.
+   */
+  const openQuickAdd = useCallback((date: WorkDate, anchor: HTMLElement | null) => {
+    setQuickAddTarget((current) =>
+      current && current.date === date && current.anchor === anchor ? current : { date, anchor },
+    );
+    setQuickAddError(null);
+  }, []);
+
+  const closeQuickAdd = useCallback(() => {
+    setQuickAddTarget(null);
+    setQuickAddError(null);
+  }, []);
+
+  /**
+   * Simpan dari Quick Add. `quickAddSaving` + kunci sinkron di panel mencegah
+   * entry ganda; entry baru langsung terlihat lewat `applyLocalEntry` tanpa
+   * reload.
+   */
+  const handleQuickAddSubmit = useCallback(
+    async (date: WorkDate, title: string): Promise<boolean> => {
+      setQuickAddSaving(true);
+      setQuickAddError(null);
+      try {
+        const draft: WorkEntryDraft = {
+          ownerId: currentUser.id,
+          workDate: date,
+          title,
+          status: "planned",
+          kind: "work",
+          isAllDay: true,
+        };
+        const created = await repository.createEntry(draft);
+        calendar.applyLocalEntry(created);
+        return true;
+      } catch (thrown) {
+        setQuickAddError(
+          thrown instanceof Error && thrown.message
+            ? thrown.message
+            : "Pekerjaan gagal disimpan. Coba lagi.",
+        );
+        return false;
+      } finally {
+        setQuickAddSaving(false);
+      }
+    },
+    [calendar, currentUser.id, repository],
+  );
+
+  /**
+   * Aksi "Tambah detail" pada Quick Add: pindah ke tampilan Hari pada tanggal
+   * target lalu fokuskan quick entry lengkap. Tidak membuat entry kedua.
+   */
+  const handleQuickAddOpenFullEditor = useCallback(
+    (date: WorkDate) => {
+      calendar.setView("day");
+      calendar.setAnchorDate(date);
+      closeQuickAdd();
+      window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
+    },
+    [calendar, closeQuickAdd],
   );
 
   // ==== Navigasi tampilan ====
@@ -449,10 +611,11 @@ export function WorkCalendarWorkspace({  currentUser,
     (next: WorkCalendarViewMode) => {
       calendar.setView(next);
       setMonthPanelDate(null);
-      setSelectedEntryId(null);
+      closeEntryDetail();
+      closeQuickAdd();
       setPrompt(null);
     },
-    [calendar],
+    [calendar, closeEntryDetail, closeQuickAdd],
   );
 
   const handleAdd = useCallback(() => {
@@ -469,11 +632,15 @@ export function WorkCalendarWorkspace({  currentUser,
     window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
   }, [calendar]);
 
-  const openMonthDay = useCallback((date: WorkDate) => {
-    setMonthPanelDate(date);
-    setSelectedEntryId(null);
-    setPrompt(null);
-  }, []);
+  const openMonthDay = useCallback(
+    (date: WorkDate) => {
+      setMonthPanelDate(date);
+      closeEntryDetail();
+      closeQuickAdd();
+      setPrompt(null);
+    },
+    [closeEntryDetail, closeQuickAdd],
+  );
 
   /**
    * Aksi "Tambahkan pekerjaan ke tanggal ini" pada panel Bulan: pindah ke
@@ -507,13 +674,14 @@ export function WorkCalendarWorkspace({  currentUser,
     promptEntryId: prompt?.entryId ?? null,
     promptType: prompt ? getWorkEntryStatusFollowUp(prompt.target) : null,
     savingEntryId,
+    selectedEntryId,
     onUpdateTitle: handleUpdateTitle,
     onRequestStatus: handleRequestStatus,
     onSubmitFollowUp: (entry, value) => {
       void handleSubmitFollowUp(entry, value);
     },
     onCancelFollowUp: handleCancelFollowUp,
-    onOpenDetail: (entry) => setSelectedEntryId(entry.id),
+    onOpenDetail: openEntryDetail,
     onMoveToDate: handleMoveToDate,
     onDelete: (entry) => {
       // Tidak ada penghapusan sebelum konfirmasi: hanya menyimpan target.
@@ -628,29 +796,36 @@ export function WorkCalendarWorkspace({  currentUser,
       )}
 
       {/* Detail pekerjaan dibuka dari judul pada semua tampilan non-Tim
-          (Hari, Minggu, Bulan). Mode Tim punya panel read-only terpisah. */}
-      {!calendar.isLoading &&
-        !calendar.error &&
-        calendar.view !== "team" &&
-        selectedEntry && (
-          <WorkEntryDetail
-            entry={selectedEntry}
-            owner={ownerById.get(selectedEntry.ownerId)}
-            today={calendar.today}
-            readOnly={!effectivePermissions.canEditEntry(selectedEntry)}
-            isSaving={detailSaving}
-            onSave={(patch) => {
-              void handleSaveDetail(selectedEntry, patch);
-            }}
-            onClose={() => setSelectedEntryId(null)}
-          />
-        )}
+          (Hari, Minggu, Bulan). Mode Tim punya panel read-only terpisah.
+          `AnimatePresence` di sini memungkinkan exit animation overlay dan
+          sheet berjalan sebelum node dilepas; kunci detail per id memastikan
+          ganti entry memainkan animasi masuk seperti panel baru. */}
+      <AnimatePresence>
+        {!calendar.isLoading &&
+          !calendar.error &&
+          calendar.view !== "team" &&
+          selectedEntry && (
+            <WorkEntryDetail
+              key={selectedEntry.id}
+              entry={selectedEntry}
+              owner={ownerById.get(selectedEntry.ownerId)}
+              today={calendar.today}
+              readOnly={!effectivePermissions.canEditEntry(selectedEntry)}
+              isSaving={detailSaving}
+              onSave={(patch) => {
+                void handleSaveDetail(selectedEntry, patch);
+              }}
+              onClose={closeEntryDetail}
+            />
+          )}
+      </AnimatePresence>
 
       {!calendar.isLoading && !calendar.error && calendar.view === "week" && (
         <WeeklyWorkView
           summaries={derived.daySummaries}
           interactions={interactions}
           onSelectDate={openDayFromWeek}
+          onQuickAdd={(date, anchor) => openQuickAdd(date, anchor)}
         />
       )}
 
@@ -660,6 +835,8 @@ export function WorkCalendarWorkspace({  currentUser,
             cells={derived.monthCells}
             today={calendar.today}
             onOpenDay={openMonthDay}
+            onQuickAdd={(date, anchor) => openQuickAdd(date, anchor)}
+            onOpenEntry={(entry) => openEntryDetail(entry)}
           />
 
           {monthPanelDate && (
@@ -750,15 +927,33 @@ export function WorkCalendarWorkspace({  currentUser,
         )
       )}
 
-      {selectedEntry && calendar.view === "team" && (
-        <WorkEntryDetail
-          entry={selectedEntry}
-          owner={ownerById.get(selectedEntry.ownerId)}
-          today={calendar.today}
-          readOnly
-          isSaving={false}
-          onSave={() => undefined}
-          onClose={() => setSelectedEntryId(null)}
+      <AnimatePresence>
+        {selectedEntry && calendar.view === "team" && (
+          <WorkEntryDetail
+            key={selectedEntry.id}
+            entry={selectedEntry}
+            owner={ownerById.get(selectedEntry.ownerId)}
+            today={calendar.today}
+            readOnly
+            isSaving={false}
+            onSave={() => undefined}
+            onClose={closeEntryDetail}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Quick Add kontekstual Minggu/Bulan: satu permukaan per tanggal. */}
+      {quickAddTarget && (
+        <QuickAddSurface
+          workDate={quickAddTarget.date}
+          isCompact={isCompact}
+          anchor={quickAddTarget.anchor}
+          isSaving={quickAddSaving}
+          error={quickAddError}
+          onSubmit={(title) => handleQuickAddSubmit(quickAddTarget.date, title)}
+          onCancel={closeQuickAdd}
+          onOpenFullEditor={handleQuickAddOpenFullEditor}
+          onDismissError={() => setQuickAddError(null)}
         />
       )}
 

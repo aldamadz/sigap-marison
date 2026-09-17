@@ -6,6 +6,8 @@
  * - perubahan filter/halaman Tim masuk history sehingga Back/Forward
  *   memulihkan state;
  * - tanggal acuan kalender (`date`) dan tanggal mode Tim selalu sama;
+ * - seleksi entry (`entry`) ikut URL sehingga Browser Back menutup detail
+ *   (CAL-03 F4B);
  * - query parameter lain milik route tidak pernah dihapus.
  *
  * Adapter sengaja hanya mengekspos baca/tulis + `key` (string URL terkini).
@@ -28,6 +30,10 @@ import {
   applyWorkTeamOverviewUrlState,
   readWorkTeamOverviewUrlState,
 } from "../lib/work-team-overview";
+import {
+  normalizeWorkEntryQueryId,
+  WORK_ENTRY_QUERY_KEY,
+} from "../lib/work-entry-selection";
 
 const ANCHOR_DATE_KEY = "date";
 const VIEW_KEY = "view";
@@ -116,6 +122,11 @@ export function useWorkCalendarRouteBinding(): WorkCalendarRouteBinding {
         const raw = new URLSearchParams(searchRef.current).get(ANCHOR_DATE_KEY);
         return raw && ISO_DATE_PATTERN.test(raw) ? raw : null;
       },
+      readEntryId() {
+        return normalizeWorkEntryQueryId(
+          new URLSearchParams(searchRef.current).get(WORK_ENTRY_QUERY_KEY),
+        );
+      },
       write(state, options) {
         commit(
           (params) => applyWorkTeamOverviewUrlState(params, state),
@@ -133,6 +144,17 @@ export function useWorkCalendarRouteBinding(): WorkCalendarRouteBinding {
         commit((params) => {
           if (params.get(VIEW_KEY) === view) return;
           params.set(VIEW_KEY, view);
+        }, options?.replace ?? false);
+      },
+      writeEntryId(entryId, options) {
+        const normalized = normalizeWorkEntryQueryId(entryId);
+        commit((params) => {
+          if (params.get(WORK_ENTRY_QUERY_KEY) === (normalized ?? null)) return;
+          if (normalized === null || normalized === "") {
+            params.delete(WORK_ENTRY_QUERY_KEY);
+            return;
+          }
+          params.set(WORK_ENTRY_QUERY_KEY, normalized);
         }, options?.replace ?? false);
       },
     }),
