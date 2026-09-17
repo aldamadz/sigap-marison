@@ -346,3 +346,56 @@ export type {
   WorkTeamOverviewSort,
   WorkTeamOverviewStatusFilter,
 } from "./types/work-team-overview";
+
+// CAL-03 F7: ringkasan dashboard dan notifikasi.
+export { WorkCalendarDashboardWidget } from "./components/WorkCalendarDashboardWidget";
+export type { WorkCalendarDashboardWidgetProps } from "./components/WorkCalendarDashboardWidget";
+export {
+  EMPTY_WORK_CALENDAR_DASHBOARD_SUMMARY,
+  buildWorkCalendarDashboardSummary,
+} from "./lib/work-calendar-dashboard";
+export {
+  WORK_CALENDAR_NOTIFICATION_DEBOUNCE_HOURS,
+  WORK_CALENDAR_NOTIFICATION_DEDUPE_PREFIX,
+  WORK_CALENDAR_NOTIFICATION_ESCALATION_WORK_DAYS,
+  WORK_CALENDAR_NOTIFICATION_META,
+  buildWorkCalendarNotificationDedupeKey,
+  countUnreadWorkCalendarNotifications,
+  getWorkCalendarNotificationMeta,
+  isWorkCalendarNotificationCategory,
+  mapWorkCalendarNotificationRow,
+  readWorkCalendarNotificationCategory,
+  summarizeWorkCalendarNotifications,
+} from "./lib/work-calendar-notifications";
+export type {
+  WorkCalendarNotificationBreakdown,
+  WorkCalendarNotificationCategoryMeta,
+  WorkCalendarNotificationRow,
+} from "./lib/work-calendar-notifications";
+export {
+  WORK_CALENDAR_NOTIFICATION_CATEGORIES,
+  WORK_CALENDAR_NOTIFICATION_TYPES,
+} from "./types/work-calendar-notifications";
+export {
+  WORK_CALENDAR_ACTIVITY_ERROR_MESSAGE,
+  WORK_CALENDAR_ACTIVITY_MAX_ROWS,
+  WORK_CALENDAR_DASHBOARD_ERROR_MESSAGE,
+  WORK_CALENDAR_NOTIFICATION_GENERATE_ERROR_MESSAGE,
+  createSupabaseWorkCalendarDashboardRepository,
+} from "./data/supabase-work-calendar-dashboard-repository";
+export type {
+  SupabaseWorkCalendarDashboardClient,
+  WorkCalendarActivityRow,
+  WorkCalendarDashboardRpcQuery,
+} from "./data/supabase-work-calendar-dashboard-repository";
+export type {
+  WorkCalendarActivityItem,
+  WorkCalendarActivityQueryInput,
+  WorkCalendarDashboardEntriesInput,
+  WorkCalendarDashboardRepository,
+  WorkCalendarDashboardSummary,
+  WorkCalendarNotification,
+  WorkCalendarNotificationCategory,
+  WorkCalendarNotificationGeneratorInput,
+  WorkCalendarNotificationType,
+} from "./types/work-calendar-notifications";

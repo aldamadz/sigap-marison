@@ -54,12 +54,15 @@ const fieldLabels: Record<string, string> = {
   signed_at: 'Waktu approval',
   signer_name: 'Penanda tangan',
   step_order: 'Urutan approval',
+  event_type: 'Jenis perubahan',
+  detail: 'Keterangan',
 };
 
 const importantFieldsByTable: Record<string, string[]> = {
   agendas: ['title', 'description', 'location', 'start_time', 'end_time', 'status'],
   surat_registrasi: ['judul_surat', 'nomor_surat', 'requester_name', 'requester_department', 'requester_office', 'status'],
   surat_signatures: ['signer_name', 'step_order', 'signed_at', 'note'],
+  work_calendar_events: ['title', 'event_type', 'status', 'detail'],
 };
 
 // --- Komponen Utama ---
@@ -71,6 +74,7 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
     const action = log.action?.toUpperCase();
     const table = log.tableName || (log as any).table_name;
     if (table === 'surat_signatures' && action === 'UPDATE') return 'APPROVAL';
+    if (table === 'work_calendar_events' && action === 'INSERT') return 'CREATE';
     if ((table === 'agendas' || table === 'surat_registrasi') && (action === 'INSERT' || action === 'CREATE')) return 'CREATE';
     return 'OTHER';
   };
@@ -100,11 +104,17 @@ export const RecentActivity = ({ logs = [], users = [] }: RecentActivityProps) =
       agendas: 'agenda',
       surat_registrasi: 'surat',
       surat_signatures: 'approval surat',
+      work_calendar_events: 'pekerjaan kalender',
     };
     const rawTable = log.tableName || (log as any).table_name || "";
     const entityName = tableMapping[rawTable] || (rawTable ? rawTable.toLowerCase().replace(/s$/, '') : 'agenda');
 
     if (rawTable === 'surat_signatures') return `menyetujui ${entityName}${title ? ` "${title}"` : ''}`;
+
+    if (rawTable === 'work_calendar_events') {
+      const verb = newData.activity_label || (log.action === 'INSERT' ? 'membuat' : 'memperbarui');
+      return `${verb} ${entityName}${title ? ` "${title}"` : ''}`;
+    }
 
     return `membuat ${entityName}${title ? ` "${title}"` : ''}`;
   };
