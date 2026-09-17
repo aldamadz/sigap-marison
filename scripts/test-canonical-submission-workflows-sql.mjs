@@ -6,6 +6,7 @@ const migrations = [
   "supabase/migrations/20260917131000_atomic_configured_checker_input.sql",
   "supabase/migrations/20260917132000_optional_branch_signer_fallback.sql",
   "supabase/migrations/20260917133000_seed_canonical_submission_workflows.sql",
+  "supabase/migrations/20260918100000_restore_asset_recommendation_config.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
 
@@ -18,8 +19,10 @@ create schema if not exists auth;
 create or replace function auth.uid() returns uuid language sql stable set search_path = ''
 as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 
-create table public.master_departments (id uuid primary key, name text not null unique);
+create table public.master_departments (id uuid primary key, name text not null unique, code text);
 create table public.master_offices (id uuid primary key, name text not null, kedudukan text);
+create table public.master_letter_types (id uuid primary key, name text not null, code text);
+create table public.master_entities (id uuid primary key, name text not null, code text);
 create table public.profiles (
   id uuid primary key, full_name text, job_title text, role text default 'user',
   office_id uuid references public.master_offices(id),
@@ -38,6 +41,7 @@ create table public.form_usages (
   name text not null, description text, route_id uuid, request_category text not null,
   scope_type text not null default 'all', status text not null default 'draft', sort_order integer default 0,
   created_by uuid, created_at timestamptz default now(), updated_at timestamptz default now(),
+  recommendation_config jsonb not null default '{}'::jsonb,
   external_revision_policy jsonb not null default '{"recipient_type":"requester","recipient_step_order":null,"approval_restart_step":1}'::jsonb
 );
 create table public.form_usage_departments (
@@ -151,14 +155,23 @@ insert into public.master_departments (id,name) values
  ('30000000-0000-4000-8000-000000000005','Keuangan & Akuntansi'),
  ('30000000-0000-4000-8000-000000000006','Branch Manager'),
  ('30000000-0000-4000-8000-000000000007','Teknik (Cabang)'),
- ('30000000-0000-4000-8000-000000000008','Umum & Keuangan (Cabang)');
+ ('30000000-0000-4000-8000-000000000008','Umum & Keuangan (Cabang)'),
+ ('30000000-0000-4000-8000-000000000009','Pengembangan Organisasi');
+update public.master_departments
+set code = 'PBO'
+where id = '30000000-0000-4000-8000-000000000009';
 insert into public.master_offices (id,name,kedudukan) values
  ('20000000-0000-4000-8000-000000000001','Kantor Pusat','Pusat'),
  ('20000000-0000-4000-8000-000000000002','Cabang A','KC'),
  ('20000000-0000-4000-8000-000000000003','Cabang B','KC'),
  ('20000000-0000-4000-8000-000000000004','Cabang Tanpa BM','KC');
 insert into public.master_forms (id,nama_form) values
- ('10000000-0000-4000-8000-000000000001','FORM PERMINTAAN BARANG & JASA');
+ ('10000000-0000-4000-8000-000000000001','FORM PERMINTAAN BARANG & JASA'),
+ ('10000000-0000-4000-8000-000000000002','REKOMENDASI PEREMAJAAN BARANG / ALAT KERJA');
+insert into public.master_letter_types (id,name,code) values
+ ('70000000-0000-4000-8000-000000000001','Rekomendasi','REK');
+insert into public.master_entities (id,name,code) values
+ ('80000000-0000-4000-8000-000000000001','UAI','UAI');
 insert into public.profiles (id,full_name,job_title,role,office_id,department_id) values
  ('40000000-0000-4000-8000-000000000001','Assistant Marketing','Assistant Manager Marketing','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001'),
  ('40000000-0000-4000-8000-000000000002','Manager Marketing','Manager Marketing','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001'),
@@ -179,9 +192,12 @@ insert into public.profiles (id,full_name,job_title,role,office_id,department_id
  ('40000000-0000-4000-8000-000000000021','Other Branch User','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000008'),
  ('40000000-0000-4000-8000-000000000022','Branch D Supervisor','Supervisor Teknik','user','20000000-0000-4000-8000-000000000004','30000000-0000-4000-8000-000000000007');
 
+insert into public.profiles (id,full_name,job_title,role,office_id,department_id) values
+ ('40000000-0000-4000-8000-000000000023','Staff IT Recommendation','Staff IT','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000009');
+
 insert into public.form_usages (id,form_id,name,request_category,scope_type,status) values
  ('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','Legacy Pusat Asset','asset','pusat','active'),
- ('50000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000001','Rekomendasi Peremajaan Aset','non_asset','pusat','active'),
+ ('50000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000002','Rekomendasi Peremajaan Aset','non_asset','pusat','active'),
  ('50000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','Permohonan Aset (Pusat)','asset','pusat','active'),
  ('50000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','Permohonan Order Bangun Marketing','unit','pusat','active'),
  ('50000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','Permohonan Teknik Cabang','non_unit','cabang','active');
@@ -189,11 +205,14 @@ insert into public.form_usage_steps (id,usage_id,step_order,role_name,label,acti
  ('60000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002',1,'memeriksa','Pimpinan Departemen','approval','head_office'),
  ('60000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000003',3,'memeriksa','Mgr. Perencanaan','unit_allocation','head_office'),
  ('60000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000004',3,'memeriksa','Mgr. Perencanaan','approval','head_office');
+insert into public.form_usage_steps (id,usage_id,step_order,role_name,label,action_type,candidate_scope) values
+ ('60000000-0000-4000-8000-000000000004','50000000-0000-4000-8000-000000000005',1,'membuat','Staff IT','approval','manual');
 insert into public.form_usage_step_users values
  ('60000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003'),
  ('60000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000006'),
  ('60000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000003'),
- ('60000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000003');
+ ('60000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000003'),
+ ('60000000-0000-4000-8000-000000000004','40000000-0000-4000-8000-000000000023');
 insert into public.form_usage_step_verifiers values
  ('60000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000005');
 
