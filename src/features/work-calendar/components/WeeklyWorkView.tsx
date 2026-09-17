@@ -9,15 +9,26 @@
 import { Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { WorkCalendarDaySummary, WorkDate } from "../types/work-calendar";
+import type {
+  WorkCalendarDayMeta,
+  WorkCalendarDaySummary,
+  WorkDate,
+} from "../types/work-calendar";
 import { formatWorkDateShort, getDayName } from "../lib/work-calendar-date";
 import { getWorkWeekDayPreview } from "../lib/work-progress";
 import { useWorkWeekPreviewLimit } from "../hooks/use-work-week-preview-limit";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
+import { WorkCalendarDayBadge, getWorkCalendarDaySurfaceClassName } from "./WorkCalendarDayBadge";
 
 export interface WeeklyWorkViewProps {
   summaries: readonly WorkCalendarDaySummary[];
   interactions: WorkCalendarViewInteractionProps;
+  /**
+   * Klasifikasi hari (kerja/nonkerja/libur) per tanggal (CAL-03 F6). Peta ini
+   * datang dari `buildWorkCalendarDayMetaMap`; tanggal yang tidak ada dianggap
+   * hari kerja.
+   */
+  dayMeta?: ReadonlyMap<WorkDate, WorkCalendarDayMeta>;
   onSelectDate: (date: WorkDate) => void;
   /**
    * Klik area kosong tanggal membuka Quick Add untuk tanggal itu (CAL-03
@@ -31,6 +42,7 @@ export interface WeeklyWorkViewProps {
 export function WeeklyWorkView({
   summaries,
   interactions,
+  dayMeta,
   onSelectDate,
   onQuickAdd,
 }: WeeklyWorkViewProps) {
@@ -44,6 +56,7 @@ export function WeeklyWorkView({
         {summaries.map((summary) => {
           const isToday = summary.date === interactions.today;
           const headingId = `work-week-heading-${summary.date}`;
+          const meta = dayMeta?.get(summary.date);
           const { preview, hiddenCount } = getWorkWeekDayPreview(
             summary.entries,
             interactions.today,
@@ -53,6 +66,7 @@ export function WeeklyWorkView({
             <div
               key={summary.date}
               data-testid={`work-week-column-${summary.date}`}
+              data-day-kind={meta?.kind ?? "work_day"}
               onClick={(event) => {
                 // Hanya klik pada area kosong kolom yang membuka Quick Add.
                 // Klik entry/`+N`/header sudah ditangani tombolnya sendiri dan
@@ -62,7 +76,8 @@ export function WeeklyWorkView({
                 onQuickAdd(summary.date, event.currentTarget);
               }}
               className={cn(
-                "flex min-w-0 flex-col rounded-sm border bg-card p-2",
+                "flex min-w-0 flex-col rounded-sm border p-2",
+                getWorkCalendarDaySurfaceClassName(meta),
                 isToday ? "border-primary/50" : "border-border",
               )}
             >
@@ -116,6 +131,10 @@ export function WeeklyWorkView({
               <h3 id={headingId} className="sr-only">
                 Pekerjaan {formatWorkDateShort(summary.date)}
               </h3>
+
+              {meta && meta.kind !== "work_day" && (
+                <WorkCalendarDayBadge meta={meta} className="mt-1.5 self-start" />
+              )}
 
               <div
                 className="mt-2 min-w-0"

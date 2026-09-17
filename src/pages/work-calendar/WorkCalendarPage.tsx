@@ -5,11 +5,13 @@ import { supabase } from "@/lib/supabase";
 import {
   WorkCalendarWorkspace,
   createSupabaseWorkCalendarProfileRepository,
+  createSupabaseWorkCalendarSettingsRepository,
   createSupabaseWorkEntryRepository,
   createSupabaseWorkTeamOverviewRepository,
   useWorkCalendarRouteBinding,
   type SupabaseWorkCalendarClient,
   type SupabaseWorkCalendarProfileClient,
+  type SupabaseWorkCalendarSettingsClient,
   type SupabaseWorkTeamOverviewClient,
   type WorkEntryOwner,
 } from "@/features/work-calendar";
@@ -47,6 +49,11 @@ export default function WorkCalendarPage() {
 
   const teamOverviewRepository = useMemo(
     () => createSupabaseWorkTeamOverviewRepository(supabase as SupabaseWorkTeamOverviewClient),
+    [],
+  );
+
+  const settingsRepository = useMemo(
+    () => createSupabaseWorkCalendarSettingsRepository(supabase as SupabaseWorkCalendarSettingsClient),
     [],
   );
 
@@ -164,6 +171,7 @@ export default function WorkCalendarPage() {
       currentUser={state.currentUser}
       repository={repository}
       teamOverviewRepository={teamOverviewRepository}
+      settingsRepository={settingsRepository}
       isTeamViewAvailableOverride={state.isTeamViewAvailable}
       initialView={route.initialView ?? "day"}
       initialAnchorDate={route.initialAnchorDate ?? undefined}
