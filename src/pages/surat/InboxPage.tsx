@@ -2580,9 +2580,10 @@ const handleApprove = async (item: any) => {
                     <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Semua kategori</SelectItem>
-                      <SelectItem value="asset">Aset</SelectItem>
-                      <SelectItem value="unit">Unit</SelectItem>
-                      <SelectItem value="non_unit">Non Unit</SelectItem>
+                      <SelectItem value="asset">Pengajuan Aset</SelectItem>
+                      <SelectItem value="unit">Pengajuan SPK</SelectItem>
+                      <SelectItem value="non_asset">Pengajuan Dana</SelectItem>
+                      <SelectItem value="non_unit">Pengajuan Non Unit</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={kpiFilter} onValueChange={setKpiFilter}>

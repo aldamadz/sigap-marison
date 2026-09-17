@@ -63,9 +63,10 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
   it("shows category buttons after selecting letter type", async () => {
     await mountForm();
     await selectLetterType();
-    expect(screen.getByText("Aset")).toBeInTheDocument();
-    expect(screen.getByText("Unit")).toBeInTheDocument();
-    expect(screen.getByText("Non Unit")).toBeInTheDocument();
+    expect(screen.getByText("Pengajuan Aset")).toBeInTheDocument();
+    expect(screen.getByText("Pengajuan SPK")).toBeInTheDocument();
+    expect(screen.getByText("Pengajuan Dana")).toBeInTheDocument();
+    expect(screen.getByText("Pengajuan Non Unit")).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 
@@ -73,7 +74,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
     await mountForm();
     await selectLetterType();
     await selectCategoryAset();
-    expect(screen.getByText("Form Dokumen")).toBeInTheDocument();
+    expect(screen.getByText("Form PGD")).toBeInTheDocument();
     expect(screen.getByText("Kegunaan")).toBeInTheDocument();
     assertStrictServiceCalls();
   });
