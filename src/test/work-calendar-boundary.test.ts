@@ -185,6 +185,7 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
 
   it("seluruh modul runtime dan test CAL-03 F3 bebas any, @ts-*, dan double cast", () => {
     const cal03TestFiles = [
+      "src/test/cal-03-f8-accessibility.test.tsx",
       "src/test/work-calendar-boundary.test.ts",
       "src/test/work-calendar-interaction-ux.test.tsx",
       "src/test/work-calendar-lib.test.ts",
@@ -980,5 +981,71 @@ describe("Work Calendar — batas CAL-03 F7 dashboard dan notifikasi", () => {
     expect(source).not.toContain(".update(");
     expect(source).not.toContain(".delete(");
     expect(source).not.toContain("work_calendar_emit_notification");
+  });
+});
+
+describe("Work Calendar — batas CAL-03 F8 penutupan produk", () => {
+  it("menyediakan manual singkat Kalender dan menautkannya dari indeks dokumentasi", () => {
+    const manual = readFileSync(join(root, "docs", "CAL-03_WORK_CALENDAR.md"), "utf8");
+
+    // Manual harus menyebut seluruh fase F1–F7 supaya pembaca dapat menelusuri
+    // lingkup fitur tanpa membuka riwayat commit.
+    for (const phase of ["F1", "F2", "F3", "F4A", "F4B", "F5", "F6", "F7"]) {
+      expect(manual).toContain(phase);
+    }
+    expect(manual).toContain("/calendar");
+    expect(manual).toContain("generate_work_calendar_notifications");
+    expect(manual).toContain("get_work_calendar_dashboard_entries");
+    expect(manual).toContain("get_my_recent_work_calendar_events");
+
+    const readme = readFileSync(join(root, "docs", "README.md"), "utf8");
+    expect(readme).toContain("CAL-03_WORK_CALENDAR.md");
+  });
+
+  it("mencatat CAL-03 F1–F7 sebagai kandidat staging tanpa menyentuh riwayat rilis production", () => {
+    const changelog = readFileSync(join(root, "docs", "versi", "changelog.md"), "utf8");
+
+    // Entri gabungan masuk ke bagian "Rilis Mendatang" (staging), bukan ke
+    // bagian "Riwayat Rilis" (production).
+    const upcomingStart = changelog.indexOf("## 2. Rilis Mendatang");
+    const releaseHistoryStart = changelog.indexOf("## 3. Riwayat Rilis");
+    expect(upcomingStart).toBeGreaterThan(-1);
+    expect(releaseHistoryStart).toBeGreaterThan(upcomingStart);
+
+    const upcoming = changelog.slice(upcomingStart, releaseHistoryStart);
+    expect(upcoming).toContain("CAL-03");
+    for (const phase of ["F1", "F2", "F3", "F4A", "F4B", "F5", "F6", "F7"]) {
+      expect(upcoming).toContain(phase);
+    }
+
+    // Riwayat rilis production tetap kosong sampai instruksi rilis eksplisit.
+    const releaseHistory = changelog.slice(releaseHistoryStart);
+    expect(releaseHistory).toContain("Belum ada rilis resmi yang tercatat");
+  });
+
+  it("tidak menambah migration atau kolom database baru pada fase penutupan", () => {
+    const migrationsDir = join(root, "supabase", "migrations");
+    const migrations = readdirSync(migrationsDir).filter((name) => name.endsWith(".sql"));
+
+    // Snapshot migration CAL-03 dibekukan pada penutupan: F2 entries, F3 team
+    // members, F4A team overview + scale, F5 lifecycle, F6 holidays, F7
+    // notifications. F8 tidak boleh menambah satu pun.
+    const cal03Migrations = migrations.filter((name) => name.includes("work_calendar")).sort();
+    expect(cal03Migrations).toEqual([
+      "20260915072607_work_calendar_entries.sql",
+      "20260915093000_work_calendar_team_members.sql",
+      "20260916170000_work_calendar_team_overview.sql",
+      "20260916171000_work_calendar_team_overview_scale.sql",
+      "20260917120000_work_calendar_lifecycle.sql",
+      "20260918090000_work_calendar_holidays.sql",
+      "20260918120000_work_calendar_notifications.sql",
+    ]);
+  });
+
+  it("menjaga audit aksesibilitas F8 tetap mencakup dark mode dan seluruh fase", () => {
+    const audit = readFileSync(join(root, "src", "test", "cal-03-f8-accessibility.test.tsx"), "utf8");
+    expect(audit).toContain(".dark .work-calendar-scope");
+    expect(audit).toContain("contrastRatio");
+    expect(audit).toContain("workspace");
   });
 });
