@@ -12,7 +12,25 @@ export { QuickWorkEntry } from "./components/QuickWorkEntry";
 export { WorkEntryRow } from "./components/WorkEntryRow";
 export { WorkEntryList } from "./components/WorkEntryList";
 export { WorkEntryEditor } from "./components/WorkEntryEditor";
+export { WorkEntryCreateDialog } from "./components/WorkEntryCreateDialog";
+export type {
+  WorkEntryCreateDialogProps,
+  WorkEntryCreateInput,
+} from "./components/WorkEntryCreateDialog";
 export { WorkEntryDetail } from "./components/WorkEntryDetail";
+export { QuickAddPanel } from "./components/QuickAddPanel";
+export { QuickAddSurface } from "./components/QuickAddSurface";
+export {
+  AnimatePresence,
+  WorkCalendarCrossfade,
+  useWorkCalendarMotion,
+} from "./components/WorkCalendarMotion";
+export type { WorkCalendarMotion } from "./components/WorkCalendarMotion";
+export { WorkCalendarModal } from "./components/WorkCalendarModal";
+export type {
+  WorkCalendarModalProps,
+  WorkCalendarModalVariant,
+} from "./components/WorkCalendarModal";
 export { WorkEntryStatusGlyph } from "./components/WorkEntryStatusGlyph";
 export { DailyWorkView } from "./components/DailyWorkView";
 export { WeeklyWorkView } from "./components/WeeklyWorkView";
@@ -82,7 +100,32 @@ export type {
 } from "./hooks/use-work-team-overview";
 export { useWorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
 export type { WorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
+export { useWorkCalendarCompact, WORK_CALENDAR_COMPACT_QUERY } from "./hooks/use-work-calendar-compact";
 export { useWorkTeamOverviewCompact } from "./hooks/use-work-team-overview-compact";
+
+export {
+  WORK_CALENDAR_CROSSFADE_DURATION_SECONDS,
+  WORK_CALENDAR_DETAIL_SHEET_MAX_WIDTH,
+  WORK_CALENDAR_DETAIL_SHEET_MIN_WIDTH,
+  WORK_CALENDAR_EASE,
+  WORK_CALENDAR_OVERLAY_DURATION_SECONDS,
+  WORK_CALENDAR_REDUCED_DURATION_SECONDS,
+  WORK_CALENDAR_SHEET_DURATION_SECONDS,
+  getWorkCalendarMotionDurations,
+} from "./lib/work-calendar-motion";
+export type { WorkCalendarMotionDurations } from "./lib/work-calendar-motion";
+
+export {
+  WORK_ENTRY_QUERY_ID_MAX_LENGTH,
+  WORK_ENTRY_QUERY_KEY,
+  normalizeWorkEntryQueryId,
+  resolveSelectedWorkEntry,
+  shouldDiscardWorkEntryQueryId,
+} from "./lib/work-entry-selection";
+export type {
+  ResolveSelectedWorkEntryInput,
+  ShouldDiscardWorkEntryQueryIdInput,
+} from "./lib/work-entry-selection";
 
 export {
   applyWorkTeamOverviewFilterChange,

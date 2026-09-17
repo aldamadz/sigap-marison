@@ -59,6 +59,18 @@ import {
   validateWorkEntryInput,
 } from "@/features/work-calendar/lib/work-entry-validation";
 import {
+  WORK_ENTRY_QUERY_ID_MAX_LENGTH,
+  normalizeWorkEntryQueryId,
+  resolveSelectedWorkEntry,
+  shouldDiscardWorkEntryQueryId,
+} from "@/features/work-calendar/lib/work-entry-selection";
+import {
+  WORK_CALENDAR_DETAIL_SHEET_MAX_WIDTH,
+  WORK_CALENDAR_DETAIL_SHEET_MIN_WIDTH,
+  WORK_CALENDAR_REDUCED_DURATION_SECONDS,
+  getWorkCalendarMotionDurations,
+} from "@/features/work-calendar/lib/work-calendar-motion";
+import {
   WORK_CALENDAR_FIXTURE_CURRENT_USER,
   WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
   WORK_CALENDAR_FIXTURE_TODAY,
@@ -691,5 +703,99 @@ describe("work-calendar-add-action (CAL-03 F4A scope C)", () => {
       targetDate: anchor,
       targetView: "day",
     });
+  });
+});
+
+describe("work-entry-selection (CAL-03 F4B)", () => {
+  const entries = [
+    createFixtureWorkEntry({ id: "milik-saya", title: "Pekerjaan saya" }),
+    createFixtureWorkEntry({ id: "milik-tim", ownerId: "user-bawahan-1", title: "Pekerjaan tim" }),
+  ];
+
+  it("menormalkan id dari URL dan menolak bentuk yang tidak masuk akal", () => {
+    expect(normalizeWorkEntryQueryId("abc-123")).toBe("abc-123");
+    expect(normalizeWorkEntryQueryId(null)).toBeNull();
+    expect(normalizeWorkEntryQueryId("")).toBeNull();
+    // Spasi di tepi, whitespace internal, dan kontrol ditolak.
+    expect(normalizeWorkEntryQueryId(" abc")).toBeNull();
+    expect(normalizeWorkEntryQueryId("abc ")).toBeNull();
+    expect(normalizeWorkEntryQueryId("a b")).toBeNull();
+    expect(normalizeWorkEntryQueryId("a\tb")).toBeNull();
+    // Id yang terlalu panjang ditolak.
+    expect(
+      normalizeWorkEntryQueryId("x".repeat(WORK_ENTRY_QUERY_ID_MAX_LENGTH + 1)),
+    ).toBeNull();
+    expect(
+      normalizeWorkEntryQueryId("x".repeat(WORK_ENTRY_QUERY_ID_MAX_LENGTH)),
+    ).toHaveLength(WORK_ENTRY_QUERY_ID_MAX_LENGTH);
+  });
+
+  it("mencari entry hanya pada data yang boleh dilihat", () => {
+    expect(
+      resolveSelectedWorkEntry({ requestedId: "milik-saya", entries })?.title,
+    ).toBe("Pekerjaan saya");
+    // Id milik orang lain tidak ada di `entries` pengguna sehingga null.
+    expect(resolveSelectedWorkEntry({ requestedId: "tidak-ada", entries })).toBeNull();
+    expect(resolveSelectedWorkEntry({ requestedId: null, entries })).toBeNull();
+    // Entry tambahan (mis. anggota tim yang sedang dibuka) ikut dicari.
+    expect(
+      resolveSelectedWorkEntry({
+        requestedId: "milik-tim",
+        entries: [entries[0]],
+        extraEntries: [entries[1]],
+      })?.ownerId,
+    ).toBe("user-bawahan-1");
+  });
+
+  it("hanya membuang id setelah data selesai dimuat", () => {
+    expect(
+      shouldDiscardWorkEntryQueryId({
+        requestedId: "tidak-ada",
+        resolvedEntry: null,
+        dataReady: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDiscardWorkEntryQueryId({
+        requestedId: "tidak-ada",
+        resolvedEntry: null,
+        dataReady: true,
+      }),
+    ).toBe(true);
+    // Id valid tidak pernah dibuang.
+    expect(
+      shouldDiscardWorkEntryQueryId({
+        requestedId: "milik-saya",
+        resolvedEntry: entries[0],
+        dataReady: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("work-calendar-motion (CAL-03 F4B)", () => {
+  it("menjaga durasi overlay 150-180 ms dan sheet 220-260 ms", () => {
+    const normal = getWorkCalendarMotionDurations(false);
+    expect(normal.overlay).toBeGreaterThanOrEqual(0.15);
+    expect(normal.overlay).toBeLessThanOrEqual(0.18);
+    expect(normal.sheet).toBeGreaterThanOrEqual(0.22);
+    expect(normal.sheet).toBeLessThanOrEqual(0.26);
+    // Crossfade detail/editor harus ringan.
+    expect(normal.crossfade).toBeLessThan(0.2);
+  });
+
+  it("memangkas durasi saat reduced motion tanpa perpindahan", () => {
+    const reduced = getWorkCalendarMotionDurations(true);
+    expect(reduced.overlay).toBe(WORK_CALENDAR_REDUCED_DURATION_SECONDS);
+    expect(reduced.sheet).toBe(WORK_CALENDAR_REDUCED_DURATION_SECONDS);
+    expect(reduced.crossfade).toBe(WORK_CALENDAR_REDUCED_DURATION_SECONDS);
+    expect(reduced.overlay).toBeLessThan(
+      getWorkCalendarMotionDurations(false).overlay,
+    );
+  });
+
+  it("menetapkan lebar sheet detail desktop pada rentang 480-560 px", () => {
+    expect(WORK_CALENDAR_DETAIL_SHEET_MIN_WIDTH).toBe(480);
+    expect(WORK_CALENDAR_DETAIL_SHEET_MAX_WIDTH).toBe(560);
   });
 });

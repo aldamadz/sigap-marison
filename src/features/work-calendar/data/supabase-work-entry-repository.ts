@@ -74,6 +74,18 @@ export interface WorkCalendarEntryUpdate {
 const WORK_ENTRY_SELECT_COLUMNS =
   "id, owner_id, work_date, title, realization, notes, location, status, kind, is_all_day, starts_at, ends_at, blocked_reason, completed_at, deleted_at, created_at, updated_at";
 
+/**
+ * Bentuk id kolom `work_calendar_entries.id` (uuid). Id yang tidak berbentuk
+ * uuid tidak pernah dikirim ke PostgREST: query akan gagal dengan error cast
+ * dan itu bukan cara yang benar untuk menangani deep link yang salah ketik.
+ */
+const WORK_ENTRY_ID_SHAPE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isWorkEntryIdShape(value: string): boolean {
+  return WORK_ENTRY_ID_SHAPE_PATTERN.test(value);
+}
+
 async function paginateQuery(
   fetchPage: (
     offset: number,
@@ -161,6 +173,37 @@ export function createSupabaseWorkEntryRepository(
       );
 
       return rows.map(mapWorkEntryRow);
+    },
+
+    async getEntryById({ entryId, signal }) {
+      // Id non-uuid (mis. hasil tebak URL yang salah) tidak pernah dikirim ke
+      // server: cukup dianggap tidak dapat diresolusi.
+      if (!isWorkEntryIdShape(entryId)) {
+        return null;
+      }
+
+      let query = client
+        .from("work_calendar_entries")
+        .select(WORK_ENTRY_SELECT_COLUMNS)
+        .eq("id", entryId)
+        .is("deleted_at", null);
+
+      if (signal && "abortSignal" in query && typeof query.abortSignal === "function") {
+        query = query.abortSignal(signal);
+      }
+
+      // RLS yang sudah ada menentukan cakupan: entry sendiri, atau pekerjaan
+      // anggota tim yang terotorisasi. Baris di luar cakupan tidak akan
+      // dikembalikan (bukan error), sehingga hasilnya konsisten `null`.
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error("Gagal memuat detail pekerjaan.");
+      }
+
+      // `id` adalah primary key, jadi hasilnya paling banyak satu baris.
+      const row = data && data.length > 0 ? data[0] : null;
+      return row ? mapWorkEntryRow(row) : null;
     },
 
     async createEntry(draft: WorkEntryDraft) {

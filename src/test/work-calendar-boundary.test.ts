@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -181,6 +181,7 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
   it("seluruh modul runtime dan test CAL-03 F3 bebas any, @ts-*, dan double cast", () => {
     const cal03TestFiles = [
       "src/test/work-calendar-boundary.test.ts",
+      "src/test/work-calendar-interaction-ux.test.tsx",
       "src/test/work-calendar-lib.test.ts",
       "src/test/work-calendar-page.test.tsx",
       "src/test/work-calendar-profile-repository.test.ts",
@@ -452,5 +453,169 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
     expect(workspace).toContain("getWorkCalendarAddAction({");
     expect(workspace).toContain('data-testid="work-month-panel-add"');
     expect(workspace).toContain("Tambahkan pekerjaan ke tanggal ini");
+  });
+});
+
+describe("Work Calendar — batas CAL-03 F4B", () => {
+  it("tidak menambah migration atau menyentuh lingkungan produksi", () => {
+    const migrationsDir = join(root, "supabase", "migrations");
+    const names = readdirSync(migrationsDir);
+    // F4B murni UI: tidak boleh ada migration baru untuk fitur ini.
+    expect(names.filter((name) => /work_entry_selection|entry_selection/i.test(name))).toEqual([]);
+  });
+
+  it("selection entry memakai query `entry` dan tidak menambah key lain", () => {
+    const selection = readFileSync(
+      join(featureDir, "lib", "work-entry-selection.ts"),
+      "utf8",
+    );
+    expect(selection).toContain('WORK_ENTRY_QUERY_KEY = "entry"');
+    expect(selection).not.toMatch(/WORK_ENTRY_QUERY_KEY = "(?!entry)/);
+
+    const routeState = readFileSync(
+      join(featureDir, "hooks", "use-work-calendar-route-state.ts"),
+      "utf8",
+    );
+    expect(routeState).toContain("writeEntryId(entryId");
+    expect(routeState).toContain("readEntryId(");
+    // Penulisan entry hanya menyentuh kuncinya sendiri.
+    const writer = routeState.slice(routeState.indexOf("writeEntryId(entryId"));
+    expect(writer.slice(0, 500)).toContain("params.delete(WORK_ENTRY_QUERY_KEY)");
+    expect(writer.slice(0, 500)).toContain("params.set(WORK_ENTRY_QUERY_KEY, normalized)");
+    expect(writer.slice(0, 500)).not.toContain('params.delete("date")');
+    expect(writer.slice(0, 500)).not.toContain('params.delete("view")');
+  });
+
+  it("motion memakai Framer Motion terbatas tanpa animasi layout besar", () => {
+    const motion = readFileSync(
+      join(featureDir, "components", "WorkCalendarMotion.tsx"),
+      "utf8",
+    );
+    expect(motion).toContain("useReducedMotion");
+    expect(motion).toContain("AnimatePresence");
+    // Tidak ada animasi layout (`layout`/`layoutId`) yang dapat mengganggu.
+    // Pola sengaja mencari pemakaian prop, bukan penyebutan di dokumentasi.
+    expect(motion).not.toMatch(/layoutId\s*[:=]/);
+    expect(motion).not.toMatch(/layout\s*=/);
+  });
+
+  it("detail memakai primitive modal Radix, bukan dialog dan focus trap buatan", () => {
+    const detail = readFileSync(
+      join(featureDir, "components", "WorkEntryDetail.tsx"),
+      "utf8",
+    );
+    // Perilaku modal didelegasikan ke primitive, bukan diimplementasikan ulang.
+    expect(detail).toContain("<WorkCalendarModal");
+    expect(detail).not.toContain('role="dialog"');
+    expect(detail).not.toContain("useWorkCalendarFocusTrap");
+    // Escape/overlay/panel tidak lagi ditangani sendiri di komponen ini.
+    expect(detail).not.toContain('event.key !== "Escape"');
+    // Lebar side sheet desktop/tablet.
+    expect(detail).toContain("sm:min-w-[480px]");
+    expect(detail).toContain("sm:w-[min(560px,92vw)]");
+  });
+
+  it("primitive modal memakai Radix Dialog + forceMount tanpa overlay/focus trap ganda", () => {
+    const modal = readFileSync(
+      join(featureDir, "components", "WorkCalendarModal.tsx"),
+      "utf8",
+    );
+    expect(modal).toContain('from "@radix-ui/react-dialog"');
+    expect(modal).toContain("DialogPrimitive.Portal");
+    // `forceMount` wajib agar Radix tidak melepas DOM sebelum exit Framer.
+    expect(modal).toContain("forceMount");
+    // Radix tidak menetapkan aria-modal; primitive ini menetapkannya.
+    expect(modal).toContain("aria-modal={true}");
+    // Tidak ada focus trap atau kunci scroll buatan sendiri.
+    expect(modal).not.toContain("useWorkCalendarFocusTrap");
+    expect(modal).not.toContain("data-scroll-locked");
+
+    // Hook focus trap buatan sudah dihapus dari fitur.
+    expect(
+      existsSync(join(featureDir, "hooks", "use-work-calendar-focus-trap.ts")),
+    ).toBe(false);
+  });
+
+  it("Quick Add dan editor lengkap memakai primitive modal yang sama", () => {
+    const surface = readFileSync(
+      join(featureDir, "components", "QuickAddSurface.tsx"),
+      "utf8",
+    );
+    expect(surface).toContain("<WorkCalendarModal");
+    expect(surface).not.toContain('role="dialog"');
+
+    const createDialog = readFileSync(
+      join(featureDir, "components", "WorkEntryCreateDialog.tsx"),
+      "utf8",
+    );
+    expect(createDialog).toContain("<WorkCalendarModal");
+    expect(createDialog).not.toContain('role="dialog"');
+    // Satu createEntry per simpan dan Batal tidak membuat entry.
+    expect(createDialog).toContain("submittingRef");
+    expect(createDialog).toContain("validateWorkEntryInput");
+  });
+
+  it("Quick Add tidak memakai drawer pihak ketiga dan aman virtual keyboard", () => {
+    const surface = readFileSync(
+      join(featureDir, "components", "QuickAddSurface.tsx"),
+      "utf8",
+    );
+    // Tidak memakai vaul/drawer; mobile memakai bottom sheet sendiri.
+    expect(surface).not.toMatch(/from ["']vaul["']/);
+    expect(surface).not.toMatch(/from ["']@\/components\/ui\/drawer["']/);
+    expect(surface).toContain("max-h-[85dvh]");
+    expect(surface).toContain("PopoverAnchor");
+    expect(surface).toContain("virtualRef");
+
+    const panel = readFileSync(
+      join(featureDir, "components", "QuickAddPanel.tsx"),
+      "utf8",
+    );
+    // Anti double-submit dan tanggal target selalu terlihat.
+    expect(panel).toContain("submittingRef");
+    expect(panel).toContain("work-calendar-quick-add-date");
+    expect(panel).toContain('event.key === "Enter"');
+    expect(panel).toContain('event.key === "Escape"');
+  });
+
+  it("permukaan Minggu/Bulan menghentikan propagasi agar tidak ada entry ganda", () => {
+    const week = readFileSync(
+      join(featureDir, "components", "WeeklyWorkView.tsx"),
+      "utf8",
+    );
+    expect(week).toContain("work-week-quick-add-");
+    expect(week).toContain("event.stopPropagation()");
+    expect(week).toContain("event.defaultPrevented");
+
+    const month = readFileSync(
+      join(featureDir, "components", "MonthlyWorkView.tsx"),
+      "utf8",
+    );
+    expect(month).toContain("work-month-quick-add-");
+    expect(month).toContain("work-month-preview-");
+    expect(month).toContain("event.stopPropagation()");
+    expect(month).toContain("event.defaultPrevented");
+  });
+
+  it("permukaan fixed dipindahkan ke body agar tidak terkena `space-y-5` `.sigap-page`", () => {
+    const modal = readFileSync(
+      join(featureDir, "components", "WorkCalendarModal.tsx"),
+      "utf8",
+    );
+    // Regresi layout: `.sigap-page` memakai `space-y-5`, sehingga anak kedua
+    // dan seterusnya mendapat `margin-top: 20px`. Overlay/sheet `fixed` yang
+    // tetap menjadi anaknya bergeser 20px (terpotong) dan overlay menyisakan
+    // celah yang tidak menutup. Solusinya portal Radix ke `document.body`.
+    expect(modal).toContain("DialogPrimitive.Portal");
+
+    // Motion tidak lagi memuat portal/overlay/panel manual.
+    const motion = readFileSync(
+      join(featureDir, "components", "WorkCalendarMotion.tsx"),
+      "utf8",
+    );
+    expect(motion).not.toContain("createPortal");
+    expect(motion).not.toContain("renderFixedSurface");
+    expect(motion).not.toContain("WorkCalendarOverlay");
+    expect(motion).not.toContain("WorkCalendarSlidePanel");
   });
 });
