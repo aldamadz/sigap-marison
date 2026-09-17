@@ -10,7 +10,12 @@ import { useState } from "react";
 import { Check, LoaderCircle, RotateCcw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { WorkDate, WorkEntry, WorkEntryPatch } from "../types/work-calendar";
+import type {
+  WorkDate,
+  WorkEntry,
+  WorkEntryColorSwatch,
+  WorkEntryPatch,
+} from "../types/work-calendar";
 import {
   WORK_ENTRY_LOCATION_MAX_LENGTH,
   WORK_ENTRY_NOTES_MAX_LENGTH,
@@ -19,6 +24,7 @@ import {
   type WorkEntryFieldErrors,
 } from "../lib/work-entry-validation";
 import { parseWorkDateTimeInput, formatWorkTimeLabelFromIso } from "../lib/work-calendar-date";
+import { WorkEntryColorPicker } from "./WorkEntryColorPicker";
 
 export interface WorkEntryEditorProps {
   entry: WorkEntry;
@@ -35,6 +41,8 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
   const [location, setLocation] = useState(entry.location ?? "");
   const [notes, setNotes] = useState(entry.notes ?? "");
   const [realization, setRealization] = useState(entry.realization ?? "");
+  const [dueDate, setDueDate] = useState(entry.dueDate ?? "");
+  const [colorSwatch, setColorSwatch] = useState<WorkEntryColorSwatch | null>(entry.colorSwatch);
   const [errors, setErrors] = useState<WorkEntryFieldErrors>({});
 
   const submit = () => {
@@ -52,6 +60,8 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
       startsAt,
       endsAt,
       workDate,
+      dueDate: dueDate || null,
+      colorSwatch,
     });
 
     if (!validation.ok) {
@@ -68,6 +78,8 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
       location: location.trim() || null,
       notes: notes.trim() || null,
       realization: realization.trim() || null,
+      dueDate: dueDate || null,
+      colorSwatch,
     });
   };
 
@@ -151,6 +163,32 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
         </div>
       )}
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label htmlFor={`work-due-date-${entry.id}`} className="block text-xs font-medium text-foreground">
+            Tenggat
+          </label>
+          <input
+            id={`work-due-date-${entry.id}`}
+            data-testid={`work-entry-editor-due-date-${entry.id}`}
+            type="date"
+            value={dueDate}
+            onChange={(event) => setDueDate(event.target.value)}
+            className="h-11 w-full rounded-sm border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <p className="text-xs text-muted-foreground">
+            Opsional. Tanpa tenggat, tanggal kerja menjadi tenggat.
+          </p>
+          {errorText("dueDate") && <p className="text-xs text-destructive">{errorText("dueDate")}</p>}
+        </div>
+      </div>
+
+      <WorkEntryColorPicker
+        idPrefix={`work-entry-editor-${entry.id}`}
+        value={colorSwatch}
+        onChange={setColorSwatch}
+      />
+
       <div className="space-y-1">
         <label htmlFor={`work-location-${entry.id}`} className="block text-xs font-medium text-foreground">
           Lokasi
@@ -221,6 +259,8 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
             setLocation(entry.location ?? "");
             setNotes(entry.notes ?? "");
             setRealization(entry.realization ?? "");
+            setDueDate(entry.dueDate ?? "");
+            setColorSwatch(entry.colorSwatch);
             setErrors({});
           }}
           disabled={isSaving}

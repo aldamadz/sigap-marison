@@ -13,7 +13,12 @@ import {
   WORK_ENTRY_REALIZATION_MAX_LENGTH,
   WORK_ENTRY_TITLE_MAX_LENGTH,
 } from "@/features/work-calendar/lib/work-entry-validation";
-import { WORK_ENTRY_KINDS, WORK_ENTRY_STATUSES } from "@/features/work-calendar/types/work-calendar";
+import {
+  WORK_ENTRY_COLOR_SWATCHES,
+  WORK_ENTRY_EVENT_TYPES,
+  WORK_ENTRY_KINDS,
+  WORK_ENTRY_STATUSES,
+} from "@/features/work-calendar/types/work-calendar";
 
 const root = process.cwd();
 const featureDir = join(root, "src", "features", "work-calendar");
@@ -183,6 +188,7 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
       "src/test/work-calendar-boundary.test.ts",
       "src/test/work-calendar-interaction-ux.test.tsx",
       "src/test/work-calendar-lib.test.ts",
+      "src/test/work-calendar-lifecycle.test.tsx",
       "src/test/work-calendar-page.test.tsx",
       "src/test/work-calendar-profile-repository.test.ts",
       "src/test/work-calendar-team-overview.test.ts",
@@ -617,5 +623,91 @@ describe("Work Calendar — batas CAL-03 F4B", () => {
     expect(motion).not.toContain("renderFixedSurface");
     expect(motion).not.toContain("WorkCalendarOverlay");
     expect(motion).not.toContain("WorkCalendarSlidePanel");
+  });
+});
+
+describe("Work Calendar — batas CAL-03 F5 siklus hidup", () => {
+  it("hanya satu migration siklus hidup dan selaras dengan domain", () => {
+    const migrationsDir = join(root, "supabase", "migrations");
+    const files = readdirSync(migrationsDir).filter((name) =>
+      name.endsWith("work_calendar_lifecycle.sql"),
+    );
+    expect(files.length).toBe(1);
+
+    const sql = readFileSync(join(migrationsDir, files[0]), "utf8");
+
+    // Kolom siklus hidup.
+    expect(sql).toContain("add column if not exists due_date date null");
+    expect(sql).toContain("add column if not exists color_swatch text null");
+
+    // Palet warna frontend harus sama dengan check constraint database.
+    for (const swatch of WORK_ENTRY_COLOR_SWATCHES) {
+      expect(sql).toContain(`'${swatch}'`);
+    }
+
+    // Tabel histori dan jenis peristiwanya.
+    expect(sql).toContain("create table if not exists public.work_calendar_events");
+    for (const eventType of WORK_ENTRY_EVENT_TYPES) {
+      expect(sql).toContain(`'${eventType}'`);
+    }
+
+    // Riwayat append-only lewat trigger definer, bukan tulis dari klien.
+    expect(sql).toContain("security definer");
+    expect(sql).toContain("create trigger trg_work_calendar_entries_log_event");
+    expect(sql).toContain("revoke all on public.work_calendar_events from public, anon, authenticated");
+    // Anti-duplikasi: satu peristiwa created per pekerjaan.
+    expect(sql).toContain("uq_work_calendar_events_created");
+  });
+
+  it("editor dan dialog membuat memakai pemilih warna statis aksesibel", () => {
+    const picker = readFileSync(
+      join(featureDir, "components", "WorkEntryColorPicker.tsx"),
+      "utf8",
+    );
+    // Grup radio asli: label teks wajib, bukan warna saja.
+    expect(picker).toContain('type="radio"');
+    expect(picker).toContain("Tanpa penanda");
+    expect(picker).toContain("WORK_ENTRY_COLOR_META");
+
+    for (const file of ["WorkEntryEditor.tsx", "WorkEntryCreateDialog.tsx"]) {
+      const source = readFileSync(join(featureDir, "components", file), "utf8");
+      expect(source).toContain("<WorkEntryColorPicker");
+    }
+  });
+
+  it("aksi siklus hidup selalu PATCH pada baris yang sama, tidak pernah createEntry", () => {
+    const actions = readFileSync(
+      join(featureDir, "components", "WorkEntryLifecycleActions.tsx"),
+      "utf8",
+    );
+    expect(actions).not.toContain("createEntry");
+    expect(actions).toContain("buildContinueTodayPatch");
+    expect(actions).toContain("buildCompletePatch");
+    expect(actions).toContain("buildBlockedPatch");
+
+    const workspace = readFileSync(
+      join(featureDir, "components", "WorkCalendarWorkspace.tsx"),
+      "utf8",
+    );
+    expect(workspace).toContain("handleQuickSaveDetail");
+    // Aksi cepat tidak menutup panel supaya timeline tetap terlihat.
+    const quickSave = workspace.slice(workspace.indexOf("const handleQuickSaveDetail"));
+    expect(quickSave.slice(0, 400)).not.toContain("closeEntryDetail");
+  });
+
+  it("detail menampilkan timeline dari repository, bukan data statis", () => {
+    const detail = readFileSync(
+      join(featureDir, "components", "WorkEntryDetail.tsx"),
+      "utf8",
+    );
+    expect(detail).toContain("<WorkEntryTimeline");
+    expect(detail).toContain("events={events}");
+
+    const workspace = readFileSync(
+      join(featureDir, "components", "WorkCalendarWorkspace.tsx"),
+      "utf8",
+    );
+    expect(workspace).toContain("listEntryEvents(");
+    expect(workspace).toContain("events={entryEvents}");
   });
 });

@@ -1,7 +1,14 @@
-import type { WorkEntryDraft, WorkEntryPatch, WorkEntryRepository } from "../types/work-calendar";
+import type {
+  WorkEntryDraft,
+  WorkEntryEvent,
+  WorkEntryPatch,
+  WorkEntryRepository,
+} from "../types/work-calendar";
 import { WorkEntryConflictError } from "../lib/work-entry-conflict";
 import type { WorkCalendarEntryRow } from "./work-entry-row-mapper";
 import { mapWorkEntryRow } from "./work-entry-row-mapper";
+import type { WorkCalendarEventRow } from "./work-entry-event-row-mapper";
+import { mapWorkEntryEventRow } from "./work-entry-event-row-mapper";
 
 export interface WorkCalendarDbQueryFilter<TResult = unknown>
   extends PromiseLike<{ data: TResult; error: { message: string } | null }> {
@@ -20,12 +27,12 @@ export interface WorkCalendarDbQueryFilter<TResult = unknown>
   maybeSingle(): PromiseLike<{ data: TResult | null; error: { message: string } | null }>;
 }
 
-export interface WorkCalendarDbTable {
-  select(columns?: string): WorkCalendarDbQueryFilter<WorkCalendarEntryRow[] | null>;
-  insert(values: unknown): WorkCalendarDbQueryFilter<WorkCalendarEntryRow | null> & {
-    select(columns?: string): WorkCalendarDbQueryFilter<WorkCalendarEntryRow | null>;
+export interface WorkCalendarDbTable<TRow = WorkCalendarEntryRow> {
+  select(columns?: string): WorkCalendarDbQueryFilter<TRow[] | null>;
+  insert(values: unknown): WorkCalendarDbQueryFilter<TRow | null> & {
+    select(columns?: string): WorkCalendarDbQueryFilter<TRow | null>;
   };
-  update(values: unknown): WorkCalendarDbQueryFilter<WorkCalendarEntryRow | null>;
+  update(values: unknown): WorkCalendarDbQueryFilter<TRow | null>;
 }
 
 export interface WorkCalendarRpcQuery<TResult = unknown>
@@ -35,7 +42,7 @@ export interface WorkCalendarRpcQuery<TResult = unknown>
 }
 
 export interface SupabaseWorkCalendarClient {
-  from(table: string): WorkCalendarDbTable;
+  from<TRow = WorkCalendarEntryRow>(table: string): WorkCalendarDbTable<TRow>;
   rpc<TResult = unknown>(
     fn: string,
     args?: Record<string, unknown>,
@@ -55,6 +62,8 @@ export interface WorkCalendarEntryInsert {
   starts_at?: string | null;
   ends_at?: string | null;
   blocked_reason?: string | null;
+  due_date?: string | null;
+  color_swatch?: string | null;
 }
 
 export interface WorkCalendarEntryUpdate {
@@ -69,10 +78,18 @@ export interface WorkCalendarEntryUpdate {
   starts_at?: string | null;
   ends_at?: string | null;
   blocked_reason?: string | null;
+  due_date?: string | null;
+  color_swatch?: string | null;
 }
 
 const WORK_ENTRY_SELECT_COLUMNS =
-  "id, owner_id, work_date, title, realization, notes, location, status, kind, is_all_day, starts_at, ends_at, blocked_reason, completed_at, deleted_at, created_at, updated_at";
+  "id, owner_id, work_date, title, realization, notes, location, status, kind, is_all_day, starts_at, ends_at, blocked_reason, completed_at, due_date, color_swatch, deleted_at, created_at, updated_at";
+
+const WORK_ENTRY_EVENT_SELECT_COLUMNS =
+  "id, entry_id, owner_id, event_type, from_status, to_status, from_work_date, to_work_date, from_due_date, to_due_date, detail, actor_id, created_at";
+
+/** Batas atas peristiwa yang ditampilkan agar timeline tetap ringan. */
+const WORK_ENTRY_EVENT_MAX_ROWS = 200;
 
 /**
  * Bentuk id kolom `work_calendar_entries.id` (uuid). Id yang tidak berbentuk
@@ -206,6 +223,33 @@ export function createSupabaseWorkEntryRepository(
       return row ? mapWorkEntryRow(row) : null;
     },
 
+    async listEntryEvents({ entryId, signal }) {
+      // Id non-uuid tidak pernah dikirim ke PostgREST (lihat getEntryById).
+      if (!isWorkEntryIdShape(entryId)) {
+        return [];
+      }
+
+      let query = client
+        .from<WorkCalendarEventRow>("work_calendar_events")
+        .select(WORK_ENTRY_EVENT_SELECT_COLUMNS)
+        .eq("entry_id", entryId)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(0, WORK_ENTRY_EVENT_MAX_ROWS - 1);
+
+      if (signal && "abortSignal" in query && typeof query.abortSignal === "function") {
+        query = query.abortSignal(signal);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error("Gagal memuat riwayat pekerjaan.");
+      }
+
+      return (data ?? []).map(mapWorkEntryEventRow);
+    },
+
     async createEntry(draft: WorkEntryDraft) {
       const payload: WorkCalendarEntryInsert = {
         owner_id: draft.ownerId,
@@ -220,6 +264,8 @@ export function createSupabaseWorkEntryRepository(
         starts_at: draft.startsAt ?? null,
         ends_at: draft.endsAt ?? null,
         blocked_reason: draft.blockedReason ?? null,
+        due_date: draft.dueDate ?? null,
+        color_swatch: draft.colorSwatch ?? null,
       };
 
       const { data, error } = await client
@@ -252,6 +298,8 @@ export function createSupabaseWorkEntryRepository(
       if (patch.startsAt !== undefined) updates.starts_at = patch.startsAt ?? null;
       if (patch.endsAt !== undefined) updates.ends_at = patch.endsAt ?? null;
       if (patch.blockedReason !== undefined) updates.blocked_reason = patch.blockedReason ?? null;
+      if (patch.dueDate !== undefined) updates.due_date = patch.dueDate ?? null;
+      if (patch.colorSwatch !== undefined) updates.color_swatch = patch.colorSwatch ?? null;
 
       const { data, error } = await client
         .from("work_calendar_entries")

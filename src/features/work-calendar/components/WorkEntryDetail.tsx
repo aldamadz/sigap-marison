@@ -21,7 +21,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
+  CalendarClock,
   Check,
+  Flag,
   Hourglass,
   MapPin,
   Pencil,
@@ -32,9 +34,23 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { WorkEntry, WorkEntryPatch, WorkEntryOwner } from "../types/work-calendar";
+import type {
+  WorkEntry,
+  WorkEntryEvent,
+  WorkEntryPatch,
+  WorkEntryOwner,
+} from "../types/work-calendar";
 import { formatWorkDateFull, formatWorkTimeLabelFromIso } from "../lib/work-calendar-date";
-import { getWorkEntryStatusLabel, isWorkEntryOverdue } from "../lib/work-entry-status";
+import {
+  getWorkEntryEffectiveDueDate,
+  getWorkEntryStatusLabel,
+  isWorkEntryCompletedLate,
+  isWorkEntryOverdue,
+} from "../lib/work-entry-status";
+import {
+  getWorkEntryColorMeta,
+  isWorkEntryColorSwatch,
+} from "../lib/work-entry-lifecycle";
 import {
   normalizeWorkEntryTitle,
   WORK_ENTRY_TITLE_MAX_LENGTH,
@@ -47,6 +63,8 @@ import {
 import { WorkCalendarModal } from "./WorkCalendarModal";
 import { WorkEntryStatusGlyph } from "./WorkEntryStatusGlyph";
 import { WorkEntryEditor } from "./WorkEntryEditor";
+import { WorkEntryLifecycleActions } from "./WorkEntryLifecycleActions";
+import { WorkEntryTimeline } from "./WorkEntryTimeline";
 
 export interface WorkEntryDetailProps {
   entry: WorkEntry;
@@ -54,7 +72,12 @@ export interface WorkEntryDetailProps {
   today: string;
   readOnly: boolean;
   isSaving: boolean;
+  events: readonly WorkEntryEvent[];
+  eventsStatus: "idle" | "loading" | "ready";
+  /** Simpan dari editor detail; menutup panel setelah sukses. */
   onSave: (patch: WorkEntryPatch) => void;
+  /** Simpan aksi cepat siklus hidup; panel tetap terbuka. */
+  onQuickSave: (patch: WorkEntryPatch) => void;
   onClose: () => void;
 }
 
@@ -64,7 +87,10 @@ export function WorkEntryDetail({
   today,
   readOnly,
   isSaving,
+  events,
+  eventsStatus,
   onSave,
+  onQuickSave,
   onClose,
 }: WorkEntryDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -80,6 +106,10 @@ export function WorkEntryDetail({
   const { durations } = useWorkCalendarMotion();
 
   const overdue = isWorkEntryOverdue(entry, today);
+  const completedLate = isWorkEntryCompletedLate(entry);
+  const effectiveDueDate = getWorkEntryEffectiveDueDate(entry);
+  const colorSwatch = isWorkEntryColorSwatch(entry.colorSwatch) ? entry.colorSwatch : null;
+  const colorInfo = colorSwatch ? getWorkEntryColorMeta(colorSwatch) : null;
   const startLabel = formatWorkTimeLabelFromIso(entry.startsAt);
   const endLabel = formatWorkTimeLabelFromIso(entry.endsAt);
 
@@ -131,8 +161,16 @@ export function WorkEntryDetail({
                 id={titleId}
                 data-testid={`work-entry-detail-heading-${entry.id}`}
                 tabIndex={-1}
-                className="rounded-sm text-sm font-semibold leading-snug text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex items-center gap-1.5 rounded-sm text-sm font-semibold leading-snug text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
+                {colorInfo && (
+                  <span
+                    aria-hidden="true"
+                    data-testid={`work-entry-detail-color-${entry.id}`}
+                    className="h-3 w-3 shrink-0 rounded-full border border-black/10"
+                    style={{ backgroundColor: colorInfo.hex }}
+                  />
+                )}
                 {entry.title}
               </h3>
               <p
@@ -146,6 +184,12 @@ export function WorkEntryDetail({
                   <span className="inline-flex items-center gap-1 font-medium text-overdue">
                     <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
                     Terlambat
+                  </span>
+                )}
+                {completedLate && (
+                  <span className="inline-flex items-center gap-1 font-medium text-overdue">
+                    <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
+                    Selesai terlambat
                   </span>
                 )}
               </p>
@@ -172,6 +216,7 @@ export function WorkEntryDetail({
                     variant="outline"
                     size="sm"
                     className="rounded-sm"
+                    data-testid={`work-entry-detail-edit-${entry.id}`}
                     onClick={() => setIsEditing(true)}
                   >
                     <Pencil aria-hidden="true" />
@@ -275,6 +320,15 @@ export function WorkEntryDetail({
                 contentKey="read"
                 duration={durations.crossfade}
               >
+                {!readOnly && (
+                  <WorkEntryLifecycleActions
+                    entry={entry}
+                    today={today}
+                    isSaving={isSaving}
+                    onSave={onQuickSave}
+                    onEditDetail={() => setIsEditing(true)}
+                  />
+                )}
                 <dl className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
                   <div className="flex items-start gap-1.5">
                     <CalendarDays
@@ -284,6 +338,51 @@ export function WorkEntryDetail({
                     <div>
                       <dt className="text-muted-foreground">Tanggal</dt>
                       <dd className="text-foreground">{formatWorkDateFull(entry.workDate)}</dd>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-1.5">
+                    <Flag
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <dt className="text-muted-foreground">Tenggat</dt>
+                      <dd
+                        data-testid={`work-entry-detail-due-date-${entry.id}`}
+                        className={cn(
+                          "text-foreground",
+                          overdue && "font-medium text-overdue",
+                          completedLate && "font-medium text-overdue",
+                        )}
+                      >
+                        {formatWorkDateFull(effectiveDueDate)}
+                        {entry.dueDate === null ? " (mengikuti tanggal kerja)" : ""}
+                      </dd>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-1.5">
+                    <CalendarClock
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <dt className="text-muted-foreground">Warna penanda</dt>
+                      <dd className="inline-flex items-center gap-1.5 text-foreground">
+                        {colorInfo ? (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="h-3 w-3 rounded-full border border-black/10"
+                              style={{ backgroundColor: colorInfo.hex }}
+                            />
+                            {colorInfo.label}
+                          </>
+                        ) : (
+                          "Tanpa penanda"
+                        )}
+                      </dd>
                     </div>
                   </div>
 
@@ -358,6 +457,8 @@ export function WorkEntryDetail({
                     </div>
                   )}
                 </dl>
+
+                <WorkEntryTimeline events={events} status={eventsStatus} />
               </WorkCalendarCrossfade>
             )}
           </AnimatePresence>

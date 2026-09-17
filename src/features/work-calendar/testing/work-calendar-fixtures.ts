@@ -8,6 +8,7 @@
 import type {
   WorkEntry,
   WorkEntryDraft,
+  WorkEntryEvent,
   WorkEntryOwner,
   WorkEntryOwnerId,
   WorkEntryRepository,
@@ -21,6 +22,7 @@ import type {
 } from "../types/work-team-overview";
 import { isWorkDateWithin, shiftWorkDate } from "../lib/work-calendar-date";
 import { WorkEntryConflictError } from "../lib/work-entry-conflict";
+import { buildWorkEntryEventDrafts } from "../lib/work-entry-lifecycle";
 import { computeWorkProgress } from "../lib/work-progress";
 
 export const WORK_CALENDAR_FIXTURE_TODAY: WorkDate = "2026-03-10";
@@ -74,6 +76,8 @@ export function createFixtureWorkEntry(overrides: Partial<WorkEntry> = {}): Work
     endsAt: overrides.endsAt ?? null,
     blockedReason: overrides.blockedReason ?? null,
     completedAt: overrides.completedAt ?? null,
+    dueDate: overrides.dueDate ?? null,
+    colorSwatch: overrides.colorSwatch ?? null,
     deletedAt: overrides.deletedAt ?? null,
     createdAt: overrides.createdAt ?? "2026-03-10T01:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-03-10T01:00:00.000Z",
@@ -217,9 +221,55 @@ export function createFixtureWorkEntryRepository(
 ): WorkEntryRepository {
   const store = new Map<string, WorkEntry>(seed.map((entry) => [entry.id, entry]));
   let counter = seed.length;
+
+  /**
+   * Riwayat peristiwa in-memory yang meniru trigger database
+   * `work_calendar_entries_log_event` (CAL-03 F5): dibuat saat entry dibuat,
+   * lalu satu peristiwa per perubahan status/tanggal/tenggat. Tidak ada
+   * peristiwa untuk update yang tidak mengubah ketiganya.
+   */
+  const eventStore = new Map<string, WorkEntryEvent[]>();
+  let eventCounter = 0;
+  const nextEventId = (): string => {
+    eventCounter += 1;
+    return `event-${eventCounter}`;
+  };  const appendEvents = (
+    ownerId: string,
+    entryId: string,
+    drafts: ReturnType<typeof buildWorkEntryEventDrafts>,
+  ): void => {
+    if (drafts.length === 0) return;
+    const history = eventStore.get(entryId) ?? [];
+    const now = new Date().toISOString();
+    for (const draft of drafts) {
+      history.push({
+        id: nextEventId(),
+        entryId,
+        ownerId,
+        type: draft.type,
+        fromStatus: draft.fromStatus,
+        toStatus: draft.toStatus,
+        fromWorkDate: draft.fromWorkDate,
+        toWorkDate: draft.toWorkDate,
+        fromDueDate: draft.fromDueDate,
+        toDueDate: draft.toDueDate,
+        detail: draft.detail,
+        actorId: ownerId,
+        createdAt: now,
+      });
+    }
+    eventStore.set(entryId, history);
+  };
+
   const authorizedOwnerIds = options.authorizedOwnerIds;
   const isOwnerAuthorized = (ownerId: string): boolean =>
     authorizedOwnerIds === undefined || authorizedOwnerIds.includes(ownerId);
+
+  // Seed dianggap dibuat lewat jalur normal, jadi setiap entry punya tepat satu
+  // peristiwa `created`, sama seperti hasil trigger database.
+  for (const entry of store.values()) {
+    appendEvents(entry.ownerId, entry.id, buildWorkEntryEventDrafts(null, entry));
+  }
 
   const listInRange = (fromDate: WorkDate, toDate: WorkDate): WorkEntry[] =>
     [...store.values()]
@@ -269,12 +319,18 @@ export function createFixtureWorkEntryRepository(
         endsAt: draft.endsAt ?? null,
         blockedReason: draft.blockedReason ?? null,
         completedAt: draft.status === "completed" ? now : null,
+        dueDate: draft.dueDate ?? null,
+        colorSwatch: draft.colorSwatch ?? null,
         deletedAt: null,
         createdAt: now,
         updatedAt: now,
       };
       store.set(entry.id, entry);
+      appendEvents(entry.ownerId, entry.id, buildWorkEntryEventDrafts(null, entry));
       return entry;
+    },
+    async listEntryEvents({ entryId }) {
+      return [...(eventStore.get(entryId) ?? [])];
     },
     async updateEntry({ entryId, patch, expectedUpdatedAt }) {
       const current = store.get(entryId);
@@ -284,6 +340,7 @@ export function createFixtureWorkEntryRepository(
       }
       const next: WorkEntry = { ...current, ...patch, updatedAt: new Date().toISOString() };
       store.set(entryId, next);
+      appendEvents(next.ownerId, entryId, buildWorkEntryEventDrafts(current, next));
       return next;
     },
     async deleteEntry({ entryId, expectedUpdatedAt }) {
