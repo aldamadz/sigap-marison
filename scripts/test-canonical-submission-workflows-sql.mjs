@@ -7,6 +7,7 @@ const migrations = [
   "supabase/migrations/20260917132000_optional_branch_signer_fallback.sql",
   "supabase/migrations/20260917133000_seed_canonical_submission_workflows.sql",
   "supabase/migrations/20260918100000_restore_asset_recommendation_config.sql",
+  "supabase/migrations/20260918110000_fix_recommendation_creator_auto_approval.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
 
@@ -215,6 +216,38 @@ insert into public.form_usage_step_users values
  ('60000000-0000-4000-8000-000000000004','40000000-0000-4000-8000-000000000023');
 insert into public.form_usage_step_verifiers values
  ('60000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000005');
+
+insert into public.form_usage_attachment_requirements (
+  id, usage_id, usage_step_id, stage_order, requirement_key, label,
+  is_required, allow_multiple, min_files, max_files
+) values (
+  '90000000-0000-4000-8000-000000000001',
+  '50000000-0000-4000-8000-000000000005',
+  '60000000-0000-4000-8000-000000000004',
+  1, 'lampiran', 'Lampiran', true, true, 1, 10
+);
+
+insert into public.surat_registrasi (
+  id, form_usage_id, office_id, dept_id, created_by, status, current_step
+) values (
+  'a0000000-0000-4000-8000-000000000001',
+  '50000000-0000-4000-8000-000000000005',
+  '20000000-0000-4000-8000-000000000001',
+  '30000000-0000-4000-8000-000000000009',
+  '40000000-0000-4000-8000-000000000023',
+  'PROSES', 1
+);
+insert into public.surat_signatures (
+  id, surat_id, user_id, form_usage_step_id, step_order, role_name,
+  is_signed, attachment_requirements_snapshot
+) values (
+  'b0000000-0000-4000-8000-000000000001',
+  'a0000000-0000-4000-8000-000000000001',
+  '40000000-0000-4000-8000-000000000023',
+  '60000000-0000-4000-8000-000000000004',
+  1, 'membuat', false,
+  '[{"usage_id":"50000000-0000-4000-8000-000000000005","stage_order":1,"requirement_key":"lampiran","label":"Lampiran","is_required":true,"min_files":1}]'::jsonb
+);
 
 ${migrations}
 ${assertions}

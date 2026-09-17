@@ -41,6 +41,38 @@ begin
     raise exception 'asset recommendation configuration is incomplete for % of 3 canonical workflows', 3 - v_count;
   end if;
 
+  if exists (
+    select 1
+    from public.form_usage_attachment_requirements requirement
+    join public.form_usages usage on usage.id = requirement.usage_id
+    where usage.name = 'Rekomendasi Peremajaan Aset'
+      and usage.is_system_template is true
+      and requirement.stage_order = 1
+  ) then raise exception 'recommendation creator still has a duplicate approval attachment requirement'; end if;
+
+  if exists (
+    select 1
+    from public.surat_signatures signature
+    where signature.id = 'b0000000-0000-4000-8000-000000000001'
+      and signature.attachment_requirements_snapshot <> '[]'::jsonb
+  ) then raise exception 'existing unsigned recommendation creator snapshot was not cleaned'; end if;
+
+  v_threw := false;
+  begin
+    insert into public.form_usage_attachment_requirements (
+      usage_id, usage_step_id, stage_order, requirement_key, label
+    ) values (
+      '50000000-0000-4000-8000-000000000005',
+      '60000000-0000-4000-8000-000000000004',
+      1, 'duplicate_creator_attachment', 'Duplicate creator attachment'
+    );
+  exception when others then
+    v_threw := position('tidak boleh diminta ulang' in sqlerrm) > 0;
+  end;
+  if not v_threw then
+    raise exception 'recommendation creator approval attachment invariant was not enforced';
+  end if;
+
   if exists (select 1 from public.form_usages where name like 'Legacy %' and status <> 'archived') then
     raise exception 'legacy usage was not archived';
   end if;
