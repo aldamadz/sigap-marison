@@ -12,6 +12,12 @@ export { QuickWorkEntry } from "./components/QuickWorkEntry";
 export { WorkEntryRow } from "./components/WorkEntryRow";
 export { WorkEntryList } from "./components/WorkEntryList";
 export { WorkEntryEditor } from "./components/WorkEntryEditor";
+export { WorkEntryColorPicker } from "./components/WorkEntryColorPicker";
+export type { WorkEntryColorPickerProps } from "./components/WorkEntryColorPicker";
+export { WorkEntryLifecycleActions } from "./components/WorkEntryLifecycleActions";
+export type { WorkEntryLifecycleActionsProps } from "./components/WorkEntryLifecycleActions";
+export { WorkEntryTimeline } from "./components/WorkEntryTimeline";
+export type { WorkEntryTimelineProps } from "./components/WorkEntryTimeline";
 export { WorkEntryCreateDialog } from "./components/WorkEntryCreateDialog";
 export type {
   WorkEntryCreateDialogProps,
@@ -83,6 +89,8 @@ export {
 } from "./lib/work-entry-conflict";
 export { mapWorkEntryRow } from "./data/work-entry-row-mapper";
 export type { WorkCalendarEntryRow } from "./data/work-entry-row-mapper";
+export { mapWorkEntryEventRow } from "./data/work-entry-event-row-mapper";
+export type { WorkCalendarEventRow } from "./data/work-entry-event-row-mapper";
 
 export { useWorkCalendarView, useWorkCalendarDerivedView } from "./hooks/use-work-calendar-view";
 export type {
@@ -190,14 +198,35 @@ export {
   WORK_ENTRY_STATUS_ORDER,
   WORK_ENTRY_OVERDUE_META,
   compareWorkEntries,
+  getWorkEntryEffectiveDueDate,
   getWorkEntryStatusFollowUp,
   getWorkEntryStatusLabel,
   getWorkEntryStatusMeta,
   isFinalWorkEntryStatus,
   isUnfinishedWorkEntryStatus,
+  isWorkEntryCompletedLate,
   isWorkEntryOverdue,
 } from "./lib/work-entry-status";
-export type { WorkEntryStatusFollowUp, WorkEntryStatusMeta } from "./lib/work-entry-status";
+export type { WorkEntryDeadlineInput, WorkEntryStatusFollowUp, WorkEntryStatusMeta } from "./lib/work-entry-status";
+
+export {
+  WORK_ENTRY_COLOR_META,
+  buildBlockedPatch,
+  buildCompletePatch,
+  buildContinueTodayPatch,
+  buildReschedulePatch,
+  buildStatusPatch,
+  buildWorkEntryEventDrafts,
+  describeWorkEntryEvent,
+  getWorkEntryColorMeta,
+  isWorkEntryColorSwatch,
+} from "./lib/work-entry-lifecycle";
+export type {
+  WorkEntryColorMeta,
+  WorkEntryEventDescription,
+  WorkEntryEventDraft,
+  WorkEntryEventDraftSource,
+} from "./lib/work-entry-lifecycle";
 
 export {
   WORK_ENTRY_BLOCKED_REASON_MAX_LENGTH,
@@ -238,6 +267,8 @@ export {
 
 export {
   WORK_CALENDAR_VIEW_MODES,
+  WORK_ENTRY_COLOR_SWATCHES,
+  WORK_ENTRY_EVENT_TYPES,
   WORK_ENTRY_KINDS,
   WORK_ENTRY_STATUSES,
 } from "./types/work-calendar";
@@ -250,7 +281,10 @@ export type {
   WorkCalendarWorkspaceProps,
   WorkDate,
   WorkEntry,
+  WorkEntryColorSwatch,
   WorkEntryDraft,
+  WorkEntryEvent,
+  WorkEntryEventType,
   WorkEntryId,
   WorkEntryKind,
   WorkEntryOwner,

@@ -36,6 +36,7 @@ import type {
   WorkDate,
   WorkEntry,
   WorkEntryDraft,
+  WorkEntryEvent,
   WorkEntryOwner,
   WorkEntryPatch,
   WorkEntryStatus,
@@ -288,6 +289,47 @@ export function WorkCalendarWorkspace({  currentUser,
   }, [needsTeamEntryResolution, repository, selectedEntryId]);
 
   const selectedEntry = selectedEntryLocal ?? resolvedTeamEntry;
+  const selectedEntryIdForEvents = selectedEntry?.id ?? null;
+  const selectedEntryUpdatedAt = selectedEntry?.updatedAt ?? null;
+
+  /**
+   * Riwayat peristiwa detail (CAL-03 F5). Dimuat per entry yang terbuka,
+   * dibatalkan saat ganti/tutup, dan tidak pernah memblokir tampilan detail:
+   * kegagalan cukup menyembunyikan timeline. `updatedAt` menjadi pemicu
+   * muat ulang sehingga aksi siklus hidup langsung menampilkan peristiwanya.
+   */
+  const [entryEvents, setEntryEvents] = useState<readonly WorkEntryEvent[]>([]);
+  const [entryEventsStatus, setEntryEventsStatus] = useState<"idle" | "loading" | "ready">("idle");
+
+  useEffect(() => {
+    if (selectedEntryIdForEvents === null) {
+      setEntryEvents([]);
+      setEntryEventsStatus("idle");
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setEntryEventsStatus("loading");
+
+    void repository
+      .listEntryEvents({ entryId: selectedEntryIdForEvents, signal: controller.signal })
+      .then((events) => {
+        if (!active || controller.signal.aborted) return;
+        setEntryEvents(events);
+        setEntryEventsStatus("ready");
+      })
+      .catch(() => {
+        if (!active || controller.signal.aborted) return;
+        setEntryEvents([]);
+        setEntryEventsStatus("ready");
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [repository, selectedEntryIdForEvents, selectedEntryUpdatedAt]);
 
   /**
    * Setelah entry Tim teresolusi dari deep link, buka baris anggota yang
@@ -626,6 +668,19 @@ export function WorkCalendarWorkspace({  currentUser,
     [closeEntryDetail, patchEntry],
   );
 
+  /**
+   * Aksi cepat siklus hidup dari panel detail: patch baris yang sama tanpa
+   * menutup panel, supaya pengguna langsung melihat status/timeline terbaru.
+   */
+  const handleQuickSaveDetail = useCallback(
+    async (entry: WorkEntry, patch: WorkEntryPatch) => {
+      setDetailSaving(true);
+      await patchEntry(entry, patch);
+      setDetailSaving(false);
+    },
+    [patchEntry],
+  );
+
   // ==== Quick Add kontekstual (Minggu/Bulan) ====
 
   /**
@@ -725,6 +780,8 @@ export function WorkCalendarWorkspace({  currentUser,
           endsAt: input.endsAt ?? null,
           location: input.location,
           notes: input.notes,
+          dueDate: input.dueDate,
+          colorSwatch: input.colorSwatch,
         };
         const created = await repository.createEntry(draft);
         calendar.applyLocalEntry(created);
@@ -956,6 +1013,8 @@ export function WorkCalendarWorkspace({  currentUser,
               entry={selectedEntry}
               owner={ownerById.get(selectedEntry.ownerId)}
               today={calendar.today}
+              events={entryEvents}
+              eventsStatus={entryEventsStatus}
               readOnly={
                 calendar.view === "team" || !effectivePermissions.canEditEntry(selectedEntry)
               }
@@ -963,6 +1022,10 @@ export function WorkCalendarWorkspace({  currentUser,
               onSave={(patch) => {
                 if (calendar.view === "team") return;
                 void handleSaveDetail(selectedEntry, patch);
+              }}
+              onQuickSave={(patch) => {
+                if (calendar.view === "team") return;
+                void handleQuickSaveDetail(selectedEntry, patch);
               }}
               onClose={closeEntryDetail}
             />

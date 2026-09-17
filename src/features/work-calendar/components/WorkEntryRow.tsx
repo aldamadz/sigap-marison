@@ -46,11 +46,14 @@ import {
 import type { WorkDate, WorkEntry, WorkEntryStatus } from "../types/work-calendar";
 import {
   compareWorkEntries,
+  getWorkEntryEffectiveDueDate,
   getWorkEntryStatusMeta,
+  isWorkEntryCompletedLate,
   isWorkEntryOverdue,
   WORK_ENTRY_STATUS_ORDER,
   type WorkEntryStatusFollowUp,
 } from "../lib/work-entry-status";
+import { getWorkEntryColorMeta, isWorkEntryColorSwatch } from "../lib/work-entry-lifecycle";
 import {
   formatWorkDateShort,
   formatWorkTimeLabelFromIso,
@@ -306,6 +309,9 @@ export function WorkEntryRow({
   }, [promptType]);
 
   const overdue = isWorkEntryOverdue(entry, today);
+  const completedLate = isWorkEntryCompletedLate(entry);
+  const colorSwatch = isWorkEntryColorSwatch(entry.colorSwatch) ? entry.colorSwatch : null;
+  const colorInfo = colorSwatch ? getWorkEntryColorMeta(colorSwatch) : null;
   const startLabel = formatWorkTimeLabelFromIso(entry.startsAt);
   const endLabel = formatWorkTimeLabelFromIso(entry.endsAt);
   const hasTimeIndicator = !entry.isAllDay && Boolean(startLabel);
@@ -416,6 +422,14 @@ export function WorkEntryRow({
                 entry.status === "completed" && "line-through decoration-muted-foreground/60",
               )}
             >
+              {colorInfo && (
+                <span
+                  aria-hidden="true"
+                  data-testid={`work-entry-color-${entry.id}`}
+                  className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/10 align-middle"
+                  style={{ backgroundColor: colorInfo.hex }}
+                />
+              )}
               <span className="min-w-0 break-words">{entry.title}</span>
             </button>
           )}
@@ -454,7 +468,17 @@ export function WorkEntryRow({
                 className="inline-flex items-center gap-1 font-medium text-overdue"
               >
                 <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
-                Terlambat {formatWorkDateShort(entry.workDate)}
+                Terlambat {formatWorkDateShort(getWorkEntryEffectiveDueDate(entry))}
+              </span>
+            )}
+
+            {completedLate && (
+              <span
+                data-testid={`work-entry-completed-late-${entry.id}`}
+                className="inline-flex items-center gap-1 font-medium text-overdue"
+              >
+                <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
+                Selesai terlambat
               </span>
             )}
           </div>

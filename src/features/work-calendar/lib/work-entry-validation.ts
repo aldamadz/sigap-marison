@@ -6,8 +6,17 @@
  * realisasi; status `blocked` membutuhkan alasan.
  */
 
-import type { WorkEntry, WorkEntryKind, WorkEntryStatus } from "../types/work-calendar";
-import { WORK_ENTRY_KINDS, WORK_ENTRY_STATUSES } from "../types/work-calendar";
+import type {
+  WorkEntry,
+  WorkEntryColorSwatch,
+  WorkEntryKind,
+  WorkEntryStatus,
+} from "../types/work-calendar";
+import {
+  WORK_ENTRY_COLOR_SWATCHES,
+  WORK_ENTRY_KINDS,
+  WORK_ENTRY_STATUSES,
+} from "../types/work-calendar";
 
 export const WORK_ENTRY_TITLE_MAX_LENGTH = 180;
 export const WORK_ENTRY_REALIZATION_MAX_LENGTH = 500;
@@ -22,6 +31,7 @@ export interface WorkEntryFieldErrors {
   notes?: string;
   location?: string;
   workDate?: string;
+  dueDate?: string;
   timeRange?: string;
 }
 
@@ -63,6 +73,8 @@ export interface WorkEntryValidationInput {
   startsAt?: string | null;
   endsAt?: string | null;
   workDate?: string;
+  dueDate?: string | null;
+  colorSwatch?: WorkEntryColorSwatch | null;
 }
 
 export function validateWorkEntryInput(input: WorkEntryValidationInput): WorkEntryValidationResult {
@@ -110,6 +122,22 @@ export function validateWorkEntryInput(input: WorkEntryValidationInput): WorkEnt
     errors.workDate = "Tanggal kerja tidak valid.";
   }
 
+  if (
+    input.dueDate !== undefined &&
+    input.dueDate !== null &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)
+  ) {
+    errors.dueDate = "Tenggat tidak valid.";
+  }
+
+  if (
+    input.colorSwatch !== undefined &&
+    input.colorSwatch !== null &&
+    !(WORK_ENTRY_COLOR_SWATCHES as readonly string[]).includes(input.colorSwatch)
+  ) {
+    errors.title = errors.title ?? "Warna penanda tidak dikenali.";
+  }
+
   const hasStart = isIsoTimestamp(input.startsAt);
   const hasEnd = isIsoTimestamp(input.endsAt);
   const wantsTime = Boolean(input.startsAt) || Boolean(input.endsAt);
@@ -141,6 +169,8 @@ export function validateStoredWorkEntry(entry: WorkEntry): WorkEntryValidationRe
     startsAt: entry.startsAt,
     endsAt: entry.endsAt,
     workDate: entry.workDate,
+    dueDate: entry.dueDate,
+    colorSwatch: entry.colorSwatch,
   });
 }
 

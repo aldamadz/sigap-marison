@@ -26,10 +26,24 @@ import {
   compareWorkEntries,
   getWorkEntryStatusFollowUp,
   getWorkEntryStatusLabel,
+  getWorkEntryEffectiveDueDate,
   isFinalWorkEntryStatus,
   isUnfinishedWorkEntryStatus,
+  isWorkEntryCompletedLate,
   isWorkEntryOverdue,
 } from "@/features/work-calendar/lib/work-entry-status";
+import {
+  buildBlockedPatch,
+  buildCompletePatch,
+  buildContinueTodayPatch,
+  buildReschedulePatch,
+  buildStatusPatch,
+  buildWorkEntryEventDrafts,
+  describeWorkEntryEvent,
+  getWorkEntryColorMeta,
+  isWorkEntryColorSwatch,
+  WORK_ENTRY_COLOR_META,
+} from "@/features/work-calendar/lib/work-entry-lifecycle";
 import {
   buildWorkEntryOwnerGroups,
   buildWorkProgressStatusRows,
@@ -240,6 +254,212 @@ describe("work-entry-status", () => {
     expect(compareWorkEntries(first, second)).toBeLessThan(0);
     expect(compareWorkEntries(second, first)).toBeGreaterThan(0);
     expect(compareWorkEntries(first, first)).toBe(0);
+  });
+});
+
+describe("work-entry-status — tenggat (CAL-03 F5)", () => {
+  it("memakai dueDate sebagai tenggat efektif dan workDate sebagai fallback", () => {
+    expect(getWorkEntryEffectiveDueDate({ workDate: "2026-03-10", dueDate: "2026-03-15" })).toBe(
+      "2026-03-15",
+    );
+    expect(getWorkEntryEffectiveDueDate({ workDate: "2026-03-10", dueDate: null })).toBe(
+      "2026-03-10",
+    );
+    expect(getWorkEntryEffectiveDueDate({ workDate: "2026-03-10" })).toBe("2026-03-10");
+  });
+
+  it("menghitung overdue dari tenggat, bukan hanya tanggal kerja", () => {
+    const today = "2026-03-10";
+    // Tanggal kerja sudah lewat, tetapi tenggat masih jauh: belum terlambat.
+    expect(
+      isWorkEntryOverdue({ status: "planned", workDate: "2026-03-01", dueDate: "2026-03-20" }, today),
+    ).toBe(false);
+    // Tanggal kerja hari ini, tetapi tenggat kemarin: terlambat.
+    expect(
+      isWorkEntryOverdue({ status: "planned", workDate: today, dueDate: "2026-03-09" }, today),
+    ).toBe(true);
+    // Tepat pada tenggat belum terhitung terlambat.
+    expect(
+      isWorkEntryOverdue({ status: "in_progress", workDate: today, dueDate: today }, today),
+    ).toBe(false);
+    // Final tidak pernah overdue meski tenggat sudah lewat.
+    expect(
+      isWorkEntryOverdue({ status: "completed", workDate: "2026-03-01", dueDate: "2026-03-02" }, today),
+    ).toBe(false);
+  });
+
+  it("menandai selesai terlambat hanya bila completedAt melewati due_date", () => {
+    expect(
+      isWorkEntryCompletedLate({
+        status: "completed",
+        completedAt: "2026-03-12T02:00:00.000Z",
+        dueDate: "2026-03-11",
+      }),
+    ).toBe(true);
+    expect(
+      isWorkEntryCompletedLate({
+        status: "completed",
+        completedAt: "2026-03-11T02:00:00.000Z",
+        dueDate: "2026-03-11",
+      }),
+    ).toBe(false);
+    // Tanpa tenggat eksplisit tidak ada penilaian terlambat.
+    expect(
+      isWorkEntryCompletedLate({
+        status: "completed",
+        completedAt: "2026-03-20T02:00:00.000Z",
+        dueDate: null,
+      }),
+    ).toBe(false);
+    // Belum selesai tidak pernah "selesai terlambat".
+    expect(
+      isWorkEntryCompletedLate({
+        status: "blocked",
+        completedAt: null,
+        dueDate: "2026-03-01",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("work-entry-lifecycle (CAL-03 F5)", () => {
+  it("mengenali palet warna statis dan menyediakan label aksesibel", () => {
+    expect(WORK_ENTRY_COLOR_META).toHaveLength(6);
+    for (const color of WORK_ENTRY_COLOR_META) {
+      expect(color.label.length).toBeGreaterThan(0);
+      expect(color.hex).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(isWorkEntryColorSwatch(color.swatch)).toBe(true);
+    }
+    expect(isWorkEntryColorSwatch("magenta")).toBe(false);
+    expect(getWorkEntryColorMeta("blue").label).toBe("Biru");
+  });
+
+  it("tidak menghasilkan patch jadwal bila tanggal tidak berubah", () => {
+    expect(buildContinueTodayPatch({ workDate: "2026-03-10" }, "2026-03-10")).toBeNull();
+    expect(buildContinueTodayPatch({ workDate: "2026-03-09" }, "2026-03-10")).toEqual({
+      workDate: "2026-03-10",
+    });
+    expect(buildReschedulePatch({ workDate: "2026-03-10" }, "2026-03-10")).toBeNull();
+    expect(buildReschedulePatch({ workDate: "2026-03-10" }, "2026-03-12")).toEqual({
+      workDate: "2026-03-12",
+    });
+  });
+
+  it("membangun patch status tanpa pernah membuat entri baru", () => {
+    expect(buildStatusPatch("in_progress")).toEqual({ status: "in_progress" });
+    expect(buildCompletePatch("Selesai")).toEqual({
+      status: "completed",
+      realization: "Selesai",
+      blockedReason: null,
+    });
+    expect(buildBlockedPatch("Menunggu")).toEqual({
+      status: "blocked",
+      blockedReason: "Menunggu",
+    });
+  });
+
+  it("menurunkan peristiwa created saat pembuatan", () => {
+    const drafts = buildWorkEntryEventDrafts(null, {
+      status: "planned",
+      workDate: "2026-03-10",
+      dueDate: "2026-03-15",
+      realization: null,
+      blockedReason: null,
+      deletedAt: null,
+    });
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({
+      type: "created",
+      fromStatus: null,
+      toStatus: "planned",
+      toWorkDate: "2026-03-10",
+      fromWorkDate: null,
+    });
+  });
+
+  it("mencatat status, jadwal, dan tenggat pada baris yang sama", () => {
+    const drafts = buildWorkEntryEventDrafts(
+      {
+        status: "planned",
+        workDate: "2026-03-10",
+        dueDate: "2026-03-11",
+        realization: null,
+        blockedReason: null,
+        deletedAt: null,
+      },
+      {
+        status: "blocked",
+        workDate: "2026-03-12",
+        dueDate: "2026-03-20",
+        realization: null,
+        blockedReason: "Menunggu data",
+        deletedAt: null,
+      },
+    );
+
+    expect(drafts.map((draft) => draft.type)).toEqual([
+      "status_changed",
+      "schedule_changed",
+      "due_date_changed",
+    ]);
+    expect(drafts[0]).toMatchObject({ fromStatus: "planned", toStatus: "blocked", detail: "Menunggu data" });
+    expect(drafts[1]).toMatchObject({ fromWorkDate: "2026-03-10", toWorkDate: "2026-03-12" });
+    expect(drafts[2]).toMatchObject({ fromDueDate: "2026-03-11", toDueDate: "2026-03-20" });
+  });
+
+  it("tidak mencatat peristiwa untuk update non-siklus hidup dan soft delete", () => {
+    const base = {
+      status: "planned" as const,
+      workDate: "2026-03-10",
+      dueDate: null,
+      realization: null,
+      blockedReason: null,
+      deletedAt: null,
+    };
+
+    expect(buildWorkEntryEventDrafts(base, { ...base })).toEqual([]);
+    expect(
+      buildWorkEntryEventDrafts(base, { ...base, deletedAt: "2026-03-10T09:00:00.000Z" }),
+    ).toEqual([]);
+  });
+
+  it("mendeskripsikan peristiwa dengan kalimat siap tampil", () => {
+    expect(
+      describeWorkEntryEvent({
+        id: "e1",
+        entryId: "w1",
+        ownerId: "u1",
+        type: "created",
+        fromStatus: null,
+        toStatus: "planned",
+        fromWorkDate: null,
+        toWorkDate: "2026-03-10",
+        fromDueDate: null,
+        toDueDate: null,
+        detail: null,
+        actorId: null,
+        createdAt: "2026-03-10T01:00:00.000Z",
+      }).title,
+    ).toBe("Pekerjaan dibuat");
+
+    const statusEvent = describeWorkEntryEvent({
+      id: "e2",
+      entryId: "w1",
+      ownerId: "u1",
+      type: "status_changed",
+      fromStatus: "planned",
+      toStatus: "completed",
+      fromWorkDate: null,
+      toWorkDate: null,
+      fromDueDate: null,
+      toDueDate: null,
+      detail: "Selesai",
+      actorId: null,
+      createdAt: "2026-03-10T01:00:00.000Z",
+    });
+    expect(statusEvent.title).toContain("Selesai");
+    expect(statusEvent.detail).toBe("Selesai");
   });
 });
 
