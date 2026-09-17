@@ -166,6 +166,67 @@ export interface WorkEntryEvent {
   createdAt: WorkTimestamp;
 }
 
+/**
+ * Konfigurasi hari dan jam kerja (CAL-03 F6).
+ *
+ * Nilainya diturunkan dari konfigurasi KPI existing (`department_kpi_configs`)
+ * untuk departemen pengguna; bila belum dikonfigurasi, default Senin-Jumat
+ * 08:00-17:00 dengan istirahat 12:00-13:00 berlaku. Modul ini hanya membaca
+ * konfigurasi tersebut, tidak pernah menulisnya.
+ */
+export interface WorkCalendarWorkSettings {
+  /** Hari kerja sebagai ISO weekday: Senin = 1 ... Minggu = 7. */
+  workDays: readonly number[];
+  /** Jam mulai kerja `HH:mm`. */
+  workStart: string;
+  /** Jam selesai kerja `HH:mm`. */
+  workEnd: string;
+  /** Jam mulai istirahat `HH:mm`. */
+  breakStart: string;
+  /** Jam selesai istirahat `HH:mm`. */
+  breakEnd: string;
+  /** Zona waktu konfigurasi, mis. `Asia/Jakarta`. */
+  timezone: string;
+}
+
+/**
+ * Satu hari libur pada kalender (CAL-03 F6).
+ * `isCutiBersama` membedakan cuti bersama dari libur nasional.
+ */
+export interface WorkCalendarHoliday {
+  date: WorkDate;
+  name: string;
+  isCutiBersama: boolean;
+}
+
+/** Klasifikasi visual satu tanggal. */
+export const WORK_CALENDAR_DAY_KINDS = ["work_day", "non_work_day", "holiday"] as const;
+
+export type WorkCalendarDayKind = (typeof WORK_CALENDAR_DAY_KINDS)[number];
+
+/** Hasil klasifikasi satu tanggal untuk pembeda visual Hari/Minggu/Bulan. */
+export interface WorkCalendarDayMeta {
+  date: WorkDate;
+  kind: WorkCalendarDayKind;
+  holiday: WorkCalendarHoliday | null;
+  isCutiBersama: boolean;
+  /** Label yang dapat ditampilkan; `null` untuk hari kerja biasa. */
+  label: string | null;
+}
+
+/**
+ * Sumber data pengaturan hari/jam kerja dan hari libur (CAL-03 F6).
+ * Implementasi konkret hanya melakukan SELECT dengan RLS yang sudah ada.
+ */
+export interface WorkCalendarSettingsRepository {
+  getWorkSettings(signal?: AbortSignal): Promise<WorkCalendarWorkSettings>;
+  listHolidays(input: {
+    fromDate: WorkDate;
+    toDate: WorkDate;
+    signal?: AbortSignal;
+  }): Promise<readonly WorkCalendarHoliday[]>;
+}
+
 export interface WorkCalendarDaySummary {
   date: WorkDate;
   entries: readonly WorkEntry[];
@@ -260,4 +321,20 @@ export interface WorkCalendarWorkspaceProps {
    * Back/Forward/deep link memulihkan state). Kosong berarti tanpa URL sync.
    */
   routeAdapter?: WorkTeamOverviewRouteAdapter;
+  /**
+   * Repository pengaturan hari/jam kerja dan hari libur (CAL-03 F6). Bila
+   * diisi, workspace memuat pengaturan dari KPI dan daftar libur untuk rentang
+   * yang terlihat. Bila kosong, default Senin-Jumat tanpa libur dipakai.
+   */
+  settingsRepository?: WorkCalendarSettingsRepository;
+  /**
+   * Override pengaturan hari/jam kerja (CAL-03 F6) untuk test/harness.
+   * Menang atas hasil repository.
+   */
+  workSettings?: WorkCalendarWorkSettings;
+  /**
+   * Override daftar hari libur (CAL-03 F6) untuk test/harness.
+   * Menang atas hasil repository.
+   */
+  holidays?: readonly WorkCalendarHoliday[];
 }

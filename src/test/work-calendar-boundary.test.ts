@@ -191,8 +191,10 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
       "src/test/work-calendar-lifecycle.test.tsx",
       "src/test/work-calendar-page.test.tsx",
       "src/test/work-calendar-profile-repository.test.ts",
+      "src/test/work-calendar-settings-repository.test.ts",
       "src/test/work-calendar-team-overview.test.ts",
       "src/test/work-calendar-team-overview-view.test.tsx",
+      "src/test/work-calendar-workdays.test.tsx",
       "src/test/work-calendar-workspace.test.tsx",
     ];
 
@@ -709,5 +711,123 @@ describe("Work Calendar — batas CAL-03 F5 siklus hidup", () => {
     );
     expect(workspace).toContain("listEntryEvents(");
     expect(workspace).toContain("events={entryEvents}");
+  });
+});
+
+describe("Work Calendar — batas CAL-03 F6 hari kerja dan libur", () => {
+  const migrationsDir = join(root, "supabase", "migrations");
+
+  it("hanya satu migration hari libur dan selaras dengan domain", () => {
+    const files = readdirSync(migrationsDir).filter((name) =>
+      name.endsWith("work_calendar_holidays.sql"),
+    );
+    expect(files.length).toBe(1);
+
+    const sql = readFileSync(join(migrationsDir, files[0]), "utf8");
+
+    // Tabel hari libur dengan kolom yang diwajibkan.
+    expect(sql).toContain("create table if not exists public.holidays");
+    expect(sql).toContain("holiday_date date not null");
+    expect(sql).toContain("name text not null");
+    expect(sql).toContain("is_cuti_bersama boolean not null default false");
+    // Satu libur per tanggal supaya impor idempotent.
+    expect(sql).toContain("unique (holiday_date)");
+
+    // RLS: baca untuk authenticated, tulis hanya admin.
+    expect(sql).toContain("alter table public.holidays enable row level security");
+    expect(sql).toContain("create policy holidays_select_authenticated");
+    expect(sql).toContain("create policy holidays_admin_write");
+    expect(sql).toContain("p.role = 'admin'");
+
+    // Pengaturan hari/jam kerja diturunkan dari KPI existing dengan default
+    // Senin-Jumat, bukan nilai yang di-hardcode di frontend.
+    expect(sql).toContain("create or replace function public.get_work_calendar_work_settings()");
+    expect(sql).toContain("public.department_kpi_configs");
+    expect(sql).toContain("array[1, 2, 3, 4, 5]");
+    expect(sql).toContain("coalesce(v_work_start, time '08:00')");
+    expect(sql).toContain("coalesce(v_timezone, 'Asia/Jakarta')");
+  });
+
+  it("mekanisme impor tersedia, default dry-run, dan menolak non-staging", () => {
+    const importer = readFileSync(join(root, "scripts", "import-holidays.mjs"), "utf8");
+    expect(importer).toContain("--apply");
+    expect(importer).toContain("MARISON_DEPLOYMENT_ENVIRONMENT");
+    expect(importer).toContain('environment !== "staging"');
+    expect(importer).toContain("onConflict");
+    // Tidak pernah mencetak credential.
+    expect(importer).not.toContain("console.log(stagingServiceKey");
+    expect(importer).not.toContain("console.log(stagingUrl");
+
+    // Contoh data tersedia untuk operator.
+    const sample = readFileSync(
+      join(root, "supabase", "data", "holidays.example.csv"),
+      "utf8",
+    );
+    expect(sample).toContain("holiday_date");
+    expect(sample).toContain("is_cuti_bersama");
+  });
+
+  it("hanya lib yang diimpor frontend; komponen tidak menulis holidays", () => {
+    const dataFiles = runtimeFiles.filter((file) =>
+      file.path.startsWith("src/features/work-calendar/data/"),
+    );
+    // Jalur data hanya membaca: tidak ada insert/update/delete pada holidays.
+    for (const file of dataFiles) {
+      if (!file.source.includes("holidays")) continue;
+      expect(file.source).not.toContain('.insert(');
+      expect(file.source).not.toContain('.update(');
+      expect(file.source).not.toContain('.delete(');
+    }
+  });
+
+  it("default frontend sama dengan default database (Senin-Jumat 08:00-17:00)", () => {
+    const lib = readFileSync(join(featureDir, "lib", "work-day-config.ts"), "utf8");
+    expect(lib).toContain("workDays: Object.freeze([1, 2, 3, 4, 5])");
+    expect(lib).toContain('workStart: "08:00"');
+    expect(lib).toContain('workEnd: "17:00"');
+    expect(lib).toContain('breakStart: "12:00"');
+    expect(lib).toContain('breakEnd: "13:00"');
+    expect(lib).toContain('timezone: "Asia/Jakarta"');
+  });
+
+  it("tampilan Hari/Minggu/Bulan memakai klasifikasi yang sama, bukan warna saja", () => {
+    for (const file of ["WeeklyWorkView.tsx", "MonthlyWorkView.tsx"]) {
+      const source = readFileSync(join(featureDir, "components", file), "utf8");
+      expect(source).toContain("WorkCalendarDayBadge");
+      expect(source).toContain("getWorkCalendarDaySurfaceClassName");
+      expect(source).toContain("data-day-kind");
+    }
+
+    const daily = readFileSync(join(featureDir, "components", "DailyWorkView.tsx"), "utf8");
+    expect(daily).toContain("work-day-note");
+    expect(daily).toContain("Pekerjaan tetap dapat ditambahkan");
+
+    const badge = readFileSync(
+      join(featureDir, "components", "WorkCalendarDayBadge.tsx"),
+      "utf8",
+    );
+    // Label teks selalu tersedia, bukan warna saja.
+    expect(badge).toContain("meta.label");
+    expect(badge).toContain("data-day-kind");
+  });
+
+  it("workspace memuat pengaturan lewat repository dan mendukung override test", () => {
+    const workspace = readFileSync(
+      join(featureDir, "components", "WorkCalendarWorkspace.tsx"),
+      "utf8",
+    );
+    expect(workspace).toContain("settingsRepository.getWorkSettings(");
+    expect(workspace).toContain("settingsRepository.listHolidays(");
+    expect(workspace).toContain("buildWorkCalendarDayMetaMap(");
+    expect(workspace).toContain("workSettingsOverride");
+    expect(workspace).toContain("holidaysOverride");
+
+    // Halaman produksi menyambungkan repository nyata.
+    const page = readFileSync(
+      join(root, "src", "pages", "work-calendar", "WorkCalendarPage.tsx"),
+      "utf8",
+    );
+    expect(page).toContain("createSupabaseWorkCalendarSettingsRepository");
+    expect(page).toContain("settingsRepository={settingsRepository}");
   });
 });

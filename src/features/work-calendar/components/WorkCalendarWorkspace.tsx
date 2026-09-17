@@ -31,7 +31,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type {
+  WorkCalendarDayMeta,
+  WorkCalendarHoliday,
+  WorkCalendarSettingsRepository,
   WorkCalendarViewMode,
+  WorkCalendarWorkSettings,
   WorkCalendarWorkspaceProps,
   WorkDate,
   WorkEntry,
@@ -43,7 +47,7 @@ import type {
   WorkProgressCounts,
 } from "../types/work-calendar";
 import { isWorkEntryConflictError } from "../lib/work-entry-conflict";
-import { formatWorkDateFull } from "../lib/work-calendar-date";
+import { formatWorkDateFull, getWorkCalendarDateRange } from "../lib/work-calendar-date";
 import { getWorkEntryStatusFollowUp } from "../lib/work-entry-status";
 import {
   computeWorkProgress,
@@ -74,6 +78,11 @@ import {
   shouldDiscardWorkEntryQueryId,
 } from "../lib/work-entry-selection";
 import { useWorkTeamOverview } from "../hooks/use-work-team-overview";
+import {
+  DEFAULT_WORK_CALENDAR_WORK_SETTINGS,
+  buildWorkCalendarDayMetaMap,
+  normalizeWorkSettings,
+} from "../lib/work-day-config";
 
 interface StatusPrompt {
   entryId: string;
@@ -92,6 +101,9 @@ export function WorkCalendarWorkspace({  currentUser,
   teamOverviewRepository,
   isTeamViewAvailableOverride,
   routeAdapter,
+  settingsRepository,
+  workSettings: workSettingsOverride,
+  holidays: holidaysOverride,
 }: WorkCalendarWorkspaceProps) {
   const calendar = useWorkCalendarView({
     repository,
@@ -129,6 +141,88 @@ export function WorkCalendarWorkspace({  currentUser,
     () => permissions ?? createWorkCalendarPermissions(currentUser.id),
     [permissions, currentUser.id],
   );
+
+  // ==== Hari/jam kerja dan hari libur (CAL-03 F6) ====
+
+  /**
+   * Pengaturan efektif: override test menang, lalu hasil repository, lalu
+   * default Senin-Jumat. Tidak pernah menulis konfigurasi KPI.
+   */
+  const [loadedWorkSettings, setLoadedWorkSettings] = useState<WorkCalendarWorkSettings | null>(
+    null,
+  );
+  const [loadedHolidays, setLoadedHolidays] = useState<readonly WorkCalendarHoliday[] | null>(null);
+
+  const effectiveWorkSettings =
+    workSettingsOverride ?? loadedWorkSettings ?? DEFAULT_WORK_CALENDAR_WORK_SETTINGS;
+  const effectiveHolidays = holidaysOverride ?? loadedHolidays ?? [];
+
+  const visibleMetaDates = useMemo<readonly WorkDate[]>(() => {
+    if (calendar.view === "month") return derived.monthDates;
+    if (calendar.view === "week") return derived.weekDates;
+    return [calendar.anchorDate];
+  }, [calendar.view, calendar.anchorDate, derived.monthDates, derived.weekDates]);
+
+  const dayMeta = useMemo<ReadonlyMap<WorkDate, WorkCalendarDayMeta>>(
+    () => buildWorkCalendarDayMetaMap(visibleMetaDates, effectiveWorkSettings, effectiveHolidays),
+    [visibleMetaDates, effectiveWorkSettings, effectiveHolidays],
+  );
+
+  const metaRange = useMemo(
+    () => getWorkCalendarDateRange(
+      calendar.view === "team" ? "day" : calendar.view,
+      calendar.anchorDate,
+    ),
+    [calendar.view, calendar.anchorDate],
+  );
+
+  /**
+   * Muat pengaturan dan libur untuk rentang yang terlihat. Kegagalan tidak
+   * memblokir kalender: pengaturan jatuh ke default dan libur disembunyikan,
+   * sementara pekerjaan tetap tampil.
+   */
+  useEffect(() => {
+    if (!settingsRepository) return undefined;
+    if (workSettingsOverride && holidaysOverride) return undefined;
+
+    const controller = new AbortController();
+    let active = true;
+
+    const load = async (): Promise<void> => {
+      if (!workSettingsOverride) {
+        try {
+          const settings = await settingsRepository.getWorkSettings(controller.signal);
+          if (!active || controller.signal.aborted) return;
+          setLoadedWorkSettings(normalizeWorkSettings(settings));
+        } catch {
+          if (!active || controller.signal.aborted) return;
+          setLoadedWorkSettings(DEFAULT_WORK_CALENDAR_WORK_SETTINGS);
+        }
+      }
+
+      if (!holidaysOverride) {
+        try {
+          const holidays = await settingsRepository.listHolidays({
+            fromDate: metaRange.fromDate,
+            toDate: metaRange.toDate,
+            signal: controller.signal,
+          });
+          if (!active || controller.signal.aborted) return;
+          setLoadedHolidays(holidays);
+        } catch {
+          if (!active || controller.signal.aborted) return;
+          setLoadedHolidays([]);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [settingsRepository, workSettingsOverride, holidaysOverride, metaRange.fromDate, metaRange.toDate]);
 
   /**
    * Sinkronisasi URL (React Router) untuk tanggal acuan dan tampilan:
@@ -995,6 +1089,7 @@ export function WorkCalendarWorkspace({  currentUser,
           summary={daySummary}
           heading={formatWorkDateFull(viewDate)}
           interactions={interactions}
+          dayMeta={dayMeta.get(viewDate)}
         />
       )}
 
@@ -1036,6 +1131,7 @@ export function WorkCalendarWorkspace({  currentUser,
         <WeeklyWorkView
           summaries={derived.daySummaries}
           interactions={interactions}
+          dayMeta={dayMeta}
           onSelectDate={openDayFromWeek}
           onQuickAdd={(date, anchor) => openQuickAdd(date, anchor)}
         />
@@ -1046,6 +1142,7 @@ export function WorkCalendarWorkspace({  currentUser,
           <MonthlyWorkView
             cells={derived.monthCells}
             today={calendar.today}
+            dayMeta={dayMeta}
             onOpenDay={openMonthDay}
             onQuickAdd={(date, anchor) => openQuickAdd(date, anchor)}
             onOpenEntry={(entry) => openEntryDetail(entry)}

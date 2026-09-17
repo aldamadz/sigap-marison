@@ -6,6 +6,9 @@
  */
 
 import type {
+  WorkCalendarHoliday,
+  WorkCalendarSettingsRepository,
+  WorkCalendarWorkSettings,
   WorkEntry,
   WorkEntryDraft,
   WorkEntryEvent,
@@ -582,6 +585,61 @@ export function createFixtureWorkTeamOverviewRepository(
         throw new Error("Gagal memuat pekerjaan anggota (fixture).");
       }
       return entriesFor(memberId, date);
+    },
+  };
+}
+
+/**
+ * Fixture pengaturan hari/jam kerja dan hari libur (CAL-03 F6).
+ *
+ * Default fixture: Senin-Jumat 08:00-17:00 (Asia/Jakarta) dan dua libur pada
+ * pekan fixture (Kamis 2026-03-12 sebagai cuti bersama, Sabtu 2026-03-14
+ * sebagai libur nasional) supaya test dapat membedakan libur, akhir pekan,
+ * dan hari kerja.
+ */
+export const WORK_CALENDAR_FIXTURE_WORK_SETTINGS: WorkCalendarWorkSettings = Object.freeze({
+  workDays: Object.freeze([1, 2, 3, 4, 5]),
+  workStart: "08:00",
+  workEnd: "17:00",
+  breakStart: "12:00",
+  breakEnd: "13:00",
+  timezone: "Asia/Jakarta",
+});
+
+export const WORK_CALENDAR_FIXTURE_HOLIDAYS: readonly WorkCalendarHoliday[] = Object.freeze([
+  {
+    date: "2026-03-12",
+    name: "Cuti Bersama Nyepi",
+    isCutiBersama: true,
+  },
+  {
+    date: "2026-03-14",
+    name: "Hari Raya Nyepi",
+    isCutiBersama: false,
+  },
+]);
+
+export function createFixtureWorkCalendarSettingsRepository(options: {
+  settings?: WorkCalendarWorkSettings;
+  holidays?: readonly WorkCalendarHoliday[];
+  failOnSettings?: boolean;
+  failOnHolidays?: boolean;
+} = {}): WorkCalendarSettingsRepository {
+  const settings = options.settings ?? WORK_CALENDAR_FIXTURE_WORK_SETTINGS;
+  const holidays = options.holidays ?? WORK_CALENDAR_FIXTURE_HOLIDAYS;
+
+  return {
+    async getWorkSettings(signal?: AbortSignal) {
+      if (signal?.aborted) throw new Error("Pencarian dibatalkan.");
+      if (options.failOnSettings) throw new Error("Gagal memuat pengaturan (fixture).");
+      return settings;
+    },
+    async listHolidays({ fromDate, toDate, signal }) {
+      if (signal?.aborted) throw new Error("Pencarian dibatalkan.");
+      if (options.failOnHolidays) throw new Error("Gagal memuat hari libur (fixture).");
+      return holidays.filter(
+        (holiday) => holiday.date >= fromDate && holiday.date <= toDate,
+      );
     },
   };
 }
