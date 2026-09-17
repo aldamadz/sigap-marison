@@ -77,6 +77,11 @@ import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreads
 import { normalizeProductionSerial } from "@/lib/production-code";
 import { useAttention } from "@/providers/AttentionProvider";
 import { parseLocalDateInput } from "@/lib/local-date";
+import {
+  canonicalizeCheckerInput,
+  normalizeCheckerInputSchema,
+  validateCheckerInput,
+} from "@/features/surat/inbox/lib/checker-input";
 
 const getAllocationUnitType = (unit: any, detail: Record<string, any> = unit?.allocation_detail || {}) =>
   String(
@@ -145,6 +150,7 @@ export default function InboxPage() {
   const [allocationSelected, setAllocationSelected] = useState<Record<string, any[]>>({});
   const [allocationDetails, setAllocationDetails] = useState<Record<string, Record<string, any>>>({});
   const [approvalFiles, setApprovalFiles] = useState<Record<string, Record<string, File[]>>>({});
+  const [checkerInputs, setCheckerInputs] = useState<Record<string, Record<string, unknown>>>({});
   const [allocationLoading, setAllocationLoading] = useState<Record<string, boolean>>({});
   const [allocationErrors, setAllocationErrors] = useState<Record<string, string | null>>({});
   const [unitSearch, setUnitSearch] = useState<Record<string, string>>({});
@@ -303,6 +309,12 @@ export default function InboxPage() {
         ])),
       }));
     }
+    if ((input as any).checker_input && typeof (input as any).checker_input === "object") {
+      setCheckerInputs((previous) => ({
+        ...previous,
+        [selectedItem.id]: (input as any).checker_input,
+      }));
+    }
     setVerificationDraftState((previous) => ({ ...previous, [selectedItem.id]: "saved" }));
     hydrationRef.current[selectedItem.id] = true;
   }, [selectedItem?.id]);
@@ -459,6 +471,12 @@ export default function InboxPage() {
         })),
         allocated_unit_count: selectedUnits.length,
       } : {}),
+      ...(item.action_type === "configured_input" ? {
+        checker_input: canonicalizeCheckerInput(
+          item.input_schema_snapshot,
+          checkerInputs[item.id] || {},
+        ),
+      } : {}),
     };
   };
 
@@ -569,6 +587,7 @@ export default function InboxPage() {
     JSON.stringify(allocationProjectSelected[selectedItem?.id || ""] || null),
     JSON.stringify(allocationSelected[selectedItem?.id || ""] || []),
     JSON.stringify(allocationDetails[selectedItem?.id || ""] || {}),
+    JSON.stringify(checkerInputs[selectedItem?.id || ""] || {}),
   ]);
 
   const handleSearchChange = (value: string) => {
@@ -789,6 +808,13 @@ const handleApprove = async (item: any) => {
       if (missingApprovalAttachments.length > 0) {
         throw new Error(`Lampiran approval belum lengkap: ${missingApprovalAttachments.join(", ")}.`);
       }
+      if (item.action_type === "configured_input") {
+        const checkerIssues = validateCheckerInput(
+          item.input_schema_snapshot,
+          checkerInputs[item.id] || {},
+        );
+        if (checkerIssues.length > 0) throw new Error(checkerIssues[0]);
+      }
 
       if (isUnitAllocationRequired(item) && selectedUnits.length < getRequestedUnitCount(item)) {
         const proceedLess = await appDialog.confirm({
@@ -822,6 +848,9 @@ const handleApprove = async (item: any) => {
       await suratApprovalApi.verifySignature(item.id, notes[item.id] || "", {
         suratId: item.surat_id,
         approvalAttachments: getSelectedApprovalFiles(item),
+        ...(item.action_type === "configured_input" ? {
+          checkerInput: checkerInputs[item.id] || {},
+        } : {}),
         ...(isUnitAllocationRequired(item) ? {
           unitAllocation: {
             project: getAllocationProject(item),
@@ -853,6 +882,11 @@ const handleApprove = async (item: any) => {
         return next;
       });
       setApprovalFiles(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      setCheckerInputs(prev => {
         const next = { ...prev };
         delete next[item.id];
         return next;
@@ -1747,6 +1781,91 @@ const handleApprove = async (item: any) => {
     );
   };
 
+  const renderConfiguredInputPanel = (item: any) => {
+    if (item.action_type !== "configured_input") return null;
+    const schema = normalizeCheckerInputSchema(item.input_schema_snapshot);
+    if (schema.fields.length === 0) return null;
+
+    const savedInput = item?.surat_registrasi?.form_input_data?.checker_inputs?.[item.id];
+    const draftInput = getVerificationDraft(item)?.input?.checker_input;
+    const values = isVerificationTask(item)
+      ? checkerInputs[item.id] || (draftInput && typeof draftInput === "object" ? draftInput : {})
+      : savedInput && typeof savedInput === "object" ? savedInput : {};
+    const editable = isVerificationTask(item);
+
+    return (
+      <section className={cn("sigap-panel", editable ? "border-sky-500/30" : "border-emerald-500/30")}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <ClipboardList className={cn("mt-0.5 h-5 w-5", editable ? "text-sky-600" : "text-emerald-600")} />
+            <div>
+              <p className="text-sm font-semibold">{schema.title || "Input tim pemeriksa"}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {schema.description || (editable
+                  ? "Lengkapi data berikut sebelum pengajuan diteruskan ke penanda tangan."
+                  : "Data ini telah disiapkan oleh tim pemeriksa.")}
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className={approvalBadgeClass(editable ? "verification_waiting" : "verification_done")}>
+            {editable ? "Perlu dilengkapi" : "Sudah diperiksa"}
+          </Badge>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {schema.fields.map((field) => {
+            const value = values[field.key] ?? "";
+            const updateValue = (nextValue: unknown) => setCheckerInputs((previous) => ({
+              ...previous,
+              [item.id]: { ...(previous[item.id] || values), [field.key]: nextValue },
+            }));
+            return (
+              <div key={field.key} className={cn("space-y-2", field.type === "textarea" && "sm:col-span-2")}>
+                <Label htmlFor={`checker-${item.id}-${field.key}`}>
+                  {field.label}{field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                </Label>
+                {editable ? field.type === "textarea" ? (
+                  <Textarea
+                    id={`checker-${item.id}-${field.key}`}
+                    value={String(value)}
+                    placeholder={field.placeholder}
+                    className="min-h-24"
+                    onChange={(event) => updateValue(event.target.value)}
+                  />
+                ) : field.type === "money" ? (
+                  <NominalInput
+                    value={value}
+                    ariaLabel={field.label}
+                    placeholder={field.placeholder}
+                    className="h-11"
+                    onCommit={updateValue}
+                  />
+                ) : (
+                  <Input
+                    id={`checker-${item.id}-${field.key}`}
+                    type={field.type === "number" ? "number" : "text"}
+                    inputMode={field.type === "number" ? "numeric" : undefined}
+                    min={field.min}
+                    value={String(value)}
+                    placeholder={field.placeholder}
+                    className="h-11"
+                    onChange={(event) => updateValue(event.target.value)}
+                  />
+                ) : (
+                  <div className="min-h-11 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
+                    {field.type === "money" && value !== ""
+                      ? formatRupiahCanonical(value)
+                      : displayText(value)}
+                  </div>
+                )}
+                {field.helperText ? <p className="text-xs text-muted-foreground">{field.helperText}</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
   const renderApprovalAttachmentPanel = (item: any) => {
     const requirements = getApprovalAttachmentRequirements(item);
     if (requirements.length === 0) return null;
@@ -2533,7 +2652,7 @@ const handleApprove = async (item: any) => {
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => { noteRefs.current[selectedItem.id] = element; }} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderConfiguredInputPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => { noteRefs.current[selectedItem.id] = element; }} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">

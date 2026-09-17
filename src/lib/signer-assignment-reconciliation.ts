@@ -23,6 +23,9 @@ export function reconcileSignerAssignments<T extends ReconciliableSignerAssignme
   const persistedUsesStepIds = persistedByStepId.size > 0;
 
   return currentAssignments.map((current) => {
+    if (current.assignee_mode === "requester") {
+      return { ...current, user_id: "" };
+    }
     const persisted = current.form_usage_step_id
       ? persistedByStepId.get(current.form_usage_step_id)
       : undefined;

@@ -849,6 +849,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         // The linked task is the authority for its form/usage pairing.
         return true;
       }
+      if (item.is_system_template) return false;
       if (item.scope_type && item.scope_type !== "all") {
         if (item.scope_type === "pusat" && !isPusatSelected) return false;
         if (item.scope_type === "cabang" && isPusatSelected) return false;
@@ -1172,8 +1173,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [generatedNoSurat, formData.judul_surat, formData.form_input_data]
   );
 
-  const getSelectedSignerName = (userId: string) =>
-    master.users?.find((user: MasterRecord) => user.id === userId)?.full_name || "";
+  const getSelectedSignerName = (userId: string, includeJobTitle = false) => {
+    const user = master.users?.find((item: MasterRecord) => item.id === userId);
+    return user
+      ? [user.full_name, includeJobTitle ? user.job_title : null].filter(Boolean).join(" · ")
+      : "";
+  };
 
   const getRecommendationPicLabel = (userId: string) => {
     const user = master.users.find((item) => item.id === userId);
@@ -1222,13 +1227,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getEligibleSignerUsersForSigner = (signer?: SignerAssignment) => {
     if (!signer) return [];
+    if (signer.assignee_mode === "requester") {
+      return (master.users || []).filter(user => user.id === currentProfile?.id);
+    }
     const eligibleIds = signer.eligible_user_ids || [];
-    return eligibleIds.length > 0
-      ? (master.users || []).filter(user => eligibleIds.includes(user.id) && isSignerAllowedByScope(user, signer))
-      : signer.form_usage_step_id
-        ? []
-        : (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
+    const configuredEligible = (master.users || []).filter(
+      user => eligibleIds.includes(user.id) && isSignerAllowedByScope(user, signer),
+    );
+    if (configuredEligible.length > 0) return configuredEligible;
+    if (signer.candidate_fallback_mode === "request_office_all") {
+      return (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
+    }
+    if (signer.form_usage_step_id) return [];
+    return (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
   };
+
+  const getVisibleConfiguredSigners = (assignments: SignerAssignment[]) =>
+    assignments.filter((signer) => !signer.skip_if_no_candidate || getEligibleSignerUsersForSigner(signer).length > 0);
 
   const getFilteredSignerUsers = (index: number) => {
     const tokens = normalizeNameSearch(signerSearch[index] || "").split(" ").filter(Boolean);
@@ -1313,16 +1328,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
       return changed ? next : prev;
     });
-  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers]);
+  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers, currentProfile?.id]);
 
   const loadUsageDetails = useCallback(async () => {
     const { data, error } = await supabase.from("form_usages")
       .select(`
-        id, name, form_id, request_category, scope_type, recommendation_config, external_revision_policy,
+        id, name, form_id, request_category, scope_type, is_system_template, recommendation_config, external_revision_policy,
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(
-          id, step_order, role_name, label, action_type, candidate_scope, signer_department_id,
+          id, step_order, role_name, label, action_type, assignee_mode, input_schema, skip_if_no_candidate, candidate_fallback_mode, candidate_scope, signer_department_id,
           form_usage_step_users(user_id),
           form_usage_step_verifiers(user_id)
         ),
@@ -1350,6 +1365,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             roleName: step.role_name,
             labelJabatan: step.label,
             action_type: step.action_type,
+            assignee_mode: step.assignee_mode || "select",
+            input_schema: step.input_schema || {},
+            skip_if_no_candidate: step.skip_if_no_candidate === true,
+            candidate_fallback_mode: step.candidate_fallback_mode || null,
             candidate_scope: step.candidate_scope || "manual",
             signer_department_id: step.signer_department_id,
             eligible_user_ids: (step.form_usage_step_users || []).map((candidate: { user_id: string }) => candidate.user_id),
@@ -1433,7 +1452,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       : [];
     const configuredSigners = usage ? buildSignerAssignments(usage) : [];
     setSigners(configuredSigners.length > 0
-      ? reconcileSignerAssignments(configuredSigners, persistedSigners)
+      ? getVisibleConfiguredSigners(reconcileSignerAssignments(configuredSigners, persistedSigners))
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
     setExternalRevision(restoredExternalRevision?.eventId ? restoredExternalRevision : null);
@@ -1457,7 +1476,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (configuredSigners.length === 0) return;
 
     setSigners((current) => {
-      const reconciled = reconcileSignerAssignments(configuredSigners, current);
+      const reconciled = getVisibleConfiguredSigners(reconcileSignerAssignments(configuredSigners, current));
       return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
     });
   }, [activeDraftId, selectedUsage]);
@@ -1666,7 +1685,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
     const configuredSigners = buildSignerAssignments(detail);
     if (configuredSigners.length > 0) {
-      setSigners(configuredSigners);
+      setSigners(getVisibleConfiguredSigners(configuredSigners));
     } else {
       toast({ variant: "destructive", title: "Format Alur Salah" });
     }
@@ -1973,7 +1992,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getLatestConfiguredSignerAssignments = () => {
     if (!selectedUsage?.id) return signers;
     const latestUsage = usageDetails.find((usage) => usage.id === selectedUsage.id) || selectedUsage;
-    const configuredSigners = buildSignerAssignments(latestUsage);
+    const configuredSigners = getVisibleConfiguredSigners(buildSignerAssignments(latestUsage));
     if (configuredSigners.length === 0) return signers;
 
     return reconcileSignerAssignments(configuredSigners, signers).map((signer) => {
@@ -4276,13 +4295,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               <Button
                                 type="button"
                                 variant="outline"
-                                disabled={Boolean(externalRevision)}
+                                disabled={Boolean(externalRevision) || s.assignee_mode === "requester"}
                                 className="h-10 w-full justify-between bg-muted/20 border-none ring-1 ring-border rounded-lg font-medium text-left"
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
-                                  {s.user_id ? getSelectedSignerName(s.user_id) : `Pilih ${s.label_jabatan}...`}
+                                  {s.user_id
+                                    ? getSelectedSignerName(s.user_id, s.candidate_fallback_mode === "request_office_all")
+                                    : s.assignee_mode === "requester"
+                                      ? "Menunggu profil pemohon"
+                                      : `Pilih ${s.label_jabatan}...`}
                                 </span>
-                                <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                                {s.assignee_mode !== "requester" && <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />}
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -4327,6 +4350,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                           </Popover>
                         </div>
                       </div>
+                      {s.assignee_mode !== "requester" && getEligibleSignerUsersForSigner(s).length === 0 && (
+                        <p className="mt-2 w-full text-left text-xs text-destructive" role="alert">
+                          Belum ada kandidat aktif untuk {s.label_jabatan} pada kantor/departemen ini. Hubungi admin sebelum mengirim pengajuan.
+                        </p>
+                      )}
                       {i < signers.length - 1 && <ArrowDown className="text-primary/20 w-4 h-4 my-1" />}
                     </div>
                   ))}

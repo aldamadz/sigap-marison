@@ -7,6 +7,10 @@ import {
   formatCreateRegistrasiError,
 } from "@/lib/registration-draft-attachment-classification";
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
+import {
+  canonicalizeCheckerInput,
+  validateCheckerInput,
+} from "@/features/surat/inbox/lib/checker-input";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -293,7 +297,7 @@ export const suratService = {
               *,
               form_usage_departments(department_id),
               form_usage_steps(
-                id, step_order, role_name, label, action_type, signer_department_id,
+                id, step_order, role_name, label, action_type, assignee_mode, input_schema, signer_department_id,
                 form_usage_step_users(user_id)
               ),
               form_usage_attachment_requirements(*),
@@ -834,7 +838,9 @@ export const suratService = {
         persistedFiles: classifiedDraftAttachments.initialAttachments,
       });
 
-      const activeSigners = signers.filter(s => s.user_id);
+      const activeSigners = signers
+        .filter(s => s.user_id)
+        .map((signer, index) => ({ ...signer, step_order: index + 1 }));
       if (activeSigners.length < 2 || activeSigners.length > 8) {
         throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap sesuai konfigurasi.");
       }
@@ -850,7 +856,9 @@ export const suratService = {
           job_title_display: profile.job_title_display ?? profile.job_title ?? null,
           email: profile.email ?? null,
           role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
-          label_jabatan: s.label_jabatan ?? null,
+          label_jabatan: s.candidate_fallback_mode === "request_office_all"
+            ? profile.job_title_display ?? profile.job_title ?? s.label_jabatan ?? null
+            : s.label_jabatan ?? null,
           step_order: Number(s.step_order || idx + 1),
           status: "PENDING",
           is_signed: false,
@@ -885,15 +893,32 @@ export const suratService = {
           }
         );
         if (validationError) throw validationError;
-        const configuredSteps = [...(configContext.usage?.form_usage_steps || [])]
+        const allConfiguredSteps = [...(configContext.usage?.form_usage_steps || [])]
           .sort((a: any, b: any) => a.step_order - b.step_order);
+        const activeStepIds = new Set(activeSigners.map(signer => signer.form_usage_step_id).filter(Boolean));
+        const missingRequiredStep = allConfiguredSteps.find((step: any) =>
+          step.skip_if_no_candidate !== true
+          && !activeStepIds.has(step.id)
+        );
+        if (missingRequiredStep) {
+          throw new Error(`Penandatangan tahap ${missingRequiredStep.step_order} belum dipilih.`);
+        }
+        const configuredSteps = allConfiguredSteps.filter((step: any) => activeStepIds.has(step.id));
         if (configuredSteps.length !== activeSigners.length) {
           throw new Error("Jumlah penandatangan tidak sesuai konfigurasi kegunaan.");
         }
         configuredSteps.forEach((step: any, index: number) => {
           const assignment = activeSigners[index];
           const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
-          if (assignment.form_usage_step_id !== step.id || !eligibleIds.includes(assignment.user_id)) {
+          const signerProfile = signerSnapshots[assignment.user_id] ?? {};
+          const matchesAssignee = step.assignee_mode === "requester"
+            ? assignment.user_id === user.id
+            : eligibleIds.includes(assignment.user_id)
+              || (
+                step.candidate_fallback_mode === "request_office_all"
+                && signerProfile.office_id === payload.office_id
+              );
+          if (assignment.form_usage_step_id !== step.id || !matchesAssignee) {
             throw new Error(`Penandatangan tahap ${step.step_order} tidak sesuai konfigurasi.`);
           }
         });
@@ -1044,13 +1069,19 @@ export const suratService = {
         surat_id: surat.id,
         user_id: s.user_id,
         role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
-        label_jabatan: s.label_jabatan ?? null,
+        label_jabatan: s.candidate_fallback_mode === "request_office_all"
+          ? (signerSnapshots[s.user_id]?.job_title_display
+            ?? signerSnapshots[s.user_id]?.job_title
+            ?? s.label_jabatan
+            ?? null)
+          : s.label_jabatan ?? null,
         step_order: s.step_order,
         is_signed: false,
         available_at: Number(s.step_order || idx + 1) === firstStepOrder ? firstAvailableAt : null,
         requires_unit_allocation: s.requires_unit_allocation === true,
         form_usage_step_id: this.cleanUuid(s.form_usage_step_id),
         action_type: s.action_type || (s.requires_unit_allocation ? "unit_allocation" : "approval"),
+        input_schema_snapshot: s.input_schema || {},
         attachment_requirements_snapshot: s.attachment_requirements || [],
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
@@ -1368,13 +1399,14 @@ export const suratService = {
     options: {
       suratId?: string;
       unitAllocation?: { project?: any; units: any[] };
+      checkerInput?: Record<string, unknown>;
       approvalAttachments?: Array<{ key: string; label: string; file: File }>;
     } = {}
   ) {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     const { data: sigInfo, error: sigError } = await supabase
       .from("surat_signatures")
-      .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, attachment_requirements_snapshot, verification_status")
+      .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, input_schema_snapshot, attachment_requirements_snapshot, verification_status")
       .eq("id", signatureId)
       .single();
     if (sigError || !sigInfo) throw new Error("Data pemeriksaan tidak ditemukan.");
@@ -1390,6 +1422,14 @@ export const suratService = {
     let formInputData = suratFresh.form_input_data ?? {};
     const persistedVerificationDraft =
       (suratFresh.data_snapshot as any)?.verification_drafts?.[signatureId]?.input || {};
+    const incomingCheckerInput = options.checkerInput ?? persistedVerificationDraft?.checker_input ?? {};
+    const checkerInput = sigInfo.action_type === "configured_input"
+      ? (() => {
+          const issues = validateCheckerInput(sigInfo.input_schema_snapshot, incomingCheckerInput);
+          if (issues.length > 0) throw new Error(issues[0]);
+          return canonicalizeCheckerInput(sigInfo.input_schema_snapshot, incomingCheckerInput);
+        })()
+      : {};
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
       : [];
@@ -1480,7 +1520,9 @@ export const suratService = {
             allocated_units: formInputData?.allocated_units ?? [],
             allocated_unit_count: formInputData?.allocated_unit_count,
           }
-        : {};
+        : sigInfo.action_type === "configured_input"
+          ? { checker_input: checkerInput }
+          : {};
 
     const { data, error } = await supabase.rpc("verify_surat_signature_v2", {
       p_sig_id: signatureId,
