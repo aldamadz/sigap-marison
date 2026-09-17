@@ -7,7 +7,7 @@ const migrations = [
   "supabase/migrations/20260917132000_optional_branch_signer_fallback.sql",
   "supabase/migrations/20260917133000_seed_canonical_submission_workflows.sql",
   "supabase/migrations/20260918100000_restore_asset_recommendation_config.sql",
-  "supabase/migrations/20260918110000_fix_recommendation_creator_auto_approval.sql",
+  "supabase/migrations/20260918130000_fix_recommendation_creator_auto_approval.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
 
