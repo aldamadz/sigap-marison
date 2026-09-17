@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const migrations = [
-  "supabase/migrations/20260917120000_canonical_submission_workflow_contract.sql",
-  "supabase/migrations/20260917121000_atomic_configured_checker_input.sql",
-  "supabase/migrations/20260917121500_optional_branch_signer_fallback.sql",
-  "supabase/migrations/20260917122000_seed_canonical_submission_workflows.sql",
+  "supabase/migrations/20260917130000_canonical_submission_workflow_contract.sql",
+  "supabase/migrations/20260917131000_atomic_configured_checker_input.sql",
+  "supabase/migrations/20260917132000_optional_branch_signer_fallback.sql",
+  "supabase/migrations/20260917133000_seed_canonical_submission_workflows.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
 
