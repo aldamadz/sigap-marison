@@ -47,6 +47,8 @@ type RouteStep = {
   assignee_mode: AssigneeMode;
   input_schema: CheckerInputSchema;
   candidate_scope: CandidateScope;
+  skip_if_no_candidate: boolean;
+  candidate_fallback_mode: "request_office_all" | null;
   signer_department_id: string;
   verifier_department_id: string;
   verifier_scope: "request_office" | "head_office" | "all_offices";
@@ -115,6 +117,8 @@ const emptyStep = (stepOrder: number): RouteStep => ({
   assignee_mode: "select",
   input_schema: { fields: [] },
   candidate_scope: "manual",
+  skip_if_no_candidate: false,
+  candidate_fallback_mode: null,
   signer_department_id: "",
   verifier_department_id: "",
   verifier_scope: "request_office",
@@ -235,7 +239,7 @@ export default function FormUsageManagementPage() {
           master_forms(id, nama_form),
           form_usage_departments(department_id),
           form_usage_steps(
-            id, step_order, role_name, label, action_type, assignee_mode, input_schema, signer_department_id, verifier_department_id, verifier_scope,
+            id, step_order, role_name, label, action_type, assignee_mode, input_schema, skip_if_no_candidate, candidate_fallback_mode, signer_department_id, verifier_department_id, verifier_scope,
             candidate_scope,
             form_usage_step_users(user_id),
             form_usage_step_verifiers(user_id)
@@ -310,6 +314,8 @@ export default function FormUsageManagementPage() {
             assignee_mode: "select",
             input_schema: { fields: [] },
             candidate_scope: "manual",
+            skip_if_no_candidate: false,
+            candidate_fallback_mode: null,
             signer_department_id: "",
             verifier_department_id: "",
             verifier_scope: "request_office",
@@ -392,6 +398,8 @@ export default function FormUsageManagementPage() {
           assignee_mode: step.assignee_mode || "select",
           input_schema: normalizeCheckerInputSchema(step.input_schema),
           candidate_scope: step.candidate_scope || "manual",
+          skip_if_no_candidate: step.skip_if_no_candidate === true,
+          candidate_fallback_mode: step.candidate_fallback_mode || null,
           signer_department_id: step.signer_department_id || "",
           verifier_department_id: step.verifier_department_id || "",
           verifier_scope: step.verifier_scope || "request_office",
@@ -433,6 +441,8 @@ export default function FormUsageManagementPage() {
           assignee_mode: "select",
           input_schema: { fields: [] },
           candidate_scope: "manual",
+          skip_if_no_candidate: false,
+          candidate_fallback_mode: null,
           signer_department_id: "",
           verifier_department_id: "",
           verifier_scope: "request_office",
@@ -763,6 +773,8 @@ export default function FormUsageManagementPage() {
           eligible_user_ids: step.eligible_user_ids,
           verifier_user_ids: step.verifier_user_ids,
           candidate_scope: step.candidate_scope || "manual",
+          skip_if_no_candidate: step.skip_if_no_candidate === true,
+          candidate_fallback_mode: step.candidate_fallback_mode || null,
       }));
       const attachmentsPayload = formData.attachments
         .filter(rule => rule.label.trim() && rule.requirement_key.trim())
@@ -1141,7 +1153,10 @@ export default function FormUsageManagementPage() {
                           </div>
                           <div className="space-y-2 pt-2">
                             <Label>Scope Kandidat</Label>
-                            <Select value={step.candidate_scope || "manual"} onValueChange={value => updateStep(index, { candidate_scope: value as CandidateScope })}>
+                            <Select value={step.candidate_scope || "manual"} onValueChange={value => updateStep(index, {
+                              candidate_scope: value as CandidateScope,
+                              candidate_fallback_mode: value === "request_office" ? step.candidate_fallback_mode : null,
+                            })}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="manual">Manual</SelectItem>
@@ -1165,6 +1180,41 @@ export default function FormUsageManagementPage() {
                                     ? "Semua kandidat terpilih tetap tampil."
                                     : "Tidak ada filter kantor otomatis."}
                             </p>
+                            {step.assignee_mode === "select" && (
+                              <div className="space-y-2 border-t border-border pt-3">
+                                <label className="flex items-start gap-2 text-xs font-medium">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-0.5"
+                                    checked={step.skip_if_no_candidate}
+                                    onChange={event => updateStep(index, { skip_if_no_candidate: event.target.checked })}
+                                  />
+                                  <span>
+                                    Lewati tahap jika kandidat kosong
+                                    <span className="mt-0.5 block font-normal text-muted-foreground">
+                                      Dipakai untuk tahap opsional seperti Asisten BM.
+                                    </span>
+                                  </span>
+                                </label>
+                                <label className="flex items-start gap-2 text-xs font-medium">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-0.5"
+                                    checked={step.candidate_fallback_mode === "request_office_all"}
+                                    disabled={step.candidate_scope !== "request_office"}
+                                    onChange={event => updateStep(index, {
+                                      candidate_fallback_mode: event.target.checked ? "request_office_all" : null,
+                                    })}
+                                  />
+                                  <span>
+                                    Fallback ke semua karyawan kantor
+                                    <span className="mt-0.5 block font-normal text-muted-foreground">
+                                      Jika tidak ada kandidat terkonfigurasi di kantor pemohon, tampilkan nama dan jabatan asli seluruh karyawan kantor.
+                                    </span>
+                                  </span>
+                                </label>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="space-y-2">

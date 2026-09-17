@@ -3,6 +3,7 @@ declare
   v_count integer;
   v_usage_id uuid;
   v_step_id uuid;
+  v_step3_id uuid;
   v_registration_id uuid;
   v_signature_id uuid;
   v_threw boolean;
@@ -133,6 +134,8 @@ begin
     join public.form_usages usage on usage.id = step.usage_id
     where usage.status = 'active'
       and step.assignee_mode = 'select'
+      and step.skip_if_no_candidate is not true
+      and step.candidate_fallback_mode is null
       and not exists (select 1 from public.form_usage_step_users candidate where candidate.usage_step_id = step.id)
   ) then raise exception 'select-mode canonical step without candidates'; end if;
 
@@ -199,6 +202,47 @@ begin
     v_threw := position('bukan kandidat signer' in sqlerrm) > 0;
   end;
   if not v_threw then raise exception 'cross-office SPV candidate was accepted'; end if;
+
+  -- Optional ABM disappears without candidates; missing BM falls back to all active employees
+  -- in the request office, while preserving the selected employee's real job title.
+  if not exists (
+    select 1
+    from public.form_usage_steps step
+    join public.form_usages usage on usage.id = step.usage_id
+    where usage.name = 'SPK Non Unit - Kantor Cabang'
+      and step.step_order = 2
+      and step.skip_if_no_candidate is true
+  ) then raise exception 'branch ABM step is not optional'; end if;
+  if not exists (
+    select 1
+    from public.form_usage_steps step
+    join public.form_usages usage on usage.id = step.usage_id
+    where usage.name = 'SPK Non Unit - Kantor Cabang'
+      and step.step_order = 3
+      and step.candidate_fallback_mode = 'request_office_all'
+  ) then raise exception 'branch BM step does not have office fallback'; end if;
+
+  select usage.id into v_usage_id from public.form_usages usage where usage.name = 'SPK Non Unit - Kantor Cabang';
+  select step.id into v_step_id from public.form_usage_steps step where step.usage_id = v_usage_id and step.step_order = 1;
+  insert into public.surat_registrasi (
+    form_usage_id, office_id, dept_id, created_by, status, current_step
+  ) values (
+    v_usage_id, '20000000-0000-4000-8000-000000000004',
+    '30000000-0000-4000-8000-000000000007', '40000000-0000-4000-8000-000000000022', 'PROSES', 1
+  ) returning id into v_registration_id;
+  select step.id into v_step3_id from public.form_usage_steps step where step.usage_id = v_usage_id and step.step_order = 3;
+  insert into public.surat_signatures (surat_id, user_id, form_usage_step_id)
+  values
+    (v_registration_id, '40000000-0000-4000-8000-000000000022', v_step_id),
+    (v_registration_id, '40000000-0000-4000-8000-000000000022', v_step3_id);
+  select signature.id into v_signature_id
+  from public.surat_signatures signature
+  where signature.surat_id = v_registration_id and signature.form_usage_step_id = v_step3_id;
+  select label_jabatan, step_order into v_value, v_count
+  from public.surat_signatures where id = v_signature_id;
+  if v_value <> 'Supervisor Teknik' or v_count <> 2 then
+    raise exception 'branch fallback did not preserve actual job title or compact step order';
+  end if;
 
   -- Configured checker input is validated and persisted atomically.
   insert into public.form_usages (form_id, name, request_category, scope_type, status, sort_order)

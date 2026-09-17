@@ -103,6 +103,8 @@ begin
     verifier_key text,
     verifier_scope text not null default 'request_office',
     input_schema jsonb not null default '{}'::jsonb,
+    skip_if_no_candidate boolean not null default false,
+    candidate_fallback_mode text,
     primary key (workflow_key, step_order)
   ) on commit drop;
 
@@ -164,9 +166,20 @@ begin
      or (workflow_key = 'pusat_fund_hrd' and step_order = 2)
      or (workflow_key = 'cabang_fund' and step_order = 3);
 
+  update canonical_steps
+  set skip_if_no_candidate = true
+  where workflow_key = 'cabang_spk_non_unit' and step_order = 2;
+
+  update canonical_steps
+  set candidate_fallback_mode = 'request_office_all'
+  where (workflow_key = 'cabang_spk_non_unit' and step_order = 3)
+     or (workflow_key = 'cabang_asset' and step_order = 2)
+     or (workflow_key = 'cabang_fund' and step_order = 2);
+
   insert into public.form_usage_steps (
     usage_id, step_order, role_name, label, action_type, assignee_mode,
-    candidate_scope, signer_department_id, input_schema, verifier_department_id, verifier_scope
+    candidate_scope, signer_department_id, input_schema, verifier_department_id, verifier_scope,
+    skip_if_no_candidate, candidate_fallback_mode
   )
   select usage.usage_id, step.step_order, step.role_name, step.label, step.action_type,
          step.assignee_mode, step.candidate_scope,
@@ -178,7 +191,9 @@ begin
          end,
          step.input_schema,
          case when step.verifier_key = 'planning_admin' then v_planning_id else null end,
-         step.verifier_scope
+         step.verifier_scope,
+         step.skip_if_no_candidate,
+         step.candidate_fallback_mode
   from canonical_steps step
   join canonical_usages usage using (workflow_key);
 
@@ -258,11 +273,15 @@ begin
   on conflict do nothing;
 
   for v_step in
-    select usage.name as usage_name, step.id, step.label, step.assignee_mode, step.action_type
+    select usage.name as usage_name, step.id, step.label, step.assignee_mode, step.action_type,
+           step.skip_if_no_candidate, step.candidate_fallback_mode
     from canonical_usages usage
     join public.form_usage_steps step on step.usage_id = usage.usage_id
   loop
-    if v_step.assignee_mode = 'select' and not exists (
+    if v_step.assignee_mode = 'select'
+       and v_step.skip_if_no_candidate is not true
+       and v_step.candidate_fallback_mode is null
+       and not exists (
       select 1 from public.form_usage_step_users candidate where candidate.usage_step_id = v_step.id
     ) then
       raise exception 'Workflow % tidak memiliki kandidat untuk tahap %.', v_step.usage_name, v_step.label;

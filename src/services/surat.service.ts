@@ -838,7 +838,9 @@ export const suratService = {
         persistedFiles: classifiedDraftAttachments.initialAttachments,
       });
 
-      const activeSigners = signers.filter(s => s.user_id);
+      const activeSigners = signers
+        .filter(s => s.user_id)
+        .map((signer, index) => ({ ...signer, step_order: index + 1 }));
       if (activeSigners.length < 2 || activeSigners.length > 8) {
         throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap sesuai konfigurasi.");
       }
@@ -854,7 +856,9 @@ export const suratService = {
           job_title_display: profile.job_title_display ?? profile.job_title ?? null,
           email: profile.email ?? null,
           role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
-          label_jabatan: s.label_jabatan ?? null,
+          label_jabatan: s.candidate_fallback_mode === "request_office_all"
+            ? profile.job_title_display ?? profile.job_title ?? s.label_jabatan ?? null
+            : s.label_jabatan ?? null,
           step_order: Number(s.step_order || idx + 1),
           status: "PENDING",
           is_signed: false,
@@ -889,17 +893,31 @@ export const suratService = {
           }
         );
         if (validationError) throw validationError;
-        const configuredSteps = [...(configContext.usage?.form_usage_steps || [])]
+        const allConfiguredSteps = [...(configContext.usage?.form_usage_steps || [])]
           .sort((a: any, b: any) => a.step_order - b.step_order);
+        const activeStepIds = new Set(activeSigners.map(signer => signer.form_usage_step_id).filter(Boolean));
+        const missingRequiredStep = allConfiguredSteps.find((step: any) =>
+          step.skip_if_no_candidate !== true
+          && !activeStepIds.has(step.id)
+        );
+        if (missingRequiredStep) {
+          throw new Error(`Penandatangan tahap ${missingRequiredStep.step_order} belum dipilih.`);
+        }
+        const configuredSteps = allConfiguredSteps.filter((step: any) => activeStepIds.has(step.id));
         if (configuredSteps.length !== activeSigners.length) {
           throw new Error("Jumlah penandatangan tidak sesuai konfigurasi kegunaan.");
         }
         configuredSteps.forEach((step: any, index: number) => {
           const assignment = activeSigners[index];
           const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
+          const signerProfile = signerSnapshots[assignment.user_id] ?? {};
           const matchesAssignee = step.assignee_mode === "requester"
             ? assignment.user_id === user.id
-            : eligibleIds.includes(assignment.user_id);
+            : eligibleIds.includes(assignment.user_id)
+              || (
+                step.candidate_fallback_mode === "request_office_all"
+                && signerProfile.office_id === payload.office_id
+              );
           if (assignment.form_usage_step_id !== step.id || !matchesAssignee) {
             throw new Error(`Penandatangan tahap ${step.step_order} tidak sesuai konfigurasi.`);
           }
@@ -1051,7 +1069,12 @@ export const suratService = {
         surat_id: surat.id,
         user_id: s.user_id,
         role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
-        label_jabatan: s.label_jabatan ?? null,
+        label_jabatan: s.candidate_fallback_mode === "request_office_all"
+          ? (signerSnapshots[s.user_id]?.job_title_display
+            ?? signerSnapshots[s.user_id]?.job_title
+            ?? s.label_jabatan
+            ?? null)
+          : s.label_jabatan ?? null,
         step_order: s.step_order,
         is_signed: false,
         available_at: Number(s.step_order || idx + 1) === firstStepOrder ? firstAvailableAt : null,

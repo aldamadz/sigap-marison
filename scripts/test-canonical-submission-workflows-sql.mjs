@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 const migrations = [
   "supabase/migrations/20260917120000_canonical_submission_workflow_contract.sql",
   "supabase/migrations/20260917121000_atomic_configured_checker_input.sql",
+  "supabase/migrations/20260917121500_optional_branch_signer_fallback.sql",
   "supabase/migrations/20260917122000_seed_canonical_submission_workflows.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
@@ -154,7 +155,8 @@ insert into public.master_departments (id,name) values
 insert into public.master_offices (id,name,kedudukan) values
  ('20000000-0000-4000-8000-000000000001','Kantor Pusat','Pusat'),
  ('20000000-0000-4000-8000-000000000002','Cabang A','KC'),
- ('20000000-0000-4000-8000-000000000003','Cabang B','KC');
+ ('20000000-0000-4000-8000-000000000003','Cabang B','KC'),
+ ('20000000-0000-4000-8000-000000000004','Cabang Tanpa BM','KC');
 insert into public.master_forms (id,nama_form) values
  ('10000000-0000-4000-8000-000000000001','FORM PERMINTAAN BARANG & JASA');
 insert into public.profiles (id,full_name,job_title,role,office_id,department_id) values
@@ -174,7 +176,8 @@ insert into public.profiles (id,full_name,job_title,role,office_id,department_id
  ('40000000-0000-4000-8000-000000000017','ABM B','Assistant Branch Manager','user','20000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000006'),
  ('40000000-0000-4000-8000-000000000018','BM B','Branch Manager','user','20000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000006'),
  ('40000000-0000-4000-8000-000000000020','Branch Requester','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000007'),
- ('40000000-0000-4000-8000-000000000021','Other Branch User','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000008');
+ ('40000000-0000-4000-8000-000000000021','Other Branch User','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000008'),
+ ('40000000-0000-4000-8000-000000000022','Branch D Supervisor','Supervisor Teknik','user','20000000-0000-4000-8000-000000000004','30000000-0000-4000-8000-000000000007');
 
 insert into public.form_usages (id,form_id,name,request_category,scope_type,status) values
  ('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','Legacy Pusat Asset','asset','pusat','active'),

@@ -1173,8 +1173,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     [generatedNoSurat, formData.judul_surat, formData.form_input_data]
   );
 
-  const getSelectedSignerName = (userId: string) =>
-    master.users?.find((user: MasterRecord) => user.id === userId)?.full_name || "";
+  const getSelectedSignerName = (userId: string, includeJobTitle = false) => {
+    const user = master.users?.find((item: MasterRecord) => item.id === userId);
+    return user
+      ? [user.full_name, includeJobTitle ? user.job_title : null].filter(Boolean).join(" · ")
+      : "";
+  };
 
   const getRecommendationPicLabel = (userId: string) => {
     const user = master.users.find((item) => item.id === userId);
@@ -1227,13 +1231,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return (master.users || []).filter(user => user.id === currentProfile?.id);
     }
     const eligibleIds = signer.eligible_user_ids || [];
-    const eligible = eligibleIds.length > 0
-      ? (master.users || []).filter(user => eligibleIds.includes(user.id) && isSignerAllowedByScope(user, signer))
-      : signer.form_usage_step_id
-        ? []
-        : (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
-    return eligible;
+    const configuredEligible = (master.users || []).filter(
+      user => eligibleIds.includes(user.id) && isSignerAllowedByScope(user, signer),
+    );
+    if (configuredEligible.length > 0) return configuredEligible;
+    if (signer.candidate_fallback_mode === "request_office_all") {
+      return (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
+    }
+    if (signer.form_usage_step_id) return [];
+    return (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
   };
+
+  const getVisibleConfiguredSigners = (assignments: SignerAssignment[]) =>
+    assignments.filter((signer) => !signer.skip_if_no_candidate || getEligibleSignerUsersForSigner(signer).length > 0);
 
   const getFilteredSignerUsers = (index: number) => {
     const tokens = normalizeNameSearch(signerSearch[index] || "").split(" ").filter(Boolean);
@@ -1327,7 +1337,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(
-          id, step_order, role_name, label, action_type, assignee_mode, input_schema, candidate_scope, signer_department_id,
+          id, step_order, role_name, label, action_type, assignee_mode, input_schema, skip_if_no_candidate, candidate_fallback_mode, candidate_scope, signer_department_id,
           form_usage_step_users(user_id),
           form_usage_step_verifiers(user_id)
         ),
@@ -1357,6 +1367,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             action_type: step.action_type,
             assignee_mode: step.assignee_mode || "select",
             input_schema: step.input_schema || {},
+            skip_if_no_candidate: step.skip_if_no_candidate === true,
+            candidate_fallback_mode: step.candidate_fallback_mode || null,
             candidate_scope: step.candidate_scope || "manual",
             signer_department_id: step.signer_department_id,
             eligible_user_ids: (step.form_usage_step_users || []).map((candidate: { user_id: string }) => candidate.user_id),
@@ -1440,7 +1452,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       : [];
     const configuredSigners = usage ? buildSignerAssignments(usage) : [];
     setSigners(configuredSigners.length > 0
-      ? reconcileSignerAssignments(configuredSigners, persistedSigners)
+      ? getVisibleConfiguredSigners(reconcileSignerAssignments(configuredSigners, persistedSigners))
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
     setExternalRevision(restoredExternalRevision?.eventId ? restoredExternalRevision : null);
@@ -1464,7 +1476,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (configuredSigners.length === 0) return;
 
     setSigners((current) => {
-      const reconciled = reconcileSignerAssignments(configuredSigners, current);
+      const reconciled = getVisibleConfiguredSigners(reconcileSignerAssignments(configuredSigners, current));
       return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
     });
   }, [activeDraftId, selectedUsage]);
@@ -1673,7 +1685,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
     const configuredSigners = buildSignerAssignments(detail);
     if (configuredSigners.length > 0) {
-      setSigners(configuredSigners);
+      setSigners(getVisibleConfiguredSigners(configuredSigners));
     } else {
       toast({ variant: "destructive", title: "Format Alur Salah" });
     }
@@ -1980,7 +1992,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getLatestConfiguredSignerAssignments = () => {
     if (!selectedUsage?.id) return signers;
     const latestUsage = usageDetails.find((usage) => usage.id === selectedUsage.id) || selectedUsage;
-    const configuredSigners = buildSignerAssignments(latestUsage);
+    const configuredSigners = getVisibleConfiguredSigners(buildSignerAssignments(latestUsage));
     if (configuredSigners.length === 0) return signers;
 
     return reconcileSignerAssignments(configuredSigners, signers).map((signer) => {
@@ -4288,7 +4300,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
                                   {s.user_id
-                                    ? getSelectedSignerName(s.user_id)
+                                    ? getSelectedSignerName(s.user_id, s.candidate_fallback_mode === "request_office_all")
                                     : s.assignee_mode === "requester"
                                       ? "Menunggu profil pemohon"
                                       : `Pilih ${s.label_jabatan}...`}

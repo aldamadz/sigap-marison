@@ -181,6 +181,8 @@ export type SignerAssignment = {
   assignee_mode?: SignerAssigneeMode;
   input_schema?: unknown;
   candidate_scope?: CandidateScope;
+  skip_if_no_candidate?: boolean;
+  candidate_fallback_mode?: "request_office_all" | null;
   eligible_user_ids?: string[];
   verifier_user_ids?: string[];
   attachment_requirements?: UsageDetailRecord["form_usage_attachment_requirements"];
@@ -198,6 +200,8 @@ export type UsageStepConfig = {
   assignee_mode?: SignerAssigneeMode;
   input_schema?: unknown;
   candidate_scope?: CandidateScope;
+  skip_if_no_candidate?: boolean;
+  candidate_fallback_mode?: "request_office_all" | null;
   eligible_user_ids?: string[];
   verifier_user_ids?: string[];
   requires_unit_allocation?: boolean;
