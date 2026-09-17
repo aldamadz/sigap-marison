@@ -1,9 +1,9 @@
 export const formatRequestCategory = (value: unknown) => {
   const category = String(value || "").toLowerCase();
-  if (category === "asset") return "Aset";
-  if (category === "unit") return "Unit";
-  if (category === "non_unit") return "Non Unit";
-  if (category === "non_asset") return "Non Aset";
+  if (category === "asset") return "Pengajuan Aset";
+  if (category === "unit") return "Pengajuan SPK";
+  if (category === "non_unit") return "Pengajuan Non Unit";
+  if (category === "non_asset") return "Pengajuan Dana";
   return String(value || "-");
 };
 

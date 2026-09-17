@@ -176,10 +176,10 @@ const normalizeRequestCategory = (value?: string | null): RequestCategory => {
 
 const requestCategoryLabel = (value?: string | null) => {
   const category = normalizeRequestCategory(value);
-  if (category === "asset") return "Aset";
-  if (category === "unit") return "Unit";
-  if (category === "non_asset") return "Non Aset";
-  return "Non Unit";
+  if (category === "asset") return "Pengajuan Aset";
+  if (category === "unit") return "Pengajuan SPK";
+  if (category === "non_asset") return "Pengajuan Dana";
+  return "Pengajuan Non Unit";
 };
 
 const candidateScopeLabel = (value?: string | null) => {
@@ -930,10 +930,10 @@ export default function FormUsageManagementPage() {
                 <Select value={formData.request_category} onValueChange={value => setFormData(previous => ({ ...previous, request_category: value as RequestCategory }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="asset">Aset</SelectItem>
-                    <SelectItem value="unit">Unit</SelectItem>
-                    <SelectItem value="non_asset">Non Aset</SelectItem>
-                    <SelectItem value="non_unit">Non Unit</SelectItem>
+                    <SelectItem value="asset">Pengajuan Aset</SelectItem>
+                    <SelectItem value="unit">Pengajuan SPK</SelectItem>
+                    <SelectItem value="non_asset">Pengajuan Dana</SelectItem>
+                    <SelectItem value="non_unit">Pengajuan Non Unit</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

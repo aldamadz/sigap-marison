@@ -114,7 +114,7 @@ export async function selectLetterType() {
   await act(async () => { fireEvent.click(trigger); });
   const option = await screen.findByText(/MH.*Permohonan/i);
   await act(async () => { fireEvent.click(option); });
-  await screen.findByText("Aset");
+  await screen.findByText("Pengajuan Aset");
 }
 
 export async function selectEntity() {
@@ -126,9 +126,9 @@ export async function selectEntity() {
 }
 
 export async function selectCategoryAset() {
-  const btn = await screen.findByText("Aset");
+  const btn = await screen.findByText("Pengajuan Aset");
   await act(async () => { fireEvent.click(btn); });
-  await screen.findByText("Form Dokumen");
+  await screen.findByText("Form PGD");
 }
 
 export async function selectForm() {
@@ -136,7 +136,7 @@ export async function selectForm() {
   try {
     screen.getByText(/FORM PERMOHONAN ASET/i);
   } catch {
-    const trigger = findSelectTrigger(/Form Dokumen/i);
+    const trigger = findSelectTrigger(/Form PGD/i);
     await act(async () => { fireEvent.click(trigger); });
     const listbox = await screen.findByRole("listbox");
     const option = within(listbox).getByText(/FORM PERMOHONAN ASET/i);
@@ -331,17 +331,17 @@ export async function selectCategory(category: string) {
 }
 
 export async function selectCategoryUnit() {
-  await selectCategory("Unit");
+  await selectCategory("Pengajuan SPK");
   // Wait for unit-specific UI to render
   await waitFor(() => {
-    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form Dokumen/i)).toBeTruthy();
+    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form PGD/i)).toBeTruthy();
   });
 }
 
 export async function selectCategoryNonUnit() {
-  await selectCategory("Non Unit");
+  await selectCategory("Pengajuan Non Unit");
   await waitFor(() => {
-    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form Dokumen/i)).toBeTruthy();
+    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form PGD/i)).toBeTruthy();
   });
 }
 

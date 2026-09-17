@@ -40,7 +40,7 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
     await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Non Unit");
+    await selectCategory("Pengajuan Non Unit");
 
     // MRN-22: Non Unit + branch + no projects must NOT show the
     // "Tidak ada proyek terdaftar" (asset-fallback) banner.
