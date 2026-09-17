@@ -59,6 +59,8 @@ export const buildSignerAssignments = (detail: UsageDetailRecord): SignerAssignm
       step_order: index + 1,
       form_usage_step_id: item.form_usage_step_id,
       action_type: item.action_type || "approval",
+      assignee_mode: item.assignee_mode || "select",
+      input_schema: item.input_schema || {},
       candidate_scope: item.candidate_scope || "manual",
       eligible_user_ids: item.eligible_user_ids || [],
       verifier_user_ids: item.verifier_user_ids || [],

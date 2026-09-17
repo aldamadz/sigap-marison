@@ -37,6 +37,8 @@ export type MasterData = {
 
 export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 export type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
+export type SuratStepActionType = "approval" | "unit_allocation" | "configured_input";
+export type SignerAssigneeMode = "select" | "requester";
 
 export type RecommendationConfig = {
   enabled?: boolean;
@@ -69,7 +71,9 @@ export type UsageDetailRecord = {
     step_order: number;
     role_name: string;
     label: string;
-    action_type?: "approval" | "unit_allocation";
+    action_type?: SuratStepActionType;
+    assignee_mode?: SignerAssigneeMode;
+    input_schema?: unknown;
     candidate_scope?: CandidateScope | null;
     signer_department_id?: string | null;
     form_usage_step_users?: Array<{ user_id: string }>;
@@ -173,7 +177,9 @@ export type SignerAssignment = {
   label_jabatan: string;
   user_id?: string | null;
   form_usage_step_id?: string;
-  action_type?: "approval" | "unit_allocation";
+  action_type?: SuratStepActionType;
+  assignee_mode?: SignerAssigneeMode;
+  input_schema?: unknown;
   candidate_scope?: CandidateScope;
   eligible_user_ids?: string[];
   verifier_user_ids?: string[];
@@ -188,7 +194,9 @@ export type UsageStepConfig = {
   labelJabatan?: string;
   label_jabatan?: string;
   jabatan?: string;
-  action_type?: "approval" | "unit_allocation";
+  action_type?: SuratStepActionType;
+  assignee_mode?: SignerAssigneeMode;
+  input_schema?: unknown;
   candidate_scope?: CandidateScope;
   eligible_user_ids?: string[];
   verifier_user_ids?: string[];

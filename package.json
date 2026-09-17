@@ -31,6 +31,7 @@
     "test:fund-without-project-sql": "node scripts/test-fund-without-project-sql.mjs",
     "test:branch-asset-without-project-sql": "node scripts/test-branch-asset-without-project-sql.mjs",
     "test:work-calendar-sql": "node scripts/test-work-calendar-sql.mjs",
+    "test:canonical-submission-workflows-sql": "node scripts/test-canonical-submission-workflows-sql.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",
     "dev:server": "npm run dev --workspace @sigap/backend",

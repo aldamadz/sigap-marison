@@ -7,6 +7,10 @@ import {
   formatCreateRegistrasiError,
 } from "@/lib/registration-draft-attachment-classification";
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
+import {
+  canonicalizeCheckerInput,
+  validateCheckerInput,
+} from "@/features/surat/inbox/lib/checker-input";
 import { documentPreviewService } from "./document-preview.service";
 import { appStorageService } from "./storage.service";
 import {
@@ -293,7 +297,7 @@ export const suratService = {
               *,
               form_usage_departments(department_id),
               form_usage_steps(
-                id, step_order, role_name, label, action_type, signer_department_id,
+                id, step_order, role_name, label, action_type, assignee_mode, input_schema, signer_department_id,
                 form_usage_step_users(user_id)
               ),
               form_usage_attachment_requirements(*),
@@ -893,7 +897,10 @@ export const suratService = {
         configuredSteps.forEach((step: any, index: number) => {
           const assignment = activeSigners[index];
           const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
-          if (assignment.form_usage_step_id !== step.id || !eligibleIds.includes(assignment.user_id)) {
+          const matchesAssignee = step.assignee_mode === "requester"
+            ? assignment.user_id === user.id
+            : eligibleIds.includes(assignment.user_id);
+          if (assignment.form_usage_step_id !== step.id || !matchesAssignee) {
             throw new Error(`Penandatangan tahap ${step.step_order} tidak sesuai konfigurasi.`);
           }
         });
@@ -1051,6 +1058,7 @@ export const suratService = {
         requires_unit_allocation: s.requires_unit_allocation === true,
         form_usage_step_id: this.cleanUuid(s.form_usage_step_id),
         action_type: s.action_type || (s.requires_unit_allocation ? "unit_allocation" : "approval"),
+        input_schema_snapshot: s.input_schema || {},
         attachment_requirements_snapshot: s.attachment_requirements || [],
         signer_snapshot: signerSnapshots[s.user_id] ?? {},
       }));
@@ -1368,13 +1376,14 @@ export const suratService = {
     options: {
       suratId?: string;
       unitAllocation?: { project?: any; units: any[] };
+      checkerInput?: Record<string, unknown>;
       approvalAttachments?: Array<{ key: string; label: string; file: File }>;
     } = {}
   ) {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     const { data: sigInfo, error: sigError } = await supabase
       .from("surat_signatures")
-      .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, attachment_requirements_snapshot, verification_status")
+      .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, input_schema_snapshot, attachment_requirements_snapshot, verification_status")
       .eq("id", signatureId)
       .single();
     if (sigError || !sigInfo) throw new Error("Data pemeriksaan tidak ditemukan.");
@@ -1390,6 +1399,14 @@ export const suratService = {
     let formInputData = suratFresh.form_input_data ?? {};
     const persistedVerificationDraft =
       (suratFresh.data_snapshot as any)?.verification_drafts?.[signatureId]?.input || {};
+    const incomingCheckerInput = options.checkerInput ?? persistedVerificationDraft?.checker_input ?? {};
+    const checkerInput = sigInfo.action_type === "configured_input"
+      ? (() => {
+          const issues = validateCheckerInput(sigInfo.input_schema_snapshot, incomingCheckerInput);
+          if (issues.length > 0) throw new Error(issues[0]);
+          return canonicalizeCheckerInput(sigInfo.input_schema_snapshot, incomingCheckerInput);
+        })()
+      : {};
     const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
       : [];
@@ -1480,7 +1497,9 @@ export const suratService = {
             allocated_units: formInputData?.allocated_units ?? [],
             allocated_unit_count: formInputData?.allocated_unit_count,
           }
-        : {};
+        : sigInfo.action_type === "configured_input"
+          ? { checker_input: checkerInput }
+          : {};
 
     const { data, error } = await supabase.rpc("verify_surat_signature_v2", {
       p_sig_id: signatureId,

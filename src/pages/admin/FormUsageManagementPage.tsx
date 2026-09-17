@@ -12,11 +12,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import {
+  normalizeCheckerInputSchema,
+  type CheckerInputField,
+  type CheckerInputSchema,
+  type CheckerInputType,
+} from "@/features/surat/inbox/lib/checker-input";
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type UsageStatus = "draft" | "active" | "archived";
 type RoleName = "membuat" | "memeriksa" | "menyetujui";
-type ActionType = "approval" | "unit_allocation";
+type ActionType = "approval" | "unit_allocation" | "configured_input";
+type AssigneeMode = "select" | "requester";
 type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
 type CandidateSort = "name_asc" | "job_asc" | "office_asc";
 type ExternalRevisionRecipient = "requester" | "signer";
@@ -37,8 +44,12 @@ type RouteStep = {
   role_name: RoleName;
   label: string;
   action_type: ActionType;
+  assignee_mode: AssigneeMode;
+  input_schema: CheckerInputSchema;
   candidate_scope: CandidateScope;
   signer_department_id: string;
+  verifier_department_id: string;
+  verifier_scope: "request_office" | "head_office" | "all_offices";
   eligible_user_ids: string[];
   verifier_user_ids: string[];
 };
@@ -101,8 +112,12 @@ const emptyStep = (stepOrder: number): RouteStep => ({
   role_name: stepOrder === 1 ? "membuat" : "menyetujui",
   label: stepOrder === 1 ? "Membuat" : `Penyetuju ${stepOrder}`,
   action_type: "approval",
+  assignee_mode: "select",
+  input_schema: { fields: [] },
   candidate_scope: "manual",
   signer_department_id: "",
+  verifier_department_id: "",
+  verifier_scope: "request_office",
   eligible_user_ids: [],
   verifier_user_ids: [],
 });
@@ -117,6 +132,28 @@ const emptyAttachment = (): AttachmentRule => ({
   max_files: 1,
   allowed_types: "application/pdf,image/jpeg,image/png",
   max_size_mb: 10,
+});
+
+const defaultConfiguredInputSchema = (): CheckerInputSchema => ({
+  title: "Pemeriksaan dana",
+  description: "Admin pemeriksa melengkapi data sebelum manager meninjau dan menandatangani.",
+  fields: [
+    {
+      key: "approved_amount",
+      label: "Nominal hasil pemeriksaan",
+      type: "money",
+      required: true,
+      placeholder: "Rp 0",
+      min: 1,
+    },
+    {
+      key: "assessment_note",
+      label: "Catatan pemeriksaan",
+      type: "textarea",
+      required: false,
+      placeholder: "Catatan hasil pemeriksaan",
+    },
+  ],
 });
 
 const defaultExternalRevisionPolicy = (): ExternalRevisionPolicy => ({
@@ -198,7 +235,7 @@ export default function FormUsageManagementPage() {
           master_forms(id, nama_form),
           form_usage_departments(department_id),
           form_usage_steps(
-            id, step_order, role_name, label, action_type, signer_department_id,
+            id, step_order, role_name, label, action_type, assignee_mode, input_schema, signer_department_id, verifier_department_id, verifier_scope,
             candidate_scope,
             form_usage_step_users(user_id),
             form_usage_step_verifiers(user_id)
@@ -270,8 +307,12 @@ export default function FormUsageManagementPage() {
             role_name: (step.roleName || step.role_name || (index === 0 ? "membuat" : "menyetujui")) as RoleName,
             label: step.labelJabatan || step.jabatan || `Tahap ${index + 1}`,
             action_type: step.requires_unit_allocation ? "unit_allocation" : "approval",
+            assignee_mode: "select",
+            input_schema: { fields: [] },
             candidate_scope: "manual",
             signer_department_id: "",
+            verifier_department_id: "",
+            verifier_scope: "request_office",
             eligible_user_ids: [],
             verifier_user_ids: [],
           })),
@@ -348,8 +389,12 @@ export default function FormUsageManagementPage() {
           role_name: step.role_name,
           label: step.label,
           action_type: step.action_type,
+          assignee_mode: step.assignee_mode || "select",
+          input_schema: normalizeCheckerInputSchema(step.input_schema),
           candidate_scope: step.candidate_scope || "manual",
           signer_department_id: step.signer_department_id || "",
+          verifier_department_id: step.verifier_department_id || "",
+          verifier_scope: step.verifier_scope || "request_office",
           eligible_user_ids: (step.form_usage_step_users || []).map(item => item.user_id),
           verifier_user_ids: (step.form_usage_step_verifiers || []).map(item => item.user_id),
         })),
@@ -385,8 +430,12 @@ export default function FormUsageManagementPage() {
           role_name: step.role_name,
           label: step.label,
           action_type: step.action_type,
+          assignee_mode: "select",
+          input_schema: { fields: [] },
           candidate_scope: "manual",
           signer_department_id: "",
+          verifier_department_id: "",
+          verifier_scope: "request_office",
           eligible_user_ids: [],
           verifier_user_ids: [],
         })) || previous.steps,
@@ -444,6 +493,41 @@ export default function FormUsageManagementPage() {
         return next;
       }),
     }));
+  };
+
+  const updateCheckerSchema = (stepIndex: number, patch: Partial<CheckerInputSchema>) => {
+    const schema = normalizeCheckerInputSchema(formData.steps[stepIndex].input_schema);
+    updateStep(stepIndex, { input_schema: { ...schema, ...patch } });
+  };
+
+  const updateCheckerField = (
+    stepIndex: number,
+    fieldIndex: number,
+    patch: Partial<CheckerInputField>,
+  ) => {
+    const schema = normalizeCheckerInputSchema(formData.steps[stepIndex].input_schema);
+    updateCheckerSchema(stepIndex, {
+      fields: schema.fields.map((field, index) => index === fieldIndex ? { ...field, ...patch } : field),
+    });
+  };
+
+  const addCheckerField = (stepIndex: number) => {
+    const schema = normalizeCheckerInputSchema(formData.steps[stepIndex].input_schema);
+    updateCheckerSchema(stepIndex, {
+      fields: [...schema.fields, {
+        key: `field_${schema.fields.length + 1}`,
+        label: `Field ${schema.fields.length + 1}`,
+        type: "text",
+        required: false,
+      }],
+    });
+  };
+
+  const removeCheckerField = (stepIndex: number, fieldIndex: number) => {
+    const schema = normalizeCheckerInputSchema(formData.steps[stepIndex].input_schema);
+    updateCheckerSchema(stepIndex, {
+      fields: schema.fields.filter((_field, index) => index !== fieldIndex),
+    });
   };
 
   const toggleEligibleUser = (stepIndex: number, userId: string) => {
@@ -516,8 +600,12 @@ export default function FormUsageManagementPage() {
 
   const getVerifierCandidates = (step: RouteStep, searchValue = "") => {
     const search = searchValue.trim().toLowerCase();
-    return getStepDepartmentUsers(step).filter(profile => {
-      if (formData.scope_type === "cabang" && !profile.office_id) return false;
+    const departmentId = step.verifier_department_id || step.signer_department_id;
+    if (!departmentId && !isDynamicCandidateScope(step.candidate_scope)) return [];
+    return profiles.filter(profile => {
+      if (departmentId && profile.department_id !== departmentId) return false;
+      if (step.verifier_scope === "head_office" && !headOfficeIds.has(profile.office_id || "")) return false;
+      if (formData.scope_type === "cabang" && step.verifier_scope === "request_office" && !profile.office_id) return false;
       const office = profile.office_id ? officeMap.get(profile.office_id) : null;
       if (!search) return true;
       return [
@@ -609,11 +697,28 @@ export default function FormUsageManagementPage() {
     for (const step of formData.steps) {
       const missing: string[] = [];
       if (!step.label.trim()) missing.push("label tahap");
-      if (!isDynamicCandidateScope(step.candidate_scope) && !step.signer_department_id) {
+      if (step.assignee_mode !== "requester" && !isDynamicCandidateScope(step.candidate_scope) && !step.signer_department_id) {
         missing.push("departemen penandatangan");
       }
-      if (step.eligible_user_ids.length === 0) missing.push("kandidat signer");
+      if (step.assignee_mode !== "requester" && step.eligible_user_ids.length === 0) missing.push("kandidat signer");
+      if (step.action_type !== "approval" && step.verifier_user_ids.length === 0) {
+        missing.push("operator pemeriksa");
+      }
+      if (step.verifier_user_ids.some(id => !getVerifierCandidates(step).some(profile => profile.id === id))) {
+        missing.push("operator pemeriksa sesuai cakupan");
+      }
+      if (step.action_type === "configured_input" && normalizeCheckerInputSchema(step.input_schema).fields.length === 0) {
+        missing.push("schema input pemeriksa");
+      }
       if (missing.length > 0) return `Tahap ${step.step_order} belum memiliki ${missing.join(", ")}.`;
+    }
+    const attachmentKeys = new Set<string>();
+    for (const attachment of formData.attachments.filter(rule => rule.label.trim() && rule.requirement_key.trim())) {
+      const key = `${attachment.stage_order}:${attachment.requirement_key.trim().toLowerCase().replace(/\s+/g, "_")}`;
+      if (attachmentKeys.has(key)) {
+        return `Kunci lampiran "${attachment.requirement_key}" digunakan lebih dari sekali pada tahap ${attachment.stage_order}.`;
+      }
+      attachmentKeys.add(key);
     }
     const revisionPolicy = formData.external_revision_policy;
     if (revisionPolicy.recipient_type === "signer" && !formData.steps.some(step => step.step_order === revisionPolicy.recipient_step_order)) {
@@ -650,7 +755,11 @@ export default function FormUsageManagementPage() {
           role_name: step.role_name,
           label: step.label.trim(),
           signer_department_id: step.signer_department_id,
+          verifier_department_id: step.verifier_department_id || null,
+          verifier_scope: step.verifier_scope,
           action_type: step.action_type,
+          assignee_mode: step.assignee_mode,
+          input_schema: normalizeCheckerInputSchema(step.input_schema),
           eligible_user_ids: step.eligible_user_ids,
           verifier_user_ids: step.verifier_user_ids,
           candidate_scope: step.candidate_scope || "manual",
@@ -974,11 +1083,23 @@ export default function FormUsageManagementPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>Action</Label>
-                          <Select value={step.action_type} onValueChange={value => updateStep(index, { action_type: value as ActionType })}>
+                          <Select
+                            value={step.action_type}
+                            onValueChange={value => {
+                              const actionType = value as ActionType;
+                              updateStep(index, {
+                                action_type: actionType,
+                                input_schema: actionType === "configured_input" && normalizeCheckerInputSchema(step.input_schema).fields.length === 0
+                                  ? defaultConfiguredInputSchema()
+                                  : step.input_schema,
+                              });
+                            }}
+                          >
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="approval">Approval</SelectItem>
                               <SelectItem value="unit_allocation">Alokasi Unit</SelectItem>
+                              <SelectItem value="configured_input">Input Pemeriksa</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1003,6 +1124,21 @@ export default function FormUsageManagementPage() {
                               {departments.map(department => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}
                             </SelectContent>
                           </Select>
+                          <div className="space-y-2 pt-2">
+                            <Label>Penetapan Signer</Label>
+                            <Select value={step.assignee_mode} onValueChange={value => updateStep(index, { assignee_mode: value as AssigneeMode })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="select">Dipilih pemohon</SelectItem>
+                                <SelectItem value="requester">Pemohon otomatis</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-muted-foreground">
+                              {step.assignee_mode === "requester"
+                                ? "Tahap otomatis memakai akun pemohon dan ikut ditandatangani saat pengajuan dikirim."
+                                : "Pemohon memilih salah satu kandidat yang tersedia."}
+                            </p>
+                          </div>
                           <div className="space-y-2 pt-2">
                             <Label>Scope Kandidat</Label>
                             <Select value={step.candidate_scope || "manual"} onValueChange={value => updateStep(index, { candidate_scope: value as CandidateScope })}>
@@ -1095,6 +1231,59 @@ export default function FormUsageManagementPage() {
                         </div>
                       </div>
 
+                      {step.action_type === "configured_input" && (() => {
+                        const schema = normalizeCheckerInputSchema(step.input_schema);
+                        return (
+                          <div className="mt-4 space-y-3 rounded-lg border border-border bg-background p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <Label>Form Input Tim Pemeriksa</Label>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Operator mengisi data ini sebelum signer tahap {step.step_order} dapat menyetujui.
+                                </p>
+                              </div>
+                              <Button type="button" variant="outline" size="sm" onClick={() => addCheckerField(index)}>
+                                <Plus className="mr-2 h-4 w-4" /> Field
+                              </Button>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label>Judul Panel</Label>
+                                <Input value={schema.title || ""} onChange={event => updateCheckerSchema(index, { title: event.target.value })} />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Penjelasan</Label>
+                                <Input value={schema.description || ""} onChange={event => updateCheckerSchema(index, { description: event.target.value })} />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              {schema.fields.map((field, fieldIndex) => (
+                                <div key={`${field.key}-${fieldIndex}`} className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[1fr_1.2fr_150px_100px_auto]">
+                                  <Input aria-label={`Kunci field ${fieldIndex + 1}`} value={field.key} onChange={event => updateCheckerField(index, fieldIndex, { key: event.target.value })} placeholder="approved_amount" />
+                                  <Input aria-label={`Label field ${fieldIndex + 1}`} value={field.label} onChange={event => updateCheckerField(index, fieldIndex, { label: event.target.value })} placeholder="Label field" />
+                                  <Select value={field.type} onValueChange={value => updateCheckerField(index, fieldIndex, { type: value as CheckerInputType })}>
+                                    <SelectTrigger aria-label={`Tipe field ${fieldIndex + 1}`}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="text">Teks</SelectItem>
+                                      <SelectItem value="textarea">Teks panjang</SelectItem>
+                                      <SelectItem value="money">Rupiah</SelectItem>
+                                      <SelectItem value="number">Angka</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <label className="flex min-h-10 items-center gap-2 text-xs font-semibold">
+                                    <input type="checkbox" checked={field.required} onChange={event => updateCheckerField(index, fieldIndex, { required: event.target.checked })} />
+                                    Wajib
+                                  </label>
+                                  <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeCheckerField(index, fieldIndex)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div className="mt-4 space-y-3 rounded-lg border border-border bg-background p-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
@@ -1113,6 +1302,41 @@ export default function FormUsageManagementPage() {
                             />
                             Aktifkan
                           </label>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label>Departemen Operator</Label>
+                            <Select
+                              value={step.verifier_department_id || "__signer__"}
+                              onValueChange={value => updateStep(index, {
+                                verifier_department_id: value === "__signer__" ? "" : value,
+                                verifier_user_ids: [],
+                              })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__signer__">Sama dengan penandatangan</SelectItem>
+                                {departments.map(department => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Cakupan Operator</Label>
+                            <Select
+                              value={step.verifier_scope}
+                              onValueChange={value => updateStep(index, {
+                                verifier_scope: value as RouteStep["verifier_scope"],
+                                verifier_user_ids: [],
+                              })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="request_office">Kantor pengaju</SelectItem>
+                                <SelectItem value="head_office">Kantor pusat</SelectItem>
+                                <SelectItem value="all_offices">Semua kantor</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                         {step.verifier_user_ids.length > 0 && (() => {
                           const candidates = getVerifierCandidates(step, verifierSearch[index] || "");
@@ -1144,7 +1368,7 @@ export default function FormUsageManagementPage() {
                                 })}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Terpilih {step.verifier_user_ids.length} pemeriksa dari departemen penandatangan tahap ini.
+                                Terpilih {step.verifier_user_ids.length} operator pemeriksa.
                               </p>
                             </div>
                           );
