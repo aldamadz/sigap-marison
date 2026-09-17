@@ -12,17 +12,12 @@
  * `prefers-reduced-motion`; tidak ada animasi dekoratif maupun layout besar.
  */
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import type { WorkDate } from "../types/work-calendar";
 import { QuickAddPanel } from "./QuickAddPanel";
-import {
-  AnimatePresence,
-  WorkCalendarOverlay,
-  WorkCalendarSlidePanel,
-  useWorkCalendarMotion,
-} from "./WorkCalendarMotion";
+import { WorkCalendarModal } from "./WorkCalendarModal";
 
 export interface QuickAddSurfaceProps {
   workDate: WorkDate;
@@ -34,7 +29,8 @@ export interface QuickAddSurfaceProps {
   error: string | null;
   onSubmit: (title: string) => Promise<boolean>;
   onCancel: () => void;
-  onOpenFullEditor: (date: WorkDate) => void;
+  /** Membuka editor pembuatan lengkap dengan tanggal + judul yang diketik. */
+  onOpenFullEditor: (date: WorkDate, title: string) => void;
   onDismissError: () => void;
 }
 
@@ -50,7 +46,6 @@ export function QuickAddSurface({
   onDismissError,
 }: QuickAddSurfaceProps) {
   const titleId = `work-calendar-quick-add-title-${workDate}`;
-  const { durations } = useWorkCalendarMotion();
 
   /**
    * Anchor Radix membutuhkan `Measurable` dan membaca `.current` setiap render.
@@ -77,28 +72,17 @@ export function QuickAddSurface({
 
   if (isCompact) {
     return (
-      <AnimatePresence>
-        <WorkCalendarOverlay
-          key="overlay"
-          duration={durations.overlay}
-          onDismiss={onCancel}
-          className="fixed inset-0 z-40 bg-black/45"
-          data-testid={`work-calendar-quick-add-overlay-${workDate}`}
-        />
-        <WorkCalendarSlidePanel
-          key="surface"
-          offsetX={0}
-          offsetY={24}
-          duration={durations.sheet}
-          role="dialog"
-          aria-modal={true}
-          aria-labelledby={titleId}
-          data-testid={`work-calendar-quick-add-surface-${workDate}`}
-          className="work-calendar-scope fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-lg border border-border bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-elevated)]"
-        >
-          {panel}
-        </WorkCalendarSlidePanel>
-      </AnimatePresence>
+      <WorkCalendarModal
+        onRequestClose={onCancel}
+        labelledBy={titleId}
+        variant="bottom-sheet"
+        panelTestId={`work-calendar-quick-add-surface-${workDate}`}
+        overlayTestId={`work-calendar-quick-add-overlay-${workDate}`}
+        overlayClassName="fixed inset-0 bg-black/45"
+        panelClassName="work-calendar-scope fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-lg border border-border bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-elevated)]"
+      >
+        {panel}
+      </WorkCalendarModal>
     );
   }
 

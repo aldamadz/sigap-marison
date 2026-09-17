@@ -43,7 +43,11 @@ export interface QuickAddPanelProps {
   onSubmit: (title: string) => Promise<boolean>;
   onCancel: () => void;
   /** Membuka alur lengkap untuk tanggal target. */
-  onOpenFullEditor: (date: WorkDate) => void;
+  /**
+   * Membuka editor pembuatan lengkap pada tanggal yang sama. Judul yang sudah
+   * diketik tetap terbawa sehingga pengguna tidak kehilangan input.
+   */
+  onOpenFullEditor: (date: WorkDate, title: string) => void;
   onDismissError: () => void;
 }
 
@@ -194,7 +198,7 @@ export function QuickAddPanel({
             variant="outline"
             className="h-11 rounded-sm"
             data-testid={`work-calendar-quick-add-detail-${workDate}`}
-            onClick={() => onOpenFullEditor(workDate)}
+            onClick={() => onOpenFullEditor(workDate, normalizeWorkEntryTitle(value))}
             disabled={busy}
           >
             Tambah detail

@@ -12,17 +12,25 @@ export { QuickWorkEntry } from "./components/QuickWorkEntry";
 export { WorkEntryRow } from "./components/WorkEntryRow";
 export { WorkEntryList } from "./components/WorkEntryList";
 export { WorkEntryEditor } from "./components/WorkEntryEditor";
+export { WorkEntryCreateDialog } from "./components/WorkEntryCreateDialog";
+export type {
+  WorkEntryCreateDialogProps,
+  WorkEntryCreateInput,
+} from "./components/WorkEntryCreateDialog";
 export { WorkEntryDetail } from "./components/WorkEntryDetail";
 export { QuickAddPanel } from "./components/QuickAddPanel";
 export { QuickAddSurface } from "./components/QuickAddSurface";
 export {
   AnimatePresence,
   WorkCalendarCrossfade,
-  WorkCalendarOverlay,
-  WorkCalendarSlidePanel,
   useWorkCalendarMotion,
 } from "./components/WorkCalendarMotion";
 export type { WorkCalendarMotion } from "./components/WorkCalendarMotion";
+export { WorkCalendarModal } from "./components/WorkCalendarModal";
+export type {
+  WorkCalendarModalProps,
+  WorkCalendarModalVariant,
+} from "./components/WorkCalendarModal";
 export { WorkEntryStatusGlyph } from "./components/WorkEntryStatusGlyph";
 export { DailyWorkView } from "./components/DailyWorkView";
 export { WeeklyWorkView } from "./components/WeeklyWorkView";
@@ -93,10 +101,6 @@ export type {
 export { useWorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
 export type { WorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
 export { useWorkCalendarCompact, WORK_CALENDAR_COMPACT_QUERY } from "./hooks/use-work-calendar-compact";
-export {
-  listFocusableElements,
-  useWorkCalendarFocusTrap,
-} from "./hooks/use-work-calendar-focus-trap";
 export { useWorkTeamOverviewCompact } from "./hooks/use-work-team-overview-compact";
 
 export {

@@ -47,10 +47,16 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 /** Probe React Router untuk mengamati URL dan mensimulasikan Back/Forward. */
-const routeProbe: { search: string; back: () => void; forward: () => void } = {
+const routeProbe: {
+  search: string;
+  back: () => void;
+  forward: () => void;
+  go: (search: string) => void;
+} = {
   search: "",
   back: () => {},
   forward: () => {},
+  go: () => {},
 };
 
 function RouteProbe() {
@@ -59,6 +65,7 @@ function RouteProbe() {
   routeProbe.search = location.search;
   routeProbe.back = () => navigate(-1);
   routeProbe.forward = () => navigate(1);
+  routeProbe.go = (search: string) => navigate({ search });
   return <output data-testid="route-search">{location.search}</output>;
 }
 
@@ -89,12 +96,29 @@ function RouteWorkspaceHarness({ repository, teamOverviewRepository }: HarnessPr
 
 function renderRouteWorkspace(options: {
   initialEntry?: string;
+  /** Riwayat lengkap untuk menguji Back/Forward deep link Tim. */
+  initialEntries?: string[];
+  initialIndex?: number;
   entries?: readonly WorkEntry[];
   teamOverviewRepository?: WorkTeamOverviewRepository;
+  authorizedOwnerIds?: readonly string[];
+  getEntryByIdDelayMs?: number;
+  entryByIdResolvedRef?: { current: boolean };
+  /** Repository khusus untuk menguji race/batal resolusi. */
+  repository?: ReturnType<typeof createFixtureWorkEntryRepository>;
 } = {}) {
-  const repository = createFixtureWorkEntryRepository(options.entries ?? []);
+  const repository =
+    options.repository ??
+    createFixtureWorkEntryRepository(options.entries ?? [], {
+      authorizedOwnerIds: options.authorizedOwnerIds,
+      getEntryByIdDelayMs: options.getEntryByIdDelayMs,
+      entryByIdResolvedRef: options.entryByIdResolvedRef,
+    });
   const utils = render(
-    <MemoryRouter initialEntries={[options.initialEntry ?? "/calendar"]}>
+    <MemoryRouter
+      initialEntries={options.initialEntries ?? [options.initialEntry ?? "/calendar"]}
+      initialIndex={options.initialIndex}
+    >
       <Routes>
         <Route
           path="/calendar"
@@ -365,6 +389,157 @@ describe("WorkCalendarWorkspace — CAL-03 F4B URL, deep link, Back/Forward", ()
   });
 });
 
+describe("WorkCalendarWorkspace — CAL-03 F4B deep link Tim setelah refresh", () => {
+  const subordinateEntry = createFixtureWorkEntry({
+    id: "team-deep-1",
+    ownerId: "user-bawahan-1",
+    title: "Pekerjaan bawahan deep link",
+    workDate: "2026-03-10",
+  });
+
+  it("refresh `?view=team&entry=<id>` bawahan terotorisasi membuka detail read-only", async () => {
+    const entries = [subordinateEntry];
+    const resolvedRef = { current: false };
+    renderRouteWorkspace({
+      initialEntry: "/calendar?view=team&date=2026-03-10&entry=team-deep-1",
+      entries,
+      teamOverviewRepository: createFixtureWorkTeamOverviewRepository(entries),
+      entryByIdResolvedRef: resolvedRef,
+    });
+
+    // Entry tidak ada di data yang dimuat massal; hanya resolver yang tahu.
+    const detail = await screen.findByTestId("work-entry-detail-team-deep-1");
+    expect(within(detail).getByText(/Hanya baca/)).toBeInTheDocument();
+    expect(resolvedRef.current).toBe(true);
+    // Parameter tetap di URL selama entry dapat diresolusi.
+    expect(routeProbe.search).toContain("entry=team-deep-1");
+  });
+
+  it("bawahan terotorisasi membuka detail Hari-nya lewat deep link Tim tanpa membocorkan data lain", async () => {
+    const entries = [
+      subordinateEntry,
+      createFixtureWorkEntry({
+        id: "team-deep-2",
+        ownerId: "user-bawahan-2",
+        title: "Pekerjaan bawahan lain",
+        workDate: "2026-03-10",
+      }),
+    ];
+    renderRouteWorkspace({
+      initialEntry: "/calendar?view=team&date=2026-03-10&entry=team-deep-2",
+      entries,
+      teamOverviewRepository: createFixtureWorkTeamOverviewRepository(entries),
+    });
+
+    expect(await screen.findByTestId("work-entry-detail-team-deep-2")).toBeInTheDocument();
+    expect(screen.queryByText("Pekerjaan bawahan deep link")).not.toBeInTheDocument();
+  });
+
+  it("entry milik owner di luar cakupan dibuang dan tidak menampilkan data apa pun", async () => {
+    const entries = [subordinateEntry];
+    renderRouteWorkspace({
+      initialEntry: "/calendar?view=team&date=2026-03-10&entry=team-deep-1",
+      entries,
+      teamOverviewRepository: createFixtureWorkTeamOverviewRepository(entries),
+      // RLS menyaring: hanya entry milik pengguna sendiri yang terlihat.
+      authorizedOwnerIds: [WORK_CALENDAR_FIXTURE_CURRENT_USER.id],
+    });
+
+    await waitFor(() => expect(routeProbe.search).not.toContain("entry="));
+    expect(screen.queryByTestId("work-entry-detail-team-deep-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pekerjaan bawahan deep link")).not.toBeInTheDocument();
+  });
+
+  it("id `entry` yang tidak dapat diresolusi dibuang setelah resolver selesai", async () => {
+    const entries = [subordinateEntry];
+    const resolvedRef = { current: false };
+    renderRouteWorkspace({
+      initialEntry: "/calendar?view=team&date=2026-03-10&entry=bukan-uuid-sama-sekali",
+      entries,
+      teamOverviewRepository: createFixtureWorkTeamOverviewRepository(entries),
+      entryByIdResolvedRef: resolvedRef,
+    });
+
+    // Resolver wajib dijalankan lebih dulu (bukan dibuang sebelum data siap).
+    await waitFor(() => expect(resolvedRef.current).toBe(true));
+    await waitFor(() => expect(routeProbe.search).not.toContain("entry="));
+    expect(screen.queryByTestId(/^work-entry-detail-/)).not.toBeInTheDocument();
+  });
+
+  it("Browser Back menutup detail Tim dan Forward membukanya kembali", async () => {
+    const entries = [subordinateEntry];
+    const overview = createFixtureWorkTeamOverviewRepository(entries);
+    renderRouteWorkspace({
+      initialEntries: [
+        "/calendar?view=team&date=2026-03-10",
+        "/calendar?view=team&date=2026-03-10&entry=team-deep-1",
+      ],
+      initialIndex: 1,
+      entries,
+      teamOverviewRepository: overview,
+    });
+
+    expect(await screen.findByTestId("work-entry-detail-team-deep-1")).toBeInTheDocument();
+
+    act(() => routeProbe.back());
+    await waitForRemoval("work-entry-detail-team-deep-1");
+    expect(routeProbe.search).not.toContain("entry=");
+
+    act(() => routeProbe.forward());
+    expect(await screen.findByTestId("work-entry-detail-team-deep-1")).toBeInTheDocument();
+  });
+
+  it("respons resolver yang terlambat tidak menimpa entry yang lebih baru", async () => {
+    const entries = [
+      subordinateEntry,
+      createFixtureWorkEntry({
+        id: "team-race-2",
+        ownerId: "user-bawahan-1",
+        title: "Pekerjaan race kedua",
+        workDate: "2026-03-10",
+      }),
+    ];
+    const pending: Array<{
+      entryId: string;
+      resolve: (entry: WorkEntry | null) => void;
+      signal: AbortSignal | undefined;
+    }> = [];
+    const repository = createFixtureWorkEntryRepository(entries);
+    repository.getEntryById = ({ entryId, signal }) =>
+      new Promise<WorkEntry | null>((resolve) => {
+        pending.push({ entryId, resolve, signal });
+      });
+
+    renderRouteWorkspace({
+      initialEntry: "/calendar?view=team&date=2026-03-10&entry=team-deep-1",
+      entries,
+      teamOverviewRepository: createFixtureWorkTeamOverviewRepository(entries),
+      repository,
+    });
+
+    // Permintaan pertama untuk entry lama masih menggantung.
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].entryId).toBe("team-deep-1");
+
+    // Parameter berubah ke entry lain: permintaan lama harus dibatalkan.
+    act(() => routeProbe.go("?view=team&date=2026-03-10&entry=team-race-2"));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[0].signal?.aborted).toBe(true);
+
+    await act(async () => {
+      pending[1].resolve(entries[1]);
+    });
+    expect(await screen.findByTestId("work-entry-detail-team-race-2")).toBeInTheDocument();
+
+    // Jawaban permintaan lama datang belakangan dan harus diabaikan.
+    await act(async () => {
+      pending[0].resolve(entries[0]);
+    });
+    expect(screen.getByTestId("work-entry-detail-team-race-2")).toBeInTheDocument();
+    expect(screen.queryByTestId("work-entry-detail-team-deep-1")).not.toBeInTheDocument();
+  });
+});
+
 describe("WorkCalendarWorkspace — CAL-03 F4B fokus, Escape, overlay", () => {
   it("fokus awal pindah ke heading detail dan kembali ke pemicu saat ditutup", async () => {
     renderBareWorkspace({
@@ -453,7 +628,65 @@ describe("WorkCalendarWorkspace — CAL-03 F4B fokus, Escape, overlay", () => {
   });
 });
 
-describe("WorkCalendarWorkspace — CAL-03 F4B reduced motion", () => {
+describe("WorkCalendarWorkspace — CAL-03 F4B keyboard, scroll lock, reduced motion", () => {
+  it("Escape dari kontrol mana pun menutup panel detail", async () => {
+    renderBareWorkspace({
+      entries: [createFixtureWorkEntry({ id: "kb-1", title: "Pekerjaan keyboard" })],
+    });
+
+    fireEvent.click(await screen.findByTestId("work-entry-title-kb-1"));
+    await screen.findByTestId("work-entry-detail-kb-1");
+
+    // Escape dari tombol Tutup (bukan hanya heading).
+    const close = screen.getByTestId("work-entry-detail-close-kb-1");
+    close.focus();
+    fireEvent.keyDown(close, { key: "Escape" });
+    await waitForRemoval("work-entry-detail-kb-1");
+  });
+
+  it("mengunci scroll body selama panel terbuka dan melepasnya saat ditutup", async () => {
+    renderBareWorkspace({
+      entries: [createFixtureWorkEntry({ id: "lock-1", title: "Pekerjaan kunci" })],
+    });
+
+    fireEvent.click(await screen.findByTestId("work-entry-title-lock-1"));
+    await screen.findByTestId("work-entry-detail-lock-1");
+    // Kunci scroll disediakan primitive modal (bukan implementasi manual).
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"));
+
+    fireEvent.keyDown(screen.getByTestId("work-entry-detail-heading-lock-1"), { key: "Escape" });
+    await waitForRemoval("work-entry-detail-lock-1");
+    await waitFor(() => expect(document.body).not.toHaveAttribute("data-scroll-locked"));
+  });
+
+  it("latar `.sigap-page` dikeluarkan dari accessibility tree saat detail terbuka", async () => {
+    renderBareWorkspace({
+      entries: [createFixtureWorkEntry({ id: "inert-1", title: "Pekerjaan inert" })],
+    });
+
+    fireEvent.click(await screen.findByTestId("work-entry-title-inert-1"));
+    await screen.findByTestId("work-entry-detail-inert-1");
+
+    const page = document.querySelector(".sigap-page");
+    expect(page).not.toBeNull();
+    // Radix menandai elemen sekitarnya dengan aria-hidden (bukan manual).
+    await waitFor(() => expect(page?.closest("[aria-hidden='true']")).not.toBeNull());
+  });
+
+  it("Shift+Tab dari elemen pertama tetap berada di dalam panel", async () => {
+    renderBareWorkspace({
+      entries: [createFixtureWorkEntry({ id: "kb-2", title: "Pekerjaan shift tab" })],
+    });
+
+    fireEvent.click(await screen.findByTestId("work-entry-title-kb-2"));
+    const panel = await screen.findByTestId("work-entry-detail-kb-2");
+    const heading = screen.getByTestId("work-entry-detail-heading-kb-2");
+    heading.focus();
+
+    fireEvent.keyDown(heading, { key: "Tab", shiftKey: true });
+    expect(panel.contains(document.activeElement)).toBe(true);
+  });
+
   it("tetap membuka dan menutup detail saat prefers-reduced-motion aktif", async () => {
     const restore = overrideMatchMedia("reduced-motion");
     try {
@@ -619,7 +852,81 @@ describe("WorkCalendarWorkspace — CAL-03 F4B Quick Add Minggu/Bulan", () => {
     expect(screen.getByTestId("work-calendar-quick-add-2026-03-11")).toBeInTheDocument();
   });
 
-  it("aksi 'Tambah detail' berpindah ke editor lengkap pada tanggal yang sama", async () => {
+  it("aksi 'Tambah detail' membuka editor lengkap dengan tanggal + judul yang dipertahankan", async () => {
+    const { repository } = renderBareWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-09",
+      entries: [],
+    });
+    const created: WorkEntryDraft[] = [];
+    repository.createEntry = async (draft) => {
+      created.push(draft);
+      return createFixtureWorkEntry({ id: "tidak-dipakai", title: draft.title });
+    };
+
+    fireEvent.click(await screen.findByTestId("work-week-quick-add-2026-03-12"));
+    const quickInput = await screen.findByLabelText(/Judul pekerjaan pada/);
+    fireEvent.change(quickInput, { target: { value: "Rapat koordinasi" } });
+    fireEvent.click(screen.getByTestId("work-calendar-quick-add-detail-2026-03-12"));
+
+    const dialog = await screen.findByTestId("work-entry-create-dialog");
+    // Tanggal target dan judul yang diketik tidak hilang.
+    expect(within(dialog).getByTestId("work-entry-create-date")).toHaveValue("2026-03-12");
+    expect(within(dialog).getByTestId("work-entry-create-title")).toHaveValue("Rapat koordinasi");
+    // Tetap pada tampilan Minggu, bukan berpindah ke Hari.
+    expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent("9 - 15 Mar 2026");
+
+    // Tidak ada entry sebelum disimpan, dan Quick Add serta editor tidak
+    // pernah hidup bersamaan.
+    expect(created).toHaveLength(0);
+    await waitForRemoval("work-calendar-quick-add-2026-03-12");
+    expect(screen.queryByTestId("work-calendar-quick-add-2026-03-12")).not.toBeInTheDocument();
+  });
+
+  it("menyimpan editor lengkap memanggil createEntry sekali dengan field lengkap", async () => {
+    const { repository } = renderBareWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-09",
+      entries: [],
+    });
+    const created: WorkEntryDraft[] = [];
+    repository.createEntry = async (draft) => {
+      created.push(draft);
+      return createFixtureWorkEntry({ id: "created-1", ...draft });
+    };
+
+    fireEvent.click(await screen.findByTestId("work-week-quick-add-2026-03-12"));
+    fireEvent.click(await screen.findByTestId("work-calendar-quick-add-detail-2026-03-12"));
+
+    const dialog = await screen.findByTestId("work-entry-create-dialog");
+    fireEvent.change(within(dialog).getByTestId("work-entry-create-title"), {
+      target: { value: "Rapat lengkap" },
+    });
+    fireEvent.change(within(dialog).getByTestId("work-entry-create-location"), {
+      target: { value: "Ruang Rapat A" },
+    });
+    fireEvent.change(within(dialog).getByTestId("work-entry-create-notes"), {
+      target: { value: "Bawa dokumen" },
+    });
+    fireEvent.click(within(dialog).getByTestId("work-entry-create-submit"));
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]).toMatchObject({
+      workDate: "2026-03-12",
+      title: "Rapat lengkap",
+      location: "Ruang Rapat A",
+      notes: "Bawa dokumen",
+      isAllDay: true,
+      status: "planned",
+      kind: "work",
+    });
+
+    // Editor tertutup dan entry terlihat pada tanggal target.
+    await waitForRemoval("work-entry-create-dialog");
+    expect(await screen.findByText("Rapat lengkap")).toBeInTheDocument();
+  });
+
+  it("Batal pada editor lengkap tidak membuat entry", async () => {
     const { repository } = renderBareWorkspace({
       view: "week",
       initialAnchorDate: "2026-03-09",
@@ -633,16 +940,96 @@ describe("WorkCalendarWorkspace — CAL-03 F4B Quick Add Minggu/Bulan", () => {
 
     fireEvent.click(await screen.findByTestId("work-week-quick-add-2026-03-12"));
     fireEvent.click(await screen.findByTestId("work-calendar-quick-add-detail-2026-03-12"));
-    await flushAnimationFrame();
+    await screen.findByTestId("work-entry-create-dialog");
 
-    await waitFor(() =>
-      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
-        "Kamis, 12 Maret 2026",
-      ),
-    );
-    await waitFor(() => expect(quickInput()).toHaveFocus());
-    await waitForRemoval("work-calendar-quick-add-2026-03-12");
+    fireEvent.click(screen.getByTestId("work-entry-create-cancel"));
+
+    await waitForRemoval("work-entry-create-dialog");
     expect(created).toHaveLength(0);
+  });
+
+  it("klik ganda Simpan hanya membuat satu entry", async () => {
+    const { repository } = renderBareWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-09",
+      entries: [],
+    });
+    const calls: WorkEntryDraft[] = [];
+    let resolveCreate: ((entry: WorkEntry) => void) | null = null;
+    repository.createEntry = (draft) => {
+      calls.push(draft);
+      return new Promise<WorkEntry>((resolve) => {
+        resolveCreate = resolve;
+      });
+    };
+
+    fireEvent.click(await screen.findByTestId("work-week-quick-add-2026-03-12"));
+    fireEvent.click(await screen.findByTestId("work-calendar-quick-add-detail-2026-03-12"));
+    const dialog = await screen.findByTestId("work-entry-create-dialog");
+    fireEvent.change(within(dialog).getByTestId("work-entry-create-title"), {
+      target: { value: "Sekali saja" },
+    });
+    const submit = within(dialog).getByTestId("work-entry-create-submit");
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    expect(calls).toHaveLength(1);
+
+    await act(async () => {
+      resolveCreate?.(
+        createFixtureWorkEntry({ id: "created-1", title: "Sekali saja", workDate: "2026-03-12" }),
+      );
+    });
+    await waitForRemoval("work-entry-create-dialog");
+  });
+
+  it("error create tetap tampil di editor dan editor tidak menutup", async () => {
+    const { repository } = renderBareWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-09",
+      entries: [],
+    });
+    repository.createEntry = async () => {
+      throw new Error("Simpan lengkap gagal.");
+    };
+
+    fireEvent.click(await screen.findByTestId("work-week-quick-add-2026-03-12"));
+    fireEvent.click(await screen.findByTestId("work-calendar-quick-add-detail-2026-03-12"));
+    const dialog = await screen.findByTestId("work-entry-create-dialog");
+    fireEvent.change(within(dialog).getByTestId("work-entry-create-title"), {
+      target: { value: "Akan gagal" },
+    });
+    fireEvent.click(within(dialog).getByTestId("work-entry-create-submit"));
+
+    expect(await screen.findByTestId("work-entry-create-error")).toHaveTextContent(
+      "Simpan lengkap gagal.",
+    );
+    expect(screen.getByTestId("work-entry-create-dialog")).toBeInTheDocument();
+  });
+
+  it("editor lengkap tidak membuka tanggal nonkerja sebagai penghalang", async () => {
+    // 2026-03-14 adalah Sabtu; editor tetap dapat dibuka dan disimpan.
+    const { repository } = renderBareWorkspace({
+      view: "week",
+      initialAnchorDate: "2026-03-09",
+      entries: [],
+    });
+    const created: WorkEntryDraft[] = [];
+    repository.createEntry = async (draft) => {
+      created.push(draft);
+      return createFixtureWorkEntry({ id: "created-sabtu", ...draft });
+    };
+
+    fireEvent.click(await screen.findByTestId("work-week-quick-add-2026-03-14"));
+    fireEvent.click(await screen.findByTestId("work-calendar-quick-add-detail-2026-03-14"));
+    const dialog = await screen.findByTestId("work-entry-create-dialog");
+    fireEvent.change(within(dialog).getByTestId("work-entry-create-title"), {
+      target: { value: "Kerja akhir pekan" },
+    });
+    fireEvent.click(within(dialog).getByTestId("work-entry-create-submit"));
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0].workDate).toBe("2026-03-14");
   });
 
   it("klik pekerjaan existing dan '+N lainnya' tidak membuka Quick Add", async () => {

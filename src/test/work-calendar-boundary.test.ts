@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -499,20 +499,60 @@ describe("Work Calendar — batas CAL-03 F4B", () => {
     expect(motion).not.toMatch(/layout\s*=/);
   });
 
-  it("detail selalu dirender lewat satu panel aksesibel dengan header lengket", () => {
+  it("detail memakai primitive modal Radix, bukan dialog dan focus trap buatan", () => {
     const detail = readFileSync(
       join(featureDir, "components", "WorkEntryDetail.tsx"),
       "utf8",
     );
-    expect(detail).toContain('role="dialog"');
-    expect(detail).toContain("aria-modal={true}");
-    expect(detail).toContain("useWorkCalendarFocusTrap(");
-    // Overlay dan panel dirender langsung, bukan AnimatePresence internal,
-    // supaya exit animation dikendalikan workspace.
-    expect(detail).not.toMatch(/<AnimatePresence>\s*<WorkCalendarOverlay/);
+    // Perilaku modal didelegasikan ke primitive, bukan diimplementasikan ulang.
+    expect(detail).toContain("<WorkCalendarModal");
+    expect(detail).not.toContain('role="dialog"');
+    expect(detail).not.toContain("useWorkCalendarFocusTrap");
+    // Escape/overlay/panel tidak lagi ditangani sendiri di komponen ini.
+    expect(detail).not.toContain('event.key !== "Escape"');
     // Lebar side sheet desktop/tablet.
     expect(detail).toContain("sm:min-w-[480px]");
     expect(detail).toContain("sm:w-[min(560px,92vw)]");
+  });
+
+  it("primitive modal memakai Radix Dialog + forceMount tanpa overlay/focus trap ganda", () => {
+    const modal = readFileSync(
+      join(featureDir, "components", "WorkCalendarModal.tsx"),
+      "utf8",
+    );
+    expect(modal).toContain('from "@radix-ui/react-dialog"');
+    expect(modal).toContain("DialogPrimitive.Portal");
+    // `forceMount` wajib agar Radix tidak melepas DOM sebelum exit Framer.
+    expect(modal).toContain("forceMount");
+    // Radix tidak menetapkan aria-modal; primitive ini menetapkannya.
+    expect(modal).toContain("aria-modal={true}");
+    // Tidak ada focus trap atau kunci scroll buatan sendiri.
+    expect(modal).not.toContain("useWorkCalendarFocusTrap");
+    expect(modal).not.toContain("data-scroll-locked");
+
+    // Hook focus trap buatan sudah dihapus dari fitur.
+    expect(
+      existsSync(join(featureDir, "hooks", "use-work-calendar-focus-trap.ts")),
+    ).toBe(false);
+  });
+
+  it("Quick Add dan editor lengkap memakai primitive modal yang sama", () => {
+    const surface = readFileSync(
+      join(featureDir, "components", "QuickAddSurface.tsx"),
+      "utf8",
+    );
+    expect(surface).toContain("<WorkCalendarModal");
+    expect(surface).not.toContain('role="dialog"');
+
+    const createDialog = readFileSync(
+      join(featureDir, "components", "WorkEntryCreateDialog.tsx"),
+      "utf8",
+    );
+    expect(createDialog).toContain("<WorkCalendarModal");
+    expect(createDialog).not.toContain('role="dialog"');
+    // Satu createEntry per simpan dan Batal tidak membuat entry.
+    expect(createDialog).toContain("submittingRef");
+    expect(createDialog).toContain("validateWorkEntryInput");
   });
 
   it("Quick Add tidak memakai drawer pihak ketiga dan aman virtual keyboard", () => {
@@ -558,21 +598,24 @@ describe("Work Calendar — batas CAL-03 F4B", () => {
   });
 
   it("permukaan fixed dipindahkan ke body agar tidak terkena `space-y-5` `.sigap-page`", () => {
-    const motion = readFileSync(
-      join(featureDir, "components", "WorkCalendarMotion.tsx"),
+    const modal = readFileSync(
+      join(featureDir, "components", "WorkCalendarModal.tsx"),
       "utf8",
     );
     // Regresi layout: `.sigap-page` memakai `space-y-5`, sehingga anak kedua
     // dan seterusnya mendapat `margin-top: 20px`. Overlay/sheet `fixed` yang
     // tetap menjadi anaknya bergeser 20px (terpotong) dan overlay menyisakan
-    // celah yang tidak menutup. Solusinya portal ke `document.body`.
-    expect(motion).toContain("createPortal");
-    expect(motion).toContain("renderFixedSurface");
+    // celah yang tidak menutup. Solusinya portal Radix ke `document.body`.
+    expect(modal).toContain("DialogPrimitive.Portal");
 
-    // Overlay dan panel memakai helper portal itu; bukan dirender langsung.
-    const overlay = motion.slice(motion.indexOf("export function WorkCalendarOverlay"));
-    expect(overlay.slice(0, 900)).toContain("renderFixedSurface(");
-    const panel = motion.slice(motion.indexOf("export const WorkCalendarSlidePanel"));
-    expect(panel.slice(0, 1400)).toContain("renderFixedSurface(");
+    // Motion tidak lagi memuat portal/overlay/panel manual.
+    const motion = readFileSync(
+      join(featureDir, "components", "WorkCalendarMotion.tsx"),
+      "utf8",
+    );
+    expect(motion).not.toContain("createPortal");
+    expect(motion).not.toContain("renderFixedSurface");
+    expect(motion).not.toContain("WorkCalendarOverlay");
+    expect(motion).not.toContain("WorkCalendarSlidePanel");
   });
 });

@@ -60,7 +60,10 @@ import { TeamProgressView } from "./TeamProgressView";
 import { TeamOverviewView } from "./TeamOverviewView";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
 import { WorkEntryDetail } from "./WorkEntryDetail";
-import { QuickAddPanel } from "./QuickAddPanel";
+import {
+  WorkEntryCreateDialog,
+  type WorkEntryCreateInput,
+} from "./WorkEntryCreateDialog";
 import { QuickAddSurface } from "./QuickAddSurface";
 import { AnimatePresence } from "./WorkCalendarMotion";
 import { useWorkCalendarCompact } from "../hooks/use-work-calendar-compact";
@@ -195,6 +198,28 @@ export function WorkCalendarWorkspace({  currentUser,
   } | null>(null);
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [quickAddError, setQuickAddError] = useState<string | null>(null);
+  /**
+   * Editor pembuatan lengkap dari aksi "Tambah detail" pada Quick Add.
+   * Quick Add selalu ditutup sebelum editor ini dibuka, sehingga keduanya
+   * tidak pernah hidup bersamaan. Tanggal target + judul yang diketik
+   * dipertahankan di sini.
+   */
+  const [createEditor, setCreateEditor] = useState<{
+    date: WorkDate;
+    title: string;
+  } | null>(null);
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createSubmittingRef = useRef(false);
+  /**
+   * Resolusi deep link Tim (`?view=team&entry=<id>`): entry mungkin belum
+   * termuat massal setelah refresh. Resolver read-only `getEntryById`
+   * menentukan apakah entry boleh dilihat.
+   */
+  const [resolvedTeamEntry, setResolvedTeamEntry] = useState<WorkEntry | null>(null);
+  const [teamResolutionStatus, setTeamResolutionStatus] = useState<
+    "idle" | "loading" | "ready"
+  >("idle");
   const isCompact = useWorkCalendarCompact();
   /**
    * Entry yang menunggu konfirmasi hapus. Selama state ini terisi, tidak ada
@@ -211,7 +236,7 @@ export function WorkCalendarWorkspace({  currentUser,
   const viewDate = calendar.anchorDate;
   const quickEntryDate = calendar.view === "day" ? calendar.anchorDate : calendar.today;
 
-  const selectedEntry = useMemo(
+  const selectedEntryLocal = useMemo(
     () =>
       resolveSelectedWorkEntry({
         requestedId: selectedEntryId,
@@ -221,10 +246,71 @@ export function WorkCalendarWorkspace({  currentUser,
     [calendar.entries, teamOverview.memberEntries, selectedEntryId],
   );
 
+  /**
+   * Mode Tim server-side memuat pekerjaan anggota secara lazy, sehingga deep
+   * link setelah refresh belum ada di `memberEntries`. Hanya dalam kondisi itu
+   * resolver `getEntryById` dijalankan — mode lain tetap memakai data yang
+   * sudah dimuat supaya tidak ada perluasan cakupan.
+   */
+  const needsTeamEntryResolution =
+    calendar.view === "team" && selectedEntryId !== null && selectedEntryLocal === null;
+
+  useEffect(() => {
+    if (!needsTeamEntryResolution || selectedEntryId === null) {
+      setResolvedTeamEntry(null);
+      setTeamResolutionStatus("idle");
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setResolvedTeamEntry(null);
+    setTeamResolutionStatus("loading");
+
+    void repository
+      .getEntryById({ entryId: selectedEntryId, signal: controller.signal })
+      .then((entry) => {
+        // Permintaan lama tidak boleh menimpa hasil baru.
+        if (!active || controller.signal.aborted) return;
+        setResolvedTeamEntry(entry);
+        setTeamResolutionStatus("ready");
+      })
+      .catch(() => {
+        if (!active || controller.signal.aborted) return;
+        setResolvedTeamEntry(null);
+        setTeamResolutionStatus("ready");
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [needsTeamEntryResolution, repository, selectedEntryId]);
+
+  const selectedEntry = selectedEntryLocal ?? resolvedTeamEntry;
+
+  /**
+   * Setelah entry Tim teresolusi dari deep link, buka baris anggota yang
+   * sedang tampil (bila ada) supaya keterkaitan panel dan baris terlihat.
+   * Anggota di luar halaman/filter aktif tidak menghalangi detail terbuka.
+   */
+  useEffect(() => {
+    if (calendar.view !== "team" || !selectedEntry) return;
+    if (teamOverviewRepository === undefined) return;
+    if (teamOverview.expandedMemberId === selectedEntry.ownerId) return;
+    const memberVisible = (teamOverview.data?.members ?? []).some(
+      (member) => member.owner.id === selectedEntry.ownerId,
+    );
+    if (!memberVisible) return;
+    teamOverview.toggleMember(selectedEntry.ownerId);
+  }, [calendar.view, selectedEntry, teamOverview, teamOverviewRepository]);
+
   /** Data yang relevan untuk detail sudah selesai dimuat. */
   const detailDataReady =
     !calendar.isLoading &&
-    (calendar.view !== "team" || teamOverview.status !== "loading");
+    (calendar.view !== "team" ||
+      (teamOverview.status !== "loading" &&
+        (!needsTeamEntryResolution || teamResolutionStatus === "ready")));
 
   /**
    * Peta pemilik untuk detail. Mode Tim server hanya menyediakan anggota dari
@@ -442,6 +528,8 @@ export function WorkCalendarWorkspace({  currentUser,
     (entry: WorkEntry) => {
       setMonthPanelDate(null);
       setQuickAddTarget(null);
+      setCreateEditor(null);
+      setCreateError(null);
       if (routeAdapter) {
         routeAdapter.writeEntryId(entry.id, { replace: false });
         return;
@@ -544,12 +632,19 @@ export function WorkCalendarWorkspace({  currentUser,
    * Membuka Quick Add untuk satu tanggal. `event.currentTarget` disimpan
    * sebagai anchor popover desktop; bottom sheet mobile tidak memakainya.
    */
-  const openQuickAdd = useCallback((date: WorkDate, anchor: HTMLElement | null) => {
-    setQuickAddTarget((current) =>
-      current && current.date === date && current.anchor === anchor ? current : { date, anchor },
-    );
-    setQuickAddError(null);
-  }, []);
+  const openQuickAdd = useCallback(
+    (date: WorkDate, anchor: HTMLElement | null) => {
+      setQuickAddTarget((current) =>
+        current && current.date === date && current.anchor === anchor ? current : { date, anchor },
+      );
+      setQuickAddError(null);
+      // Tidak ada modal bertumpuk: Quick Add menutup detail/editor yang terbuka.
+      closeEntryDetail();
+      setCreateEditor(null);
+      setCreateError(null);
+    },
+    [closeEntryDetail],
+  );
 
   const closeQuickAdd = useCallback(() => {
     setQuickAddTarget(null);
@@ -592,18 +687,69 @@ export function WorkCalendarWorkspace({  currentUser,
   );
 
   /**
-   * Aksi "Tambah detail" pada Quick Add: pindah ke tampilan Hari pada tanggal
-   * target lalu fokuskan quick entry lengkap. Tidak membuat entry kedua.
+   * Aksi "Tambah detail" pada Quick Add: tutup Quick Add lalu buka editor
+   * pembuatan lengkap pada tanggal + judul yang sama. Tidak ada entry yang
+   * dibuat pada langkah ini; `createEntry` hanya dipanggil saat editor
+   * disimpan. Quick Add dan editor lengkap tidak pernah hidup bersamaan.
    */
   const handleQuickAddOpenFullEditor = useCallback(
-    (date: WorkDate) => {
-      calendar.setView("day");
-      calendar.setAnchorDate(date);
+    (date: WorkDate, title: string) => {
       closeQuickAdd();
-      window.requestAnimationFrame(() => quickEntryInputRef.current?.focus());
+      setCreateError(null);
+      createSubmittingRef.current = false;
+      setCreateEditor({ date, title });
     },
-    [calendar, closeQuickAdd],
+    [closeQuickAdd],
   );
+
+  /**
+   * Simpan dari editor pembuatan lengkap. Tepat satu `createEntry` per
+   * percobaan (dijaga kunci sinkron + `createSaving`); error tetap berada di
+   * editor dan editor tidak ditutup.
+   */
+  const handleCreateSubmit = useCallback(
+    async (input: WorkEntryCreateInput): Promise<boolean> => {
+      if (createSubmittingRef.current) return false;
+      createSubmittingRef.current = true;
+      setCreateSaving(true);
+      setCreateError(null);
+      try {
+        const draft: WorkEntryDraft = {
+          ownerId: currentUser.id,
+          workDate: input.workDate,
+          title: input.title,
+          status: "planned",
+          kind: "work",
+          isAllDay: input.isAllDay,
+          startsAt: input.startsAt ?? null,
+          endsAt: input.endsAt ?? null,
+          location: input.location,
+          notes: input.notes,
+        };
+        const created = await repository.createEntry(draft);
+        calendar.applyLocalEntry(created);
+        setCreateEditor(null);
+        return true;
+      } catch (thrown) {
+        setCreateError(
+          thrown instanceof Error && thrown.message
+            ? thrown.message
+            : "Pekerjaan gagal disimpan. Coba lagi.",
+        );
+        return false;
+      } finally {
+        createSubmittingRef.current = false;
+        setCreateSaving(false);
+      }
+    },
+    [calendar, currentUser.id, repository],
+  );
+
+  const closeCreateEditor = useCallback(() => {
+    if (createSubmittingRef.current) return;
+    setCreateEditor(null);
+    setCreateError(null);
+  }, []);
 
   // ==== Navigasi tampilan ====
 
@@ -795,24 +941,27 @@ export function WorkCalendarWorkspace({  currentUser,
         />
       )}
 
-      {/* Detail pekerjaan dibuka dari judul pada semua tampilan non-Tim
-          (Hari, Minggu, Bulan). Mode Tim punya panel read-only terpisah.
-          `AnimatePresence` di sini memungkinkan exit animation overlay dan
-          sheet berjalan sebelum node dilepas; kunci detail per id memastikan
-          ganti entry memainkan animasi masuk seperti panel baru. */}
+      {/* Detail pekerjaan: satu pola untuk Hari, Minggu, Bulan, dan Tim.
+          `AnimatePresence` memegang exit animation, sedangkan perilaku modal
+          (focus trap, kunci scroll, Escape, overlay, pemulihan fokus) dimiliki
+          `WorkCalendarModal` (Radix Dialog). Kunci per id memastikan ganti
+          entry memainkan animasi masuk seperti panel baru. */}
       <AnimatePresence>
-        {!calendar.isLoading &&
-          !calendar.error &&
-          calendar.view !== "team" &&
+        {!calendar.error &&
+          !calendar.isLoading &&
+          detailDataReady &&
           selectedEntry && (
             <WorkEntryDetail
               key={selectedEntry.id}
               entry={selectedEntry}
               owner={ownerById.get(selectedEntry.ownerId)}
               today={calendar.today}
-              readOnly={!effectivePermissions.canEditEntry(selectedEntry)}
-              isSaving={detailSaving}
+              readOnly={
+                calendar.view === "team" || !effectivePermissions.canEditEntry(selectedEntry)
+              }
+              isSaving={calendar.view === "team" ? false : detailSaving}
               onSave={(patch) => {
+                if (calendar.view === "team") return;
                 void handleSaveDetail(selectedEntry, patch);
               }}
               onClose={closeEntryDetail}
@@ -927,17 +1076,19 @@ export function WorkCalendarWorkspace({  currentUser,
         )
       )}
 
+      {/* Editor pembuatan lengkap dari "Tambah detail". Quick Add sudah ditutup
+          sebelum ini dirender, jadi keduanya tidak pernah hidup bersamaan. */}
       <AnimatePresence>
-        {selectedEntry && calendar.view === "team" && (
-          <WorkEntryDetail
-            key={selectedEntry.id}
-            entry={selectedEntry}
-            owner={ownerById.get(selectedEntry.ownerId)}
-            today={calendar.today}
-            readOnly
-            isSaving={false}
-            onSave={() => undefined}
-            onClose={closeEntryDetail}
+        {createEditor && (
+          <WorkEntryCreateDialog
+            key={`work-entry-create-${createEditor.date}`}
+            workDate={createEditor.date}
+            initialTitle={createEditor.title}
+            isSaving={createSaving}
+            error={createError}
+            onSubmit={handleCreateSubmit}
+            onClose={closeCreateEditor}
+            onDismissError={() => setCreateError(null)}
           />
         )}
       </AnimatePresence>

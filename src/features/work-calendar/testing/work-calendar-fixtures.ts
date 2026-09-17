@@ -202,10 +202,24 @@ export function createFixtureWorkEntries(): WorkEntry[] {
  */
 export function createFixtureWorkEntryRepository(
   seed: readonly WorkEntry[] = createFixtureWorkEntries(),
-  options: { failOnList?: boolean } = {},
+  options: {
+    failOnList?: boolean;
+    /**
+     * Meniru RLS: bila diisi, `getEntryById` hanya mengembalikan entry milik
+     * pemilik yang terotorisasi. `undefined` berarti semua owner diizinkan.
+     */
+    authorizedOwnerIds?: readonly string[];
+    /** Menunda respons `getEntryById` agar test dapat mengamati race/batal. */
+    getEntryByIdDelayMs?: number;
+    /** Mengisi `true` saat `getEntryById` selesai (sukses maupun gagal). */
+    entryByIdResolvedRef?: { current: boolean };
+  } = {},
 ): WorkEntryRepository {
   const store = new Map<string, WorkEntry>(seed.map((entry) => [entry.id, entry]));
   let counter = seed.length;
+  const authorizedOwnerIds = options.authorizedOwnerIds;
+  const isOwnerAuthorized = (ownerId: string): boolean =>
+    authorizedOwnerIds === undefined || authorizedOwnerIds.includes(ownerId);
 
   const listInRange = (fromDate: WorkDate, toDate: WorkDate): WorkEntry[] =>
     [...store.values()]
@@ -220,6 +234,22 @@ export function createFixtureWorkEntryRepository(
     async listTeamEntries({ fromDate, toDate }) {
       if (options.failOnList) throw new Error("Gagal memuat data pekerjaan (fixture).");
       return listInRange(fromDate, toDate);
+    },
+    async getEntryById({ entryId, signal }) {
+      try {
+        if (options.getEntryByIdDelayMs) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, options.getEntryByIdDelayMs);
+          });
+        }
+        if (signal?.aborted) throw new Error("Pencarian dibatalkan.");
+        const entry = store.get(entryId);
+        if (!entry || entry.deletedAt !== null) return null;
+        if (!isOwnerAuthorized(entry.ownerId)) return null;
+        return entry;
+      } finally {
+        if (options.entryByIdResolvedRef) options.entryByIdResolvedRef.current = true;
+      }
     },
     async createEntry(draft: WorkEntryDraft) {
       counter += 1;
