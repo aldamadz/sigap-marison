@@ -22,6 +22,11 @@ export interface WorkCalendarViewInteractionProps {
   promptEntryId: string | null;
   promptType: WorkEntryStatusFollowUp;
   savingEntryId: string | null;
+  /**
+   * Entry yang sedang dibuka detailnya (CAL-03 F4B). Dipakai untuk memberi
+   * penanda visual pada baris terpilih di seluruh view.
+   */
+  selectedEntryId: string | null;
   onUpdateTitle: (entry: WorkEntry, title: string) => void;
   onRequestStatus: (entry: WorkEntry, status: WorkEntryStatus) => void;
   onSubmitFollowUp: (entry: WorkEntry, value: string) => void;
@@ -72,6 +77,7 @@ export function WorkEntryList({
             today={interactions.today}
             readOnly={readOnly}
             variant={variant}
+            isSelected={interactions.selectedEntryId === entry.id}
             isSaving={interactions.savingEntryId === entry.id}
             promptType={interactions.promptEntryId === entry.id ? interactions.promptType : null}
             onUpdateTitle={(title) => interactions.onUpdateTitle(entry, title)}

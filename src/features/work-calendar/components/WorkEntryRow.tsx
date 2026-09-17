@@ -65,6 +65,11 @@ export interface WorkEntryRowProps {
   today: WorkDate;
   readOnly?: boolean;
   isSaving?: boolean;
+  /**
+   * `true` bila detail entry ini sedang terbuka (CAL-03 F4B). Baris diberi
+   * penanda visual + `aria-current` supaya keterkaitan baris dan panel jelas.
+   */
+  isSelected?: boolean;
   promptType?: WorkEntryStatusFollowUp;
   /**
    * `compact` dipakai kolom minggu yang sempit: kontrol status dan menu
@@ -266,6 +271,7 @@ export function WorkEntryRow({
   today,
   readOnly = false,
   isSaving = false,
+  isSelected = false,
   promptType = null,
   variant = "full",
   onUpdateTitle,
@@ -355,10 +361,13 @@ export function WorkEntryRow({
       data-entry-status={entry.status}
       data-readonly={readOnly ? "true" : "false"}
       data-row-variant={variant}
+      data-selected={isSelected ? "true" : "false"}
       className={cn(
         "rounded-sm border bg-card",
         isCompact ? "px-1.5 py-1.5" : "px-3 py-2.5",
         overdue ? "border-overdue/60" : "border-border",
+        // Visual state entry terpilih: cincin + border, bukan warna saja.
+        isSelected && "border-primary ring-2 ring-primary/60",
       )}
     >
       <div className={cn("flex items-start", isCompact ? "gap-1" : "gap-2")}>
@@ -396,6 +405,7 @@ export function WorkEntryRow({
               data-testid={`work-entry-title-${entry.id}`}
               onClick={onOpenDetail}
               aria-label={`Buka detail pekerjaan: ${entry.title}`}
+              aria-current={isSelected ? "true" : undefined}
               className={cn(
                 "flex w-full min-h-touch items-center rounded-sm text-left font-medium leading-snug text-foreground",
                 isCompact ? "text-xs" : "text-sm",

@@ -151,6 +151,16 @@ export interface WorkEntryRepository {
     toDate: WorkDate;
     signal?: AbortSignal;
   }): Promise<readonly WorkEntry[]>;
+  /**
+   * Resolusi satu entry untuk deep link (CAL-03 F4B), mis.
+   * `?view=team&entry=<id>` yang harus tetap terbuka setelah refresh.
+   *
+   * Read-only: implementasi hanya melakukan SELECT dengan RLS yang sudah ada
+   * (tanpa service role dan tanpa migration baru). `null` berarti entry tidak
+   * ada, sudah dihapus, id tidak valid, atau di luar cakupan hak pengguna —
+   * pemanggil tidak boleh menampilkan data apa pun dalam kasus itu.
+   */
+  getEntryById(input: { entryId: WorkEntryId; signal?: AbortSignal }): Promise<WorkEntry | null>;
   createEntry(input: WorkEntryDraft): Promise<WorkEntry>;
   updateEntry(input: { entryId: WorkEntryId; patch: WorkEntryPatch; expectedUpdatedAt: WorkTimestamp }): Promise<WorkEntry>;
   deleteEntry(input: { entryId: WorkEntryId; expectedUpdatedAt: WorkTimestamp }): Promise<void>;
