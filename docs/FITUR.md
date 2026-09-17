@@ -149,6 +149,25 @@ Dokumen ini menjadi pusat inventaris fitur SIGAP. README cukup memuat garis besa
 - Tampilan kalender harus tetap terbaca pada desktop dan mobile.
 - Perubahan data agenda tidak boleh membuat kalender menampilkan data lama terlalu lama.
 
+### Kalender Kerja (Unified Work Calendar)
+
+Route `/calendar` kini memuat **Kalender Kerja** — pengganti kalender agenda
+lama untuk pencatatan pekerjaan harian individu dan tim. Fitur ini mencakup
+tampilan Hari/Minggu/Bulan/Tim, siklus hidup pekerjaan dengan tenggat dan
+riwayat peristiwa, hari kerja & hari libur dari konfigurasi KPI, ringkasan
+dashboard, serta notifikasi lonceng. Manual lengkap CAL-03 F1–F7 ada di
+[`CAL-03_WORK_CALENDAR.md`](./CAL-03_WORK_CALENDAR.md).
+
+### Non-Fungsional Kalender Kerja
+
+- Status pekerjaan, hari nonkerja, dan kategori notifikasi tidak pernah
+  dibedakan hanya lewat warna.
+- Kontrol ikon memiliki nama aksesibel dan target sentuh minimal 44px.
+- Token dark mode dibatasi pada scope Work Calendar agar tidak meregresi
+  halaman lain.
+- Otorisasi kepemilikan dan bawahan diputuskan server-side lewat RLS dan RPC.
+
+
 ## 5. Persuratan Digital
 
 ### Fungsional
