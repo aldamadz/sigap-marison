@@ -14,14 +14,26 @@
 import { Hourglass, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { WorkCalendarDayCell, WorkDate, WorkEntry, WorkEntryStatus } from "../types/work-calendar";
+import type {
+  WorkCalendarDayCell,
+  WorkCalendarDayMeta,
+  WorkDate,
+  WorkEntry,
+  WorkEntryStatus,
+} from "../types/work-calendar";
 import { WORK_WEEKDAY_LABELS_ID, formatWorkDateShort } from "../lib/work-calendar-date";
 import { getWorkMonthCellPreview } from "../lib/work-progress";
 import { WorkEntryStatusGlyph } from "./WorkEntryStatusGlyph";
+import { WorkCalendarDayBadge, getWorkCalendarDaySurfaceClassName } from "./WorkCalendarDayBadge";
 
 export interface MonthlyWorkViewProps {
   cells: readonly WorkCalendarDayCell[];
   today: WorkDate;
+  /**
+   * Klasifikasi hari (kerja/nonkerja/libur) per tanggal (CAL-03 F6). Tanggal
+   * yang tidak ada di peta dianggap hari kerja.
+   */
+  dayMeta?: ReadonlyMap<WorkDate, WorkCalendarDayMeta>;
   onOpenDay: (date: WorkDate) => void;
   /**
    * Klik area kosong sel membuka Quick Add untuk tanggal tersebut (CAL-03
@@ -37,6 +49,7 @@ export interface MonthlyWorkViewProps {
 export function MonthlyWorkView({
   cells,
   today,
+  dayMeta,
   onOpenDay,
   onQuickAdd,
   onOpenEntry,
@@ -54,6 +67,7 @@ export function MonthlyWorkView({
           const { preview, hiddenCount } = getWorkMonthCellPreview(cell.entries);
           const isToday = cell.date === today;
           const progress = cell.progress;
+          const meta = dayMeta?.get(cell.date);
           const compactItems = (
             [
               { key: "planned", value: progress.planned },
@@ -68,6 +82,7 @@ export function MonthlyWorkView({
               key={cell.date}
               data-testid={`work-month-cell-${cell.date}`}
               data-current-month={cell.isCurrentMonth ? "true" : "false"}
+              data-day-kind={meta?.kind ?? "work_day"}
               onClick={(event) => {
                 // Klik area kosong sel membuka Quick Add untuk tanggal ini.
                 // Klik tombol tanggal/preview/`+N` tidak sampai ke sini karena
@@ -78,7 +93,7 @@ export function MonthlyWorkView({
               }}
               className={cn(
                 "group/month-cell flex min-w-0 flex-col rounded-sm border p-1.5",
-                cell.isCurrentMonth ? "bg-card" : "bg-muted/40",
+                getWorkCalendarDaySurfaceClassName(meta, { isCurrentMonth: cell.isCurrentMonth }),
                 isToday ? "border-primary/60" : "border-border",
               )}
             >
@@ -137,12 +152,17 @@ export function MonthlyWorkView({
 
               {/* Teks lengkap untuk pembaca layar, bukan warna saja. */}
               <span className="sr-only">
+                {meta && meta.kind !== "work_day" ? `${meta.label}. ` : ""}
                 {progress.total === 0
                   ? "Belum ada pekerjaan"
                   : `${progress.completed} dari ${progress.total} pekerjaan selesai, ${progress.planned} direncanakan, ${progress.inProgress} berjalan, ${progress.blocked} terhambat${
                       progress.overdue > 0 ? `, ${progress.overdue} terlambat` : ""
                     }`}
               </span>
+
+              {meta && meta.kind === "holiday" && (
+                <WorkCalendarDayBadge meta={meta} className="mt-1 self-start" />
+              )}
 
               <div className="mt-1 hidden space-y-0.5 md:block">
                 {preview.map((entry) => (

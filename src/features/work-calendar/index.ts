@@ -38,6 +38,8 @@ export type {
   WorkCalendarModalVariant,
 } from "./components/WorkCalendarModal";
 export { WorkEntryStatusGlyph } from "./components/WorkEntryStatusGlyph";
+export { WorkCalendarDayBadge, getWorkCalendarDaySurfaceClassName } from "./components/WorkCalendarDayBadge";
+export type { WorkCalendarDayBadgeProps } from "./components/WorkCalendarDayBadge";
 export { DailyWorkView } from "./components/DailyWorkView";
 export { WeeklyWorkView } from "./components/WeeklyWorkView";
 export { MonthlyWorkView } from "./components/MonthlyWorkView";
@@ -91,6 +93,22 @@ export { mapWorkEntryRow } from "./data/work-entry-row-mapper";
 export type { WorkCalendarEntryRow } from "./data/work-entry-row-mapper";
 export { mapWorkEntryEventRow } from "./data/work-entry-event-row-mapper";
 export type { WorkCalendarEventRow } from "./data/work-entry-event-row-mapper";
+export {
+  WORK_CALENDAR_HOLIDAY_DB_COLUMNS,
+  mapWorkCalendarHolidayRow,
+} from "./data/work-calendar-holiday-mapper";
+export type { WorkCalendarHolidayRow } from "./data/work-calendar-holiday-mapper";
+export {
+  WORK_CALENDAR_HOLIDAY_MAX_RANGE_DAYS,
+  createSupabaseWorkCalendarSettingsRepository,
+} from "./data/supabase-work-calendar-settings-repository";
+export type {
+  SupabaseWorkCalendarSettingsClient,
+  WorkCalendarSettingsDbQuery,
+  WorkCalendarSettingsDbTable,
+  WorkCalendarSettingsRpcQuery,
+  WorkCalendarWorkSettingsRow,
+} from "./data/supabase-work-calendar-settings-repository";
 
 export { useWorkCalendarView, useWorkCalendarDerivedView } from "./hooks/use-work-calendar-view";
 export type {
@@ -194,6 +212,17 @@ export {
 export type { WorkCalendarDateRange } from "./lib/work-calendar-date";
 
 export {
+  DEFAULT_WORK_CALENDAR_WORK_SETTINGS,
+  buildWorkCalendarDayMetaMap,
+  formatWorkCalendarWorkHours,
+  getWorkCalendarDayMeta,
+  indexWorkCalendarHolidays,
+  isWorkCalendarWorkDay,
+  normalizeWorkDays,
+  normalizeWorkSettings,
+} from "./lib/work-day-config";
+
+export {
   WORK_ENTRY_STATUS_META,
   WORK_ENTRY_STATUS_ORDER,
   WORK_ENTRY_OVERDUE_META,
@@ -266,6 +295,7 @@ export {
 } from "./lib/work-progress";
 
 export {
+  WORK_CALENDAR_DAY_KINDS,
   WORK_CALENDAR_VIEW_MODES,
   WORK_ENTRY_COLOR_SWATCHES,
   WORK_ENTRY_EVENT_TYPES,
@@ -274,10 +304,15 @@ export {
 } from "./types/work-calendar";
 export type {
   WorkCalendarDayCell,
+  WorkCalendarDayKind,
+  WorkCalendarDayMeta,
   WorkCalendarDaySummary,
+  WorkCalendarHoliday,
   WorkCalendarPermissions,
+  WorkCalendarSettingsRepository,
   WorkCalendarViewMode,
   WorkCalendarViewModel,
+  WorkCalendarWorkSettings,
   WorkCalendarWorkspaceProps,
   WorkDate,
   WorkEntry,
