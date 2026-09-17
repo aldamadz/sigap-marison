@@ -357,6 +357,87 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
     });
   });
 
+  describe("getEntryById (deep link F4B)", () => {
+    function createRepoWithQuery(
+      payload: { data: WorkCalendarEntryRow[] | null; error: { message: string } | null },
+    ) {
+      const mockQueryBuilder: WorkCalendarDbQueryFilter = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (onfulfilled, onrejected) => Promise.resolve(payload).then(onfulfilled, onrejected),
+      };
+      const mockTable: WorkCalendarDbTable = {
+        select: vi.fn().mockReturnValue(mockQueryBuilder),
+        insert: vi.fn(),
+        update: vi.fn(),
+      };
+      const mockClient: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue(mockTable),
+        rpc: vi.fn(),
+      };
+      return {
+        repo: createSupabaseWorkEntryRepository(mockClient),
+        mockClient,
+        mockQueryBuilder,
+        mockTable,
+      };
+    }
+
+    it("mengambil tepat satu row dengan RLS yang sudah ada dan abortSignal diteruskan", async () => {
+      const row = createMockRow({ id: "e1000000-0000-4000-8000-000000000001" });
+      const { repo, mockClient, mockQueryBuilder } = createRepoWithQuery({
+        data: [row],
+        error: null,
+      });
+      const controller = new AbortController();
+
+      const result = await repo.getEntryById({
+        entryId: row.id,
+        signal: controller.signal,
+      });
+
+      expect(mockClient.from).toHaveBeenCalledWith("work_calendar_entries");
+      expect(mockQueryBuilder.eq).toHaveBeenCalledWith("id", row.id);
+      expect(mockQueryBuilder.is).toHaveBeenCalledWith("deleted_at", null);
+      expect(mockQueryBuilder.abortSignal).toHaveBeenCalledWith(controller.signal);
+      expect(result?.id).toBe(row.id);
+    });
+
+    it("mengembalikan null bila row tidak terlihat karena RLS/terhapus", async () => {
+      const { repo } = createRepoWithQuery({ data: [], error: null });
+
+      await expect(
+        repo.getEntryById({ entryId: "e1000000-0000-4000-8000-000000000002" }),
+      ).resolves.toBeNull();
+    });
+
+    it("tidak mengirim id yang bentuknya tidak valid ke server", async () => {
+      const { repo, mockClient } = createRepoWithQuery({ data: [], error: null });
+
+      await expect(repo.getEntryById({ entryId: "bukan-uuid" })).resolves.toBeNull();
+      expect(mockClient.from).not.toHaveBeenCalled();
+    });
+
+    it("meneruskan error aplikasi yang stabil saat query gagal", async () => {
+      const { repo } = createRepoWithQuery({
+        data: null,
+        error: { message: "boom" },
+      });
+
+      await expect(
+        repo.getEntryById({ entryId: "e1000000-0000-4000-8000-000000000003" }),
+      ).rejects.toThrow("Gagal memuat detail pekerjaan.");
+    });
+  });
+
   describe("updateEntry", () => {
     it("hanya memperbarui field whitelist dan memeriksa expectedUpdatedAt", async () => {
       const row = createMockRow({
