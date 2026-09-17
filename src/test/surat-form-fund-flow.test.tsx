@@ -38,7 +38,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     await mountFormWithUsage(FUND_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Non Aset");
+    await selectCategory("Pengajuan Dana");
 
     // KC tidak punya proyek siap Marison; fund bisa memilih Tanpa Proyek.
     expect(await screen.findByText("Belum ada proyek yang siap digunakan")).toBeInTheDocument();

@@ -353,10 +353,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getRequestCombinationLabel = () => {
     const category = getRequestCategory();
-    if (category === "asset") return "Aset";
-    if (category === "unit") return "Unit";
-    if (category === "non_asset") return "Non Aset";
-    if (category === "non_unit") return "Non Unit";
+    if (category === "asset") return "Pengajuan Aset";
+    if (category === "unit") return "Pengajuan SPK";
+    if (category === "non_asset") return "Pengajuan Dana";
+    if (category === "non_unit") return "Pengajuan Non Unit";
     return "Belum dipilih";
   };
 
@@ -3130,9 +3130,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       <div className="space-y-3 rounded-lg border border-border bg-card p-4 md:p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-foreground">Klasifikasi Dokumen</p>
+            <p className="text-sm font-semibold text-foreground">Pilih Jenis Pengajuan</p>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Pilih klasifikasi sebelum sistem menentukan matrix dan template yang tersedia.
+              Form PGD menyediakan empat jenis pengajuan. Pilih salah satu agar sistem menampilkan alur yang sesuai.
             </p>
           </div>
           <span className="inline-flex w-fit items-center rounded-md border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
@@ -3142,10 +3142,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { value: "asset", label: "Aset", description: "Dokumen aset / properti" },
-            { value: "unit", label: "Unit", description: "Permohonan/order bangun unit" },
-            { value: "non_asset", label: "Non Aset", description: "Dokumen barang/jasa non aset" },
-            { value: "non_unit", label: "Non Unit", description: "Pekerjaan proyek tanpa alokasi kavling" },
+            { value: "asset", label: "Pengajuan Aset", description: "Barang atau kebutuhan yang dicatat sebagai aset" },
+            { value: "unit", label: "Pengajuan SPK", description: "SPK pembangunan atau pengadaan unit" },
+            { value: "non_asset", label: "Pengajuan Dana", description: "Kebutuhan dana operasional atau non-aset" },
+            { value: "non_unit", label: "Pengajuan Non Unit", description: "Pekerjaan proyek tanpa alokasi unit" },
           ].map((option) => (
             (() => {
               const unitDisabled = option.value === "unit" && !canRequesterChooseUnit;
@@ -4006,7 +4006,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {!isRecommendationFlow && !generatedNoSurat && !draftLoading && getRequestCategory() && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form Dokumen</Label>
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
                 <Select
                   value={selectedFormId}
                   onValueChange={value => {
@@ -4017,7 +4017,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   }}
                 >
                   <SelectTrigger className="h-12 bg-background">
-                    <SelectValue placeholder="Pilih form sesuai kebutuhan" />
+                    <SelectValue placeholder="Pilih Form PGD" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableForms.map(form => (
@@ -4056,7 +4056,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {generatedNoSurat && selectedUsage && !isRecommendationFlow && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form Dokumen</Label>
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
                 <div className="flex min-h-12 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground">
                   {selectedFormName}
                 </div>

@@ -41,7 +41,7 @@ describe("Flow 3: Unit pusat", () => {
     await selectLetterType();
     await selectEntity();
 
-    expect(screen.getByRole("button", { name: /Unit Permohonan\/order bangun unit/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Pengajuan SPK SPK pembangunan atau pengadaan unit/i })).toBeDisabled();
     assertStrictServiceCalls();
   });
 
@@ -49,7 +49,7 @@ describe("Flow 3: Unit pusat", () => {
     await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Unit");
+    await selectCategory("Pengajuan SPK");
 
     await selectOptionByLabel(/^Proyek$/i, /GA01 - Griya Asri/i);
     fireEvent.change(screen.getByPlaceholderText("Contoh: 10"), { target: { value: "3" } });
