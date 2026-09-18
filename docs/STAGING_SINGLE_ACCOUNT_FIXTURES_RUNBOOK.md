@@ -31,44 +31,53 @@ select public.marison_payload_profile_source_valid('<tester-uuid>');
 select public.marison_payload_office_source_valid('<tester-office-uuid>');
 ```
 
-## 2. Backup custom-format sebelum apply (host staging, luar repository)
+## 2. Backup custom-format sebelum apply (host staging Ubuntu, luar repository)
 
-Gunakan PostgreSQL 17 yang kompatibel. Backup hanya tabel konfigurasi terkait
-(atau seluruh staging DB bila kebijakan meminta). Simpan di host staging di luar
-repository. Jangan menampilkan connection string/password di log.
+Jalankan dari host staging yang mempunyai konektivitas database. Gunakan
+PostgreSQL 17 yang kompatibel. Kredensial hanya lewat libpq environment
+(`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`) yang sudah terisi
+dari secret staging. Jangan memberikan connection string/password di argumen
+command, jangan mencetak environment, dan jangan mengaktifkan shell tracing.
+Jika endpoint direct tetap gagal, gunakan koneksi pooler staging yang sudah
+dikonfigurasi lewat environment yang sama, tanpa menampilkan URL/credential.
 
-```powershell
-$stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$dump = "/root/staging_single_account_fixtures_preapply_${stamp}.dump"
-# $env:STAGING_DB_URL sudah terisi dari secret staging (jangan di-echo).
-pg_dump -Fc `
-  -t public.form_usages `
-  -t public.form_usage_steps `
-  -t public.form_usage_step_users `
-  -t public.form_usage_step_verifiers `
-  -t public.form_usage_departments `
-  -t public.form_usage_attachment_requirements `
-  -f $dump `
-  $env:STAGING_DB_URL
-Get-Item $dump | Select-Object FullName, Length
-Get-FileHash $dump -Algorithm SHA256
-pg_restore --list $dump | Measure-Object -Line
-pg_restore --list $dump
+```bash
+set -u
+umask 077
+stamp=$(date +%Y%m%d_%H%M%S)
+dump="/root/staging_single_account_fixtures_preapply_${stamp}.dump"
+pg_dump -Fc \
+  -t public.form_usages \
+  -t public.form_usage_steps \
+  -t public.form_usage_step_users \
+  -t public.form_usage_step_verifiers \
+  -t public.form_usage_departments \
+  -t public.form_usage_attachment_requirements \
+  -f "$dump"
+test -s "$dump"
+stat -c %s "$dump"
+sha256sum "$dump"
+pg_restore --list "$dump" | wc -l
+pg_restore --list "$dump"
 ```
 
-Catat: ukuran file, SHA-256, jumlah object dari `pg_restore --list`.
+Catat: ukuran file (`stat`), SHA-256 (`sha256sum`), jumlah object
+(`pg_restore --list | wc -l`). Pastikan `test -s` lolos (dump tidak kosong).
 Tidak ada tabel backup yang dibuat di database.
 
 ## 3. Migration inventory / dry-run (before apply)
 
-```powershell
+Jalankan dari checkout yang linked ke project staging
+(ref `wrufczusfopgvwvxsmjk`) dengan password database via environment.
+Tanpa `--include-all`, tanpa repair, tanpa apply.
+
+```bash
 git fetch origin --prune
 git rev-parse origin/staging
 # Hanya migration berikut yang boleh pending:
 git diff --name-only origin/staging...HEAD -- supabase/migrations
-npx supabase migration list --db-url $env:STAGING_DB_URL
-npx supabase db push --db-url $env:STAGING_DB_URL --dry-run
-# Jangan gunakan --include-all atau repair. Jangan apply.
+supabase migration list --linked
+supabase db push --linked --dry-run
 ```
 
 Timestamp `20260919000000` unik setelah `20260918130000`; verifikasi tidak ada
