@@ -55,7 +55,7 @@ async function reachExternalForm() {
   await selectFormAndUsage();
     await selectLetterType();
   await selectEntity();
-  
+
   await clickGetNumber();
   await screen.findByText("Unit Kerja");
 }

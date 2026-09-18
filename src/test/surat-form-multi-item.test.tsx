@@ -51,7 +51,7 @@ async function reachMultiItemForm() {
   await selectFormAndUsage();
     await selectLetterType();
   await selectEntity();
-  
+
   await clickGetNumber();
 }
 

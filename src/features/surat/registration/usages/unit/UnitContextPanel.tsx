@@ -11,7 +11,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
   const [externalProjects, setExternalProjects] = useState<ProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
-  
+
   const [projectUnitAvailability, setProjectUnitAvailability] = useState<{
     loading: boolean;
     count: number | null;
@@ -58,7 +58,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     };
     const count = Number(input.requested_unit_count || 0);
     setInputValue("requested_project", reqProject);
-    setInputValue("unit_request_sentence", count > 0 
+    setInputValue("unit_request_sentence", count > 0
       ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
       : "");
   };
@@ -86,9 +86,9 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-xs font-semibold text-muted-foreground">Proyek</Label>
-          <Select 
-            value={(input.requested_project as { value?: string } | undefined)?.value || ""} 
-            onValueChange={handleExternalProjectChange} 
+          <Select
+            value={(input.requested_project as { value?: string } | undefined)?.value || ""}
+            onValueChange={handleExternalProjectChange}
             disabled={projectsLoading || !!generatedNoSurat}
           >
             <SelectTrigger className="h-12 bg-background/70 text-sm">

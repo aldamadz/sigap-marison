@@ -59,7 +59,7 @@ describe("Flow 3: Unit pusat", () => {
     await selectFormAndUsage(/Unit/i);
     await selectLetterType();
     await selectEntity();
-    
+
 
     await selectOptionByLabel(/^Proyek$/i, /GA01 - Griya Asri/i);
     fireEvent.change(screen.getByPlaceholderText("Contoh: 10"), { target: { value: "3" } });

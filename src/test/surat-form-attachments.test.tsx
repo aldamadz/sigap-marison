@@ -58,7 +58,7 @@ async function reachReadyAttachmentForm() {
   await selectFormAndUsage();
     await selectLetterType();
   await selectEntity();
-  
+
   await clickGetNumber();
   await fillNamaBarang("Printer Epson");
   await waitFor(() => expect(screen.getByPlaceholderText(/Contoh.*Permohonan/i)).toHaveValue(

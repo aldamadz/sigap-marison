@@ -1564,7 +1564,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const applySelectedUsage = (detail: UsageDetailRecord) => {
     const isNewUsage = Array.isArray(detail.form_usage_steps);
-    
+
     const usageData = selectUsage(detail);
     if (!usageData) {
       toast({ variant: "destructive", title: "Kegunaan Form Tidak Valid", description: "Kategori pengajuan tidak dapat ditentukan dari konfigurasi Kegunaan Form. Hubungi administrator." });
@@ -1577,7 +1577,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setSelectedUsage(detail);
     setFormData(prev => {
       const nextInput = { ...prev.form_input_data };
-      
+
       const previousUsageData = selectUsage(selectedUsage);
       if (previousUsageData) {
         const cleanup = previousUsageData.module.cleanup(buildModuleTransitionCtx(
@@ -1587,12 +1587,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           prev,
           nextInput,
         ), "usage_change");
-        
+
         cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
       }
 
       nextInput.request_category = usageData.category;
-      
+
       // Auto apply require recommendation if needed based on module
       if (usageData.category === "asset") {
         nextInput.requires_recommendation = false; // default to false on switch, let context panel change it if allowed
@@ -3532,7 +3532,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 {/* Entitas */}
                 <div className="space-y-2">
                   <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>
@@ -3967,5 +3967,3 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 }
 
 export default SuratForm;
-
-

@@ -43,7 +43,7 @@ export const unitModule: UsageModule = {
   normalizeInput(input, ctx) {
     const next = { ...input };
     next.request_mode = "unit";
-    
+
     // We recreate the items table based on the requested unit count
     const count = Number(next.requested_unit_count || 0);
     const unitLabel = Number.isFinite(count) && count > 0 ? count : "";
