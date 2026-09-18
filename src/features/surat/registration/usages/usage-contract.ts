@@ -40,6 +40,7 @@ export interface UsageModuleContext {
 
   setInputValue(key: string, value: unknown): void;
   setSelection(patch: Partial<FormDataSnapshot>): void;
+  requestExternalOptions(sourceKey: string, variables?: Record<string, unknown>): Promise<Array<{ value: string; label: string; raw?: Record<string, unknown> }>>;
 }
 
 export interface UsageModuleMeta {

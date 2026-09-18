@@ -1656,6 +1656,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
       return {
         ...prev,
+        // Ganti Kegunaan: proyek hanya dipertahankan bila kategori sama;
+        // lintas kategori, proyek lama tidak lagi sah.
+        project_id: previousUsageData && previousUsageData.category !== usageData.category ? "" : prev.project_id,
         penggunaan_id: isNewUsage ? "" : detail.id,
         form_usage_id: isNewUsage ? detail.id : "",
         is_aset: usageData.category === "asset",
@@ -3691,7 +3694,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       }
                       nextInput.request_category = null;
                       nextInput.request_mode = null;
-                      return { ...previous, form_usage_id: "", penggunaan_id: "", form_input_data: nextInput, is_aset: false };
+                      // Ganti Form: proyek dan konteks modul lama tidak lagi sah.
+                      return { ...previous, project_id: "", form_usage_id: "", penggunaan_id: "", form_input_data: nextInput, is_aset: false };
                     });
                   }}
                 >

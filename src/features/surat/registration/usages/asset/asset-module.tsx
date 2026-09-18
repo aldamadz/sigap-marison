@@ -2,9 +2,6 @@ import React from "react";
 import type { UsageModule, UsageModuleContext, CleanupResult } from "../usage-contract";
 import { registerUsageModule } from "../usage-registry";
 import { AssetContextPanel } from "./AssetContextPanel";
-import { clearRecommendationInput } from "@/components/surat/form/surat-form-schema";
-import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
-import { isRecommendationItemsComplete } from "@/components/surat/recommendation-multi-detail";
 
 export const assetModule: UsageModule = {
   meta: {
