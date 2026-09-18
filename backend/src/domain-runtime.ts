@@ -2388,6 +2388,49 @@ const marisonSyncRuntime = createMarisonSyncRuntime({
   executeMarisonEmployeeSync,
 });
 
+const MARISON_UNITS_SOURCE_KEY = "marison_units_by_project";
+const MAX_EXTERNAL_DATA_SOURCE_PAGES = 100;
+
+const getExternalDataSourceItems = (payload, responsePath) => {
+  const rawItems = getPathValue(payload, responsePath) ?? [];
+  if (Array.isArray(rawItems)) return rawItems;
+  return Array.isArray(rawItems?.data) ? rawItems.data : [];
+};
+
+const getExternalPaginationMeta = (payload) => {
+  const meta = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload.meta
+    : null;
+  const nested = meta && typeof meta === "object" ? (meta.pagination || meta) : {};
+  const readPositiveInteger = (...values) => {
+    for (const value of values) {
+      const parsed = Number(value);
+      if (Number.isSafeInteger(parsed) && parsed > 0) return parsed;
+    }
+    return null;
+  };
+
+  return {
+    totalPages: readPositiveInteger(nested.total_pages, nested.totalPages, nested.last_page, nested.lastPage),
+    totalItems: readPositiveInteger(nested.total, nested.total_items, nested.totalItems),
+  };
+};
+
+const requestExternalDataSourcePage = async (source, environment, url, method) => {
+  if (source.auth_type === "marison_token_hmac_sha512") {
+    return getMarisonExternalJson(source, environment, url);
+  }
+
+  const response = await fetch(url, { method, headers: {} });
+  const responsePayload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(responsePayload?.message || "Gagal mengambil data dari API eksternal.");
+    err.status = response.status;
+    throw err;
+  }
+  return responsePayload;
+};
+
 const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
 
@@ -2423,25 +2466,55 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
     }
   });
 
-  const payload = source.auth_type === "marison_token_hmac_sha512"
-    ? await getMarisonExternalJson(source, state.environment, url)
-    : await (async () => {
-      const response = await fetch(url, { method, headers: {} });
-      const responsePayload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const err = new Error(responsePayload?.message || "Gagal mengambil data dari API eksternal.");
-        err.status = response.status;
-        throw err;
-      }
-      return responsePayload;
-    })();
+  const shouldPaginateUnits = source.source_key === MARISON_UNITS_SOURCE_KEY;
+  const pageSize = Number(url.searchParams.get("per_page")) || 100;
+  const items = [];
+  let page = 1;
+  let paginationCompleted = !shouldPaginateUnits;
 
-  const rawItems = getPathValue(payload, source.response_path) ?? [];
-  const items = Array.isArray(rawItems)
-    ? rawItems
-    : Array.isArray(rawItems?.data)
-      ? rawItems.data
-      : [];
+  for (; page <= (shouldPaginateUnits ? MAX_EXTERNAL_DATA_SOURCE_PAGES : 1); page += 1) {
+    const pageUrl = new URL(url);
+    if (shouldPaginateUnits) pageUrl.searchParams.set("page", String(page));
+
+    const payload = await requestExternalDataSourcePage(source, state.environment, pageUrl, method);
+    const pageItems = getExternalDataSourceItems(payload, source.response_path);
+    items.push(...pageItems);
+
+    if (!shouldPaginateUnits) break;
+
+    const { totalPages, totalItems } = getExternalPaginationMeta(payload);
+    if (pageItems.length === 0 || pageItems.length > pageSize) {
+      paginationCompleted = true;
+      break;
+    }
+    if (totalPages !== null && page >= totalPages) {
+      paginationCompleted = true;
+      break;
+    }
+    if (totalItems !== null && items.length >= totalItems) {
+      paginationCompleted = true;
+      break;
+    }
+    if (totalPages === null && totalItems === null && pageItems.length < pageSize) {
+      paginationCompleted = true;
+      break;
+    }
+  }
+
+  if (shouldPaginateUnits && !paginationCompleted) {
+    const err = new Error("Pagination unit Marison melebihi batas aman.");
+    err.status = 502;
+    throw err;
+  }
+
+  const normalizedOptions = items
+    .map((item) => normalizeExternalOption(item, source))
+    .filter((item) => item.value && item.label);
+  const optionsByValue = new Map();
+  normalizedOptions.forEach((item) => {
+    if (!optionsByValue.has(item.value)) optionsByValue.set(item.value, item);
+  });
+  const normalizedOptionList = [...optionsByValue.values()];
 
   return {
     source: {
@@ -2449,10 +2522,9 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
       name: source.name,
       environment: state.environment,
     },
-    options: items
-      .map((item) => normalizeExternalOption(item, source))
-      .filter((item) => item.value && item.label),
+    options: normalizedOptionList,
     raw_count: items.length,
+    total_count: normalizedOptionList.length,
   };
 };
 
