@@ -1,9 +1,19 @@
 # Staging Single-Account Fixtures — Snapshot & Cleanup Runbook (staging only)
 
 > Jangan apply migration sebelum Tech Lead review. Jangan promosikan ke production.
-> PR: #309. Issue: #308. Migration fixture: `20260919000000`.
-> Tester: `system.tuyemaris@gmail.com` (boolean login verified, no secrets here).
+> PR: #309 (applied), follow-up branch `fix/staging-split-account-usage-fixtures-01`.
+> Issue: #308, follow-up #310.
+> Migrations: `20260919000000` (legacy single-account, archived),
+> `20260919000100` (split-account: 8 selectable + 2 internal).
+> Tester Pusat: `system.tuyemaris@gmail.com`; tester Cabang: `faizalsyahiddin@gmail.com`.
+> (boolean login verified, no secrets here).
 > Dilarang membuat tabel backup di `public` atau schema lain.
+>
+> Catatan visibilitas: department ACL membatasi fixture per scope untuk
+> anggota non-admin; akun admin (tester Pusat) secara inheren dapat membaca
+> seluruh Kegunaan lewat `can_read_form_usage`. Risiko pengguna lain pada
+> department yang sama dapat melihat fixture tetap didokumentasikan. Tidak ada
+> bypass authorization berbasis nama/prefix di source aplikasi.
 
 ## 1. Pre-apply snapshot (staging, read-only, tanpa secrets)
 
@@ -90,10 +100,17 @@ Ulangi snapshot count/fingerprint section 1 dan bandingkan sebelum vs sesudah:
 ```sql
 -- 9 canonical tidak berubah (8 + 1 template, tanpa prefix).
 select count(*) from public.form_usages
-where status='active' and name not like '[UJI STAGING]%';
--- 9 fixture aktif dengan prefix dan deskripsi akun uji.
+where status='active' and name not like '[UJI STAGING%';
+-- 8 fixture selectable aktif dengan prefix scope dan deskripsi akun uji.
 select name from public.form_usages
-where status='active' and name like '[UJI STAGING]%' order by name;
+where status='active' and is_system_template is false
+  and (name like '[UJI STAGING PUSAT]%' or name like '[UJI STAGING CABANG]%')
+order by name;
+-- 2 template rekomendasi internal (tidak selectable).
+select name from public.form_usages
+where status='active' and is_system_template is true
+  and (name like '[UJI STAGING PUSAT]%' or name like '[UJI STAGING CABANG]%')
+order by name;
 select count(*) from public.form_usages
 where status='active' and name like '[UJI STAGING]%'
   and description ilike '%system.tuyemaris@gmail.com%';
@@ -117,5 +134,6 @@ update public.form_usages set status='archived', updated_at=clock_timestamp()
 where name like '[UJI STAGING]%' and status='active';
 ```
 
-Verifikasi canonical 9 tetap active dan fixture 0 active. Jangan promosikan
+Verifikasi canonical 9 tetap active dan 10 clone scope (8 selectable + 2 internal)
+kembali 0 active. Jangan promosikan
 fixture maupun cleanup ke production.

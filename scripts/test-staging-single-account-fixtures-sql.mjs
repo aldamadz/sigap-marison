@@ -178,7 +178,8 @@ insert into public.master_departments (id,name) values
  ('30000000-0000-4000-8000-000000000006','Branch Manager'),
  ('30000000-0000-4000-8000-000000000007','Teknik (Cabang)'),
  ('30000000-0000-4000-8000-000000000008','Umum & Keuangan (Cabang)'),
- ('30000000-0000-4000-8000-000000000009','Pengembangan Organisasi');
+ ('30000000-0000-4000-8000-000000000009','Pengembangan Organisasi'),
+ ('30000000-0000-4000-8000-000000000010','Marketing (Cabang)');
 update public.master_departments set code='PBO' where id='30000000-0000-4000-8000-000000000009';
 insert into public.master_offices (id,name,code,kedudukan,marison_branch_id,marison_synced_at) values
  ('20000000-0000-4000-8000-000000000001','Kantor Pusat','001','Pusat',1,now()),
@@ -214,7 +215,8 @@ insert into public.profiles (id,full_name,job_title,role,office_id,department_id
  ('40000000-0000-4000-8000-000000000021','Other Branch User','Staff','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000008','r2@x.test','R2',null,null),
  ('40000000-0000-4000-8000-000000000022','Branch D Supervisor','Supervisor Teknik','user','20000000-0000-4000-8000-000000000004','30000000-0000-4000-8000-000000000007','r3@x.test','R3',null,null),
  ('40000000-0000-4000-8000-000000000023','Staff IT Recommendation','Staff IT','user','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000009','rec@x.test','REC',null,null),
- ('1cc26c67-064c-44e2-9e23-e3b4311500e1','Tester Satu Akun','Staff PBO','admin','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000009','system.tuyemaris@gmail.com','I114',17,now());
+ ('1cc26c67-064c-44e2-9e23-e3b4311500e1','Tester Satu Akun','Staff PBO','admin','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000009','system.tuyemaris@gmail.com','I114',17,now()),
+ ('2cc26c67-064c-44e2-9e23-e3b4311500e2','Tester Cabang','Staff Marketing Cabang','user','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000010','faizalsyahiddin@gmail.com','C201',201,now());
 
 insert into public.form_usages (id,form_id,name,request_category,scope_type,status) values
  ('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','Legacy Pusat Asset','asset','pusat','active'),
@@ -310,7 +312,7 @@ try {
   if (!output.includes("STAGING single-account fixtures: all assertions passed")) {
     throw new Error(`SQL success marker missing.\n${output}`);
   }
-  if (!output.includes("STAGING single-account behavioral: all assertions passed")) {
+  if (!output.includes("SPLIT single-account behavioral: all assertions passed")) {
     throw new Error(`Behavioral marker missing.\n${output}`);
   }
   process.stdout.write(output);
