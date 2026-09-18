@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
+import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf, resolvePgdMasterForm } from "./pgd-pdf-renderer.mjs";
 import {
   parseStorageRef,
   recommendationVersionPath,
@@ -113,11 +113,21 @@ const markFailed = async (job, error) => {
 const renderDirectPgdJob = async (job) => {
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
+    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
     .eq("id", job.surat_id)
     .maybeSingle();
   if (suratError) throw suratError;
-  if (!surat || !isPgdDocument(surat)) return null;
+  if (!surat) return null;
+  // Newer letters may carry an empty snapshot form while still referencing a
+  // canonical form usage. Resolve form_usage_id → form_usages → master_forms
+  // as a second detection source; anything unresolvable stays non-PGD
+  // (fail-closed) so the job fails with a clear renderer error.
+  let detectionSource = surat;
+  if (!isPgdDocument(surat) && surat.form_usage_id) {
+    const masterForm = await resolvePgdMasterForm(supabase, surat.form_usage_id);
+    if (masterForm) detectionSource = { ...surat, resolved_master_form: masterForm };
+  }
+  if (!isPgdDocument(detectionSource)) return null;
 
   const { data: signatures, error: signatureError } = await supabase
     .from("surat_signatures")

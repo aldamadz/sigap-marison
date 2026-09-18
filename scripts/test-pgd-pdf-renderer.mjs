@@ -6,11 +6,91 @@ import {
   isPgdDocument,
   normalizePgdDocumentData,
   renderPgdPdf,
+  resolvePgdMasterForm,
 } from "../pgd-pdf-renderer.mjs";
+
+const PGD_MASTER_FORM = { id: "form-pgd", nama_form: "FORM PERMINTAAN BARANG & JASA", nomor_form: "FM-UAI.PGD-01-00" };
+const NON_PGD_MASTER_FORM = { id: "form-rec", nama_form: "FORM REKOMENDASI", nomor_form: "FM-UAI.HRD-30-00" };
+
+const stubClient = ({ usage = null, usageError = null, masterForm = null, masterFormError = null } = {}) => ({
+  from: (table) => ({
+    select: () => ({
+      eq: () => ({
+        maybeSingle: async () => {
+          if (table === "form_usages") return { data: usage, error: usageError };
+          return { data: masterForm, error: masterFormError };
+        },
+      }),
+    }),
+  }),
+});
 
 test("detects PGD from the persisted form snapshot", () => {
   assert.equal(isPgdDocument({ location_snapshot: { form: { nama_form: "FORM PERMINTAAN BARANG & JASA" } } }), true);
   assert.equal(isPgdDocument({ location_snapshot: { form: { nama_form: "FORM REKOMENDASI" } } }), false);
+});
+
+test("detects PGD from resolved canonical master form when snapshot form is empty", async () => {
+  const surat = {
+    id: "surat-baru",
+    form_usage_id: "usage-pgd",
+    form_input_data: { request_category: "asset", items: [{ nama_barang: "Laptop", jumlah: 1 }] },
+    location_snapshot: { form: {} },
+    data_snapshot: {},
+  };
+  assert.equal(isPgdDocument(surat), false);
+  const masterForm = await resolvePgdMasterForm(
+    stubClient({ usage: { id: "usage-pgd", form_id: "form-pgd" }, masterForm: PGD_MASTER_FORM }),
+    surat.form_usage_id,
+  );
+  assert.deepEqual(masterForm, PGD_MASTER_FORM);
+  assert.equal(isPgdDocument({ ...surat, resolved_master_form: masterForm }), true);
+  const pdf = await renderPgdPdf(normalizePgdDocumentData({ ...surat, resolved_master_form: masterForm }));
+  assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+});
+
+test("rejects non-PGD forms even with a PGD-like category", () => {
+  const surat = {
+    form_usage_id: "usage-rec",
+    form_input_data: { request_category: "asset" },
+    location_snapshot: { form: {} },
+    data_snapshot: {},
+  };
+  assert.equal(isPgdDocument({ ...surat, resolved_master_form: NON_PGD_MASTER_FORM }), false);
+  assert.equal(isPgdDocument({ form_input_data: { request_category: "asset" } }), false);
+});
+
+test("fails closed on missing or invalid form usage", async () => {
+  const client = (overrides) => stubClient(overrides);
+  assert.equal(await resolvePgdMasterForm(client({}), null), null);
+  assert.equal(await resolvePgdMasterForm(client({}), undefined), null);
+  assert.equal(await resolvePgdMasterForm(client({ usage: null }), "usage-hilang"), null);
+  assert.equal(await resolvePgdMasterForm(client({ usage: { id: "usage-tanpa-form" } }), "usage-tanpa-form"), null);
+  assert.equal(await resolvePgdMasterForm(client({ usage: { id: "u", form_id: "f" }, masterForm: null }), "u"), null);
+  assert.equal(await resolvePgdMasterForm(client({ usage: null, usageError: new Error("db down") }), "u"), null);
+  assert.equal(
+    await resolvePgdMasterForm(
+      client({ usage: { id: "u", form_id: "f" }, masterForm: null, masterFormError: new Error("db down") }),
+      "u",
+    ),
+    null,
+  );
+  assert.equal(isPgdDocument({}), false);
+  assert.equal(isPgdDocument({ location_snapshot: { form: {} }, data_snapshot: {} }), false);
+});
+
+test("covers all four PGD request categories with resolved canonical form", () => {
+  for (const request_category of ["asset", "unit", "non_unit", "non_asset"]) {
+    const surat = {
+      form_usage_id: `usage-${request_category}`,
+      form_input_data: { request_category },
+      location_snapshot: { form: {} },
+      data_snapshot: {},
+    };
+    assert.equal(isPgdDocument(surat), false);
+    assert.equal(isPgdDocument({ ...surat, resolved_master_form: PGD_MASTER_FORM }), true);
+    assert.equal(isPgdDocument({ ...surat, resolved_master_form: NON_PGD_MASTER_FORM }), false);
+  }
 });
 
 test("normalizes database snapshots without depending on Excel", () => {

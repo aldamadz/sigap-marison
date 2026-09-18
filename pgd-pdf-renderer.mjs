@@ -127,8 +127,31 @@ export const isPgdDocument = (source = {}) => {
     source?.location_snapshot?.form?.nama_form,
     source?.data_snapshot?.form?.nama_form,
     source?.data_snapshot?.form?.name,
+    source?.resolved_master_form?.nama_form,
   ].map((value) => String(value || "").toUpperCase());
   return names.some((name) => name.includes("PERMINTAAN BARANG"));
+};
+
+// Resolves the canonical master form for a surat through its form usage:
+// form_usage_id → form_usages.form_id → master_forms.
+// Returns the master form row ({ id, nama_form, nomor_form }) or null when
+// the usage is missing, invalid, or unresolvable. Never throws: callers
+// treat null as "not PGD" (fail-closed).
+export const resolvePgdMasterForm = async (client, formUsageId) => {
+  if (!formUsageId) return null;
+  const { data: usage, error: usageError } = await client
+    .from("form_usages")
+    .select("id, form_id")
+    .eq("id", formUsageId)
+    .maybeSingle();
+  if (usageError || !usage?.form_id) return null;
+  const { data: masterForm, error: masterFormError } = await client
+    .from("master_forms")
+    .select("id, nama_form, nomor_form")
+    .eq("id", usage.form_id)
+    .maybeSingle();
+  if (masterFormError || !masterForm) return null;
+  return masterForm;
 };
 
 export const normalizeNativeSignatures = (signatures = [], targetStep = 0) =>
