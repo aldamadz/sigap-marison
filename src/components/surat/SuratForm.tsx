@@ -56,7 +56,6 @@ import type {
 } from "@/features/surat/registration/usages/usage-contract";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import {
   RegistrationSummaryDialog,
@@ -73,17 +72,10 @@ import {
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
 import { NominalInput } from "@/components/surat/NominalInput";
 import {
-  getFundSubmissionAmount,
-  validateFundSubmissionItems,
-} from "@/components/surat/fund-submission";
-import { formatRupiahZero } from "@/lib/rupiah";
-import {
   resolveNonUnitProjectMapping,
-  validateNonUnitRows,
 } from "@/components/surat/non-unit-request";
 import {
   canDepartmentRequestUnit,
-  clearRecommendationInput,
   getExternalInputFields,
   getFullRoles,
   getInputSchema,
@@ -661,10 +653,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const isTableFieldComplete = (field: TemplateField) => {
-    if (field.key === RECOMMENDATION_ITEMS_KEY) return isRecommendationItemsComplete(field);
-    if (field.key === "items" && getRequestCategory() === "non_unit" && !shouldUseDefaultBranchProject) {
-      return validateNonUnitRows(getFormFieldValue(field.key)).length === 0;
+    // Slot modul didahulukan; field milik modul tanpa override dilewati generik.
+    if (activeUsageData && moduleCtx) {
+      const owned = activeUsageData.module.isFieldComplete?.(field, moduleCtx);
+      if (owned !== null && owned !== undefined) return owned;
+      const hidden = activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? [];
+      if (hidden.includes(field.key)) return true;
     }
+    if (field.key === RECOMMENDATION_ITEMS_KEY) return isRecommendationItemsComplete(field);
     const rows = getTableRows(field.key).filter((row: TableRow) =>
       Object.values(row ?? {}).some((value) => String(value ?? "").trim())
     );
@@ -677,12 +673,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const isManualFieldComplete = (field: TemplateField) => {
-    if (!isUnitMode && isUnitField(field)) return true;
-    if (hasUnitRequestFields(selectedUsage)) {
-      if (field.key === "requested_unit_count") return true;
-      if (isUnitMode && (field.key === "items" || field.key === "unit")) return true;
-      if (!isUnitMode && field.key === "unit") return true;
+    if (activeUsageData && moduleCtx) {
+      const owned = activeUsageData.module.isFieldComplete?.(field, moduleCtx);
+      if (owned !== null && owned !== undefined) return owned;
+      const hidden = activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? [];
+      if (hidden.includes(field.key)) return true;
     }
+    const requiresUnitAllocation = activeUsageData?.module.requirements.requiresUnitAllocation ?? false;
+    if (!requiresUnitAllocation && isUnitField(field)) return true;
     if (field.type === "table") return isTableFieldComplete(field);
     const value = getFormFieldValue(field.key);
     if (field.type === "external_select" && isMultiSelectField(field)) {
@@ -729,12 +727,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const profileOfficeId = currentProfile?.office_id || "";
   const profileDepartmentId = currentProfile?.department_id || requesterDepartmentId;
   const profileLocationReady = isProfileLocationReady(currentProfile, formData, isCurrentUserAdmin);
-  const canRequesterUseRecommendation = useMemo(() => {
-    if (linkedDocumentContext?.type === "recommendation") return false;
-    const departmentId = formData.dept_id || requesterDepartmentId;
-    const department = master.depts.find((dept: MasterRecord) => dept.id === departmentId);
-    return canUseAssetRecommendation(department);
-  }, [formData.dept_id, requesterDepartmentId, master.depts, linkedDocumentContext]);
 
   const filteredUsage = useMemo(() => {
     return usageDetails.filter((item) => {
@@ -891,11 +883,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return prefix ? prefix.toUpperCase() : "";
   }, [selectedProject]);
 
+  // Modul aktif (identitas stabil agar moduleCtx tidak churn).
+  // Didefinisikan awal karena requirements-nya dipakai derivasi lokasi.
+  const activeUsageData = useMemo(
+    () => (selectedUsage ? selectUsage(selectedUsage) : null),
+    [selectedUsage],
+  );
+
   const isBranchOfficeSelected = Boolean(formData.office_id && !isPusatSelected);
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
-  const isFundMode = getRequestCategory() === "non_asset";
-  const isNonUnitMode = getRequestCategory() === "non_unit";
-  const requiresMarisonProject = isNonUnitMode || isFundMode;
+  // Tanpa flag mode kategori di orchestrator: kebutuhan mapping proyek
+  // dibaca dari requirements modul aktif.
+  const requiresMarisonProject = activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false;
+  // Flag mode untuk validator shared (lib) diturunkan dari requirements modul,
+  // bukan dari perbandingan kategori di orchestrator.
+  const moduleModeFlags = {
+    isNonUnitMode: (activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false)
+      && !(activeUsageData?.module.requirements.allowsFundWithoutProject ?? false),
+    isFundMode: activeUsageData?.module.requirements.allowsFundWithoutProject ?? false,
+  };
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;
@@ -960,12 +966,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   // Modul aktif + shared module context (typed penuh, tanpa any-cast).
   // Resolver null → tidak ada modul (fail closed di UI & gate nomor).
-  // activeUsageData di-memo agar identitas stabil (hindari churn moduleCtx).
-  const activeUsageData = useMemo(
-    () => (selectedUsage ? selectUsage(selectedUsage) : null),
-    [selectedUsage],
-  );
-
   const moduleCtx: UsageModuleContext | null = useMemo(() => {
     if (!selectedUsage || !activeUsageData) return null;
     return {
@@ -1458,14 +1458,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
   }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext, generatedNoSurat]);
 
+  // Rekonsiliasi input khusus modul (mis. rekomendasi Aset) berjalan generik
+  // lewat kontrak modul. Orchestrator tidak tahu isi modul apa pun.
   useEffect(() => {
-    if (getRequestCategory() !== "asset" || canRequesterUseRecommendation) return;
-    if (formData.form_input_data.requires_recommendation === undefined) return;
-    setFormData(previous => ({
-      ...previous,
-      form_input_data: clearRecommendationInput(previous.form_input_data),
-    }));
-  }, [canRequesterUseRecommendation, formData.form_input_data.request_category, formData.form_input_data.requires_recommendation]);
+    if (!activeUsageData || !moduleCtx) return;
+    const reconcile = activeUsageData.module.reconcileInputForContext;
+    if (!reconcile) return;
+    const reconciled = reconcile({ ...formData.form_input_data }, moduleCtx);
+    if (JSON.stringify(reconciled) !== JSON.stringify(formData.form_input_data)) {
+      setFormData((previous) => ({ ...previous, form_input_data: reconciled }));
+    }
+  }, [
+    activeUsageData,
+    moduleCtx,
+    formData.dept_id,
+    formData.office_id,
+    formData.form_input_data,
+    linkedDocumentContext,
+    selectedUsage?.id,
+  ]);
 
   useEffect(() => {
     const fields = getExternalInputFields(selectedUsage);
@@ -1593,19 +1604,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
       nextInput.request_category = usageData.category;
 
-      // Auto apply require recommendation if needed based on module
-      if (usageData.category === "asset") {
-        nextInput.requires_recommendation = false; // default to false on switch, let context panel change it if allowed
-      }
-
-      // Initialize the normalized state
-      const initializedInput = usageData.module.normalizeInput(nextInput, buildModuleTransitionCtx(
+      // Rekonsiliasi generik milik modul (default pilihan, konteks linked, dsb).
+      // Orchestrator tidak mengetahui modul apa yang aktif.
+      const transitionCtxFor = (input: FormInputData) => buildModuleTransitionCtx(
         detail,
         usageData.key,
         usageData.category,
         prev,
-        nextInput,
-      ));
+        input,
+      );
+      const reconciledInput = usageData.module.reconcileInputForContext?.(nextInput, transitionCtxFor(nextInput)) ?? nextInput;
+
+      // Initialize the normalized state
+      const initializedInput = usageData.module.normalizeInput(reconciledInput, transitionCtxFor(reconciledInput));
 
       return {
         ...prev,
@@ -1939,15 +1950,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       requestedUnitCount: Number(getFormFieldValue("requested_unit_count") || 0),
       requestedProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
 
-      isNonUnitMode,
+      isNonUnitMode: moduleModeFlags.isNonUnitMode,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
-      firstNonUnitError: isNonUnitMode ? validateNonUnitRows(effectiveFormInputData.items)[0]?.message : undefined,
-
-      isFundMode,
+      firstNonUnitError: undefined,
+      isFundMode: moduleModeFlags.isFundMode,
       fundWithoutProject: isGeneralFund,
       fundType: String(getFormFieldValue("fund_type") || ""),
-      firstFundIssue: isFundMode ? validateFundSubmissionItems(effectiveFormInputData.items)[0]?.message : undefined,
+      firstFundIssue: undefined,
 
       missingField: missingField ? { key: missingField.key, label: missingField.label } : undefined,
       firstRecommendationError,
@@ -1960,6 +1970,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         variant: "destructive",
         title: result.errorTitle!,
         ...(result.errorDescription ? { description: result.errorDescription } : {}),
+      });
+      return false;
+    }
+
+    // Gate submit khusus modul (baris rincian milik modul aktif).
+    const moduleSubmitIssues = activeUsageData && moduleCtx
+      ? activeUsageData.module.validateSubmit?.(moduleCtx) ?? []
+      : [];
+    if (moduleSubmitIssues.length > 0) {
+      toast({
+        variant: "destructive",
+        title: moduleSubmitIssues[0].title,
+        ...(moduleSubmitIssues[0].description ? { description: moduleSubmitIssues[0].description } : {}),
       });
       return false;
     }
@@ -1976,29 +1999,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
       "recommendation_template_name", "recommendation_multi_detail", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type", "fund_amount", "fund_without_project",
     ]);
+    // Label + baris ringkasan khusus modul berasal dari modul aktif.
+    const moduleSummaryLabels = activeUsageData?.module.summaryFieldLabels ?? {};
+    const moduleSummaryFields = activeUsageData && moduleCtx
+      ? activeUsageData.module.buildSummaryFields?.(moduleCtx) ?? []
+      : [];
     const fields: RegistrationSummaryField[] = formFields
       .filter((field) => !hiddenKeys.has(field.key))
       .map((field) => ({
         key: field.key,
-        label: field.key === "items" && isNonUnitMode
-          ? "Daftar Pekerjaan Non Unit"
-          : field.label || humanizeInputKey(field.key),
+        label: moduleSummaryLabels[field.key] || field.label || humanizeInputKey(field.key),
         type: field.type,
         value: effectiveFormInputData[field.key],
       }))
       .filter((field) => Array.isArray(field.value) ? field.value.length > 0 : formatSummaryValue(field.value) !== "-");
 
-    if (isFundMode) {
-      fields.push({
-        key: "fund_type",
-        label: "Jenis Pengajuan Dana",
-        value: getFormFieldValue("fund_type") === "production_cost" ? "Biaya Produksi" : "Biaya Operasional",
-      });
-      fields.push({
-        key: "fund_amount",
-        label: "Total Pengajuan Dana",
-        value: formatRupiahZero(getFundSubmissionAmount(effectiveFormInputData.items)),
-      });
+    for (const moduleField of moduleSummaryFields) {
+      fields.push({ key: moduleField.key, label: moduleField.label, value: moduleField.value });
     }
 
     Object.entries(effectiveFormInputData).forEach(([key, value]) => {

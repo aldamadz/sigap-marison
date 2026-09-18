@@ -68,6 +68,7 @@ export type RecommendationIO = {
   };
 };
 
+export type { TemplateField };
 export interface UsageModuleContext {
   usage: UsageDetailRecord;
   usageKey: UsageModuleKey;
@@ -94,6 +95,19 @@ export type NumberContextIssue = {
   description?: string;
 };
 
+/** Satu masalah validasi submit: judul + deskripsi aman untuk UI. */
+export type SubmitIssue = {
+  title: string;
+  description?: string;
+};
+
+/** Satu baris ringkasan submit milik modul. */
+export type SummaryField = {
+  key: string;
+  label: string;
+  value: unknown;
+};
+
 export interface UsageModuleMeta {
   key: UsageModuleKey;
   label: string;
@@ -107,6 +121,8 @@ export interface UsageModuleRequirements {
   requiresUnitAllocation: boolean;
   requiresRecommendationChoice: boolean;
   allowsLinkedRecommendation: boolean;
+  /** Butuh mapping master-proyek → Marison (selector Proyek + snapshot payload). */
+  requiresMasterProjectMapping: boolean;
 }
 
 export interface CleanupResult {
@@ -129,6 +145,27 @@ export interface UsageModule {
 
   /** Aturan gate nomor khusus modul. Array kosong = lolos. */
   validateNumberContext(ctx: UsageModuleContext): NumberContextIssue[];
+
+  /**
+   * Kelengkapan satu field untuk submit. Boolean = milik modul;
+   * null = serahkan ke pemeriksaan generik orchestrator.
+   */
+  isFieldComplete?(field: TemplateField, ctx: UsageModuleContext): boolean | null;
+
+  /** Aturan gate submit khusus modul. Array kosong = lolos. */
+  validateSubmit?(ctx: UsageModuleContext): SubmitIssue[];
+
+  /** Baris ringkasan submit tambahan milik modul. */
+  buildSummaryFields?(ctx: UsageModuleContext): SummaryField[];
+
+  /** Override label ringkasan generik per key. */
+  summaryFieldLabels?: Record<string, string>;
+
+  /**
+   * Rekonsiliasi input terhadap konteks (departemen/lokasi/linked/usage).
+   * Dipanggil generik oleh orchestrator; orchestrator tidak tahu isi modul.
+   */
+  reconcileInputForContext?(input: FormInputData, ctx: UsageModuleContext): FormInputData;
 
   cleanup(ctx: UsageModuleContext, reason: "form_change" | "usage_change" | "category_change" | "number_reset"): CleanupResult;
   normalizeInput(input: FormInputData, ctx: UsageModuleContext): FormInputData;

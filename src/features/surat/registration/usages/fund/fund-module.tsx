@@ -3,8 +3,19 @@ import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import {
   getFundSubmissionAmount,
   normalizeFundSubmissionItems,
+  validateFundSubmissionItems,
 } from "@/components/surat/fund-submission";
-import type { UsageModule, UsageModuleContext, CleanupResult, NumberContextIssue } from "../usage-contract";
+import type {
+  UsageModule,
+  UsageModuleContext,
+  CleanupResult,
+  NumberContextIssue,
+  SubmitIssue,
+  SummaryField,
+  TemplateField,
+} from "../usage-contract";
+import type { FormInputData } from "@/components/surat/form/surat-form-types";
+import { formatRupiahZero } from "@/lib/rupiah";
 import { registerUsageModule } from "../usage-registry";
 import { FundContextPanel } from "./FundContextPanel";
 
@@ -23,6 +34,7 @@ export const fundModule: UsageModule = {
     requiresUnitAllocation: false,
     requiresRecommendationChoice: false,
     allowsLinkedRecommendation: false,
+    requiresMasterProjectMapping: true,
   },
   renderContextPanel(ctx) {
     return <FundContextPanel ctx={ctx} />;
@@ -37,6 +49,32 @@ export const fundModule: UsageModule = {
   },
   hiddenFieldKeys() {
     return ["items", "fund_amount"];
+  },
+  isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
+    if (field.key !== "items" && field.key !== "fund_amount") return null;
+    return validateFundSubmissionItems(ctx.input.items).length === 0;
+  },
+  validateSubmit(ctx: UsageModuleContext): SubmitIssue[] {
+    const first = validateFundSubmissionItems(ctx.input.items)[0];
+    return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
+  },
+  buildSummaryFields(ctx: UsageModuleContext): SummaryField[] {
+    const fundType = String(ctx.input.fund_type || "");
+    return [
+      {
+        key: "fund_type",
+        label: "Jenis Pengajuan Dana",
+        value: fundType === "production_cost" ? "Biaya Produksi" : "Biaya Operasional",
+      },
+      {
+        key: "fund_amount",
+        label: "Total Pengajuan Dana",
+        value: formatRupiahZero(getFundSubmissionAmount(ctx.input.items)),
+      },
+    ];
+  },
+  reconcileInputForContext(input: FormInputData): FormInputData {
+    return input;
   },
   validateNumberContext(ctx): NumberContextIssue[] {
     const fundWithoutProject = ctx.input.fund_without_project === true;

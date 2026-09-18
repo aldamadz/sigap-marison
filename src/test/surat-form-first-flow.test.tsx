@@ -217,6 +217,19 @@ describe("SUR-01 form-first acceptance", () => {
     expect(suratFormSource).not.toContain(" as any");
     expect(suratFormSource).not.toContain("@ts-ignore");
     expect(suratFormSource).not.toContain("@ts-nocheck");
+    // A: validasi khusus modul tidak boleh diimpor/dipanggil orchestrator.
+    expect(suratFormSource).not.toContain("validateFundSubmissionItems");
+    expect(suratFormSource).not.toContain("validateNonUnitRows");
+    // C: rekonsiliasi rekomendasi milik modul Aset.
+    expect(suratFormSource).not.toContain("clearRecommendationInput");
+    // D: kelayakan rekomendasi hanya dihitung modul Aset.
+    expect(suratFormSource).not.toContain("canUseAssetRecommendation");
+    expect(suratFormSource).not.toContain("canRequesterUseRecommendation");
+    // E: tanpa hardcode default rekomendasi di applySelectedUsage.
+    expect(suratFormSource).not.toContain("nextInput.requires_recommendation = false");
+    // B: tanpa flag mode kategori di orchestrator.
+    expect(suratFormSource).not.toContain("const isFundMode");
+    expect(suratFormSource).not.toContain("const isNonUnitMode");
     // A: tanpa fallback generic.
     expect(suratFormSource).not.toContain('registry.get("generic")');
   });

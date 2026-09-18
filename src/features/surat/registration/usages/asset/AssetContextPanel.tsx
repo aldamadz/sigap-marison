@@ -2,32 +2,34 @@ import React, { useMemo } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UsageModuleContext } from "../usage-contract";
-import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
 import { MasterRecord } from "@/components/surat/form/surat-form-types";
+import {
+  ASSET_RECOMMENDATION_NEED_NOTE,
+  ASSET_RECOMMENDATION_SKIP_NOTE,
+  ASSET_RECOMMENDATION_TEMPLATE_NAME,
+  isRecommendationChoiceAllowed,
+} from "./recommendation-eligibility";
 
 export function AssetContextPanel({ ctx }: { ctx: UsageModuleContext }) {
   const { input, formData, master, linkedDocumentContext, requesterDepartmentId, setInputValue } = ctx;
 
   const canRequesterUseRecommendation = useMemo(() => {
-    if (linkedDocumentContext?.type === "recommendation") return false;
     const departmentId = formData.dept_id || requesterDepartmentId;
     const department = master.depts.find((dept: MasterRecord) => dept.id === departmentId);
-    return canUseAssetRecommendation(department);
+    return isRecommendationChoiceAllowed(department, linkedDocumentContext?.type ?? null);
   }, [formData.dept_id, requesterDepartmentId, master.depts, linkedDocumentContext]);
 
   if (!canRequesterUseRecommendation) return null;
 
   const required = input.requires_recommendation === true;
-  const RECOMMENDATION_TEMPLATE_NAME = "Rekomendasi Peremajaan Alat";
+  const RECOMMENDATION_TEMPLATE_NAME = ASSET_RECOMMENDATION_TEMPLATE_NAME;
 
   const applyRecommendationChoice = (choice: boolean) => {
     setInputValue("requires_recommendation", choice);
     setInputValue("recommendation_template_name", RECOMMENDATION_TEMPLATE_NAME);
     setInputValue(
       "recommendation_attachment_note",
-      choice
-        ? "Pemohon membutuhkan lampiran rekomendasi untuk permohonan aset ini."
-        : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini."
+      choice ? ASSET_RECOMMENDATION_NEED_NOTE : ASSET_RECOMMENDATION_SKIP_NOTE
     );
   };
 

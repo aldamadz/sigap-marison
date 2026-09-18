@@ -1,5 +1,13 @@
 import React from "react";
-import type { UsageModule, UsageModuleContext, CleanupResult, NumberContextIssue } from "../usage-contract";
+import type {
+  UsageModule,
+  UsageModuleContext,
+  CleanupResult,
+  NumberContextIssue,
+  SubmitIssue,
+  TemplateField,
+} from "../usage-contract";
+import type { FormInputData } from "@/components/surat/form/surat-form-types";
 import { registerUsageModule } from "../usage-registry";
 import { UnitContextPanel } from "./UnitContextPanel";
 
@@ -16,12 +24,22 @@ export const unitModule: UsageModule = {
     requiresUnitAllocation: true,
     requiresRecommendationChoice: false,
     allowsLinkedRecommendation: false,
+    requiresMasterProjectMapping: false,
   },
   renderContextPanel(ctx) {
     return <UnitContextPanel ctx={ctx} />;
   },
   hiddenFieldKeys() {
     return ["items", "unit"];
+  },
+  isFieldComplete(_field: TemplateField): boolean | null {
+    return null;
+  },
+  validateSubmit(): SubmitIssue[] {
+    return [];
+  },
+  reconcileInputForContext(input: FormInputData): FormInputData {
+    return input;
   },
   validateNumberContext(ctx): NumberContextIssue[] {
     const project = ctx.input.requested_project as { code?: string } | undefined;

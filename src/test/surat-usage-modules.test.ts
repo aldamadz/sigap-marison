@@ -73,6 +73,23 @@ describe("fund module", () => {
     expect(Array.isArray(out.items)).toBe(true);
   });
 
+  it("submit + isFieldComplete + summary milik modul dana", () => {
+    expect(fundModule.validateSubmit?.(ctxFor("non_asset", { items: [] }))[0].title)
+      .toBe("Rincian Dana Belum Lengkap");
+    const ctx = ctxFor("non_asset", { fund_type: "operational", items: [] });
+    expect(fundModule.isFieldComplete?.({ key: "items" } as never, ctx)).toBe(false);
+    expect(fundModule.isFieldComplete?.({ key: "nama_barang" } as never, ctx)).toBeNull();
+    const rows = fundModule.buildSummaryFields?.(ctxFor("non_asset", { fund_type: "operational", items: [] })) ?? [];
+    expect(rows.map(r => r.key)).toEqual(["fund_type", "fund_amount"]);
+    expect(rows[0]).toMatchObject({ label: "Jenis Pengajuan Dana", value: "Biaya Operasional" });
+  });
+
+  it("reconcile identitas untuk dana", () => {
+    const input = { request_mode: "barang" };
+    expect(fundModule.reconcileInputForContext?.(input as never, ctxFor("non_asset")))
+      .toBe(input);
+  });
+
   it("render slot tersedia, hidden mencakup items/fund_amount", () => {
     const ctx = ctxFor("non_asset");
     expect(fundModule.renderContextPanel(ctx)).not.toBeNull();
@@ -95,6 +112,30 @@ describe("non-unit module", () => {
     )).toEqual([]);
   });
 
+  it("submit: baris pekerjaan divalidasi modul", () => {
+    expect(nonUnitModule.validateSubmit?.(ctxFor("non_unit", { items: [] }))[0].title)
+      .toBe("Data Non Unit Belum Lengkap");
+    expect(nonUnitModule.validateSubmit?.(
+      ctxFor("non_unit", { items: [{ non_unit_id: 12, item_name: "Jalan", subtotal: 1000000 }] })
+    )).toEqual([]);
+  });
+
+  it("isFieldComplete: hanya items milik modul", () => {
+    const ctx = ctxFor("non_unit", { items: [] });
+    expect(nonUnitModule.isFieldComplete?.({ key: "items" } as never, ctx)).toBe(false);
+    expect(nonUnitModule.isFieldComplete?.({ key: "nama_barang" } as never, ctx)).toBeNull();
+  });
+
+  it("summary label items berasal dari modul", () => {
+    expect(nonUnitModule.summaryFieldLabels?.items).toBe("Daftar Pekerjaan Non Unit");
+  });
+
+  it("reconcile identitas untuk non-unit", () => {
+    const input = { request_mode: "barang" };
+    expect(nonUnitModule.reconcileInputForContext?.(input as never, ctxFor("non_unit")))
+      .toBe(input);
+  });
+
   it("cleanup + normalize milik modul; render slot bukan null", () => {
     expect(nonUnitModule.cleanup(ctxFor("non_unit"), "usage_change").inputKeysToDelete)
       .toEqual(expect.arrayContaining(["items"]));
@@ -111,6 +152,17 @@ describe("non-unit module", () => {
 });
 
 describe("unit module", () => {
+  it("requirements jujur untuk derivasi orchestrator", () => {
+    expect(unitModule.requirements.requiresMasterProjectMapping).toBe(false);
+    expect(unitModule.requirements.requiresUnitAllocation).toBe(true);
+  });
+
+  it("reconcile identitas untuk unit", () => {
+    const input = { request_mode: "unit" };
+    expect(unitModule.reconcileInputForContext?.(input as never, ctxFor("unit")))
+      .toBe(input);
+  });
+
   it("validate: proyek + jumlah wajib", () => {
     expect(unitModule.validateNumberContext(ctxFor("unit"))[0].title)
       .toBe("Proyek Unit Wajib Dipilih");
@@ -145,6 +197,25 @@ describe("asset module", () => {
       .toEqual(expect.arrayContaining(["requires_recommendation"]));
     const out = assetModule.normalizeInput({ request_mode: "unit" } as never, ctxFor("asset"));
     expect((out as Record<string, unknown>).request_mode).toBe("barang");
+  });
+
+  it("reconcile: default pilihan saat diizinkan, strip saat tidak", () => {
+    const allowed = assetModule.reconcileInputForContext?.(
+      {} as never,
+      ctxFor("asset", {}, { dept_id: "dept-pbo" }),
+    ) as Record<string, unknown>;
+    expect(allowed.requires_recommendation).toBe(false);
+    expect(allowed.recommendation_template_name).toBe("Rekomendasi Peremajaan Alat");
+
+    const stripped = assetModule.reconcileInputForContext?.(
+      { requires_recommendation: true, recommendation_template_name: "x" } as never,
+      {
+        ...ctxFor("asset", {}, { dept_id: "dept-pbo" }),
+        linkedDocumentContext: { type: "recommendation", parentSuratId: "p1" } as never,
+      },
+    ) as Record<string, unknown>;
+    expect(stripped).not.toHaveProperty("requires_recommendation");
+    expect(stripped).not.toHaveProperty("recommendation_template_name");
   });
 
   it("renderFieldOverride: model v1 dirender modul, tanpa model null", () => {
