@@ -27,6 +27,11 @@ describe("inbox dual-role task queue", () => {
     expect(inbox).toContain("const active = selectedTaskKey === taskKey");
   });
 
+  it("opens the actionable verification task first for a legacy signature-only link", () => {
+    expect(inbox).toContain("item.id === requestedTaskKey && isVerificationTask(item)");
+    expect(inbox).toContain("legacySelectedCompactItem");
+  });
+
   it("rejects malformed task identities rather than conflating them", () => {
     expect(getInboxTaskKey({ id: "signature", task_type: "other" })).toBeNull();
     expect(getInboxTaskKey({ task_type: "approval" })).toBeNull();
