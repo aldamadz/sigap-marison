@@ -22,7 +22,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     let cancelled = false;
     setProjectsLoading(true);
     requestExternalOptions("marison_projects")
-      .then(options => { if (!cancelled) setExternalProjects(options); })
+      .then(options => { if (!cancelled) setExternalProjects(options as ProjectOption[]); })
       .catch(err => { if (!cancelled) setProjectsError(err.message); })
       .finally(() => { if (!cancelled) setProjectsLoading(false); });
     return () => { cancelled = true; };
