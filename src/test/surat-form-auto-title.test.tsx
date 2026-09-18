@@ -19,6 +19,11 @@ import {
   selectCategoryAset,
   selectFormAndUsage,
   clickGetNumber,
+  selectForm,
+  selectUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -40,10 +45,9 @@ afterEach(() => {
 describe("Flow 8: Auto-title and Auto-place", () => {
   it("auto-generates exact title from category and office", async () => {
     await mountForm();
+    await selectFormAndUsage();
     await selectLetterType();
     await selectEntity();
-    await selectCategoryAset();
-    await selectFormAndUsage();
     await clickGetNumber();
 
     await waitFor(() => expect(setJudulForDisplayMock).toHaveBeenLastCalledWith(
@@ -57,10 +61,9 @@ describe("Flow 8: Auto-title and Auto-place", () => {
 
   it("auto-sets request_place to 'Magelang' for pusat office", async () => {
     await mountForm();
+    await selectFormAndUsage();
     await selectLetterType();
     await selectEntity();
-    await selectCategoryAset();
-    await selectFormAndUsage();
     await clickGetNumber();
 
     expect(screen.getByPlaceholderText(/Jakarta|Tempat/i)).toHaveValue("Magelang");
@@ -69,10 +72,9 @@ describe("Flow 8: Auto-title and Auto-place", () => {
 
   it("manual title override prevents auto-update, clear reverts to auto", async () => {
     await mountForm();
+    await selectFormAndUsage();
     await selectLetterType();
     await selectEntity();
-    await selectCategoryAset();
-    await selectFormAndUsage();
     await clickGetNumber();
 
     const perihal = screen.getByPlaceholderText(/Contoh.*Permohonan/i);

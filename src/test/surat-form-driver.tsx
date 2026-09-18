@@ -104,7 +104,7 @@ export function findSelectTrigger(labelPattern: RegExp): HTMLElement {
 
 export async function mountForm() {
   render(<SuratForm {...defaultProps()} />);
-  await screen.findByText(/Form & Lokasi/i);
+  await screen.findAllByText(/Form & Lokasi/i);
 }
 
 // ─── Select helpers ─────────────────────────────────────────────
@@ -182,7 +182,8 @@ export async function clickGetNumber() {
   await act(async () => { fireEvent.click(btn); });
   // Wizard pindah ke langkah 2 setelah nomor didapat; langkah 1 (dengan
   // kartu "Nomor Terdaftar") unmount. Tunggu header langkah 2.
-  await screen.findByText("Persetujuan dan Berkas");
+  // ("Persetujuan & Berkas" muncul di stepper + section → pakai AllBy.)
+  await screen.findAllByText("Persetujuan & Berkas");
 }
 
 // ─── Autosave with fake timers ──────────────────────────────────
@@ -360,7 +361,7 @@ export async function mountFormWithUsage(usageData: unknown[], profileData?: unk
     }
   );
   render(<SuratForm {...defaultProps()} />);
-  await screen.findByText(/Form & Lokasi/i);
+  await screen.findAllByText(/Form & Lokasi/i);
 }
 
 // ─── Fetch mock helpers ─────────────────────────────────────────
@@ -400,7 +401,7 @@ export async function uploadAttachment(fileName: string) {
  * Mount form with custom URL search params.
  * Use for linked document flows (Flow 5).
  * For recommendation flow, waits for RecommendationParentSummary.
- * For normal flow, waits for "Lokasi dan Klasifikasi".
+ * For normal flow, waits for "Form & Lokasi".
  */
 export async function mountFormWithSearchParams(params: Record<string, string>) {
   const { setSearchParamsOverride } = await import("./surat-form-harness");
@@ -410,7 +411,7 @@ export async function mountFormWithSearchParams(params: Record<string, string>) 
   if (params.linked_type === "recommendation") {
     if (params.parent_no_surat) await screen.findByText(params.parent_no_surat);
   } else {
-    await screen.findByText(/Lokasi dan Klasifikasi/i);
+    await screen.findAllByText(/Form & Lokasi/i);
   }
 }
 

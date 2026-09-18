@@ -18,6 +18,13 @@ import {
   configureStandardMocks,
   mountFormWithUsageAndSearchParams,
   goToWizardStep,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {

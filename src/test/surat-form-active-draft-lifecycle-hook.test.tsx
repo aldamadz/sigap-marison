@@ -32,7 +32,18 @@ import {
   RECOMMENDATION_PARENT_SUMMARY,
   UUID,
 } from "./surat-form-fixtures";
-import { configureStandardMocks, mountFormWithSearchParams, mountFormWithUsageAndSearchParams } from "./surat-form-driver";
+import {
+  configureStandardMocks,
+  mountFormWithSearchParams,
+  mountFormWithUsageAndSearchParams,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
+} from "./surat-form-driver";
 import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-active-draft-lifecycle";
 
 const RESERVATION_ID = "rsv-pass-f-01";

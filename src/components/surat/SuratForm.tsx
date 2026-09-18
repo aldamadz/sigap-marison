@@ -87,7 +87,6 @@ import {
 import {
   canDepartmentRequestUnit,
   clearRecommendationInput,
-  clearUnitInput,
   getExternalInputFields,
   getFullRoles,
   getInputSchema,
@@ -289,76 +288,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
       },
     }));
-  };
-
-  const setRequestCategory = (category: RequestCategory) => {
-    if (category === "unit" && !canRequesterChooseUnit) {
-      toast({
-        variant: "destructive",
-        title: "Unit Tidak Diizinkan",
-        description: requesterDepartmentId
-          ? "Belum ada matrix Unit yang mengizinkan departemen akun Anda pada scope kantor ini."
-          : "Departemen akun Anda belum ditentukan.",
-      });
-      return;
-    }
-    setFormData(prev => {
-      const baseInput = category === "unit"
-        ? {
-            ...prev.form_input_data,
-            request_category: category,
-            request_mode: "unit",
-          }
-        : clearUnitInput({
-            ...prev.form_input_data,
-            request_category: category,
-            request_mode: "barang",
-          });
-      const nextInput = category === "asset" && canRequesterUseRecommendation
-        ? {
-            ...baseInput,
-            requires_recommendation: typeof baseInput.requires_recommendation === "boolean"
-              ? baseInput.requires_recommendation
-              : false,
-            recommendation_template_name: RECOMMENDATION_TEMPLATE_NAME,
-            recommendation_attachment_note: typeof baseInput.recommendation_attachment_note === "string"
-              ? baseInput.recommendation_attachment_note
-              : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
-          }
-        : clearRecommendationInput(baseInput);
-      if (category !== "non_asset") {
-        delete nextInput.fund_type;
-        delete nextInput.fund_amount;
-        delete nextInput.fund_without_project;
-      }
-      return {
-        ...prev,
-        project_id: prev.form_input_data.request_category === category ? prev.project_id : "",
-        is_aset: category === "asset",
-        form_input_data: nextInput,
-      };
-    });
-    if (category !== "non_asset") setFundWithoutProject(false);
-    if (category === "unit") {
-      setFormData(prev => {
-        const nextInput = { ...prev.form_input_data };
-        delete nextInput.items;
-        return { ...prev, form_input_data: nextInput };
-      });
-    }
-    setSelectedUsage(null);
-    setSelectedFormId("");
-    setSigners([]);
-    setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
-  };
-
-  const getRequestCombinationLabel = () => {
-    const category = getRequestCategory();
-    if (category === "asset") return "Pengajuan Aset";
-    if (category === "unit") return "Pengajuan SPK";
-    if (category === "non_asset") return "Pengajuan Dana";
-    if (category === "non_unit") return "Pengajuan Non Unit";
-    return "Belum dipilih";
   };
 
   const setInputValue = (key: string, value: unknown) => {
@@ -876,18 +805,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const selectedForm = availableForms.find(form => form.id === selectedFormId);
     return selectedForm?.name || selectedUsage?.master_forms?.nama_form || "Form dokumen";
   }, [availableForms, selectedFormId, selectedUsage?.master_forms?.nama_form]);
-
-  const canRequesterChooseUnit = useMemo(
-    () => usageDetails.some(item =>
-      getWorkflowCategories(item).includes("unit") &&
-      (item.scope_type === "all" ||
-        (item.scope_type === "pusat" && isPusatSelected) ||
-        (item.scope_type === "cabang" && !isPusatSelected) ||
-        (!item.scope_type && item.is_cabang === !isPusatSelected)) &&
-      canDepartmentRequestUnit(item, formData.dept_id || requesterDepartmentId)
-    ),
-    [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id]
-  );
 
   const filteredDepts = useMemo(() => {
     if (!master.depts) return [];
@@ -1793,8 +1710,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
   }, [linkedDocumentContext, generatedNoSurat, usageDetails, selectedFormId, selectedUsage?.id]);
 
+  // Form-first: Form/Kegunaan wajib dipilih eksplisit pada alur normal.
+  // Tidak ada auto-select; restore draft, linked recommendation, dan
+  // external revision mengisi Form/Kegunaan secara programatis via
+  // applySelectedUsage, bukan via effect ini. Effect ini hanya fail-closed:
+  // membersihkan pilihan yang tidak lagi valid.
   useEffect(() => {
-    if (generatedNoSurat || !getRequestCategory()) return;
+    if (generatedNoSurat) return;
     const selectedFormStillAvailable = selectedFormId
       ? availableForms.some(form => form.id === selectedFormId)
       : false;
@@ -1803,12 +1725,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setSelectedUsage(null);
       setSigners([]);
       setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
-      return;
     }
-    if (!selectedFormId && availableForms.length === 1) {
-      setSelectedFormId(availableForms[0].id);
-    }
-  }, [availableForms, selectedFormId, generatedNoSurat, formData.form_input_data.request_category]);
+  }, [availableForms, selectedFormId, generatedNoSurat]);
 
   useEffect(() => {
     if (generatedNoSurat || !selectedFormId) return;
@@ -1820,12 +1738,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setSelectedUsage(null);
       setSigners([]);
       setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
-      return;
     }
-    if (!selectedUsageId && usagesForSelectedForm.length === 1) {
-      applySelectedUsage(usagesForSelectedForm[0]);
-    }
-  }, [generatedNoSurat, selectedFormId, selectedUsage?.id, usagesForSelectedForm, formData.form_input_data.request_category]);
+  }, [generatedNoSurat, selectedFormId, selectedUsage?.id, usagesForSelectedForm]);
 
   const handleGetNumber = async () => {
     const requestCategory = getRequestCategory();
@@ -3187,65 +3101,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
-  const renderRequestClassificationStep = () => {
-    const category = getRequestCategory();
-    return (
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4 md:p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Pilih Jenis Pengajuan</p>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Form PGD menyediakan empat jenis pengajuan. Pilih salah satu agar sistem menampilkan alur yang sesuai.
-            </p>
-          </div>
-          <span className="inline-flex w-fit items-center rounded-md border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
-            {getRequestCombinationLabel()}
-          </span>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { value: "asset", label: "Pengajuan Aset", description: "Barang atau kebutuhan yang dicatat sebagai aset" },
-            { value: "unit", label: "Pengajuan SPK", description: "SPK pembangunan atau pengadaan unit" },
-            { value: "non_asset", label: "Pengajuan Dana", description: "Kebutuhan dana operasional atau non-aset" },
-            { value: "non_unit", label: "Pengajuan Non Unit", description: "Pekerjaan proyek tanpa alokasi unit" },
-          ].map((option) => (
-            (() => {
-              const unitDisabled = option.value === "unit" && !canRequesterChooseUnit;
-              return (
-            <button
-              key={option.value}
-              type="button"
-              disabled={!!generatedNoSurat || unitDisabled}
-              onClick={() => setRequestCategory(option.value as RequestCategory)}
-              className={cn(
-                "rounded-md border px-4 py-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
-                category === option.value
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border bg-background/70 text-foreground hover:bg-muted"
-              )}
-            >
-              <span className="block text-sm font-semibold">{option.label}</span>
-              <span className={cn(
-                "mt-1 block text-[10px] font-semibold",
-                category === option.value ? "text-primary-foreground/80" : "text-muted-foreground"
-              )}>
-                {option.description}
-              </span>
-              {unitDisabled && (
-                <span className="mt-2 block text-[9px] font-bold text-amber-600">
-                  Tidak tersedia untuk departemen akun Anda
-                </span>
-              )}
-            </button>
-              );
-            })()
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   const renderFundTypeStep = () => {
     if (!isFundMode) return null;
     return (
@@ -3875,15 +3730,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </SelectContent>
                 </Select>
               </div>
+              {/* Kegunaan: hanya tampil setelah Form dipilih (progressive disclosure,
+                  tanpa kontrol ghost/disabled untuk tahap yang belum tersedia). */}
+              {selectedFormId ? (
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Kegunaan</Label>
                 <Select
-                  disabled={!selectedFormId}
                   value={selectedUsage?.id || ""}
                   onValueChange={handleUsageChange}
                 >
                   <SelectTrigger className="h-12 bg-background">
-                    <SelectValue placeholder={selectedFormId ? "Pilih kegunaan dan alur approval" : "Pilih form terlebih dahulu"} />
+                    <SelectValue placeholder="Pilih kegunaan dan alur approval" />
                   </SelectTrigger>
                   <SelectContent>
                     {usagesForSelectedForm.map(usage => (
@@ -3894,6 +3751,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </SelectContent>
                 </Select>
               </div>
+              ) : (
+              <div className="flex items-center rounded-lg border border-dashed border-border bg-background/50 px-4 py-3 text-xs font-medium text-muted-foreground">
+                Pilih Form terlebih dahulu untuk melihat daftar kegunaan.
+              </div>
+              )}
               {selectedFormId && usagesForSelectedForm.length === 0 && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs font-semibold text-amber-700 md:col-span-2 dark:text-amber-300">
                   Belum ada kegunaan aktif untuk departemen dan kantor yang dipilih.
@@ -4106,7 +3968,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">2</span>
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold leading-tight text-foreground">Persetujuan dan Berkas</h3>
+                  <h3 className="text-base font-semibold leading-tight text-foreground">Persetujuan & Berkas</h3>
                   <p className="mt-1 text-xs text-muted-foreground">Lengkapi perihal, tempat, tanggal, lampiran, dan penandatangan sebelum pengajuan didaftarkan.</p>
                 </div>
               </div>

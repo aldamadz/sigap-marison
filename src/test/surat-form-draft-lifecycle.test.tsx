@@ -23,6 +23,11 @@ import {
   clickGetNumber,
   editFieldAndWaitForAutosave,
   editFieldAndUnmountBeforeAutosave,
+  selectForm,
+  selectUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -44,11 +49,10 @@ afterEach(() => {
 /** Mount and navigate to number generated, returning unmount handle. */
 async function mountToNumberGenerated() {
   const { unmount } = render(<SuratForm {...defaultProps()} />);
-  await screen.findByText(/Lokasi dan Klasifikasi/i);
+  await screen.findByText(/Form & Lokasi/i);
+  await selectFormAndUsage();
   await selectLetterType();
   await selectEntity();
-  await selectCategoryAset();
-  await selectFormAndUsage();
   await clickGetNumber();
   return { unmount };
 }
@@ -124,7 +128,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Lokasi dan Klasifikasi/i);
+    await screen.findByText(/Form & Lokasi/i);
 
     // Hook fetched the requested draft by id; hydrate is gated on
     // usageDetails and stays blocked in the harness, but the URL→fetch
@@ -147,7 +151,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Lokasi dan Klasifikasi/i);
+    await screen.findByText(/Form & Lokasi/i);
 
     // The hook exposes `activeDrafts` to the component unchanged, so
     // the list (and therefore the no_surat on each entry) flows through
@@ -174,7 +178,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Lokasi dan Klasifikasi/i);
+    await screen.findByText(/Form & Lokasi/i);
 
     // Drive void directly on the service mock: the hook contract is
     // that callers can re-invoke refreshActiveDrafts and mutate the list
@@ -201,7 +205,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Lokasi dan Klasifikasi/i);
+    await screen.findByText(/Form & Lokasi/i);
 
     // The autosave hook reads draftToRestore from the lifecycle hook.
     // With the requested draft still pending, the guard `... || draftToRestore`

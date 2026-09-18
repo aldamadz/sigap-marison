@@ -18,6 +18,12 @@ import {
   mountFormWithUsage,
   selectOptionByLabel,
   clickGetNumber,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -47,9 +53,10 @@ describe("Flow 3: Unit pusat", () => {
 
   it("sends selected Marison project and requested unit count when reserving number", async () => {
     await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
+    await selectCategory("Pengajuan SPK");
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Pengajuan SPK");
+    
 
     await selectOptionByLabel(/^Proyek$/i, /GA01 - Griya Asri/i);
     fireEvent.change(screen.getByPlaceholderText("Contoh: 10"), { target: { value: "3" } });

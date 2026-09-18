@@ -17,6 +17,12 @@ import {
   selectOptionByLabel,
   mountFormWithUsage,
   clickGetNumber,
+  selectForm,
+  selectUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 afterEach(() => teardownTestHarness());

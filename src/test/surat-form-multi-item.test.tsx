@@ -21,6 +21,12 @@ import {
   goToWizardStep,
   clickConfirmRegistration,
   submitFromDialog,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -42,9 +48,10 @@ afterEach(() => teardownTestHarness());
 
 async function reachMultiItemForm() {
   await mountFormWithUsage(MULTI_ITEM_FORM_USAGE_RAW);
-  await selectLetterType();
+  await selectFormAndUsage();
+    await selectLetterType();
   await selectEntity();
-  await selectCategoryAset();
+  
   await clickGetNumber();
 }
 

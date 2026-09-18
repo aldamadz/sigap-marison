@@ -20,8 +20,8 @@ export type WizardStep =
 export const WIZARD_STEPS: ReadonlyArray<{ step: WizardStep; title: string; description: string }> = [
   {
     step: WIZARD_STEP_LOKASI,
-    title: "Lokasi & Klasifikasi",
-    description: "Kantor, proyek, dan jenis dokumen",
+    title: "Form & Lokasi",
+    description: "Form, kegunaan, kantor, dan jenis dokumen",
   },
   {
     step: WIZARD_STEP_BERKAS,

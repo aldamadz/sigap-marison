@@ -26,6 +26,12 @@ import {
   mountFormWithUsage,
   selectOptionByLabel,
   findSelectTrigger,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -46,9 +52,10 @@ afterEach(() => teardownTestHarness());
 
 async function reachExternalForm() {
   await mountFormWithUsage(EXTERNAL_SELECT_FORM_USAGE_RAW);
-  await selectLetterType();
+  await selectFormAndUsage();
+    await selectLetterType();
   await selectEntity();
-  await selectCategoryAset();
+  
   await clickGetNumber();
   await screen.findByText("Unit Kerja");
 }
