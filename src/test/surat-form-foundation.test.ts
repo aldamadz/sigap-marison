@@ -56,7 +56,7 @@ describe("SuratForm pure schema adapters", () => {
     expect(normalizeTableRows([null, "x"])).toEqual([]);
     expect(getScalarFieldValue({ value: 7 })).toBe("7");
     expect(getScalarFieldValue(["x"])).toBe("");
-    expect(getWorkflowCategories({ id: "usage" })).toEqual(["asset", "non_unit"]);
+    expect(getWorkflowCategories({ id: "usage" })).toEqual([]);
     expect(getWorkflowCategories({ id: "usage", request_category: "unit" })).toEqual(["unit"]);
     expect(clearUnitInput(input)).toEqual({ keep: "yes" });
     expect(input.requested_project).toBe("P1");

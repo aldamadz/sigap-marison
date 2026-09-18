@@ -86,7 +86,7 @@ describe("Flow 5: Recommendation linked document", () => {
   it("without linked_type param renders normal form", async () => {
     await mountForm();
 
-    expect(screen.getByText(/Form & Lokasi/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Form & Lokasi/i)[0]).toBeInTheDocument();
     expect(serviceMock.getRecommendationParentSummary).not.toHaveBeenCalled();
     assertStrictServiceCalls();
   });

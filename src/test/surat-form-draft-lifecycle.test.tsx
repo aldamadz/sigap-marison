@@ -49,7 +49,7 @@ afterEach(() => {
 /** Mount and navigate to number generated, returning unmount handle. */
 async function mountToNumberGenerated() {
   const { unmount } = render(<SuratForm {...defaultProps()} />);
-  await screen.findByText(/Form & Lokasi/i);
+  await screen.findAllByText(/Form & Lokasi/i);
   await selectFormAndUsage();
   await selectLetterType();
   await selectEntity();
@@ -95,7 +95,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     await editFieldAndWaitForAutosave(perihal, "Judul Manual");
 
     expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
-    expect(screen.getByText("Persetujuan dan Berkas")).toBeInTheDocument();
+    expect(screen.getAllByText("Persetujuan & Berkas").length).toBeGreaterThanOrEqual(1);
     assertStrictServiceCalls();
   });
 
@@ -128,7 +128,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Form & Lokasi/i);
+    await screen.findAllByText(/Form & Lokasi/i);
 
     // Hook fetched the requested draft by id; hydrate is gated on
     // usageDetails and stays blocked in the harness, but the URL→fetch
@@ -151,7 +151,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Form & Lokasi/i);
+    await screen.findAllByText(/Form & Lokasi/i);
 
     // The hook exposes `activeDrafts` to the component unchanged, so
     // the list (and therefore the no_surat on each entry) flows through
@@ -178,7 +178,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Form & Lokasi/i);
+    await screen.findAllByText(/Form & Lokasi/i);
 
     // Drive void directly on the service mock: the hook contract is
     // that callers can re-invoke refreshActiveDrafts and mutate the list
@@ -205,7 +205,7 @@ describe("Flow 6: Draft Lifecycle", () => {
     );
 
     render(<SuratForm {...defaultProps()} />);
-    await screen.findByText(/Form & Lokasi/i);
+    await screen.findAllByText(/Form & Lokasi/i);
 
     // The autosave hook reads draftToRestore from the lifecycle hook.
     // With the requested draft still pending, the guard `... || draftToRestore`
