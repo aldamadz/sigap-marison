@@ -235,7 +235,11 @@ export default function InboxPage() {
   }, [inbox, kpiFilter, kpiBySignature]);
 
   const requestedTaskKey = searchParams.get("task");
-  const selectedCompactItem = filteredInbox.find((item: any) => getInboxTaskKey(item) === requestedTaskKey) || filteredInbox[0] || null;
+  const selectedCompactItem =
+    filteredInbox.find((item: any) => getInboxTaskKey(item) === requestedTaskKey) ||
+    filteredInbox.find((item: any) => item.id === requestedTaskKey) ||
+    filteredInbox[0] ||
+    null;
   const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const selectedSignatureId = selectedCompactItem?.id || null;
 
