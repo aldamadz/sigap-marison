@@ -3101,31 +3101,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
-  const renderFundTypeStep = () => {
-    if (!isFundMode) return null;
-    return (
-      <div className="space-y-2 rounded-lg border border-border bg-card p-4 md:p-5">
-        <Label className="text-sm font-semibold text-foreground">Jenis Pengajuan Dana</Label>
-        <p className="text-xs text-muted-foreground">
-          Pilihan ini dikirim sebagai tipe Fund Submission ke Marison.
-        </p>
-        <Select
-          disabled={!!generatedNoSurat}
-          value={String(getFormFieldValue("fund_type") || "")}
-          onValueChange={(value) => setInputValue("fund_type", value)}
-        >
-          <SelectTrigger className="h-11">
-            <SelectValue placeholder="Pilih jenis pengajuan dana..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="operational">Biaya Operasional</SelectItem>
-            <SelectItem value="production_cost">Biaya Produksi</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    );
-  };
-
   const renderRecommendationOptionStep = () => {
     if (getRequestCategory() !== "asset") return null;
     if (!canRequesterUseRecommendation) return null;
@@ -3843,6 +3818,92 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Proyek cabang, serta proyek external wajib untuk Non Unit dan Non Aset. */}
+                {shouldShowProjectSelector && (
+                  <div className="space-y-2 animate-in slide-in-from-top-2">
+                    <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
+                      <Briefcase className="w-3 h-3" />
+                      {requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
+                    </Label>
+                    {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
+                      <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
+                        <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
+                          <SelectValue placeholder="Pilih Proyek..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {projectSelectionOptions.map((p: MasterRecord) => {
+                            const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
+                            const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
+                            return (
+                              <SelectItem key={p.id} value={p.id}>
+                                {requiresMarisonProject && isPusatSelected && projectOffice?.name
+                                  ? `${projectLabel} — ${projectOffice.name}`
+                                  : projectLabel}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    ) : requiresMarisonProject && !shouldUseDefaultBranchProject ? (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                        <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
+                        <div className="mt-1 text-xs">
+                          {hasRegisteredProjectCandidates
+                            ? "Mapping proyek/kantor Marison (termasuk mapping staging trial) perlu dilengkapi admin di Master Proyek."
+                            : "Belum ada proyek external yang tersedia untuk kantor ini."}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5">
+                        <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
+                      </div>
+                    )}
+                    {isFundMode && (
+                      <label className="flex cursor-pointer items-start gap-3 rounded-md border border-muted bg-muted/40 px-3 py-2.5">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={fundWithoutProject}
+                          disabled={!!generatedNoSurat}
+                          onCheckedChange={(checked) => {
+                            if (checked === true) {
+                              setFundWithoutProject(true);
+                              setFormData((prev) => ({
+                                ...prev,
+                                project_id: "",
+                                form_input_data: {
+                                  ...prev.form_input_data,
+                                  fund_without_project: true,
+                                },
+                              }));
+                            } else {
+                              setFundWithoutProject(false);
+                              setFormData((prev) => ({
+                                ...prev,
+                                form_input_data: {
+                                  ...prev.form_input_data,
+                                  fund_without_project: false,
+                                },
+                              }));
+                            }
+                          }}
+                        />
+                        <span className="text-sm">
+                          <span className="font-medium text-foreground">Tanpa Proyek (Dana Umum)</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            Pengajuan dana tidak terikat proyek; dikirim ke Marison tanpa <code>project_id</code>.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                    {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
+                      <p className="px-1 text-xs text-muted-foreground">
+                        {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Departemen */}
                 <div className="space-y-2">

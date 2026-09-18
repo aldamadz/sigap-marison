@@ -44,16 +44,19 @@ afterEach(() => teardownTestHarness());
 describe("Flow 3: Unit pusat", () => {
   it("does not treat an Asset workflow as permission to request Unit", async () => {
     await mountFormWithUsage(FORM_USAGES_RAW);
+    await selectFormAndUsage();
     await selectLetterType();
     await selectEntity();
 
-    expect(screen.getByRole("button", { name: /Pengajuan SPK SPK pembangunan atau pengadaan unit/i })).toBeDisabled();
+    // Tidak ada tombol klasifikasi manual; kategori diturunkan dari Kegunaan.
+    expect(screen.queryByRole("button", { name: /Pengajuan SPK/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Pengajuan Aset")).not.toBeInTheDocument();
     assertStrictServiceCalls();
   });
 
   it("sends selected Marison project and requested unit count when reserving number", async () => {
     await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
-    await selectCategory("Pengajuan SPK");
+    await selectFormAndUsage(/Unit/i);
     await selectLetterType();
     await selectEntity();
     

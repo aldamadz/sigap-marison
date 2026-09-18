@@ -44,7 +44,7 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
 
   it("menolak Non Unit di cabang tanpa proyek dan tidak memanggil generateNoSurat", async () => {
     await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
-    await selectCategory("Pengajuan Non Unit");
+    await selectFormAndUsage(/Non Unit/i);
     await selectLetterType();
     await selectEntity();
     
