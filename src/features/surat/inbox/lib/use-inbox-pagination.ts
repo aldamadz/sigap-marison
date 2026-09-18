@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, keepPreviousData, type QueryClient } from "@tanstack/react-query";
 import { suratInboxApi } from "@/features/surat/inbox/services/surat-inbox-api";
+import { getInboxTaskKey, getInboxTaskSignatureId } from "@/features/surat/inbox/lib/inbox-task-state";
 
 export type InboxActionFilter = "all" | "approval" | "verification";
 export type InboxCategoryFilter = string;
@@ -32,7 +33,7 @@ export type UseInboxPaginationResult = {
   loadMore: () => void;
   refetch: () => void;
   refetchFull: () => void;
-  finishTaskLocally: (taskId: string) => void;
+  finishTaskLocally: (taskKey: string) => void;
   refreshAfterAction: () => void;
   resetPagination: () => void;
 };
@@ -119,8 +120,11 @@ export const useInboxPagination = (
       if (page.total !== null) setInboxTotal(page.total);
     } else {
       setInboxAllItems((prev) => {
-        const ids = new Set(prev.map((i: any) => i.id));
-        const next = page.items.filter((i: any) => !ids.has(i.id));
+        const taskKeys = new Set(prev.map(getInboxTaskKey).filter(Boolean));
+        const next = page.items.filter((item: any) => {
+          const taskKey = getInboxTaskKey(item);
+          return taskKey !== null && !taskKeys.has(taskKey);
+        });
         return [...prev, ...next];
       });
     }
@@ -135,15 +139,17 @@ export const useInboxPagination = (
   }, [refetchInbox]);
 
   const finishTaskLocally = useCallback(
-    (taskId: string) => {
-      setInboxAllItems((previous) => previous.filter((item: any) => item.id !== taskId));
+    (taskKey: string) => {
+      const signatureId = getInboxTaskSignatureId(taskKey);
+      setInboxAllItems((previous) => previous.filter((item: any) => getInboxTaskKey(item) !== taskKey));
       setInboxTotal((previous) => Math.max(0, previous - 1));
+      if (!signatureId) return;
       setDetailCache((previous) => {
         const next = { ...previous };
-        delete next[taskId];
+        delete next[signatureId];
         return next;
       });
-      queryClient.removeQueries({ queryKey: ["surat-inbox-detail", taskId], exact: true });
+      queryClient.removeQueries({ queryKey: ["surat-inbox-detail", signatureId], exact: true });
     },
     [queryClient],
   );
