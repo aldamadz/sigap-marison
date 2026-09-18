@@ -47,6 +47,7 @@ import { executeRecommendationPostSubmit } from "@/features/surat/recommendation
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
+import { selectUsage } from "@/features/surat/registration/usages";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
@@ -839,8 +840,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [formData.dept_id, requesterDepartmentId, master.depts, linkedDocumentContext]);
 
   const filteredUsage = useMemo(() => {
-    const category = getRequestCategory();
-    if (!category) return [];
     return usageDetails.filter((item) => {
       if (
         linkedDocumentContext?.type === "recommendation" &&
@@ -854,11 +853,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         if (item.scope_type === "pusat" && !isPusatSelected) return false;
         if (item.scope_type === "cabang" && isPusatSelected) return false;
       } else if (item.is_cabang !== undefined && item.is_cabang !== !isPusatSelected) return false;
-      if (!getWorkflowCategories(item).includes(category)) return false;
       if (!canDepartmentRequestUnit(item, formData.dept_id || requesterDepartmentId)) return false;
       return true;
     });
-  }, [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id, formData.form_input_data.request_category, linkedDocumentContext]);
+  }, [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id, linkedDocumentContext]);
 
   const availableForms = useMemo(() => {
     const seen = new Set<string>();
@@ -1675,14 +1673,79 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const applySelectedUsage = (detail: UsageDetailRecord) => {
     const isNewUsage = Array.isArray(detail.form_usage_steps);
+    
+    const usageData = selectUsage(detail);
+    if (!usageData) {
+      toast({ variant: "destructive", title: "Kegunaan Form Tidak Valid", description: "Kategori pengajuan tidak dapat ditentukan dari konfigurasi Kegunaan Form. Hubungi administrator." });
+      setSelectedUsage(null);
+      setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
+      setSigners([]);
+      return;
+    }
+
     setSelectedUsage(detail);
     setFormData(prev => {
+      const nextInput = { ...prev.form_input_data };
+      
+      const previousUsageData = selectUsage(selectedUsage);
+      if (previousUsageData) {
+        const cleanup = previousUsageData.module.cleanup({
+          usage: selectedUsage!,
+          usageKey: previousUsageData.key,
+          category: previousUsageData.category,
+          formData: prev,
+          input: nextInput,
+          isPusatSelected,
+          requesterDepartmentId,
+          linkedDocumentContext,
+          externalRevision,
+          generatedNoSurat,
+          master,
+          setInputValue,
+          setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
+          requestExternalOptions: async () => []
+        } as any, "usage_change");
+        
+        cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
+        if (cleanup.resetSelection.includes("fundWithoutProject")) {
+          setFundWithoutProject(false);
+        }
+      }
+
+      nextInput.request_category = usageData.category;
+      
+      // Auto apply require recommendation if needed based on module
+      if (usageData.category === "asset") {
+        nextInput.requires_recommendation = false; // default to false on switch, let context panel change it if allowed
+      }
+
+      // Initialize the normalized state
+      const initializedInput = usageData.module.normalizeInput(nextInput, {
+        usage: detail,
+        usageKey: usageData.key,
+        category: usageData.category,
+        formData: prev,
+        input: nextInput,
+        isPusatSelected,
+        requesterDepartmentId,
+        linkedDocumentContext,
+        externalRevision,
+        generatedNoSurat,
+        master,
+        setInputValue,
+        setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
+        requestExternalOptions: async () => []
+      } as any);
+
       return {
         ...prev,
         penggunaan_id: isNewUsage ? "" : detail.id,
         form_usage_id: isNewUsage ? detail.id : "",
+        is_aset: usageData.category === "asset",
+        form_input_data: initializedInput,
       };
     });
+
     const configuredSigners = buildSignerAssignments(detail);
     if (configuredSigners.length > 0) {
       setSigners(getVisibleConfiguredSigners(configuredSigners));
@@ -3752,258 +3815,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </div>
         )}
 
-        {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
+        {/* ══ SECTION 1: FORM & LOKASI ══════════════════════════════ */}
         {!isRecommendationFlow && isIdentityActive && (
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
-            <h3 className="text-sm font-semibold text-foreground">Lokasi dan Klasifikasi</h3>
+            <h3 className="text-sm font-semibold text-foreground">Form & Lokasi</h3>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5">
-            {/* Kantor */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Kantor Penerbit</Label>
-              <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
-                onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih Kantor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {master.offices?.map((o: MasterRecord) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.kedudukan === "Pusat" ? "🏢 Kantor Pusat" : `🏗️ ${o.kedudukan}. ${o.name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Proyek cabang, serta proyek external wajib untuk Non Unit dan Non Aset. */}
-            {shouldShowProjectSelector && (
-              <div className="space-y-2 animate-in slide-in-from-top-2">
-                <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
-                  <Briefcase className="w-3 h-3" />
-                  {requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
-                </Label>
-                {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
-                  <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
-                    <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
-                      <SelectValue placeholder="Pilih Proyek..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projectSelectionOptions.map((p: MasterRecord) => {
-                        const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
-                        const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
-                        return (
-                          <SelectItem key={p.id} value={p.id}>
-                            {requiresMarisonProject && isPusatSelected && projectOffice?.name
-                              ? `${projectLabel} · ${projectOffice.name}`
-                              : projectLabel}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : requiresMarisonProject && !shouldUseDefaultBranchProject ? (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-                    <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
-                    <div className="mt-1 text-xs">
-                      {hasRegisteredProjectCandidates
-                        ? "Mapping proyek/kantor Marison (termasuk mapping staging trial) perlu dilengkapi admin di Master Proyek."
-                        : "Belum ada proyek external yang tersedia untuk kantor ini."}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5">
-                    <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
-                  </div>
-                )}
-                {isFundMode && (
-                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-muted bg-muted/40 px-3 py-2.5">
-                    <Checkbox
-                      className="mt-0.5"
-                      checked={fundWithoutProject}
-                      disabled={!!generatedNoSurat}
-                      onCheckedChange={(checked) => {
-                        if (checked === true) {
-                          setFundWithoutProject(true);
-                          setFormData((prev) => ({
-                            ...prev,
-                            project_id: "",
-                            form_input_data: {
-                              ...prev.form_input_data,
-                              fund_without_project: true,
-                            },
-                          }));
-                        } else {
-                          setFundWithoutProject(false);
-                          setFormData((prev) => ({
-                            ...prev,
-                            form_input_data: {
-                              ...prev.form_input_data,
-                              fund_without_project: false,
-                            },
-                          }));
-                        }
-                      }}
-                    />
-                    <span className="text-sm">
-                      <span className="font-medium text-foreground">Tanpa Proyek (Dana Umum)</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Pengajuan dana tidak terikat proyek; dikirim ke Marison tanpa <code>project_id</code>.
-                      </span>
-                    </span>
-                  </label>
-                )}
-                {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
-                  <p className="px-1 text-xs text-muted-foreground">
-                    {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Entitas */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>
-              <Select disabled={!!generatedNoSurat} value={formData.entity_id}
-                onValueChange={v => setFormData({ ...formData, entity_id: v })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih PT..." />
-                </SelectTrigger>
-                <SelectContent
-                  align="start"
-                  collisionPadding={16}
-                  className="max-w-[calc(100vw-2rem)]"
-                >
-                  {master.entities?.map((e: MasterRecord) => (
-                    <SelectItem
-                      key={e.id}
-                      value={e.id}
-                      className="[&>span:last-child]:whitespace-normal [&>span:last-child]:break-words"
-                    >
-                      {e.code} - {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Departemen */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Departemen</Label>
-              <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.dept_id}
-                onValueChange={v => setFormData({ ...formData, dept_id: v, letter_type_id: "" })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih Dept..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {departmentSelectOptions.map((d: MasterRecord) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Jenis Dokumen */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Jenis Dokumen</Label>
-              <Select disabled={!!generatedNoSurat} value={formData.letter_type_id}
-                onValueChange={handleLetterTypeChange}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih Jenis..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {departmentLetterTypes.map((t: MasterRecord) => (
-                    <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>
-                  ))}
-                  {formData.dept_id && departmentLetterTypes.length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">
-                      Belum ada jenis dokumen untuk departemen ini.
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {!isRecommendationFlow && !generatedNoSurat && !!formData.letter_type_id && (
-            <>
-              {renderRequestClassificationStep()}
-              {renderFundTypeStep()}
-              {renderRecommendationOptionStep()}
-              {isUnitMode && renderUnitRequestPanel()}
-            </>
-          )}
-
-          {/* ══ TOGGLE ASET — posisi baru, MENCOLOK, tepat sebelum tombol nomor ══ */}
-          {Boolean(import.meta.env.VITE_SHOW_LEGACY_ASSET_TOGGLE) && !isRecommendationFlow && !generatedNoSurat && (
-            <div
-              role="button"
-              onClick={() => setFormData(f => ({ ...f, is_aset: !f.is_aset }))}
-              className={cn(
-                "relative overflow-hidden rounded-2xl border-2 p-5 transition-all duration-300 cursor-pointer select-none group",
-                formData.is_aset
-                  ? "bg-amber-500/10 border-amber-500 shadow-lg shadow-amber-500/15"
-                  : "bg-muted/20 border-dashed border-muted-foreground/30 hover:border-amber-500/50 hover:bg-amber-500/5"
-              )}
-            >
-              {/* Animated glow saat aktif */}
-              {formData.is_aset && (
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/8 via-transparent to-amber-400/5 pointer-events-none" />
-              )}
-
-              <div className="relative flex items-center justify-between gap-4">
-                {/* Ikon + teks */}
-                <div className="flex items-center gap-4">
-                  <div className={cn(
-                    "p-3 rounded-xl transition-all duration-200 shadow-sm",
-                    formData.is_aset
-                      ? "bg-amber-500 text-white shadow-amber-500/30"
-                      : "bg-background text-muted-foreground group-hover:bg-amber-500/10 group-hover:text-amber-500"
-                  )}>
-                    {formData.is_aset ? <Archive className="w-5 h-5" /> : <Home className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <p className={cn(
-                      "font-black uppercase tracking-tight text-sm transition-colors",
-                      formData.is_aset ? "text-amber-600 dark:text-amber-400" : "text-foreground group-hover:text-amber-600"
-                    )}>
-                      {formData.is_aset ? "✦ Dokumen Aset — Aktif" : "Tandai sebagai Dokumen Aset"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                      {formData.is_aset
-                        ? "Kolom B4 pada template akan dicentang otomatis sebagai penanda aset"
-                        : "Properti · Kendaraan · Inventaris Legal — klik untuk mengaktifkan"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Switch */}
-                <Switch
-                  checked={formData.is_aset}
-                  onCheckedChange={val => setFormData(f => ({ ...f, is_aset: val }))}
-                  onClick={e => e.stopPropagation()}
-                  className="data-[state=checked]:bg-amber-500 shrink-0 scale-110"
-                />
-              </div>
-
-              {/* Badge konfirmasi saat aktif */}
-              {formData.is_aset && (
-                <div className="relative mt-3 pt-3 border-t border-amber-500/20 flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
-                    Surat ini ditandai sebagai dokumen aset &amp; akan diproses sesuai alur properti
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Tombol dapatkan nomor / tampilan nomor ────────────────────── */}
-          {!isRecommendationFlow && !generatedNoSurat && !draftLoading && getRequestCategory() && (
+          {/* Form & Kegunaan */}
+          {!generatedNoSurat && !draftLoading && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
@@ -4013,7 +3834,35 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     setSelectedFormId(value);
                     setSelectedUsage(null);
                     setSigners([]);
-                    setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
+                    setFormData(previous => {
+                      const usageData = selectUsage(selectedUsage);
+                      const nextInput = { ...previous.form_input_data };
+                      if (usageData) {
+                        const cleanup = usageData.module.cleanup({
+                          usage: selectedUsage!,
+                          usageKey: usageData.key,
+                          category: usageData.category,
+                          formData: previous,
+                          input: nextInput,
+                          isPusatSelected,
+                          requesterDepartmentId,
+                          linkedDocumentContext,
+                          externalRevision,
+                          generatedNoSurat,
+                          master,
+                          setInputValue,
+                          setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
+                          requestExternalOptions: async () => []
+                        } as any, "form_change");
+                        cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
+                        if (cleanup.resetSelection.includes("fundWithoutProject")) {
+                          setFundWithoutProject(false);
+                        }
+                      }
+                      nextInput.request_category = null;
+                      nextInput.request_mode = null;
+                      return { ...previous, form_usage_id: "", penggunaan_id: "", form_input_data: nextInput, is_aset: false };
+                    });
                   }}
                 >
                   <SelectTrigger className="h-12 bg-background">
@@ -4045,15 +3894,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </SelectContent>
                 </Select>
               </div>
-              {availableForms.length === 0 && (
+              {selectedFormId && usagesForSelectedForm.length === 0 && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs font-semibold text-amber-700 md:col-span-2 dark:text-amber-300">
-                  Belum ada kegunaan aktif untuk kategori, departemen, dan kantor yang dipilih.
+                  Belum ada kegunaan aktif untuk departemen dan kantor yang dipilih.
                 </div>
               )}
             </div>
           )}
 
-          {generatedNoSurat && selectedUsage && !isRecommendationFlow && (
+          {generatedNoSurat && selectedUsage && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
@@ -4070,11 +3919,114 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           )}
 
+          {/* Module specific context panels & Location */}
+          {selectedUsage && (
+            <>
+              {(() => {
+                const usageData = selectUsage(selectedUsage);
+                if (usageData) {
+                  return usageData.module.renderContextPanel({
+                    usage: selectedUsage,
+                    usageKey: usageData.key,
+                    category: usageData.category,
+                    formData,
+                    input: formData.form_input_data,
+                    isPusatSelected,
+                    requesterDepartmentId,
+                    linkedDocumentContext,
+                    externalRevision,
+                    generatedNoSurat,
+                    master,
+                    setInputValue,
+                    setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
+                    requestExternalOptions
+                  } as any);
+                }
+                return null;
+              })()}
+
+              <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5 mt-4">
+                {/* Kantor */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Kantor Penerbit</Label>
+                  <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
+                    onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih Kantor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {master.offices?.map((o: MasterRecord) => (
+                        <SelectItem key={o.id} value={o.id}>
+                          {o.kedudukan === "Pusat" ? "🏢 Kantor Pusat" : `🏗️ ${o.kedudukan}. ${o.name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Entitas */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>
+                  <Select disabled={!!generatedNoSurat} value={formData.entity_id}
+                    onValueChange={v => setFormData({ ...formData, entity_id: v })}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih PT..." />
+                    </SelectTrigger>
+                    <SelectContent align="start" collisionPadding={16} className="max-w-[calc(100vw-2rem)]">
+                      {master.entities?.map((e: MasterRecord) => (
+                        <SelectItem key={e.id} value={e.id} className="[&>span:last-child]:whitespace-normal [&>span:last-child]:break-words">
+                          {e.code} - {e.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Departemen */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Departemen</Label>
+                  <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.dept_id}
+                    onValueChange={v => setFormData({ ...formData, dept_id: v, letter_type_id: "" })}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih Dept..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentSelectOptions.map((d: MasterRecord) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Jenis Dokumen */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Jenis Dokumen</Label>
+                  <Select disabled={!!generatedNoSurat} value={formData.letter_type_id}
+                    onValueChange={handleLetterTypeChange}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih Jenis..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentLetterTypes.map((t: MasterRecord) => (
+                        <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>
+                      ))}
+                      {formData.dept_id && departmentLetterTypes.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          Belum ada jenis dokumen untuk departemen ini.
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </>
+          )}
+
           {!generatedNoSurat ? (
             <Button
               onClick={handleGetNumber}
-              disabled={isProcessingNumber || !profileLocationReady || !formData.entity_id || !formData.dept_id || !formData.letter_type_id}
-              className="h-12 w-full font-semibold"
+              disabled={isProcessingNumber || !profileLocationReady || !formData.entity_id || !formData.dept_id || !formData.letter_type_id || !selectedUsage}
+              className="h-12 w-full font-semibold mt-4"
             >
               {isProcessingNumber
                 ? <Loader2 className="animate-spin mr-2 w-5 h-5" />
@@ -4082,7 +4034,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               }
             </Button>
           ) : (
-            <div className="flex flex-col items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/10 p-5 md:flex-row">
+            <div className="flex flex-col items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/10 p-5 md:flex-row mt-4">
               <div className="flex gap-4 items-center">
                 <div className="p-3 bg-primary rounded-2xl text-primary-foreground shadow-lg"><Hash className="w-6 h-6" /></div>
                 <div>
@@ -4104,7 +4056,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </div>
                 </div>
               </div>
-              {isRecommendationFlow ? (
+              {linkedDocumentContext?.type === "recommendation" ? (
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -4146,9 +4098,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           )}
         </section>
-        )}
-
-        {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
+        )}\n        {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
         {generatedNoSurat && (
           <div id="surat-registration-details" className="scroll-mt-24 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
             {showSectionBerkas && (
@@ -4403,3 +4353,5 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 }
 
 export default SuratForm;
+
+
