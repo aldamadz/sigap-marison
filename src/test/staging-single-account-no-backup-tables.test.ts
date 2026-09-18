@@ -17,7 +17,7 @@ describe("staging single-account fixtures guard", () => {
     for (const file of files) {
       const content = readFileSync(join(process.cwd(), file), "utf8").toLowerCase();
       for (const pattern of banned) {
-        expect(`${file} contains ${pattern}`, content.includes(pattern)).toBe(false);
+        expect(content.includes(pattern), `${file} contains ${pattern}`).toBe(false);
       }
     }
   });
