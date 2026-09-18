@@ -5,9 +5,11 @@ import { join } from "node:path";
 const files = [
   "docs/STAGING_SINGLE_ACCOUNT_FIXTURES_RUNBOOK.md",
   "supabase/migrations/20260919000000_staging_single_account_usage_fixtures.sql",
+  "supabase/migrations/20260919000100_staging_split_account_usage_fixtures.sql",
   "supabase/tests/staging_single_account_fixtures.integration.sql",
   "supabase/tests/staging_single_account_behavioral.integration.sql",
   "supabase/tests/staging_single_account_fixtures_removal.sql",
+  "supabase/tests/staging_split_account_fixtures.integration.sql",
 ];
 
 const backupBanned = ["create table public._backup", "_backup_form_"];
@@ -33,5 +35,15 @@ describe("staging single-account fixtures guard", () => {
         expect(content.includes(pattern), `${file} contains ${pattern}`).toBe(false);
       }
     }
+  });
+
+  it("cleanup targets scoped prefixes, not the legacy-only pattern", () => {
+    const removal = readFileSync(
+      join(process.cwd(), "supabase/tests/staging_single_account_fixtures_removal.sql"),
+      "utf8",
+    );
+    expect(removal.includes("[UJI STAGING PUSAT]%"), "removal misses PUSAT prefix").toBe(true);
+    expect(removal.includes("[UJI STAGING CABANG]%"), "removal misses CABANG prefix").toBe(true);
+    expect(removal.includes("like '[UJI STAGING]%'"), "removal uses legacy-only pattern").toBe(false);
   });
 });
