@@ -48,7 +48,7 @@ export const fundModule: UsageModule = {
     );
   },
   hiddenFieldKeys() {
-    return ["items", "fund_amount"];
+    return ["items", "fund_amount", "fund_type", "fund_without_project"];
   },
   isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
     if (field.key !== "items" && field.key !== "fund_amount") return null;
@@ -106,7 +106,9 @@ export const fundModule: UsageModule = {
   },
   normalizeInput(input) {
     const next = { ...input };
+    next.request_category = "non_asset";
     next.request_mode = "barang";
+    delete next.is_aset;
     const fundItems = normalizeFundSubmissionItems(next.items);
     next.items = fundItems;
     next.fund_amount = getFundSubmissionAmount(fundItems);

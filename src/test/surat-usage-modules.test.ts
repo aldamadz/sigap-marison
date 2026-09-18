@@ -90,12 +90,25 @@ describe("fund module", () => {
       .toBe(input);
   });
 
-  it("render slot tersedia, hidden mencakup items/fund_amount", () => {
+  it("G.7 baseline payload dana", () => {
+    const out = fundModule.normalizeInput(
+      { items: [{ nama_barang: "Sewa", jumlah: "2", nominal: "1500000" }] } as never,
+      ctxFor("non_asset"),
+    ) as Record<string, unknown>;
+    expect(out.request_category).toBe("non_asset");
+    expect(out.request_mode).toBe("barang");
+    expect(out).not.toHaveProperty("is_aset");
+    expect(out.fund_amount).toBe(1500000);
+    expect(out.items).toEqual([
+      expect.objectContaining({ nama_barang: "Sewa", nominal: "1500000" }),
+    ]);
+  });
+  it("render slot tersedia, hidden mencakup items/fund_amount dana", () => {
     const ctx = ctxFor("non_asset");
     expect(fundModule.renderContextPanel(ctx)).not.toBeNull();
     expect(fundModule.renderDetailsPanel?.(ctx)).not.toBeNull();
     expect(fundModule.hiddenFieldKeys?.(ctx)).toEqual(
-      expect.arrayContaining(["items", "fund_amount"])
+      expect.arrayContaining(["items", "fund_amount", "fund_type", "fund_without_project"])
     );
   });
 });
@@ -126,8 +139,32 @@ describe("non-unit module", () => {
     expect(nonUnitModule.isFieldComplete?.({ key: "nama_barang" } as never, ctx)).toBeNull();
   });
 
+  it("G.7 baseline payload non-unit", () => {
+    const out = nonUnitModule.normalizeInput(
+      { request_mode: "unit", is_aset: true, foo: 1 } as never,
+      ctxFor("non_unit"),
+    ) as Record<string, unknown>;
+    expect(out).toMatchObject({ request_category: "non_unit", request_mode: "barang", foo: 1 });
+    expect(out).not.toHaveProperty("is_aset");
+  });
+
   it("summary label items berasal dari modul", () => {
     expect(nonUnitModule.summaryFieldLabels?.items).toBe("Daftar Pekerjaan Non Unit");
+  });
+
+  it("G.7 baseline payload unit sama seperti sebelum refactor", () => {
+    const out = unitModule.normalizeInput({ requested_unit_count: 3 } as never, ctxFor("unit"));
+    const items = (out as Record<string, unknown>).items as Array<Record<string, unknown>>;
+    expect((out as Record<string, unknown>).request_category).toBe("unit");
+    expect((out as Record<string, unknown>).request_mode).toBe("unit");
+    expect((out as Record<string, unknown>)).not.toHaveProperty("is_aset");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      nama_barang: "Permohonan Order Bangun SPK Pembangunan Rumah 3 Unit",
+      sat: "Unit",
+      jumlah: 3,
+      status: "2",
+    });
   });
 
   it("reconcile identitas untuk non-unit", () => {
@@ -207,8 +244,16 @@ describe("asset module", () => {
     expect(allowed.requires_recommendation).toBe(false);
     expect(allowed.recommendation_template_name).toBe("Rekomendasi Peremajaan Alat");
 
+    // Departemen tak dikenal: policy mengizinkan → default diterapkan.
+    const unknownDept = assetModule.reconcileInputForContext?.(
+      { catatan: "tetap" } as never,
+      ctxFor("asset", {}, { dept_id: "dept-tak-dikenal" }),
+    ) as Record<string, unknown>;
+    expect(unknownDept.requires_recommendation).toBe(false);
+    expect(unknownDept.catatan).toBe("tetap");
+
     const stripped = assetModule.reconcileInputForContext?.(
-      { requires_recommendation: true, recommendation_template_name: "x" } as never,
+      { requires_recommendation: true, recommendation_template_name: "x", catatan: "tetap" } as never,
       {
         ...ctxFor("asset", {}, { dept_id: "dept-pbo" }),
         linkedDocumentContext: { type: "recommendation", parentSuratId: "p1" } as never,
@@ -216,6 +261,20 @@ describe("asset module", () => {
     ) as Record<string, unknown>;
     expect(stripped).not.toHaveProperty("requires_recommendation");
     expect(stripped).not.toHaveProperty("recommendation_template_name");
+    expect(stripped.catatan).toBe("tetap");
+  });
+
+  it("G.7 baseline payload aset", () => {
+    const out = assetModule.normalizeInput(
+      { request_mode: "unit", foo: "bar" } as never,
+      ctxFor("asset"),
+    ) as Record<string, unknown>;
+    expect(out).toMatchObject({
+      request_category: "asset",
+      request_mode: "barang",
+      is_aset: true,
+      foo: "bar",
+    });
   });
 
   it("renderFieldOverride: model v1 dirender modul, tanpa model null", () => {

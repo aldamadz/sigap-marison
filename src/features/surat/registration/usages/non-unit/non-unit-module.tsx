@@ -77,7 +77,9 @@ export const nonUnitModule: UsageModule = {
   },
   normalizeInput(input) {
     const next = { ...input };
+    next.request_category = "non_unit";
     next.request_mode = "barang";
+    delete next.is_aset;
     return next;
   },
 };

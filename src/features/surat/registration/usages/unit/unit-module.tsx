@@ -60,7 +60,9 @@ export const unitModule: UsageModule = {
   },
   normalizeInput(input, ctx) {
     const next = { ...input };
+    next.request_category = "unit";
     next.request_mode = "unit";
+    delete next.is_aset;
 
     // We recreate the items table based on the requested unit count
     const count = Number(next.requested_unit_count || 0);

@@ -227,11 +227,19 @@ describe("SUR-01 form-first acceptance", () => {
     expect(suratFormSource).not.toContain("canRequesterUseRecommendation");
     // E: tanpa hardcode default rekomendasi di applySelectedUsage.
     expect(suratFormSource).not.toContain("nextInput.requires_recommendation = false");
+    expect(suratFormSource).not.toContain("requires_recommendation");
+    expect(suratFormSource).not.toContain('usageData.category === "asset"');
     // B: tanpa flag mode kategori di orchestrator.
-    expect(suratFormSource).not.toContain("const isFundMode");
-    expect(suratFormSource).not.toContain("const isNonUnitMode");
+    expect(suratFormSource).not.toContain("isFundMode");
+    expect(suratFormSource).not.toContain("isNonUnitMode");
     // A: tanpa fallback generic.
     expect(suratFormSource).not.toContain('registry.get("generic")');
+    // Slot generik dipakai (bukan branch kategori).
+    expect(suratFormSource).toContain("reconcileInputForContext");
+    expect(suratFormSource).toContain("validateSubmit");
+    expect(suratFormSource).toContain("buildSummaryFields");
+    expect(suratFormSource).toContain("renderDetailsPanel");
+    expect(suratFormSource).toContain("requiresMasterProjectMapping");
   });
 
   it("18. tidak ada dispatch berbasis UUID/nama", async () => {

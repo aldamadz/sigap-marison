@@ -60,7 +60,13 @@ export const assetModule: UsageModule = {
     return null;
   },
   hiddenFieldKeys() {
-    return [];
+    // Kunci internal milik modul (juga dipakai summary agar tidak bocor ke dump generik).
+    return [
+      "requires_recommendation",
+      "recommendation_template_name",
+      "recommendation_attachment_note",
+      "recommendation_multi_detail",
+    ];
   },
   validateNumberContext(): NumberContextIssue[] {
     return [];
@@ -104,7 +110,9 @@ export const assetModule: UsageModule = {
   },
   normalizeInput(input) {
     const next = { ...input };
+    next.request_category = "asset";
     next.request_mode = "barang";
+    next.is_aset = true;
     return next;
   },
 };

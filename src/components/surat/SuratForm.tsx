@@ -895,20 +895,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   // Tanpa flag mode kategori di orchestrator: kebutuhan mapping proyek
   // dibaca dari requirements modul aktif.
   const requiresMarisonProject = activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false;
-  // Flag mode untuk validator shared (lib) diturunkan dari requirements modul,
-  // bukan dari perbandingan kategori di orchestrator.
-  const moduleModeFlags = {
-    isNonUnitMode: (activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false)
-      && !(activeUsageData?.module.requirements.allowsFundWithoutProject ?? false),
-    isFundMode: activeUsageData?.module.requirements.allowsFundWithoutProject ?? false,
-  };
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;
   // MRN-22: virtual scope "000" fallback is the single source of truth.
   // Unit, Non Unit, and Non Aset are explicitly excluded by the predicate
   // (requestCategory must be "asset").  This replaces the old heuristic
-  // `isBranchOfficeSelected && !branchHasRegisteredProjects && cat !== 'unit' && !isFundMode`
   // which incorrectly covered Non Unit.
   const shouldUseDefaultBranchProject = isBranchAssetFallbackMarker({
     officeKedudukan: isPusatSelected ? "Pusat" : "Cabang",
@@ -1602,9 +1594,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
       }
 
-      nextInput.request_category = usageData.category;
-
-      // Rekonsiliasi generik milik modul (default pilihan, konteks linked, dsb).
+      // Default state berasal dari kontrak modul (reconcile + normalize),
+      // termasuk request_category/request_mode/is_aset. Orchestrator hanya
+      // menulis routing key bersama (form_usage_id/penggunaan_id).
       // Orchestrator tidak mengetahui modul apa yang aktif.
       const transitionCtxFor = (input: FormInputData) => buildModuleTransitionCtx(
         detail,
@@ -1625,7 +1617,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         project_id: previousUsageData && previousUsageData.category !== usageData.category ? "" : prev.project_id,
         penggunaan_id: isNewUsage ? "" : detail.id,
         form_usage_id: isNewUsage ? detail.id : "",
-        is_aset: usageData.category === "asset",
+        // Flag warisan dibaca dari output normalisasi modul, bukan dari branch kategori.
+        is_aset: initializedInput.is_aset === true,
         form_input_data: initializedInput,
       };
     });
@@ -1944,17 +1937,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       requestDate: formData.request_date,
       missingInitialAttachmentLabels: getMissingInitialAttachmentLabels(),
 
-      isUnitMode,
+      requestCategory: getRequestCategory(),
       hasUnitRequestFields: hasUnitRequestFields(selectedUsage),
       canCurrentDepartmentRequestUnit: canCurrentDepartmentRequestUnit(selectedUsage),
       requestedUnitCount: Number(getFormFieldValue("requested_unit_count") || 0),
       requestedProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
 
-      isNonUnitMode: moduleModeFlags.isNonUnitMode,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
       firstNonUnitError: undefined,
-      isFundMode: moduleModeFlags.isFundMode,
       fundWithoutProject: isGeneralFund,
       fundType: String(getFormFieldValue("fund_type") || ""),
       firstFundIssue: undefined,
@@ -1995,9 +1986,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const office = master.offices.find((item) => item.id === formData.office_id);
     const formFields = selectedUsage ? getManualInputFields(selectedUsage) : [];
     const mappedKeys = new Set(formFields.map((field) => field.key));
+    // Kunci internal milik modul dibaca dari kontrak modul; sisanya snapshot bersama.
+    const moduleHiddenKeys = activeUsageData && moduleCtx
+      ? activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? []
+      : [];
     const hiddenKeys = new Set([
-      "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
-      "recommendation_template_name", "recommendation_multi_detail", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type", "fund_amount", "fund_without_project",
+      "request_mode", "request_category", "unit_config_snapshot", "project_code", "project_name", "project_is_default",
+      ...moduleHiddenKeys,
     ]);
     // Label + baris ringkasan khusus modul berasal dari modul aktif.
     const moduleSummaryLabels = activeUsageData?.module.summaryFieldLabels ?? {};
@@ -3675,7 +3670,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 <div>
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-[10px] font-black text-primary uppercase">Nomor Terdaftar</p>
-                    {formData.is_aset && (
+                    {effectiveFormInputData.is_aset === true && (
                       <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-full">
                         <Archive className="w-3 h-3 text-amber-500" />
                         <span className="text-[9px] font-black text-amber-500 uppercase">Aset</span>
