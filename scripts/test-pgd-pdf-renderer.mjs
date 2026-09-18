@@ -12,13 +12,12 @@ import {
 const PGD_MASTER_FORM = { id: "form-pgd", nama_form: "FORM PERMINTAAN BARANG & JASA", nomor_form: "FM-UAI.PGD-01-00" };
 const NON_PGD_MASTER_FORM = { id: "form-rec", nama_form: "FORM REKOMENDASI", nomor_form: "FM-UAI.HRD-30-00" };
 
-const stubClient = ({ usage = null, usageError = null, masterForm = null, masterFormError = null } = {}) => ({
+const stubClient = ({ usage = null, usageError = null } = {}) => ({
   from: (table) => ({
     select: () => ({
       eq: () => ({
         maybeSingle: async () => {
-          if (table === "form_usages") return { data: usage, error: usageError };
-          return { data: masterForm, error: masterFormError };
+          return { data: usage, error: usageError };
         },
       }),
     }),
@@ -40,7 +39,7 @@ test("detects PGD from resolved canonical master form when snapshot form is empt
   };
   assert.equal(isPgdDocument(surat), false);
   const masterForm = await resolvePgdMasterForm(
-    stubClient({ usage: { id: "usage-pgd", form_id: "form-pgd" }, masterForm: PGD_MASTER_FORM }),
+    stubClient({ usage: { id: "usage-pgd", form_id: "form-pgd", master_forms: PGD_MASTER_FORM } }),
     surat.form_usage_id,
   );
   assert.deepEqual(masterForm, PGD_MASTER_FORM);
@@ -66,15 +65,14 @@ test("fails closed on missing or invalid form usage", async () => {
   assert.equal(await resolvePgdMasterForm(client({}), undefined), null);
   assert.equal(await resolvePgdMasterForm(client({ usage: null }), "usage-hilang"), null);
   assert.equal(await resolvePgdMasterForm(client({ usage: { id: "usage-tanpa-form" } }), "usage-tanpa-form"), null);
-  assert.equal(await resolvePgdMasterForm(client({ usage: { id: "u", form_id: "f" }, masterForm: null }), "u"), null);
-  assert.equal(await resolvePgdMasterForm(client({ usage: null, usageError: new Error("db down") }), "u"), null);
-  assert.equal(
-    await resolvePgdMasterForm(
-      client({ usage: { id: "u", form_id: "f" }, masterForm: null, masterFormError: new Error("db down") }),
-      "u",
-    ),
-    null,
-  );
+  assert.equal(await resolvePgdMasterForm(client({ usage: { id: "u", form_id: "f" } }), "u"), null);
+
+  const errorObj = new Error("db down");
+  await assert.rejects(resolvePgdMasterForm(client({ usage: null, usageError: errorObj }), "u"), (err) => {
+    assert.strictEqual(err, errorObj);
+    return true;
+  });
+
   assert.equal(isPgdDocument({}), false);
   assert.equal(isPgdDocument({ location_snapshot: { form: {} }, data_snapshot: {} }), false);
 });

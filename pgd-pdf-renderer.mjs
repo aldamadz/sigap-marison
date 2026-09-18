@@ -141,17 +141,14 @@ export const resolvePgdMasterForm = async (client, formUsageId) => {
   if (!formUsageId) return null;
   const { data: usage, error: usageError } = await client
     .from("form_usages")
-    .select("id, form_id")
+    .select("id, form_id, master_forms!fk_master_forms(id, nama_form, nomor_form)")
     .eq("id", formUsageId)
     .maybeSingle();
-  if (usageError || !usage?.form_id) return null;
-  const { data: masterForm, error: masterFormError } = await client
-    .from("master_forms")
-    .select("id, nama_form, nomor_form")
-    .eq("id", usage.form_id)
-    .maybeSingle();
-  if (masterFormError || !masterForm) return null;
-  return masterForm;
+
+  if (usageError) throw usageError;
+  if (!usage || !usage.form_id || !usage.master_forms) return null;
+
+  return Array.isArray(usage.master_forms) ? usage.master_forms[0] : usage.master_forms;
 };
 
 export const normalizeNativeSignatures = (signatures = [], targetStep = 0) =>
