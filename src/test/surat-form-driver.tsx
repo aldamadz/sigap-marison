@@ -104,17 +104,37 @@ export function findSelectTrigger(labelPattern: RegExp): HTMLElement {
 
 export async function mountForm() {
   render(<SuratForm {...defaultProps()} />);
-  await screen.findByText(/Lokasi dan Klasifikasi/i);
+  await screen.findAllByText(/Form & Lokasi/i);
 }
 
 // ─── Select helpers ─────────────────────────────────────────────
+
+export async function selectForm(formName?: RegExp | string) {
+  const trigger = findSelectTrigger(/Form/i);
+  await act(async () => { fireEvent.click(trigger); });
+  const listbox = await screen.findByRole("listbox");
+  const options = within(listbox).getAllByText(formName || /FORM PERMOHONAN/i);
+  await act(async () => { fireEvent.click(options[0]); });
+}
+
+export async function selectUsage(usageName: RegExp | string = /Permohonan/i) {
+  const trigger = findSelectTrigger(/Kegunaan/i);
+  await act(async () => { fireEvent.click(trigger); });
+  const listbox = await screen.findByRole("listbox");
+  const options = within(listbox).getAllByText(usageName);
+  await act(async () => { fireEvent.click(options[0]); });
+}
+
+export async function selectFormAndUsage(usageName?: RegExp | string) {
+  await selectForm();
+  await selectUsage(usageName);
+}
 
 export async function selectLetterType() {
   const trigger = findSelectTrigger(/Jenis Dokumen/i);
   await act(async () => { fireEvent.click(trigger); });
   const option = await screen.findByText(/MH.*Permohonan/i);
   await act(async () => { fireEvent.click(option); });
-  await screen.findByText("Pengajuan Aset");
 }
 
 export async function selectEntity() {
@@ -126,42 +146,22 @@ export async function selectEntity() {
 }
 
 export async function selectCategoryAset() {
-  const btn = await screen.findByText("Pengajuan Aset");
-  await act(async () => { fireEvent.click(btn); });
-  await screen.findByText("Form PGD");
+  // Form-first: category is derived. No-op to preserve old test compatibility
 }
 
-export async function selectForm() {
-  // If only one form is available, it auto-selects. Check first.
-  try {
-    screen.getByText(/FORM PERMOHONAN ASET/i);
-  } catch {
-    const trigger = findSelectTrigger(/Form PGD/i);
-    await act(async () => { fireEvent.click(trigger); });
-    const listbox = await screen.findByRole("listbox");
-    const option = within(listbox).getByText(/FORM PERMOHONAN ASET/i);
-    await act(async () => { fireEvent.click(option); });
-  }
-  await screen.findByText("Kegunaan");
+export async function selectCategory(catName: string) {
+  if (catName.includes("SPK")) await selectFormAndUsage(/Permohonan Unit/i);
+  else if (catName.includes("Dana")) await selectFormAndUsage(/Permohonan Dana/i);
+  else if (catName.includes("Non Unit")) await selectFormAndUsage(/Permohonan Non Unit/i);
+  else await selectFormAndUsage(/Permohonan Aset/i);
 }
 
-export async function selectUsage() {
-  const matches = screen.queryAllByText(/Permohonan Aset/i);
-  const alreadySelected = matches.some(
-    el => el.closest("[role='combobox']") !== null
-  );
-  if (!alreadySelected) {
-    const trigger = findSelectTrigger(/Kegunaan/i);
-    await act(async () => { fireEvent.click(trigger); });
-    const listbox = await screen.findByRole("listbox");
-    const option = within(listbox).getByText(/Permohonan Aset/i);
-    await act(async () => { fireEvent.click(option); });
-  }
+export async function selectCategoryUnit() {
+  await selectCategory("Pengajuan SPK");
 }
 
-export async function selectFormAndUsage() {
-  await selectForm();
-  await selectUsage();
+export async function selectCategoryNonUnit() {
+  await selectCategory("Pengajuan Non Unit");
 }
 
 export async function selectOptionByLabel(labelPattern: RegExp, optionPattern: RegExp) {
@@ -182,7 +182,8 @@ export async function clickGetNumber() {
   await act(async () => { fireEvent.click(btn); });
   // Wizard pindah ke langkah 2 setelah nomor didapat; langkah 1 (dengan
   // kartu "Nomor Terdaftar") unmount. Tunggu header langkah 2.
-  await screen.findByText("Persetujuan dan Berkas");
+  // ("Persetujuan & Berkas" muncul di stepper + section → pakai AllBy.)
+  await screen.findAllByText("Persetujuan & Berkas");
 }
 
 // ─── Autosave with fake timers ──────────────────────────────────
@@ -294,7 +295,7 @@ export async function closeDialog() {
 /** Navigate the registration wizard via its stepper buttons. */
 export async function goToWizardStep(step: 1 | 2 | 3) {
   const name =
-    step === 1 ? /Lokasi & Klasifikasi/
+    step === 1 ? /Form & Lokasi/
     : step === 2 ? /Persetujuan & Berkas/
     : /Penandatangan/;
   const btn = screen.getByRole("button", { name });
@@ -305,10 +306,9 @@ export async function goToWizardStep(step: 1 | 2 | 3) {
 
 export async function navigateToNumberReady() {
   await mountForm();
+  await selectFormAndUsage();
   await selectLetterType();
   await selectEntity();
-  await selectCategoryAset();
-  await selectFormAndUsage();
 }
 
 export async function navigateToNumberGenerated() {
@@ -325,25 +325,7 @@ export async function navigateToReadyToSubmit() {
 
 // ─── Category selection helpers ─────────────────────────────────
 
-export async function selectCategory(category: string) {
-  const btn = await screen.findByText(category);
-  await act(async () => { fireEvent.click(btn); });
-}
 
-export async function selectCategoryUnit() {
-  await selectCategory("Pengajuan SPK");
-  // Wait for unit-specific UI to render
-  await waitFor(() => {
-    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form PGD/i)).toBeTruthy();
-  });
-}
-
-export async function selectCategoryNonUnit() {
-  await selectCategory("Pengajuan Non Unit");
-  await waitFor(() => {
-    expect(screen.queryByText(/Pilih form/i) || screen.queryByText(/Form PGD/i)).toBeTruthy();
-  });
-}
 
 // ─── Mount with custom config ───────────────────────────────────
 
@@ -379,7 +361,7 @@ export async function mountFormWithUsage(usageData: unknown[], profileData?: unk
     }
   );
   render(<SuratForm {...defaultProps()} />);
-  await screen.findByText(/Lokasi dan Klasifikasi/i);
+  await screen.findAllByText(/Form & Lokasi/i);
 }
 
 // ─── Fetch mock helpers ─────────────────────────────────────────
@@ -419,7 +401,7 @@ export async function uploadAttachment(fileName: string) {
  * Mount form with custom URL search params.
  * Use for linked document flows (Flow 5).
  * For recommendation flow, waits for RecommendationParentSummary.
- * For normal flow, waits for "Lokasi dan Klasifikasi".
+ * For normal flow, waits for "Form & Lokasi".
  */
 export async function mountFormWithSearchParams(params: Record<string, string>) {
   const { setSearchParamsOverride } = await import("./surat-form-harness");
@@ -429,7 +411,7 @@ export async function mountFormWithSearchParams(params: Record<string, string>) 
   if (params.linked_type === "recommendation") {
     if (params.parent_no_surat) await screen.findByText(params.parent_no_surat);
   } else {
-    await screen.findByText(/Lokasi dan Klasifikasi/i);
+    await screen.findAllByText(/Form & Lokasi/i);
   }
 }
 

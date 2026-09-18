@@ -14,6 +14,8 @@ export interface MissingFieldSnapshot {
   label: string;
 }
 
+export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+
 export interface SuratSubmitValidationInput {
   uploadingRequirement: boolean;
   uploadingRecommendationAttachment: boolean;
@@ -22,22 +24,22 @@ export interface SuratSubmitValidationInput {
   requestPlace: string;
   requestDate?: string;
   missingInitialAttachmentLabels: string[];
-  
+
+  /** Kategori canonical; mode turunan dihitung di dalam lib, bukan oleh pemanggil. */
+  requestCategory: RequestCategory | null;
+
   // Unit mode
-  isUnitMode: boolean;
   hasUnitRequestFields: boolean;
   canCurrentDepartmentRequestUnit: boolean;
   requestedUnitCount: number;
   requestedProjectCode?: string;
 
   // Non Unit mode
-  isNonUnitMode: boolean;
   shouldUseDefaultBranchProject: boolean;
   isMarisonProjectReady: boolean;
   firstNonUnitError?: string;
 
   // Non Aset (Fund) mode
-  isFundMode: boolean;
   fundWithoutProject: boolean;
   fundType: string;
   firstFundIssue?: string;
@@ -65,6 +67,10 @@ function fail(title: string, description?: string): SuratSubmitValidationResult 
 // Order matches original validateRegistration exactly (lines 1972-2085 at Pass K1 base).
 
 export function validateSuratSubmit(input: SuratSubmitValidationInput): SuratSubmitValidationResult {
+  const isUnitMode = input.requestCategory === "unit";
+  const isNonUnitMode = input.requestCategory === "non_unit";
+  const isFundMode = input.requestCategory === "non_asset";
+
   if (input.uploadingRequirement || input.uploadingRecommendationAttachment) {
     return fail("Upload Belum Selesai", "Tunggu sampai seluruh lampiran selesai disimpan.");
   }
@@ -82,7 +88,7 @@ export function validateSuratSubmit(input: SuratSubmitValidationInput): SuratSub
   }
 
   // ── Unit ──────────────────────────────────────────────────────────────
-  if (input.isUnitMode) {
+  if (isUnitMode) {
     if (!input.hasUnitRequestFields) {
       return fail("Matrix Unit Tidak Valid", "Pilih matrix/template yang mendukung permohonan unit.");
     }
@@ -98,7 +104,7 @@ export function validateSuratSubmit(input: SuratSubmitValidationInput): SuratSub
   }
 
   // ── Non Unit ──────────────────────────────────────────────────────────
-  if (input.isNonUnitMode && !input.shouldUseDefaultBranchProject) {
+  if (isNonUnitMode && !input.shouldUseDefaultBranchProject) {
     if (!input.isMarisonProjectReady) {
       return fail(
         "Proyek Belum Terhubung",
@@ -111,7 +117,7 @@ export function validateSuratSubmit(input: SuratSubmitValidationInput): SuratSub
   }
 
   // ── Non Aset (fund) ──────────────────────────────────────────────────
-  if (input.isFundMode) {
+  if (isFundMode) {
     if (!input.fundWithoutProject && !input.isMarisonProjectReady) {
       return fail(
         "Proyek Belum Terhubung",

@@ -13,10 +13,16 @@ import {
   configureStandardMocks,
   selectLetterType,
   selectEntity,
-  selectCategory,
+  selectFormAndUsage,
   selectOptionByLabel,
   mountFormWithUsage,
   clickGetNumber,
+  selectForm,
+  selectUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 afterEach(() => teardownTestHarness());
@@ -36,9 +42,9 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
 
   it("reserves number for dana umum without a Marison project", async () => {
     await mountFormWithUsage(FUND_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
+    await selectFormAndUsage(/Dana/i);
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Pengajuan Dana");
 
     // KC tidak punya proyek siap Marison; fund bisa memilih Tanpa Proyek.
     expect(await screen.findByText("Belum ada proyek yang siap digunakan")).toBeInTheDocument();
