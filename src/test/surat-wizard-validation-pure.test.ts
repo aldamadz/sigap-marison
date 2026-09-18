@@ -39,7 +39,7 @@ describe("surat-wizard-validation — validateStep1ForNumberGeneration", () => {
       validAssetInput({ requestCategory: null }),
     );
     expect(r.valid).toBe(false);
-    expect(r.errorTitle).toBe("Klasifikasi Belum Dipilih");
+    expect(r.errorTitle).toBe("Konfigurasi Kegunaan Belum Valid");
   });
 
   it("3. rejects when no usage selected", () => {
@@ -256,7 +256,7 @@ describe("surat-wizard-validation — validateStep1ForNumberGeneration", () => {
         selectedUsageId: null,
       }),
     );
-    expect(r.errorTitle).toBe("Klasifikasi Belum Dipilih");
+    expect(r.errorTitle).toBe("Konfigurasi Kegunaan Belum Valid");
   });
 
   // ── Fully valid asset ─────────────────────────────────────────────────────
