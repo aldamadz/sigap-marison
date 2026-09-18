@@ -30,7 +30,6 @@ describe("usage registry fail-closed", () => {
     expect(
       resolveUsageModuleKey(asUsage({ request_category: undefined, request_categories: ["asset", "non_unit"] }))
     ).toBeNull();
-    // Sinyal kapabilitas bertentangan dengan kategori workflow → ambigu.
     expect(
       resolveUsageModuleKey(asUsage({
         request_category: "asset",
@@ -44,7 +43,6 @@ describe("usage registry fail-closed", () => {
     expect(modules).toHaveLength(4);
     expect(modules.map(m => m.meta.key).sort()).toEqual(["asset", "non_asset", "non_unit", "unit"]);
     expect(isUsageModuleRegistered("generic" as never)).toBe(false);
-    // Normalisasi diam-diam tidak menebak kategori.
     expect(normalizeFormInputData({})).not.toHaveProperty("request_category");
     expect(normalizeFormInputData({ request_mode: "unit" }).request_category).toBe("unit");
     expect(normalizeFormInputData({ is_aset: true }).request_category).toBe("asset");

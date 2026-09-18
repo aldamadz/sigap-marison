@@ -1,5 +1,6 @@
 import React from "react";
-import type { UsageModule, UsageModuleContext, CleanupResult } from "../usage-contract";
+import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
+import type { UsageModule, UsageModuleContext, CleanupResult, NumberContextIssue } from "../usage-contract";
 import { registerUsageModule } from "../usage-registry";
 import { AssetContextPanel } from "./AssetContextPanel";
 
@@ -21,28 +22,40 @@ export const assetModule: UsageModule = {
     return <AssetContextPanel ctx={ctx} />;
   },
   renderFieldOverride(field, ctx) {
-    if (field.key === "recommendation_items" && ctx.input.recommendation_multi_detail) {
-      // It's handled inside the orchestrator currently since it needs upload handlers,
-      // but we can pass those down later. For now we just return null to let orchestrator handle it,
-      // or we can migrate the editor here if we decouple upload. 
-      // Actually, let's keep it null here and let orchestrator render it via generic table if needed,
-      // but the orchestrator has renderRecommendationItemsField. Let's export what orchestrator needs,
-      // or just keep it simple.
-      return null;
+    // Model rekomendasi v1 dirender modul Aset; varian baris legacy
+    // tetap memakai render tabel generik orchestrator.
+    if (field.key === "recommendation_items" && ctx.recommendationIO?.model) {
+      const io = ctx.recommendationIO;
+      return (
+        <RecommendationMultiDetailEditor
+          model={io.model}
+          onChange={io.onModelChange}
+          users={io.directory.users}
+          offices={io.directory.offices}
+          departments={io.directory.departments}
+          uploadingKey={io.uploadingKey}
+          onUpload={(parentId, detailId, files, source) => io.onUpload(parentId, detailId, files, source)}
+          onDeleteAttachment={(parentId, detailId, attachment) => io.onDeleteAttachment(parentId, detailId, attachment)}
+          onDeleteDetail={(parentId, detail) => io.onDeleteDetail(parentId, detail)}
+        />
+      );
     }
     return null;
   },
-  hiddenFieldKeys(ctx) {
+  hiddenFieldKeys() {
     return [];
   },
-  cleanup(ctx, reason): CleanupResult {
+  validateNumberContext(): NumberContextIssue[] {
+    return [];
+  },
+  cleanup(): CleanupResult {
     const keys = ["requires_recommendation", "recommendation_template_name", "recommendation_attachment_note"];
     return {
       inputKeysToDelete: keys,
       resetSelection: ["recommendationMultiDetail"],
     };
   },
-  normalizeInput(input, ctx) {
+  normalizeInput(input) {
     const next = { ...input };
     next.request_mode = "barang";
     return next;

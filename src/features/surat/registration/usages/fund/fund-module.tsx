@@ -1,7 +1,16 @@
 import React from "react";
-import type { UsageModule, UsageModuleContext, CleanupResult } from "../usage-contract";
+import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
+import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
+import {
+  getFundSubmissionAmount,
+  normalizeFundSubmissionItems,
+} from "@/components/surat/fund-submission";
+import { normalizeTableRows } from "@/components/surat/form/surat-form-schema";
+import type { UsageModule, UsageModuleContext, CleanupResult, NumberContextIssue } from "../usage-contract";
 import { registerUsageModule } from "../usage-registry";
 import { FundContextPanel } from "./FundContextPanel";
+
+const FUND_TYPES = ["operational", "production_cost"];
 
 export const fundModule: UsageModule = {
   meta: {
@@ -20,18 +29,64 @@ export const fundModule: UsageModule = {
   renderContextPanel(ctx) {
     return <FundContextPanel ctx={ctx} />;
   },
-  hiddenFieldKeys(ctx) {
-    return ["items", "fund_amount"]; // Handled by FundSubmissionEditor
+  renderDetailsPanel(ctx) {
+    return (
+      <FundSubmissionEditor
+        value={ctx.input.items}
+        onChange={(items) => ctx.setInputValue("items", items)}
+      />
+    );
   },
-  cleanup(ctx, reason): CleanupResult {
+  renderFieldOverride(field, ctx) {
+    // Varian tabel skema Non Aset; default "items" dirender via renderDetailsPanel.
+    if (field.key === "items" && getNonAsetItemColumnKeys(field.table_config?.columns ?? []) !== null) {
+      return (
+        <NonAsetItemEditor
+          rows={normalizeTableRows(ctx.input.items)}
+          columns={field.table_config?.columns ?? []}
+          onChange={(rows) => ctx.setInputValue("items", rows)}
+        />
+      );
+    }
+    return null;
+  },
+  hiddenFieldKeys() {
+    return ["items", "fund_amount"];
+  },
+  validateNumberContext(ctx): NumberContextIssue[] {
+    const fundWithoutProject = ctx.input.fund_without_project === true;
+    if (!fundWithoutProject && !ctx.formData.project_id) {
+      return [{
+        title: "Proyek Tujuan Wajib Dipilih",
+        description: "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
+      }];
+    }
+    if (!fundWithoutProject && !(ctx.marisonProject?.ready ?? false)) {
+      return [{
+        title: "Proyek Belum Terhubung",
+        description: "Pilih proyek yang memiliki ID proyek dan kantor external yang valid.",
+      }];
+    }
+    if (!FUND_TYPES.includes(String(ctx.input.fund_type || ""))) {
+      return [{
+        title: "Jenis Pengajuan Dana Wajib Dipilih",
+        description: "Pilih Biaya Operasional atau Biaya Produksi.",
+      }];
+    }
+    return [];
+  },
+  cleanup(): CleanupResult {
     return {
       inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project"],
       resetSelection: ["fundWithoutProject"],
     };
   },
-  normalizeInput(input, ctx) {
+  normalizeInput(input) {
     const next = { ...input };
     next.request_mode = "barang";
+    const fundItems = normalizeFundSubmissionItems(next.items);
+    next.items = fundItems;
+    next.fund_amount = getFundSubmissionAmount(fundItems);
     return next;
   },
 };

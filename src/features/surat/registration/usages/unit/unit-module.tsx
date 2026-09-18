@@ -1,5 +1,5 @@
 import React from "react";
-import type { UsageModule, UsageModuleContext, CleanupResult } from "../usage-contract";
+import type { UsageModule, UsageModuleContext, CleanupResult, NumberContextIssue } from "../usage-contract";
 import { registerUsageModule } from "../usage-registry";
 import { UnitContextPanel } from "./UnitContextPanel";
 
@@ -20,8 +20,19 @@ export const unitModule: UsageModule = {
   renderContextPanel(ctx) {
     return <UnitContextPanel ctx={ctx} />;
   },
-  hiddenFieldKeys(ctx) {
+  hiddenFieldKeys() {
     return ["items", "unit"];
+  },
+  validateNumberContext(ctx): NumberContextIssue[] {
+    const project = ctx.input.requested_project as { code?: string } | undefined;
+    if (!project?.code) {
+      return [{ title: "Proyek Unit Wajib Dipilih" }];
+    }
+    const count = Number(ctx.input.requested_unit_count || 0);
+    if (!Number.isFinite(count) || count < 1) {
+      return [{ title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." }];
+    }
+    return [];
   },
   cleanup(ctx, reason): CleanupResult {
     return {

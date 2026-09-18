@@ -1,11 +1,17 @@
 import React from "react";
-import type { 
-  UsageDetailRecord, 
-  TemplateField, 
+import type {
+  UsageDetailRecord,
+  TemplateField,
   FormInputData,
-  LinkedDocumentContext 
+  LinkedDocumentContext,
+  MasterData,
+  MasterRecord,
 } from "@/components/surat/form/surat-form-types";
-import type { MasterData } from "@/components/surat/form/surat-form-types";
+import type {
+  RecommendationAttachment,
+  RecommendationDetail,
+  RecommendationMultiDetail,
+} from "@sigap/shared";
 
 export type UsageCategory = "asset" | "unit" | "non_asset" | "non_unit";
 /** Hanya empat kategori canonical yang didukung. Tidak ada modul generic. */
@@ -36,6 +42,32 @@ export type ExternalRevisionContext = {
   reason?: string;
 };
 
+/** Proyek Marison hasil mapping (single source di orchestrator, read-only bagi modul). */
+export type ModuleMarisonProject = {
+  ready: boolean;
+  projectId: number;
+  projectName: string;
+  unavailableCount: number;
+};
+
+/**
+ * Kemampuan file draft untuk editor rekomendasi. Implementasi upload/hapus
+ * tetap memakai infrastruktur file draft bersama; modul memiliki alur UI.
+ */
+export type RecommendationIO = {
+  model: RecommendationMultiDetail | null;
+  onModelChange(model: RecommendationMultiDetail): void;
+  uploadingKey: string | null;
+  onUpload(parentId: string, detailId: string, files: File[]): Promise<void>;
+  onDeleteAttachment(parentId: string, detailId: string, attachment: RecommendationAttachment): Promise<void>;
+  onDeleteDetail(parentId: string, detail: RecommendationDetail): Promise<void>;
+  directory: {
+    users: MasterRecord[];
+    offices: MasterRecord[];
+    departments: MasterRecord[];
+  };
+};
+
 export interface UsageModuleContext {
   usage: UsageDetailRecord;
   usageKey: UsageModuleKey;
@@ -48,11 +80,19 @@ export interface UsageModuleContext {
   externalRevision: ExternalRevisionContext | null;
   generatedNoSurat: string | null;
   master: MasterData;
+  marisonProject: ModuleMarisonProject | null;
+  recommendationIO: RecommendationIO | null;
 
   setInputValue(key: string, value: unknown): void;
   setSelection(patch: Partial<FormDataSnapshot>): void;
   requestExternalOptions(sourceKey: string, variables?: Record<string, unknown>): Promise<Array<{ value: string; label: string; raw?: Record<string, unknown> }>>;
 }
+
+/** Satu masalah validasi konteks nomor: judul + deskripsi aman untuk UI. */
+export type NumberContextIssue = {
+  title: string;
+  description?: string;
+};
 
 export interface UsageModuleMeta {
   key: UsageModuleKey;
@@ -78,9 +118,17 @@ export interface UsageModule {
   meta: UsageModuleMeta;
   requirements: UsageModuleRequirements;
 
+  /** Panel konteks Section 1 (pra-nomor). */
   renderContextPanel(ctx: UsageModuleContext): React.ReactNode | null;
+  /** Override field manual Section 2 (pasca-nomor). Null = render generik orchestrator. */
   renderFieldOverride?(field: TemplateField, ctx: UsageModuleContext): React.ReactNode | null;
+  /** Panel detail Section 2 yang bukan field manual (mis. FundSubmissionEditor). */
+  renderDetailsPanel?(ctx: UsageModuleContext): React.ReactNode | null;
+  /** Field manual yang dirender sendiri oleh modul (disembunyikan dari render generik). */
   hiddenFieldKeys?(ctx: UsageModuleContext): string[];
+
+  /** Aturan gate nomor khusus modul. Array kosong = lolos. */
+  validateNumberContext(ctx: UsageModuleContext): NumberContextIssue[];
 
   cleanup(ctx: UsageModuleContext, reason: "form_change" | "usage_change" | "category_change" | "number_reset"): CleanupResult;
   normalizeInput(input: FormInputData, ctx: UsageModuleContext): FormInputData;
