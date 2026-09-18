@@ -15,6 +15,7 @@ describe("compact approval inbox — structural contracts", () => {
   const service = read("src/services/surat.service.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
   const migration = read("supabase/migrations/20260804081000_compact_inbox_rpc.sql");
+  const separateTaskMigration = read("supabase/migrations/20260919000050_separate_inbox_verification_tasks.sql");
   const sqlTest = read("supabase/tests/compact_inbox.integration.sql");
 
   it("1. RPC get_compact_inbox with filter params (search, request_category, task_type)", () => {
@@ -110,6 +111,13 @@ describe("compact approval inbox — structural contracts", () => {
   it("15. RPC uses keyset cursor with LIMIT +1 for hasMore", () => {
     expect(migration).toContain("LIMIT p_limit + 1");
     expect(migration).toContain("(available_at, task_type, id) >");
+  });
+
+  it("16. separate-task migration preserves both responsibilities for dual-role users", () => {
+    expect(separateTaskMigration).toContain("SELECT * FROM signer_rows\n    UNION ALL\n    SELECT * FROM verifier_rows");
+    expect(separateTaskMigration).not.toContain("WHERE NOT EXISTS (SELECT 1 FROM signer_rows");
+    expect(separateTaskMigration).toContain("'approval'::text AS task_type");
+    expect(separateTaskMigration).toContain("'verification'::text AS task_type");
   });
 });
 
@@ -241,13 +249,17 @@ describe("compact approval inbox — behavioral: pagination", () => {
     expect(buildPage([], 20).hasMore).toBe(false);
   });
 
-  it("two pages have no duplicate IDs", () => {
-    const all = Array.from({ length: 35 }, (_, i) => ({ id: `id-${i}`, available_at: "2026-01-01T00:00:00Z", task_type: "approval" }));
+  it("two pages have no duplicate composite task keys", () => {
+    const all = [
+      { id: "dual", available_at: "2026-01-01T00:00:00Z", task_type: "approval" },
+      { id: "dual", available_at: "2026-01-01T00:00:00Z", task_type: "verification" },
+      ...Array.from({ length: 33 }, (_, i) => ({ id: `id-${i}`, available_at: "2026-01-01T00:00:00Z", task_type: "approval" })),
+    ];
     const p1 = buildPage(all.slice(0, 21), 20);
     const p2 = buildPage(all.slice(20), 20);
-    const ids1 = new Set(p1.items.map((r: any) => r.id));
-    const ids2 = new Set(p2.items.map((r: any) => r.id));
-    expect([...ids1].filter((id) => ids2.has(id))).toHaveLength(0);
+    const keys1 = new Set(p1.items.map((r: any) => `${r.task_type}:${r.id}`));
+    const keys2 = new Set(p2.items.map((r: any) => `${r.task_type}:${r.id}`));
+    expect([...keys1].filter((key) => keys2.has(key))).toHaveLength(0);
   });
 });
 
@@ -267,10 +279,10 @@ describe("compact approval inbox — SQL integration test", () => {
     expect(sqlTest).toContain("Future verifier does NOT appear");
   });
 
-  it("dual role dedup test uses UNION (not UNION ALL)", () => {
-    expect(sqlTest).toContain("Dual role does NOT duplicate");
-    // Use a regex tolerant of CRLF so the assertion is not line-ending dependent.
-    expect(sqlTest).toMatch(/UNION\r?\n\s*SELECT/);
+  it("dual role test models separate approval and verification tasks", () => {
+    expect(sqlTest).toContain("Dual role produces independent approval and verification tasks");
+    expect(sqlTest).toMatch(/UNION ALL\r?\n\s*SELECT ss\.id, 'verification'::text AS task_type/);
+    expect(sqlTest).toContain("ASSERT cnt = 2");
   });
 
   it("category test extracts from JSON path", () => {

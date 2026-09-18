@@ -23,10 +23,10 @@ describe("inbox verification task_type preserved on detail merge", () => {
     expect(inbox).toContain("...(selectedDetailItem || {})");
   });
 
-  it("1b. task_type merge is null-safe (detail null does not clobber compact)", () => {
-    // detail.task_type may be null/undefined (stale runtime/cache); it must
-    // fall back to the compact item's canonical task_type via nullish coalescing.
-    expect(inbox).toContain("task_type: selectedDetailItem?.task_type ?? selectedCompactItem.task_type");
+  it("1b. task_type always comes from the compact queue task", () => {
+    // Detail is keyed only by signature. When a user owns both responsibilities
+    // on one signature, detail cannot choose which inbox task is selected.
+    expect(inbox).toContain("task_type: selectedCompactItem.task_type ?? selectedDetailItem?.task_type");
   });
 
   it("2. Compact item remains the base of the selected item", () => {
@@ -84,13 +84,13 @@ describe("inbox verification task_type — behavioral", () => {
         : null;
   };
 
-  // Mirrors src/pages/surat/InboxPage.tsx selectedItem merge (null-safe).
+  // Mirrors src/pages/surat/InboxPage.tsx selectedItem merge.
   const mergeSelected = (compact: any, detail: any) =>
     compact
       ? {
           ...compact,
           ...(detail || {}),
-          task_type: detail?.task_type ?? compact.task_type,
+          task_type: compact.task_type ?? detail?.task_type,
         }
       : detail;
 
@@ -175,8 +175,9 @@ describe("inbox verification task_type — behavioral", () => {
     expect(deriveTaskType(detail, otherUser)).toBe(null);
   });
 
-  it("signer wins over verifier on overlap (matches RPC NOT EXISTS dedup)", () => {
+  it("detail may derive approval for a dual-role user, while the compact verification task remains verification", () => {
     const detail = { user_id: "u-1", verifier_snapshot: [{ user_id: "u-1" }], verification_required: true, verification_status: "pending" };
     expect(deriveTaskType(detail, "u-1")).toBe("approval");
+    expect(mergeSelected({ task_type: "verification" }, detail).task_type).toBe("verification");
   });
 });
