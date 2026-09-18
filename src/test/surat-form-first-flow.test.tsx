@@ -202,6 +202,23 @@ describe("SUR-01 form-first acceptance", () => {
     expect(suratFormSource).not.toContain('"Pengajuan SPK"');
     expect(suratFormSource).not.toContain('"Pengajuan Dana"');
     expect(suratFormSource).not.toContain('"Pengajuan Non Unit"');
+    // E: editor + state modul tidak boleh kembali ke orchestrator.
+    expect(suratFormSource).not.toContain("FundSubmissionEditor");
+    expect(suratFormSource).not.toContain("NonUnitRequestEditor");
+    expect(suratFormSource).not.toContain("RecommendationMultiDetailEditor");
+    expect(suratFormSource).not.toContain("NonAsetItemEditor");
+    expect(suratFormSource).not.toContain("nonUnitOptions");
+    expect(suratFormSource).not.toContain("nonUnitReloadKey");
+    // State milik modul (useState + setter); properti input validator bersama
+    // (fundWithoutProject:) tetap menjadi lem ke lib validasi.
+    expect(suratFormSource).not.toContain("setFundWithoutProject");
+    expect(suratFormSource).not.toContain("[fundWithoutProject");
+    // F: tanpa any/double-cast/ts-ignore di orchestrator.
+    expect(suratFormSource).not.toContain(" as any");
+    expect(suratFormSource).not.toContain("@ts-ignore");
+    expect(suratFormSource).not.toContain("@ts-nocheck");
+    // A: tanpa fallback generic.
+    expect(suratFormSource).not.toContain('registry.get("generic")');
   });
 
   it("18. tidak ada dispatch berbasis UUID/nama", async () => {

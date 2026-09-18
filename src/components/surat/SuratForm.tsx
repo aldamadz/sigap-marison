@@ -898,7 +898,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const requiresMarisonProject = isNonUnitMode || isFundMode;
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
-  const fundWithoutProject = formData.form_input_data.fund_without_project === true;
+  const isGeneralFund = formData.form_input_data.fund_without_project === true;
   // MRN-22: virtual scope "000" fallback is the single source of truth.
   // Unit, Non Unit, and Non Aset are explicitly excluded by the predicate
   // (requestCategory must be "asset").  This replaces the old heuristic
@@ -958,7 +958,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     ? nonUnitProjectCandidates.length > 0
     : branchHasRegisteredProjects;
 
-  // Modul aktif + shared module context (typed, tanpa `as any`).
+  // Modul aktif + shared module context (typed penuh, tanpa any-cast).
   // Resolver null → tidak ada modul (fail closed di UI & gate nomor).
   // activeUsageData di-memo agar identitas stabil (hindari churn moduleCtx).
   const activeUsageData = useMemo(
@@ -1710,7 +1710,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       projectId: formData.project_id,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
-      fundWithoutProject,
+      fundWithoutProject: isGeneralFund,
       fundType: String(getFormFieldValue("fund_type") || ""),
     });
     if (!step1Check.valid) {
@@ -1945,7 +1945,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       firstNonUnitError: isNonUnitMode ? validateNonUnitRows(effectiveFormInputData.items)[0]?.message : undefined,
 
       isFundMode,
-      fundWithoutProject,
+      fundWithoutProject: isGeneralFund,
       fundType: String(getFormFieldValue("fund_type") || ""),
       firstFundIssue: isFundMode ? validateFundSubmissionItems(effectiveFormInputData.items)[0]?.message : undefined,
 
