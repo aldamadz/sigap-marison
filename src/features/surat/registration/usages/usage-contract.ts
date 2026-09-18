@@ -58,7 +58,7 @@ export type RecommendationIO = {
   model: RecommendationMultiDetail | null;
   onModelChange(model: RecommendationMultiDetail): void;
   uploadingKey: string | null;
-  onUpload(parentId: string, detailId: string, files: File[]): Promise<void>;
+  onUpload(parentId: string, detailId: string, files: File[], source: "upload" | "paste" | "drop"): Promise<void>;
   onDeleteAttachment(parentId: string, detailId: string, attachment: RecommendationAttachment): Promise<void>;
   onDeleteDetail(parentId: string, detail: RecommendationDetail): Promise<void>;
   directory: {

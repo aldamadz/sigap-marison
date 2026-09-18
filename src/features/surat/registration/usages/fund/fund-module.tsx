@@ -1,11 +1,9 @@
 import React from "react";
 import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
-import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
 import {
   getFundSubmissionAmount,
   normalizeFundSubmissionItems,
 } from "@/components/surat/fund-submission";
-import { normalizeTableRows } from "@/components/surat/form/surat-form-schema";
 import type { UsageModule, UsageModuleContext, CleanupResult, NumberContextIssue } from "../usage-contract";
 import { registerUsageModule } from "../usage-registry";
 import { FundContextPanel } from "./FundContextPanel";
@@ -36,19 +34,6 @@ export const fundModule: UsageModule = {
         onChange={(items) => ctx.setInputValue("items", items)}
       />
     );
-  },
-  renderFieldOverride(field, ctx) {
-    // Varian tabel skema Non Aset; default "items" dirender via renderDetailsPanel.
-    if (field.key === "items" && getNonAsetItemColumnKeys(field.table_config?.columns ?? []) !== null) {
-      return (
-        <NonAsetItemEditor
-          rows={normalizeTableRows(ctx.input.items)}
-          columns={field.table_config?.columns ?? []}
-          onChange={(rows) => ctx.setInputValue("items", rows)}
-        />
-      );
-    }
-    return null;
   },
   hiddenFieldKeys() {
     return ["items", "fund_amount"];

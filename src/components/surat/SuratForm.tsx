@@ -48,6 +48,12 @@ import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 import { selectUsage } from "@/features/surat/registration/usages";
+import type {
+  NumberContextIssue,
+  UsageCategory,
+  UsageModuleContext,
+  UsageModuleKey,
+} from "@/features/surat/registration/usages/usage-contract";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
@@ -59,30 +65,21 @@ import {
 } from "@/components/surat/RegistrationSummaryDialog";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { RecommendationParentSummary } from "@/components/surat/RecommendationParentSummary";
-import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
 import {
   buildRecommendationMultiDetail,
   recommendationMultiDetailErrors,
   syncRecommendationMultiDetailInput,
 } from "@/features/surat/registration/lib/recommendation-multi-detail-builder";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
-import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
-import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
 import { NominalInput } from "@/components/surat/NominalInput";
-import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import {
   getFundSubmissionAmount,
-  normalizeFundSubmissionItems,
   validateFundSubmissionItems,
 } from "@/components/surat/fund-submission";
-import { Checkbox } from "@/components/ui/checkbox";
 import { formatRupiahZero } from "@/lib/rupiah";
 import {
-  normalizeNonUnitOption,
   resolveNonUnitProjectMapping,
   validateNonUnitRows,
-  type NonUnitExternalOption,
-  type NonUnitRequestRow,
 } from "@/components/surat/non-unit-request";
 import {
   canDepartmentRequestUnit,
@@ -122,8 +119,6 @@ import type {
   LinkedDocumentContext,
   MasterData,
   MasterRecord,
-  ProjectOption,
-  ProjectRaw,
   RecommendationItemAttachment,
   RequestCategory,
   SignerAssignment,
@@ -134,7 +129,6 @@ import type {
 } from "@/components/surat/form/surat-form-types";
 
 
-const RECOMMENDATION_TEMPLATE_NAME = "Rekomendasi Peremajaan Alat";
 const RECOMMENDATION_ITEMS_KEY = "recommendation_items";
 const RECOMMENDATION_MULTI_DETAIL_KEY = "recommendation_multi_detail";
 const RECOMMENDATION_CHECK_MARK = "✓";
@@ -199,7 +193,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
-  const [fundWithoutProject, setFundWithoutProject] = useState(false);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
@@ -214,18 +207,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalOptions, setExternalOptions]     = useState<Record<string, ExternalOption[]>>({});
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
-  const [externalProjects, setExternalProjects]   = useState<ProjectOption[]>([]);
-  const [nonUnitOptions, setNonUnitOptions]       = useState<NonUnitExternalOption[]>([]);
-  const [nonUnitLoading, setNonUnitLoading]       = useState(false);
-  const [nonUnitError, setNonUnitError]           = useState<string | null>(null);
-  const [nonUnitReloadKey, setNonUnitReloadKey]   = useState(0);
-  const [projectsLoading, setProjectsLoading]     = useState(false);
-  const [projectsError, setProjectsError]         = useState<string | null>(null);
-  const [projectUnitAvailability, setProjectUnitAvailability] = useState<{
-    loading: boolean;
-    count: number | null;
-    error: string | null;
-  }>({ loading: false, count: null, error: null });
   const [currentProfile, setCurrentProfile]       = useState<CurrentProfile | null>(null);
   const [activeRecommendationItem, setActiveRecommendationItem] = useState(0);
   const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
@@ -275,29 +256,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getRequestMode = () => getRequestCategory() === "unit" ? "unit" : "barang";
   const isUnitMode = getRequestCategory() === "unit";
 
-
-  const applyRecommendationChoice = (required: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      form_input_data: {
-        ...prev.form_input_data,
-        requires_recommendation: required,
-        recommendation_template_name: RECOMMENDATION_TEMPLATE_NAME,
-        recommendation_attachment_note: required
-          ? "Pemohon membutuhkan lampiran rekomendasi untuk permohonan aset ini."
-          : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
-      },
-    }));
-  };
-
-  const setInputValue = (key: string, value: unknown) => {
+  // Stabil (useCallback): dipakai sebagai dep effect di modul usage.
+  // Identitas tak stabil = fetch effect modul berputar tanpa henti.
+  const setInputValue = useCallback((key: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       form_input_data: { ...prev.form_input_data, [key]: value },
     }));
-  };
+  }, []);
 
-  const requestExternalOptions = async (sourceKey: string, variables: Record<string, unknown> = {}) => {
+  const requestExternalOptions = useCallback(async (sourceKey: string, variables: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Tidak terautentikasi");
     const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
@@ -311,7 +279,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.error || "Gagal mengambil data external.");
     return payload.options || [];
-  };
+  }, []);
 
   const getTableRows = (key: string) => normalizeTableRows(formData.form_input_data[key]);
 
@@ -928,6 +896,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const isFundMode = getRequestCategory() === "non_asset";
   const isNonUnitMode = getRequestCategory() === "non_unit";
   const requiresMarisonProject = isNonUnitMode || isFundMode;
+  // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
+  // (milik modul Dana), bukan useState orchestrator.
+  const fundWithoutProject = formData.form_input_data.fund_without_project === true;
   // MRN-22: virtual scope "000" fallback is the single source of truth.
   // Unit, Non Unit, and Non Aset are explicitly excluded by the predicate
   // (requestCategory must be "asset").  This replaces the old heuristic
@@ -987,14 +958,77 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     ? nonUnitProjectCandidates.length > 0
     : branchHasRegisteredProjects;
 
+  // Modul aktif + shared module context (typed, tanpa `as any`).
+  // Resolver null → tidak ada modul (fail closed di UI & gate nomor).
+  // activeUsageData di-memo agar identitas stabil (hindari churn moduleCtx).
+  const activeUsageData = useMemo(
+    () => (selectedUsage ? selectUsage(selectedUsage) : null),
+    [selectedUsage],
+  );
+
+  const moduleCtx: UsageModuleContext | null = useMemo(() => {
+    if (!selectedUsage || !activeUsageData) return null;
+    return {
+      usage: selectedUsage,
+      usageKey: activeUsageData.key,
+      category: activeUsageData.category,
+      formData,
+      input: formData.form_input_data,
+      isPusatSelected,
+      requesterDepartmentId,
+      linkedDocumentContext,
+      externalRevision,
+      generatedNoSurat,
+      master,
+      marisonProject: {
+        ready: isMarisonProjectReady,
+        projectId: selectedMarisonProjectId,
+        projectName: selectedNonUnitProjectMapping.name || "",
+        unavailableCount: unavailableNonUnitProjectCount,
+      },
+      recommendationIO: recommendationMultiDetail ? {
+        model: recommendationMultiDetail,
+        onModelChange: setRecommendationMultiDetail,
+        uploadingKey: uploadingRecommendationAttachment,
+        onUpload: uploadRecommendationDetailAttachments,
+        onDeleteAttachment: deleteRecommendationDetailAttachment,
+        onDeleteDetail: deleteRecommendationDetail,
+        directory: {
+          users: master.users,
+          offices: master.offices,
+          departments: master.depts,
+        },
+      } : null,
+      setInputValue,
+      setSelection: (patch) => setFormData((current) => ({ ...current, ...patch })),
+      requestExternalOptions,
+    };
+  }, [
+    selectedUsage,
+    activeUsageData,
+    formData,
+    isPusatSelected,
+    requesterDepartmentId,
+    linkedDocumentContext,
+    externalRevision,
+    generatedNoSurat,
+    master,
+    isMarisonProjectReady,
+    selectedMarisonProjectId,
+    selectedNonUnitProjectMapping.name,
+    unavailableNonUnitProjectCount,
+    recommendationMultiDetail,
+    uploadingRecommendationAttachment,
+    setInputValue,
+    requestExternalOptions,
+  ]);
+
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
-    if (isFundMode) {
-      const fundItems = normalizeFundSubmissionItems(input.items);
-      input.items = fundItems;
-      input.fund_amount = getFundSubmissionAmount(fundItems);
-    } else {
-      delete input.fund_amount;
+    delete input.fund_amount;
+    if (activeUsageData && moduleCtx) {
+      const normalized = activeUsageData.module.normalizeInput({ ...input }, moduleCtx);
+      Object.assign(input, normalized);
     }
     if (requiresMarisonProject && isMarisonProjectReady && selectedProject) {
       const snapshotCode = selectedNonUnitProjectMapping.code || "";
@@ -1050,7 +1084,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedProject,
     selectedNonUnitProjectMapping,
     shouldUseDefaultBranchProject,
-    isFundMode,
+    activeUsageData,
+    moduleCtx,
   ]);
 
   const effectiveFormData = useMemo(() => ({
@@ -1342,24 +1377,27 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setLinkedDocumentContext(restoredLinkedContext);
     }
 
+    const restoredFundWithoutProject =
+      restoredInput.fund_without_project === true
+        || (restoredInput.request_category === "non_asset"
+          && !restoredFormData.project_id
+          && Boolean(draftToRestore.no_surat));
+
     setFormData(previous => ({
       ...previous,
       ...restoredFormData,
       is_aset: restoredLinkedContext?.type === "recommendation" ? true : restoredFormData.is_aset,
-      form_input_data: restoredLinkedContext?.type === "recommendation"
-        ? {
-            ...(restoredFormData.form_input_data || {}),
-            request_category: "asset",
-            request_mode: "barang",
-          }
-        : restoredFormData.form_input_data || {},
+      form_input_data: {
+        ...(restoredLinkedContext?.type === "recommendation"
+          ? {
+              ...(restoredFormData.form_input_data || {}),
+              request_category: "asset",
+              request_mode: "barang",
+            }
+          : restoredFormData.form_input_data || {}),
+        ...(restoredFundWithoutProject ? { fund_without_project: true } : {}),
+      },
     }));
-    setFundWithoutProject(
-      restoredInput.fund_without_project === true
-        || (restoredInput.request_category === "non_asset"
-          && !restoredFormData.project_id
-          && Boolean(draftToRestore.no_surat)),
-    );
     setSelectedFormId(String(payload.selectedFormId || usage?.form_id || usage?.master_forms?.id || ""));
     setSelectedUsage(usage);
     const persistedSigners = Array.isArray(draftToRestore.signer_assignments)
@@ -1482,111 +1520,47 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return () => { cancelled = true; };
   }, [selectedUsage, externalVariables, isUnitMode]);
 
-  useEffect(() => {
-    if (!isNonUnitMode || !selectedUsage || !generatedNoSurat) {
-      setNonUnitOptions([]);
-      setNonUnitError(null);
-      setNonUnitLoading(false);
-      return;
-    }
-    if (!isMarisonProjectReady) {
-      setNonUnitOptions([]);
-      setNonUnitError(null);
-      setNonUnitLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setNonUnitLoading(true);
-    setNonUnitError(null);
-    requestExternalOptions("marison_non_units_by_project", {
-      project_id: selectedMarisonProjectId,
-    })
-      .then((options: ExternalOption[]) => {
-        if (cancelled) return;
-        const normalized = options
-          .map((option) => normalizeNonUnitOption(option))
-          .filter((option): option is NonUnitExternalOption => Boolean(option));
-        setNonUnitOptions(normalized);
-        if (normalized.length === 0) {
-          setNonUnitError("Belum ada jenis pekerjaan Non Unit untuk proyek ini.");
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setNonUnitOptions([]);
-        setNonUnitError(error instanceof Error ? error.message : "Gagal mengambil jenis pekerjaan Non Unit.");
-      })
-      .finally(() => {
-        if (!cancelled) setNonUnitLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [isNonUnitMode, isMarisonProjectReady, selectedMarisonProjectId, nonUnitReloadKey, selectedUsage?.id, generatedNoSurat]);
-
-  useEffect(() => {
-    if (getRequestCategory() !== "unit") return;
-    if (externalProjects.length > 0) return;
-    let cancelled = false;
-    setProjectsLoading(true);
-    setProjectsError(null);
-    requestExternalOptions("marison_projects")
-      .then((options) => { if (!cancelled) setExternalProjects(options); })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setExternalProjects([]);
-          setProjectsError(error instanceof Error ? error.message : "Gagal mengambil daftar proyek.");
-        }
-      })
-      .finally(() => { if (!cancelled) setProjectsLoading(false); });
-    return () => { cancelled = true; };
-  }, [formData.form_input_data.request_category, externalProjects.length]);
-
-  useEffect(() => {
-    if (getRequestCategory() !== "unit") {
-      setProjectUnitAvailability({ loading: false, count: null, error: null });
-      return;
-    }
-    const requestedProject = formData.form_input_data.requested_project as { id?: string; code?: string } | undefined;
-    const projectId = String(requestedProject?.id || "").trim();
-    if (!projectId) {
-      setProjectUnitAvailability({ loading: false, count: null, error: null });
-      return;
-    }
-
-    let cancelled = false;
-    setProjectUnitAvailability({ loading: true, count: null, error: null });
-    requestExternalOptions("marison_units_by_project", {
-      project_id: projectId,
-      requested_project: requestedProject,
-    })
-      .then((options) => {
-        if (!cancelled) {
-          setProjectUnitAvailability({ loading: false, count: options.length, error: null });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setProjectUnitAvailability({
-            loading: false,
-            count: null,
-            error: error instanceof Error ? error.message : "Jumlah unit tersedia belum termuat.",
-          });
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, [formData.form_input_data.request_category, formData.form_input_data.requested_project]);
-
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
     const proj = master.projects?.find((p: MasterRecord) => p.id === projectId);
-    setFundWithoutProject(false);
-    setFormData(prev => ({ ...prev, project_id: projectId, entity_id: proj?.entity_id || prev.entity_id }));
+    setFormData(prev => ({
+      ...prev,
+      project_id: projectId,
+      entity_id: proj?.entity_id || prev.entity_id,
+      form_input_data: { ...prev.form_input_data, fund_without_project: false },
+    }));
   };
 
   const handleLetterTypeChange = (letterTypeId: string) => {
     setFormData(prev => ({ ...prev, letter_type_id: letterTypeId }));
   };
+
+  // Context modul minimal typed untuk cleanup/normalize sinkron.
+  // marisonProject/recommendationIO null: kedua operasi tidak membutuhkannya.
+  const buildModuleTransitionCtx = (
+    usage: UsageDetailRecord,
+    key: UsageModuleKey,
+    category: UsageCategory | null,
+    formSnapshot: typeof formData,
+    input: FormInputData,
+  ): UsageModuleContext => ({
+    usage,
+    usageKey: key,
+    category,
+    formData: formSnapshot,
+    input,
+    isPusatSelected,
+    requesterDepartmentId,
+    linkedDocumentContext,
+    externalRevision,
+    generatedNoSurat,
+    master,
+    marisonProject: null,
+    recommendationIO: null,
+    setInputValue,
+    setSelection: (patch) => setFormData((current) => ({ ...current, ...patch })),
+    requestExternalOptions,
+  });
 
   const applySelectedUsage = (detail: UsageDetailRecord) => {
     const isNewUsage = Array.isArray(detail.form_usage_steps);
@@ -1606,27 +1580,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       
       const previousUsageData = selectUsage(selectedUsage);
       if (previousUsageData) {
-        const cleanup = previousUsageData.module.cleanup({
-          usage: selectedUsage!,
-          usageKey: previousUsageData.key,
-          category: previousUsageData.category,
-          formData: prev,
-          input: nextInput,
-          isPusatSelected,
-          requesterDepartmentId,
-          linkedDocumentContext,
-          externalRevision,
-          generatedNoSurat,
-          master,
-          setInputValue,
-          setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
-          requestExternalOptions: async () => []
-        } as any, "usage_change");
+        const cleanup = previousUsageData.module.cleanup(buildModuleTransitionCtx(
+          selectedUsage!,
+          previousUsageData.key,
+          previousUsageData.category,
+          prev,
+          nextInput,
+        ), "usage_change");
         
         cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
-        if (cleanup.resetSelection.includes("fundWithoutProject")) {
-          setFundWithoutProject(false);
-        }
       }
 
       nextInput.request_category = usageData.category;
@@ -1637,22 +1599,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       }
 
       // Initialize the normalized state
-      const initializedInput = usageData.module.normalizeInput(nextInput, {
-        usage: detail,
-        usageKey: usageData.key,
-        category: usageData.category,
-        formData: prev,
-        input: nextInput,
-        isPusatSelected,
-        requesterDepartmentId,
-        linkedDocumentContext,
-        externalRevision,
-        generatedNoSurat,
-        master,
-        setInputValue,
-        setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
-        requestExternalOptions: async () => []
-      } as any);
+      const initializedInput = usageData.module.normalizeInput(nextInput, buildModuleTransitionCtx(
+        detail,
+        usageData.key,
+        usageData.category,
+        prev,
+        nextInput,
+      ));
 
       return {
         ...prev,
@@ -1767,6 +1720,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         ...(step1Check.errorDescription ? { description: step1Check.errorDescription } : {}),
       });
     }
+    // Gate khusus modul (aturan konteks nomor milik modul aktif).
+    const moduleIssues: NumberContextIssue[] =
+      activeUsageData && moduleCtx ? activeUsageData.module.validateNumberContext(moduleCtx) : [];
+    if (moduleIssues.length > 0) {
+      return toast({
+        variant: "destructive",
+        title: moduleIssues[0].title,
+        ...(moduleIssues[0].description ? { description: moduleIssues[0].description } : {}),
+      });
+    }
     setIsProcessingNumber(true);
     try {
       const res = await suratRegistrationApi.generateNoSurat(effectiveFormData);
@@ -1847,34 +1810,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     } finally {
       setIsResettingNumber(false);
     }
-  };
-
-  const handleRequestedUnitCountChange = (rawValue: string) => {
-    const count = Math.max(Number(rawValue || 0), 0);
-    setInputValue("requested_unit_count", count || "");
-    const project = getFormFieldValue("requested_project") as { name?: string } | undefined;
-    setInputValue("unit_request_sentence", project?.name && count > 0
-      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
-      : "");
-  };
-
-  const handleExternalProjectChange = (value: string) => {
-    const option = externalProjects.find((item) => item.value === value) as ProjectOption | undefined;
-    const project = option?.raw;
-    if (!option || !project?.code) return;
-    const requestedProject = {
-      value: option.value,
-      label: option.label,
-      id: project.id,
-      code: project.code,
-      name: project.name,
-      branch: project.branch ?? null,
-    };
-    const count = Number(getFormFieldValue("requested_unit_count") || 0);
-    setInputValue("requested_project", requestedProject);
-    setInputValue("unit_request_sentence", count > 0
-      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
-      : "");
   };
 
   const getDraftCreatorName = (draft: SuratRegistrationDraft) => {
@@ -2272,22 +2207,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     </Popover>
   );
 
+  // Varian baris legacy; model v1 dirender modul Aset via renderFieldOverride.
   const renderRecommendationItemsField = (field: TemplateField) => {
-    if (recommendationMultiDetail) {
-      return (
-        <RecommendationMultiDetailEditor
-          model={recommendationMultiDetail}
-          onChange={setRecommendationMultiDetail}
-          users={master.users}
-          offices={master.offices}
-          departments={master.depts}
-          uploadingKey={uploadingRecommendationAttachment}
-          onUpload={uploadRecommendationDetailAttachments}
-          onDeleteAttachment={deleteRecommendationDetailAttachment}
-          onDeleteDetail={deleteRecommendationDetail}
-        />
-      );
-    }
     const rows = getTableRows(field.key);
     const isLinkedRecommendation =
       linkedDocumentContext?.type === "recommendation" && parentRecommendationItems.length > 0;
@@ -2712,33 +2633,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
+  // Render tabel generik. Field khusus modul sudah ditangani override
+  // di renderManualField sebelum mencapai sini.
   const renderTableField = (field: TemplateField) => {
     if (field.key === RECOMMENDATION_ITEMS_KEY) return renderRecommendationItemsField(field);
-    if (field.key === "items" && isNonUnitMode && !shouldUseDefaultBranchProject) {
-      return (
-        <NonUnitRequestEditor
-          rows={getTableRows(field.key) as NonUnitRequestRow[]}
-          options={nonUnitOptions}
-          loading={nonUnitLoading}
-          error={nonUnitError}
-          projectReady={isMarisonProjectReady}
-          projectName={selectedProject?.name || ""}
-          onChange={(rows) => setTableRows(field.key, rows)}
-          onRetry={() => setNonUnitReloadKey((current) => current + 1)}
-        />
-      );
-    }
-
-    if (field.key === "items" && isFundMode
-      && getNonAsetItemColumnKeys(field.table_config?.columns ?? []) !== null) {
-      return (
-        <NonAsetItemEditor
-          rows={getTableRows(field.key)}
-          columns={field.table_config?.columns ?? []}
-          onChange={(rows) => setTableRows(field.key, rows)}
-        />
-      );
-    }
 
     const columns = field.table_config?.columns ?? [];
     const rows = getTableRows(field.key);
@@ -2950,12 +2848,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const renderManualField = (field: TemplateField, index = 0) => {
+    // Slot modul didahulukan; field milik modul tanpa override tidak dirender generik.
+    if (activeUsageData && moduleCtx) {
+      const override = activeUsageData.module.renderFieldOverride?.(field, moduleCtx);
+      if (override) return <div key={field.key}>{override}</div>;
+      const hidden = activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? [];
+      if (hidden.includes(field.key)) return null;
+    }
     const isTable = field.type === "table";
     const isLongText = field.type === "textarea";
     const inputPlaceholder = field.placeholder || `Isi ${field.label}`;
-    const displayLabel = field.key === "items" && isNonUnitMode
-      ? "Detail Pekerjaan Non Unit"
-      : field.label;
+    const displayLabel = field.label;
 
     return (
       <div key={field.key} className={cn(
@@ -3024,163 +2927,21 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
-  const getVisibleManualFields = () =>
-    getManualInputFields(selectedUsage).filter((field: TemplateField) => {
-      if (!isUnitMode && isUnitExternalField(field)) return false;
-      if (isUnitMode && (field.key === "items" || field.key === "unit")) return false;
-      if (isFundMode && (field.key === "items" || field.key === "fund_amount")) return false;
-      if (!hasUnitRequestFields(selectedUsage)) return true;
-      if (field.key === "requested_unit_count") return false;
-      if (isUnitMode) return field.key !== "items" && field.key !== "unit";
-      return field.key !== "unit";
+  // Field milik modul (hidden) tetap masuk daftar agar override modul berjalan;
+  // render generik dilewati untuk key tersebut. Aturan unit-external dibaca
+  // dari requirements modul, bukan branch kategori di orchestrator.
+  const getVisibleManualFields = () => {
+    const requiresUnitAllocation = activeUsageData?.module.requirements.requiresUnitAllocation ?? false;
+    const hidden = activeUsageData && moduleCtx
+      ? activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? []
+      : [];
+    return getManualInputFields(selectedUsage).filter((field: TemplateField) => {
+      if (hidden.includes(field.key)) return true;
+      if (!requiresUnitAllocation && isUnitExternalField(field)) return false;
+      if (!requiresUnitAllocation && field.key === "requested_unit_count") return false;
+      if (!requiresUnitAllocation && field.key === "unit") return false;
+      return true;
     });
-
-  const renderUnitRequestPanel = () => {
-    if (!isUnitMode) return null;
-    const selectedProject = getFormFieldValue("requested_project") as ProjectRaw | undefined;
-    const requestedCount = Number(getFormFieldValue("requested_unit_count") || 0);
-    const availableCount = Number(projectUnitAvailability.count ?? 0);
-    const exceedsAvailability = selectedProject?.code &&
-      projectUnitAvailability.count != null &&
-      requestedCount > availableCount;
-    return (
-      <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-primary">Pengajuan Unit</p>
-          <p className="text-xs font-medium text-muted-foreground">
-            Pemohon hanya mengajukan jumlah unit. Perencanaan akan memilih unit spesifik saat approval.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">Proyek</Label>
-            <Select value={(getFormFieldValue("requested_project") as { value?: string } | undefined)?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading || !!generatedNoSurat}>
-              <SelectTrigger className="h-12 bg-background/70 text-sm">
-                <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
-              </SelectTrigger>
-              <SelectContent>
-                {externalProjects.map((project) => (
-                  <SelectItem key={project.value} value={project.value} disabled={!project.raw?.code}>
-                    {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {projectsError && <p className="text-[10px] font-semibold text-destructive">{projectsError}</p>}
-            {selectedProject?.code ? (
-              <p className={cn(
-                "text-[11px] font-medium",
-                projectUnitAvailability.error ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"
-              )}>
-                {projectUnitAvailability.loading
-                  ? "Memuat jumlah unit tersedia..."
-                  : projectUnitAvailability.error
-                    ? "Jumlah unit tersedia belum termuat."
-                    : `Kapasitas tersedia saat ini: ${projectUnitAvailability.count ?? 0} unit.`}
-              </p>
-            ) : (
-              <p className="text-[11px] font-medium text-muted-foreground">Pilih proyek untuk melihat jumlah unit tersedia.</p>
-            )}
-            {exceedsAvailability && (
-              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                Jumlah yang diajukan melebihi kapasitas unit yang sedang termuat. Pengajuan tetap bisa dilanjutkan, tetapi tim pemeriksa perlu menyesuaikan alokasi.
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">Jumlah Unit Diajukan</Label>
-            <Input
-              type="number"
-              min={1}
-              value={String(getFormFieldValue("requested_unit_count") ?? "")}
-              onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
-              disabled={!!generatedNoSurat && !(externalRevision && getRequestCategory() === "unit")}
-              className="h-12 bg-background/70 text-sm"
-              placeholder="Contoh: 10"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderRecommendationOptionStep = () => {
-    if (getRequestCategory() !== "asset") return null;
-    if (!canRequesterUseRecommendation) return null;
-    const required = formData.form_input_data.requires_recommendation === true;
-    const options = [
-      {
-        value: true,
-        label: "Butuh rekomendasi",
-        description: "Pengajuan aset ini membutuhkan lampiran rekomendasi. Template rekomendasi sudah tersedia di sistem.",
-      },
-      {
-        value: false,
-        label: "Tidak perlu rekomendasi",
-        description: "Pengajuan aset dapat berjalan tanpa lampiran rekomendasi tambahan.",
-      },
-    ];
-
-    return (
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4 md:p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Rekomendasi Aset</p>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Tentukan apakah permohonan aset ini membutuhkan lampiran rekomendasi.
-            </p>
-          </div>
-          <span className={cn(
-            "inline-flex w-fit rounded-md border px-3 py-1 text-[11px] font-semibold",
-            required
-              ? "border-primary/20 bg-primary/10 text-primary"
-              : "border-border bg-muted/40 text-muted-foreground"
-          )}>
-            {required ? "Rekomendasi diperlukan" : "Tanpa rekomendasi"}
-          </span>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2">
-          {options.map((option) => {
-            const selected = required === option.value;
-            return (
-              <button
-                key={String(option.value)}
-                type="button"
-                onClick={() => applyRecommendationChoice(option.value)}
-                className={cn(
-                  "min-h-24 rounded-md border px-4 py-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  selected
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                    : "border-border bg-background/70 text-foreground hover:bg-muted"
-                )}
-                aria-pressed={selected}
-              >
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  <span className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-full border",
-                    selected ? "border-primary-foreground bg-primary-foreground text-primary" : "border-muted-foreground/40"
-                  )}>
-                    {selected && <Check className="h-3.5 w-3.5" />}
-                  </span>
-                  {option.label}
-                </span>
-                <span className={cn(
-                  "mt-2 block text-xs leading-5",
-                  selected ? "text-primary-foreground/85" : "text-muted-foreground"
-                )}>
-                  {option.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const renderRequestWorkflowStep = () => {
-    return null;
   };
 
   const handleAttachmentSelection = async (rule: AttachmentRequirement, selectedFiles: File[]) => {
@@ -3671,26 +3432,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       const usageData = selectUsage(selectedUsage);
                       const nextInput = { ...previous.form_input_data };
                       if (usageData) {
-                        const cleanup = usageData.module.cleanup({
-                          usage: selectedUsage!,
-                          usageKey: usageData.key,
-                          category: usageData.category,
-                          formData: previous,
-                          input: nextInput,
-                          isPusatSelected,
-                          requesterDepartmentId,
-                          linkedDocumentContext,
-                          externalRevision,
-                          generatedNoSurat,
-                          master,
-                          setInputValue,
-                          setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
-                          requestExternalOptions: async () => []
-                        } as any, "form_change");
+                        const cleanup = usageData.module.cleanup(buildModuleTransitionCtx(
+                          selectedUsage!,
+                          usageData.key,
+                          usageData.category,
+                          previous,
+                          nextInput,
+                        ), "form_change");
                         cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
-                        if (cleanup.resetSelection.includes("fundWithoutProject")) {
-                          setFundWithoutProject(false);
-                        }
                       }
                       nextInput.request_category = null;
                       nextInput.request_mode = null;
@@ -3763,28 +3512,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {/* Module specific context panels & Location */}
           {selectedUsage && (
             <>
-              {(() => {
-                const usageData = selectUsage(selectedUsage);
-                if (usageData) {
-                  return usageData.module.renderContextPanel({
-                    usage: selectedUsage,
-                    usageKey: usageData.key,
-                    category: usageData.category,
-                    formData,
-                    input: formData.form_input_data,
-                    isPusatSelected,
-                    requesterDepartmentId,
-                    linkedDocumentContext,
-                    externalRevision,
-                    generatedNoSurat,
-                    master,
-                    setInputValue,
-                    setSelection: (patch) => setFormData(f => ({ ...f, ...patch })),
-                    requestExternalOptions
-                  } as any);
-                }
-                return null;
-              })()}
+              {activeUsageData && moduleCtx ? activeUsageData.module.renderContextPanel(moduleCtx) : null}
 
               <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5 mt-4">
                 {/* Kantor */}
@@ -3863,43 +3591,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
                         <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
                       </div>
-                    )}
-                    {isFundMode && (
-                      <label className="flex cursor-pointer items-start gap-3 rounded-md border border-muted bg-muted/40 px-3 py-2.5">
-                        <Checkbox
-                          className="mt-0.5"
-                          checked={fundWithoutProject}
-                          disabled={!!generatedNoSurat}
-                          onCheckedChange={(checked) => {
-                            if (checked === true) {
-                              setFundWithoutProject(true);
-                              setFormData((prev) => ({
-                                ...prev,
-                                project_id: "",
-                                form_input_data: {
-                                  ...prev.form_input_data,
-                                  fund_without_project: true,
-                                },
-                              }));
-                            } else {
-                              setFundWithoutProject(false);
-                              setFormData((prev) => ({
-                                ...prev,
-                                form_input_data: {
-                                  ...prev.form_input_data,
-                                  fund_without_project: false,
-                                },
-                              }));
-                            }
-                          }}
-                        />
-                        <span className="text-sm">
-                          <span className="font-medium text-foreground">Tanpa Proyek (Dana Umum)</span>
-                          <span className="mt-0.5 block text-xs text-muted-foreground">
-                            Pengajuan dana tidak terikat proyek; dikirim ke Marison tanpa <code>project_id</code>.
-                          </span>
-                        </span>
-                      </label>
                     )}
                     {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
                       <p className="px-1 text-xs text-muted-foreground">
@@ -4094,16 +3785,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
               </div>
 
-              {isFundMode && (
-                <FundSubmissionEditor
-                  value={getFormFieldValue("items")}
-                  onChange={(items) => setInputValue("items", items)}
-                />
-              )}
+              {activeUsageData && moduleCtx
+                ? activeUsageData.module.renderDetailsPanel?.(moduleCtx)
+                : null}
 
               {selectedUsage && (getVisibleManualFields().length > 0 || hasUnitRequestFields(selectedUsage)) && (
                 <div className="space-y-5">
-                  {renderRequestWorkflowStep()}
                   {getVisibleManualFields().length > 0 && (
                     <div className="space-y-4">
                       {getVisibleManualFields().map((field: TemplateField, index: number) => renderManualField(field, index))}
