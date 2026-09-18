@@ -8,7 +8,18 @@ import type {
 import type { MasterData } from "@/components/surat/form/surat-form-types";
 
 export type UsageCategory = "asset" | "unit" | "non_asset" | "non_unit";
-export type UsageModuleKey = UsageCategory | "generic";
+/** Hanya empat kategori canonical yang didukung. Tidak ada modul generic. */
+export type UsageModuleKey = UsageCategory;
+
+/** Fail-closed: resolver/module tidak pernah menebak kategori. */
+export class UsageConfigurationError extends Error {
+  readonly usageId: string | null;
+  constructor(message: string, usageId?: string | null) {
+    super(message);
+    this.name = "UsageConfigurationError";
+    this.usageId = usageId ?? null;
+  }
+}
 
 export type FormDataSnapshot = {
   office_id: string;

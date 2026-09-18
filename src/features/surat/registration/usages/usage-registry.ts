@@ -1,4 +1,5 @@
 import type { UsageDetailRecord } from "@/components/surat/form/surat-form-types";
+import { UsageConfigurationError } from "./usage-contract";
 import type { UsageCategory, UsageModule, UsageModuleKey } from "./usage-contract";
 
 const registry = new Map<UsageModuleKey, UsageModule>();
@@ -7,14 +8,23 @@ export function registerUsageModule(module: UsageModule) {
   registry.set(module.meta.key, module);
 }
 
+/**
+ * Fail-closed: key yang tidak terdaftar melempar UsageConfigurationError.
+ * Tidak ada fallback generic, tidak ada tebakan non_unit. Orchestrator
+ * wajib menangkapnya pada boundary UI dan memblokir nomor/submit.
+ */
 export function getUsageModule(key: UsageModuleKey): UsageModule {
   const module = registry.get(key);
   if (!module) {
-    // Fail closed conceptually, but for pure lookup we return generic.
-    // The resolver itself is what fails closed if category is ambiguous.
-    return registry.get("generic")!;
+    throw new UsageConfigurationError(
+      `Modul kegunaan "${key}" belum terdaftar. Hubungi administrator.`
+    );
   }
   return module;
+}
+
+export function isUsageModuleRegistered(key: UsageModuleKey): boolean {
+  return registry.has(key);
 }
 
 const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
@@ -77,6 +87,6 @@ export function resolveUsageModuleKey(usage: UsageDetailRecord | null): UsageMod
 
   const [category] = [...candidates];
   // Modul wajib terdaftar; handler tak dikenal → fail closed.
-  if (!registry.has(category)) return null;
+  if (!isUsageModuleRegistered(category)) return null;
   return category;
 }
