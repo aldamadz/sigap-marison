@@ -17,6 +17,10 @@ const assertions = readFileSync(
   "supabase/tests/staging_single_account_fixtures.integration.sql",
   "utf8",
 );
+const behavioral = readFileSync(
+  "supabase/tests/staging_single_account_behavioral.integration.sql",
+  "utf8",
+);
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -104,7 +108,7 @@ create table public.surat_signatures (
   requires_unit_allocation boolean default false, attachment_requirements_snapshot jsonb default '[]'::jsonb,
   verifier_snapshot jsonb default '[]'::jsonb, verification_required boolean default false,
   verification_status text default 'not_required', verified_at timestamptz, verified_by uuid,
-  verification_note text
+  verification_note text, input_schema_snapshot jsonb default '{}'::jsonb
 );
 create table public.surat_attachments (
   id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
@@ -267,7 +271,22 @@ ${canonical}
 ${fixture}
 -- idempotency: second run must not duplicate
 ${fixture}
+-- Behavioral active-task predicate (subset of compact inbox RPC, no revision tasks).
+create or replace function public.is_inbox_task_active(p_user_id uuid, p_signature_id uuid)
+returns boolean language sql stable as $$
+  select exists (
+    select 1 from public.surat_signatures ss
+    join public.surat_registrasi sr on sr.id=ss.surat_id
+    where ss.id=p_signature_id
+      and coalesce(ss.is_signed,false) is not true
+      and sr.status='PROSES' and ss.step_order=sr.current_step
+      and (ss.user_id=p_user_id
+        or (ss.verification_required is true and ss.verification_status='pending'
+          and ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', p_user_id::text))))
+  )
+$$;
 ${assertions}
+${behavioral}
 `;
 
 const run = (args, input = "") => {
@@ -290,6 +309,9 @@ try {
   const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], sql);
   if (!output.includes("STAGING single-account fixtures: all assertions passed")) {
     throw new Error(`SQL success marker missing.\n${output}`);
+  }
+  if (!output.includes("STAGING single-account behavioral: all assertions passed")) {
+    throw new Error(`Behavioral marker missing.\n${output}`);
   }
   process.stdout.write(output);
 } finally {

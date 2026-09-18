@@ -140,7 +140,7 @@ begin
         is_system_template, created_by
       ) values (
         v_source.form_id, v_source.route_id, v_clone_name,
-        'Khusus pengujian staging. Pasangan test-only rekomendasi aset satu akun. Sumber: '
+        'Khusus pengujian staging. Akun uji: system.tuyemaris@gmail.com. Pasangan test-only rekomendasi aset satu akun. Sumber: '
           || coalesce(v_source.description, v_source.name),
         v_source.request_category, v_source.scope_type,
         'active', 1035, v_source.external_revision_policy, '{}'::jsonb,
@@ -177,7 +177,7 @@ begin
           v_rec_clone_id, null, v_step.step_order, v_step.role_name, v_step.label,
           v_step.signer_department_id, v_step.action_type, 'manual',
           v_step.assignee_mode, v_step.input_schema,
-          v_step.verifier_department_id, 'all_offices',
+          null, 'all_offices',
           coalesce(v_step.skip_if_no_candidate, false), null
         ) returning id into v_new_step_id;
       else
@@ -186,7 +186,7 @@ begin
             action_type = v_step.action_type, assignee_mode = v_step.assignee_mode,
             candidate_scope = 'manual', signer_department_id = v_step.signer_department_id,
             input_schema = v_step.input_schema,
-            verifier_department_id = v_step.verifier_department_id,
+            verifier_department_id = null,
             verifier_scope = 'all_offices',
             skip_if_no_candidate = coalesce(v_step.skip_if_no_candidate, false),
             candidate_fallback_mode = null
@@ -252,7 +252,7 @@ begin
         is_system_template, created_by
       ) values (
         v_source.form_id, v_source.route_id, v_clone_name,
-        'Khusus pengujian staging satu akun. Sumber kanonikal: ' || v_source.name
+        'Khusus pengujian staging satu akun. Akun uji: system.tuyemaris@gmail.com. Sumber kanonikal: ' || v_source.name
           || '. ' || coalesce(v_source.description, ''),
         v_source.request_category, v_source.scope_type,
         'active', v_source.sort_order + 1000,
@@ -269,7 +269,7 @@ begin
           external_revision_policy = v_source.external_revision_policy,
           recommendation_config = v_source.recommendation_config,
           is_system_template = false,
-          description = 'Khusus pengujian staging satu akun. Sumber kanonikal: '
+          description = 'Khusus pengujian staging satu akun. Akun uji: system.tuyemaris@gmail.com. Sumber kanonikal: '
             || v_source.name || '. ' || coalesce(v_source.description, '')
       where id = v_clone_id;
     end if;
@@ -297,7 +297,7 @@ begin
           v_clone_id, null, v_step.step_order, v_step.role_name, v_step.label,
           v_step.signer_department_id, v_step.action_type, 'manual',
           v_step.assignee_mode, v_step.input_schema,
-          v_step.verifier_department_id, 'all_offices',
+          null, 'all_offices',
           coalesce(v_step.skip_if_no_candidate, false), null
         ) returning id into v_new_step_id;
       else
@@ -306,7 +306,7 @@ begin
             action_type = v_step.action_type, assignee_mode = v_step.assignee_mode,
             candidate_scope = 'manual', signer_department_id = v_step.signer_department_id,
             input_schema = v_step.input_schema,
-            verifier_department_id = v_step.verifier_department_id,
+            verifier_department_id = null,
             verifier_scope = 'all_offices',
             skip_if_no_candidate = coalesce(v_step.skip_if_no_candidate, false),
             candidate_fallback_mode = null

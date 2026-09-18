@@ -43,8 +43,9 @@ begin
   if v_count <> 9 then raise exception 'expected 9 clones, got %', v_count; end if;
   if exists (select 1 from public.form_usages
     where status='active' and name like '[UJI STAGING]%'
-      and coalesce(description,'') not ilike '%Khusus pengujian staging%') then
-    raise exception 'clone missing staging-only description';
+      and (coalesce(description,'') not ilike '%Khusus pengujian staging%'
+        or coalesce(description,'') not ilike '%system.tuyemaris@gmail.com%')) then
+    raise exception 'clone missing staging-only description or tester account';
   end if;
 
   -- 3. Same form/category/scope/integration.
@@ -141,6 +142,33 @@ begin
       raise exception 'step count differs for %', v_usage.name;
     end if;
   end loop;
+
+  -- Visibility: same-department parity (minimal possible without per-user ACL).
+  -- Schema only supports department-level visibility; same-dept users can still
+  -- see fixtures (documented risk, no name-based bypass).
+  if exists (
+    with src as (
+      select sf.name as n, d.department_id
+      from public.form_usage_departments d
+      join public.form_usages sf on sf.id=d.usage_id
+      where sf.status='active' and sf.name not like '[UJI STAGING]%'
+    ), cln as (
+      select replace(cf.name,'[UJI STAGING] ','') as n, d.department_id
+      from public.form_usage_departments d
+      join public.form_usages cf on cf.id=d.usage_id
+      where cf.status='active' and cf.name like '[UJI STAGING]%'
+    )
+    select 1 from (
+      (select * from src except select * from cln)
+      union all
+      (select * from cln except select * from src)
+    ) d
+  ) then raise exception 'department visibility differs from canonical'; end if;
+  if exists (
+    select 1 from public.form_usages
+    where status='active' and name like '[UJI STAGING]%'
+      and (name not like '[UJI STAGING] %' or left(name, 13) <> '[UJI STAGING]')
+  ) then raise exception 'fixture prefix unclear'; end if;
 
   -- 6. Attachments identical (remapped step).
   if exists (
