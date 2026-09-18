@@ -55,8 +55,8 @@ export function validateStep1ForNumberGeneration(
   }
   if (!input.requestCategory) {
     return fail(
-      "Klasifikasi Belum Dipilih",
-      "Pilih Aset, Unit, Non Aset, atau Non Unit sebelum mendapatkan nomor surat.",
+      "Konfigurasi Kegunaan Belum Valid",
+      "Kegunaan yang dipilih belum menentukan klasifikasi pengajuan. Hubungi administrator.",
     );
   }
   if (!input.selectedUsageId) {

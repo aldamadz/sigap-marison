@@ -71,7 +71,10 @@ export const isUnitExternalField = (field: TemplateField): boolean =>
 export function getWorkflowCategories(item: UsageDetailRecord | null | undefined): RequestCategory[] {
   if (item?.request_category) return [item.request_category];
   const categories = Array.isArray(item?.request_categories) ? item.request_categories : [];
-  return categories.length > 0 ? categories : ["asset", "non_unit"];
+  // Fail closed: konfigurasi tanpa kategori menghasilkan daftar kosong
+  // (bukan tebakan ["asset", "non_unit"]) agar resolver menolak usage ini
+  // dengan pesan konfigurasi yang aman.
+  return categories;
 }
 
 export const hasUnitRequestFields = (item: UsageDetailRecord): boolean =>

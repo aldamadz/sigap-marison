@@ -15,18 +15,16 @@ function validSubmitInput(overrides: Partial<SuratSubmitValidationInput> = {}): 
     requestDate: "2026-09-02",
     missingInitialAttachmentLabels: [],
 
-    isUnitMode: false,
+    requestCategory: null,
     hasUnitRequestFields: false,
     canCurrentDepartmentRequestUnit: false,
     requestedUnitCount: 0,
     requestedProjectCode: undefined,
 
-    isNonUnitMode: false,
     shouldUseDefaultBranchProject: false,
     isMarisonProjectReady: true,
     firstNonUnitError: undefined,
 
-    isFundMode: false,
     fundWithoutProject: false,
     fundType: "",
     firstFundIssue: undefined,
@@ -86,14 +84,14 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   // ── Unit Checks ───────────────────────────────────────────────────────────
 
   it("7. unit mode: rejects invalid matrix", () => {
-    const r = validateSuratSubmit(validSubmitInput({ isUnitMode: true, hasUnitRequestFields: false }));
+    const r = validateSuratSubmit(validSubmitInput({ requestCategory: "unit", hasUnitRequestFields: false }));
     expect(r.valid).toBe(false);
     expect(r.errorTitle).toBe("Matrix Unit Tidak Valid");
   });
 
   it("8. unit mode: rejects invalid department", () => {
     const r = validateSuratSubmit(
-      validSubmitInput({ isUnitMode: true, hasUnitRequestFields: true, canCurrentDepartmentRequestUnit: false }),
+      validSubmitInput({ requestCategory: "unit", hasUnitRequestFields: true, canCurrentDepartmentRequestUnit: false }),
     );
     expect(r.valid).toBe(false);
     expect(r.errorTitle).toBe("Mode Unit Tidak Diizinkan");
@@ -102,7 +100,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("9. unit mode: rejects without project", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isUnitMode: true,
+        requestCategory: "unit",
         hasUnitRequestFields: true,
         canCurrentDepartmentRequestUnit: true,
         requestedProjectCode: undefined,
@@ -115,7 +113,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("10. unit mode: rejects missing or zero unit count", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isUnitMode: true,
+        requestCategory: "unit",
         hasUnitRequestFields: true,
         canCurrentDepartmentRequestUnit: true,
         requestedProjectCode: "PRJ-1",
@@ -131,7 +129,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("11. non unit mode: rejects when marison not ready", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isNonUnitMode: true,
+        requestCategory: "non_unit",
         shouldUseDefaultBranchProject: false,
         isMarisonProjectReady: false,
       }),
@@ -143,7 +141,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("12. non unit mode: rejects on row error", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isNonUnitMode: true,
+        requestCategory: "non_unit",
         shouldUseDefaultBranchProject: false,
         isMarisonProjectReady: true,
         firstNonUnitError: "Item 1 price invalid",
@@ -158,7 +156,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
     // Original behavior check: if `!shouldUseDefaultBranchProject` is false, it skips the check entirely
     const r = validateSuratSubmit(
       validSubmitInput({
-        isNonUnitMode: true,
+        requestCategory: "non_unit",
         shouldUseDefaultBranchProject: true, // Bypass non-unit checks
         firstNonUnitError: "Ignored row error",
       }),
@@ -171,7 +169,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("14. fund mode: rejects when marison not ready (and not fund without project)", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isFundMode: true,
+        requestCategory: "non_asset",
         fundWithoutProject: false,
         isMarisonProjectReady: false,
       }),
@@ -183,7 +181,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("15. fund mode: rejects invalid fund type", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isFundMode: true,
+        requestCategory: "non_asset",
         fundWithoutProject: true, // passes marison check
         fundType: "invalid-type",
       }),
@@ -195,7 +193,7 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
   it("16. fund mode: rejects on row issue", () => {
     const r = validateSuratSubmit(
       validSubmitInput({
-        isFundMode: true,
+        requestCategory: "non_asset",
         fundWithoutProject: true,
         fundType: "operational",
         firstFundIssue: "Missing amount",

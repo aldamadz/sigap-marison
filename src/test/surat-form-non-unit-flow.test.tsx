@@ -19,6 +19,12 @@ import {
   selectEntity,
   selectCategory,
   mountFormWithUsage,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 afterEach(() => teardownTestHarness());
@@ -38,9 +44,10 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
 
   it("menolak Non Unit di cabang tanpa proyek dan tidak memanggil generateNoSurat", async () => {
     await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
+    await selectFormAndUsage(/Non Unit/i);
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Pengajuan Non Unit");
+
 
     // MRN-22: Non Unit + branch + no projects must NOT show the
     // "Tidak ada proyek terdaftar" (asset-fallback) banner.

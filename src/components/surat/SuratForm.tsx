@@ -47,9 +47,15 @@ import { executeRecommendationPostSubmit } from "@/features/surat/recommendation
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
+import { selectUsage } from "@/features/surat/registration/usages";
+import type {
+  NumberContextIssue,
+  UsageCategory,
+  UsageModuleContext,
+  UsageModuleKey,
+} from "@/features/surat/registration/usages/usage-contract";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import {
   RegistrationSummaryDialog,
@@ -58,35 +64,18 @@ import {
 } from "@/components/surat/RegistrationSummaryDialog";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { RecommendationParentSummary } from "@/components/surat/RecommendationParentSummary";
-import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
 import {
   buildRecommendationMultiDetail,
   recommendationMultiDetailErrors,
   syncRecommendationMultiDetailInput,
 } from "@/features/surat/registration/lib/recommendation-multi-detail-builder";
 import type { RecommendationAttachment, RecommendationMultiDetail } from "@sigap/shared";
-import { NonAsetItemEditor, getNonAsetItemColumnKeys } from "@/components/surat/NonAsetItemEditor";
-import { NonUnitRequestEditor } from "@/components/surat/NonUnitRequestEditor";
 import { NominalInput } from "@/components/surat/NominalInput";
-import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import {
-  getFundSubmissionAmount,
-  normalizeFundSubmissionItems,
-  validateFundSubmissionItems,
-} from "@/components/surat/fund-submission";
-import { Checkbox } from "@/components/ui/checkbox";
-import { formatRupiahZero } from "@/lib/rupiah";
-import {
-  normalizeNonUnitOption,
   resolveNonUnitProjectMapping,
-  validateNonUnitRows,
-  type NonUnitExternalOption,
-  type NonUnitRequestRow,
 } from "@/components/surat/non-unit-request";
 import {
   canDepartmentRequestUnit,
-  clearRecommendationInput,
-  clearUnitInput,
   getExternalInputFields,
   getFullRoles,
   getInputSchema,
@@ -122,8 +111,6 @@ import type {
   LinkedDocumentContext,
   MasterData,
   MasterRecord,
-  ProjectOption,
-  ProjectRaw,
   RecommendationItemAttachment,
   RequestCategory,
   SignerAssignment,
@@ -134,7 +121,6 @@ import type {
 } from "@/components/surat/form/surat-form-types";
 
 
-const RECOMMENDATION_TEMPLATE_NAME = "Rekomendasi Peremajaan Alat";
 const RECOMMENDATION_ITEMS_KEY = "recommendation_items";
 const RECOMMENDATION_MULTI_DETAIL_KEY = "recommendation_multi_detail";
 const RECOMMENDATION_CHECK_MARK = "✓";
@@ -199,7 +185,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [isProcessingNumber, setIsProcessingNumber] = useState(false);
   const [isResettingNumber, setIsResettingNumber] = useState(false);
   const [isCopied, setIsCopied]                   = useState(false);
-  const [fundWithoutProject, setFundWithoutProject] = useState(false);
   const [draftModalOpen, setDraftModalOpen]       = useState(false);
   const [openSignerIndex, setOpenSignerIndex]     = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen]       = useState<Record<string, boolean>>({});
@@ -214,18 +199,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalOptions, setExternalOptions]     = useState<Record<string, ExternalOption[]>>({});
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
-  const [externalProjects, setExternalProjects]   = useState<ProjectOption[]>([]);
-  const [nonUnitOptions, setNonUnitOptions]       = useState<NonUnitExternalOption[]>([]);
-  const [nonUnitLoading, setNonUnitLoading]       = useState(false);
-  const [nonUnitError, setNonUnitError]           = useState<string | null>(null);
-  const [nonUnitReloadKey, setNonUnitReloadKey]   = useState(0);
-  const [projectsLoading, setProjectsLoading]     = useState(false);
-  const [projectsError, setProjectsError]         = useState<string | null>(null);
-  const [projectUnitAvailability, setProjectUnitAvailability] = useState<{
-    loading: boolean;
-    count: number | null;
-    error: string | null;
-  }>({ loading: false, count: null, error: null });
   const [currentProfile, setCurrentProfile]       = useState<CurrentProfile | null>(null);
   const [activeRecommendationItem, setActiveRecommendationItem] = useState(0);
   const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
@@ -275,99 +248,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getRequestMode = () => getRequestCategory() === "unit" ? "unit" : "barang";
   const isUnitMode = getRequestCategory() === "unit";
 
-
-  const applyRecommendationChoice = (required: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      form_input_data: {
-        ...prev.form_input_data,
-        requires_recommendation: required,
-        recommendation_template_name: RECOMMENDATION_TEMPLATE_NAME,
-        recommendation_attachment_note: required
-          ? "Pemohon membutuhkan lampiran rekomendasi untuk permohonan aset ini."
-          : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
-      },
-    }));
-  };
-
-  const setRequestCategory = (category: RequestCategory) => {
-    if (category === "unit" && !canRequesterChooseUnit) {
-      toast({
-        variant: "destructive",
-        title: "Unit Tidak Diizinkan",
-        description: requesterDepartmentId
-          ? "Belum ada matrix Unit yang mengizinkan departemen akun Anda pada scope kantor ini."
-          : "Departemen akun Anda belum ditentukan.",
-      });
-      return;
-    }
-    setFormData(prev => {
-      const baseInput = category === "unit"
-        ? {
-            ...prev.form_input_data,
-            request_category: category,
-            request_mode: "unit",
-          }
-        : clearUnitInput({
-            ...prev.form_input_data,
-            request_category: category,
-            request_mode: "barang",
-          });
-      const nextInput = category === "asset" && canRequesterUseRecommendation
-        ? {
-            ...baseInput,
-            requires_recommendation: typeof baseInput.requires_recommendation === "boolean"
-              ? baseInput.requires_recommendation
-              : false,
-            recommendation_template_name: RECOMMENDATION_TEMPLATE_NAME,
-            recommendation_attachment_note: typeof baseInput.recommendation_attachment_note === "string"
-              ? baseInput.recommendation_attachment_note
-              : "Pemohon tidak membutuhkan lampiran rekomendasi untuk permohonan aset ini.",
-          }
-        : clearRecommendationInput(baseInput);
-      if (category !== "non_asset") {
-        delete nextInput.fund_type;
-        delete nextInput.fund_amount;
-        delete nextInput.fund_without_project;
-      }
-      return {
-        ...prev,
-        project_id: prev.form_input_data.request_category === category ? prev.project_id : "",
-        is_aset: category === "asset",
-        form_input_data: nextInput,
-      };
-    });
-    if (category !== "non_asset") setFundWithoutProject(false);
-    if (category === "unit") {
-      setFormData(prev => {
-        const nextInput = { ...prev.form_input_data };
-        delete nextInput.items;
-        return { ...prev, form_input_data: nextInput };
-      });
-    }
-    setSelectedUsage(null);
-    setSelectedFormId("");
-    setSigners([]);
-    setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
-  };
-
-  const getRequestCombinationLabel = () => {
-    const category = getRequestCategory();
-    if (category === "asset") return "Pengajuan Aset";
-    if (category === "unit") return "Pengajuan SPK";
-    if (category === "non_asset") return "Pengajuan Dana";
-    if (category === "non_unit") return "Pengajuan Non Unit";
-    return "Belum dipilih";
-  };
-
-  const setInputValue = (key: string, value: unknown) => {
+  // Stabil (useCallback): dipakai sebagai dep effect di modul usage.
+  // Identitas tak stabil = fetch effect modul berputar tanpa henti.
+  const setInputValue = useCallback((key: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       form_input_data: { ...prev.form_input_data, [key]: value },
     }));
-  };
+  }, []);
 
-  const requestExternalOptions = async (sourceKey: string, variables: Record<string, unknown> = {}) => {
+  const requestExternalOptions = useCallback(async (sourceKey: string, variables: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Tidak terautentikasi");
     const response = await fetch(`/api/data-sources/${sourceKey}/query`, {
@@ -381,7 +271,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.error || "Gagal mengambil data external.");
     return payload.options || [];
-  };
+  }, []);
 
   const getTableRows = (key: string) => normalizeTableRows(formData.form_input_data[key]);
 
@@ -763,10 +653,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const isTableFieldComplete = (field: TemplateField) => {
-    if (field.key === RECOMMENDATION_ITEMS_KEY) return isRecommendationItemsComplete(field);
-    if (field.key === "items" && getRequestCategory() === "non_unit" && !shouldUseDefaultBranchProject) {
-      return validateNonUnitRows(getFormFieldValue(field.key)).length === 0;
+    // Slot modul didahulukan; field milik modul tanpa override dilewati generik.
+    if (activeUsageData && moduleCtx) {
+      const owned = activeUsageData.module.isFieldComplete?.(field, moduleCtx);
+      if (owned !== null && owned !== undefined) return owned;
+      const hidden = activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? [];
+      if (hidden.includes(field.key)) return true;
     }
+    if (field.key === RECOMMENDATION_ITEMS_KEY) return isRecommendationItemsComplete(field);
     const rows = getTableRows(field.key).filter((row: TableRow) =>
       Object.values(row ?? {}).some((value) => String(value ?? "").trim())
     );
@@ -779,12 +673,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const isManualFieldComplete = (field: TemplateField) => {
-    if (!isUnitMode && isUnitField(field)) return true;
-    if (hasUnitRequestFields(selectedUsage)) {
-      if (field.key === "requested_unit_count") return true;
-      if (isUnitMode && (field.key === "items" || field.key === "unit")) return true;
-      if (!isUnitMode && field.key === "unit") return true;
+    if (activeUsageData && moduleCtx) {
+      const owned = activeUsageData.module.isFieldComplete?.(field, moduleCtx);
+      if (owned !== null && owned !== undefined) return owned;
+      const hidden = activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? [];
+      if (hidden.includes(field.key)) return true;
     }
+    const requiresUnitAllocation = activeUsageData?.module.requirements.requiresUnitAllocation ?? false;
+    if (!requiresUnitAllocation && isUnitField(field)) return true;
     if (field.type === "table") return isTableFieldComplete(field);
     const value = getFormFieldValue(field.key);
     if (field.type === "external_select" && isMultiSelectField(field)) {
@@ -831,16 +727,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const profileOfficeId = currentProfile?.office_id || "";
   const profileDepartmentId = currentProfile?.department_id || requesterDepartmentId;
   const profileLocationReady = isProfileLocationReady(currentProfile, formData, isCurrentUserAdmin);
-  const canRequesterUseRecommendation = useMemo(() => {
-    if (linkedDocumentContext?.type === "recommendation") return false;
-    const departmentId = formData.dept_id || requesterDepartmentId;
-    const department = master.depts.find((dept: MasterRecord) => dept.id === departmentId);
-    return canUseAssetRecommendation(department);
-  }, [formData.dept_id, requesterDepartmentId, master.depts, linkedDocumentContext]);
 
   const filteredUsage = useMemo(() => {
-    const category = getRequestCategory();
-    if (!category) return [];
     return usageDetails.filter((item) => {
       if (
         linkedDocumentContext?.type === "recommendation" &&
@@ -854,11 +742,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         if (item.scope_type === "pusat" && !isPusatSelected) return false;
         if (item.scope_type === "cabang" && isPusatSelected) return false;
       } else if (item.is_cabang !== undefined && item.is_cabang !== !isPusatSelected) return false;
-      if (!getWorkflowCategories(item).includes(category)) return false;
       if (!canDepartmentRequestUnit(item, formData.dept_id || requesterDepartmentId)) return false;
       return true;
     });
-  }, [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id, formData.form_input_data.request_category, linkedDocumentContext]);
+  }, [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id, linkedDocumentContext]);
 
   const availableForms = useMemo(() => {
     const seen = new Set<string>();
@@ -878,18 +765,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const selectedForm = availableForms.find(form => form.id === selectedFormId);
     return selectedForm?.name || selectedUsage?.master_forms?.nama_form || "Form dokumen";
   }, [availableForms, selectedFormId, selectedUsage?.master_forms?.nama_form]);
-
-  const canRequesterChooseUnit = useMemo(
-    () => usageDetails.some(item =>
-      getWorkflowCategories(item).includes("unit") &&
-      (item.scope_type === "all" ||
-        (item.scope_type === "pusat" && isPusatSelected) ||
-        (item.scope_type === "cabang" && !isPusatSelected) ||
-        (!item.scope_type && item.is_cabang === !isPusatSelected)) &&
-      canDepartmentRequestUnit(item, formData.dept_id || requesterDepartmentId)
-    ),
-    [usageDetails, isPusatSelected, requesterDepartmentId, formData.dept_id]
-  );
 
   const filteredDepts = useMemo(() => {
     if (!master.depts) return [];
@@ -1008,15 +883,24 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return prefix ? prefix.toUpperCase() : "";
   }, [selectedProject]);
 
+  // Modul aktif (identitas stabil agar moduleCtx tidak churn).
+  // Didefinisikan awal karena requirements-nya dipakai derivasi lokasi.
+  const activeUsageData = useMemo(
+    () => (selectedUsage ? selectUsage(selectedUsage) : null),
+    [selectedUsage],
+  );
+
   const isBranchOfficeSelected = Boolean(formData.office_id && !isPusatSelected);
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
-  const isFundMode = getRequestCategory() === "non_asset";
-  const isNonUnitMode = getRequestCategory() === "non_unit";
-  const requiresMarisonProject = isNonUnitMode || isFundMode;
+  // Tanpa flag mode kategori di orchestrator: kebutuhan mapping proyek
+  // dibaca dari requirements modul aktif.
+  const requiresMarisonProject = activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false;
+  // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
+  // (milik modul Dana), bukan useState orchestrator.
+  const isGeneralFund = formData.form_input_data.fund_without_project === true;
   // MRN-22: virtual scope "000" fallback is the single source of truth.
   // Unit, Non Unit, and Non Aset are explicitly excluded by the predicate
   // (requestCategory must be "asset").  This replaces the old heuristic
-  // `isBranchOfficeSelected && !branchHasRegisteredProjects && cat !== 'unit' && !isFundMode`
   // which incorrectly covered Non Unit.
   const shouldUseDefaultBranchProject = isBranchAssetFallbackMarker({
     officeKedudukan: isPusatSelected ? "Pusat" : "Cabang",
@@ -1072,14 +956,71 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     ? nonUnitProjectCandidates.length > 0
     : branchHasRegisteredProjects;
 
+  // Modul aktif + shared module context (typed penuh, tanpa any-cast).
+  // Resolver null → tidak ada modul (fail closed di UI & gate nomor).
+  const moduleCtx: UsageModuleContext | null = useMemo(() => {
+    if (!selectedUsage || !activeUsageData) return null;
+    return {
+      usage: selectedUsage,
+      usageKey: activeUsageData.key,
+      category: activeUsageData.category,
+      formData,
+      input: formData.form_input_data,
+      isPusatSelected,
+      requesterDepartmentId,
+      linkedDocumentContext,
+      externalRevision,
+      generatedNoSurat,
+      master,
+      marisonProject: {
+        ready: isMarisonProjectReady,
+        projectId: selectedMarisonProjectId,
+        projectName: selectedNonUnitProjectMapping.name || "",
+        unavailableCount: unavailableNonUnitProjectCount,
+      },
+      recommendationIO: recommendationMultiDetail ? {
+        model: recommendationMultiDetail,
+        onModelChange: setRecommendationMultiDetail,
+        uploadingKey: uploadingRecommendationAttachment,
+        onUpload: uploadRecommendationDetailAttachments,
+        onDeleteAttachment: deleteRecommendationDetailAttachment,
+        onDeleteDetail: deleteRecommendationDetail,
+        directory: {
+          users: master.users,
+          offices: master.offices,
+          departments: master.depts,
+        },
+      } : null,
+      setInputValue,
+      setSelection: (patch) => setFormData((current) => ({ ...current, ...patch })),
+      requestExternalOptions,
+    };
+  }, [
+    selectedUsage,
+    activeUsageData,
+    formData,
+    isPusatSelected,
+    requesterDepartmentId,
+    linkedDocumentContext,
+    externalRevision,
+    generatedNoSurat,
+    master,
+    isMarisonProjectReady,
+    selectedMarisonProjectId,
+    selectedNonUnitProjectMapping.name,
+    unavailableNonUnitProjectCount,
+    recommendationMultiDetail,
+    uploadingRecommendationAttachment,
+    setInputValue,
+    requestExternalOptions,
+  ]);
+
   const effectiveFormInputData = useMemo<FormInputData>(() => {
     const input = { ...formData.form_input_data };
-    if (isFundMode) {
-      const fundItems = normalizeFundSubmissionItems(input.items);
-      input.items = fundItems;
-      input.fund_amount = getFundSubmissionAmount(fundItems);
-    } else {
-      delete input.fund_amount;
+    delete input.fund_amount;
+    if (activeUsageData && moduleCtx) {
+      const normalized = activeUsageData.module.normalizeInput({ ...input }, moduleCtx);
+      Object.assign(input, normalized);
     }
     if (requiresMarisonProject && isMarisonProjectReady && selectedProject) {
       const snapshotCode = selectedNonUnitProjectMapping.code || "";
@@ -1135,7 +1076,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedProject,
     selectedNonUnitProjectMapping,
     shouldUseDefaultBranchProject,
-    isFundMode,
+    activeUsageData,
+    moduleCtx,
   ]);
 
   const effectiveFormData = useMemo(() => ({
@@ -1427,24 +1369,27 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setLinkedDocumentContext(restoredLinkedContext);
     }
 
+    const restoredFundWithoutProject =
+      restoredInput.fund_without_project === true
+        || (restoredInput.request_category === "non_asset"
+          && !restoredFormData.project_id
+          && Boolean(draftToRestore.no_surat));
+
     setFormData(previous => ({
       ...previous,
       ...restoredFormData,
       is_aset: restoredLinkedContext?.type === "recommendation" ? true : restoredFormData.is_aset,
-      form_input_data: restoredLinkedContext?.type === "recommendation"
-        ? {
-            ...(restoredFormData.form_input_data || {}),
-            request_category: "asset",
-            request_mode: "barang",
-          }
-        : restoredFormData.form_input_data || {},
+      form_input_data: {
+        ...(restoredLinkedContext?.type === "recommendation"
+          ? {
+              ...(restoredFormData.form_input_data || {}),
+              request_category: "asset",
+              request_mode: "barang",
+            }
+          : restoredFormData.form_input_data || {}),
+        ...(restoredFundWithoutProject ? { fund_without_project: true } : {}),
+      },
     }));
-    setFundWithoutProject(
-      restoredInput.fund_without_project === true
-        || (restoredInput.request_category === "non_asset"
-          && !restoredFormData.project_id
-          && Boolean(draftToRestore.no_surat)),
-    );
     setSelectedFormId(String(payload.selectedFormId || usage?.form_id || usage?.master_forms?.id || ""));
     setSelectedUsage(usage);
     const persistedSigners = Array.isArray(draftToRestore.signer_assignments)
@@ -1505,14 +1450,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
   }, [formData.dept_id, selectedUsage, formData.form_input_data.request_category, linkedDocumentContext, generatedNoSurat]);
 
+  // Rekonsiliasi input khusus modul (mis. rekomendasi Aset) berjalan generik
+  // lewat kontrak modul. Orchestrator tidak tahu isi modul apa pun.
   useEffect(() => {
-    if (getRequestCategory() !== "asset" || canRequesterUseRecommendation) return;
-    if (formData.form_input_data.requires_recommendation === undefined) return;
-    setFormData(previous => ({
-      ...previous,
-      form_input_data: clearRecommendationInput(previous.form_input_data),
-    }));
-  }, [canRequesterUseRecommendation, formData.form_input_data.request_category, formData.form_input_data.requires_recommendation]);
+    if (!activeUsageData || !moduleCtx) return;
+    const reconcile = activeUsageData.module.reconcileInputForContext;
+    if (!reconcile) return;
+    const reconciled = reconcile({ ...formData.form_input_data }, moduleCtx);
+    if (JSON.stringify(reconciled) !== JSON.stringify(formData.form_input_data)) {
+      setFormData((previous) => ({ ...previous, form_input_data: reconciled }));
+    }
+  }, [
+    activeUsageData,
+    moduleCtx,
+    formData.dept_id,
+    formData.office_id,
+    formData.form_input_data,
+    linkedDocumentContext,
+    selectedUsage?.id,
+  ]);
 
   useEffect(() => {
     const fields = getExternalInputFields(selectedUsage);
@@ -1567,122 +1523,106 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return () => { cancelled = true; };
   }, [selectedUsage, externalVariables, isUnitMode]);
 
-  useEffect(() => {
-    if (!isNonUnitMode || !selectedUsage || !generatedNoSurat) {
-      setNonUnitOptions([]);
-      setNonUnitError(null);
-      setNonUnitLoading(false);
-      return;
-    }
-    if (!isMarisonProjectReady) {
-      setNonUnitOptions([]);
-      setNonUnitError(null);
-      setNonUnitLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setNonUnitLoading(true);
-    setNonUnitError(null);
-    requestExternalOptions("marison_non_units_by_project", {
-      project_id: selectedMarisonProjectId,
-    })
-      .then((options: ExternalOption[]) => {
-        if (cancelled) return;
-        const normalized = options
-          .map((option) => normalizeNonUnitOption(option))
-          .filter((option): option is NonUnitExternalOption => Boolean(option));
-        setNonUnitOptions(normalized);
-        if (normalized.length === 0) {
-          setNonUnitError("Belum ada jenis pekerjaan Non Unit untuk proyek ini.");
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setNonUnitOptions([]);
-        setNonUnitError(error instanceof Error ? error.message : "Gagal mengambil jenis pekerjaan Non Unit.");
-      })
-      .finally(() => {
-        if (!cancelled) setNonUnitLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [isNonUnitMode, isMarisonProjectReady, selectedMarisonProjectId, nonUnitReloadKey, selectedUsage?.id, generatedNoSurat]);
-
-  useEffect(() => {
-    if (getRequestCategory() !== "unit") return;
-    if (externalProjects.length > 0) return;
-    let cancelled = false;
-    setProjectsLoading(true);
-    setProjectsError(null);
-    requestExternalOptions("marison_projects")
-      .then((options) => { if (!cancelled) setExternalProjects(options); })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setExternalProjects([]);
-          setProjectsError(error instanceof Error ? error.message : "Gagal mengambil daftar proyek.");
-        }
-      })
-      .finally(() => { if (!cancelled) setProjectsLoading(false); });
-    return () => { cancelled = true; };
-  }, [formData.form_input_data.request_category, externalProjects.length]);
-
-  useEffect(() => {
-    if (getRequestCategory() !== "unit") {
-      setProjectUnitAvailability({ loading: false, count: null, error: null });
-      return;
-    }
-    const requestedProject = formData.form_input_data.requested_project as { id?: string; code?: string } | undefined;
-    const projectId = String(requestedProject?.id || "").trim();
-    if (!projectId) {
-      setProjectUnitAvailability({ loading: false, count: null, error: null });
-      return;
-    }
-
-    let cancelled = false;
-    setProjectUnitAvailability({ loading: true, count: null, error: null });
-    requestExternalOptions("marison_units_by_project", {
-      project_id: projectId,
-      requested_project: requestedProject,
-    })
-      .then((options) => {
-        if (!cancelled) {
-          setProjectUnitAvailability({ loading: false, count: options.length, error: null });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setProjectUnitAvailability({
-            loading: false,
-            count: null,
-            error: error instanceof Error ? error.message : "Jumlah unit tersedia belum termuat.",
-          });
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, [formData.form_input_data.request_category, formData.form_input_data.requested_project]);
-
   // ── HANDLERS ───────────────────────────────────────────────────────────────
   const handleProjectChange = (projectId: string) => {
     const proj = master.projects?.find((p: MasterRecord) => p.id === projectId);
-    setFundWithoutProject(false);
-    setFormData(prev => ({ ...prev, project_id: projectId, entity_id: proj?.entity_id || prev.entity_id }));
+    setFormData(prev => ({
+      ...prev,
+      project_id: projectId,
+      entity_id: proj?.entity_id || prev.entity_id,
+      form_input_data: { ...prev.form_input_data, fund_without_project: false },
+    }));
   };
 
   const handleLetterTypeChange = (letterTypeId: string) => {
     setFormData(prev => ({ ...prev, letter_type_id: letterTypeId }));
   };
 
+  // Context modul minimal typed untuk cleanup/normalize sinkron.
+  // marisonProject/recommendationIO null: kedua operasi tidak membutuhkannya.
+  const buildModuleTransitionCtx = (
+    usage: UsageDetailRecord,
+    key: UsageModuleKey,
+    category: UsageCategory | null,
+    formSnapshot: typeof formData,
+    input: FormInputData,
+  ): UsageModuleContext => ({
+    usage,
+    usageKey: key,
+    category,
+    formData: formSnapshot,
+    input,
+    isPusatSelected,
+    requesterDepartmentId,
+    linkedDocumentContext,
+    externalRevision,
+    generatedNoSurat,
+    master,
+    marisonProject: null,
+    recommendationIO: null,
+    setInputValue,
+    setSelection: (patch) => setFormData((current) => ({ ...current, ...patch })),
+    requestExternalOptions,
+  });
+
   const applySelectedUsage = (detail: UsageDetailRecord) => {
     const isNewUsage = Array.isArray(detail.form_usage_steps);
+
+    const usageData = selectUsage(detail);
+    if (!usageData) {
+      toast({ variant: "destructive", title: "Kegunaan Form Tidak Valid", description: "Kategori pengajuan tidak dapat ditentukan dari konfigurasi Kegunaan Form. Hubungi administrator." });
+      setSelectedUsage(null);
+      setFormData(prev => ({ ...prev, penggunaan_id: "", form_usage_id: "" }));
+      setSigners([]);
+      return;
+    }
+
     setSelectedUsage(detail);
     setFormData(prev => {
+      const nextInput = { ...prev.form_input_data };
+
+      const previousUsageData = selectUsage(selectedUsage);
+      if (previousUsageData) {
+        const cleanup = previousUsageData.module.cleanup(buildModuleTransitionCtx(
+          selectedUsage!,
+          previousUsageData.key,
+          previousUsageData.category,
+          prev,
+          nextInput,
+        ), "usage_change");
+
+        cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
+      }
+
+      // Default state berasal dari kontrak modul (reconcile + normalize),
+      // termasuk request_category/request_mode/is_aset. Orchestrator hanya
+      // menulis routing key bersama (form_usage_id/penggunaan_id).
+      // Orchestrator tidak mengetahui modul apa yang aktif.
+      const transitionCtxFor = (input: FormInputData) => buildModuleTransitionCtx(
+        detail,
+        usageData.key,
+        usageData.category,
+        prev,
+        input,
+      );
+      const reconciledInput = usageData.module.reconcileInputForContext?.(nextInput, transitionCtxFor(nextInput)) ?? nextInput;
+
+      // Initialize the normalized state
+      const initializedInput = usageData.module.normalizeInput(reconciledInput, transitionCtxFor(reconciledInput));
+
       return {
         ...prev,
+        // Ganti Kegunaan: proyek hanya dipertahankan bila kategori sama;
+        // lintas kategori, proyek lama tidak lagi sah.
+        project_id: previousUsageData && previousUsageData.category !== usageData.category ? "" : prev.project_id,
         penggunaan_id: isNewUsage ? "" : detail.id,
         form_usage_id: isNewUsage ? detail.id : "",
+        // Flag warisan dibaca dari output normalisasi modul, bukan dari branch kategori.
+        is_aset: initializedInput.is_aset === true,
+        form_input_data: initializedInput,
       };
     });
+
     const configuredSigners = buildSignerAssignments(detail);
     if (configuredSigners.length > 0) {
       setSigners(getVisibleConfiguredSigners(configuredSigners));
@@ -1730,8 +1670,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     }
   }, [linkedDocumentContext, generatedNoSurat, usageDetails, selectedFormId, selectedUsage?.id]);
 
+  // Form-first: Form/Kegunaan wajib dipilih eksplisit pada alur normal.
+  // Tidak ada auto-select; restore draft, linked recommendation, dan
+  // external revision mengisi Form/Kegunaan secara programatis via
+  // applySelectedUsage, bukan via effect ini. Effect ini hanya fail-closed:
+  // membersihkan pilihan yang tidak lagi valid.
   useEffect(() => {
-    if (generatedNoSurat || !getRequestCategory()) return;
+    if (generatedNoSurat) return;
     const selectedFormStillAvailable = selectedFormId
       ? availableForms.some(form => form.id === selectedFormId)
       : false;
@@ -1740,12 +1685,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setSelectedUsage(null);
       setSigners([]);
       setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
-      return;
     }
-    if (!selectedFormId && availableForms.length === 1) {
-      setSelectedFormId(availableForms[0].id);
-    }
-  }, [availableForms, selectedFormId, generatedNoSurat, formData.form_input_data.request_category]);
+  }, [availableForms, selectedFormId, generatedNoSurat]);
 
   useEffect(() => {
     if (generatedNoSurat || !selectedFormId) return;
@@ -1757,12 +1698,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       setSelectedUsage(null);
       setSigners([]);
       setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
-      return;
     }
-    if (!selectedUsageId && usagesForSelectedForm.length === 1) {
-      applySelectedUsage(usagesForSelectedForm[0]);
-    }
-  }, [generatedNoSurat, selectedFormId, selectedUsage?.id, usagesForSelectedForm, formData.form_input_data.request_category]);
+  }, [generatedNoSurat, selectedFormId, selectedUsage?.id, usagesForSelectedForm]);
 
   const handleGetNumber = async () => {
     const requestCategory = getRequestCategory();
@@ -1777,7 +1714,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       projectId: formData.project_id,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
-      fundWithoutProject,
+      fundWithoutProject: isGeneralFund,
       fundType: String(getFormFieldValue("fund_type") || ""),
     });
     if (!step1Check.valid) {
@@ -1785,6 +1722,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         variant: "destructive",
         title: step1Check.errorTitle!,
         ...(step1Check.errorDescription ? { description: step1Check.errorDescription } : {}),
+      });
+    }
+    // Gate khusus modul (aturan konteks nomor milik modul aktif).
+    const moduleIssues: NumberContextIssue[] =
+      activeUsageData && moduleCtx ? activeUsageData.module.validateNumberContext(moduleCtx) : [];
+    if (moduleIssues.length > 0) {
+      return toast({
+        variant: "destructive",
+        title: moduleIssues[0].title,
+        ...(moduleIssues[0].description ? { description: moduleIssues[0].description } : {}),
       });
     }
     setIsProcessingNumber(true);
@@ -1867,34 +1814,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     } finally {
       setIsResettingNumber(false);
     }
-  };
-
-  const handleRequestedUnitCountChange = (rawValue: string) => {
-    const count = Math.max(Number(rawValue || 0), 0);
-    setInputValue("requested_unit_count", count || "");
-    const project = getFormFieldValue("requested_project") as { name?: string } | undefined;
-    setInputValue("unit_request_sentence", project?.name && count > 0
-      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
-      : "");
-  };
-
-  const handleExternalProjectChange = (value: string) => {
-    const option = externalProjects.find((item) => item.value === value) as ProjectOption | undefined;
-    const project = option?.raw;
-    if (!option || !project?.code) return;
-    const requestedProject = {
-      value: option.value,
-      label: option.label,
-      id: project.id,
-      code: project.code,
-      name: project.name,
-      branch: project.branch ?? null,
-    };
-    const count = Number(getFormFieldValue("requested_unit_count") || 0);
-    setInputValue("requested_project", requestedProject);
-    setInputValue("unit_request_sentence", count > 0
-      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
-      : "");
   };
 
   const getDraftCreatorName = (draft: SuratRegistrationDraft) => {
@@ -2018,21 +1937,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       requestDate: formData.request_date,
       missingInitialAttachmentLabels: getMissingInitialAttachmentLabels(),
 
-      isUnitMode,
+      requestCategory: getRequestCategory(),
       hasUnitRequestFields: hasUnitRequestFields(selectedUsage),
       canCurrentDepartmentRequestUnit: canCurrentDepartmentRequestUnit(selectedUsage),
       requestedUnitCount: Number(getFormFieldValue("requested_unit_count") || 0),
       requestedProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
 
-      isNonUnitMode,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
-      firstNonUnitError: isNonUnitMode ? validateNonUnitRows(effectiveFormInputData.items)[0]?.message : undefined,
-
-      isFundMode,
-      fundWithoutProject,
+      firstNonUnitError: undefined,
+      fundWithoutProject: isGeneralFund,
       fundType: String(getFormFieldValue("fund_type") || ""),
-      firstFundIssue: isFundMode ? validateFundSubmissionItems(effectiveFormInputData.items)[0]?.message : undefined,
+      firstFundIssue: undefined,
 
       missingField: missingField ? { key: missingField.key, label: missingField.label } : undefined,
       firstRecommendationError,
@@ -2048,6 +1964,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
       return false;
     }
+
+    // Gate submit khusus modul (baris rincian milik modul aktif).
+    const moduleSubmitIssues = activeUsageData && moduleCtx
+      ? activeUsageData.module.validateSubmit?.(moduleCtx) ?? []
+      : [];
+    if (moduleSubmitIssues.length > 0) {
+      toast({
+        variant: "destructive",
+        title: moduleSubmitIssues[0].title,
+        ...(moduleSubmitIssues[0].description ? { description: moduleSubmitIssues[0].description } : {}),
+      });
+      return false;
+    }
     return true;
   };
 
@@ -2057,33 +1986,31 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const office = master.offices.find((item) => item.id === formData.office_id);
     const formFields = selectedUsage ? getManualInputFields(selectedUsage) : [];
     const mappedKeys = new Set(formFields.map((field) => field.key));
+    // Kunci internal milik modul dibaca dari kontrak modul; sisanya snapshot bersama.
+    const moduleHiddenKeys = activeUsageData && moduleCtx
+      ? activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? []
+      : [];
     const hiddenKeys = new Set([
-      "request_mode", "request_category", "unit_config_snapshot", "recommendation_attachment_note",
-      "recommendation_template_name", "recommendation_multi_detail", "requires_recommendation", "project_code", "project_name", "project_is_default", "fund_type", "fund_amount", "fund_without_project",
+      "request_mode", "request_category", "unit_config_snapshot", "project_code", "project_name", "project_is_default",
+      ...moduleHiddenKeys,
     ]);
+    // Label + baris ringkasan khusus modul berasal dari modul aktif.
+    const moduleSummaryLabels = activeUsageData?.module.summaryFieldLabels ?? {};
+    const moduleSummaryFields = activeUsageData && moduleCtx
+      ? activeUsageData.module.buildSummaryFields?.(moduleCtx) ?? []
+      : [];
     const fields: RegistrationSummaryField[] = formFields
       .filter((field) => !hiddenKeys.has(field.key))
       .map((field) => ({
         key: field.key,
-        label: field.key === "items" && isNonUnitMode
-          ? "Daftar Pekerjaan Non Unit"
-          : field.label || humanizeInputKey(field.key),
+        label: moduleSummaryLabels[field.key] || field.label || humanizeInputKey(field.key),
         type: field.type,
         value: effectiveFormInputData[field.key],
       }))
       .filter((field) => Array.isArray(field.value) ? field.value.length > 0 : formatSummaryValue(field.value) !== "-");
 
-    if (isFundMode) {
-      fields.push({
-        key: "fund_type",
-        label: "Jenis Pengajuan Dana",
-        value: getFormFieldValue("fund_type") === "production_cost" ? "Biaya Produksi" : "Biaya Operasional",
-      });
-      fields.push({
-        key: "fund_amount",
-        label: "Total Pengajuan Dana",
-        value: formatRupiahZero(getFundSubmissionAmount(effectiveFormInputData.items)),
-      });
+    for (const moduleField of moduleSummaryFields) {
+      fields.push({ key: moduleField.key, label: moduleField.label, value: moduleField.value });
     }
 
     Object.entries(effectiveFormInputData).forEach(([key, value]) => {
@@ -2292,22 +2219,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     </Popover>
   );
 
+  // Varian baris legacy; model v1 dirender modul Aset via renderFieldOverride.
   const renderRecommendationItemsField = (field: TemplateField) => {
-    if (recommendationMultiDetail) {
-      return (
-        <RecommendationMultiDetailEditor
-          model={recommendationMultiDetail}
-          onChange={setRecommendationMultiDetail}
-          users={master.users}
-          offices={master.offices}
-          departments={master.depts}
-          uploadingKey={uploadingRecommendationAttachment}
-          onUpload={uploadRecommendationDetailAttachments}
-          onDeleteAttachment={deleteRecommendationDetailAttachment}
-          onDeleteDetail={deleteRecommendationDetail}
-        />
-      );
-    }
     const rows = getTableRows(field.key);
     const isLinkedRecommendation =
       linkedDocumentContext?.type === "recommendation" && parentRecommendationItems.length > 0;
@@ -2732,33 +2645,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
+  // Render tabel generik. Field khusus modul sudah ditangani override
+  // di renderManualField sebelum mencapai sini.
   const renderTableField = (field: TemplateField) => {
     if (field.key === RECOMMENDATION_ITEMS_KEY) return renderRecommendationItemsField(field);
-    if (field.key === "items" && isNonUnitMode && !shouldUseDefaultBranchProject) {
-      return (
-        <NonUnitRequestEditor
-          rows={getTableRows(field.key) as NonUnitRequestRow[]}
-          options={nonUnitOptions}
-          loading={nonUnitLoading}
-          error={nonUnitError}
-          projectReady={isMarisonProjectReady}
-          projectName={selectedProject?.name || ""}
-          onChange={(rows) => setTableRows(field.key, rows)}
-          onRetry={() => setNonUnitReloadKey((current) => current + 1)}
-        />
-      );
-    }
-
-    if (field.key === "items" && isFundMode
-      && getNonAsetItemColumnKeys(field.table_config?.columns ?? []) !== null) {
-      return (
-        <NonAsetItemEditor
-          rows={getTableRows(field.key)}
-          columns={field.table_config?.columns ?? []}
-          onChange={(rows) => setTableRows(field.key, rows)}
-        />
-      );
-    }
 
     const columns = field.table_config?.columns ?? [];
     const rows = getTableRows(field.key);
@@ -2970,12 +2860,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const renderManualField = (field: TemplateField, index = 0) => {
+    // Slot modul didahulukan; field milik modul tanpa override tidak dirender generik.
+    if (activeUsageData && moduleCtx) {
+      const override = activeUsageData.module.renderFieldOverride?.(field, moduleCtx);
+      if (override) return <div key={field.key}>{override}</div>;
+      const hidden = activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? [];
+      if (hidden.includes(field.key)) return null;
+    }
     const isTable = field.type === "table";
     const isLongText = field.type === "textarea";
     const inputPlaceholder = field.placeholder || `Isi ${field.label}`;
-    const displayLabel = field.key === "items" && isNonUnitMode
-      ? "Detail Pekerjaan Non Unit"
-      : field.label;
+    const displayLabel = field.label;
 
     return (
       <div key={field.key} className={cn(
@@ -3044,247 +2939,21 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     );
   };
 
-  const getVisibleManualFields = () =>
-    getManualInputFields(selectedUsage).filter((field: TemplateField) => {
-      if (!isUnitMode && isUnitExternalField(field)) return false;
-      if (isUnitMode && (field.key === "items" || field.key === "unit")) return false;
-      if (isFundMode && (field.key === "items" || field.key === "fund_amount")) return false;
-      if (!hasUnitRequestFields(selectedUsage)) return true;
-      if (field.key === "requested_unit_count") return false;
-      if (isUnitMode) return field.key !== "items" && field.key !== "unit";
-      return field.key !== "unit";
+  // Field milik modul (hidden) tetap masuk daftar agar override modul berjalan;
+  // render generik dilewati untuk key tersebut. Aturan unit-external dibaca
+  // dari requirements modul, bukan branch kategori di orchestrator.
+  const getVisibleManualFields = () => {
+    const requiresUnitAllocation = activeUsageData?.module.requirements.requiresUnitAllocation ?? false;
+    const hidden = activeUsageData && moduleCtx
+      ? activeUsageData.module.hiddenFieldKeys?.(moduleCtx) ?? []
+      : [];
+    return getManualInputFields(selectedUsage).filter((field: TemplateField) => {
+      if (hidden.includes(field.key)) return true;
+      if (!requiresUnitAllocation && isUnitExternalField(field)) return false;
+      if (!requiresUnitAllocation && field.key === "requested_unit_count") return false;
+      if (!requiresUnitAllocation && field.key === "unit") return false;
+      return true;
     });
-
-  const renderUnitRequestPanel = () => {
-    if (!isUnitMode) return null;
-    const selectedProject = getFormFieldValue("requested_project") as ProjectRaw | undefined;
-    const requestedCount = Number(getFormFieldValue("requested_unit_count") || 0);
-    const availableCount = Number(projectUnitAvailability.count ?? 0);
-    const exceedsAvailability = selectedProject?.code &&
-      projectUnitAvailability.count != null &&
-      requestedCount > availableCount;
-    return (
-      <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-primary">Pengajuan Unit</p>
-          <p className="text-xs font-medium text-muted-foreground">
-            Pemohon hanya mengajukan jumlah unit. Perencanaan akan memilih unit spesifik saat approval.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">Proyek</Label>
-            <Select value={(getFormFieldValue("requested_project") as { value?: string } | undefined)?.value || ""} onValueChange={handleExternalProjectChange} disabled={projectsLoading || !!generatedNoSurat}>
-              <SelectTrigger className="h-12 bg-background/70 text-sm">
-                <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
-              </SelectTrigger>
-              <SelectContent>
-                {externalProjects.map((project) => (
-                  <SelectItem key={project.value} value={project.value} disabled={!project.raw?.code}>
-                    {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {projectsError && <p className="text-[10px] font-semibold text-destructive">{projectsError}</p>}
-            {selectedProject?.code ? (
-              <p className={cn(
-                "text-[11px] font-medium",
-                projectUnitAvailability.error ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"
-              )}>
-                {projectUnitAvailability.loading
-                  ? "Memuat jumlah unit tersedia..."
-                  : projectUnitAvailability.error
-                    ? "Jumlah unit tersedia belum termuat."
-                    : `Kapasitas tersedia saat ini: ${projectUnitAvailability.count ?? 0} unit.`}
-              </p>
-            ) : (
-              <p className="text-[11px] font-medium text-muted-foreground">Pilih proyek untuk melihat jumlah unit tersedia.</p>
-            )}
-            {exceedsAvailability && (
-              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                Jumlah yang diajukan melebihi kapasitas unit yang sedang termuat. Pengajuan tetap bisa dilanjutkan, tetapi tim pemeriksa perlu menyesuaikan alokasi.
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">Jumlah Unit Diajukan</Label>
-            <Input
-              type="number"
-              min={1}
-              value={String(getFormFieldValue("requested_unit_count") ?? "")}
-              onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
-              disabled={!!generatedNoSurat && !(externalRevision && getRequestCategory() === "unit")}
-              className="h-12 bg-background/70 text-sm"
-              placeholder="Contoh: 10"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderRequestClassificationStep = () => {
-    const category = getRequestCategory();
-    return (
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4 md:p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Pilih Jenis Pengajuan</p>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Form PGD menyediakan empat jenis pengajuan. Pilih salah satu agar sistem menampilkan alur yang sesuai.
-            </p>
-          </div>
-          <span className="inline-flex w-fit items-center rounded-md border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
-            {getRequestCombinationLabel()}
-          </span>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { value: "asset", label: "Pengajuan Aset", description: "Barang atau kebutuhan yang dicatat sebagai aset" },
-            { value: "unit", label: "Pengajuan SPK", description: "SPK pembangunan atau pengadaan unit" },
-            { value: "non_asset", label: "Pengajuan Dana", description: "Kebutuhan dana operasional atau non-aset" },
-            { value: "non_unit", label: "Pengajuan Non Unit", description: "Pekerjaan proyek tanpa alokasi unit" },
-          ].map((option) => (
-            (() => {
-              const unitDisabled = option.value === "unit" && !canRequesterChooseUnit;
-              return (
-            <button
-              key={option.value}
-              type="button"
-              disabled={!!generatedNoSurat || unitDisabled}
-              onClick={() => setRequestCategory(option.value as RequestCategory)}
-              className={cn(
-                "rounded-md border px-4 py-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-70",
-                category === option.value
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border bg-background/70 text-foreground hover:bg-muted"
-              )}
-            >
-              <span className="block text-sm font-semibold">{option.label}</span>
-              <span className={cn(
-                "mt-1 block text-[10px] font-semibold",
-                category === option.value ? "text-primary-foreground/80" : "text-muted-foreground"
-              )}>
-                {option.description}
-              </span>
-              {unitDisabled && (
-                <span className="mt-2 block text-[9px] font-bold text-amber-600">
-                  Tidak tersedia untuk departemen akun Anda
-                </span>
-              )}
-            </button>
-              );
-            })()
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderFundTypeStep = () => {
-    if (!isFundMode) return null;
-    return (
-      <div className="space-y-2 rounded-lg border border-border bg-card p-4 md:p-5">
-        <Label className="text-sm font-semibold text-foreground">Jenis Pengajuan Dana</Label>
-        <p className="text-xs text-muted-foreground">
-          Pilihan ini dikirim sebagai tipe Fund Submission ke Marison.
-        </p>
-        <Select
-          disabled={!!generatedNoSurat}
-          value={String(getFormFieldValue("fund_type") || "")}
-          onValueChange={(value) => setInputValue("fund_type", value)}
-        >
-          <SelectTrigger className="h-11">
-            <SelectValue placeholder="Pilih jenis pengajuan dana..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="operational">Biaya Operasional</SelectItem>
-            <SelectItem value="production_cost">Biaya Produksi</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    );
-  };
-
-  const renderRecommendationOptionStep = () => {
-    if (getRequestCategory() !== "asset") return null;
-    if (!canRequesterUseRecommendation) return null;
-    const required = formData.form_input_data.requires_recommendation === true;
-    const options = [
-      {
-        value: true,
-        label: "Butuh rekomendasi",
-        description: "Pengajuan aset ini membutuhkan lampiran rekomendasi. Template rekomendasi sudah tersedia di sistem.",
-      },
-      {
-        value: false,
-        label: "Tidak perlu rekomendasi",
-        description: "Pengajuan aset dapat berjalan tanpa lampiran rekomendasi tambahan.",
-      },
-    ];
-
-    return (
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4 md:p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Rekomendasi Aset</p>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Tentukan apakah permohonan aset ini membutuhkan lampiran rekomendasi.
-            </p>
-          </div>
-          <span className={cn(
-            "inline-flex w-fit rounded-md border px-3 py-1 text-[11px] font-semibold",
-            required
-              ? "border-primary/20 bg-primary/10 text-primary"
-              : "border-border bg-muted/40 text-muted-foreground"
-          )}>
-            {required ? "Rekomendasi diperlukan" : "Tanpa rekomendasi"}
-          </span>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2">
-          {options.map((option) => {
-            const selected = required === option.value;
-            return (
-              <button
-                key={String(option.value)}
-                type="button"
-                onClick={() => applyRecommendationChoice(option.value)}
-                className={cn(
-                  "min-h-24 rounded-md border px-4 py-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  selected
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                    : "border-border bg-background/70 text-foreground hover:bg-muted"
-                )}
-                aria-pressed={selected}
-              >
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  <span className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-full border",
-                    selected ? "border-primary-foreground bg-primary-foreground text-primary" : "border-muted-foreground/40"
-                  )}>
-                    {selected && <Check className="h-3.5 w-3.5" />}
-                  </span>
-                  {option.label}
-                </span>
-                <span className={cn(
-                  "mt-2 block text-xs leading-5",
-                  selected ? "text-primary-foreground/85" : "text-muted-foreground"
-                )}>
-                  {option.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const renderRequestWorkflowStep = () => {
-    return null;
   };
 
   const handleAttachmentSelection = async (rule: AttachmentRequirement, selectedFiles: File[]) => {
@@ -3752,258 +3421,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           </div>
         )}
 
-        {/* ══ SECTION 1: LOKASI & KLASIFIKASI ══════════════════════════════ */}
+        {/* ══ SECTION 1: FORM & LOKASI ══════════════════════════════ */}
         {!isRecommendationFlow && isIdentityActive && (
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
-            <h3 className="text-sm font-semibold text-foreground">Lokasi dan Klasifikasi</h3>
+            <h3 className="text-sm font-semibold text-foreground">Form & Lokasi</h3>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5">
-            {/* Kantor */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Kantor Penerbit</Label>
-              <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
-                onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih Kantor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {master.offices?.map((o: MasterRecord) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.kedudukan === "Pusat" ? "🏢 Kantor Pusat" : `🏗️ ${o.kedudukan}. ${o.name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Proyek cabang, serta proyek external wajib untuk Non Unit dan Non Aset. */}
-            {shouldShowProjectSelector && (
-              <div className="space-y-2 animate-in slide-in-from-top-2">
-                <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
-                  <Briefcase className="w-3 h-3" />
-                  {requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
-                </Label>
-                {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
-                  <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
-                    <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
-                      <SelectValue placeholder="Pilih Proyek..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projectSelectionOptions.map((p: MasterRecord) => {
-                        const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
-                        const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
-                        return (
-                          <SelectItem key={p.id} value={p.id}>
-                            {requiresMarisonProject && isPusatSelected && projectOffice?.name
-                              ? `${projectLabel} · ${projectOffice.name}`
-                              : projectLabel}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : requiresMarisonProject && !shouldUseDefaultBranchProject ? (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-                    <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
-                    <div className="mt-1 text-xs">
-                      {hasRegisteredProjectCandidates
-                        ? "Mapping proyek/kantor Marison (termasuk mapping staging trial) perlu dilengkapi admin di Master Proyek."
-                        : "Belum ada proyek external yang tersedia untuk kantor ini."}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5">
-                    <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
-                  </div>
-                )}
-                {isFundMode && (
-                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-muted bg-muted/40 px-3 py-2.5">
-                    <Checkbox
-                      className="mt-0.5"
-                      checked={fundWithoutProject}
-                      disabled={!!generatedNoSurat}
-                      onCheckedChange={(checked) => {
-                        if (checked === true) {
-                          setFundWithoutProject(true);
-                          setFormData((prev) => ({
-                            ...prev,
-                            project_id: "",
-                            form_input_data: {
-                              ...prev.form_input_data,
-                              fund_without_project: true,
-                            },
-                          }));
-                        } else {
-                          setFundWithoutProject(false);
-                          setFormData((prev) => ({
-                            ...prev,
-                            form_input_data: {
-                              ...prev.form_input_data,
-                              fund_without_project: false,
-                            },
-                          }));
-                        }
-                      }}
-                    />
-                    <span className="text-sm">
-                      <span className="font-medium text-foreground">Tanpa Proyek (Dana Umum)</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Pengajuan dana tidak terikat proyek; dikirim ke Marison tanpa <code>project_id</code>.
-                      </span>
-                    </span>
-                  </label>
-                )}
-                {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
-                  <p className="px-1 text-xs text-muted-foreground">
-                    {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Entitas */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>
-              <Select disabled={!!generatedNoSurat} value={formData.entity_id}
-                onValueChange={v => setFormData({ ...formData, entity_id: v })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih PT..." />
-                </SelectTrigger>
-                <SelectContent
-                  align="start"
-                  collisionPadding={16}
-                  className="max-w-[calc(100vw-2rem)]"
-                >
-                  {master.entities?.map((e: MasterRecord) => (
-                    <SelectItem
-                      key={e.id}
-                      value={e.id}
-                      className="[&>span:last-child]:whitespace-normal [&>span:last-child]:break-words"
-                    >
-                      {e.code} - {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Departemen */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Departemen</Label>
-              <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.dept_id}
-                onValueChange={v => setFormData({ ...formData, dept_id: v, letter_type_id: "" })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih Dept..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {departmentSelectOptions.map((d: MasterRecord) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Jenis Dokumen */}
-            <div className="space-y-2">
-              <Label className="ml-1 text-xs font-semibold text-muted-foreground">Jenis Dokumen</Label>
-              <Select disabled={!!generatedNoSurat} value={formData.letter_type_id}
-                onValueChange={handleLetterTypeChange}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Pilih Jenis..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {departmentLetterTypes.map((t: MasterRecord) => (
-                    <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>
-                  ))}
-                  {formData.dept_id && departmentLetterTypes.length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">
-                      Belum ada jenis dokumen untuk departemen ini.
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {!isRecommendationFlow && !generatedNoSurat && !!formData.letter_type_id && (
-            <>
-              {renderRequestClassificationStep()}
-              {renderFundTypeStep()}
-              {renderRecommendationOptionStep()}
-              {isUnitMode && renderUnitRequestPanel()}
-            </>
-          )}
-
-          {/* ══ TOGGLE ASET — posisi baru, MENCOLOK, tepat sebelum tombol nomor ══ */}
-          {Boolean(import.meta.env.VITE_SHOW_LEGACY_ASSET_TOGGLE) && !isRecommendationFlow && !generatedNoSurat && (
-            <div
-              role="button"
-              onClick={() => setFormData(f => ({ ...f, is_aset: !f.is_aset }))}
-              className={cn(
-                "relative overflow-hidden rounded-2xl border-2 p-5 transition-all duration-300 cursor-pointer select-none group",
-                formData.is_aset
-                  ? "bg-amber-500/10 border-amber-500 shadow-lg shadow-amber-500/15"
-                  : "bg-muted/20 border-dashed border-muted-foreground/30 hover:border-amber-500/50 hover:bg-amber-500/5"
-              )}
-            >
-              {/* Animated glow saat aktif */}
-              {formData.is_aset && (
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/8 via-transparent to-amber-400/5 pointer-events-none" />
-              )}
-
-              <div className="relative flex items-center justify-between gap-4">
-                {/* Ikon + teks */}
-                <div className="flex items-center gap-4">
-                  <div className={cn(
-                    "p-3 rounded-xl transition-all duration-200 shadow-sm",
-                    formData.is_aset
-                      ? "bg-amber-500 text-white shadow-amber-500/30"
-                      : "bg-background text-muted-foreground group-hover:bg-amber-500/10 group-hover:text-amber-500"
-                  )}>
-                    {formData.is_aset ? <Archive className="w-5 h-5" /> : <Home className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <p className={cn(
-                      "font-black uppercase tracking-tight text-sm transition-colors",
-                      formData.is_aset ? "text-amber-600 dark:text-amber-400" : "text-foreground group-hover:text-amber-600"
-                    )}>
-                      {formData.is_aset ? "✦ Dokumen Aset — Aktif" : "Tandai sebagai Dokumen Aset"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                      {formData.is_aset
-                        ? "Kolom B4 pada template akan dicentang otomatis sebagai penanda aset"
-                        : "Properti · Kendaraan · Inventaris Legal — klik untuk mengaktifkan"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Switch */}
-                <Switch
-                  checked={formData.is_aset}
-                  onCheckedChange={val => setFormData(f => ({ ...f, is_aset: val }))}
-                  onClick={e => e.stopPropagation()}
-                  className="data-[state=checked]:bg-amber-500 shrink-0 scale-110"
-                />
-              </div>
-
-              {/* Badge konfirmasi saat aktif */}
-              {formData.is_aset && (
-                <div className="relative mt-3 pt-3 border-t border-amber-500/20 flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
-                    Surat ini ditandai sebagai dokumen aset &amp; akan diproses sesuai alur properti
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Tombol dapatkan nomor / tampilan nomor ────────────────────── */}
-          {!isRecommendationFlow && !generatedNoSurat && !draftLoading && getRequestCategory() && (
+          {/* Form & Kegunaan */}
+          {!generatedNoSurat && !draftLoading && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
@@ -4013,7 +3440,24 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     setSelectedFormId(value);
                     setSelectedUsage(null);
                     setSigners([]);
-                    setFormData(previous => ({ ...previous, form_usage_id: "", penggunaan_id: "" }));
+                    setFormData(previous => {
+                      const usageData = selectUsage(selectedUsage);
+                      const nextInput = { ...previous.form_input_data };
+                      if (usageData) {
+                        const cleanup = usageData.module.cleanup(buildModuleTransitionCtx(
+                          selectedUsage!,
+                          usageData.key,
+                          usageData.category,
+                          previous,
+                          nextInput,
+                        ), "form_change");
+                        cleanup.inputKeysToDelete.forEach(k => delete nextInput[k]);
+                      }
+                      nextInput.request_category = null;
+                      nextInput.request_mode = null;
+                      // Ganti Form: proyek dan konteks modul lama tidak lagi sah.
+                      return { ...previous, project_id: "", form_usage_id: "", penggunaan_id: "", form_input_data: nextInput, is_aset: false };
+                    });
                   }}
                 >
                   <SelectTrigger className="h-12 bg-background">
@@ -4026,15 +3470,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </SelectContent>
                 </Select>
               </div>
+              {/* Kegunaan: hanya tampil setelah Form dipilih (progressive disclosure,
+                  tanpa kontrol ghost/disabled untuk tahap yang belum tersedia). */}
+              {selectedFormId ? (
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Kegunaan</Label>
                 <Select
-                  disabled={!selectedFormId}
                   value={selectedUsage?.id || ""}
                   onValueChange={handleUsageChange}
                 >
                   <SelectTrigger className="h-12 bg-background">
-                    <SelectValue placeholder={selectedFormId ? "Pilih kegunaan dan alur approval" : "Pilih form terlebih dahulu"} />
+                    <SelectValue placeholder="Pilih kegunaan dan alur approval" />
                   </SelectTrigger>
                   <SelectContent>
                     {usagesForSelectedForm.map(usage => (
@@ -4045,15 +3491,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </SelectContent>
                 </Select>
               </div>
-              {availableForms.length === 0 && (
+              ) : (
+              <div className="flex items-center rounded-lg border border-dashed border-border bg-background/50 px-4 py-3 text-xs font-medium text-muted-foreground">
+                Pilih Form terlebih dahulu untuk melihat daftar kegunaan.
+              </div>
+              )}
+              {selectedFormId && usagesForSelectedForm.length === 0 && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs font-semibold text-amber-700 md:col-span-2 dark:text-amber-300">
-                  Belum ada kegunaan aktif untuk kategori, departemen, dan kantor yang dipilih.
+                  Belum ada kegunaan aktif untuk departemen dan kantor yang dipilih.
                 </div>
               )}
             </div>
           )}
 
-          {generatedNoSurat && selectedUsage && !isRecommendationFlow && (
+          {generatedNoSurat && selectedUsage && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
@@ -4070,11 +3521,142 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           )}
 
+          {/* Module specific context panels & Location */}
+          {selectedUsage && (
+            <>
+              {activeUsageData && moduleCtx ? activeUsageData.module.renderContextPanel(moduleCtx) : null}
+
+              <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5 mt-4">
+                {/* Kantor */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Kantor Penerbit</Label>
+                  <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
+                    onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih Kantor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {master.offices?.map((o: MasterRecord) => (
+                        <SelectItem key={o.id} value={o.id}>
+                          {o.kedudukan === "Pusat" ? "🏢 Kantor Pusat" : `🏗️ ${o.kedudukan}. ${o.name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Entitas */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>
+                  <Select disabled={!!generatedNoSurat} value={formData.entity_id}
+                    onValueChange={v => setFormData({ ...formData, entity_id: v })}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih PT..." />
+                    </SelectTrigger>
+                    <SelectContent align="start" collisionPadding={16} className="max-w-[calc(100vw-2rem)]">
+                      {master.entities?.map((e: MasterRecord) => (
+                        <SelectItem key={e.id} value={e.id} className="[&>span:last-child]:whitespace-normal [&>span:last-child]:break-words">
+                          {e.code} - {e.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Proyek cabang, serta proyek external wajib untuk Non Unit dan Non Aset. */}
+                {shouldShowProjectSelector && (
+                  <div className="space-y-2 animate-in slide-in-from-top-2">
+                    <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
+                      <Briefcase className="w-3 h-3" />
+                      {requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
+                    </Label>
+                    {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
+                      <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
+                        <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
+                          <SelectValue placeholder="Pilih Proyek..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {projectSelectionOptions.map((p: MasterRecord) => {
+                            const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
+                            const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
+                            return (
+                              <SelectItem key={p.id} value={p.id}>
+                                {requiresMarisonProject && isPusatSelected && projectOffice?.name
+                                  ? `${projectLabel} — ${projectOffice.name}`
+                                  : projectLabel}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    ) : requiresMarisonProject && !shouldUseDefaultBranchProject ? (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                        <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
+                        <div className="mt-1 text-xs">
+                          {hasRegisteredProjectCandidates
+                            ? "Mapping proyek/kantor Marison (termasuk mapping staging trial) perlu dilengkapi admin di Master Proyek."
+                            : "Belum ada proyek external yang tersedia untuk kantor ini."}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5">
+                        <div className="text-sm font-medium text-foreground">Tidak ada proyek terdaftar</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Kode proyek pada nomor surat akan memakai 000.</div>
+                      </div>
+                    )}
+                    {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
+                      <p className="px-1 text-xs text-muted-foreground">
+                        {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Departemen */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Departemen</Label>
+                  <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.dept_id}
+                    onValueChange={v => setFormData({ ...formData, dept_id: v, letter_type_id: "" })}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih Dept..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentSelectOptions.map((d: MasterRecord) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Jenis Dokumen */}
+                <div className="space-y-2">
+                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Jenis Dokumen</Label>
+                  <Select disabled={!!generatedNoSurat} value={formData.letter_type_id}
+                    onValueChange={handleLetterTypeChange}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Pilih Jenis..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentLetterTypes.map((t: MasterRecord) => (
+                        <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>
+                      ))}
+                      {formData.dept_id && departmentLetterTypes.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          Belum ada jenis dokumen untuk departemen ini.
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </>
+          )}
+
           {!generatedNoSurat ? (
             <Button
               onClick={handleGetNumber}
-              disabled={isProcessingNumber || !profileLocationReady || !formData.entity_id || !formData.dept_id || !formData.letter_type_id}
-              className="h-12 w-full font-semibold"
+              disabled={isProcessingNumber || !profileLocationReady || !formData.entity_id || !formData.dept_id || !formData.letter_type_id || !selectedUsage}
+              className="h-12 w-full font-semibold mt-4"
             >
               {isProcessingNumber
                 ? <Loader2 className="animate-spin mr-2 w-5 h-5" />
@@ -4082,13 +3664,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               }
             </Button>
           ) : (
-            <div className="flex flex-col items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/10 p-5 md:flex-row">
+            <div className="flex flex-col items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/10 p-5 md:flex-row mt-4">
               <div className="flex gap-4 items-center">
                 <div className="p-3 bg-primary rounded-2xl text-primary-foreground shadow-lg"><Hash className="w-6 h-6" /></div>
                 <div>
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-[10px] font-black text-primary uppercase">Nomor Terdaftar</p>
-                    {formData.is_aset && (
+                    {effectiveFormInputData.is_aset === true && (
                       <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-full">
                         <Archive className="w-3 h-3 text-amber-500" />
                         <span className="text-[9px] font-black text-amber-500 uppercase">Aset</span>
@@ -4104,7 +3686,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </div>
                 </div>
               </div>
-              {isRecommendationFlow ? (
+              {linkedDocumentContext?.type === "recommendation" ? (
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -4146,9 +3728,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           )}
         </section>
-        )}
-
-        {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
+        )}\n        {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
         {generatedNoSurat && (
           <div id="surat-registration-details" className="scroll-mt-24 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
             {showSectionBerkas && (
@@ -4156,7 +3736,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">2</span>
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold leading-tight text-foreground">Persetujuan dan Berkas</h3>
+                  <h3 className="text-base font-semibold leading-tight text-foreground">Persetujuan & Berkas</h3>
                   <p className="mt-1 text-xs text-muted-foreground">Lengkapi perihal, tempat, tanggal, lampiran, dan penandatangan sebelum pengajuan didaftarkan.</p>
                 </div>
               </div>
@@ -4217,16 +3797,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
               </div>
 
-              {isFundMode && (
-                <FundSubmissionEditor
-                  value={getFormFieldValue("items")}
-                  onChange={(items) => setInputValue("items", items)}
-                />
-              )}
+              {activeUsageData && moduleCtx
+                ? activeUsageData.module.renderDetailsPanel?.(moduleCtx)
+                : null}
 
               {selectedUsage && (getVisibleManualFields().length > 0 || hasUnitRequestFields(selectedUsage)) && (
                 <div className="space-y-5">
-                  {renderRequestWorkflowStep()}
                   {getVisibleManualFields().length > 0 && (
                     <div className="space-y-4">
                       {getVisibleManualFields().map((field: TemplateField, index: number) => renderManualField(field, index))}

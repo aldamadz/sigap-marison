@@ -149,12 +149,17 @@ export const normalizeFormInputData = (
   context?: { requesterDepartmentCode?: string | null; requesterDepartmentName?: string | null },
 ) => {
   const normalized = { ...(inputData ?? {}) };
+  // Fail closed: kategori kosong/ambigu TIDAK boleh ditebak diam-diam.
+  // Kategori wajib diturunkan eksplisit dari resolver Kegunaan
+  // (applySelectedUsage). Di sini hanya pulihkan dua sinyal eksplisit:
+  // request_mode "unit" → "unit", dan flag legacy is_aset → "asset".
+  // Selain itu kategori dibiarkan kosong agar validasi menolak nomor.
   if (!normalized.request_category) {
-    normalized.request_category = normalized.request_mode === "unit"
-      ? "unit"
-      : normalized.is_aset === true
-        ? "asset"
-        : "non_unit";
+    if (normalized.request_mode === "unit") {
+      normalized.request_category = "unit";
+    } else if (normalized.is_aset === true) {
+      normalized.request_category = "asset";
+    }
   }
   if (normalized.request_category === "unit") {
     normalized.request_mode = "unit";
