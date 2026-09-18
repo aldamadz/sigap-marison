@@ -3,8 +3,9 @@
 > Jangan apply migration sebelum Tech Lead review. Jangan promosikan ke production.
 > PR: #309. Issue: #308. Migration fixture: `20260919000000`.
 > Tester: `system.tuyemaris@gmail.com` (boolean login verified, no secrets here).
+> Dilarang membuat tabel backup di `public` atau schema lain.
 
-## 1. Pre-apply snapshot (staging, read-only)
+## 1. Pre-apply snapshot (staging, read-only, tanpa secrets)
 
 ```sql
 -- Canonical inventory (expect 8 + 1 template).
@@ -15,23 +16,50 @@ select u.name, count(s.id) as steps
 from public.form_usages u left join public.form_usage_steps s on s.usage_id=u.id
 where u.status='active' group by u.name order by u.name;
 
+-- Count/fingerprint sebelum apply (catat angkanya, bukan datanya).
+select count(*) as usages_active from public.form_usages where status='active';
+select count(*) as steps_total from public.form_usage_steps;
+select count(*) as step_users from public.form_usage_step_users;
+select count(*) as step_verifiers from public.form_usage_step_verifiers;
+select count(*) as dept_links from public.form_usage_departments;
+select count(*) as attachments from public.form_usage_attachment_requirements;
+select md5(string_agg(name, '|' order by name)) as usage_fingerprint
+from public.form_usages where status='active';
+
 -- Tester readiness (booleans only).
 select public.marison_payload_profile_source_valid('<tester-uuid>');
 select public.marison_payload_office_source_valid('<tester-office-uuid>');
 ```
 
-Backup config tables (staging backup tool, contoh):
+## 2. Backup custom-format sebelum apply (host staging, luar repository)
 
-```sql
-create table public._backup_form_usages_20260919 as table public.form_usages;
-create table public._backup_form_usage_steps_20260919 as table public.form_usage_steps;
-create table public._backup_form_usage_step_users_20260919 as table public.form_usage_step_users;
-create table public._backup_form_usage_step_verifiers_20260919 as table public.form_usage_step_verifiers;
-create table public._backup_form_usage_departments_20260919 as table public.form_usage_departments;
-create table public._backup_form_usage_attachments_20260919 as table public.form_usage_attachment_requirements;
+Gunakan PostgreSQL 17 yang kompatibel. Backup hanya tabel konfigurasi terkait
+(atau seluruh staging DB bila kebijakan meminta). Simpan di host staging di luar
+repository. Jangan menampilkan connection string/password di log.
+
+```powershell
+$stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$dump = "/root/staging_single_account_fixtures_preapply_${stamp}.dump"
+# $env:STAGING_DB_URL sudah terisi dari secret staging (jangan di-echo).
+pg_dump -Fc `
+  -t public.form_usages `
+  -t public.form_usage_steps `
+  -t public.form_usage_step_users `
+  -t public.form_usage_step_verifiers `
+  -t public.form_usage_departments `
+  -t public.form_usage_attachment_requirements `
+  -f $dump `
+  $env:STAGING_DB_URL
+Get-Item $dump | Select-Object FullName, Length
+Get-FileHash $dump -Algorithm SHA256
+pg_restore --list $dump | Measure-Object -Line
+pg_restore --list $dump
 ```
 
-## 2. Migration inventory / dry-run (before apply)
+Catat: ukuran file, SHA-256, jumlah object dari `pg_restore --list`.
+Tidak ada tabel backup yang dibuat di database.
+
+## 3. Migration inventory / dry-run (before apply)
 
 ```powershell
 git fetch origin --prune
@@ -46,12 +74,9 @@ npx supabase db push --db-url $env:STAGING_DB_URL --dry-run
 Timestamp `20260919000000` unik setelah `20260918130000`; verifikasi tidak ada
 migration `20260919*` lain dari `origin/staging` sebelum apply.
 
-## 3. Apply (hanya setelah approval eksplisit)
-
-Apply via pipeline/migration staging yang disetujui, bukan via file test ad hoc.
-Jangan deploy app, jangan restart worker, jangan vendor POST, jangan buat surat nyata.
-
 ## 4. Post-apply verify (staging)
+
+Ulangi snapshot count/fingerprint section 1 dan bandingkan sebelum vs sesudah:
 
 ```sql
 -- 9 canonical tidak berubah (8 + 1 template, tanpa prefix).
