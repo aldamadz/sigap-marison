@@ -81,8 +81,9 @@ describe("Marison outbound submission dispatch", () => {
     const server = read("backend/src/domain-runtime.ts");
     const worker = read("server/marison-outbound-worker.mjs");
     const form = read("src/components/surat/SuratForm.tsx");
-    // Fund-type UI lives in the fund usage module (orchestrator only renders it).
+    // Fund UI lives in the fund usage module; orchestrator only delegates slots.
     const fundModule = read("src/features/surat/registration/usages/fund/FundContextPanel.tsx");
+    const fundModuleDef = read("src/features/surat/registration/usages/fund/fund-module.tsx");
     const migration = read("supabase/migrations/20260811153000_fund_submission_outbound.sql");
 
     expect(server).toContain("buildMarisonFundPayload");
@@ -97,7 +98,9 @@ describe("Marison outbound submission dispatch", () => {
     expect(fundModule).toContain('setInputValue("fund_type", value)');
     expect(fundModule).toContain('<SelectItem value="operational">Biaya Operasional</SelectItem>');
     expect(fundModule).toContain('<SelectItem value="production_cost">Biaya Produksi</SelectItem>');
-    expect(form).toContain("<FundSubmissionEditor");
+    expect(fundModuleDef).toContain("<FundSubmissionEditor");
+    expect(form).not.toContain("<FundSubmissionEditor");
+    expect(form).toContain("renderDetailsPanel");
     expect(migration).toContain("v_kind := 'fund'; v_endpoint := '/fund-submissions';");
     expect(migration).not.toContain("update public.surat_registrasi");
   });
