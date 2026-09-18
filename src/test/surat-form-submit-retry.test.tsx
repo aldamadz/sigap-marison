@@ -17,6 +17,13 @@ import {
   clickConfirmRegistration,
   submitFromDialog,
   closeDialog,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {

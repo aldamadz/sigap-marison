@@ -21,6 +21,12 @@ import {
   selectAllSigners,
   goToWizardStep,
   clickConfirmRegistration,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -49,9 +55,10 @@ afterEach(() => teardownTestHarness());
 
 async function reachReadyAttachmentForm() {
   await mountFormWithUsage(ATTACHMENT_FORM_USAGE_RAW);
-  await selectLetterType();
+  await selectFormAndUsage();
+    await selectLetterType();
   await selectEntity();
-  await selectCategoryAset();
+
   await clickGetNumber();
   await fillNamaBarang("Printer Epson");
   await waitFor(() => expect(screen.getByPlaceholderText(/Contoh.*Permohonan/i)).toHaveValue(
