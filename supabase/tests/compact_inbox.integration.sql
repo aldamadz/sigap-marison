@@ -238,7 +238,8 @@ BEGIN
     true, 'pending', jsonb_build_array(jsonb_build_object('user_id', '22222222-2222-2222-2222-222222222222')));
 END $$;
 
--- Fixture 15: Dual role — signer AND verifier on same signature (should NOT duplicate)
+-- Fixture 15: Dual role — signer AND verifier on the same signature.
+-- Each responsibility must produce its own inbox task.
 DO $$
 DECLARE
   sr_id uuid;
@@ -343,8 +344,7 @@ BEGIN
       )
   ) q;
 
-  -- Should be: 5 (active) + 3 (perbaikan) + 1 (dual as signer) + 10 (bulk) + 1 (revision) = 20
-  -- But dual role only counts as signer here (user_id matches)
+  -- This signer-only assertion counts the approval side of the dual-role task.
   -- And revision task: surat is MENUNGGU_PERBAIKAN and has matching revision event
   RAISE NOTICE 'Test 1 PASS: signer active count = %', list_count;
   ASSERT list_count >= 15, 'Expected at least 15 active signer tasks';
@@ -435,7 +435,7 @@ BEGIN
 END $$;
 
 -- ============================================================
--- Test 6: Dual role does NOT duplicate
+-- Test 6: Dual role produces independent approval and verification tasks
 -- ============================================================
 DO $$
 DECLARE
@@ -443,19 +443,18 @@ DECLARE
 BEGIN
   SELECT COUNT(*) INTO cnt
   FROM (
-    SELECT ss.id FROM test_inbox.surat_signatures ss
+    SELECT ss.id, 'approval'::text AS task_type FROM test_inbox.surat_signatures ss
     WHERE ss.user_id = '33333333-3333-3333-3333-333333333333'
       AND NOT COALESCE(ss.is_signed, false)
-    UNION
-    SELECT ss.id FROM test_inbox.surat_signatures ss
+    UNION ALL
+    SELECT ss.id, 'verification'::text AS task_type FROM test_inbox.surat_signatures ss
     WHERE ss.verification_required = true
       AND ss.verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', '33333333-3333-3333-3333-333333333333'))
       AND NOT COALESCE(ss.is_signed, false)
   ) q;
 
-  -- UNION (not UNION ALL) deduplicates by id
-  ASSERT cnt = 1, 'Dual role should produce exactly 1 task (not 2)';
-  RAISE NOTICE 'Test 6 PASS: dual role no duplicate, count = %', cnt;
+  ASSERT cnt = 2, 'Dual role should produce approval and verification tasks';
+  RAISE NOTICE 'Test 6 PASS: dual role tasks are separate, count = %', cnt;
 END $$;
 
 -- ============================================================

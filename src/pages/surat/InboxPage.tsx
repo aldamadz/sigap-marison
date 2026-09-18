@@ -41,6 +41,7 @@ import { suratApprovalApi } from "@/features/surat/inbox/services/surat-approval
 import {
   getTaskAction,
   getVerifierDisplayName,
+  getInboxTaskKey,
   hasVerifierTargets,
   isPreparedByVerifier,
   isVerificationTask,
@@ -233,8 +234,9 @@ export default function InboxPage() {
     });
   }, [inbox, kpiFilter, kpiBySignature]);
 
-  const requestedTaskId = searchParams.get("task");
-  const selectedCompactItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;
+  const requestedTaskKey = searchParams.get("task");
+  const selectedCompactItem = filteredInbox.find((item: any) => getInboxTaskKey(item) === requestedTaskKey) || filteredInbox[0] || null;
+  const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const selectedSignatureId = selectedCompactItem?.id || null;
 
   const { data: selectedDetail, isFetching: detailFetching } = useQuery({
@@ -262,7 +264,7 @@ export default function InboxPage() {
     ? {
         ...selectedCompactItem,
         ...(selectedDetailItem || {}),
-        task_type: selectedDetailItem?.task_type ?? selectedCompactItem.task_type,
+        task_type: selectedCompactItem.task_type ?? selectedDetailItem?.task_type,
       }
     : selectedDetailItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
@@ -328,13 +330,13 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (!selectedItem) {
-      if (requestedTaskId) setSearchParams({}, { replace: true });
+      if (requestedTaskKey) setSearchParams({}, { replace: true });
       return;
     }
-    if (requestedTaskId !== selectedItem.id) {
-      setSearchParams({ task: selectedItem.id }, { replace: true });
+    if (selectedTaskKey && requestedTaskKey !== selectedTaskKey) {
+      setSearchParams({ task: selectedTaskKey }, { replace: true });
     }
-  }, [selectedItem?.id, requestedTaskId, setSearchParams]);
+  }, [requestedTaskKey, selectedItem, selectedTaskKey, setSearchParams]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -740,7 +742,8 @@ const handleApprove = async (item: any) => {
       });
       return next;
     });
-    finishInboxTaskLocally(item.id);
+    const taskKey = getInboxTaskKey(item);
+    if (taskKey) finishInboxTaskLocally(taskKey);
     refreshInboxAfterAction();
   } catch (error: any) {
     console.error("Approve Error:", error);
@@ -778,7 +781,8 @@ const handleApprove = async (item: any) => {
       toast.error("Dokumen Ditolak", {
         description: "Alur dokumen telah dihentikan secara permanen.",
       });
-      finishInboxTaskLocally(item.id);
+      const taskKey = getInboxTaskKey(item);
+      if (taskKey) finishInboxTaskLocally(taskKey);
       refreshInboxAfterAction();
     } catch (error: any) {
       console.error("Reject Error:", error);
@@ -891,7 +895,8 @@ const handleApprove = async (item: any) => {
         delete next[item.id];
         return next;
       });
-      finishInboxTaskLocally(item.id);
+      const taskKey = getInboxTaskKey(item);
+      if (taskKey) finishInboxTaskLocally(taskKey);
       refreshInboxAfterAction();
     } catch (error: any) {
       toast.error(error.message || "Gagal menyimpan pemeriksaan data.");
@@ -2476,8 +2481,8 @@ const handleApprove = async (item: any) => {
     );
   };
 
-  const selectTask = (id: string) => {
-    setSearchParams({ task: id });
+  const selectTask = (taskKey: string) => {
+    setSearchParams({ task: taskKey });
     setTaskSwitcherOpen(false);
   };
 
@@ -2487,11 +2492,12 @@ const handleApprove = async (item: any) => {
     const department = surat.location_snapshot?.department?.name || surat.data_snapshot?.location?.department?.name || "Departemen tidak tersedia";
     const category = formatRequestCategory(surat.form_input_data?.request_category || surat.data_snapshot?.request_category);
     const kpi = getKpiPresentation(item);
-    const active = selectedItem?.id === item.id;
+    const taskKey = getInboxTaskKey(item);
+    const active = selectedTaskKey === taskKey;
     const requirementCount = getApprovalAttachmentRequirements(item).length;
     const verificationTask = isVerificationTask(item);
     return (
-      <button type="button" key={item.id} onClick={() => selectTask(item.id)} className={cn("w-full rounded-md border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + item.id}>
+      <button type="button" key={taskKey || item.id} onClick={() => taskKey && selectTask(taskKey)} className={cn("w-full rounded-md border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + (taskKey || item.id)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-mono text-[11px] font-semibold text-primary">{surat.no_surat || "Nomor diproses"}</p>
