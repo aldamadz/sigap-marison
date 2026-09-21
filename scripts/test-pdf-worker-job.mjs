@@ -285,3 +285,30 @@ test("pdf-worker.mjs imports createPgdJobHandler from server/pdf-worker-job.mjs"
     "pdf-worker.mjs must import createRecommendationJobHandler",
   );
 });
+
+// ─── regression: form_usages -> master_forms embed must be unhinted ─────────
+// The FK-constraint hint "master_forms!fk_master_forms(...)" does not resolve
+// on the staging schema (no such constraint name), so the lookup failed at
+// runtime. The unhinted "master_forms(...)" embed is required.
+test("resolvePgdMasterForm embeds master_forms without the broken FK hint", () => {
+  const src = readFileSync(new URL("../pgd-pdf-renderer.mjs", import.meta.url), "utf8");
+  assert.ok(
+    !src.includes("master_forms!fk_master_forms"),
+    "the fk_master_forms hint broke the lookup on staging and must not return",
+  );
+  assert.ok(
+    src.includes('.select("id, form_id, master_forms(id, nama_form, nomor_form)")'),
+    "the form_usages query must embed master_forms without a constraint hint",
+  );
+});
+
+// ─── regression: dockerfile must package the job factory ────────────────────
+// pdf-worker.mjs imports ./server/pdf-worker-job.mjs; without the COPY the
+// worker crashes at startup inside the image.
+test("dockerfile packages server/pdf-worker-job.mjs into the image", () => {
+  const src = readFileSync(new URL("../dockerfile", import.meta.url), "utf8");
+  assert.ok(
+    src.includes("COPY server/pdf-worker-job.mjs ./server/pdf-worker-job.mjs"),
+    "dockerfile must COPY server/pdf-worker-job.mjs so pdf-worker.mjs can import it",
+  );
+});
