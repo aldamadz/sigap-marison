@@ -141,7 +141,10 @@ export const resolvePgdMasterForm = async (client, formUsageId) => {
   if (!formUsageId) return null;
   const { data: usage, error: usageError } = await client
     .from("form_usages")
-    .select("id, form_id, master_forms!fk_master_forms(id, nama_form, nomor_form)")
+    // Unhinted embed: the FK-constraint hint failed on the staging schema
+    // (the constraint name is not fk_master_forms). The unhinted relation
+    // resolves via the form_usages.form_id -> master_forms(id) join.
+    .select("id, form_id, master_forms(id, nama_form, nomor_form)")
     .eq("id", formUsageId)
     .maybeSingle();
 
