@@ -311,7 +311,7 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
 
   it("menjaga target sentuh kontrol Work Calendar minimal 44px", () => {
     const iconControls: ReadonlyArray<readonly [string, string]> = [
-      ["components/WorkCalendarToolbar.tsx", 'className="w-11 shrink-0 rounded-sm"'],
+      ["components/WorkCalendarToolbar.tsx", 'className="h-11 w-11 shrink-0 rounded-sm"'],
       ["components/WorkEntryRow.tsx", 'className="w-11 shrink-0 rounded-sm"'],
       ["components/WorkEntryRow.tsx", '"h-11 min-w-touch gap-1.5 rounded-sm px-2 font-medium"'],
     ];

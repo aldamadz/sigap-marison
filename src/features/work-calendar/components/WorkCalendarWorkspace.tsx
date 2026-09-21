@@ -55,9 +55,15 @@ import {
 } from "../lib/work-progress";
 import { normalizeWorkEntryText, validateWorkEntryInput } from "../lib/work-entry-validation";
 import { getWorkCalendarAddAction } from "../lib/work-calendar-add-action";
+import {
+  DEFAULT_WORK_CALENDAR_STATUS_FILTER,
+  filterWorkEntriesByStatus,
+  type WorkCalendarStatusFilter,
+} from "../lib/work-calendar-status-filter";
 import { useWorkCalendarDerivedView, useWorkCalendarView } from "../hooks/use-work-calendar-view";
 import { WorkCalendarToolbar } from "./WorkCalendarToolbar";
 import { QuickWorkEntry } from "./QuickWorkEntry";
+import { DailyProgressSummary } from "./DailyProgressSummary";
 import { DailyWorkView } from "./DailyWorkView";
 import { WeeklyWorkView } from "./WeeklyWorkView";
 import { MonthlyWorkView } from "./MonthlyWorkView";
@@ -282,6 +288,13 @@ export function WorkCalendarWorkspace({  currentUser,
   const [expandedOwnerId, setExpandedOwnerId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   /**
+   * Filter status pribadi pada command surface (CAL-03 redesign tahap 1).
+   * Dideklarasikan di sini agar dapat dipakai memo panel bulan di bawah.
+   */
+  const [statusFilter, setStatusFilter] = useState<WorkCalendarStatusFilter>(
+    DEFAULT_WORK_CALENDAR_STATUS_FILTER,
+  );
+  /**
    * Quick Add kontekstual (CAL-03 F4B): tanggal target + area pemicu. `anchor`
    * adalah elemen tanggal yang diklik (dipakai popover desktop); `rect`
    * dipakai saat area pemicu tidak lagi tersedia. Tidak ada entry ganda: satu
@@ -489,6 +502,39 @@ export function WorkCalendarWorkspace({  currentUser,
         progress: computeWorkProgress([], calendar.today),
       },
     [derived.daySummaries, viewDate, calendar.today],
+  );
+
+  /**
+   * Filter status pribadi (CAL-03 redesign tahap 1). Filter hanya menyaring,
+   * tidak pernah mengurutkan ulang: urutan waktu kerja tetap dipegang
+   * `compareWorkEntries` di tingkat repository, sehingga pekerjaan berjam
+   * tetap bermakna setelah difilter. Filter bersifat pribadi — mode Tim
+   * (read-only) tidak pernah memakainya.
+   */
+  const filterEntries = useCallback(
+    (entries: readonly WorkEntry[]) =>
+      filterWorkEntriesByStatus(entries, statusFilter, calendar.today),
+    [statusFilter, calendar.today],
+  );
+
+  const filteredDaySummary = useMemo(
+    () => ({ ...daySummary, entries: filterEntries(daySummary.entries) }),
+    [daySummary, filterEntries],
+  );
+
+  const filteredWeekSummaries = useMemo(
+    () =>
+      derived.daySummaries.map((summary) => ({
+        ...summary,
+        entries: filterEntries(summary.entries),
+      })),
+    [derived.daySummaries, filterEntries],
+  );
+
+  const filteredMonthCells = useMemo(
+    () =>
+      derived.monthCells.map((cell) => ({ ...cell, entries: filterEntries(cell.entries) })),
+    [derived.monthCells, filterEntries],
   );
 
   // ==== Mutasi ====
@@ -987,13 +1033,6 @@ export function WorkCalendarWorkspace({  currentUser,
     },
   };
 
-  const toolbarHeading =
-    calendar.view === "week"
-      ? `Minggu ${derived.weekDates[0]}`
-      : calendar.view === "month"
-        ? `Bulan ${calendar.anchorDate.slice(0, 7)}`
-        : viewDate;
-
   const addAction = getWorkCalendarAddAction({
     view: calendar.view,
     anchorDate: calendar.anchorDate,
@@ -1006,31 +1045,37 @@ export function WorkCalendarWorkspace({  currentUser,
         view={calendar.view}
         anchorDate={calendar.anchorDate}
         today={calendar.today}
-        heading={toolbarHeading}
         isTeamViewAvailable={calendar.isTeamViewAvailable}
         ownerFilterId={calendar.ownerFilterId}
         teamMembers={teamMembers ?? []}
         showOwnerFilter={teamOverviewRepository === undefined}
         addLabel={addAction.label}
+        statusFilter={calendar.view === "team" ? undefined : statusFilter}
+        onSelectStatusFilter={setStatusFilter}
         onSelectView={handleSelectView}
         onPrevious={calendar.goToPreviousRange}
         onNext={calendar.goToNextRange}
         onToday={calendar.goToToday}
         onSelectOwner={(ownerId) => calendar.setOwnerFilterId(ownerId)}
         onAdd={handleAdd}
-      />
-
-      {calendar.view === "day" && (
-        <QuickWorkEntry
-          value={quickTitle}
-          isSaving={quickSaving}
-          error={quickError}
-          onChange={setQuickTitle}
-          onSubmit={handleQuickSubmit}
-          onDismissError={() => setQuickError(null)}
-          inputRef={quickEntryInputRef}
-        />
-      )}
+      >
+        {calendar.view === "day" ? (
+          <div className="space-y-2.5 border-t border-border pt-2.5">
+            <QuickWorkEntry
+              value={quickTitle}
+              isSaving={quickSaving}
+              error={quickError}
+              onChange={setQuickTitle}
+              onSubmit={handleQuickSubmit}
+              onDismissError={() => setQuickError(null)}
+              inputRef={quickEntryInputRef}
+            />
+            {!calendar.isLoading && !calendar.error ? (
+              <DailyProgressSummary counts={daySummary.progress} />
+            ) : null}
+          </div>
+        ) : null}
+      </WorkCalendarToolbar>
 
       {mutationError && (
         <div
@@ -1086,7 +1131,7 @@ export function WorkCalendarWorkspace({  currentUser,
 
       {!calendar.isLoading && !calendar.error && calendar.view === "day" && (
         <DailyWorkView
-          summary={daySummary}
+          summary={filteredDaySummary}
           heading={formatWorkDateFull(viewDate)}
           interactions={interactions}
           dayMeta={dayMeta.get(viewDate)}
@@ -1129,7 +1174,7 @@ export function WorkCalendarWorkspace({  currentUser,
 
       {!calendar.isLoading && !calendar.error && calendar.view === "week" && (
         <WeeklyWorkView
-          summaries={derived.daySummaries}
+          summaries={filteredWeekSummaries}
           interactions={interactions}
           dayMeta={dayMeta}
           onSelectDate={openDayFromWeek}
@@ -1140,7 +1185,7 @@ export function WorkCalendarWorkspace({  currentUser,
       {!calendar.isLoading && !calendar.error && calendar.view === "month" && (
         <>
           <MonthlyWorkView
-            cells={derived.monthCells}
+            cells={filteredMonthCells}
             today={calendar.today}
             dayMeta={dayMeta}
             onOpenDay={openMonthDay}
@@ -1193,7 +1238,7 @@ export function WorkCalendarWorkspace({  currentUser,
               </p>
 
               <WorkEntryList
-                entries={monthPanelEntries}
+                entries={filterEntries(monthPanelEntries)}
                 emptyLabel="Belum ada pekerjaan pada tanggal ini."
                 labelledBy="work-month-panel-title"
                 {...interactions}
