@@ -12,8 +12,8 @@
  *   tidak pernah menyentuh mode Tim (read-only terhadap entry bawahan).
  */
 
-import type { WorkDate, WorkEntry, WorkEntryStatus } from "../types/work-calendar";
-import { isWorkEntryOverdue, type WorkEntryDeadlineInput } from "./work-entry-status";
+import type { WorkDate, WorkEntry } from "../types/work-calendar";
+import { isWorkEntryOverdue } from "./work-entry-status";
 
 export type WorkCalendarStatusFilter =
   | "all"
@@ -63,9 +63,16 @@ export function matchesWorkCalendarStatusFilter(
 ): boolean {
   if (filter === "all") return true;
   if (filter === "attention") {
-    return entry.status === "blocked" || isWorkEntryOverdue(entry as WorkEntryDeadlineInput, today);
+    return entry.status === "blocked" || isWorkEntryOverdue(entry, today);
   }
-  return entry.status === (filter as WorkEntryStatus);
+  switch (filter) {
+    case "in_progress":
+      return entry.status === "in_progress";
+    case "blocked":
+      return entry.status === "blocked";
+    case "completed":
+      return entry.status === "completed";
+  }
 }
 
 /**

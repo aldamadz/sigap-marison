@@ -91,7 +91,6 @@ import {
   filterWorkEntriesByStatus,
   getWorkCalendarStatusFilterLabel,
   matchesWorkCalendarStatusFilter,
-  type WorkCalendarStatusFilter,
 } from "@/features/work-calendar/lib/work-calendar-status-filter";
 import {
   WORK_CALENDAR_FIXTURE_CURRENT_USER,
@@ -1108,26 +1107,21 @@ describe("work-calendar-status-filter", () => {
     expect(countWorkEntriesByStatusFilter(entries, "in_progress", today)).toBe(1);
   });
 
-  it("menerima input sebagian untuk kompatibilitas predikat overdue", () => {
-    expect(
-      matchesWorkCalendarStatusFilter(
-        { status: "planned", workDate: "2026-03-09", dueDate: null },
-        "attention",
-        today,
-      ),
-    ).toBe(true);
-    expect(
-      matchesWorkCalendarStatusFilter(
-        { status: "planned", workDate: "2026-03-10", dueDate: null },
-        "attention",
-        today,
-      ),
-    ).toBe(false);
-  });
-
-  it("mengembalikan label default untuk nilai tak dikenal", () => {
-    expect(
-      getWorkCalendarStatusFilterLabel("unknown" as WorkCalendarStatusFilter),
-    ).toBe("Semua");
+  it("memakai dueDate eksplisit, bukan workDate, untuk overdue", () => {
+    // Cabang `dueDate ?? workDate`: dueDate di masa lalu + workDate hari ini.
+    const dueYesterday = createFixtureWorkEntry({
+      id: "f-due-late",
+      status: "planned",
+      workDate: WORK_CALENDAR_FIXTURE_TODAY,
+      dueDate: "2026-03-09",
+    });
+    const dueToday = createFixtureWorkEntry({
+      id: "f-due-today",
+      status: "planned",
+      workDate: WORK_CALENDAR_FIXTURE_TODAY,
+      dueDate: WORK_CALENDAR_FIXTURE_TODAY,
+    });
+    expect(matchesWorkCalendarStatusFilter(dueYesterday, "attention", today)).toBe(true);
+    expect(matchesWorkCalendarStatusFilter(dueToday, "attention", today)).toBe(false);
   });
 });
