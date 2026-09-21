@@ -179,7 +179,7 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const targetStep = Number(options.targetStep || 0);
   const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
-    formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.PGD-01-00"),
+    formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.PGD-01-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
     isAsset: source.is_aset === true || input.request_category === "asset",
     department: text(location?.department?.name || source.department_name, "-"),

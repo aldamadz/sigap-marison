@@ -9,7 +9,7 @@ import {
   resolvePgdMasterForm,
 } from "../pgd-pdf-renderer.mjs";
 
-const PGD_MASTER_FORM = { id: "form-pgd", nama_form: "FORM PERMINTAAN BARANG & JASA", nomor_form: "FM-UAI.PGD-01-00" };
+const PGD_MASTER_FORM = { id: "form-pgd", nama_form: "FORM PERMINTAAN BARANG & JASA", nomor_form: "FM-UAI.PGD-07-77" };
 const NON_PGD_MASTER_FORM = { id: "form-rec", nama_form: "FORM REKOMENDASI", nomor_form: "FM-UAI.HRD-30-00" };
 
 const stubClient = ({ usage = null, usageError = null } = {}) => ({
@@ -44,7 +44,13 @@ test("detects PGD from resolved canonical master form when snapshot form is empt
   );
   assert.deepEqual(masterForm, PGD_MASTER_FORM);
   assert.equal(isPgdDocument({ ...surat, resolved_master_form: masterForm }), true);
-  const pdf = await renderPgdPdf(normalizePgdDocumentData({ ...surat, resolved_master_form: masterForm }));
+  const documentData = normalizePgdDocumentData({ ...surat, resolved_master_form: masterForm });
+  assert.equal(
+    documentData.formNumber,
+    PGD_MASTER_FORM.nomor_form,
+    "formNumber must fall back to resolved_master_form when snapshot form is empty",
+  );
+  const pdf = await renderPgdPdf(documentData);
   assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
 });
 

@@ -49,7 +49,7 @@ export const createPgdJobHandler = ({
   const targetSignature = job.signature_id
     ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
     : null;
-  const documentData = normalizePgdDocumentData(surat, {
+  const documentData = normalizePgdDocumentData(detectionSource, {
     signatures: enrichedSignatures,
     targetStep: targetSignature?.step_order || null,
   });

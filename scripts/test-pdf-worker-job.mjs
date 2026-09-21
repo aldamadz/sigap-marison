@@ -40,10 +40,12 @@ const makeSupabase = (tableMap) => ({
   from: (table) => makeChain(tableMap[table] || { data: null, error: null }),
 });
 
+// Distinct nomor_form: must differ from the normalizer default "FM-UAI.PGD-01-00"
+// so a missing resolved_master_form would silently produce the wrong value.
 const PGD_MASTER_FORM = {
   id: "form-pgd",
   nama_form: "FORM PERMINTAAN BARANG & JASA",
-  nomor_form: "FM-UAI.PGD-01-00",
+  nomor_form: "FM-UAI.PGD-09-99",
 };
 const NON_PGD_MASTER_FORM = {
   id: "form-rec",
@@ -83,13 +85,16 @@ const PGD_USAGE_ROW = {
   master_forms: PGD_MASTER_FORM,
 };
 
-const makeHandler = (supabase, renderPgdPdfStub = async () => FAKE_PDF) =>
+const makeHandler = (supabase, renderPgdPdfStub = async () => FAKE_PDF, capture = {}) =>
   createPgdJobHandler({
     supabase,
     isPgdDocument,
     resolvePgdMasterForm,
     normalizePgdDocumentData,
-    renderPgdPdf: renderPgdPdfStub,
+    renderPgdPdf: async (documentData) => {
+      capture.documentData = documentData;
+      return renderPgdPdfStub(documentData);
+    },
     logoPath: "/fake/logo.png",
   });
 
@@ -107,6 +112,7 @@ test("surat not found → return null", async () => {
 
 test("surat with PGD snapshot → no lookup, renders %PDF", async () => {
   let lookupCalled = false;
+  const capture = {};
   const renderStub = async () => FAKE_PDF;
   const resolveSpy = async (client, id) => {
     lookupCalled = true;
@@ -124,7 +130,10 @@ test("surat with PGD snapshot → no lookup, renders %PDF", async () => {
     isPgdDocument,
     resolvePgdMasterForm: resolveSpy,
     normalizePgdDocumentData,
-    renderPgdPdf: renderStub,
+    renderPgdPdf: async (documentData) => {
+      capture.documentData = documentData;
+      return renderStub(documentData);
+    },
     logoPath: "/fake/logo.png",
   });
 
@@ -132,10 +141,16 @@ test("surat with PGD snapshot → no lookup, renders %PDF", async () => {
   assert.ok(buf, "expected a buffer");
   assert.equal(buf.subarray(0, 4).toString(), "%PDF");
   assert.equal(lookupCalled, false, "lookup must not run when snapshot already PGD");
+  assert.equal(
+    capture.documentData.formNumber,
+    SURAT_PGD_SNAPSHOT.location_snapshot.form.nomor_form,
+    "formNumber must come from the persisted snapshot",
+  );
 });
 
-test("empty snapshot + form_usage PGD → lookup called → renders %PDF", async () => {
+test("empty snapshot + form_usage PGD → lookup called → renders %PDF with master form number", async () => {
   let lookupCalled = false;
+  const capture = {};
   const renderStub = async () => FAKE_PDF;
   const resolveSpy = async (client, id) => {
     lookupCalled = true;
@@ -154,7 +169,10 @@ test("empty snapshot + form_usage PGD → lookup called → renders %PDF", async
     isPgdDocument,
     resolvePgdMasterForm: resolveSpy,
     normalizePgdDocumentData,
-    renderPgdPdf: renderStub,
+    renderPgdPdf: async (documentData) => {
+      capture.documentData = documentData;
+      return renderStub(documentData);
+    },
     logoPath: "/fake/logo.png",
   });
 
@@ -162,6 +180,16 @@ test("empty snapshot + form_usage PGD → lookup called → renders %PDF", async
   assert.ok(buf, "expected a buffer");
   assert.equal(buf.subarray(0, 4).toString(), "%PDF");
   assert.equal(lookupCalled, true, "lookup must run for empty-snapshot surat");
+  assert.equal(
+    capture.documentData.formNumber,
+    PGD_MASTER_FORM.nomor_form,
+    "formNumber must come from the resolved master form, not the hardcoded default",
+  );
+  assert.notEqual(
+    capture.documentData.formNumber,
+    "FM-UAI.PGD-01-00",
+    "resolved form number must not collapse to the default constant",
+  );
 });
 
 test("empty snapshot + form_usage non-PGD → null (fail-closed)", async () => {
