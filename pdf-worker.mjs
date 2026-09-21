@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf } from "./pgd-pdf-renderer.mjs";
+import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf, resolvePgdMasterForm } from "./pgd-pdf-renderer.mjs";
 import {
   parseStorageRef,
   recommendationVersionPath,
@@ -13,6 +13,7 @@ import {
   isStoragePathWithinPrefix,
   normalizeStoragePathPrefix,
 } from "./storage-path-policy.mjs";
+import { createPgdJobHandler, createRecommendationJobHandler } from "./server/pdf-worker-job.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -110,81 +111,22 @@ const markFailed = async (job, error) => {
   if (!data?.id) throw new Error(`Failure transition returned no job for ${job.id}.`);
 };
 
-const renderDirectPgdJob = async (job) => {
-  const { data: surat, error: suratError } = await supabase
-    .from("surat_registrasi")
-    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
-    .eq("id", job.surat_id)
-    .maybeSingle();
-  if (suratError) throw suratError;
-  if (!surat || !isPgdDocument(surat)) return null;
+const renderDirectPgdJob = createPgdJobHandler({
+  supabase,
+  isPgdDocument,
+  resolvePgdMasterForm,
+  normalizePgdDocumentData,
+  renderPgdPdf,
+  logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
+});
 
-  const { data: signatures, error: signatureError } = await supabase
-    .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
-    .eq("surat_id", job.surat_id)
-    .order("step_order", { ascending: true });
-  if (signatureError) throw signatureError;
-
-  const userIds = [...new Set((signatures || []).map((item) => item.user_id).filter(Boolean))];
-  let profileMap = new Map();
-  if (userIds.length > 0) {
-    const { data: profiles, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, full_name, job_title")
-      .in("id", userIds);
-    if (profileError) throw profileError;
-    profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
-  }
-  const enrichedSignatures = (signatures || []).map((signature) => ({
-    ...signature,
-    profile: profileMap.get(signature.user_id) || null,
-  }));
-  const targetSignature = job.signature_id
-    ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
-    : null;
-  const documentData = normalizePgdDocumentData(surat, {
-    signatures: enrichedSignatures,
-    targetStep: targetSignature?.step_order || null,
-  });
-  return await renderPgdPdf(documentData, {
-    logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
-  });
-};
-
-const renderDirectRecommendationJob = async (job, recommendation) => {
-  const { data: surat, error: suratError } = await supabase
-    .from("surat_registrasi")
-    .select("id, no_surat, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
-    .eq("id", job.surat_id)
-    .maybeSingle();
-  if (suratError) throw suratError;
-  if (!surat) throw new Error("Dokumen rekomendasi tidak ditemukan.");
-
-  const { data: signatures, error: signatureError } = await supabase
-    .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
-    .eq("surat_id", job.surat_id)
-    .order("step_order", { ascending: true });
-  if (signatureError) throw signatureError;
-
-  const targetSignature = job.signature_id
-    ? (signatures || []).find((signature) => signature.id === job.signature_id)
-    : null;
-  const data = normalizeRecommendationDocumentData(surat, {
-    items: recommendation.items,
-    signatures: signatures || [],
-    targetStep: targetSignature?.step_order || 0,
-  });
-  return renderRecommendationPdf(data, {
-    logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
-    downloadImage: (attachment) => downloadStorageFile(
-      attachment.url,
-      `Gambar ${attachment.name || attachment.id}`,
-      "lampiran_surat",
-    ),
-  });
-};
+const renderDirectRecommendationJob = createRecommendationJobHandler({
+  supabase,
+  normalizeRecommendationDocumentData,
+  renderRecommendationPdf,
+  downloadStorageFile,
+  logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
+});
 
 const processJob = async (job) => {
   const recommendation = recommendationFromSnapshot(job);
