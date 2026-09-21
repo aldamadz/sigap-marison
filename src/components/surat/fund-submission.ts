@@ -15,6 +15,7 @@ export type FundSubmissionValidationIssue = {
 };
 
 const text = (value: unknown) => String(value ?? "").trim();
+const editableText = (value: unknown) => String(value ?? "");
 const scalar = (value: unknown): string | number => (
   typeof value === "string" || typeof value === "number" ? value : ""
 );
@@ -31,9 +32,11 @@ export function normalizeFundSubmissionItems(value: unknown): FundSubmissionItem
     .map((row) => ({
       ...row,
       id: text(row.id) || undefined,
-      nama_barang: text(row.nama_barang ?? row.item_name ?? row.nama ?? row.name),
+      // This normalizer feeds controlled inputs on every keystroke. Trimming
+      // here would remove a just-entered trailing space before the next word.
+      nama_barang: editableText(row.nama_barang ?? row.item_name ?? row.nama ?? row.name),
       jumlah: scalar(row.jumlah ?? row.quantity),
-      satuan: text(row.satuan ?? row.sat ?? row.unit),
+      satuan: editableText(row.satuan ?? row.sat ?? row.unit),
       nominal: scalar(row.nominal ?? row.subtotal ?? row.nilai),
     }));
 }
