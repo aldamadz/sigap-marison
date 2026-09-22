@@ -109,9 +109,9 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
 
   const handleResetPassword = async () => {
     const confirmed = await confirmAction({
-      title: "Reset Password?",
-      description: `Password ${user.fullName} akan direset. Di production, email recovery akan dikirim. Di staging, password direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}.`,
-      confirmText: "Reset Password",
+      title: "Atur Ulang Password?",
+      description: `Password ${user.fullName} akan direset. Aksi ini akan mengirim email pemulihan (production) atau mengatur ulang ke password default (staging).`,
+      confirmText: "Atur Ulang",
       variant: "destructive",
     });
     if (!confirmed) return;
@@ -119,9 +119,9 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
     try {
       const res = await adminUserService.resetPassword(user.id);
       if (res.recoveryEmailSent) {
-        toast.success(`Link recovery berhasil dikirim ke ${user.email}`);
+        toast.success(`Email pemulihan berhasil dikirim ke ${user.email}`);
       } else {
-        toast.success(`Password ${user.fullName} berhasil direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}`);
+        toast.success(`Password ${user.fullName} berhasil direset ke password default staging`);
       }
     } catch (err) {
       toast.error(describeAdminUserError(err));
@@ -245,7 +245,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                     <div>
                       <p className="text-xs font-semibold text-amber-500">Reset password</p>
                       <p className="mt-0.5 text-xs font-medium leading-relaxed text-muted-foreground">
-                        Password akan direset ke default staging oleh server.
+                        Password akan diatur ulang oleh sistem.
                       </p>
                     </div>
                   </div>
@@ -256,8 +256,8 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                     className="h-9 w-full border-amber-500/30 text-xs font-medium text-amber-500 hover:bg-amber-500/10"
                   >
                     {resetting
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Mereset...</>
-                      : <><KeyRound className="w-3.5 h-3.5 mr-2" />Reset ke Password Default</>
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Memproses...</>
+                      : <><KeyRound className="w-3.5 h-3.5 mr-2" />Atur Ulang Password</>
                     }
                   </Button>
                 </div>
@@ -534,9 +534,9 @@ export default function UserManagementPage() {
 
   const bulkResetPassword = async () => {
     const confirmed = await appDialog.confirm({
-      title: "Reset Password Massal?",
-      description: `${selectedUsers.length} akun akan direset (ke ${STAGING_DEFAULT_PASSWORD_LABEL} di staging, atau link recovery di production).`,
-      confirmText: "Reset Password",
+      title: "Atur Ulang Password Massal?",
+      description: `${selectedUsers.length} akun akan diatur ulang. Aksi ini akan mengirim email pemulihan (production) atau mengatur ulang ke password default (staging).`,
+      confirmText: "Atur Ulang",
       variant: "destructive",
     });
     if (!confirmed) return;
@@ -550,7 +550,7 @@ export default function UserManagementPage() {
         ok++;
       } catch { fail++; }
     }
-    const mode = emailed ? 'Link recovery dikirim' : 'Reset password';
+    const mode = emailed ? 'Email pemulihan dikirim' : 'Atur ulang password';
     toast.success(`${mode}: ${ok} berhasil${fail ? `, ${fail} gagal` : ''}`);
     setBulkLoading(false);
     clearSelection();

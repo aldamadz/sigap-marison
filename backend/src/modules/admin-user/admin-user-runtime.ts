@@ -55,10 +55,10 @@ export type AdminUserAuthAdminResult = {
 
 export type AdminUserAuthAdminPort = {
   createUser(input: AdminUserAuthAdminCreateInput): Promise<AdminUserAuthAdminResult>;
-  inviteUserByEmail(email: string, options?: { data?: Record<string, string | null> }): Promise<AdminUserAuthAdminResult>;
+  inviteUserByEmail(email: string, options?: { data?: Record<string, string | null>; redirectTo?: string }): Promise<AdminUserAuthAdminResult>;
   updateUserById(uid: string, input: AdminUserAuthAdminUpdateInput): Promise<AdminUserAuthAdminResult>;
   deleteUser(uid: string): Promise<AdminUserAuthAdminResult>;
-  resetPasswordForEmail(email: string): Promise<{ error: { message?: string } | null }>;
+  resetPasswordForEmail(email: string, options?: { redirectTo?: string }): Promise<{ error: { message?: string } | null }>;
   /**
    * Revokes a target user's sessions.
    *
@@ -136,6 +136,7 @@ export type AdminUserDependencies = {
    * Only ever consulted for the staging environment.
    */
   getBootstrapPassword: () => string | null;
+  getAppPublicUrl: () => string | null;
   deploymentEnvironment: string;
   getBearerToken: (req: unknown) => string;
   requireAdminUser: (token: string) => Promise<{ id: string }>;
@@ -318,6 +319,14 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     return password;
   };
 
+  const assertProductionAppUrlAvailable = (): string => {
+    const url = deps.getAppPublicUrl();
+    if (!url) {
+      throw errorWithStatus("APP_PUBLIC_URL belum dikonfigurasi atau tidak valid untuk environment production.", 503);
+    }
+    return url;
+  };
+
   /**
    * Resolves and validates organization references. Throws 400/404-style
    * errors with safe messages; never leaks internal ids beyond what the UI
@@ -426,8 +435,12 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
         user_metadata: userMetadata,
       });
     } else {
+      const appPublicUrl = assertProductionAppUrlAvailable();
       // Production uses invite link which sends a welcome email.
-      created = await authAdmin.inviteUserByEmail(input.email, { data: userMetadata });
+      created = await authAdmin.inviteUserByEmail(input.email, {
+        data: userMetadata,
+        redirectTo: `${appPublicUrl}/reset-password`,
+      });
     }
 
     if (created.error || !created.data?.user?.id) {
@@ -504,8 +517,26 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
       }
     }
 
-    const profile = await repository.updateProfile(userId, profileWriteRow(userId, input));
-    if (!profile) throw errorWithStatus("Gagal memperbarui profil.", 500);
+    let profile: AdminUserProfileRow | null;
+    try {
+      profile = await repository.updateProfile(userId, profileWriteRow(userId, input));
+      if (!profile) throw new Error("Profile update returned no row.");
+    } catch (error) {
+      // Compensating action: rollback Auth identity.
+      if (identityChanged) {
+        const rollback = await authAdmin.updateUserById(userId, {
+          email: current.email ?? undefined,
+          email_confirm: true,
+          user_metadata: { full_name: current.full_name, nik: current.nik },
+        });
+        if (rollback.error) {
+          console.error("[admin-user] compensating Auth rollback failed:", rollback.error.message);
+        }
+      }
+      console.error("[admin-user] profile update failed:", error instanceof Error ? error.message : "unknown");
+      throw errorWithStatus("Gagal memperbarui profil; identitas Auth telah dikembalikan.", 500);
+    }
+
     await repository.recordAudit({
       actorId: actor.id,
       action: "UPDATE",
@@ -529,7 +560,7 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     userId: string,
   ): Promise<{ success: true; sessionsRevoked: boolean; recoveryEmailSent: boolean }> => {
     deps.assertSameOrigin(req);
-    await deps.requireAdminUser(deps.getBearerToken(req));
+    const actor = await deps.requireAdminUser(deps.getBearerToken(req));
     if (!UUID_RE.test(userId)) throw errorWithStatus("ID user tidak valid.", 400);
 
     const password = assertBootstrapPasswordAvailable();
@@ -547,13 +578,25 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
       }
     } else {
       if (!target.email) throw errorWithStatus("User tidak memiliki email.", 400);
-      const reset = await authAdmin.resetPasswordForEmail(target.email);
+      const appPublicUrl = assertProductionAppUrlAvailable();
+      const reset = await authAdmin.resetPasswordForEmail(target.email, {
+        redirectTo: `${appPublicUrl}/reset-password`,
+      });
       if (reset.error) {
         console.error("[admin-user] reset password email failed:", reset.error.message);
         throw errorWithStatus("Gagal mengirim email reset password.", 502);
       }
       recoveryEmailSent = true;
     }
+
+    await repository.recordAudit({
+      actorId: actor.id,
+      action: "UPDATE",
+      tableName: "profiles",
+      recordId: userId,
+      oldValues: { event: "password_reset", mode: recoveryEmailSent ? "recovery_email" : "staging_default" },
+      newValues: null,
+    });
 
     const revocation = await authAdmin.revokeSessions(userId);
     if (!revocation.revoked) {
@@ -721,8 +764,8 @@ export const createSupabaseAuthAdminPort = (client: SupabaseClient): AdminUserAu
     const result = await client.auth.admin.deleteUser(uid);
     return { data: result.data as never, error: result.error as never };
   },
-  resetPasswordForEmail: async (email) => {
-    const result = await client.auth.resetPasswordForEmail(email);
+  resetPasswordForEmail: async (email, options) => {
+    const result = await client.auth.resetPasswordForEmail(email, options);
     return { error: result.error as never };
   },
   revokeSessions: async (userId) => {

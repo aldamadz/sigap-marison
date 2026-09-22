@@ -2406,6 +2406,20 @@ const adminUserRuntime = createAdminUserRuntime({
   getAuthAdmin: () => createSupabaseAuthAdminPort(assertAdminUserServiceAvailable()),
   getProfileRepository: () => createSupabaseProfileRepositoryPort(assertAdminUserServiceAvailable()),
   getBootstrapPassword: () => process.env.STAGING_DEFAULT_USER_PASSWORD || null,
+  getAppPublicUrl: () => {
+    let url = process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL;
+    if (url) {
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = `https://${url}`;
+      }
+      try {
+        return new URL(url).origin;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  },
   deploymentEnvironment: marisonDeploymentEnvironment,
   getBearerToken,
   requireAdminUser,
