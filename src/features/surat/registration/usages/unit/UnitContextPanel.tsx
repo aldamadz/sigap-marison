@@ -23,8 +23,12 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     return () => { cancelled = true; };
   }, [requestExternalOptions]);
 
-  const requestedProject = input.requested_project as ProjectRaw | undefined;
+  const requestedProject = input.requested_project as (ProjectRaw & { value?: string; label?: string }) | undefined;
   const availability = ctx.unitAvailability ?? EMPTY_UNIT_AVAILABILITY;
+  const isEditableRequesterRevision = Boolean(
+    generatedNoSurat && externalRevision?.eventId && ctx.category === "unit",
+  );
+  const isNumberedContextLocked = Boolean(generatedNoSurat && !isEditableRequesterRevision);
 
   const handleExternalProjectChange = (value: string) => {
     const option = externalProjects.find(item => item.value === value);
@@ -56,7 +60,19 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     : undefined;
 
   return (
-    <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
+    <div id="unit-request-context" className="scroll-mt-24 space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
+      {isEditableRequesterRevision && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-900 dark:text-amber-100">
+          <p className="text-sm font-semibold">Perbaiki Proyek dan Jumlah Unit</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            {externalRevision?.reason?.trim()
+              || "Pengajuan dikembalikan agar proyek atau jumlah unit dapat disesuaikan."}
+          </p>
+          <p className="mt-2 text-xs font-medium">
+            Kapasitas proyek akan diperiksa ulang sebelum perbaikan dapat dikirim.
+          </p>
+        </div>
+      )}
       <div className="flex flex-col gap-1">
         <p className="text-sm font-semibold text-primary">Pengajuan Unit</p>
         <p className="text-xs font-medium text-muted-foreground">
@@ -65,13 +81,13 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
       </div>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div className="space-y-2">
-          <Label className="text-xs font-semibold text-muted-foreground">Proyek</Label>
+          <Label htmlFor="unit-request-project" className="text-xs font-semibold text-muted-foreground">Proyek</Label>
           <Select
-            value={(input.requested_project as { value?: string } | undefined)?.value || ""}
+            value={requestedProject?.value || requestedProject?.id || ""}
             onValueChange={handleExternalProjectChange}
-            disabled={projectsLoading || !!generatedNoSurat}
+            disabled={projectsLoading || isNumberedContextLocked}
           >
-            <SelectTrigger className="h-12 bg-background/70 text-sm">
+            <SelectTrigger id="unit-request-project" className="h-12 bg-background/70 text-sm">
               <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
             </SelectTrigger>
             <SelectContent>
@@ -104,14 +120,15 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
           )}
         </div>
         <div className="space-y-2">
-          <Label className="text-xs font-semibold text-muted-foreground">Jumlah Unit Diajukan</Label>
+          <Label htmlFor="unit-request-count" className="text-xs font-semibold text-muted-foreground">Jumlah Unit Diajukan</Label>
           <Input
+            id="unit-request-count"
             type="number"
             min={1}
             max={availability.count ?? undefined}
             value={String(input.requested_unit_count ?? "")}
             onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
-            disabled={!!generatedNoSurat && !(externalRevision && ctx.category === "unit")}
+            disabled={isNumberedContextLocked}
             className="h-12 bg-background/70 text-sm"
             placeholder="Contoh: 10"
           />
