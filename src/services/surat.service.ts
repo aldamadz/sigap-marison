@@ -34,6 +34,7 @@ import {
   getSignerSnapshots,
 } from "./surat/pdf-builders";
 import { notifyInboxStepTasks, sendNotification } from "./surat/notification";
+import type { UsageDetailRecord } from "@/components/surat/form/surat-form-types";
 
 export interface SuratRegistrasi {
   id: string;
@@ -86,6 +87,7 @@ export interface SuratRegistrationDraft {
   created_at: string;
   updated_at: string;
   surat_registration_draft_files?: SuratRegistrationDraftFile[];
+  usage_configuration?: UsageDetailRecord | null;
 }
 
 export interface RecommendationTask {
@@ -364,7 +366,38 @@ export const suratService = {
       .gt("expires_at", new Date().toISOString())
       .single();
     if (error) throw error;
-    return data as SuratRegistrationDraft;
+    const draft = data as SuratRegistrationDraft;
+    const formData = draft.payload?.formData;
+    const usageId = formData && typeof formData === "object"
+      ? String(
+          (formData as Record<string, unknown>).form_usage_id
+          || draft.payload?.selectedUsageId
+          || "",
+        )
+      : String(draft.payload?.selectedUsageId || "");
+    if (!usageId) return draft;
+
+    const { data: usageConfiguration, error: usageError } = await supabase
+      .from("form_usages")
+      .select(`
+        id, name, form_id, request_category, scope_type, is_system_template, recommendation_config, external_revision_policy,
+        master_forms(id, nama_form, nomor_form, department_id, input_schema),
+        form_usage_departments(department_id),
+        form_usage_steps(
+          id, step_order, role_name, label, action_type, assignee_mode, input_schema, skip_if_no_candidate, candidate_fallback_mode, candidate_scope, signer_department_id,
+          form_usage_step_users(user_id),
+          form_usage_step_verifiers(user_id)
+        ),
+        form_usage_attachment_requirements(*)
+      `)
+      .eq("id", usageId)
+      .maybeSingle();
+    if (usageError) throw usageError;
+
+    return {
+      ...draft,
+      usage_configuration: usageConfiguration as UsageDetailRecord | null,
+    };
   },
 
   async createExternalSubmissionRevisionDraft(revisionEventId: string): Promise<SuratRegistrationDraft> {
