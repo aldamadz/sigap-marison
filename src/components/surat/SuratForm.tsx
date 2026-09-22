@@ -33,6 +33,7 @@ import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-a
 import { isBranchAssetFallback as isBranchAssetFallbackMarker } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
 import {
+  WIZARD_STEP_LOKASI,
   WIZARD_STEP_BERKAS,
   WIZARD_STEPS,
   canGoToStep,
@@ -89,6 +90,8 @@ import {
   isProfileLocationReady,
   isUnitExternalField,
   isUnitField,
+  normalizeFormUsageRecord,
+  normalizeFormUsageRecords,
   normalizeTableRows,
 } from "@/components/surat/form/surat-form-schema";
 import {
@@ -180,6 +183,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   // ── STATE ──────────────────────────────────────────────────────────────────
   const [master, setMaster] = useState<MasterData>({ entities: [], depts: [], offices: [], types: [], users: [], projects: [] });
   const [usageDetails, setUsageDetails]           = useState<UsageDetailRecord[]>([]);
+  const [usageDetailsLoaded, setUsageDetailsLoaded] = useState(false);
   const [selectedUsage, setSelectedUsage]         = useState<UsageDetailRecord | null>(null);
   const [selectedFormId, setSelectedFormId]       = useState("");
   const [generatedNoSurat, setGeneratedNoSurat]   = useState<string | null>(null);
@@ -1307,34 +1311,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
     if (error) {
       toast({ variant: "destructive", title: "Gagal memuat penggunaan", description: error.message });
+      setUsageDetailsLoaded(true);
       return;
     }
 
     let nextUsageDetails: UsageDetailRecord[];
     if ((data || []).length > 0) {
-      nextUsageDetails = (data || []).map((item: any) => ({
-        ...item,
-        workflow_allowed_departments: item.form_usage_departments || [],
-        request_categories: [item.request_category],
-        is_cabang: item.scope_type === "cabang",
-        ttd_config: [...(item.form_usage_steps || [])]
-          .sort((a, b) => a.step_order - b.step_order)
-          .map(step => ({
-            form_usage_step_id: step.id,
-            roleName: step.role_name,
-            labelJabatan: step.label,
-            action_type: step.action_type,
-            assignee_mode: step.assignee_mode || "select",
-            input_schema: step.input_schema || {},
-            skip_if_no_candidate: step.skip_if_no_candidate === true,
-            candidate_fallback_mode: step.candidate_fallback_mode || null,
-            candidate_scope: step.candidate_scope || "manual",
-            signer_department_id: step.signer_department_id,
-            eligible_user_ids: (step.form_usage_step_users || []).map((candidate: { user_id: string }) => candidate.user_id),
-            verifier_user_ids: (step.form_usage_step_verifiers || []).map((candidate: { user_id: string }) => candidate.user_id),
-            requires_unit_allocation: step.action_type === "unit_allocation",
-          })),
-      }));
+      nextUsageDetails = normalizeFormUsageRecords((data || []) as UsageDetailRecord[]);
     } else {
       const { data: legacyData, error: legacyError } = await supabase
         .from("master_penggunaan_detail")
@@ -1346,11 +1329,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         .order("created_at", { ascending: false });
       if (legacyError) {
         toast({ variant: "destructive", title: "Gagal memuat fallback matrix", description: legacyError.message });
+        setUsageDetailsLoaded(true);
         return;
       }
       nextUsageDetails = legacyData || [];
     }
     setUsageDetails(nextUsageDetails);
+    setUsageDetailsLoaded(true);
     setSelectedUsage((current) => {
       if (!current?.id) return current;
       return nextUsageDetails.find((item) => item.id === current.id) || current;
@@ -1374,14 +1359,30 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [loadUsageDetails]);
 
   useEffect(() => {
-    if (!draftToRestore || usageDetails.length === 0) return;
+    if (!draftToRestore || !usageDetailsLoaded) return;
     const payload = draftToRestore.payload || {};
     const restoredFormData = payload.formData || {};
     const restoredInput = restoredFormData.form_input_data || {};
     const usageId = String(payload.selectedUsageId || restoredFormData.form_usage_id || restoredFormData.penggunaan_id || "");
-    const usage = usageDetails.find(item => item.id === usageId) || null;
+    const historicalUsage = draftToRestore.usage_configuration
+      ? normalizeFormUsageRecord(draftToRestore.usage_configuration)
+      : null;
+    const usage = usageDetails.find(item => item.id === usageId)
+      || (historicalUsage?.id === usageId ? historicalUsage : null);
+    if (usageId && !usage) {
+      toast({
+        variant: "destructive",
+        title: "Konfigurasi pengajuan tidak dapat dimuat",
+        description: "Kegunaan historis untuk draft ini tidak tersedia. Muat ulang halaman atau hubungi administrator.",
+      });
+      setDraftToRestore(null);
+      return;
+    }
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
     const restoredExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
+    const opensUnitRevisionContext = Boolean(
+      restoredExternalRevision?.eventId && restoredInput.request_category === "unit",
+    );
     if (restoredLinkedContext?.type === "recommendation" && restoredLinkedContext.parentSuratId) {
       setLinkedDocumentContext(restoredLinkedContext);
     }
@@ -1421,16 +1422,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
-    setWizardStep(WIZARD_STEP_BERKAS);
+    setWizardStep(opensUnitRevisionContext ? WIZARD_STEP_LOKASI : WIZARD_STEP_BERKAS);
     markDraftRestored(draftToRestore);
     setJudulForDisplay(String(restoredFormData.judul_surat || ""));
     setDraftSaveState("saved");
     setDraftToRestore(null);
 
     window.requestAnimationFrame(() => {
-      document.getElementById("surat-registration-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document
+        .getElementById(opensUnitRevisionContext ? "unit-request-context" : "surat-registration-details")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [draftToRestore, usageDetails, setJudulForDisplay]);
+  }, [draftToRestore, usageDetails, usageDetailsLoaded, setJudulForDisplay, toast]);
 
   useEffect(() => {
     if (!activeDraftId || !selectedUsage) return;
@@ -3746,7 +3749,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             </div>
           )}
         </section>
-        )}\n        {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
+        )}
+        {/* ══ SECTION 2: BERKAS ════════════════════════════════════════════ */}
         {generatedNoSurat && (
           <div id="surat-registration-details" className="scroll-mt-24 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
             {showSectionBerkas && (
