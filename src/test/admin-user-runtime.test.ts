@@ -366,13 +366,50 @@ describe("admin-user createUser", () => {
     expect(result.user.id).toBe(NEW_USER_ID);
   });
 
-  it("fails closed in production if APP_PUBLIC_URL is invalid", async () => {
-    const { runtime } = createRuntime({
-      readJsonBody: async () => ({ ...validPayload, parent_id: null }),
-      deploymentEnvironment: "production",
-      getAppPublicUrl: () => null,
-    });
-    await expect(runtime.createUser({})).rejects.toMatchObject({ status: 503 });
+  it("fails closed in production if APP_PUBLIC_URL is missing, invalid, http, or contains credentials", async () => {
+    const payloads = [
+      { url: null, expectError: "belum dikonfigurasi" },
+      { url: "not-a-url", expectError: "tidak valid" },
+      { url: "http://app.sigap.com", expectError: "HTTPS" },
+      { url: "https://user:pass@app.sigap.com", expectError: "kredensial" },
+    ];
+    for (const { url, expectError } of payloads) {
+      const { runtime } = createRuntime({
+        readJsonBody: async () => ({ ...validPayload, parent_id: null }),
+        deploymentEnvironment: "production",
+        getAppPublicUrl: () => url,
+      });
+      await expect(runtime.createUser({})).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining(expectError),
+      });
+    }
+  });
+
+  it("succeeds with a warning if the audit log fails", async () => {
+    const { runtime, ports } = createRuntime({ readJsonBody: async () => validPayload });
+    vi.spyOn(ports.repository, "findProfileById").mockImplementation(async (id) =>
+      id === PARENT_ID ? profile({ id: PARENT_ID, full_name: "Parent" }) : null,
+    );
+    vi.spyOn(ports.repository, "recordAudit").mockRejectedValue(new Error("DB error"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await runtime.createUser({});
+    expect(result.user.id).toBe(NEW_USER_ID);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("audit log failure"), expect.any(String));
+  });
+
+  it("deletes the Auth user when profile completion fails", async () => {
+    const { runtime, ports } = createRuntime({ readJsonBody: async () => validPayload });
+    vi.spyOn(ports.repository, "findProfileById").mockImplementation(async (id) =>
+      id === PARENT_ID ? profile({ id: PARENT_ID, full_name: "Parent" }) : null,
+    );
+    vi.spyOn(ports.repository, "recordAudit").mockRejectedValue(new Error("DB error"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await runtime.createUser({});
+    expect(result.user.id).toBe(NEW_USER_ID);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("audit log failure"), expect.any(String));
   });
 
   it("deletes the Auth user when profile completion fails", async () => {
@@ -386,12 +423,23 @@ describe("admin-user createUser", () => {
     expect(state.authUsers.size).toBe(0);
   });
 
-  it("fails closed in production if APP_PUBLIC_URL is invalid", async () => {
-    const { runtime } = createRuntime(
-      { deploymentEnvironment: "production", getAppPublicUrl: () => null },
-      { profiles: [profile()] },
-    );
-    await expect(runtime.resetUserPassword({}, NEW_USER_ID)).rejects.toMatchObject({ status: 503 });
+  it("fails closed in production if APP_PUBLIC_URL is missing, invalid, http, or contains credentials", async () => {
+    const payloads = [
+      { url: null, expectError: "belum dikonfigurasi" },
+      { url: "not-a-url", expectError: "tidak valid" },
+      { url: "http://app.sigap.com", expectError: "HTTPS" },
+      { url: "https://user:pass@app.sigap.com", expectError: "kredensial" },
+    ];
+    for (const { url, expectError } of payloads) {
+      const { runtime } = createRuntime(
+        { deploymentEnvironment: "production", getAppPublicUrl: () => url },
+        { profiles: [profile()] },
+      );
+      await expect(runtime.resetUserPassword({}, NEW_USER_ID)).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining(expectError),
+      });
+    }
   });
 
   it("fails closed when the staging bootstrap password is missing or weak in staging", async () => {
@@ -401,6 +449,49 @@ describe("admin-user createUser", () => {
 
     const weak = createRuntime({ readJsonBody: async () => validPayload, getBootstrapPassword: () => "short" });
     await expect(weak.runtime.createUser({})).rejects.toMatchObject({ status: 503 });
+  });
+  it("rolls back Auth email and metadata when the profile update fails", async () => {
+    const { runtime, ports, state } = createRuntime(
+      { readJsonBody: async () => ({ ...validPayload, parent_id: null, email: "new.updated@example.com" }) },
+      { profiles: [profile()], authUsers: new Map([[NEW_USER_ID, { email: "new.user@example.com", password: "pwd" }]]) }
+    );
+    vi.spyOn(ports.repository, "updateProfile").mockRejectedValue(new Error("profile write failed"));
+    vi.spyOn(ports.authAdmin, "updateUserById");
+
+    await expect(runtime.updateUser({}, NEW_USER_ID)).rejects.toMatchObject({
+      status: 500,
+      message: "Gagal memperbarui profil; identitas Auth telah dikembalikan.",
+    });
+    
+    expect(ports.authAdmin.updateUserById).toHaveBeenCalledTimes(2);
+    const rollbackCall = vi.mocked(ports.authAdmin.updateUserById).mock.calls[1];
+    expect(rollbackCall[0]).toBe(NEW_USER_ID);
+    expect(rollbackCall[1].email).toBe("new.user@example.com");
+    expect(rollbackCall[1].user_metadata?.full_name).toBe("New User");
+    expect(state.authUsers.get(NEW_USER_ID)?.email).toBe("new.user@example.com");
+  });
+
+  it("returns a partial-failure error if Auth rollback also fails", async () => {
+    const { runtime, ports, state } = createRuntime(
+      { readJsonBody: async () => ({ ...validPayload, parent_id: null, email: "new.updated@example.com" }) },
+      { profiles: [profile()], authUsers: new Map([[NEW_USER_ID, { email: "new.user@example.com", password: "pwd" }]]) }
+    );
+    vi.spyOn(ports.repository, "updateProfile").mockRejectedValue(new Error("profile write failed"));
+    vi.spyOn(ports.authAdmin, "updateUserById").mockImplementationOnce(async (uid, input) => {
+      const user = state.authUsers.get(uid);
+      if (user && input.email) user.email = input.email;
+      return { data: { user: { id: uid } }, error: null };
+    }).mockImplementationOnce(async () => {
+      return { data: null, error: { message: "Network error" } };
+    });
+
+    await expect(runtime.updateUser({}, NEW_USER_ID)).rejects.toMatchObject({
+      status: 500,
+      message: expect.stringContaining("identitas login tidak dapat dikembalikan"),
+    });
+
+    expect(ports.authAdmin.updateUserById).toHaveBeenCalledTimes(2);
+    expect(state.authUsers.get(NEW_USER_ID)?.email).toBe("new.updated@example.com"); // Remains changed!
   });
 });
 

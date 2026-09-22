@@ -320,11 +320,31 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
   };
 
   const assertProductionAppUrlAvailable = (): string => {
-    const url = deps.getAppPublicUrl();
-    if (!url) {
-      throw errorWithStatus("APP_PUBLIC_URL belum dikonfigurasi atau tidak valid untuk environment production.", 503);
+    const raw = deps.getAppPublicUrl();
+    if (!raw) {
+      throw errorWithStatus("APP_PUBLIC_URL belum dikonfigurasi untuk environment production.", 503);
     }
-    return url;
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      throw errorWithStatus("APP_PUBLIC_URL tidak valid.", 503);
+    }
+    if (parsed.protocol !== "https:") {
+      throw errorWithStatus("APP_PUBLIC_URL wajib menggunakan HTTPS.", 503);
+    }
+    if (parsed.username || parsed.password) {
+      throw errorWithStatus("APP_PUBLIC_URL tidak boleh mengandung kredensial.", 503);
+    }
+    return parsed.origin;
+  };
+
+  const safeAudit = async (entry: AdminUserAuditEntry) => {
+    try {
+      await deps.getProfileRepository().recordAudit(entry);
+    } catch (error) {
+      console.warn(`[admin-user] audit log failure for ${entry.action} on ${entry.tableName}:`, error instanceof Error ? error.message : "unknown");
+    }
   };
 
   /**
@@ -457,7 +477,7 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     try {
       const profile = await repository.upsertProfile(profileWriteRow(authUserId, input));
       if (!profile) throw new Error("Profile upsert returned no row.");
-      await repository.recordAudit({
+      await safeAudit({
         actorId: actor.id,
         action: "INSERT",
         tableName: "profiles",
@@ -522,7 +542,7 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
       profile = await repository.updateProfile(userId, profileWriteRow(userId, input));
       if (!profile) throw new Error("Profile update returned no row.");
     } catch (error) {
-      // Compensating action: rollback Auth identity.
+      let rollbackSuccess = false;
       if (identityChanged) {
         const rollback = await authAdmin.updateUserById(userId, {
           email: current.email ?? undefined,
@@ -530,14 +550,22 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
           user_metadata: { full_name: current.full_name, nik: current.nik },
         });
         if (rollback.error) {
-          console.error("[admin-user] compensating Auth rollback failed:", rollback.error.message);
+          console.error("[admin-user] compensating Auth rollback failed. Auth identity remains changed while profile is stale.");
+        } else {
+          rollbackSuccess = true;
         }
       }
       console.error("[admin-user] profile update failed:", error instanceof Error ? error.message : "unknown");
-      throw errorWithStatus("Gagal memperbarui profil; identitas Auth telah dikembalikan.", 500);
+      if (identityChanged && !rollbackSuccess) {
+        throw errorWithStatus("Update parsial: gagal menyimpan profil, dan identitas login tidak dapat dikembalikan. Harap periksa data pengguna.", 500);
+      } else if (identityChanged && rollbackSuccess) {
+        throw errorWithStatus("Gagal memperbarui profil; identitas Auth telah dikembalikan.", 500);
+      } else {
+        throw errorWithStatus("Gagal memperbarui profil.", 500);
+      }
     }
 
-    await repository.recordAudit({
+    await safeAudit({
       actorId: actor.id,
       action: "UPDATE",
       tableName: "profiles",
@@ -589,7 +617,7 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
       recoveryEmailSent = true;
     }
 
-    await repository.recordAudit({
+    await safeAudit({
       actorId: actor.id,
       action: "UPDATE",
       tableName: "profiles",
@@ -663,7 +691,7 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
       throw errorWithStatus("Gagal menyinkronkan status profil.", 500);
     }
 
-    await repository.recordAudit({
+    await safeAudit({
       actorId: actor.id,
       action: "UPDATE",
       tableName: "profiles",
@@ -728,7 +756,7 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
 
     const deactivated = await repository.deactivateProfiles(safeCandidates.map((candidate) => candidate.id));
     if (deactivated > 0) {
-      await repository.recordAudit({
+      await safeAudit({
         actorId: actor.id,
         action: "UPDATE",
         tableName: "profiles",
