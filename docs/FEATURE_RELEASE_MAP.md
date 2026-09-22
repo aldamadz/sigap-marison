@@ -143,6 +143,12 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | REC-03 | Rekomendasi aset multi-detail | UI dan backend/data deployed di staging; layout formulir PDF native dalam perbaikan | Canonical v1 contract, editor parent/detail dengan stable ID, beberapa detail dan gambar, keputusan tertaut pada Inbox, legacy flattening, PDF_PENDING finalization dan final-status PDF refresh, immutable render snapshot/fingerprint, stable audited external link, pre-POST all-rejected recheck | REC-01, SUR-01, WF-03, MRN-07 | Halaman pertama PDF native mengikuti struktur FM-UAI.HRD-30-00 dengan kolom lengkap, baris formulir, catatan, serta tanda tangan kanan bawah; halaman lampiran multi-detail tetap terpisah. Production tidak berubah |
 | SUR-16 | Keputusan eksternal dan revision generation | Staging candidate; client-credentials + Zudoku candidate; provisioning scope diperbaiki | Callback M2M strict, scoped short-lived access token, raw-body HMAC, event idempotency, immutable revision history, Tindak Lanjut pemohon, routing Unit/Rekomendasi/umum, approval dan outbound generation baru | SUR-01, REC-03, MRN-17 | Consumer menukar `client_id`/`client_secret` melalui `/api/access-token`; client provisioning default ke scope `submission:decide`, menyimpan secret hanya dalam file operator yang aman, dan tidak menghentikan proses Node secara paksa. `event_id` tetap menjadi idempotency key bisnis. Static decision token hanya internal facade-to-backend. Zudoku disajikan sekali pada `/docs` dengan kontrak OpenAPI yang sama seperti runtime. Production tidak disentuh |
 
+Catatan kandidat SUR-16 (Issue #328): branch `fix/unit-requester-revision-editability-01`
+membuka hanya proyek dan jumlah unit pada draft revisi SPK Unit yang ditujukan ke
+pemohon, mengarahkan pengguna langsung ke konteks tersebut, dan tetap memakai
+validasi kapasitas backend sebelum perbaikan dikirim. Identitas dan nomor dokumen
+tetap terkunci; production belum disentuh.
+
 ### 4.5 Permohonan Unit, Non-Unit, Aset, dan Marison
 
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |

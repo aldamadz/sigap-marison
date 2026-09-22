@@ -33,6 +33,7 @@ import { useActiveDraftLifecycle } from "@/features/surat/registration/lib/use-a
 import { isBranchAssetFallback as isBranchAssetFallbackMarker } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { buildAutoTitle } from "@/features/surat/registration/lib/surat-title-formatters";
 import {
+  WIZARD_STEP_LOKASI,
   WIZARD_STEP_BERKAS,
   WIZARD_STEPS,
   canGoToStep,
@@ -1382,6 +1383,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const usage = usageDetails.find(item => item.id === usageId) || null;
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
     const restoredExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
+    const opensUnitRevisionContext = Boolean(
+      restoredExternalRevision?.eventId && restoredInput.request_category === "unit",
+    );
     if (restoredLinkedContext?.type === "recommendation" && restoredLinkedContext.parentSuratId) {
       setLinkedDocumentContext(restoredLinkedContext);
     }
@@ -1421,14 +1425,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
-    setWizardStep(WIZARD_STEP_BERKAS);
+    setWizardStep(opensUnitRevisionContext ? WIZARD_STEP_LOKASI : WIZARD_STEP_BERKAS);
     markDraftRestored(draftToRestore);
     setJudulForDisplay(String(restoredFormData.judul_surat || ""));
     setDraftSaveState("saved");
     setDraftToRestore(null);
 
     window.requestAnimationFrame(() => {
-      document.getElementById("surat-registration-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document
+        .getElementById(opensUnitRevisionContext ? "unit-request-context" : "surat-registration-details")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [draftToRestore, usageDetails, setJudulForDisplay]);
 
