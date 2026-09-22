@@ -167,6 +167,7 @@ const createRuntime = (
     getAuthAdmin: () => ports.authAdmin,
     getProfileRepository: () => ports.repository,
     getBootstrapPassword: () => BOOTSTRAP_PASSWORD,
+    getAppPublicUrl: () => "https://app.sigap.com",
     deploymentEnvironment: "staging",
     getBearerToken: () => "token",
     requireAdminUser: async () => ({ id: ACTOR_ID }),
@@ -342,10 +343,11 @@ describe("admin-user createUser", () => {
     await expect(withInactiveParent.runtime.createUser({})).rejects.toMatchObject({ status: 400 });
   });
 
-  it("uses an invite email in production without requiring a shared password", async () => {
+  it("uses an invite email in production with the correct redirectTo", async () => {
     const { runtime, ports, state } = createRuntime({
       readJsonBody: async () => validPayload,
       deploymentEnvironment: "production",
+      getAppPublicUrl: () => "https://app.sigap.com",
     });
     vi.spyOn(ports.repository, "findProfileById").mockImplementation(async (id) =>
       id === PARENT_ID ? profile({ id: PARENT_ID, full_name: "Parent" }) : null,
@@ -356,9 +358,21 @@ describe("admin-user createUser", () => {
     const result = await runtime.createUser({});
 
     expect(ports.authAdmin.inviteUserByEmail).toHaveBeenCalledTimes(1);
+    expect(ports.authAdmin.inviteUserByEmail).toHaveBeenCalledWith("new.user@example.com", expect.objectContaining({
+      redirectTo: "https://app.sigap.com/reset-password",
+    }));
     expect(ports.authAdmin.createUser).toHaveBeenCalledTimes(0);
     expect(state.authUsers.get(NEW_USER_ID)?.password).toBe("invited");
     expect(result.user.id).toBe(NEW_USER_ID);
+  });
+
+  it("fails closed in production if APP_PUBLIC_URL is invalid", async () => {
+    const { runtime } = createRuntime({
+      readJsonBody: async () => ({ ...validPayload, parent_id: null }),
+      deploymentEnvironment: "production",
+      getAppPublicUrl: () => null,
+    });
+    await expect(runtime.createUser({})).rejects.toMatchObject({ status: 503 });
   });
 
   it("deletes the Auth user when profile completion fails", async () => {
@@ -370,6 +384,14 @@ describe("admin-user createUser", () => {
     await expect(runtime.createUser({})).rejects.toMatchObject({ status: 500 });
     expect(ports.authAdmin.deleteUser).toHaveBeenCalledWith(NEW_USER_ID);
     expect(state.authUsers.size).toBe(0);
+  });
+
+  it("fails closed in production if APP_PUBLIC_URL is invalid", async () => {
+    const { runtime } = createRuntime(
+      { deploymentEnvironment: "production", getAppPublicUrl: () => null },
+      { profiles: [profile()] },
+    );
+    await expect(runtime.resetUserPassword({}, NEW_USER_ID)).rejects.toMatchObject({ status: 503 });
   });
 
   it("fails closed when the staging bootstrap password is missing or weak in staging", async () => {
@@ -399,9 +421,9 @@ describe("admin-user resetPassword", () => {
     await expect(runtime.resetUserPassword({}, NEW_USER_ID)).rejects.toMatchObject({ status: 404 });
   });
 
-  it("sends a recovery email in production without a shared password", async () => {
+  it("sends a recovery email in production with the correct redirectTo", async () => {
     const { runtime, ports } = createRuntime(
-      { deploymentEnvironment: "production" },
+      { deploymentEnvironment: "production", getAppPublicUrl: () => "https://app.sigap.com" },
       { profiles: [profile()], authUsers: new Map([[NEW_USER_ID, { email: "new.user@example.com" }]]) },
     );
     vi.spyOn(ports.authAdmin, "resetPasswordForEmail");
@@ -409,7 +431,9 @@ describe("admin-user resetPassword", () => {
 
     const result = await runtime.resetUserPassword({}, NEW_USER_ID);
 
-    expect(ports.authAdmin.resetPasswordForEmail).toHaveBeenCalledWith("new.user@example.com");
+    expect(ports.authAdmin.resetPasswordForEmail).toHaveBeenCalledWith("new.user@example.com", {
+      redirectTo: "https://app.sigap.com/reset-password",
+    });
     expect(ports.authAdmin.updateUserById).toHaveBeenCalledTimes(0);
     expect(result.recoveryEmailSent).toBe(true);
     expect(result.sessionsRevoked).toBe(true);
