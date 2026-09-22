@@ -22,6 +22,7 @@ import {
   selectLetterType,
 } from "./surat-form-driver";
 import {
+  FORM_USAGES_RAW,
   MASTER_DATA_WITH_PROJECTS,
   UNIT_FORM_USAGE_RAW,
   UUID,
@@ -121,13 +122,18 @@ function registerUnitSources() {
   });
 }
 
-async function mountUnitRevisionDraft() {
+async function mountUnitRevisionDraft(
+  activeUsageData: unknown[] = UNIT_FORM_USAGE_RAW,
+  draft: typeof unitRevisionDraft & {
+    usage_configuration?: (typeof UNIT_FORM_USAGE_RAW)[number];
+  } = unitRevisionDraft,
+) {
   setSearchParamsOverride(
     new URLSearchParams(`?draft=${UUID.draft}&revision=${REVISION_EVENT_ID}`),
   );
   serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_WITH_PROJECTS);
   serviceMock.getActiveRegistrationDrafts.mockResolvedValue([]);
-  serviceMock.getRegistrationDraft.mockResolvedValue(unitRevisionDraft);
+  serviceMock.getRegistrationDraft.mockResolvedValue(draft);
   registerUnitSources();
   allowServiceCalls(
     "getMasterData",
@@ -136,7 +142,7 @@ async function mountUnitRevisionDraft() {
     "saveRegistrationDraft",
   );
 
-  await mountFormWithUsage(UNIT_FORM_USAGE_RAW);
+  await mountFormWithUsage(activeUsageData);
   await screen.findByText("Perbaiki Proyek dan Jumlah Unit");
 }
 
@@ -148,6 +154,26 @@ beforeEach(() => {
 afterEach(() => teardownTestHarness());
 
 describe("SPK Unit requester revision", () => {
+  it("restores its archived usage configuration without exposing it as an active option", async () => {
+    const archivedUsage = {
+      ...UNIT_FORM_USAGE_RAW[0],
+      name: "[UJI STAGING] Pengajuan SPK Unit",
+      status: "archived",
+    };
+
+    await mountUnitRevisionDraft(
+      FORM_USAGES_RAW,
+      { ...unitRevisionDraft, usage_configuration: archivedUsage },
+    );
+
+    expect(screen.getByText("[UJI STAGING] Pengajuan SPK Unit")).toBeInTheDocument();
+    expect(screen.getByText("FORM PERMOHONAN UNIT")).toBeInTheDocument();
+    await waitFor(() => expect(findSelectTrigger(/^Proyek$/i)).not.toBeDisabled());
+    expect(screen.getByLabelText("Jumlah Unit Diajukan")).toHaveValue(2);
+    expect(screen.queryByText("\\n")).not.toBeInTheDocument();
+    assertStrictServiceCalls();
+  });
+
   it("opens the returned draft on its editable unit context", async () => {
     await mountUnitRevisionDraft();
 

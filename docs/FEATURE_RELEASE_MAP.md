@@ -149,6 +149,12 @@ pemohon, mengarahkan pengguna langsung ke konteks tersebut, dan tetap memakai
 validasi kapasitas backend sebelum perbaikan dikirim. Identitas dan nomor dokumen
 tetap terkunci; production belum disentuh.
 
+Koreksi lanjutan SUR-16 (Issue #180): draft revisi tetap memuat konfigurasi
+Kegunaan historis yang sudah diarsipkan tanpa menampilkannya kembali sebagai
+opsi pengajuan baru. Restore Form, Kegunaan, Proyek, dan Jumlah Unit tidak lagi
+bergantung pada daftar Kegunaan aktif; teks escape literal pada Form & Lokasi
+juga dihapus. Tidak ada migration atau perubahan data.
+
 ### 4.5 Permohonan Unit, Non-Unit, Aset, dan Marison
 
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |

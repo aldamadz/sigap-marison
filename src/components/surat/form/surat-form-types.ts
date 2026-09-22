@@ -74,6 +74,8 @@ export type UsageDetailRecord = {
     action_type?: SuratStepActionType;
     assignee_mode?: SignerAssigneeMode;
     input_schema?: unknown;
+    skip_if_no_candidate?: boolean;
+    candidate_fallback_mode?: string | null;
     candidate_scope?: CandidateScope | null;
     signer_department_id?: string | null;
     form_usage_step_users?: Array<{ user_id: string }>;
