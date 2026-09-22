@@ -1056,7 +1056,7 @@ describe("WorkCalendarWorkspace — CAL-03 F4B Quick Add Minggu/Bulan", () => {
     expect(screen.queryByTestId(/^work-calendar-quick-add-/)).not.toBeInTheDocument();
   });
 
-  it("'+N pekerjaan lainnya' pada Minggu membuka Hari, bukan Quick Add", async () => {
+  it("'+N pekerjaan lainnya' pada Minggu membuka panel hari, bukan Quick Add", async () => {
     const entries = Array.from({ length: 6 }, (_, index) =>
       createFixtureWorkEntry({
         id: `more-${index}`,
@@ -1068,11 +1068,7 @@ describe("WorkCalendarWorkspace — CAL-03 F4B Quick Add Minggu/Bulan", () => {
 
     fireEvent.click(await screen.findByTestId("work-week-more-2026-03-10"));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
-        "Hari Ini, Selasa, 10 Maret 2026",
-      ),
-    );
+    expect(await screen.findByTestId("work-week-day-panel-2026-03-10")).toBeInTheDocument();
     expect(screen.queryByTestId(/^work-calendar-quick-add-/)).not.toBeInTheDocument();
   });
 

@@ -23,7 +23,7 @@ function readIsMobileWeek(): boolean {
   return window.matchMedia(WEEK_MOBILE_QUERY).matches;
 }
 
-export function useWorkWeekPreviewLimit(): number {
+function useMobileWeekQuery(): boolean {
   const [isMobile, setIsMobile] = useState<boolean>(readIsMobileWeek);
 
   useEffect(() => {
@@ -35,5 +35,18 @@ export function useWorkWeekPreviewLimit(): number {
     return () => mediaQuery.removeEventListener("change", onChange);
   }, []);
 
-  return getWorkWeekPreviewLimit(isMobile);
+  return isMobile;
+}
+
+export function useWorkWeekPreviewLimit(): number {
+  return getWorkWeekPreviewLimit(useMobileWeekQuery());
+}
+
+/**
+ * `true` pada viewport mobile (`< md`). Dipakai pemilihan pola presentasi
+ * panel kontekstual Minggu (popover desktop vs bottom sheet mobile) selaras
+ * dengan `useWorkTeamOverviewCompact`.
+ */
+export function useWorkWeekIsCompact(): boolean {
+  return useMobileWeekQuery();
 }

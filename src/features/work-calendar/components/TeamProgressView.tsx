@@ -1,12 +1,14 @@
 /**
  * Tampilan Tim (baca saja).
  *
- * Satu baris per anggota dengan urutan yang dapat dipindai:
- * - baris pertama: identitas (nama dan jabatan, tidak dipotong) serta rasio
+ * Daftar risiko operasional per anggota:
+ * - baris pertama: penanda risiko `Terhambat`/`Terlambat` (hanya bila ada)
+ *   sehingga terbaca paling pertama;
+ * - baris kedua: identitas (nama dan jabatan, tidak dipotong) serta rasio
  *   selesai/total;
- * - baris kedua: metrik lengkap `Direncanakan`, `Berjalan`, `Selesai`,
+ * - baris ketiga: metrik lengkap `Direncanakan`, `Berjalan`, `Selesai`,
  *   `Terhambat`, dan indikator lintas status `Terlambat`;
- * - baris ketiga: batang rasio selesai yang ringkas.
+ * - baris keempat: batang rasio selesai yang ringkas.
  *
  * Progres dihitung otomatis dari status entry. `Terlambat` bukan bagian
  * penjumlahan status sehingga tidak pernah menambah total. Tidak ada aksi
@@ -17,13 +19,13 @@ import { ChevronDown, ChevronRight, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type {
-  WorkProgressCounts,
   WorkEntryOwner,
   WorkEntryOwnerGroup,
   WorkDate,
 } from "../types/work-calendar";
 import { computeWorkCompletionPercent, computeWorkProgress } from "../lib/work-progress";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
+import { TeamMemberMetrics, TeamMemberRiskBadges } from "./TeamMemberMetrics";
 
 export interface TeamProgressViewProps {
   groups: readonly WorkEntryOwnerGroup[];
@@ -77,39 +79,6 @@ export function TeamScopeProgress({
   );
 }
 
-function TeamMetrics({ ownerId, progress }: { ownerId: string; progress: WorkProgressCounts }) {
-  const items = [
-    {
-      key: "planned",
-      label: "Direncanakan",
-      value: progress.planned,
-      tone: "text-muted-foreground",
-    },
-    { key: "in-progress", label: "Berjalan", value: progress.inProgress, tone: "text-pending" },
-    { key: "completed", label: "Selesai", value: progress.completed, tone: "text-success" },
-    { key: "blocked", label: "Terhambat", value: progress.blocked, tone: "text-destructive" },
-    {
-      key: "overdue",
-      label: "Terlambat",
-      value: progress.overdue,
-      tone: progress.overdue > 0 ? "text-overdue" : "text-muted-foreground",
-    },
-  ] as const;
-
-  return (
-    <dl className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      {items.map((item) => (
-        <div key={item.key} className="inline-flex items-center gap-1">
-          <dt className="text-muted-foreground">{item.label}</dt>
-          <dd className={cn("font-semibold", item.tone)} data-testid={`team-${item.key}-${ownerId}`}>
-            {item.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 function TeamOwnerRow({
   group,
   interactions,
@@ -124,14 +93,26 @@ function TeamOwnerRow({
   const progress = computeWorkProgress(group.entries, interactions.today);
   const percent = computeWorkCompletionPercent(progress);
   const headingId = `work-team-heading-${group.owner.id}`;
+  const hasRisk = progress.blocked > 0 || progress.overdue > 0;
 
   return (
     <li
       data-testid={`work-team-row-${group.owner.id}`}
       data-owner-id={group.owner.id}
-      className="rounded-sm border border-border bg-card"
+      data-risk={hasRisk ? "true" : "false"}
+      className={cn(
+        "rounded-sm border",
+        hasRisk ? "border-destructive/40 bg-destructive/5" : "border-border bg-card",
+      )}
     >
       <div className="flex flex-col gap-1.5 px-3 py-2">
+        {hasRisk && (
+          <TeamMemberRiskBadges
+            ownerId={group.owner.id}
+            progress={progress}
+            testIdPrefix="team"
+          />
+        )}
         <button
           type="button"
           onClick={onToggle}
@@ -166,7 +147,7 @@ function TeamOwnerRow({
         </button>
 
         <div className="pl-6">
-          <TeamMetrics ownerId={group.owner.id} progress={progress} />
+          <TeamMemberMetrics ownerId={group.owner.id} progress={progress} testIdPrefix="team" />
         </div>
 
         <div

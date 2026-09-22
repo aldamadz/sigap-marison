@@ -14,6 +14,7 @@
 
 import { AlertCircle, ChevronDown, ChevronRight, RefreshCw, Users } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { WorkDate, WorkEntry, WorkProgressCounts } from "../types/work-calendar";
 import type {
@@ -26,6 +27,10 @@ import type { UseWorkTeamOverviewResult } from "../hooks/use-work-team-overview"
 import { useWorkTeamOverviewCompact } from "../hooks/use-work-team-overview-compact";
 import type { WorkCalendarViewInteractionProps } from "./WorkEntryList";
 import { WorkEntryList } from "./WorkEntryList";
+import {
+  TeamMemberMetrics,
+  TeamMemberRiskBadges,
+} from "./TeamMemberMetrics";
 import {
   TeamOverviewFilterBar,
   TeamOverviewFilterPanel,
@@ -83,32 +88,6 @@ function TeamAggregateProgress({
   );
 }
 
-function TeamMetrics({ ownerId, progress }: { ownerId: string; progress: WorkProgressCounts }) {
-  const items = [
-    { key: "planned", label: "Direncanakan", value: progress.planned },
-    { key: "in-progress", label: "Berjalan", value: progress.inProgress },
-    { key: "completed", label: "Selesai", value: progress.completed },
-    { key: "blocked", label: "Terhambat", value: progress.blocked },
-    { key: "overdue", label: "Terlambat", value: progress.overdue },
-  ] as const;
-
-  return (
-    <dl className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-      {items.map((item) => (
-        <div key={item.key} className="flex items-center gap-1">
-          <dt className="text-muted-foreground">{item.label}</dt>
-          <dd
-            className="font-semibold text-foreground"
-            data-testid={`team-member-${item.key}-${ownerId}`}
-          >
-            {item.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 function TeamMemberCard({
   member,
   isExpanded,
@@ -132,16 +111,36 @@ function TeamMemberCard({
   const identity = [member.officeName, member.departmentName].filter(
     (value): value is string => Boolean(value),
   );
+  // Anggota berisiko (ada pekerjaan terhambat/terlambat) diberi bobot visual
+  // lebih besar: penanda risiko terbaca pertama, baru identitas dan progres.
+  const hasRisk = member.progress.blocked > 0 || member.progress.overdue > 0;
 
   return (
     <li
       data-testid={`team-member-${member.owner.id}`}
-      className="rounded-sm border border-border bg-card"
+      data-risk={hasRisk ? "true" : "false"}
+      className={cn(
+        "rounded-sm border",
+        hasRisk ? "border-destructive/40 bg-destructive/5" : "border-border bg-card/70",
+      )}
     >
-      <div className="flex flex-col gap-2 p-3">
+      <div className={cn("flex flex-col gap-2", hasRisk ? "p-3" : "px-3 py-2.5")}>
+        {hasRisk && (
+          <TeamMemberRiskBadges
+            ownerId={member.owner.id}
+            progress={member.progress}
+            testIdPrefix="team-member"
+          />
+        )}
+
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">
+            <p
+              className={cn(
+                "truncate text-foreground",
+                hasRisk ? "text-sm font-semibold" : "text-sm font-medium",
+              )}
+            >
               {member.owner.name}
             </p>
             <p className="truncate text-xs text-muted-foreground">
@@ -149,23 +148,37 @@ function TeamMemberCard({
               {identity.length > 0 ? ` · ${identity.join(" · ")}` : ""}
             </p>
           </div>
-          <p className="shrink-0 text-xs text-muted-foreground">
+        </div>
+
+        {/*
+          Batang progres dan rasio digabung dalam satu baris. Sebelumnya rasio
+          ditampilkan terpisah dari batang sehingga progres terbaca tiga kali
+          (rasio, metrik "Selesai", batang).
+        */}
+        <div className="flex items-center gap-2">
+          <div
+            role="progressbar"
+            aria-label={`Progres ${member.owner.name}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            aria-valuetext={`${percent} persen selesai, ${member.progress.completed} dari ${member.progress.total} pekerjaan`}
+            className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-sm bg-muted"
+          >
+            <div className="h-full rounded-sm bg-primary" style={{ width: `${percent}%` }} />
+          </div>
+          <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
             <span className="font-semibold text-foreground">{member.progress.completed}</span>/
             <span>{member.progress.total}</span> selesai ({percent}%)
           </p>
         </div>
 
-        <TeamMetrics ownerId={member.owner.id} progress={member.progress} />
-
-        <div
-          role="progressbar"
-          aria-label={`Progres ${member.owner.name}`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
-          className="h-1.5 w-full overflow-hidden rounded-sm bg-muted"
-        >
-          <div className="h-full rounded-sm bg-primary" style={{ width: `${percent}%` }} />
+        <div className={cn(hasRisk ? "" : "opacity-80")}>
+          <TeamMemberMetrics
+            ownerId={member.owner.id}
+            progress={member.progress}
+            testIdPrefix="team-member"
+          />
         </div>
 
         <div>
