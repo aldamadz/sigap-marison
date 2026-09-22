@@ -2528,6 +2528,54 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
   };
 };
 
+const unitRequestValidationError = (message: string, status = 422) => {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+};
+
+/**
+ * Enforcement server-side untuk SPK Unit: lookup `marison_units_by_project`
+ * terpaginasi penuh (seluruh koleksi, bukan halaman pertama). Browser tidak
+ * dipercaya untuk requested_unit_count/kapasitas; lookup hanya GET Marison.
+ */
+const assertUnitRequestAvailability = async (formInput: unknown) => {
+  const input = asPlainRecord(formInput);
+  const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
+  if (category !== "unit") return { valid: true, availableCount: null };
+
+  const requestedProject = asPlainRecord(input.requested_project);
+  const projectId = externalIdFrom(requestedProject, input);
+  if (projectId === null) {
+    throw unitRequestValidationError("Proyek unit wajib dipilih sebelum menerbitkan nomor atau submit SPK Unit.");
+  }
+
+  const requestedCount = Number(input.requested_unit_count || 0);
+  if (!Number.isFinite(requestedCount) || requestedCount < 1) {
+    throw unitRequestValidationError("Jumlah unit wajib diisi. Jumlah unit minimal 1.");
+  }
+
+  let queryResult;
+  try {
+    queryResult = await queryExternalDataSource(MARISON_UNITS_SOURCE_KEY, { project_id: String(projectId) });
+  } catch (lookupError) {
+    const lookupStatus = Number(lookupError?.status) || 0;
+    const error = new Error("Kapasitas unit belum dapat dipastikan. Coba beberapa saat lagi atau hubungi admin.");
+    // Tetap 4xx aman untuk UI; jangan gelembarkan ke 500.
+    error.status = lookupStatus >= 400 && lookupStatus < 500 ? lookupStatus : 422;
+    throw error;
+  }
+
+  const availableCount = Number(queryResult?.total_count || 0);
+  if (!Number.isFinite(availableCount) || availableCount === 0) {
+    throw unitRequestValidationError("Proyek belum punya unit tersedia. Pilih proyek lain sebelum melanjutkan SPK Unit.");
+  }
+  if (requestedCount > availableCount) {
+    throw unitRequestValidationError(`Jumlah unit melebihi ketersediaan proyek (${availableCount} unit).`);
+  }
+  return { valid: true, availableCount };
+};
+
 const getMarisonEnvironmentStatus = async (req) => {
   const user = await requireSupabaseUser(getBearerToken(req));
   const state = await getMarisonEnvironmentState();
@@ -4844,6 +4892,14 @@ export const handleRequest = async (req, res) => {
         const token = getBearerToken(req);
         const payload = await readJsonBody(req);
         const result = await sendInternalNotification(token, payload);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/surat/unit-availability/validate") {
+        const token = getBearerToken(req);
+        await requireSupabaseUser(token);
+        const payload = await readJsonBody(req);
+        const result = await assertUnitRequestAvailability(payload?.form_input_data || payload?.payload || {});
         return sendJson(res, 200, result);
       }
 

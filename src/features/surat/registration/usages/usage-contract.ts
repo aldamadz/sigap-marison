@@ -12,6 +12,7 @@ import type {
   RecommendationDetail,
   RecommendationMultiDetail,
 } from "@sigap/shared";
+import type { UnitAvailabilityState } from "./unit/unit-availability";
 
 export type UsageCategory = "asset" | "unit" | "non_asset" | "non_unit";
 /** Hanya empat kategori canonical yang didukung. Tidak ada modul generic. */
@@ -82,6 +83,8 @@ export interface UsageModuleContext {
   generatedNoSurat: string | null;
   master: MasterData;
   marisonProject: ModuleMarisonProject | null;
+  /** Kapasitas unit Marison untuk proyek terpilih; null = bukan modul unit. */
+  unitAvailability: UnitAvailabilityState | null;
   recommendationIO: RecommendationIO | null;
 
   setInputValue(key: string, value: unknown): void;

@@ -8,6 +8,7 @@ import { assetModule } from "@/features/surat/registration/usages/asset/asset-mo
 import { fundModule } from "@/features/surat/registration/usages/fund/fund-module";
 import { unitModule } from "@/features/surat/registration/usages/unit/unit-module";
 import { nonUnitModule } from "@/features/surat/registration/usages/non-unit/non-unit-module";
+import type { UnitAvailabilityState } from "@/features/surat/registration/usages/unit/unit-availability";
 
 function ctxFor(
   key: UsageModuleKey,
@@ -35,6 +36,7 @@ function ctxFor(
     generatedNoSurat: null,
     master: { entities: [], depts: [], offices: [], types: [], users: [], projects: [] },
     marisonProject,
+    unitAvailability: key === "unit" ? { loading: false, count: 10, error: null } : null,
     recommendationIO: null,
     setInputValue: () => undefined,
     setSelection: () => undefined,
@@ -43,6 +45,16 @@ function ctxFor(
 }
 
 const readyProject = { ready: true, projectId: 19, projectName: "GA01", unavailableCount: 0 };
+
+function ctxForUnitAvailability(availability: UnitAvailabilityState, input: Record<string, unknown> = {}) {
+  const ctx = ctxFor("unit", {
+    requested_project: { code: "GA01" },
+    requested_unit_count: 2,
+    ...input,
+  });
+  ctx.unitAvailability = availability;
+  return ctx;
+}
 
 describe("fund module", () => {
   it("validate: proyek wajib kecuali dana umum; jenis wajib", () => {
@@ -209,6 +221,36 @@ describe("unit module", () => {
     expect(unitModule.validateNumberContext(
       ctxFor("unit", { requested_project: { code: "GA01" }, requested_unit_count: 3 })
     )).toEqual([]);
+  });
+
+  it("fail-closed: lookup loading/error/nol/jumlah melampaui memblokir nomor & submit", () => {
+    const loading = ctxForUnitAvailability({ loading: true, count: null, error: null });
+    expect(unitModule.validateNumberContext(loading)[0].title).toBe("Kapasitas Unit Sedang Dimuat");
+    expect(unitModule.validateSubmit(loading)[0].title).toBe("Kapasitas Unit Sedang Dimuat");
+
+    const errored = ctxForUnitAvailability({ loading: false, count: null, error: "Vendor Marison tidak terjangkau" });
+    expect(unitModule.validateNumberContext(errored)[0].title).toBe("Kapasitas Unit Belum Termuat");
+    expect(unitModule.validateNumberContext(errored)[0].description).toContain("Vendor Marison tidak terjangkau");
+
+    const zero = ctxForUnitAvailability({ loading: false, count: 0, error: null });
+    expect(unitModule.validateNumberContext(zero)[0].title).toBe("Proyek Belum Punya Unit Tersedia");
+    expect(unitModule.validateSubmit(zero)[0].title).toBe("Proyek Belum Punya Unit Tersedia");
+
+    const exceeds = ctxForUnitAvailability({ loading: false, count: 1, error: null }, { requested_unit_count: 2 });
+    expect(unitModule.validateNumberContext(exceeds)[0].title).toBe("Jumlah Melebihi Kapasitas");
+    expect(unitModule.validateNumberContext(exceeds)[0].description).toContain("Kapasitas tersedia 1 unit");
+  });
+
+  it("pass: kapasitas valid & jumlah di dalam kapasitas lolos kedua gate", () => {
+    const valid = ctxForUnitAvailability({ loading: false, count: 10, error: null }, { requested_unit_count: 3 });
+    expect(unitModule.validateNumberContext(valid)).toEqual([]);
+    expect(unitModule.validateSubmit(valid)).toEqual([]);
+  });
+
+  it("non-unit tidak terpengaruh oleh state availabilitas unit", () => {
+    const nonUnit = ctxFor("non_unit", {}, { project_id: "p1" }, readyProject);
+    expect(nonUnit.unitAvailability).toBeNull();
+    expect(nonUnitModule.validateNumberContext(nonUnit)).toEqual([]);
   });
 
   it("cleanup + normalize milik modul; render slot tersedia", () => {

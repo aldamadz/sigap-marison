@@ -381,6 +381,9 @@ export const suratService = {
     formData: Record<string, any>;
     requesterNote?: string;
   }): Promise<{ success: boolean; next_step: string; surat_id: string; revision_event_id: string }> {
+    // Revisi eksternal dapat mengubah jumlah unit, maka jalur ini juga
+    // memakai keputusan ketersediaan backend sebelum RPC.
+    await this.validateUnitRequestAvailability(args.formData?.form_input_data);
     const { data, error } = await supabase.rpc("submit_external_submission_revision", {
       p_revision_event_id: args.revisionEventId,
       p_draft_id: args.draftId,
@@ -608,6 +611,25 @@ export const suratService = {
     if (error) throw error;
   },
 
+  async validateUnitRequestAvailability(formInputData: Record<string, unknown> | undefined | null): Promise<{ valid: boolean; availableCount: number | null }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Tidak terautentikasi");
+    const response = await fetch("/api/surat/unit-availability/validate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ form_input_data: formInputData || {} }),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || "Gagal memvalidasi ketersediaan unit."));
+    }
+    return payload as { valid: boolean; availableCount: number | null };
+  },
+
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
     try {
       const { data: { user } } = await supabase.auth.getUser({ force: true });
@@ -638,6 +660,9 @@ export const suratService = {
         )) {
           throw new Error("Departemen akun Anda tidak diizinkan membuat permohonan Unit pada matrix ini.");
         }
+        // Backend (domain-runtime) memutuskan ketersediaan aktual Marison;
+        // browser tidak dipercaya untuk count/kapasitas.
+        await this.validateUnitRequestAvailability(payload.form_input_data);
       }
 
       // MRN-22: branch-asset virtual fallback (scope "000")
@@ -819,6 +844,8 @@ export const suratService = {
         )) {
           throw new Error("Departemen akun Anda tidak diizinkan membuat permohonan Unit pada matrix ini.");
         }
+        // Submit awal: sama-sama memakai keputusan ketersediaan di backend.
+        await this.validateUnitRequestAvailability(normalizedFormInputData);
       }
 
       const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
