@@ -369,11 +369,15 @@ export function WorkEntryRow({
       data-row-variant={variant}
       data-selected={isSelected ? "true" : "false"}
       className={cn(
-        "rounded-sm border bg-card",
-        isCompact ? "px-1.5 py-1.5" : "px-3 py-2.5",
-        overdue ? "border-overdue/60" : "border-border",
-        // Visual state entry terpilih: cincin + border, bukan warna saja.
-        isSelected && "border-primary ring-2 ring-primary/60",
+        "transition-colors",
+        isCompact ? "px-1.5 py-1.5" : "px-3 py-2",
+        // Kanvas utama: tidak ada border/kartu per baris. Hover lembut, dan
+        // baris terpilih tetap jelas melalui ring + latar (bukan warna saja).
+        isSelected
+          ? "bg-primary/5 ring-2 ring-inset ring-primary/60"
+          : overdue
+            ? "bg-overdue/5 hover:bg-overdue/10"
+            : "hover:bg-muted/40",
       )}
     >
       <div className={cn("flex items-start", isCompact ? "gap-1" : "gap-2")}>

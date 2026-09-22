@@ -1,12 +1,13 @@
 /**
- * Quick entry: satu input utama "Apa yang akan dikerjakan?".
+ * Quick entry: baris ringan di dalam command surface (CAL-03 redesign tahap 1).
  *
  * Perilaku produk:
  * - Enter menyimpan; input dikosongkan oleh pemanggil setelah simpan berhasil
  *   sehingga langsung siap untuk entry berikutnya;
  * - Esc membatalkan dan membersihkan input;
  * - hanya judul yang dibutuhkan untuk membuat entry;
- * - loading tidak menggeser layout (slot status berukuran tetap);
+ * - loading tidak menggeser layout: indikator "Menyimpan" muncul HANYA saat
+ *   menyimpan (tidak ada slot status kosong yang dialokasikan saat idle);
  * - error tampil dekat input, bukan sebagai toast global.
  *
  * Komponen ini dikendalikan (`value`/`onChange`) agar pemanggil menentukan
@@ -60,13 +61,13 @@ export function QuickWorkEntry({
 
   return (
     <form
-      className="rounded-sm border border-border bg-card px-3 py-2.5"
+      data-testid="work-calendar-quick-entry"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-2">
         <label htmlFor="quick-work-entry-input" className="sr-only">
           Apa yang akan dikerjakan?
         </label>
@@ -99,36 +100,36 @@ export function QuickWorkEntry({
             }
           }}
           className={cn(
-            "h-11 w-full min-w-0 rounded-sm border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground sm:flex-1",
+            "h-11 w-full min-w-0 rounded-sm border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground",
             "focus:outline-none focus:ring-2 focus:ring-ring",
             displayedError ? "border-destructive" : "border-input",
           )}
         />
-
-        <div className="flex items-center gap-2">
-          {/* Slot status berukuran tetap supaya layout tidak bergeser saat loading. */}
-          <span className="inline-flex h-11 min-w-[92px] items-center justify-center text-xs text-muted-foreground">
-            {isSaving ? (
-              <span className="inline-flex items-center gap-1.5">
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                Menyimpan
-              </span>
-            ) : (
-              <span className="hidden sm:inline">Enter untuk simpan</span>
-            )}
-          </span>
-          <Button type="submit" className="h-11 shrink-0 rounded-sm" disabled={isSaving}>
+        <Button
+          type="submit"
+          className="h-11 shrink-0 rounded-sm"
+          disabled={isSaving}
+          data-testid="work-calendar-quick-entry-submit"
+        >
+          {isSaving ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
             <Plus aria-hidden="true" />
-            Tambah
-          </Button>
-        </div>
+          )}
+          <span className="hidden sm:inline">{isSaving ? "Menyimpan" : "Tambah"}</span>
+        </Button>
       </div>
 
-      {displayedError && (
-        <p id="quick-work-entry-error" role="alert" className="mt-1.5 text-xs text-destructive">
+      {displayedError ? (
+        <p
+          id="quick-work-entry-error"
+          role="alert"
+          className="mt-1.5 text-xs text-destructive"
+          data-testid="quick-work-entry-error"
+        >
           {displayedError}
         </p>
-      )}
+      ) : null}
     </form>
   );
 }

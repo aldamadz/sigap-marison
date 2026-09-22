@@ -7,6 +7,8 @@
 
 import { Inbox } from "lucide-react";
 
+import { cn } from "@/lib/utils";
+
 import type {
   WorkCalendarPermissions,
   WorkDate,
@@ -66,7 +68,16 @@ export function WorkEntryList({
   }
 
   return (
-    <ul aria-labelledby={labelledBy} className="space-y-2">
+    <ul
+      aria-labelledby={labelledBy}
+      data-testid="work-entry-list"
+      data-variant={variant}
+      className={cn(
+        variant === "full"
+          ? "divide-y divide-border overflow-hidden rounded-sm border border-border bg-card"
+          : "divide-y divide-border/60",
+      )}
+    >
       {entries.map((entry) => {
         const isOwn = interactions.permissions.canEditEntry(entry);
         const readOnly = forceReadOnly || !isOwn;
