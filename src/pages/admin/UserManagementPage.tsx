@@ -110,15 +110,19 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
   const handleResetPassword = async () => {
     const confirmed = await confirmAction({
       title: "Reset Password?",
-      description: `Password ${user.fullName} akan direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}.`,
+      description: `Password ${user.fullName} akan direset. Di production, email recovery akan dikirim. Di staging, password direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}.`,
       confirmText: "Reset Password",
       variant: "destructive",
     });
     if (!confirmed) return;
     setResetting(true);
     try {
-      await adminUserService.resetPassword(user.id);
-      toast.success(`Password ${user.fullName} berhasil direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}`);
+      const res = await adminUserService.resetPassword(user.id);
+      if (res.recoveryEmailSent) {
+        toast.success(`Link recovery berhasil dikirim ke ${user.email}`);
+      } else {
+        toast.success(`Password ${user.fullName} berhasil direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}`);
+      }
     } catch (err) {
       toast.error(describeAdminUserError(err));
     } finally {
@@ -531,20 +535,23 @@ export default function UserManagementPage() {
   const bulkResetPassword = async () => {
     const confirmed = await appDialog.confirm({
       title: "Reset Password Massal?",
-      description: `${selectedUsers.length} akun akan direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}.`,
+      description: `${selectedUsers.length} akun akan direset (ke ${STAGING_DEFAULT_PASSWORD_LABEL} di staging, atau link recovery di production).`,
       confirmText: "Reset Password",
       variant: "destructive",
     });
     if (!confirmed) return;
     setBulkLoading(true);
     let ok = 0, fail = 0;
+    let emailed = false;
     for (const u of selectedUsers) {
       try {
-        await adminUserService.resetPassword(u.id);
+        const res = await adminUserService.resetPassword(u.id);
+        if (res.recoveryEmailSent) emailed = true;
         ok++;
       } catch { fail++; }
     }
-    toast.success(`Reset password: ${ok} berhasil${fail ? `, ${fail} gagal` : ''}`);
+    const mode = emailed ? 'Link recovery dikirim' : 'Reset password';
+    toast.success(`${mode}: ${ok} berhasil${fail ? `, ${fail} gagal` : ''}`);
     setBulkLoading(false);
     clearSelection();
   };

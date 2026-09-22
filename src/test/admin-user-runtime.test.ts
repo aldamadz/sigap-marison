@@ -86,6 +86,19 @@ const createFakePorts = (state: FakeState) => {
       state.revokedUsers.add(userId);
       return { revoked: true, error: null };
     },
+    inviteUserByEmail: async (email) => {
+      const existing = [...state.authUsers.values()].find((user) => user.email === email);
+      if (existing) {
+        return { data: null, error: { message: "User already registered", code: "user_already_exists" } };
+      }
+      state.authUsers.set(NEW_USER_ID, { email, password: "invited" });
+      return { data: { user: { id: NEW_USER_ID } }, error: null };
+    },
+    resetPasswordForEmail: async (email) => {
+      const existing = [...state.authUsers.values()].find((user) => user.email === email);
+      if (!existing) return { error: { message: "Not found" } };
+      return { error: null };
+    },
   };
 
   const repository: AdminUserProfileRepositoryPort = {
@@ -329,6 +342,25 @@ describe("admin-user createUser", () => {
     await expect(withInactiveParent.runtime.createUser({})).rejects.toMatchObject({ status: 400 });
   });
 
+  it("uses an invite email in production without requiring a shared password", async () => {
+    const { runtime, ports, state } = createRuntime({
+      readJsonBody: async () => validPayload,
+      deploymentEnvironment: "production",
+    });
+    vi.spyOn(ports.repository, "findProfileById").mockImplementation(async (id) =>
+      id === PARENT_ID ? profile({ id: PARENT_ID, full_name: "Parent" }) : null,
+    );
+    vi.spyOn(ports.authAdmin, "inviteUserByEmail");
+    vi.spyOn(ports.authAdmin, "createUser");
+
+    const result = await runtime.createUser({});
+
+    expect(ports.authAdmin.inviteUserByEmail).toHaveBeenCalledTimes(1);
+    expect(ports.authAdmin.createUser).toHaveBeenCalledTimes(0);
+    expect(state.authUsers.get(NEW_USER_ID)?.password).toBe("invited");
+    expect(result.user.id).toBe(NEW_USER_ID);
+  });
+
   it("deletes the Auth user when profile completion fails", async () => {
     const { runtime, state, ports } = createRuntime({ readJsonBody: async () => validPayload });
     vi.spyOn(ports.repository, "findProfileById").mockResolvedValue(profile({ id: PARENT_ID }));
@@ -340,16 +372,7 @@ describe("admin-user createUser", () => {
     expect(state.authUsers.size).toBe(0);
   });
 
-  it("fails closed outside staging (no bootstrap password in production)", async () => {
-    const { runtime, state } = createRuntime({
-      readJsonBody: async () => validPayload,
-      deploymentEnvironment: "production",
-    });
-    await expect(runtime.createUser({})).rejects.toMatchObject({ status: 503 });
-    expect(state.authUsers.size).toBe(0);
-  });
-
-  it("fails closed when the staging bootstrap password is missing or weak", async () => {
+  it("fails closed when the staging bootstrap password is missing or weak in staging", async () => {
     const missing = createRuntime({ readJsonBody: async () => validPayload, getBootstrapPassword: () => null });
     await expect(missing.runtime.createUser({})).rejects.toMatchObject({ status: 503 });
     expect(missing.state.authUsers.size).toBe(0);
@@ -376,12 +399,20 @@ describe("admin-user resetPassword", () => {
     await expect(runtime.resetUserPassword({}, NEW_USER_ID)).rejects.toMatchObject({ status: 404 });
   });
 
-  it("fails closed outside staging", async () => {
-    const { runtime } = createRuntime(
+  it("sends a recovery email in production without a shared password", async () => {
+    const { runtime, ports } = createRuntime(
       { deploymentEnvironment: "production" },
-      { profiles: [profile()] },
+      { profiles: [profile()], authUsers: new Map([[NEW_USER_ID, { email: "new.user@example.com" }]]) },
     );
-    await expect(runtime.resetUserPassword({}, NEW_USER_ID)).rejects.toMatchObject({ status: 503 });
+    vi.spyOn(ports.authAdmin, "resetPasswordForEmail");
+    vi.spyOn(ports.authAdmin, "updateUserById");
+
+    const result = await runtime.resetUserPassword({}, NEW_USER_ID);
+
+    expect(ports.authAdmin.resetPasswordForEmail).toHaveBeenCalledWith("new.user@example.com");
+    expect(ports.authAdmin.updateUserById).toHaveBeenCalledTimes(0);
+    expect(result.recoveryEmailSent).toBe(true);
+    expect(result.sessionsRevoked).toBe(true);
   });
 });
 
