@@ -1,9 +1,9 @@
 /**
- * Tampilan Hari (default). Fokus pada pekerjaan satu tanggal:
- * ringkasan progres lalu daftar entry.
+ * Tampilan Hari (default). Fokus pada pekerjaan satu tanggal.
  *
- * Panel detail dirender oleh workspace supaya tampilan Hari dan Minggu
- * memakai panel yang sama.
+ * CAL-03 redesign tahap 1: ringkasan progres dan quick entry sudah menjadi
+ * bagian command surface (sticky), sehingga tampilan ini sekarang hanya
+ * kanvas daftar kerja + catatan hari. Panel detail tetap dirender workspace.
  *
  * CAL-03 F6: bila tanggal acuan adalah hari libur atau hari nonkerja, sebuah
  * catatan kontekstual ditampilkan. Catatan ini informatif — tidak pernah
@@ -14,7 +14,6 @@ import { CalendarOff, PartyPopper } from "lucide-react";
 
 import type { WorkCalendarDayMeta, WorkCalendarDaySummary } from "../types/work-calendar";
 import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
-import { DailyProgressSummary } from "./DailyProgressSummary";
 
 export interface DailyWorkViewProps {
   summary: WorkCalendarDaySummary;
@@ -30,18 +29,16 @@ export function DailyWorkView({ summary, heading, interactions, dayMeta }: Daily
   const DayNoteIcon = dayMeta?.isCutiBersama ? PartyPopper : CalendarOff;
 
   return (
-    <section aria-labelledby={headingId} className="space-y-3">
+    <section aria-labelledby={headingId} className="space-y-2">
       <h2 id={headingId} className="sr-only">
         Pekerjaan {heading}
       </h2>
-
-      <DailyProgressSummary title={heading} counts={summary.progress} />
 
       {showDayNote && dayMeta && (
         <p
           data-testid={`work-day-note-${summary.date}`}
           data-day-kind={dayMeta.kind}
-          className="flex items-center gap-2 rounded-sm border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
+          className="flex items-center gap-1.5 rounded-sm border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
         >
           <DayNoteIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{dayMeta.label ?? "Hari nonkerja"}.</span>

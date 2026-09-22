@@ -85,6 +85,14 @@ import {
   getWorkCalendarMotionDurations,
 } from "@/features/work-calendar/lib/work-calendar-motion";
 import {
+  DEFAULT_WORK_CALENDAR_STATUS_FILTER,
+  WORK_CALENDAR_STATUS_FILTERS,
+  countWorkEntriesByStatusFilter,
+  filterWorkEntriesByStatus,
+  getWorkCalendarStatusFilterLabel,
+  matchesWorkCalendarStatusFilter,
+} from "@/features/work-calendar/lib/work-calendar-status-filter";
+import {
   WORK_CALENDAR_FIXTURE_CURRENT_USER,
   WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
   WORK_CALENDAR_FIXTURE_TODAY,
@@ -1017,5 +1025,103 @@ describe("work-calendar-motion (CAL-03 F4B)", () => {
   it("menetapkan lebar sheet detail desktop pada rentang 480-560 px", () => {
     expect(WORK_CALENDAR_DETAIL_SHEET_MIN_WIDTH).toBe(480);
     expect(WORK_CALENDAR_DETAIL_SHEET_MAX_WIDTH).toBe(560);
+  });
+});
+
+describe("work-calendar-status-filter", () => {
+  const today = WORK_CALENDAR_FIXTURE_TODAY;
+
+  const planned = createFixtureWorkEntry({ id: "f-planned", status: "planned" });
+  const running = createFixtureWorkEntry({ id: "f-running", status: "in_progress" });
+  const done = createFixtureWorkEntry({ id: "f-done", status: "completed" });
+  const blocked = createFixtureWorkEntry({ id: "f-blocked", status: "blocked" });
+  const overdue = createFixtureWorkEntry({
+    id: "f-overdue",
+    status: "planned",
+    workDate: "2026-03-09",
+  });
+  const blockedOverdue = createFixtureWorkEntry({
+    id: "f-blocked-overdue",
+    status: "blocked",
+    workDate: "2026-03-09",
+  });
+
+  it("menyediakan opsi sesuai urutan pemindaian operasional", () => {
+    expect(WORK_CALENDAR_STATUS_FILTERS.map((option) => option.value)).toEqual([
+      "all",
+      "attention",
+      "in_progress",
+      "blocked",
+      "completed",
+    ]);
+    expect(DEFAULT_WORK_CALENDAR_STATUS_FILTER).toBe("all");
+  });
+
+  it("menerjemahkan nilai filter menjadi label yang stabil", () => {
+    expect(getWorkCalendarStatusFilterLabel("all")).toBe("Semua");
+    expect(getWorkCalendarStatusFilterLabel("attention")).toBe("Perlu perhatian");
+    expect(getWorkCalendarStatusFilterLabel("in_progress")).toBe("Berjalan");
+    expect(getWorkCalendarStatusFilterLabel("blocked")).toBe("Terhambat");
+    expect(getWorkCalendarStatusFilterLabel("completed")).toBe("Selesai");
+  });
+
+  it("mengembalikan seluruh entry tanpa mengubah urutan pada filter Semua", () => {
+    const entries = [planned, running, done];
+    expect(filterWorkEntriesByStatus(entries, "all", today)).toBe(entries);
+  });
+
+  it("menyaring per status tunggal", () => {
+    const entries = [planned, running, done, blocked];
+    expect(filterWorkEntriesByStatus(entries, "in_progress", today)).toEqual([running]);
+    expect(filterWorkEntriesByStatus(entries, "blocked", today)).toEqual([blocked]);
+    expect(filterWorkEntriesByStatus(entries, "completed", today)).toEqual([done]);
+  });
+
+  it("menggabungkan overdue dan blocked pada filter Perlu perhatian", () => {
+    const entries = [planned, running, done, blocked, overdue, blockedOverdue];
+    // `planned` hari ini bukan attention; `running`/`done` juga bukan.
+    expect(filterWorkEntriesByStatus(entries, "attention", today)).toEqual([
+      blocked,
+      overdue,
+      blockedOverdue,
+    ]);
+  });
+
+  it("tidak mengurutkan ulang: urutan relatif tetap setelah disaring", () => {
+    // Urutan waktu kerja (entry berjam sebelum sepanjang hari) dipegang
+    // repository; filter hanya membuang, tidak mengubah urutan.
+    const timed = createFixtureWorkEntry({
+      id: "f-timed",
+      status: "in_progress",
+      isAllDay: false,
+      startsAt: "2026-03-10T01:00:00.000Z",
+    });
+    const entries = [timed, planned, running];
+    expect(filterWorkEntriesByStatus(entries, "in_progress", today)).toEqual([timed, running]);
+  });
+
+  it("menghitung jumlah yang cocok tanpa mengubah daftar", () => {
+    const entries = [planned, running, done, blocked, overdue];
+    expect(countWorkEntriesByStatusFilter(entries, "all", today)).toBe(5);
+    expect(countWorkEntriesByStatusFilter(entries, "attention", today)).toBe(2);
+    expect(countWorkEntriesByStatusFilter(entries, "in_progress", today)).toBe(1);
+  });
+
+  it("memakai dueDate eksplisit, bukan workDate, untuk overdue", () => {
+    // Cabang `dueDate ?? workDate`: dueDate di masa lalu + workDate hari ini.
+    const dueYesterday = createFixtureWorkEntry({
+      id: "f-due-late",
+      status: "planned",
+      workDate: WORK_CALENDAR_FIXTURE_TODAY,
+      dueDate: "2026-03-09",
+    });
+    const dueToday = createFixtureWorkEntry({
+      id: "f-due-today",
+      status: "planned",
+      workDate: WORK_CALENDAR_FIXTURE_TODAY,
+      dueDate: WORK_CALENDAR_FIXTURE_TODAY,
+    });
+    expect(matchesWorkCalendarStatusFilter(dueYesterday, "attention", today)).toBe(true);
+    expect(matchesWorkCalendarStatusFilter(dueToday, "attention", today)).toBe(false);
   });
 });
