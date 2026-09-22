@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
 
 export type DraftSaveState = "idle" | "saving" | "saved" | "error";
@@ -60,8 +60,24 @@ export const useSuratAutosave = (
     debounceMs = 900,
   } = params;
 
+  const wasRestoring = useRef(draftToRestore);
+  const skipNextAutosave = useRef(false);
+
+  // `draftToRestore` is cleared only after hydration. Skip the first autosave
+  // cycle so restoring a numbered draft does not rewrite it without user input.
+  useEffect(() => {
+    if (wasRestoring.current && !draftToRestore) {
+      skipNextAutosave.current = true;
+    }
+    wasRestoring.current = draftToRestore;
+  }, [draftToRestore]);
+
   useEffect(() => {
     if (!activeDraftId || !generatedNoSurat || draftToRestore) return;
+    if (skipNextAutosave.current) {
+      skipNextAutosave.current = false;
+      return;
+    }
     // Jangan pernah menimpa payload dengan kondisi yang sudah kehilangan
     // tautan usage — itu akan menghapus perihal/penanda tangan secara permanen.
     if (!selectedUsage?.id && !linkedDocumentContext) return;
