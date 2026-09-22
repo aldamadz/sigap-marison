@@ -6,6 +6,10 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { LogController } from "fastify";
 import { getEnvironment } from "./config/env.js";
 import { registerErrorHandler } from "./plugins/errors.js";
+import {
+  pathnameFromUrl,
+  shouldServeSpaIndex,
+} from "./plugins/spa-fallback.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerBffRoutes } from "./routes/bff.routes.js";
 import { registerDomainRoutes } from "./routes/domain.routes.js";
@@ -80,7 +84,7 @@ export const buildApp = async () => {
   });
 
   app.setNotFoundHandler(async (request, reply) => {
-    if (request.method === "GET" && String(request.headers.accept || "").includes("text/html")) {
+    if (shouldServeSpaIndex({ method: request.method, pathname: pathnameFromUrl(request.url) })) {
       return reply.header("Cache-Control", "no-cache").sendFile("index.html");
     }
     return reply.code(404).send({ error: "Not found", requestId: request.id });
