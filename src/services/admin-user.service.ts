@@ -120,7 +120,7 @@ export const adminUserService = {
     }),
 
   resetPassword: (userId: string) =>
-    request<{ success: true; sessionsRevoked: boolean }>(
+    request<{ success: true; sessionsRevoked: boolean; recoveryEmailSent: boolean }>(
       `/api/admin/users/${userId}/reset-password`,
       { method: 'POST', body: JSON.stringify({}) },
     ),

@@ -55,8 +55,10 @@ export type AdminUserAuthAdminResult = {
 
 export type AdminUserAuthAdminPort = {
   createUser(input: AdminUserAuthAdminCreateInput): Promise<AdminUserAuthAdminResult>;
+  inviteUserByEmail(email: string, options?: { data?: Record<string, string | null> }): Promise<AdminUserAuthAdminResult>;
   updateUserById(uid: string, input: AdminUserAuthAdminUpdateInput): Promise<AdminUserAuthAdminResult>;
   deleteUser(uid: string): Promise<AdminUserAuthAdminResult>;
+  resetPasswordForEmail(email: string): Promise<{ error: { message?: string } | null }>;
   /**
    * Revokes a target user's sessions.
    *
@@ -305,12 +307,9 @@ export const assertOrganizationPairing = (
 };
 
 export function createAdminUserRuntime(deps: AdminUserDependencies) {
-  const assertBootstrapPasswordAvailable = (): string => {
+  const assertBootstrapPasswordAvailable = (): string | null => {
     if (deps.deploymentEnvironment !== "staging") {
-      throw errorWithStatus(
-        "Pembuatan/reset password otomatis hanya tersedia di staging hingga kebijakan onboarding production dikonfigurasi.",
-        503,
-      );
+      return null;
     }
     const password = deps.getBootstrapPassword();
     if (typeof password !== "string" || password.length < 8) {
@@ -408,20 +407,29 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     await resolveOrganization(input);
 
     const authAdmin = deps.getAuthAdmin();
-    const created = await authAdmin.createUser({
-      email: input.email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: input.full_name,
-        nik: input.nik,
-        job_title: input.job_title,
-        role: input.role,
-        department_id: input.department_id,
-        office_id: input.office_id,
-        parent_id: input.parent_id,
-      },
-    });
+    const userMetadata = {
+      full_name: input.full_name,
+      nik: input.nik,
+      job_title: input.job_title,
+      role: input.role,
+      department_id: input.department_id,
+      office_id: input.office_id,
+      parent_id: input.parent_id,
+    };
+
+    let created: AdminUserAuthAdminResult;
+    if (password) {
+      created = await authAdmin.createUser({
+        email: input.email,
+        password,
+        email_confirm: true,
+        user_metadata: userMetadata,
+      });
+    } else {
+      // Production uses invite link which sends a welcome email.
+      created = await authAdmin.inviteUserByEmail(input.email, { data: userMetadata });
+    }
+
     if (created.error || !created.data?.user?.id) {
       const message = String(created.error?.message || "Gagal membuat akun Auth.");
       if (/already registered|already exists|email must be unique/i.test(message)) {
@@ -513,12 +521,13 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
    * POST /api/admin/users/:userId/reset-password
    *
    * The bootstrap password is read server-side only and never returned.
+   * In production, sends a recovery email instead and ignores the payload.
    * Session revocation is best-effort (see AdminUserAuthAdminPort).
    */
   const resetUserPassword = async (
     req: unknown,
     userId: string,
-  ): Promise<{ success: true; sessionsRevoked: boolean }> => {
+  ): Promise<{ success: true; sessionsRevoked: boolean; recoveryEmailSent: boolean }> => {
     deps.assertSameOrigin(req);
     await deps.requireAdminUser(deps.getBearerToken(req));
     if (!UUID_RE.test(userId)) throw errorWithStatus("ID user tidak valid.", 400);
@@ -529,17 +538,28 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     if (!target || target.deleted_at) throw errorWithStatus("User tidak ditemukan.", 404);
 
     const authAdmin = deps.getAuthAdmin();
-    const updated = await authAdmin.updateUserById(userId, { password });
-    if (updated.error) {
-      console.error("[admin-user] reset password failed:", updated.error.message);
-      throw errorWithStatus("Gagal mereset password.", 502);
+    let recoveryEmailSent = false;
+    if (password) {
+      const updated = await authAdmin.updateUserById(userId, { password });
+      if (updated.error) {
+        console.error("[admin-user] reset password failed:", updated.error.message);
+        throw errorWithStatus("Gagal mereset password.", 502);
+      }
+    } else {
+      if (!target.email) throw errorWithStatus("User tidak memiliki email.", 400);
+      const reset = await authAdmin.resetPasswordForEmail(target.email);
+      if (reset.error) {
+        console.error("[admin-user] reset password email failed:", reset.error.message);
+        throw errorWithStatus("Gagal mengirim email reset password.", 502);
+      }
+      recoveryEmailSent = true;
     }
 
     const revocation = await authAdmin.revokeSessions(userId);
     if (!revocation.revoked) {
       console.warn("[admin-user] session revocation unavailable for user:", userId);
     }
-    return { success: true, sessionsRevoked: revocation.revoked };
+    return { success: true, sessionsRevoked: revocation.revoked, recoveryEmailSent };
   };
 
   /**
@@ -689,6 +709,10 @@ export const createSupabaseAuthAdminPort = (client: SupabaseClient): AdminUserAu
     const result = await client.auth.admin.createUser(input as never);
     return { data: result.data as never, error: result.error as never };
   },
+  inviteUserByEmail: async (email, options) => {
+    const result = await client.auth.admin.inviteUserByEmail(email, options);
+    return { data: result.data as never, error: result.error as never };
+  },
   updateUserById: async (uid, input) => {
     const result = await client.auth.admin.updateUserById(uid, input as never);
     return { data: result.data as never, error: result.error as never };
@@ -696,6 +720,10 @@ export const createSupabaseAuthAdminPort = (client: SupabaseClient): AdminUserAu
   deleteUser: async (uid) => {
     const result = await client.auth.admin.deleteUser(uid);
     return { data: result.data as never, error: result.error as never };
+  },
+  resetPasswordForEmail: async (email) => {
+    const result = await client.auth.resetPasswordForEmail(email);
+    return { error: result.error as never };
   },
   revokeSessions: async (userId) => {
     try {
