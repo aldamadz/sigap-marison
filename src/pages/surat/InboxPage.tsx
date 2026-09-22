@@ -441,6 +441,17 @@ export default function InboxPage() {
       (item?.verification_required !== true && !hasStoredUnitAllocation(item) && shouldSignerInputStageData(item))
     );
 
+  // Dead-end recovery: lookup unit gagal/kosong/proyek hilang sehingga alokasi
+  // mustahil. Tim pemeriksa tidak diberi hak tolak permanen di sini.
+  const canReturnToRequester = (item: any) =>
+    isVerificationTask(item) &&
+    isUnitAllocationRequired(item) &&
+    (
+      !getAllocationProject(item)?.code ||
+      Boolean(allocationErrors[item.id]) ||
+      (!allocationLoading[item.id] && (allocationUnits[item.id] || []).length === 0)
+    );
+
   const getAllocationProject = (item: any) =>
     getUnitAllocationData(item.surat_registrasi).project ||
     allocationProjectSelected[item.id] ||
@@ -794,6 +805,57 @@ const handleApprove = async (item: any) => {
     } catch (error: any) {
       console.error("Reject Error:", error);
       toast.error(error.message || "Gagal menolak dokumen.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReturnToRequester = async (item: any) => {
+    const reason = await appDialog.prompt({
+      title: "Kembalikan ke Pemohon?",
+      description: `Lookup unit untuk "${item.surat_registrasi.judul_surat}" tidak dapat diselesaikan. Pemohon akan masuk ke status Menunggu Perbaikan dan dapat memperbaiki pengajuan. Alasan wajib.`,
+      label: "Alasan pengembalian",
+      placeholder: "Tuliskan alasan yang jelas, minimal 5 karakter...",
+      confirmText: "Kembalikan ke Pemohon",
+      cancelText: "Batal",
+      multiline: true,
+      required: true,
+    });
+    if (reason === null) return;
+    if (reason.trim().length < 5) {
+      toast.error("Alasan Wajib Diisi", {
+        description: "Harap masukkan alasan pengembalian minimal 5 karakter.",
+      });
+      return;
+    }
+
+    setProcessingId(item.id);
+    try {
+      await suratApprovalApi.requestProcessRevision({
+        suratId: item.surat_id,
+        signatureId: item.id,
+        targetType: "requester",
+        targetStep: null,
+        reason: reason.trim(),
+        changes: {
+          note: reason.trim(),
+          requested_by: "verification_inbox",
+          external_submission_revision: true,
+          requester_must_edit: true,
+          unit_availability_dead_end: true,
+        },
+      });
+      toast.success("Dikembalikan ke Pemohon", {
+        description: "Pengajuan masuk status Menunggu Perbaikan dan bisa diperbaiki oleh pemohon.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
+        refetchAttention(),
+      ]);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal mengembalikan proses.");
     } finally {
       setProcessingId(null);
     }
@@ -2695,6 +2757,17 @@ const handleApprove = async (item: any) => {
                 </div>
                 {isVerificationTask(selectedItem) ? (
                   <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:justify-end">
+                    {canReturnToRequester(selectedItem) && (
+                      <Button
+                        variant="outline"
+                        className="shrink-0 border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                        disabled={processingId === selectedItem.id}
+                        onClick={() => handleReturnToRequester(selectedItem)}
+                      >
+                        {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Kembalikan ke Pemohon
+                      </Button>
+                    )}
                     <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
                       {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                       Export Summary

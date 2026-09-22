@@ -54,6 +54,8 @@ import type {
   UsageModuleContext,
   UsageModuleKey,
 } from "@/features/surat/registration/usages/usage-contract";
+import { useUnitAvailability } from "@/features/surat/registration/usages/unit/use-unit-availability";
+import { EMPTY_UNIT_AVAILABILITY } from "@/features/surat/registration/usages/unit/unit-availability";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
@@ -956,6 +958,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     ? nonUnitProjectCandidates.length > 0
     : branchHasRegisteredProjects;
 
+  // Availability unit dibangun dari input + requestExternalOptions stabil;
+  // tidak menunggu moduleCtx lengkap agar moduleCtx bisa memakai hasilnya.
+  const unitAvailabilityCtx = useMemo(() => {
+    if (!selectedUsage || !activeUsageData) return null;
+    return {
+      usage: selectedUsage,
+      category: activeUsageData.category,
+      input: formData.form_input_data,
+      requestExternalOptions,
+    };
+  }, [selectedUsage, activeUsageData, formData.form_input_data, requestExternalOptions]);
+  const unitAvailability = useUnitAvailability(unitAvailabilityCtx);
+
   // Modul aktif + shared module context (typed penuh, tanpa any-cast).
   // Resolver null → tidak ada modul (fail closed di UI & gate nomor).
   const moduleCtx: UsageModuleContext | null = useMemo(() => {
@@ -978,6 +993,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         projectName: selectedNonUnitProjectMapping.name || "",
         unavailableCount: unavailableNonUnitProjectCount,
       },
+      unitAvailability,
       recommendationIO: recommendationMultiDetail ? {
         model: recommendationMultiDetail,
         onModelChange: setRecommendationMultiDetail,
@@ -1009,6 +1025,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedMarisonProjectId,
     selectedNonUnitProjectMapping.name,
     unavailableNonUnitProjectCount,
+    unitAvailability,
     recommendationMultiDetail,
     uploadingRecommendationAttachment,
     setInputValue,
@@ -1559,6 +1576,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     generatedNoSurat,
     master,
     marisonProject: null,
+    unitAvailability: EMPTY_UNIT_AVAILABILITY,
     recommendationIO: null,
     setInputValue,
     setSelection: (patch) => setFormData((current) => ({ ...current, ...patch })),

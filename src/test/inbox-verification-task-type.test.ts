@@ -44,6 +44,15 @@ describe("inbox verification task_type preserved on detail merge", () => {
     expect(inbox).toContain("Simpan & lanjutkan");
   });
 
+  it("4b. Verification dead-end exposes canonical Kembalikan ke Pemohon, not permanent reject", () => {
+    expect(inbox).toContain("Kembalikan ke Pemohon");
+    expect(inbox).toContain("handleReturnToRequester");
+    expect(inbox).toContain("canReturnToRequester(selectedItem)");
+    expect(inbox).toContain("targetType: \"requester\"");
+    expect(inbox).toContain("external_submission_revision: true");
+    expect(inbox).toContain("requester_must_edit: true");
+  });
+
   it("5. BFF detail derives task_type with canonical signer/verifier rule", () => {
     // signer (user_id) wins; else verifier_snapshot hit + verification pending
     expect(inboxRuntime).toContain("const isSigner = data.user_id === user.id");
@@ -179,5 +188,53 @@ describe("inbox verification task_type — behavioral", () => {
     const detail = { user_id: "u-1", verifier_snapshot: [{ user_id: "u-1" }], verification_required: true, verification_status: "pending" };
     expect(deriveTaskType(detail, "u-1")).toBe("approval");
     expect(mergeSelected({ task_type: "verification" }, detail).task_type).toBe("verification");
+  });
+});
+
+describe("verification dead-end recovery — behavioral", () => {
+  type VerificationItem = {
+    task_type: string | null;
+    requires_unit_allocation: boolean;
+    project?: { code?: string };
+  };
+  type UnitLookup = {
+    loading: boolean;
+    units: string[];
+    error: string | null;
+  };
+
+  // Mirrors src/pages/surat/InboxPage.tsx canReturnToRequester.
+  const canReturnToRequester = (item: VerificationItem, lookup: UnitLookup) =>
+    item.task_type === "verification" &&
+    item.requires_unit_allocation &&
+    (
+      !item.project?.code ||
+      Boolean(lookup.error) ||
+      (!lookup.loading && lookup.units.length === 0)
+    );
+
+  const item = (overrides: Partial<VerificationItem> = {}): VerificationItem => ({
+    task_type: "verification",
+    requires_unit_allocation: true,
+    project: { code: "TEST-02" },
+    ...overrides,
+  });
+
+  it("lookup kosong/gagal/proyek hilang membuat Kembalikan ke Pemohon tersedia", () => {
+    expect(canReturnToRequester(item(), { loading: false, units: [], error: null })).toBe(true);
+    expect(canReturnToRequester(item(), { loading: false, units: [], error: "Vendor Marison tidak terjangkau" })).toBe(true);
+    expect(canReturnToRequester(item({ project: undefined }), { loading: false, units: ["u1"], error: null })).toBe(true);
+  });
+
+  it("lookup valid menyembunyikan jalur pengembalian", () => {
+    expect(canReturnToRequester(item(), { loading: false, units: ["u1"], error: null })).toBe(false);
+    expect(canReturnToRequester(item(), { loading: true, units: [], error: null })).toBe(false);
+  });
+
+  it("alasan pengembalian wajib minimal 5 karakter (aturan RPC kanonikal)", () => {
+    const reasonValid = (reason: string) => reason.trim().length >= 5;
+    expect(reasonValid("")).toBe(false);
+    expect(reasonValid("unit")).toBe(false);
+    expect(reasonValid("Lookup unit kosong untuk proyek ini")).toBe(true);
   });
 });
