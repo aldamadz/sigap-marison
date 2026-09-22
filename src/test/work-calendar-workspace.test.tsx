@@ -1043,19 +1043,31 @@ describe("WorkCalendarWorkspace — CAL-03 F4A koreksi batas preview Minggu", ()
     }
   });
 
-  it("tombol +N membuka tampilan Hari pada tanggal tersebut", async () => {
+  it("tombol +N membuka panel hari dalam konteks Minggu", async () => {
     renderWorkspace({ view: "week", initialAnchorDate: "2026-03-09", entries: weekEntries(5) });
 
     const more = await screen.findByTestId(`work-week-more-${WORK_CALENDAR_FIXTURE_TODAY}`);
     fireEvent.click(more);
 
+    // Panel terbuka tanpa berpindah ke tampilan Hari: tujuh kolom minggu tetap
+    // dirender di bawahnya.
+    const panel = await screen.findByTestId(
+      `work-week-day-panel-${WORK_CALENDAR_FIXTURE_TODAY}`,
+    );
+    expect(panel).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^work-week-column-/)).toHaveLength(7);
+    // Panel memuat seluruh entry, termasuk yang dipotong preview.
+    expect(await screen.findByTestId("work-entry-row-week-4")).toBeInTheDocument();
+
+    // Aksi sekunder tetap membuka tampilan Hari penuh pada tanggal itu.
+    fireEvent.click(
+      screen.getByTestId(`work-week-day-panel-open-day-${WORK_CALENDAR_FIXTURE_TODAY}`),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("work-calendar-range-label")).toHaveTextContent(
         "Hari Ini, Selasa, 10 Maret 2026",
       ),
     );
-    // Tampilan Hari menampilkan seluruh entry, bukan hanya preview.
-    expect(await screen.findByTestId("work-entry-row-week-4")).toBeInTheDocument();
   });
 });
 
@@ -1244,7 +1256,7 @@ describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
     expect(screen.getByTestId(`work-month-more-${WORK_CALENDAR_FIXTURE_TODAY}`)).toHaveTextContent("+1 lainnya");
   });
 
-  it("menyediakan indikator ringkas mobile tanpa preview judul", async () => {
+  it("menyediakan satu preview judul prioritas tertinggi pada sel mobile", async () => {
     renderWorkspace({
       view: "month",
       entries: [
@@ -1254,11 +1266,13 @@ describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
     });
 
     const compact = await screen.findByTestId(`work-month-compact-${WORK_CALENDAR_FIXTURE_TODAY}`);
-    // Satu selesai dan satu terhambat: dua penanda status ringkas.
-    expect(compact).toHaveTextContent("11");
-    // Indikator mobile tidak memuat judul entry.
+    // Preview tunggal memuat judul dengan prioritas tertinggi (terhambat)
+    // sehingga risiko paling mudah terbaca; judul entry selesai tidak ikut.
+    expect(within(compact).getByTestId("work-month-mobile-preview-mc2")).toBeInTheDocument();
+    expect(compact).toHaveTextContent("Dua");
     expect(compact).not.toHaveTextContent("Satu");
-    expect(compact).not.toHaveTextContent("Dua");
+    // Ringkasan jumlah per status tetap ada: satu selesai dan satu terhambat.
+    expect(within(compact).getAllByText("1")).toHaveLength(2);
   });
 
   it("membuka panel hari saat +N lainnya diklik", async () => {

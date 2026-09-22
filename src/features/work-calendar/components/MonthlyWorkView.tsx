@@ -2,9 +2,10 @@
  * Tampilan Bulan.
  *
  * Komposisi responsif:
- * - Mobile (< md): sel hanya memuat tanggal, jumlah selesai/total, dan
- *   indikator status/overdue yang ringkas. Tidak ada potongan judul satu
- *   huruf di dalam grid. Menekan sel membuka daftar hari yang terbaca penuh.
+ * - Mobile (< md): sel memuat tanggal, jumlah selesai/total, satu preview
+ *   judul prioritas tertinggi yang aman dibaca (bukan potongan satu huruf),
+ *   serta indikator status/overdue. Menekan sel membuka panel hari yang
+ *   terbaca penuh. Tidak ada teks di bawah 11px.
  * - Desktop/tablet (>= md): sel boleh menampilkan maksimal dua preview judul
  *   beserta tombol "+N lainnya".
  *
@@ -22,7 +23,7 @@ import type {
   WorkEntryStatus,
 } from "../types/work-calendar";
 import { WORK_WEEKDAY_LABELS_ID, formatWorkDateShort } from "../lib/work-calendar-date";
-import { getWorkMonthCellPreview } from "../lib/work-progress";
+import { getWorkMonthCellPreview, getWorkWeekDayPreview } from "../lib/work-progress";
 import { WorkEntryStatusGlyph } from "./WorkEntryStatusGlyph";
 import { WorkCalendarDayBadge, getWorkCalendarDaySurfaceClassName } from "./WorkCalendarDayBadge";
 
@@ -65,6 +66,10 @@ export function MonthlyWorkView({
       <div className="grid grid-cols-7 gap-1">
         {cells.map((cell) => {
           const { preview, hiddenCount } = getWorkMonthCellPreview(cell.entries);
+          // Preview mobile tunggal: entry dengan prioritas tertinggi
+          // (terhambat/terlambat lebih dulu) sehingga risiko paling mudah
+          // terbaca tanpa membuka panel hari.
+          const mobilePreview = getWorkWeekDayPreview(cell.entries, today, 1).preview[0] ?? null;
           const isToday = cell.date === today;
           const progress = cell.progress;
           const meta = dayMeta?.get(cell.date);
@@ -122,30 +127,53 @@ export function MonthlyWorkView({
                 {progress.total > 0 && (
                   <span
                     data-testid={`work-month-count-${cell.date}`}
-                    className="rounded-sm bg-muted px-1 text-[10px] font-medium text-muted-foreground"
+                    className="rounded-sm bg-muted px-1 text-[11px] font-medium text-muted-foreground"
                   >
                     {progress.completed}/{progress.total}
                   </span>
                 )}
               </button>
 
-              {/* Indikator ringkas mobile: status dan overdue tanpa judul. */}
-              {(compactItems.length > 0 || progress.overdue > 0) && (
+              {/*
+                Indikator ringkas mobile: satu preview judul prioritas
+                tertinggi yang aman dibaca, lalu ringkasan status/overdue.
+                Sisa judul tetap dibuka lewat panel hari.
+              */}
+              {mobilePreview && (
                 <div
                   data-testid={`work-month-compact-${cell.date}`}
-                  className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 md:hidden"
+                  className="mt-1 flex flex-col gap-0.5 md:hidden"
                 >
-                  {compactItems.map((item) => (
-                    <span key={item.key} className="inline-flex items-center text-[10px] text-muted-foreground">
-                      <WorkEntryStatusGlyph status={item.key} className="h-3 w-3" />
-                      <span className="ml-0.5 font-semibold text-foreground">{item.value}</span>
-                    </span>
-                  ))}
-                  {progress.overdue > 0 && (
-                    <span className="inline-flex items-center text-[10px] font-medium text-overdue">
-                      <Hourglass className="h-3 w-3" aria-hidden="true" />
-                      <span className="ml-0.5">{progress.overdue}</span>
-                    </span>
+                  <button
+                    type="button"
+                    data-testid={`work-month-mobile-preview-${mobilePreview.id}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenEntry(mobilePreview);
+                    }}
+                    title={mobilePreview.title}
+                    aria-label={`Buka ${mobilePreview.title} pada ${cell.date}`}
+                    className="flex min-h-touch w-full min-w-0 items-center gap-1 rounded-sm px-0.5 text-left text-[11px] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <WorkEntryStatusGlyph status={mobilePreview.status} className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{mobilePreview.title}</span>
+                  </button>
+
+                  {(compactItems.length > 0 || progress.overdue > 0) && (
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      {compactItems.map((item) => (
+                        <span key={item.key} className="inline-flex items-center text-[11px] text-muted-foreground">
+                          <WorkEntryStatusGlyph status={item.key} className="h-3 w-3" />
+                          <span className="ml-0.5 font-semibold text-foreground">{item.value}</span>
+                        </span>
+                      ))}
+                      {progress.overdue > 0 && (
+                        <span className="inline-flex items-center text-[11px] font-medium text-overdue">
+                          <Hourglass className="h-3 w-3" aria-hidden="true" />
+                          <span className="ml-0.5">{progress.overdue}</span>
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -199,7 +227,7 @@ export function MonthlyWorkView({
               )}
 
               {progress.overdue > 0 && (
-                <span className="mt-1 hidden text-[10px] font-medium text-overdue md:block">
+                <span className="mt-1 hidden text-[11px] font-medium text-overdue md:block">
                   {progress.overdue} terlambat
                 </span>
               )}

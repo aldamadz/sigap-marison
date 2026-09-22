@@ -6,6 +6,7 @@
  * tindakan pada baris, jadi drag-and-drop bukan satu-satunya cara.
  */
 
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -15,9 +16,17 @@ import type {
   WorkDate,
 } from "../types/work-calendar";
 import { formatWorkDateShort, getDayName } from "../lib/work-calendar-date";
-import { getWorkWeekDayPreview } from "../lib/work-progress";
-import { useWorkWeekPreviewLimit } from "../hooks/use-work-week-preview-limit";
-import { WorkEntryList, type WorkCalendarViewInteractionProps } from "./WorkEntryList";
+import { EMPTY_WORK_PROGRESS, getWorkWeekDayPreview } from "../lib/work-progress";
+import {
+  useWorkWeekIsCompact,
+  useWorkWeekPreviewLimit,
+} from "../hooks/use-work-week-preview-limit";
+import {
+  WorkEntryList,
+  type WorkCalendarViewInteractionProps,
+} from "./WorkEntryList";
+import { AnimatePresence } from "./WorkCalendarMotion";
+import { WeekDayPanel } from "./WeekDayPanel";
 import { WorkCalendarDayBadge, getWorkCalendarDaySurfaceClassName } from "./WorkCalendarDayBadge";
 
 export interface WeeklyWorkViewProps {
@@ -49,6 +58,34 @@ export function WeeklyWorkView({
   // Satu daftar preview untuk mobile dan desktop: batasnya dihitung di JS
   // supaya tidak ada DOM aksesibel ganda antar layout.
   const previewLimit = useWorkWeekPreviewLimit();
+  const isCompact = useWorkWeekIsCompact();
+
+  // `+N pekerjaan lainnya` membuka panel hari dalam konteks Minggu (CAL-03
+  // tahap 2) alih-alih memindahkan pengguna ke tampilan Hari.
+  const [panel, setPanel] = useState<{ date: WorkDate; anchor: HTMLElement } | null>(null);
+
+  // Panel ditutup bila tanggalnya tidak lagi ada dalam minggu yang tampil
+  // (mis. pengguna pindah minggu) supaya tidak menampilkan data basi.
+  useEffect(() => {
+    if (!panel) return;
+    if (!summaries.some((summary) => summary.date === panel.date)) setPanel(null);
+  }, [panel, summaries]);
+
+  const panelSummary = panel ? summaries.find((summary) => summary.date === panel.date) : null;
+
+  // Detail pekerjaan dan konfirmasi hapus merupakan lapisan di atas panel;
+  // panel ditutup lebih dulu supaya tidak ada dua permukaan bertumpuk.
+  const panelInteractions: WorkCalendarViewInteractionProps = {
+    ...interactions,
+    onOpenDetail: (entry) => {
+      setPanel(null);
+      interactions.onOpenDetail(entry);
+    },
+    onDelete: (entry) => {
+      setPanel(null);
+      interactions.onDelete(entry);
+    },
+  };
 
   return (
     <section aria-label="Tampilan minggu" className="space-y-2">
@@ -180,9 +217,9 @@ export function WeeklyWorkView({
                         data-testid={`work-week-more-${summary.date}`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          onSelectDate(summary.date);
+                          setPanel({ date: summary.date, anchor: event.currentTarget });
                         }}
-                        aria-label={`Buka tampilan hari ${formatWorkDateShort(summary.date)} untuk ${hiddenCount} pekerjaan lainnya`}
+                        aria-label={`Buka ${hiddenCount} pekerjaan lainnya pada ${formatWorkDateShort(summary.date)}`}
                         className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm px-2 text-[11px] font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         +{hiddenCount} pekerjaan lainnya
@@ -195,6 +232,25 @@ export function WeeklyWorkView({
           );
         })}
       </div>
+
+      <AnimatePresence>
+        {panel && (
+          <WeekDayPanel
+            key={panel.date}
+            date={panel.date}
+            entries={panelSummary?.entries ?? []}
+            progress={panelSummary?.progress ?? EMPTY_WORK_PROGRESS}
+            interactions={panelInteractions}
+            isCompact={isCompact}
+            anchor={panel.anchor}
+            onClose={() => setPanel(null)}
+            onOpenDay={(date) => {
+              setPanel(null);
+              onSelectDate(date);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </section>
   );
 }
