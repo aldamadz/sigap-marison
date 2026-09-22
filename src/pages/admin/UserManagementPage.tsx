@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Link } from 'react-router';
 import { supabase } from '@/lib/supabase';
 import { getUsers } from '@/services/user.service';
+import { adminUserService, describeAdminUserError } from '@/services/admin-user.service';
 import { User } from '@/types/agenda';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -43,12 +44,7 @@ import { isMarisonProfileExternalIdentityValid } from '@/lib/marison-payload-map
 
 type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
 
-const invokeAdminUser = async (body: Record<string, unknown>) => {
-  const { data, error } = await supabase.functions.invoke('admin-create-user', { body });
-  if (error) throw new Error(error.message);
-  if (data?.error) throw new Error(data.error);
-  return data;
-};
+const STAGING_DEFAULT_PASSWORD_LABEL = 'password default staging';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -114,17 +110,17 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
   const handleResetPassword = async () => {
     const confirmed = await confirmAction({
       title: "Reset Password?",
-      description: `Password ${user.fullName} akan direset ke default "marison123".`,
+      description: `Password ${user.fullName} akan direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}.`,
       confirmText: "Reset Password",
       variant: "destructive",
     });
     if (!confirmed) return;
     setResetting(true);
     try {
-      await invokeAdminUser({ action: 'reset_password', user_id: user.id });
-      toast.success(`Password ${user.fullName} berhasil direset ke "marison123"`);
-    } catch (err: any) {
-      toast.error(err.message);
+      await adminUserService.resetPassword(user.id);
+      toast.success(`Password ${user.fullName} berhasil direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}`);
+    } catch (err) {
+      toast.error(describeAdminUserError(err));
     } finally {
       setResetting(false);
     }
@@ -245,8 +241,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                     <div>
                       <p className="text-xs font-semibold text-amber-500">Reset password</p>
                       <p className="mt-0.5 text-xs font-medium leading-relaxed text-muted-foreground">
-                        Password akan direset ke default{' '}
-                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">marison123</span>.
+                        Password akan direset ke default staging oleh server.
                       </p>
                     </div>
                   </div>
@@ -258,7 +253,7 @@ const DetailUserModal = ({ user, open, onClose, onEdit, onToggle, togglingId, co
                   >
                     {resetting
                       ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Mereset...</>
-                      : <><KeyRound className="w-3.5 h-3.5 mr-2" />Reset ke "marison123"</>
+                      : <><KeyRound className="w-3.5 h-3.5 mr-2" />Reset ke Password Default</>
                     }
                   </Button>
                 </div>
@@ -523,7 +518,7 @@ export default function UserManagementPage() {
     let ok = 0, fail = 0;
     for (const u of selectedUsers) {
       try {
-        await invokeAdminUser({ action: 'toggle_active', user_id: u.id, is_active: activate });
+        await adminUserService.updateStatus(u.id, activate);
         ok++;
       } catch { fail++; }
     }
@@ -536,7 +531,7 @@ export default function UserManagementPage() {
   const bulkResetPassword = async () => {
     const confirmed = await appDialog.confirm({
       title: "Reset Password Massal?",
-      description: `${selectedUsers.length} akun akan direset ke password default "marison123".`,
+      description: `${selectedUsers.length} akun akan direset ke ${STAGING_DEFAULT_PASSWORD_LABEL}.`,
       confirmText: "Reset Password",
       variant: "destructive",
     });
@@ -545,7 +540,7 @@ export default function UserManagementPage() {
     let ok = 0, fail = 0;
     for (const u of selectedUsers) {
       try {
-        await invokeAdminUser({ action: 'reset_password', user_id: u.id });
+        await adminUserService.resetPassword(u.id);
         ok++;
       } catch { fail++; }
     }
@@ -558,10 +553,10 @@ export default function UserManagementPage() {
     const newVal = !(user as any).is_active;
     setTogglingId(user.id);
     try {
-      await invokeAdminUser({ action: 'toggle_active', user_id: user.id, is_active: newVal });
+      await adminUserService.updateStatus(user.id, newVal);
       toast.success(`Akun ${user.fullName} ${newVal ? 'diaktifkan' : 'dinonaktifkan'}`);
       fetchUsers();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(describeAdminUserError(err)); }
     finally { setTogglingId(null); }
   };
 
@@ -771,14 +766,13 @@ export default function UserManagementPage() {
         const normalizedRole = (row.role || '').trim().toLowerCase();
         if (row.department_name && !departmentId) unmatchedDepartments.add(row.department_name);
         if (row.office_name && !officeId) unmatchedOffices.add(row.office_name);
-        await invokeAdminUser({
-            action:      'create',
+        await adminUserService.createUser({
             email:       row.email,
             full_name:   row.full_name,
             nik:         row.nik,
             job_title:   row.job_title   || null,
             phone:       row.phone       || null,
-            role:        ['admin','user'].includes(normalizedRole) ? normalizedRole : null,
+            role:        (['admin','user'].includes(normalizedRole) ? normalizedRole : 'user') as 'user' | 'admin',
             join_date:   row.join_date   || null,
             resign_date: row.resign_date || null,
             department_id: departmentId,
@@ -809,11 +803,28 @@ export default function UserManagementPage() {
           phase: 'syncing',
           message: 'Menyinkronkan status akun aktif...',
         } : null);
-        const syncJson = await invokeAdminUser({ action: 'sync_active_import', active_niks: importedNiks });
-        deactivated = Number(syncJson.deactivated || 0);
+        // Dry run first so deactivation is previewed, not applied blindly.
+        const preview = await adminUserService.syncActiveImport(importedNiks, true);
+        let skipSync = false;
+        if (preview.wouldDeactivate > 0) {
+          const confirmedSync = await appDialog.confirm({
+            title: "Nonaktifkan Karyawan Tidak Aktif?",
+            description: `${preview.wouldDeactivate} akun karyawan yang NIK-nya tidak ada di file import akan dinonaktifkan. Akun admin, akun sistem, dan akun tanpa NIK tidak ikut.`,
+            confirmText: "Nonaktifkan",
+            variant: "destructive",
+          });
+          if (!confirmedSync) skipSync = true;
+        }
+        if (skipSync) {
+          toast.info('Sinkronisasi status aktif dilewati.');
+          deactivated = 0;
+        } else {
+          const syncResult = await adminUserService.syncActiveImport(importedNiks, false);
+          deactivated = Number(syncResult.deactivated || 0);
+        }
         setImportProgress((prev) => prev ? { ...prev, deactivated } : null);
-      } catch (error: any) {
-        toast.error(error.message || 'Gagal menonaktifkan karyawan yang tidak ada di file import.');
+      } catch (error) {
+        toast.error(describeAdminUserError(error));
       }
     }
 

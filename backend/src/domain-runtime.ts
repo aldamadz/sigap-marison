@@ -99,6 +99,11 @@ import { createAttentionRuntime } from "./modules/attention/attention-runtime.js
 import { createMarisonApiClient } from "./modules/marison/marison-api-client.js";
 import { createMarisonPreviewRuntime } from "./modules/marison/marison-preview-runtime.js";
 import { createMarisonSyncRuntime } from "./modules/marison/marison-sync-runtime.js";
+import {
+  createAdminUserRuntime,
+  createSupabaseAuthAdminPort,
+  createSupabaseProfileRepositoryPort,
+} from "./modules/admin-user/admin-user-runtime.js";
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -2386,6 +2391,26 @@ const marisonSyncRuntime = createMarisonSyncRuntime({
   executeMarisonBranchSync,
   executeMarisonProjectSync,
   executeMarisonEmployeeSync,
+});
+
+const assertAdminUserServiceAvailable = () => {
+  if (!adminSupabase) {
+    const err = new Error("Layanan admin user belum dikonfigurasi di server.");
+    err.status = 503;
+    throw err;
+  }
+  return adminSupabase;
+};
+
+const adminUserRuntime = createAdminUserRuntime({
+  getAuthAdmin: () => createSupabaseAuthAdminPort(assertAdminUserServiceAvailable()),
+  getProfileRepository: () => createSupabaseProfileRepositoryPort(assertAdminUserServiceAvailable()),
+  getBootstrapPassword: () => process.env.STAGING_DEFAULT_USER_PASSWORD || null,
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  getBearerToken,
+  requireAdminUser,
+  assertSameOrigin,
+  readJsonBody,
 });
 
 const MARISON_UNITS_SOURCE_KEY = "marison_units_by_project";
@@ -4808,6 +4833,29 @@ export const handleRequest = async (req, res) => {
       }
       if (req.method === "POST" && url.pathname === "/api/admin/marison-payload-mappings") {
         return sendJson(res, 200, await configureMarisonPayloadMapping(req));
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/admin/users") {
+        return sendJson(res, 201, await adminUserRuntime.createUser(req), { "Cache-Control": "no-store" });
+      }
+
+      const adminUserMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})$/i);
+      if (req.method === "PATCH" && adminUserMatch) {
+        return sendJson(res, 200, await adminUserRuntime.updateUser(req, adminUserMatch[1]), { "Cache-Control": "no-store" });
+      }
+
+      const adminUserResetMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/reset-password$/i);
+      if (req.method === "POST" && adminUserResetMatch) {
+        return sendJson(res, 200, await adminUserRuntime.resetUserPassword(req, adminUserResetMatch[1]), { "Cache-Control": "no-store" });
+      }
+
+      const adminUserStatusMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/status$/i);
+      if (req.method === "PATCH" && adminUserStatusMatch) {
+        return sendJson(res, 200, await adminUserRuntime.updateUserStatus(req, adminUserStatusMatch[1]), { "Cache-Control": "no-store" });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/admin/users/sync-active-import") {
+        return sendJson(res, 200, await adminUserRuntime.syncActiveImport(req), { "Cache-Control": "no-store" });
       }
 
       if (req.method === "GET" && url.pathname === "/api/surat/inbox") {
