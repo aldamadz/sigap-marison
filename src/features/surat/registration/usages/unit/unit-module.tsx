@@ -10,6 +10,20 @@ import type {
 import type { FormInputData } from "@/components/surat/form/surat-form-types";
 import { registerUsageModule } from "../usage-registry";
 import { UnitContextPanel } from "./UnitContextPanel";
+import { unitAvailabilityIssues } from "./unit-availability";
+
+const unitRequestIssues = (ctx: UsageModuleContext) => {
+  const project = ctx.input.requested_project as { code?: string } | undefined;
+  if (!project?.code) {
+    return [{ title: "Proyek Unit Wajib Dipilih" }];
+  }
+  const count = Number(ctx.input.requested_unit_count || 0);
+  if (!Number.isFinite(count) || count < 1) {
+    return [{ title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." }];
+  }
+  // Fail-closed: lookup loading/gagal/nol atau jumlah > kapasitas aktual memblokir.
+  return unitAvailabilityIssues(ctx.unitAvailability, count);
+};
 
 export const unitModule: UsageModule = {
   meta: {
@@ -35,22 +49,14 @@ export const unitModule: UsageModule = {
   isFieldComplete(_field: TemplateField): boolean | null {
     return null;
   },
-  validateSubmit(): SubmitIssue[] {
-    return [];
+  validateSubmit(ctx): SubmitIssue[] {
+    return unitRequestIssues(ctx);
   },
   reconcileInputForContext(input: FormInputData): FormInputData {
     return input;
   },
   validateNumberContext(ctx): NumberContextIssue[] {
-    const project = ctx.input.requested_project as { code?: string } | undefined;
-    if (!project?.code) {
-      return [{ title: "Proyek Unit Wajib Dipilih" }];
-    }
-    const count = Number(ctx.input.requested_unit_count || 0);
-    if (!Number.isFinite(count) || count < 1) {
-      return [{ title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." }];
-    }
-    return [];
+    return unitRequestIssues(ctx);
   },
   cleanup(ctx, reason): CleanupResult {
     return {

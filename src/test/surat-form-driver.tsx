@@ -377,7 +377,7 @@ export function registerExternalDataRoutes() {
   );
   registerFetchRoute(
     "/api/data-sources/marison_units_by_project/query",
-    { options: [{ value: "unit-a1", label: "A-01" }, { value: "unit-a2", label: "A-02" }] }
+    { options: [{ value: "unit-a1", label: "A-01" }, { value: "unit-a2", label: "A-02" }, { value: "unit-b1", label: "B-01" }] }
   );
   registerFetchRoute(
     "/api/data-sources/marison_non_units_by_project/query",

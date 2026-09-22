@@ -5,18 +5,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import type { UsageModuleContext } from "../usage-contract";
 import type { ProjectOption, ProjectRaw } from "@/components/surat/form/surat-form-types";
+import { EMPTY_UNIT_AVAILABILITY, unitAvailabilityIssues } from "./unit-availability";
 
 export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
   const { input, generatedNoSurat, externalRevision, setInputValue, requestExternalOptions } = ctx;
   const [externalProjects, setExternalProjects] = useState<ProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
-
-  const [projectUnitAvailability, setProjectUnitAvailability] = useState<{
-    loading: boolean;
-    count: number | null;
-    error: string | null;
-  }>({ loading: false, count: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -29,23 +24,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
   }, [requestExternalOptions]);
 
   const requestedProject = input.requested_project as ProjectRaw | undefined;
-  const projectId = String(requestedProject?.id || "").trim();
-
-  useEffect(() => {
-    if (!projectId) {
-      setProjectUnitAvailability({ loading: false, count: null, error: null });
-      return;
-    }
-    let cancelled = false;
-    setProjectUnitAvailability({ loading: true, count: null, error: null });
-    requestExternalOptions("marison_units_by_project", {
-      project_id: projectId,
-      requested_project: requestedProject,
-    })
-      .then(options => { if (!cancelled) setProjectUnitAvailability({ loading: false, count: options.length, error: null }); })
-      .catch(err => { if (!cancelled) setProjectUnitAvailability({ loading: false, count: null, error: err.message }); });
-    return () => { cancelled = true; };
-  }, [projectId, requestedProject, requestExternalOptions]);
+  const availability = ctx.unitAvailability ?? EMPTY_UNIT_AVAILABILITY;
 
   const handleExternalProjectChange = (value: string) => {
     const option = externalProjects.find(item => item.value === value);
@@ -72,8 +51,9 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
   };
 
   const requestedCount = Number(input.requested_unit_count || 0);
-  const availableCount = Number(projectUnitAvailability.count ?? 0);
-  const exceedsAvailability = requestedProject?.code && projectUnitAvailability.count != null && requestedCount > availableCount;
+  const blockingIssue = requestedProject?.code
+    ? unitAvailabilityIssues(availability, requestedCount)[0]
+    : undefined;
 
   return (
     <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-5 md:p-6">
@@ -106,20 +86,20 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
           {requestedProject?.code ? (
             <p className={cn(
               "text-[11px] font-medium",
-              projectUnitAvailability.error ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"
+              availability.error ? "text-destructive" : "text-muted-foreground"
             )}>
-              {projectUnitAvailability.loading
+              {availability.loading
                 ? "Memuat jumlah unit tersedia..."
-                : projectUnitAvailability.error
+                : availability.error
                   ? "Jumlah unit tersedia belum termuat."
-                  : `Kapasitas tersedia saat ini: ${projectUnitAvailability.count ?? 0} unit.`}
+                  : `Kapasitas tersedia saat ini: ${availability.count ?? 0} unit.`}
             </p>
           ) : (
             <p className="text-[11px] font-medium text-muted-foreground">Pilih proyek untuk melihat jumlah unit tersedia.</p>
           )}
-          {exceedsAvailability && (
+          {blockingIssue && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              Jumlah yang diajukan melebihi kapasitas unit yang sedang termuat. Pengajuan tetap bisa dilanjutkan, tetapi tim pemeriksa perlu menyesuaikan alokasi.
+              {blockingIssue.description || blockingIssue.title}. Pengajuan tidak dapat dilanjutkan sampai kapasitas unit valid untuk proyek ini.
             </p>
           )}
         </div>
@@ -128,6 +108,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
           <Input
             type="number"
             min={1}
+            max={availability.count ?? undefined}
             value={String(input.requested_unit_count ?? "")}
             onChange={(e) => handleRequestedUnitCountChange(e.target.value)}
             disabled={!!generatedNoSurat && !(externalRevision && ctx.category === "unit")}

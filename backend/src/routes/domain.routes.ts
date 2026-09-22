@@ -51,6 +51,7 @@ const routes: DomainRoute[] = [
   { method: "POST", url: "/api/notifications/email" },
   { method: "POST", url: "/api/notifications/send" },
   { method: "POST", url: "/api/data-sources/:sourceKey/query" },
+  { method: "POST", url: "/api/surat/unit-availability/validate" },
 ];
 
 export const registerDomainRoutes = async (app: FastifyInstance) => {
