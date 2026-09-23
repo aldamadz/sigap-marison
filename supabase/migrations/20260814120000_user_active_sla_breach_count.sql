@@ -66,4 +66,3 @@ $$;
 
 revoke all on function public.get_user_active_sla_breach_count(uuid) from public, anon, authenticated;
 grant execute on function public.get_user_active_sla_breach_count(uuid) to service_role;
-

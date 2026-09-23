@@ -122,14 +122,14 @@ const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine
 try {
   let ready = false;
   for (let attempt = 0; attempt < 40 && !ready; attempt += 1) {
-    ready = spawnSync("docker", ["exec", id, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
+    ready = spawnSync("docker", ["exec", id, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], { encoding: "utf8" }).status === 0;
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 750);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   // Apply the real migration lineage once, then run both rollback-based suites
   // in the same disposable database to avoid a second PostgreSQL container.
   process.stdout.write(run(
-    ["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
+    ["exec", "-i", "-e", "PGPASSWORD=test", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
     fixtureSql + migrations + integrationTests
   ));
 } finally {

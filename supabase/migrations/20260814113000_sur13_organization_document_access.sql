@@ -65,4 +65,3 @@ $$;
 
 revoke all on function public.can_read_surat(uuid) from public, anon;
 grant execute on function public.can_read_surat(uuid) to authenticated, service_role;
-

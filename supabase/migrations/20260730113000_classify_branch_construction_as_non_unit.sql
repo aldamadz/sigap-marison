@@ -32,4 +32,3 @@ begin
     and request_category = 'non_asset';
 end
 $$;
-

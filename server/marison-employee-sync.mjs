@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 const asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
 export const normalizeMarisonName = (value) => String(value ?? "")
@@ -104,21 +106,47 @@ const normalizedOfficeName = (value) => normalizeMarisonName(value)
   .replace(/^kc\.?\s+/, "")
   .replace(/^kcp\.?\s+/, "");
 
-const resolveDepartmentName = (division, office) => {
+const MARISON_DEPARTMENT_CATALOG = Object.freeze({
+  "Branch Manager": { code: "BM", deptIndex: 1 },
+  Direksi: { code: "DIR", deptIndex: 2 },
+  "HRD & GA": { code: "HRD", deptIndex: 3 },
+  "Keuangan & Akuntansi": { code: "KEU", deptIndex: 4 },
+  "Legal Lahan": { code: "LLH", deptIndex: 5 },
+  "Legal Proyek": { code: "LGP", deptIndex: 6 },
+  Marketing: { code: "MKT", deptIndex: 7 },
+  "Marketing (Cabang)": { code: "MKC", deptIndex: 8 },
+  "Operasional Kost": { code: "OPK", deptIndex: 9 },
+  Pengadaan: { code: "PRC", deptIndex: 10 },
+  "Pengembangan Bisnis": { code: "PBI", deptIndex: 11 },
+  "Pengembangan Organisasi": { code: "PBO", deptIndex: 12 },
+  Perencanaan: { code: "PLN", deptIndex: 13 },
+  "Teknik (Cabang)": { code: "TKN", deptIndex: 14 },
+  "Umum & Keuangan (Cabang)": { code: "UKC", deptIndex: 15 },
+});
+
+export const resolveMarisonDepartment = (division, office) => {
   const value = normalizeMarisonName(division);
   const isBranch = office && normalizeMarisonName(office.kedudukan) !== "pusat";
-  if (!value || /^\d+$/.test(value)) return "";
-  if (/^direktur/.test(value)) return "Direksi";
-  if (value === "hrd & ga") return "HRD & GA";
-  if (value === "keuangan & akuntansi") return isBranch ? "Umum & Keuangan (Cabang)" : "Keuangan & Akuntansi";
-  if (value === "legal & humas") return "Legal Proyek";
+  let name = "";
+  if (!value || /^\d+$/.test(value)) return null;
+  if (/^direktur/.test(value) || value === "sekretaris direksi") name = "Direksi";
+  else if (value === "cabang") name = "Branch Manager";
+  else if (value === "hrd & ga") name = "HRD & GA";
+  else if (value === "keuangan & akuntansi") name = isBranch ? "Umum & Keuangan (Cabang)" : "Keuangan & Akuntansi";
+  else if (value === "legal lahan") name = "Legal Lahan";
+  else if (["legal & humas", "legal proyek & humas", "legal proyek"].includes(value)) name = "Legal Proyek";
   if (["marketing", "marketing & branding", "marketing & sales", "marketing cabang"].includes(value)) {
-    return isBranch ? "Marketing (Cabang)" : "Marketing";
+    name = isBranch ? "Marketing (Cabang)" : "Marketing";
   }
-  if (value === "pengembangan bisnis") return "Pengembangan Bisnis";
-  if (value === "pengembangan organisasi") return "Pengembangan Organisasi";
-  if (value === "perencanaan") return isBranch ? "Teknik (Cabang)" : "Perencanaan";
-  return "";
+  else if (["operasional kos", "operasional kost"].includes(value)) name = "Operasional Kost";
+  else if (value === "pengadaan") name = "Pengadaan";
+  else if (value === "pengembangan bisnis") name = "Pengembangan Bisnis";
+  else if (value === "pengembangan organisasi") name = "Pengembangan Organisasi";
+  else if (value === "perencanaan") name = isBranch ? "Teknik (Cabang)" : "Perencanaan";
+  else if (value === "teknik") name = isBranch ? "Teknik (Cabang)" : "Perencanaan";
+  else if (value === "umum & keuangan") name = isBranch ? "Umum & Keuangan (Cabang)" : "Keuangan & Akuntansi";
+  const catalog = MARISON_DEPARTMENT_CATALOG[name];
+  return catalog ? { name, ...catalog } : null;
 };
 
 const deriveJobTitle = (employee) => meaningfulText(employee?.department) || meaningfulText(employee?.position) || null;
@@ -318,6 +346,47 @@ const syncBranches = async (supabase, branches, dryRun) => {
   for (const branch of Array.isArray(branches) ? branches : []) {
     const resolved = findOfficeForBranch(branch, offices);
     if (resolved.office) result.mappings.set(Number(branch.id), resolved.office);
+  }
+  return result;
+};
+
+const syncDepartments = async (supabase, employees, officeMappings, dryRun) => {
+  const { data, error } = await supabase
+    .from("master_departments")
+    .select("id,name,code,dept_index");
+  if (error) throw error;
+
+  const departments = [...(data || [])];
+  const byName = new Map(departments.map((row) => [normalizeMarisonName(row.name), row]));
+  const required = new Map();
+  for (const employee of Array.isArray(employees) ? employees : []) {
+    const branchId = Number(employee?.branch?.id);
+    const office = Number.isSafeInteger(branchId) ? officeMappings.get(branchId) || null : null;
+    const department = resolveMarisonDepartment(employee?.division, office);
+    if (department) required.set(normalizeMarisonName(department.name), department);
+  }
+
+  const result = { matched: 0, created: 0, createdApplied: 0 };
+  for (const [key, department] of required) {
+    if (byName.has(key)) {
+      result.matched += 1;
+      continue;
+    }
+    result.created += 1;
+    if (dryRun) continue;
+    const { data: inserted, error: insertError } = await supabase
+      .from("master_departments")
+      .insert({
+        name: department.name,
+        code: department.code,
+        dept_index: department.deptIndex,
+      })
+      .select("id,name,code,dept_index")
+      .single();
+    if (insertError) throw insertError;
+    departments.push(inserted);
+    byName.set(key, inserted);
+    result.createdApplied += 1;
   }
   return result;
 };
@@ -612,7 +681,7 @@ const resolveExistingProfile = (employee, indexes) => {
   return { profile: null, match: "new" };
 };
 
-const buildEmployeePlan = (employees, state, officeMappings) => {
+const buildEmployeePlan = (employees, state, officeMappings, environment = "staging") => {
   const indexes = buildProfileIndexes(state.profiles);
   const nameCounts = new Map();
   for (const employee of employees) {
@@ -645,8 +714,13 @@ const buildEmployeePlan = (employees, state, officeMappings) => {
     }
     const duplicateName = (nameCounts.get(normalizeMarisonName(employee.name)) || 0) > 1;
     const externalEmail = isValidEmail(employee.email) ? normalizeEmail(employee.email) : "";
+    const existingEmail = normalizeEmail(resolved.profile?.email);
+    if (environment === "production" && !externalEmail && !existingEmail) {
+      plan.push({ employee, action: "blocked", reason: "Email external wajib tersedia untuk sinkronisasi production" });
+      continue;
+    }
     let email = externalEmail
-      || normalizeEmail(resolved.profile?.email)
+      || existingEmail
       || buildMarisonStagingEmail(employee, duplicateName);
     let currentAuth = resolved.profile ? authById.get(resolved.profile.id) : null;
     const occupied = authByEmail.get(email);
@@ -663,7 +737,7 @@ const buildEmployeePlan = (employees, state, officeMappings) => {
     const externalBranchId = Number(employee?.branch?.id);
     const office = Number.isSafeInteger(externalBranchId) ? officeMappings.get(externalBranchId) || null : null;
     const externalDepartmentName = meaningfulText(employee.division) || meaningfulText(employee.department);
-    const derivedDepartmentName = resolveDepartmentName(employee.division, office);
+    const derivedDepartmentName = resolveMarisonDepartment(employee.division, office)?.name || "";
     const department = [
       externalDepartmentName,
       derivedDepartmentName,
@@ -691,7 +765,7 @@ const publicIssue = (item) => ({
   reason: item?.reason || "Data tidak valid",
 });
 
-export const previewMarisonEmployeeSync = async ({ supabase, employees, branches }) => {
+export const previewMarisonEmployeeSync = async ({ supabase, employees, branches, environment = "staging" }) => {
   const state = await loadSyncState(supabase);
   const deduplicated = deduplicateMarisonEmployees(employees, {
     knownNames: state.profiles.map((profile) => profile.full_name),
@@ -702,10 +776,11 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
     const resolved = findOfficeForBranch(branch, state.offices);
     if (resolved.office) prospectiveMappings.set(Number(branch.id), resolved.office);
   }
-  const plan = buildEmployeePlan(deduplicated.employees, state, prospectiveMappings);
+  const departmentResult = await syncDepartments(supabase, deduplicated.employees, prospectiveMappings, true);
+  const plan = buildEmployeePlan(deduplicated.employees, state, prospectiveMappings, environment);
   const blockedPlan = plan.filter((item) => item.action === "blocked");
   return {
-    environment: "staging",
+    environment,
     generatedAt: new Date().toISOString(),
     source: {
       employees: Array.isArray(employees) ? employees.length : 0,
@@ -716,6 +791,11 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
       toCreate: branchResult.created,
       toUpdate: branchResult.updated,
       blocked: branchResult.errors.length,
+    },
+    departments: {
+      matched: departmentResult.matched,
+      toCreate: departmentResult.created,
+      blocked: 0,
     },
     employees: {
       ready: plan.filter((item) => item.action !== "blocked").length,
@@ -735,16 +815,17 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
   };
 };
 
-export const executeMarisonEmployeeSync = async ({ supabase, employees, branches, defaultPassword }) => {
-  if (typeof defaultPassword !== "string" || defaultPassword.length < 8) {
-    throw new Error("Konfigurasi password default belum memenuhi persyaratan keamanan.");
+export const executeMarisonEmployeeSync = async ({ supabase, employees, branches, defaultPassword, environment = "staging" }) => {
+  if (environment === "staging" && (typeof defaultPassword !== "string" || defaultPassword.length < 8)) {
+    throw new Error("STAGING_DEFAULT_USER_PASSWORD belum dikonfigurasi dengan aman.");
   }
   const branchResult = await syncBranches(supabase, branches, false);
+  const departmentResult = await syncDepartments(supabase, employees, branchResult.mappings, false);
   const state = await loadSyncState(supabase);
   const deduplicated = deduplicateMarisonEmployees(employees, {
     knownNames: state.profiles.map((profile) => profile.full_name),
   });
-  const plan = buildEmployeePlan(deduplicated.employees, state, branchResult.mappings);
+  const plan = buildEmployeePlan(deduplicated.employees, state, branchResult.mappings, environment);
   const result = {
     created: 0,
     updated: 0,
@@ -752,6 +833,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
     skipped: deduplicated.conflictingNik.length,
     branchesCreated: branchResult.createdApplied,
     branchesUpdated: branchResult.updatedApplied,
+    departmentsCreated: departmentResult.createdApplied,
     errors: [
       ...deduplicated.conflictingNik.map((conflict) => ({ entityType: "employee", ...conflict, reason: "Satu NIK dipakai oleh nama berbeda pada API external" })),
       ...branchResult.errors,
@@ -781,7 +863,9 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
       } else {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: item.email,
-          password: defaultPassword,
+          password: environment === "production"
+            ? randomBytes(32).toString("base64url")
+            : defaultPassword,
           email_confirm: true,
           user_metadata: { full_name: String(employee.name || "").trim() },
         });
@@ -825,7 +909,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
     }
   }
   return {
-    environment: "staging",
+    environment,
     completedAt: new Date().toISOString(),
     ...result,
   };

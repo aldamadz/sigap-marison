@@ -15,7 +15,8 @@ describe("compact approval inbox — structural contracts", () => {
   const service = read("src/services/surat.service.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
   const migration = read("supabase/migrations/20260804081000_compact_inbox_rpc.sql");
-  const separateTaskMigration = read("supabase/migrations/20260919000050_separate_inbox_verification_tasks.sql");
+  const separateTaskMigration = read("supabase/migrations/20260919000050_separate_inbox_verification_tasks.sql")
+    .replace(/\r\n/g, "\n");
   const sqlTest = read("supabase/tests/compact_inbox.integration.sql");
 
   it("1. RPC get_compact_inbox with filter params (search, request_category, task_type)", () => {

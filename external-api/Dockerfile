@@ -24,6 +24,10 @@ FROM node:22-alpine
 
 WORKDIR /app
 
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
+ENV GIT_SHA=$GIT_SHA
+
 # Install Fastify deps
 COPY package*.json ./
 RUN npm install --omit=dev

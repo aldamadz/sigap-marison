@@ -17,11 +17,51 @@ mengikuti pola `release/YYYY-MM-DD`.
 
 ## 2. Rilis Mendatang
 
-### 2.1 Alur registrasi bertahap + editor Non Aset bergaya kartu
+_Tidak ada kandidat rilis yang belum dipromosikan._
 
-- **Status**: PR #233 (staging), menanti deploy & smoke test
-- **Tanggal target**: menyusul hasil verifikasi staging
-- **Cabang**: `feature/surat-registrasi-wizard`
+## 3. Riwayat Rilis
+
+### 3.1 Unified Work Calendar dan alur Surat production-safe
+
+- **Tanggal**: 2026-09-23
+- **Cabang**: `release/production-20260922`
+- **PR**: [#333](https://github.com/aldamadz/frontend/pull/333)
+- **Merge SHA**: `0acbdf1c738d8aa0948f86697d6c3618a23fd551`
+- **Lingkup**: CAL-03 F1, F2, F3, F4A, F4B, F5, F6, F7, dan F8; form-first
+  Surat, workflow kanonikal, revisi SPK Unit, PDF native, dan manajemen user
+  backend production-safe.
+
+Perubahan:
+
+- Kalender Kerja menyediakan tampilan Hari, Minggu, Bulan, dan Tim; Quick Add,
+  detail responsif, siklus hidup pekerjaan, hari kerja/libur, dashboard,
+  notifikasi, dark mode, dan aksesibilitas.
+- Form Surat memakai urutan Form → Kegunaan → Lokasi/Konteks → Nomor dengan
+  modul Aset, Dana, Unit, dan Non Unit yang fail-closed.
+- SPK Unit memvalidasi kapasitas Marison secara server-side dan menyediakan
+  jalur Kembalikan ke Pemohon saat Tim Pemeriksa menemui dead-end.
+- PDF worker mendeteksi PGD melalui master form kanonikal dan memuat factory
+  runtime yang sama dengan test.
+- Manajemen user berjalan melalui backend; production memakai email
+  undangan/pemulihan, tanpa password bootstrap staging.
+- Fixture akun/kegunaan `[UJI STAGING]`, mapping khusus staging, dan data uji
+  staging tidak dipromosikan.
+
+Validasi:
+
+- CI: 176 file / 1.734 test lulus; lint, typecheck, build, dan audit hijau.
+- SQL disposable: Work Calendar, workflow kanonikal, branch asset, revisi PDF,
+  dan REC-03 lulus.
+- Production: 15 migration diterapkan tanpa drift; app dan PDF worker memakai
+  merge SHA yang sama; live/ready, aset, SPA fallback, dan auth boundary lulus.
+
+### 3.2 Alur registrasi bertahap + editor Non Aset bergaya kartu
+
+- **Tanggal**: 2026-08-27
+- **Cabang**: `codex/release-wizard-production`
+- **PR**: [#237](https://github.com/aldamadz/frontend/pull/237)
+- **Lingkup**: wizard registrasi tiga tahap, editor item Non Aset bergaya kartu,
+  dan perlindungan linkage draft terhadap perubahan konfigurasi.
 
 Perubahan:
 
@@ -38,78 +78,11 @@ Perubahan:
 Validasi:
 
 - `tsc --noEmit`: hijau
-- `vitest run`: 118 file / 766 tes lulus
-- PR: https://github.com/aldamadz/frontend/pull/233
-
-### 2.2 Unified Work Calendar (CAL-03 F1–F7) — changelog gabungan staging
-
-- **Status**: kandidat staging, menanti keputusan rilis production
-- **Tanggal target**: menyusul instruksi rilis eksplisit dari pemilik produk
-- **Lingkup**: seluruh fase CAL-03 F1 sampai F7 digabung dalam satu entri
-- **Dokumentasi**: [`CAL-03_WORK_CALENDAR.md`](./CAL-03_WORK_CALENDAR.md)
-
-Perubahan:
-
-- **F1**: fondasi Unified Work Calendar — workspace Hari/Minggu/Bulan, quick
-  entry, empat status pekerjaan, dan overdue turunan (bukan status tersimpan).
-- **F2**: skema database dan repository Supabase `work_calendar_entries`
-  beserta RLS kepemilikan.
-- **F3**: cutover route resmi `/calendar`, RPC anggota tim, dan repository
-  profil; kalender agenda lama tidak lagi menjadi entry point.
-- **F4A**: koreksi ketepatan filter Tim, keterbacaan dark mode, label aksi
-  tambah kontekstual, dan Team Overview skala Direktur (paginasi + agregat
-  server-side).
-- **F4B**: detail entri responsif (side sheet desktop/tablet, dialog layar
-  penuh mobile) di Hari/Minggu/Bulan/Tim dan Quick Add dari area tanggal kosong
-  Minggu/Bulan.
-- **F5**: siklus hidup pekerjaan — satu pekerjaan = satu baris, aksi
-  "Lanjutkan hari ini"/"Ubah jadwal"/"Terhambat"/"Selesai" hanya PATCH baris
-  yang sama, histori peristiwa server-side, tenggat `due_date`, warna penanda
-  statis aksesibel, dan timeline peristiwa di panel detail.
-- **F6**: hari & jam kerja diturunkan dari konfigurasi KPI existing (read-only,
-  default Senin–Jumat 08:00–17:00), tabel `holidays` (libur nasional/cuti
-  bersama) dengan impor terkurasi, dan pembeda visual nonkerja/libur berlabel.
-- **F7**: ringkasan pekerjaan hari ini & tertunda di dashboard
-  (`get_work_calendar_dashboard_entries`), notifikasi lonceng berbasis tabel
-  `notifications` bersama dengan badge angka dan ikon kategori
-  (`generate_work_calendar_notifications` untuk tenggat terlewati, pengingat
-  tindak lanjut, dan eskalasi atasan; dedupe unik, batching satu
-  notifikasi/kategori/hari, debounce 6 jam, eskalasi berbasis hari kerja), serta
-  integrasi `work_calendar_events` ke modul Aktivitas Terbaru
-  (`get_my_recent_work_calendar_events`).
-- **F8**: penutupan produk — manual Kalender Kerja di `docs/`, changelog
-  gabungan ini, dan audit aksesibilitas ringan termasuk Dark Mode; tanpa fitur
-  atau kolom database baru.
-
-Migration (staging saja):
-
-- `20260915072607_work_calendar_entries.sql`
-- `20260915093000_work_calendar_team_members.sql`
-- `20260916170000_work_calendar_team_overview.sql`
-- `20260916171000_work_calendar_team_overview_scale.sql`
-- `20260917120000_work_calendar_lifecycle.sql`
-- `20260918090000_work_calendar_holidays.sql`
-- `20260918120000_work_calendar_notifications.sql`
-
-Validasi staging:
-
-- Migration F1–F7 diterapkan dan diverifikasi pada Supabase staging.
-- Fungsi F7 (`generate_work_calendar_notifications`,
-  `get_work_calendar_dashboard_entries`, `get_my_recent_work_calendar_events`)
-  tersedia dengan hak akses yang benar.
-- Bundle staging memuat kode F7; health `live`/`ready`/`version` merespons dan
-  SHA rilis sesuai.
-- `tsc --noEmit`, `vitest run`, `test:work-calendar-sql`, `lint`, `build`, dan
-  `npm audit --audit-level=high` hijau.
-
-Catatan: entri ini **belum** menjadi rilis production. Riwayat rilis resmi pada
-bagian 3 baru diisi saat branch fitur dipromosikan ke `main` atas instruksi
-eksplisit.
-
-## 3. Riwayat Rilis
-
-_Belum ada rilis resmi yang tercatat. Entri pertama akan ditambahkan saat
-rilis produksi pertama._
+- `vitest run`: 118 file / 767 tes lulus
+- Smoke staging: pengajuan `011/UAI/PBO.1/VIII/2026` berhasil dan muncul
+  pada inbox approver tahap kedua.
+- PR sumber: [#232](https://github.com/aldamadz/frontend/pull/232) dan
+  [#233](https://github.com/aldamadz/frontend/pull/233)
 
 ## 4. Skema Penambahan Entri
 

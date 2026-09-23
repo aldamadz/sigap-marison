@@ -93,8 +93,8 @@ export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
 
   const getMarisonEmployeeSyncSource = async () => {
     if (overrideEmployeeSource) return overrideEmployeeSource();
-    const branches = await deps.getAllMarisonCollection("staging", "/branches");
-    const employees = await deps.getAllMarisonCollection("staging", "/employees");
+    const branches = await deps.getAllMarisonCollection(deps.deploymentEnvironment, "/branches");
+    const employees = await deps.getAllMarisonCollection(deps.deploymentEnvironment, "/employees");
     return { branches, employees };
   };
 

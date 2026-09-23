@@ -46,4 +46,3 @@ describe("SUR-13 organization document access", () => {
     expect(migration).toContain("to authenticated, service_role");
   });
 });
-

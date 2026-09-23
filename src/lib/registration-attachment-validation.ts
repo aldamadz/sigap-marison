@@ -7,14 +7,12 @@ export type InitialAttachmentRequirement = {
   allowed_types?: string[] | null;
   max_size_bytes?: number | null;
 };
-
 export type PersistedInitialAttachment = {
   file_name: string;
   file_type?: string | null;
   file_size?: number | null;
   requirement_key?: string | null;
 };
-
 type NewFileMetadata = Record<
   string,
   { key?: string | null; label?: string | null } | undefined
@@ -57,7 +55,6 @@ const validateAttachmentMetadata = (
     throw new Error(`Ukuran file ${attachment.name} melebihi batas.`);
   }
 };
-
 export const validateInitialRegistrationAttachments = ({
   requirements,
   newFiles,
@@ -81,10 +78,7 @@ export const validateInitialRegistrationAttachments = ({
   }
 
   for (const file of persistedFiles) {
-    if (
-      !file.requirement_key ||
-      !requirementsByKey.has(file.requirement_key)
-    ) {
+    if (!file.requirement_key || !requirementsByKey.has(file.requirement_key)) {
       throw new Error(
         `Lampiran ${file.file_name} tidak memiliki konfigurasi yang valid.`,
       );
@@ -93,8 +87,7 @@ export const validateInitialRegistrationAttachments = ({
 
   for (const requirement of requirements) {
     const newFilesForRequirement = newFiles.filter(
-      (file) =>
-        newFileMetadata[file.name]?.key === requirement.requirement_key,
+      (file) => newFileMetadata[file.name]?.key === requirement.requirement_key,
     );
     const persistedFilesForRequirement = persistedFiles.filter(
       (file) => file.requirement_key === requirement.requirement_key,
@@ -104,10 +97,7 @@ export const validateInitialRegistrationAttachments = ({
     const minimum = requirement.is_required
       ? Math.max(1, Number(requirement.min_files || 1))
       : 0;
-    const maximum = Math.max(
-      minimum,
-      Number(requirement.max_files || 1),
-    );
+    const maximum = Math.max(minimum, Number(requirement.max_files || 1));
     const label = requirement.label || requirement.requirement_key;
 
     if (totalFiles < minimum) {
@@ -135,4 +125,3 @@ export const validateInitialRegistrationAttachments = ({
     );
   }
 };
-

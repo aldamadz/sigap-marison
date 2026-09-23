@@ -77,4 +77,3 @@ where sre.surat_id = sr.id
   and sre.target_type = 'checker'
   and sre.target_step is not null
   and (sr.status is distinct from 'MENUNGGU_PERBAIKAN' or sr.current_step is distinct from sre.target_step);
-

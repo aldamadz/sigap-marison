@@ -439,4 +439,3 @@ where sre.surat_id = ss.surat_id
   and sre.target_step = ss.step_order
   and ss.verification_required is true
   and ss.verification_status is distinct from 'pending';
-

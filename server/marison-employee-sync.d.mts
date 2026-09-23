@@ -20,6 +20,10 @@ export function canUseMarisonNameFallback(
 ): boolean;
 export function buildMarisonStagingEmail(employee: MarisonEmployee, duplicateName?: boolean): string;
 export function deriveMarisonOfficeType(branch: Record<string, unknown>): "Pusat" | "KC" | "KCP" | "Kost";
+export function resolveMarisonDepartment(
+  division: unknown,
+  office?: Record<string, unknown> | null,
+): { name: string; code: string; deptIndex: number } | null;
 export function resolveMarisonEmployeeActive(status: unknown, fallback?: boolean): boolean;
 export function deduplicateMarisonEmployees(rows: MarisonEmployee[], options?: { knownNames?: string[] }): {
   employees: MarisonEmployee[];
@@ -54,6 +58,7 @@ export function previewMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];
   branches: Array<Record<string, unknown>>;
+  environment?: "staging" | "production";
 }): Promise<Record<string, unknown>>;
 export function chooseProjectLocalCode(
   externalCode: unknown,
@@ -65,7 +70,8 @@ export function executeMarisonEmployeeSync(options: {
   supabase: unknown;
   employees: MarisonEmployee[];
   branches: Array<Record<string, unknown>>;
-  defaultPassword: string;
+  defaultPassword?: string;
+  environment?: "staging" | "production";
 }): Promise<Record<string, unknown>>;
 export function replaceMarisonSyncIssues(options: {
   supabase: unknown;

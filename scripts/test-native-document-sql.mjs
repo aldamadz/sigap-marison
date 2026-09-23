@@ -150,7 +150,7 @@ try {
   for (let attempt = 0; attempt < 60 && consecutiveReadyProbes < 3; attempt += 1) {
     const probe = spawnSync(
       "docker",
-      ["exec", containerId, "psql", "-U", "postgres", "-Atqc", "select 1"],
+      ["exec", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-Atqc", "select 1"],
       { encoding: "utf8" },
     );
     consecutiveReadyProbes = probe.status === 0 && probe.stdout.trim() === "1"
@@ -164,7 +164,7 @@ try {
     throw new Error("Disposable PostgreSQL did not become stably ready");
   }
   process.stdout.write(run([
-    "exec", "-i", containerId, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
+    "exec", "-i", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
   ], fixture));
 } finally {
   run(["rm", "-f", containerId]);
