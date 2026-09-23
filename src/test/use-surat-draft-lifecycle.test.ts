@@ -21,7 +21,7 @@ describe("useSuratDraftLifecycle — finishSubmittedDraft (Pass K2C2)", () => {
     toastMock = vi.fn();
     setSearchParamsMock = vi.fn();
     searchParamsMock = new URLSearchParams();
-    
+
     // Default mock setup for initialization
     vi.mocked(suratRegistrationApi.getActiveRegistrationDrafts).mockResolvedValue([
       { id: "draft-1" } as any,
@@ -57,9 +57,9 @@ describe("useSuratDraftLifecycle — finishSubmittedDraft (Pass K2C2)", () => {
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 0));
     });
-    
+
     expect(result.current.activeDrafts).toHaveLength(2);
-    
+
     await act(async () => {
       await result.current.finishSubmittedDraft(null);
     });
@@ -90,7 +90,7 @@ describe("useSuratDraftLifecycle — finishSubmittedDraft (Pass K2C2)", () => {
     await act(async () => {
       await result.current.finishSubmittedDraft("draft-1");
     });
-    
+
     await waitFor(() => {
       expect(result.current.activeDrafts).toHaveLength(1);
     }, { timeout: 2000 });

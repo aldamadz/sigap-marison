@@ -221,7 +221,7 @@ describe("recommendation-post-submit orchestration (Pass K2C1)", () => {
   it("17. Input/context tidak dimutasi", async () => {
     const context = { type: "recommendation", parentSuratId: "P-1", taskId: "T-1" };
     const contextClone = JSON.parse(JSON.stringify(context));
-    
+
     await executeRecommendationPostSubmit(
       {
         linkedDocumentContext: context,
@@ -229,7 +229,7 @@ describe("recommendation-post-submit orchestration (Pass K2C1)", () => {
       },
       deps
     );
-    
+
     expect(context).toEqual(contextClone);
   });
 });
