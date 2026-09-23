@@ -17,6 +17,7 @@ import type { User } from '@/types/agenda'
 import { useAttention } from '@/providers/AttentionProvider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getSuratNavigationTone, type SuratNavigationTone } from './surat-navigation-tone'
+import { isWorkCalendarEnabled } from '@/lib/feature-availability'
 
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated'
 
@@ -241,6 +242,21 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
     )
   }
 
+  const renderDisabledNavItem = (label: string, Icon: typeof Calendar) => (
+    <div
+      className={cn(
+        "flex w-full cursor-not-allowed items-center gap-3 rounded-md py-2.5 text-muted-foreground/60",
+        isDesktopCollapsed ? "justify-center px-0" : "px-3",
+      )}
+      aria-disabled="true"
+      aria-label={`${label} sedang dikembangkan di staging`}
+      title={`${label} sedang dikembangkan di staging`}
+    >
+      <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+      {(isMobile || !collapsed) && <span className="truncate text-sm font-medium">{label}</span>}
+    </div>
+  )
+
   // Mobile Header in sidebar - TANPA TOMBOL X (sudah ada di Sheet)
   const MobileHeader = () => (
     <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-4">
@@ -301,7 +317,9 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
         {/* Main Navigation */}
         <div className="space-y-1">
           {renderNavLink('/dashboard', 'Dashboard', LayoutDashboard)}
-          {renderNavLink('/calendar', 'Kalender Kerja', Calendar)}
+          {isWorkCalendarEnabled
+            ? renderNavLink('/calendar', 'Kalender Kerja', Calendar)
+            : renderDisabledNavItem('Kalender Kerja', Calendar)}
         </div>
 
         {/* Surat Section */}
