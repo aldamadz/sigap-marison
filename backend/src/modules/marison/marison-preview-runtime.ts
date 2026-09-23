@@ -63,9 +63,9 @@ export function createMarisonPreviewRuntime(deps: MarisonPreviewDependencies) {
   };
 
   const assertMarisonEmployeeSyncInfraAvailable = (): SupabaseClientStructural => {
-    if (deps.deploymentEnvironment !== "staging") {
-      const err = new Error("Sinkronisasi karyawan external hanya tersedia di staging.");
-      Object.assign(err, { status: 403 });
+    if (deps.deploymentEnvironment !== "staging" && deps.deploymentEnvironment !== "production") {
+      const err = new Error("Layanan sinkronisasi tidak tersedia.");
+      Object.assign(err, { status: 503 });
       throw err;
     }
     const supabase = deps.getSupabase();
