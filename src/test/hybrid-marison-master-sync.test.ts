@@ -20,13 +20,14 @@ describe("Hybrid Marison master sync", () => {
   it("runs the staging cron at midnight Jakarta through the internal tracked route", () => {
     const worker = read("server/marison-sync-worker.mjs");
     const server = read("backend/src/domain-runtime.ts");
+    const syncRuntime = read("backend/src/modules/marison/marison-sync-runtime.ts");
     const compose = read("docker-compose.staging.yml");
 
     expect(worker).toContain('const timeZone = "Asia/Jakarta"');
     expect(worker).toContain('parts.hour === "00" && parts.minute === "00"');
     expect(server).toContain("/api/internal/marison/directory-sync");
-    expect(server).toContain('triggerType: "cron"');
-    expect(server).toContain('scope: "projects"');
+    expect(syncRuntime).toContain('triggerType: "cron"');
+    expect(syncRuntime).toContain('scope: "projects"');
     expect(compose).toContain("agenda-marison-sync-staging:");
     expect(compose).toContain('MARISON_SYNC_ENABLED: "true"');
   });
@@ -35,11 +36,12 @@ describe("Hybrid Marison master sync", () => {
     const server = read("backend/src/domain-runtime.ts");
     const sync = read("server/marison-employee-sync.mjs");
 
-    const sourceLoader = server.slice(
-      server.indexOf("const getMarisonEmployeeSyncSource"),
-      server.indexOf("const getMarisonBranchSyncSource"),
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    const sourceLoader = preview.slice(
+      preview.indexOf("const getMarisonEmployeeSyncSource"),
+      preview.indexOf("const previewMarisonBranches"),
     );
-    expect(sourceLoader).toContain("marisonDeploymentEnvironment");
+    expect(sourceLoader).toContain("deps.deploymentEnvironment");
     expect(sourceLoader).not.toContain('getAllMarisonCollection("staging"');
     expect(sourceLoader.indexOf('"/branches"')).toBeLessThan(sourceLoader.indexOf('"/employees"'));
 
@@ -72,9 +74,10 @@ describe("Hybrid Marison master sync", () => {
     expect(migration).toContain("scope in ('branches', 'directory', 'projects')");
     expect(migration).toContain("entity_type in ('branch', 'employee', 'project')");
     expect(migration).not.toContain("alter column id");
-    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/projects")');
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/projects")');
     expect(server).toContain("/api/integrations/marison/projects/sync");
-    expect(server).toContain('scope: "projects"');
+    expect(read("backend/src/modules/marison/marison-sync-runtime.ts")).toContain('scope: "projects"');
     expect(sync).toContain("export const previewMarisonProjectSync");
     expect(sync).toContain("export const executeMarisonProjectSync");
     expect(sync).toContain("Branch proyek external belum tersedia");
@@ -83,7 +86,7 @@ describe("Hybrid Marison master sync", () => {
     expect(sync).toContain("Entitas proyek belum dipilih");
     expect(sync).toContain("fallbackOffice");
     expect(sync).not.toContain("defaultEntityId");
-    expect(server).toContain("masterProjectReviewCount");
+    expect(read("backend/src/modules/attention/attention-runtime.ts")).toContain("masterProjectReviewCount");
     const routes = read("backend/src/routes/domain.routes.ts");
     expect(routes).toContain('{ method: "GET", url: "/api/integrations/marison/projects/preview" }');
     expect(routes).toContain('{ method: "POST", url: "/api/integrations/marison/projects/sync" }');

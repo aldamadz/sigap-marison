@@ -136,6 +136,72 @@
     --gradient-card: linear-gradient(180deg, hsl(222 47% 10%), hsl(222 47% 8%));
   }
 
+  /*
+   * CAL-03 F4A — scope permukaan & kontras Work Calendar.
+   *
+   * Seluruh nilai di bawah dipilih dari rasio kontras terukur (WCAG 2.1),
+   * bukan dari selera. Scope ini hanya berlaku di dalam elemen
+   * `.work-calendar-scope` (termasuk portal menu/dialog Work Calendar yang
+   * diberi kelas yang sama), sehingga halaman lain tidak mengalami regresi.
+   *
+   * Terang:
+   * - `--primary` 126 55% 30%: `text-primary` di atas chip `bg-primary/10`
+   *   4.91:1, di atas `bg-card` 5.64:1, dan teks putih di atas `bg-primary`
+   *   5.64:1 (nilai global 39% hanya 3.23-3.62:1).
+   * - `--destructive` 0 72% 45%: teks "Terhambat" di atas chip
+   *   `bg-destructive/10` 4.94:1 dan tanda wajib di atas `bg-muted` 4.95:1
+   *   (nilai global 51% hanya 4.09-4.12:1).
+   * - `--input` 215 16% 56%: batas kontrol interaktif >= 3:1 di atas
+   *   `card`/`muted` (nilai lama 84% hanya 1.48:1).
+   * - `--success`/`--pending`/`--overdue` dibuat lebih gelap agar teks
+   *   status >= 4.5:1 di atas kartu putih.
+   *
+   * Gelap:
+   * - `--card` 12% dan `--popover` 13% memberi hierarki permukaan di atas
+   *   `background` 6-7% serta jarak terhadap `--muted` 17%.
+   * - `--primary` harus ikut di-override menjadi 126 55% 62%; tanpa itu
+   *   nilai terang (30%) terbawa ke tema gelap dan `text-primary` hanya
+   *   3.42:1 di atas `accent`/chip. Dengan 62%: chip `bg-primary/10` 7.63:1,
+   *   `bg-card` 9.23:1, `bg-accent` 6.17:1, dan teks gelap di atas
+   *   `bg-primary` 10.4:1.
+   * - `--border` 22 30% memisahkan kartu, `--input` 18 48% menjadi batas
+   *   kontrol yang jelas.
+   * - Token status dinaikkan ke lightness 48-72% agar teks status >= 4.5:1
+   *   di atas kartu; `--destructive-foreground` dibalik menjadi gelap supaya
+   *   tombol hapus tetap >= 4.5:1.
+   */
+  .work-calendar-scope {
+    --primary: 126 55% 30%;
+    --input: 215 16% 56%;
+    --success: 158 64% 28%;
+    --pending: 217 91% 40%;
+    --overdue: 0 84% 45%;
+    --destructive: 0 72% 45%;
+  }
+
+  .dark .work-calendar-scope {
+    --primary: 126 55% 62%;
+    --card: 222 34% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 34% 13%;
+    --popover-foreground: 210 40% 98%;
+    --muted: 217 28% 17%;
+    --muted-foreground: 215 20% 66%;
+    --border: 217 22% 30%;
+    --input: 217 18% 48%;
+    --ring: 126 55% 55%;
+    --accent: 126 22% 20%;
+    --accent-foreground: 126 55% 62%;
+    --success: 158 64% 48%;
+    --pending: 217 91% 64%;
+    --overdue: 0 84% 72%;
+    --destructive: 0 80% 66%;
+    --destructive-foreground: 222 47% 6%;
+    --ongoing: 158 64% 48%;
+    --shadow-card: 0 1px 0 hsl(210 40% 98% / 0.06), 0 16px 36px -26px hsl(222 47% 3% / 0.9);
+    --shadow-elevated: 0 20px 48px -26px hsl(222 47% 3% / 0.95);
+  }
+
   * {
     @apply border-border;
   }

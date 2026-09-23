@@ -1,0 +1,401 @@
+/**
+ * Public boundary Unified Work Calendar (CAL-03 F1 & F2).
+ *
+ * Modul ini sengaja tidak mengekspor `testing/*`. Fixture hanya boleh
+ * diimpor langsung dari `@/features/work-calendar/testing/work-calendar-fixtures`
+ * oleh test atau harness visual verification, bukan oleh runtime aplikasi.
+ */
+
+export { WorkCalendarWorkspace } from "./components/WorkCalendarWorkspace";
+export { WorkCalendarToolbar } from "./components/WorkCalendarToolbar";
+export { QuickWorkEntry } from "./components/QuickWorkEntry";
+export { WorkEntryRow } from "./components/WorkEntryRow";
+export { WorkEntryList } from "./components/WorkEntryList";
+export { WorkEntryEditor } from "./components/WorkEntryEditor";
+export { WorkEntryColorPicker } from "./components/WorkEntryColorPicker";
+export type { WorkEntryColorPickerProps } from "./components/WorkEntryColorPicker";
+export { WorkEntryLifecycleActions } from "./components/WorkEntryLifecycleActions";
+export type { WorkEntryLifecycleActionsProps } from "./components/WorkEntryLifecycleActions";
+export { WorkEntryTimeline } from "./components/WorkEntryTimeline";
+export type { WorkEntryTimelineProps } from "./components/WorkEntryTimeline";
+export { WorkEntryCreateDialog } from "./components/WorkEntryCreateDialog";
+export type {
+  WorkEntryCreateDialogProps,
+  WorkEntryCreateInput,
+} from "./components/WorkEntryCreateDialog";
+export { WorkEntryDetail } from "./components/WorkEntryDetail";
+export { QuickAddPanel } from "./components/QuickAddPanel";
+export { QuickAddSurface } from "./components/QuickAddSurface";
+export {
+  AnimatePresence,
+  WorkCalendarCrossfade,
+  useWorkCalendarMotion,
+} from "./components/WorkCalendarMotion";
+export type { WorkCalendarMotion } from "./components/WorkCalendarMotion";
+export { WorkCalendarModal } from "./components/WorkCalendarModal";
+export type {
+  WorkCalendarModalProps,
+  WorkCalendarModalVariant,
+} from "./components/WorkCalendarModal";
+export { WorkEntryStatusGlyph } from "./components/WorkEntryStatusGlyph";
+export { WorkCalendarDayBadge, getWorkCalendarDaySurfaceClassName } from "./components/WorkCalendarDayBadge";
+export type { WorkCalendarDayBadgeProps } from "./components/WorkCalendarDayBadge";
+export { DailyWorkView } from "./components/DailyWorkView";
+export { WeeklyWorkView } from "./components/WeeklyWorkView";
+export { MonthlyWorkView } from "./components/MonthlyWorkView";
+export { TeamProgressView } from "./components/TeamProgressView";
+export { TeamOverviewView } from "./components/TeamOverviewView";
+export {
+  TeamOverviewFilterBar,
+  TeamOverviewFilterPanel,
+} from "./components/TeamOverviewFilters";
+export { DailyProgressSummary } from "./components/DailyProgressSummary";
+
+export { createSupabaseWorkEntryRepository } from "./data/supabase-work-entry-repository";
+export type {
+  SupabaseWorkCalendarClient,
+  WorkCalendarDbQueryFilter,
+  WorkCalendarDbTable,
+  WorkCalendarRpcQuery,
+} from "./data/supabase-work-entry-repository";
+export {
+  WORK_TEAM_OVERVIEW_UNNAMED_LABEL,
+  createSupabaseWorkTeamOverviewRepository,
+  mapWorkTeamOverviewOptionRow,
+  mapWorkTeamOverviewRow,
+  resolveWorkTeamOverviewMemberName,
+} from "./data/supabase-work-team-overview-repository";
+export type {
+  SupabaseWorkTeamOverviewClient,
+  WorkTeamOverviewOptionRow,
+  WorkTeamOverviewRow,
+  WorkTeamOverviewRpcQuery,
+} from "./data/supabase-work-team-overview-repository";
+export {
+  createSupabaseWorkCalendarProfileRepository,
+  mapProfileRowToOwner,
+} from "./data/work-calendar-profile-repository";
+export type {
+  SupabaseWorkCalendarProfileClient,
+  WorkCalendarProfileDbQuery,
+  WorkCalendarProfileDbTable,
+  WorkCalendarProfileRepository,
+  WorkCalendarProfileRpcQuery,
+  WorkCalendarProfileRow,
+  WorkCalendarTeamMemberRow,
+} from "./data/work-calendar-profile-repository";
+export {
+  WorkEntryConflictError,
+  WORK_ENTRY_CONFLICT_CODE,
+  isWorkEntryConflictError,
+} from "./lib/work-entry-conflict";
+export { mapWorkEntryRow } from "./data/work-entry-row-mapper";
+export type { WorkCalendarEntryRow } from "./data/work-entry-row-mapper";
+export { mapWorkEntryEventRow } from "./data/work-entry-event-row-mapper";
+export type { WorkCalendarEventRow } from "./data/work-entry-event-row-mapper";
+export {
+  WORK_CALENDAR_HOLIDAY_DB_COLUMNS,
+  mapWorkCalendarHolidayRow,
+} from "./data/work-calendar-holiday-mapper";
+export type { WorkCalendarHolidayRow } from "./data/work-calendar-holiday-mapper";
+export {
+  WORK_CALENDAR_HOLIDAY_MAX_RANGE_DAYS,
+  createSupabaseWorkCalendarSettingsRepository,
+} from "./data/supabase-work-calendar-settings-repository";
+export type {
+  SupabaseWorkCalendarSettingsClient,
+  WorkCalendarSettingsDbQuery,
+  WorkCalendarSettingsDbTable,
+  WorkCalendarSettingsRpcQuery,
+  WorkCalendarWorkSettingsRow,
+} from "./data/supabase-work-calendar-settings-repository";
+
+export { useWorkCalendarView, useWorkCalendarDerivedView } from "./hooks/use-work-calendar-view";
+export type {
+  UseWorkCalendarViewInput,
+  UseWorkCalendarViewResult,
+  WorkCalendarDerivedView,
+} from "./hooks/use-work-calendar-view";
+
+export { useWorkTeamOverview } from "./hooks/use-work-team-overview";
+export type {
+  UseWorkTeamOverviewInput,
+  UseWorkTeamOverviewResult,
+  WorkTeamOverviewFilterChange,
+  WorkTeamOverviewStatus,
+} from "./hooks/use-work-team-overview";
+export { useWorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
+export type { WorkCalendarRouteBinding } from "./hooks/use-work-calendar-route-state";
+export { useWorkCalendarCompact, WORK_CALENDAR_COMPACT_QUERY } from "./hooks/use-work-calendar-compact";
+export { useWorkTeamOverviewCompact } from "./hooks/use-work-team-overview-compact";
+
+export {
+  WORK_CALENDAR_CROSSFADE_DURATION_SECONDS,
+  WORK_CALENDAR_DETAIL_SHEET_MAX_WIDTH,
+  WORK_CALENDAR_DETAIL_SHEET_MIN_WIDTH,
+  WORK_CALENDAR_EASE,
+  WORK_CALENDAR_OVERLAY_DURATION_SECONDS,
+  WORK_CALENDAR_REDUCED_DURATION_SECONDS,
+  WORK_CALENDAR_SHEET_DURATION_SECONDS,
+  getWorkCalendarMotionDurations,
+} from "./lib/work-calendar-motion";
+export type { WorkCalendarMotionDurations } from "./lib/work-calendar-motion";
+
+export {
+  WORK_ENTRY_QUERY_ID_MAX_LENGTH,
+  WORK_ENTRY_QUERY_KEY,
+  normalizeWorkEntryQueryId,
+  resolveSelectedWorkEntry,
+  shouldDiscardWorkEntryQueryId,
+} from "./lib/work-entry-selection";
+export type {
+  ResolveSelectedWorkEntryInput,
+  ShouldDiscardWorkEntryQueryIdInput,
+} from "./lib/work-entry-selection";
+
+export {
+  applyWorkTeamOverviewFilterChange,
+  clampWorkTeamOverviewPage,
+  clampWorkTeamOverviewPageSize,
+  countActiveWorkTeamOverviewFilters,
+  createWorkTeamOverviewFilters,
+  getWorkTeamOverviewPageCount,
+  isWorkTeamOverviewSort,
+  isWorkTeamOverviewStatusFilter,
+  listWorkTeamOverviewDepartmentOptions,
+  listWorkTeamOverviewMemberOptions,
+  normalizeWorkTeamOverviewSearch,
+  readWorkTeamOverviewUrlState,
+  reconcileWorkTeamOverviewFilters,
+  toWorkTeamOverviewDbStatus,
+  writeWorkTeamOverviewUrlState,
+} from "./lib/work-team-overview";
+export type {
+  ReadWorkTeamOverviewUrlInput,
+  WorkTeamOverviewUrlState,
+} from "./lib/work-team-overview";
+
+export {
+  WORK_CALENDAR_TIME_ZONE,
+  WORK_WEEKDAY_LABELS_ID,
+  addWorkDays,
+  compareWorkDates,
+  endOfWorkMonth,
+  formatWorkDateFull,
+  formatWorkDateKey,
+  formatWorkDateShort,
+  formatWorkDateHeading,
+  formatWorkMonthLabel,
+  formatWorkTimeLabel,
+  formatWorkTimeLabelFromIso,
+  formatWorkWeekRangeLabel,
+  getDayName,
+  getDaysInWorkMonth,
+  getMonthName,
+  getWorkCalendarDateRange,
+  getWorkDateWeekday,
+  isWorkDateAfter,
+  isWorkDateBefore,
+  isWorkDateWithin,
+  isValidWorkDate,
+  parseWorkDateParts,
+  parseWorkDateTimeInput,
+  shiftWorkDate,
+  startOfWorkMonth,
+  startOfWorkWeek,
+  todayWorkDate,
+  workDateRangeToUtcRange,
+  workDateToUtcRange,
+  workMonthDates,
+  workWeekDates,
+} from "./lib/work-calendar-date";
+export type { WorkCalendarDateRange } from "./lib/work-calendar-date";
+
+export {
+  DEFAULT_WORK_CALENDAR_WORK_SETTINGS,
+  buildWorkCalendarDayMetaMap,
+  formatWorkCalendarWorkHours,
+  getWorkCalendarDayMeta,
+  indexWorkCalendarHolidays,
+  isWorkCalendarWorkDay,
+  normalizeWorkDays,
+  normalizeWorkSettings,
+} from "./lib/work-day-config";
+
+export {
+  WORK_ENTRY_STATUS_META,
+  WORK_ENTRY_STATUS_ORDER,
+  WORK_ENTRY_OVERDUE_META,
+  compareWorkEntries,
+  getWorkEntryEffectiveDueDate,
+  getWorkEntryStatusFollowUp,
+  getWorkEntryStatusLabel,
+  getWorkEntryStatusMeta,
+  isFinalWorkEntryStatus,
+  isUnfinishedWorkEntryStatus,
+  isWorkEntryCompletedLate,
+  isWorkEntryOverdue,
+} from "./lib/work-entry-status";
+export type { WorkEntryDeadlineInput, WorkEntryStatusFollowUp, WorkEntryStatusMeta } from "./lib/work-entry-status";
+
+export {
+  WORK_ENTRY_COLOR_META,
+  buildBlockedPatch,
+  buildCompletePatch,
+  buildContinueTodayPatch,
+  buildReschedulePatch,
+  buildStatusPatch,
+  buildWorkEntryEventDrafts,
+  describeWorkEntryEvent,
+  getWorkEntryColorMeta,
+  isWorkEntryColorSwatch,
+} from "./lib/work-entry-lifecycle";
+export type {
+  WorkEntryColorMeta,
+  WorkEntryEventDescription,
+  WorkEntryEventDraft,
+  WorkEntryEventDraftSource,
+} from "./lib/work-entry-lifecycle";
+
+export {
+  WORK_ENTRY_BLOCKED_REASON_MAX_LENGTH,
+  WORK_ENTRY_LOCATION_MAX_LENGTH,
+  WORK_ENTRY_NOTES_MAX_LENGTH,
+  WORK_ENTRY_REALIZATION_MAX_LENGTH,
+  WORK_ENTRY_TITLE_MAX_LENGTH,
+  canQuickCreateWorkEntry,
+  normalizeWorkEntryText,
+  normalizeWorkEntryTitle,
+  validateStoredWorkEntry,
+  validateWorkEntryInput,
+} from "./lib/work-entry-validation";
+export type {
+  WorkEntryFieldErrors,
+  WorkEntryValidationInput,
+  WorkEntryValidationResult,
+} from "./lib/work-entry-validation";
+
+export {
+  EMPTY_WORK_PROGRESS,
+  WORK_MONTH_CELL_PREVIEW_LIMIT,
+  WORK_MONTH_MOBILE_CELL_PREVIEW_LIMIT,
+  buildWorkCalendarDayCells,
+  buildWorkCalendarDaySummaries,
+  buildWorkEntryOwnerGroups,
+  buildWorkEntryStates,
+  buildWorkProgressStatusRows,
+  computeWorkCompletionPercent,
+  computeWorkProgress,
+  createWorkCalendarPermissions,
+  filterWorkEntriesByOwner,
+  getWorkMonthCellPreview,
+  groupWorkEntriesByDate,
+  isWorkCalendarTeamViewAvailable,
+  selectUnfinishedWorkEntries,
+} from "./lib/work-progress";
+
+export {
+  WORK_CALENDAR_DAY_KINDS,
+  WORK_CALENDAR_VIEW_MODES,
+  WORK_ENTRY_COLOR_SWATCHES,
+  WORK_ENTRY_EVENT_TYPES,
+  WORK_ENTRY_KINDS,
+  WORK_ENTRY_STATUSES,
+} from "./types/work-calendar";
+export type {
+  WorkCalendarDayCell,
+  WorkCalendarDayKind,
+  WorkCalendarDayMeta,
+  WorkCalendarDaySummary,
+  WorkCalendarHoliday,
+  WorkCalendarPermissions,
+  WorkCalendarSettingsRepository,
+  WorkCalendarViewMode,
+  WorkCalendarViewModel,
+  WorkCalendarWorkSettings,
+  WorkCalendarWorkspaceProps,
+  WorkDate,
+  WorkEntry,
+  WorkEntryColorSwatch,
+  WorkEntryDraft,
+  WorkEntryEvent,
+  WorkEntryEventType,
+  WorkEntryId,
+  WorkEntryKind,
+  WorkEntryOwner,
+  WorkEntryOwnerGroup,
+  WorkEntryOwnerId,
+  WorkEntryPatch,
+  WorkEntryRepository,
+  WorkEntryState,
+  WorkEntryStatus,
+  WorkProgressCounts,
+  WorkTimestamp,
+} from "./types/work-calendar";
+
+export { WORK_TEAM_OVERVIEW_SORTS, WORK_TEAM_OVERVIEW_STATUS_FILTERS } from "./types/work-team-overview";
+export type {
+  WorkTeamOverviewEntryQuery,
+  WorkTeamOverviewFilters,
+  WorkTeamOverviewMember,
+  WorkTeamOverviewOption,
+  WorkTeamOverviewOptionKind,
+  WorkTeamOverviewPage,
+  WorkTeamOverviewQuery,
+  WorkTeamOverviewRepository,
+  WorkTeamOverviewSort,
+  WorkTeamOverviewStatusFilter,
+} from "./types/work-team-overview";
+
+// CAL-03 F7: ringkasan dashboard dan notifikasi.
+export { WorkCalendarDashboardWidget } from "./components/WorkCalendarDashboardWidget";
+export type { WorkCalendarDashboardWidgetProps } from "./components/WorkCalendarDashboardWidget";
+export {
+  EMPTY_WORK_CALENDAR_DASHBOARD_SUMMARY,
+  buildWorkCalendarDashboardSummary,
+} from "./lib/work-calendar-dashboard";
+export {
+  WORK_CALENDAR_NOTIFICATION_DEBOUNCE_HOURS,
+  WORK_CALENDAR_NOTIFICATION_DEDUPE_PREFIX,
+  WORK_CALENDAR_NOTIFICATION_ESCALATION_WORK_DAYS,
+  WORK_CALENDAR_NOTIFICATION_META,
+  buildWorkCalendarNotificationDedupeKey,
+  countUnreadWorkCalendarNotifications,
+  getWorkCalendarNotificationMeta,
+  isWorkCalendarNotificationCategory,
+  mapWorkCalendarNotificationRow,
+  readWorkCalendarNotificationCategory,
+  summarizeWorkCalendarNotifications,
+} from "./lib/work-calendar-notifications";
+export type {
+  WorkCalendarNotificationBreakdown,
+  WorkCalendarNotificationCategoryMeta,
+  WorkCalendarNotificationRow,
+} from "./lib/work-calendar-notifications";
+export {
+  WORK_CALENDAR_NOTIFICATION_CATEGORIES,
+  WORK_CALENDAR_NOTIFICATION_TYPES,
+} from "./types/work-calendar-notifications";
+export {
+  WORK_CALENDAR_ACTIVITY_ERROR_MESSAGE,
+  WORK_CALENDAR_ACTIVITY_MAX_ROWS,
+  WORK_CALENDAR_DASHBOARD_ERROR_MESSAGE,
+  WORK_CALENDAR_NOTIFICATION_GENERATE_ERROR_MESSAGE,
+  createSupabaseWorkCalendarDashboardRepository,
+} from "./data/supabase-work-calendar-dashboard-repository";
+export type {
+  SupabaseWorkCalendarDashboardClient,
+  WorkCalendarActivityRow,
+  WorkCalendarDashboardRpcQuery,
+} from "./data/supabase-work-calendar-dashboard-repository";
+export type {
+  WorkCalendarActivityItem,
+  WorkCalendarActivityQueryInput,
+  WorkCalendarDashboardEntriesInput,
+  WorkCalendarDashboardRepository,
+  WorkCalendarDashboardSummary,
+  WorkCalendarNotification,
+  WorkCalendarNotificationCategory,
+  WorkCalendarNotificationGeneratorInput,
+  WorkCalendarNotificationType,
+} from "./types/work-calendar-notifications";

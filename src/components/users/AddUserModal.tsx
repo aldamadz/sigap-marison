@@ -11,10 +11,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { User, Role } from '@/types/agenda';
+import { adminUserService, describeAdminUserError } from '@/services/admin-user.service';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import {
-  UserPlus, Building2, Briefcase, Fingerprint, Mail, Lock,
+  UserPlus, Building2, Briefcase, Fingerprint, Mail,
   Loader2, ShieldCheck, User as UserIcon, Phone, Calendar, LogOut,
 } from 'lucide-react';
 
@@ -30,7 +31,6 @@ interface Office     { id: string; name: string; kedudukan?: string; }
 
 const EMPTY_FORM = {
   email:        '',
-  password:     'marison123',
   fullName:     '',
   nik:          '',
   role:         'user' as Role,
@@ -100,32 +100,30 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
     setFormData(f => ({ ...f, [k]: e.target.value }));
 
   const handleSave = async () => {
+    if (loading) return; // double-submit guard
     if (!formData.email || !formData.fullName) return toast.error('Email dan Nama wajib diisi');
-    if ((formData.password || '').length < 6) return toast.error('Password minimal 6 karakter');
+    if (!formData.nik) return toast.error('NIK wajib diisi');
 
     setLoading(true);
     try {
-      const { data: json, error } = await supabase.functions.invoke('admin-create-user', {
-        body: {
-            action:        'create',
-            email:         formData.email,
-            full_name:     formData.fullName,
-            job_title:     formData.jobTitle    || null,
-            phone:         formData.phone       || null,
-            role:          formData.role        || 'user',
-            join_date:     formData.join_date   || null,
-            resign_date:   formData.resign_date || null,
-            department_id: formData.departmentId === 'none' ? null : String(formData.departmentId),
-            office_id:     formData.officeId     === 'none' ? null : String(formData.officeId),
-        },
+      await adminUserService.createUser({
+        email:         formData.email,
+        full_name:     formData.fullName,
+        nik:           formData.nik,
+        job_title:     formData.jobTitle    || null,
+        phone:         formData.phone       || null,
+        role:          formData.role        || 'user',
+        join_date:     formData.join_date   || null,
+        resign_date:   formData.resign_date || null,
+        department_id: formData.departmentId === 'none' ? null : String(formData.departmentId),
+        office_id:     formData.officeId     === 'none' ? null : String(formData.officeId),
+        parent_id:     formData.parentId     === 'none' ? null : String(formData.parentId),
       });
-      if (error) throw new Error(error.message);
-      if (json?.error) throw new Error(json.error);
-      toast.success(`Akun ${formData.fullName} berhasil dibuat. Password: marison123`);
+      toast.success(`Akun ${formData.fullName} berhasil dibuat dengan password default staging.`);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(describeAdminUserError(err));
     } finally {
       setLoading(false);
     }
@@ -152,8 +150,7 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
             <DialogDescription className="text-muted-foreground font-medium">
               Sistem akan membuat akun login dan profil database secara otomatis.{' '}
               <span className="text-primary font-bold">
-                Password default:{' '}
-                <span className="font-mono bg-primary/10 px-1.5 py-0.5 rounded text-xs">marison123</span>
+                Password default staging akan dibuat server secara otomatis.
               </span>
             </DialogDescription>
           </DialogHeader>
@@ -171,13 +168,6 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
                 </Label>
                 <Input type="email" value={formData.email} onChange={set('email')}
                   placeholder="name@company.com" className="bg-background h-10" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-muted-foreground" /> Password
-                </Label>
-                <Input type="text" value={formData.password} onChange={set('password')}
-                  className="bg-background h-10 font-mono text-sm" />
               </div>
             </div>
           </div>

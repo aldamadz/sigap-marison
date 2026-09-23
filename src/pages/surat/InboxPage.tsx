@@ -1,7 +1,10 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
-import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
-import { 
+import {
+  useInboxPagination,
+} from "@/features/surat/inbox/lib/use-inbox-pagination";
+import {
   Loader2, 
   Search,
   ArrowRight,
@@ -32,7 +35,19 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { suratService, type LinkedSuratDocument } from "@/services/surat.service";
+import type { LinkedSuratDocument } from "@/services/surat.service";
+import { suratInboxApi } from "@/features/surat/inbox/services/surat-inbox-api";
+import { suratApprovalApi } from "@/features/surat/inbox/services/surat-approval-api";
+import {
+  getTaskAction,
+  getVerifierDisplayName,
+  getInboxTaskKey,
+  hasVerifierTargets,
+  isPreparedByVerifier,
+  isVerificationTask,
+  isWaitingVerification,
+  shouldSignerInputStageData,
+} from "@/features/surat/inbox/lib/inbox-task-state";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -63,6 +78,11 @@ import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreads
 import { normalizeProductionSerial } from "@/lib/production-code";
 import { useAttention } from "@/providers/AttentionProvider";
 import { parseLocalDateInput } from "@/lib/local-date";
+import {
+  canonicalizeCheckerInput,
+  normalizeCheckerInputSchema,
+  validateCheckerInput,
+} from "@/features/surat/inbox/lib/checker-input";
 
 const getAllocationUnitType = (unit: any, detail: Record<string, any> = unit?.allocation_detail || {}) =>
   String(
@@ -131,6 +151,7 @@ export default function InboxPage() {
   const [allocationSelected, setAllocationSelected] = useState<Record<string, any[]>>({});
   const [allocationDetails, setAllocationDetails] = useState<Record<string, Record<string, any>>>({});
   const [approvalFiles, setApprovalFiles] = useState<Record<string, Record<string, File[]>>>({});
+  const [checkerInputs, setCheckerInputs] = useState<Record<string, Record<string, unknown>>>({});
   const [allocationLoading, setAllocationLoading] = useState<Record<string, boolean>>({});
   const [allocationErrors, setAllocationErrors] = useState<Record<string, string | null>>({});
   const [unitSearch, setUnitSearch] = useState<Record<string, string>>({});
@@ -145,83 +166,30 @@ export default function InboxPage() {
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. DATA INBOX (compact)
-  const [inboxCursor, setInboxCursor] = useState<string | null>(null);
-  const [inboxAllItems, setInboxAllItems] = useState<any[]>([]);
-  const [inboxHasMore, setInboxHasMore] = useState(false);
-  const [inboxTotal, setInboxTotal] = useState(0);
-  const [detailCache, setDetailCache] = useState<Record<string, any>>({});
-
-  const inboxFilterKey = `${debouncedSearch}|${categoryFilter}|${actionFilter}`;
-  const prevFilterKeyRef = useRef(inboxFilterKey);
-  useEffect(() => {
-    if (prevFilterKeyRef.current !== inboxFilterKey) {
-      prevFilterKeyRef.current = inboxFilterKey;
-      setInboxCursor(null);
-      setInboxAllItems([]);
-      setInboxHasMore(false);
-      setInboxTotal(0);
-    }
-  }, [inboxFilterKey]);
-
-  const taskTypeParam = actionFilter === "approval" ? "approval" : actionFilter === "verification" ? "verification" : undefined;
-
-  const { data: inboxPage, isLoading: loading, error: inboxError, refetch: refetchInbox, isFetching } = useQuery({
-    queryKey: ['surat-inbox-compact', inboxFilterKey, inboxCursor] as string[],
-    queryFn: () => suratService.getMyInboxCompact({
-      limit: 20,
-      cursor: inboxCursor || undefined,
-      search: debouncedSearch || undefined,
-      request_category: categoryFilter !== "all" ? categoryFilter : undefined,
-      task_type: taskTypeParam,
-    }),
-    staleTime: 30000,
-    placeholderData: keepPreviousData,
+  // 1. DATA INBOX (compact) — pagination + lifecycle extracted to hook
+  const {
+    items: inbox,
+    hasMore: inboxHasMore,
+    total: inboxTotal,
+    remaining: inboxRemaining,
+    loading,
+    error: inboxError,
+    isFetching,
+    detailCache,
+    setDetailCache,
+    loadMore,
+    refetch: refetchInbox,
+    refetchFull: refetchInboxFull,
+    finishTaskLocally: finishInboxTaskLocally,
+    refreshAfterAction: refreshInboxAfterAction,
+    resetPagination: resetInboxPagination,
+  } = useInboxPagination({
+    search: debouncedSearch,
+    categoryFilter,
+    actionFilter,
+    refetchAttention,
+    queryClient,
   });
-
-  useEffect(() => {
-    if (!inboxPage) return;
-    const page = inboxPage as { items: any[]; total: number | null; hasMore: boolean; nextCursor: string | null; pageSize: number };
-    if (!inboxCursor) {
-      setInboxAllItems(page.items);
-      if (page.total !== null) setInboxTotal(page.total);
-    } else {
-      setInboxAllItems((prev) => {
-        const ids = new Set(prev.map((i: any) => i.id));
-        const next = page.items.filter((i: any) => !ids.has(i.id));
-        return [...prev, ...next];
-      });
-    }
-    setInboxHasMore(page.hasMore);
-  }, [inboxPage]);
-
-  const inbox = inboxAllItems;
-
-  const refetchInboxFull = () => {
-    setInboxCursor(null);
-    setInboxAllItems([]);
-    setDetailCache({});
-    refetchInbox();
-  };
-
-  const finishInboxTaskLocally = (taskId: string) => {
-    setInboxAllItems((previous) => previous.filter((item: any) => item.id !== taskId));
-    setInboxTotal((previous) => Math.max(0, previous - 1));
-    setDetailCache((previous) => {
-      const next = { ...previous };
-      delete next[taskId];
-      return next;
-    });
-    queryClient.removeQueries({ queryKey: ['surat-inbox-detail', taskId], exact: true });
-  };
-
-  const refreshInboxAfterAction = () => {
-    void Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
-      queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
-      refetchAttention(),
-    ]);
-  };
 
   const { data: kpiDetails = [], isLoading: kpiLoading } = useQuery({
     queryKey: ['surat-inbox-kpi'],
@@ -251,40 +219,6 @@ export default function InboxPage() {
     }
   });
 
-  const isVerificationTask = (item: any) => item?.task_type === "verification";
-
-  const hasVerifierTargets = (item: any) =>
-    Array.isArray(item?.verifier_snapshot) && item.verifier_snapshot.some((entry: any) => entry?.user_id);
-
-  const getVerifierDisplayName = (item: any) => {
-    const names = Array.isArray(item?.verifier_snapshot)
-      ? item.verifier_snapshot
-          .map((entry: any) => String(entry?.full_name || entry?.name || entry?.display_name || "").trim())
-          .filter(Boolean)
-      : [];
-    const uniqueNames = Array.from(new Set(names));
-    if (uniqueNames.length === 0) return "tim pemeriksa";
-    if (uniqueNames.length === 1) return uniqueNames[0];
-    if (uniqueNames.length === 2) return `${uniqueNames[0]} dan ${uniqueNames[1]}`;
-    return `${uniqueNames.slice(0, 2).join(", ")} dan ${uniqueNames.length - 2} lainnya`;
-  };
-
-  const isWaitingVerification = (item: any) =>
-    item?.verification_required === true && item?.verification_status !== "verified";
-
-  const isPreparedByVerifier = (item: any) =>
-    item?.verification_required === true && item?.verification_status === "verified";
-
-  const shouldSignerInputStageData = (item: any) =>
-    !item?.verification_required || isVerificationTask(item);
-
-  const getTaskAction = (item: any) => {
-    if (isVerificationTask(item)) return "verification";
-    if (item.requires_unit_allocation) return "unit";
-    if ((item.attachment_requirements_snapshot || []).length > 0) return "attachment";
-    return "approval";
-  };
-
   const kpiBySignature = useMemo(() => new Map(
     (kpiDetails as DepartmentKpiDetail[]).map((detail) => [detail.signature_id, detail])
   ), [kpiDetails]);
@@ -300,13 +234,21 @@ export default function InboxPage() {
     });
   }, [inbox, kpiFilter, kpiBySignature]);
 
-  const requestedTaskId = searchParams.get("task");
-  const selectedCompactItem = filteredInbox.find((item: any) => item.id === requestedTaskId) || filteredInbox[0] || null;
+  const requestedTaskKey = searchParams.get("task");
+  const legacySelectedCompactItem =
+    filteredInbox.find((item: any) => item.id === requestedTaskKey && isVerificationTask(item)) ||
+    filteredInbox.find((item: any) => item.id === requestedTaskKey);
+  const selectedCompactItem =
+    filteredInbox.find((item: any) => getInboxTaskKey(item) === requestedTaskKey) ||
+    legacySelectedCompactItem ||
+    filteredInbox[0] ||
+    null;
+  const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const selectedSignatureId = selectedCompactItem?.id || null;
 
   const { data: selectedDetail, isFetching: detailFetching } = useQuery({
     queryKey: ['surat-inbox-detail', selectedSignatureId],
-    queryFn: () => suratService.getMyInboxDetail(selectedSignatureId!),
+    queryFn: () => suratInboxApi.getMyInboxDetail(selectedSignatureId!),
     enabled: Boolean(selectedSignatureId),
     staleTime: 30000,
     gcTime: 120000,
@@ -329,21 +271,21 @@ export default function InboxPage() {
     ? {
         ...selectedCompactItem,
         ...(selectedDetailItem || {}),
-        task_type: selectedDetailItem?.task_type ?? selectedCompactItem.task_type,
+        task_type: selectedCompactItem.task_type ?? selectedDetailItem?.task_type,
       }
     : selectedDetailItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
 
   const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
     queryKey: ["surat-linked-documents", selectedSuratId],
-    queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
+    queryFn: () => suratInboxApi.getLinkedDocuments(selectedSuratId),
     enabled: Boolean(selectedSuratId),
     staleTime: 15000,
   });
 
   const { data: revisionHistory = [] } = useQuery({
     queryKey: ["surat-revision-history", selectedSuratId],
-    queryFn: () => suratService.getRevisionHistory(selectedSuratId),
+    queryFn: () => suratInboxApi.getRevisionHistory(selectedSuratId),
     enabled: Boolean(selectedSuratId),
     staleTime: 10000,
   });
@@ -376,6 +318,12 @@ export default function InboxPage() {
         ])),
       }));
     }
+    if ((input as any).checker_input && typeof (input as any).checker_input === "object") {
+      setCheckerInputs((previous) => ({
+        ...previous,
+        [selectedItem.id]: (input as any).checker_input,
+      }));
+    }
     setVerificationDraftState((previous) => ({ ...previous, [selectedItem.id]: "saved" }));
     hydrationRef.current[selectedItem.id] = true;
   }, [selectedItem?.id]);
@@ -389,13 +337,13 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (!selectedItem) {
-      if (requestedTaskId) setSearchParams({}, { replace: true });
+      if (requestedTaskKey) setSearchParams({}, { replace: true });
       return;
     }
-    if (requestedTaskId !== selectedItem.id) {
-      setSearchParams({ task: selectedItem.id }, { replace: true });
+    if (selectedTaskKey && requestedTaskKey !== selectedTaskKey) {
+      setSearchParams({ task: selectedTaskKey }, { replace: true });
     }
-  }, [selectedItem?.id, requestedTaskId, setSearchParams]);
+  }, [requestedTaskKey, selectedItem, selectedTaskKey, setSearchParams]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -403,9 +351,7 @@ export default function InboxPage() {
     const scheduleInboxRefresh = () => {
       if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
       realtimeRefreshTimerRef.current = setTimeout(() => {
-        setInboxCursor(null);
-        setInboxAllItems([]);
-        setDetailCache({});
+        resetInboxPagination();
         queryClient.invalidateQueries({ queryKey: ["surat-inbox-compact"] });
         queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] });
         queryClient.invalidateQueries({ queryKey: ["surat-linked-documents"] });
@@ -495,6 +441,17 @@ export default function InboxPage() {
       (item?.verification_required !== true && !hasStoredUnitAllocation(item) && shouldSignerInputStageData(item))
     );
 
+  // Dead-end recovery: lookup unit gagal/kosong/proyek hilang sehingga alokasi
+  // mustahil. Tim pemeriksa tidak diberi hak tolak permanen di sini.
+  const canReturnToRequester = (item: any) =>
+    isVerificationTask(item) &&
+    isUnitAllocationRequired(item) &&
+    (
+      !getAllocationProject(item)?.code ||
+      Boolean(allocationErrors[item.id]) ||
+      (!allocationLoading[item.id] && (allocationUnits[item.id] || []).length === 0)
+    );
+
   const getAllocationProject = (item: any) =>
     getUnitAllocationData(item.surat_registrasi).project ||
     allocationProjectSelected[item.id] ||
@@ -533,6 +490,12 @@ export default function InboxPage() {
           ),
         })),
         allocated_unit_count: selectedUnits.length,
+      } : {}),
+      ...(item.action_type === "configured_input" ? {
+        checker_input: canonicalizeCheckerInput(
+          item.input_schema_snapshot,
+          checkerInputs[item.id] || {},
+        ),
       } : {}),
     };
   };
@@ -625,7 +588,7 @@ export default function InboxPage() {
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
     draftSaveTimerRef.current = setTimeout(() => {
       setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "saving" }));
-      suratService.saveVerificationDraft(signatureId, payload, note)
+      suratApprovalApi.saveVerificationDraft(signatureId, payload, note)
         .then(() => {
           setVerificationDraftState((previous) => ({ ...previous, [signatureId]: "saved" }));
         })
@@ -644,6 +607,7 @@ export default function InboxPage() {
     JSON.stringify(allocationProjectSelected[selectedItem?.id || ""] || null),
     JSON.stringify(allocationSelected[selectedItem?.id || ""] || []),
     JSON.stringify(allocationDetails[selectedItem?.id || ""] || {}),
+    JSON.stringify(checkerInputs[selectedItem?.id || ""] || {}),
   ]);
 
   const handleSearchChange = (value: string) => {
@@ -740,7 +704,7 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
 
-    await suratService.approveSurat(
+    await suratApprovalApi.approveSurat(
       item.id, 
       item.surat_id, 
       item.surat_registrasi.current_step, 
@@ -796,7 +760,8 @@ const handleApprove = async (item: any) => {
       });
       return next;
     });
-    finishInboxTaskLocally(item.id);
+    const taskKey = getInboxTaskKey(item);
+    if (taskKey) finishInboxTaskLocally(taskKey);
     refreshInboxAfterAction();
   } catch (error: any) {
     console.error("Approve Error:", error);
@@ -830,15 +795,67 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
     try {
-      await suratService.rejectSurat(item.id, item.surat_id, note);
+      await suratApprovalApi.rejectSurat(item.id, item.surat_id, note);
       toast.error("Dokumen Ditolak", {
         description: "Alur dokumen telah dihentikan secara permanen.",
       });
-      finishInboxTaskLocally(item.id);
+      const taskKey = getInboxTaskKey(item);
+      if (taskKey) finishInboxTaskLocally(taskKey);
       refreshInboxAfterAction();
     } catch (error: any) {
       console.error("Reject Error:", error);
       toast.error(error.message || "Gagal menolak dokumen.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReturnToRequester = async (item: any) => {
+    const reason = await appDialog.prompt({
+      title: "Kembalikan ke Pemohon?",
+      description: `Lookup unit untuk "${item.surat_registrasi.judul_surat}" tidak dapat diselesaikan. Pemohon akan masuk ke status Menunggu Perbaikan dan dapat memperbaiki pengajuan. Alasan wajib.`,
+      label: "Alasan pengembalian",
+      placeholder: "Tuliskan alasan yang jelas, minimal 5 karakter...",
+      confirmText: "Kembalikan ke Pemohon",
+      cancelText: "Batal",
+      multiline: true,
+      required: true,
+    });
+    if (reason === null) return;
+    if (reason.trim().length < 5) {
+      toast.error("Alasan Wajib Diisi", {
+        description: "Harap masukkan alasan pengembalian minimal 5 karakter.",
+      });
+      return;
+    }
+
+    setProcessingId(item.id);
+    try {
+      await suratApprovalApi.requestProcessRevision({
+        suratId: item.surat_id,
+        signatureId: item.id,
+        targetType: "requester",
+        targetStep: null,
+        reason: reason.trim(),
+        changes: {
+          note: reason.trim(),
+          requested_by: "verification_inbox",
+          external_submission_revision: true,
+          requester_must_edit: true,
+          unit_availability_dead_end: true,
+        },
+      });
+      toast.success("Dikembalikan ke Pemohon", {
+        description: "Pengajuan masuk status Menunggu Perbaikan dan bisa diperbaiki oleh pemohon.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-compact'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-inbox-kpi'] }),
+        queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] }),
+        refetchAttention(),
+      ]);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal mengembalikan proses.");
     } finally {
       setProcessingId(null);
     }
@@ -863,6 +880,13 @@ const handleApprove = async (item: any) => {
       const missingApprovalAttachments = getMissingApprovalAttachmentLabels(item);
       if (missingApprovalAttachments.length > 0) {
         throw new Error(`Lampiran approval belum lengkap: ${missingApprovalAttachments.join(", ")}.`);
+      }
+      if (item.action_type === "configured_input") {
+        const checkerIssues = validateCheckerInput(
+          item.input_schema_snapshot,
+          checkerInputs[item.id] || {},
+        );
+        if (checkerIssues.length > 0) throw new Error(checkerIssues[0]);
       }
 
       if (isUnitAllocationRequired(item) && selectedUnits.length < getRequestedUnitCount(item)) {
@@ -894,9 +918,12 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
     try {
-      await suratService.verifySignature(item.id, notes[item.id] || "", {
+      await suratApprovalApi.verifySignature(item.id, notes[item.id] || "", {
         suratId: item.surat_id,
         approvalAttachments: getSelectedApprovalFiles(item),
+        ...(item.action_type === "configured_input" ? {
+          checkerInput: checkerInputs[item.id] || {},
+        } : {}),
         ...(isUnitAllocationRequired(item) ? {
           unitAllocation: {
             project: getAllocationProject(item),
@@ -932,7 +959,13 @@ const handleApprove = async (item: any) => {
         delete next[item.id];
         return next;
       });
-      finishInboxTaskLocally(item.id);
+      setCheckerInputs(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      const taskKey = getInboxTaskKey(item);
+      if (taskKey) finishInboxTaskLocally(taskKey);
       refreshInboxAfterAction();
     } catch (error: any) {
       toast.error(error.message || "Gagal menyimpan pemeriksaan data.");
@@ -1192,7 +1225,7 @@ const handleApprove = async (item: any) => {
         ? Math.max(1, Number(item.step_order || 1) - 1)
         : Number(item.step_order || 1);
       const checkerInputSnapshot = target === "checker" ? buildCheckerInputSnapshot(item) : null;
-      await suratService.requestProcessRevision({
+      await suratApprovalApi.requestProcessRevision({
         suratId: item.surat_id,
         signatureId: item.id,
         targetType: target,
@@ -1822,6 +1855,91 @@ const handleApprove = async (item: any) => {
     );
   };
 
+  const renderConfiguredInputPanel = (item: any) => {
+    if (item.action_type !== "configured_input") return null;
+    const schema = normalizeCheckerInputSchema(item.input_schema_snapshot);
+    if (schema.fields.length === 0) return null;
+
+    const savedInput = item?.surat_registrasi?.form_input_data?.checker_inputs?.[item.id];
+    const draftInput = getVerificationDraft(item)?.input?.checker_input;
+    const values = isVerificationTask(item)
+      ? checkerInputs[item.id] || (draftInput && typeof draftInput === "object" ? draftInput : {})
+      : savedInput && typeof savedInput === "object" ? savedInput : {};
+    const editable = isVerificationTask(item);
+
+    return (
+      <section className={cn("sigap-panel", editable ? "border-sky-500/30" : "border-emerald-500/30")}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <ClipboardList className={cn("mt-0.5 h-5 w-5", editable ? "text-sky-600" : "text-emerald-600")} />
+            <div>
+              <p className="text-sm font-semibold">{schema.title || "Input tim pemeriksa"}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {schema.description || (editable
+                  ? "Lengkapi data berikut sebelum pengajuan diteruskan ke penanda tangan."
+                  : "Data ini telah disiapkan oleh tim pemeriksa.")}
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className={approvalBadgeClass(editable ? "verification_waiting" : "verification_done")}>
+            {editable ? "Perlu dilengkapi" : "Sudah diperiksa"}
+          </Badge>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {schema.fields.map((field) => {
+            const value = values[field.key] ?? "";
+            const updateValue = (nextValue: unknown) => setCheckerInputs((previous) => ({
+              ...previous,
+              [item.id]: { ...(previous[item.id] || values), [field.key]: nextValue },
+            }));
+            return (
+              <div key={field.key} className={cn("space-y-2", field.type === "textarea" && "sm:col-span-2")}>
+                <Label htmlFor={`checker-${item.id}-${field.key}`}>
+                  {field.label}{field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                </Label>
+                {editable ? field.type === "textarea" ? (
+                  <Textarea
+                    id={`checker-${item.id}-${field.key}`}
+                    value={String(value)}
+                    placeholder={field.placeholder}
+                    className="min-h-24"
+                    onChange={(event) => updateValue(event.target.value)}
+                  />
+                ) : field.type === "money" ? (
+                  <NominalInput
+                    value={value}
+                    ariaLabel={field.label}
+                    placeholder={field.placeholder}
+                    className="h-11"
+                    onCommit={updateValue}
+                  />
+                ) : (
+                  <Input
+                    id={`checker-${item.id}-${field.key}`}
+                    type={field.type === "number" ? "number" : "text"}
+                    inputMode={field.type === "number" ? "numeric" : undefined}
+                    min={field.min}
+                    value={String(value)}
+                    placeholder={field.placeholder}
+                    className="h-11"
+                    onChange={(event) => updateValue(event.target.value)}
+                  />
+                ) : (
+                  <div className="min-h-11 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
+                    {field.type === "money" && value !== ""
+                      ? formatRupiahCanonical(value)
+                      : displayText(value)}
+                  </div>
+                )}
+                {field.helperText ? <p className="text-xs text-muted-foreground">{field.helperText}</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
   const renderApprovalAttachmentPanel = (item: any) => {
     const requirements = getApprovalAttachmentRequirements(item);
     if (requirements.length === 0) return null;
@@ -2168,7 +2286,7 @@ const handleApprove = async (item: any) => {
     const note = notes[item.id] || "";
     setProcessingId(item.id);
     try {
-      await suratService.resolveProcessRevision(revision.event_id, note);
+      await suratApprovalApi.resolveProcessRevision(revision.event_id, note);
       toast.success("Perbaikan selesai", {
         description: revision.target_type === "signer" && revision.changes?.external_submission_revision
           ? "Perbaikan tersimpan dan approval revisi dimulai sesuai konfigurasi kegunaan."
@@ -2432,8 +2550,8 @@ const handleApprove = async (item: any) => {
     );
   };
 
-  const selectTask = (id: string) => {
-    setSearchParams({ task: id });
+  const selectTask = (taskKey: string) => {
+    setSearchParams({ task: taskKey });
     setTaskSwitcherOpen(false);
   };
 
@@ -2443,11 +2561,12 @@ const handleApprove = async (item: any) => {
     const department = surat.location_snapshot?.department?.name || surat.data_snapshot?.location?.department?.name || "Departemen tidak tersedia";
     const category = formatRequestCategory(surat.form_input_data?.request_category || surat.data_snapshot?.request_category);
     const kpi = getKpiPresentation(item);
-    const active = selectedItem?.id === item.id;
+    const taskKey = getInboxTaskKey(item);
+    const active = selectedTaskKey === taskKey;
     const requirementCount = getApprovalAttachmentRequirements(item).length;
     const verificationTask = isVerificationTask(item);
     return (
-      <button type="button" key={item.id} onClick={() => selectTask(item.id)} className={cn("w-full rounded-md border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + item.id}>
+      <button type="button" key={taskKey || item.id} onClick={() => taskKey && selectTask(taskKey)} className={cn("w-full rounded-md border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + (taskKey || item.id)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-mono text-[11px] font-semibold text-primary">{surat.no_surat || "Nomor diproses"}</p>
@@ -2536,9 +2655,10 @@ const handleApprove = async (item: any) => {
                     <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Semua kategori</SelectItem>
-                      <SelectItem value="asset">Aset</SelectItem>
-                      <SelectItem value="unit">Unit</SelectItem>
-                      <SelectItem value="non_unit">Non Unit</SelectItem>
+                      <SelectItem value="asset">Pengajuan Aset</SelectItem>
+                      <SelectItem value="unit">Pengajuan SPK</SelectItem>
+                      <SelectItem value="non_asset">Pengajuan Dana</SelectItem>
+                      <SelectItem value="non_unit">Pengajuan Non Unit</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={kpiFilter} onValueChange={setKpiFilter}>
@@ -2578,10 +2698,10 @@ const handleApprove = async (item: any) => {
                         size="sm"
                         className="w-full text-xs"
                         disabled={isFetching}
-                        onClick={() => setInboxCursor((inboxPage as any)?.nextCursor ?? null)}
+                        onClick={loadMore}
                       >
                         {isFetching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                        Muat lebih banyak ({inboxTotal - inboxAllItems.length} tersisa)
+                        Muat lebih banyak ({inboxRemaining} tersisa)
                       </Button>
                     </div>
                   )}
@@ -2608,7 +2728,7 @@ const handleApprove = async (item: any) => {
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => { noteRefs.current[selectedItem.id] = element; }} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderConfiguredInputPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => { noteRefs.current[selectedItem.id] = element; }} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
@@ -2637,6 +2757,17 @@ const handleApprove = async (item: any) => {
                 </div>
                 {isVerificationTask(selectedItem) ? (
                   <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:justify-end">
+                    {canReturnToRequester(selectedItem) && (
+                      <Button
+                        variant="outline"
+                        className="shrink-0 border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                        disabled={processingId === selectedItem.id}
+                        onClick={() => handleReturnToRequester(selectedItem)}
+                      >
+                        {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Kembalikan ke Pemohon
+                      </Button>
+                    )}
                     <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
                       {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                       Export Summary

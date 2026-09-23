@@ -10,9 +10,13 @@ const read = (path: string) => readFileSync(resolve(path), "utf8");
 
 describe("compact approval inbox — structural contracts", () => {
   const runtime = read("backend/src/domain-runtime.ts");
+  const inboxRuntime = read("backend/src/modules/surat/inbox-runtime.ts");
+  const attentionRuntime = read("backend/src/modules/attention/attention-runtime.ts");
   const service = read("src/services/surat.service.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
   const migration = read("supabase/migrations/20260804081000_compact_inbox_rpc.sql");
+  const separateTaskMigration = read("supabase/migrations/20260919000050_separate_inbox_verification_tasks.sql")
+    .replace(/\r\n/g, "\n");
   const sqlTest = read("supabase/tests/compact_inbox.integration.sql");
 
   it("1. RPC get_compact_inbox with filter params (search, request_category, task_type)", () => {
@@ -29,55 +33,61 @@ describe("compact approval inbox — structural contracts", () => {
   });
 
   it("3. Attention badge uses get_compact_inbox_count", () => {
-    expect(runtime).toContain('supabase.rpc("get_compact_inbox_count"');
-    expect(runtime).toContain("compactInboxCount");
-    expect(runtime).toContain("inboxCount: compactInboxCount");
+    expect(attentionRuntime).toContain('rpc("get_compact_inbox_count"');
+    expect(attentionRuntime).toContain("inboxCount:");
   });
 
   it("4. BFF count only on first page (no cursor)", () => {
-    expect(runtime).toContain("const needsCount = !cursor");
-    expect(runtime).toContain("if (needsCount)");
+    expect(inboxRuntime).toContain("const needsCount = !cursor");
+    expect(inboxRuntime).toContain("if (needsCount)");
   });
 
   it("5. BFF strict limit validation: digit-only pattern and bounds", () => {
-    expect(runtime).toContain("limit harus integer positif");
-    expect(runtime).toContain("limit minimum 1");
-    expect(runtime).toContain("limit maksimum 50");
+    expect(inboxRuntime).toContain("limit harus integer positif");
+    expect(inboxRuntime).toContain("limit minimum 1");
+    expect(inboxRuntime).toContain("limit maksimum 50");
   });
 
   it("6. BFF strict cursor validation: UUID regex", () => {
-    expect(runtime).toContain("UUID_RE");
-    expect(runtime).toContain("UUID_RE.test(id)");
-    expect(runtime).toContain('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}');
+    expect(inboxRuntime).toContain("UUID_RE");
+    expect(inboxRuntime).toContain("UUID_RE.test(id)");
+    expect(inboxRuntime).toContain('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}');
   });
 
   it("7. BFF search validation: max 200 chars, trimmed", () => {
-    expect(runtime).toContain("parseInboxSearch");
-    expect(runtime).toContain("200");
+    expect(inboxRuntime).toContain("parseInboxSearch");
+    expect(inboxRuntime).toContain("200");
   });
 
   it("8. BFF task_type validation: allowlist", () => {
-    expect(runtime).toContain("INBOX_TASK_TYPE_ALLOWLIST");
-    expect(runtime).toContain('"approval", "verification"');
+    expect(inboxRuntime).toContain("INBOX_TASK_TYPE_ALLOWLIST");
+    expect(inboxRuntime).toContain('"approval", "verification"');
   });
 
   it("9. Detail auth uses is_inbox_task_active RPC, not client-side check", () => {
-    expect(runtime).toContain('supabase.rpc("is_inbox_task_active"');
-    expect(runtime).toContain("err.status = 403");
+    expect(inboxRuntime).toContain('rpc("is_inbox_task_active"');
+    expect(inboxRuntime).toContain("Task tidak aktif atau tidak ditemukan untuk user ini");
   });
 
   it("10. InboxPage passes filter params to getMyInboxCompact", () => {
     expect(service).toContain("search?: string");
     expect(service).toContain("request_category?: string");
     expect(service).toContain("task_type?: string");
-    expect(inbox).toContain("debouncedSearch");
-    expect(inbox).toContain("taskTypeParam");
+    // Pass B: filter wiring lives in the pagination hook, but InboxPage
+    // still threads `search` / `categoryFilter` / `actionFilter` into it.
+    expect(inbox).toContain("search: debouncedSearch");
+    expect(inbox).toContain("categoryFilter");
+    expect(inbox).toContain("actionFilter");
   });
 
   it("11. InboxPage resets cursor on filter change", () => {
-    expect(inbox).toContain("inboxFilterKey");
-    expect(inbox).toContain("prevFilterKeyRef");
-    expect(inbox).toContain('setInboxCursor(null)');
+    // Pass B: cursor reset moved to use-inbox-pagination. InboxPage
+    // delegates the realtime reset through `resetInboxPagination`.
+    const hook = read("src/features/surat/inbox/lib/use-inbox-pagination.ts");
+    expect(hook).toContain("inboxFilterKey");
+    expect(hook).toContain("prevFilterKeyRef");
+    expect(hook).toContain("setInboxCursor(null)");
+    expect(inbox).toContain("resetInboxPagination");
   });
 
   it("12. SQL integration test has 25+ fixture rows", () => {
@@ -102,6 +112,13 @@ describe("compact approval inbox — structural contracts", () => {
   it("15. RPC uses keyset cursor with LIMIT +1 for hasMore", () => {
     expect(migration).toContain("LIMIT p_limit + 1");
     expect(migration).toContain("(available_at, task_type, id) >");
+  });
+
+  it("16. separate-task migration preserves both responsibilities for dual-role users", () => {
+    expect(separateTaskMigration).toContain("SELECT * FROM signer_rows\n    UNION ALL\n    SELECT * FROM verifier_rows");
+    expect(separateTaskMigration).not.toContain("WHERE NOT EXISTS (SELECT 1 FROM signer_rows");
+    expect(separateTaskMigration).toContain("'approval'::text AS task_type");
+    expect(separateTaskMigration).toContain("'verification'::text AS task_type");
   });
 });
 
@@ -233,13 +250,17 @@ describe("compact approval inbox — behavioral: pagination", () => {
     expect(buildPage([], 20).hasMore).toBe(false);
   });
 
-  it("two pages have no duplicate IDs", () => {
-    const all = Array.from({ length: 35 }, (_, i) => ({ id: `id-${i}`, available_at: "2026-01-01T00:00:00Z", task_type: "approval" }));
+  it("two pages have no duplicate composite task keys", () => {
+    const all = [
+      { id: "dual", available_at: "2026-01-01T00:00:00Z", task_type: "approval" },
+      { id: "dual", available_at: "2026-01-01T00:00:00Z", task_type: "verification" },
+      ...Array.from({ length: 33 }, (_, i) => ({ id: `id-${i}`, available_at: "2026-01-01T00:00:00Z", task_type: "approval" })),
+    ];
     const p1 = buildPage(all.slice(0, 21), 20);
     const p2 = buildPage(all.slice(20), 20);
-    const ids1 = new Set(p1.items.map((r: any) => r.id));
-    const ids2 = new Set(p2.items.map((r: any) => r.id));
-    expect([...ids1].filter((id) => ids2.has(id))).toHaveLength(0);
+    const keys1 = new Set(p1.items.map((r: any) => `${r.task_type}:${r.id}`));
+    const keys2 = new Set(p2.items.map((r: any) => `${r.task_type}:${r.id}`));
+    expect([...keys1].filter((key) => keys2.has(key))).toHaveLength(0);
   });
 });
 
@@ -259,10 +280,10 @@ describe("compact approval inbox — SQL integration test", () => {
     expect(sqlTest).toContain("Future verifier does NOT appear");
   });
 
-  it("dual role dedup test uses UNION (not UNION ALL)", () => {
-    expect(sqlTest).toContain("Dual role does NOT duplicate");
-    // Use a regex tolerant of CRLF so the assertion is not line-ending dependent.
-    expect(sqlTest).toMatch(/UNION\r?\n\s*SELECT/);
+  it("dual role test models separate approval and verification tasks", () => {
+    expect(sqlTest).toContain("Dual role produces independent approval and verification tasks");
+    expect(sqlTest).toMatch(/UNION ALL\r?\n\s*SELECT ss\.id, 'verification'::text AS task_type/);
+    expect(sqlTest).toContain("ASSERT cnt = 2");
   });
 
   it("category test extracts from JSON path", () => {
@@ -284,10 +305,10 @@ describe("compact approval inbox — SQL integration test", () => {
 // ============================================================
 
 describe("compact approval inbox — attention badge", () => {
-  const runtime = read("backend/src/domain-runtime.ts");
+  const runtime = read("backend/src/modules/attention/attention-runtime.ts");
 
   it("inboxCount uses get_compact_inbox_count, not sum of separate counts", () => {
-    expect(runtime).toContain("inboxCount: compactInboxCount");
+    expect(runtime).toContain("inboxCount:");
     expect(runtime).not.toContain("inboxCount: approvalCount + verificationCount + revisionCount");
   });
 

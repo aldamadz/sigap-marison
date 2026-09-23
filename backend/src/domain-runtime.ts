@@ -3,7 +3,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import webpush from "web-push";
@@ -93,7 +93,17 @@ import {
 import { createSessionCookieHelpers } from "./domain/session-cookie.js";
 import { clientIp, enforceRateLimit, recordRateLimit } from "./domain/rate-limit.js";
 import { isActiveAdminProfile, isActiveProfile } from "./domain/profile-authorization.js";
-
+import { createBffRuntime } from "./modules/bff/bff-runtime.js";
+import { createInboxRuntime } from "./modules/surat/inbox-runtime.js";
+import { createAttentionRuntime } from "./modules/attention/attention-runtime.js";
+import { createMarisonApiClient } from "./modules/marison/marison-api-client.js";
+import { createMarisonPreviewRuntime } from "./modules/marison/marison-preview-runtime.js";
+import { createMarisonSyncRuntime } from "./modules/marison/marison-sync-runtime.js";
+import {
+  createAdminUserRuntime,
+  createSupabaseAuthAdminPort,
+  createSupabaseProfileRepositoryPort,
+} from "./modules/admin-user/admin-user-runtime.js";
 
 const distDir = resolve(process.env.DIST_DIR || "dist");
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -139,17 +149,12 @@ let mailTransporter = null;
 
 const FILE_VIEW_TOKEN_TTL_MS = 2 * 60 * 1000;
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
-const externalAccessTokenCache = new Map();
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
 const passwordResetSendCooldowns = new Map();
 const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
-const marisonRealtimeClients = new Set();
-let marisonEmployeeSyncInFlight = false;
-let marisonBranchSyncInFlight = false;
-let marisonProjectSyncInFlight = false;
 const TEMPLATE_PREVIEW_TTL_MS = 2 * 60 * 1000;
 const TEMPLATE_PREVIEW_MAX_PER_MINUTE = 6;
 const PASSWORD_RESET_SEND_COOLDOWN_MS = 60 * 1000;
@@ -192,17 +197,43 @@ if (webPushConfig.publicKey && webPushConfig.privateKey) {
 
 const hashFileViewToken = (token) => createHash("sha256").update(token).digest("hex");
 const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
-const hmacSha512Hex = (secret, value) => createHmac("sha512", secret).update(value).digest("hex");
 const secretMatches = (supplied, expected) => {
   const suppliedHash = createHash("sha256").update(String(supplied || "")).digest();
   const expectedHash = createHash("sha256").update(String(expected || "")).digest();
   return timingSafeEqual(suppliedHash, expectedHash);
 };
 
+export const resetDomainRuntimeDependenciesForTest = () => {
+  if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
+  marisonPreviewRuntime.resetOverrides();
+  marisonSyncRuntime.resetOverrides();
+};
+
 export const setDomainRuntimeDependenciesForTest = (dependencies) => {
   if (process.env.NODE_ENV !== "test") throw new Error("Runtime dependency injection is test-only.");
+  if (dependencies.nowIso) marisonApiClient.setDependencies({ nowIso: dependencies.nowIso });
   if (dependencies.supabase) supabase = dependencies.supabase;
   if (dependencies.storageSupabase) storageSupabase = dependencies.storageSupabase;
+  if (dependencies.getMarisonEmployeeSyncSource || dependencies.getMarisonProjectSyncSource || dependencies.getMarisonBranchSyncSource) {
+    marisonPreviewRuntime.setDependencies({
+      getMarisonEmployeeSyncSource: dependencies.getMarisonEmployeeSyncSource,
+      getMarisonProjectSyncSource: dependencies.getMarisonProjectSyncSource,
+      getMarisonBranchSyncSource: dependencies.getMarisonBranchSyncSource,
+    });
+  }
+  if (
+    dependencies.runTrackedMarisonSync
+    || dependencies.executeMarisonBranchSync
+    || dependencies.executeMarisonProjectSync
+    || dependencies.executeMarisonEmployeeSync
+  ) {
+    marisonSyncRuntime.setDependencies({
+      runTrackedMarisonSync: dependencies.runTrackedMarisonSync,
+      executeMarisonBranchSync: dependencies.executeMarisonBranchSync,
+      executeMarisonProjectSync: dependencies.executeMarisonProjectSync,
+      executeMarisonEmployeeSync: dependencies.executeMarisonEmployeeSync,
+    });
+  }
 };
 
 const getMailTransporter = () => {
@@ -523,189 +554,16 @@ const handleAuthLogout = async (req, res) => {
   return { ok: true };
 };
 
-const BFF_QUERY_METHODS = new Set([
-  "select", "insert", "update", "upsert", "delete",
-  "eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "is", "in",
-  "contains", "containedBy", "overlaps", "match", "not", "or", "filter",
-  "order", "limit", "range", "single", "maybeSingle", "csv", "throwOnError",
-]);
-
-const assertBffIdentifier = (value, label) => {
-  const normalized = String(value || "");
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(normalized)) {
-    const err = new Error(`${label} tidak valid.`);
-    err.status = 400;
-    throw err;
-  }
-  return normalized;
-};
-
-const handleBffQuery = async (req) => {
-  assertSameOrigin(req);
-  const session = requireCookieSession(req);
-  const payload = await readJsonBody(req, 2 * 1024 * 1024);
-  const kind = payload?.kind === "rpc" ? "rpc" : "table";
-  const name = assertBffIdentifier(payload?.name, kind === "rpc" ? "Nama RPC" : "Nama tabel");
-
-  const client = createUserSupabaseClient(session.access_token);
-  let query = kind === "rpc"
-    ? client.rpc(name, payload?.args || {}, payload?.options)
-    : client.from(name);
-  const operations = Array.isArray(payload?.operations) ? payload.operations : [];
-  if (!operations.length && kind === "table") {
-    const err = new Error("Operasi query tidak boleh kosong.");
-    err.status = 400;
-    throw err;
-  }
-  for (const operation of operations) {
-    const method = String(operation?.method || "");
-    if (!BFF_QUERY_METHODS.has(method) || typeof query?.[method] !== "function") {
-      const err = new Error(`Operasi query ${method || "(kosong)"} tidak diizinkan.`);
-      err.status = 400;
-      throw err;
-    }
-    query = query[method](...(Array.isArray(operation.args) ? operation.args : []));
-  }
-  const result = await query;
-  return {
-    data: result.data ?? null,
-    error: result.error ? {
-      message: result.error.message,
-      details: result.error.details,
-      hint: result.error.hint,
-      code: result.error.code,
-    } : null,
-    count: result.count ?? null,
-    status: result.status,
-    statusText: result.statusText,
-  };
-};
-
-const handleBffFunction = async (req, functionName) => {
-  assertSameOrigin(req);
-  const session = requireCookieSession(req);
-  const name = assertBffIdentifier(functionName, "Nama function");
-  const payload = await readJsonBody(req, 2 * 1024 * 1024);
-  const result = await createUserSupabaseClient(session.access_token).functions.invoke(name, payload?.options || {});
-  return {
-    data: result.data ?? null,
-    error: result.error ? { message: result.error.message, name: result.error.name } : null,
-  };
-};
-
-const handleBffStorageFile = async (req, res, url) => {
-  const session = requireCookieSession(req);
-  const bucket = assertBffIdentifier(url.searchParams.get("bucket"), "Nama bucket");
-  const path = sanitizeStoragePath(url.searchParams.get("path"));
-  let relativePath;
-  try {
-    relativePath = removeStoragePathPrefix(path, storagePathPrefix);
-  } catch {
-    relativePath = "";
-  }
-  if (bucket !== "avatars" || !/^[0-9a-f-]{36}\/avatar_[A-Za-z0-9_.-]+(?:_thumb\.webp)?$/i.test(relativePath)) {
-    const err = new Error("Akses file harus melalui endpoint dokumen yang terotorisasi.");
-    err.status = 403;
-    throw err;
-  }
-  if (!relativePath.startsWith(`${session.user.id}/`)) {
-    const err = new Error("Akses avatar ditolak.");
-    err.status = 403;
-    throw err;
-  }
-  const { data, error } = await storageSupabase.storage.from(bucket).download(path);
-  if (error || !data) {
-    const err = new Error(error?.message || "File tidak ditemukan.");
-    err.status = 404;
-    throw err;
-  }
-  const buffer = Buffer.from(await data.arrayBuffer());
-  res.writeHead(200, withSecurityHeaders({
-    "Content-Type": data.type || contentTypes[extname(path)] || "application/octet-stream",
-    "Content-Length": buffer.length,
-    "Content-Disposition": filenameHeaderValue(path.split("/").pop() || "file"),
-    "Cache-Control": "private, max-age=60",
-  }));
-  res.end(buffer);
-};
-
-const openBffRealtimeStream = async (req, res, url) => {
-  const session = requireCookieSession(req);
-  const tables = [...new Set(String(url.searchParams.get("tables") || "")
-    .split(",")
-    .map((table) => table.trim())
-    .filter(Boolean)
-    .map((table) => assertBffIdentifier(table, "Nama tabel")))];
-  if (!tables.length || tables.length > 32) {
-    const err = new Error("Daftar tabel realtime harus berisi 1 sampai 32 tabel.");
-    err.status = 400;
-    throw err;
-  }
-
-  const client = createUserSupabaseClient(session.access_token);
-  await client.realtime.setAuth(session.access_token);
-
-  res.writeHead(200, withSecurityHeaders({
-    "Content-Type": "text/event-stream; charset=utf-8",
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-  }));
-  res.write("retry: 3000\n");
-  res.write(": connected\n\n");
-  marisonRealtimeClients.add(res);
-
-  let closed = false;
-  let eventSequence = 0;
-  const channel = client.channel(`sigap-bff:${session.user.id}:${randomUUID()}`);
-  for (const table of tables) {
-    channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
-      if (closed || res.destroyed) return;
-      eventSequence += 1;
-      res.write(`id: ${Date.now()}-${eventSequence}\n`);
-      res.write("event: postgres_change\n");
-      res.write(`data: ${JSON.stringify({
-        schema: payload.schema,
-        table: payload.table,
-        eventType: payload.eventType,
-        commit_timestamp: payload.commit_timestamp,
-        new: payload.new || {},
-        old: payload.old || {},
-      })}\n\n`);
-    });
-  }
-
-  const heartbeatTimer = setInterval(() => {
-    if (!closed && !res.destroyed) res.write(`: heartbeat ${Date.now()}\n\n`);
-  }, 25_000);
-  const remainingTokenMs = Math.max(60_000, Number(session.expires_at || 0) * 1000 - Date.now() - 5 * 60_000);
-  const reconnectTimer = setTimeout(() => {
-    if (!closed && !res.destroyed) res.end();
-  }, Math.min(45 * 60_000, remainingTokenMs));
-
-  const cleanup = () => {
-    if (closed) return;
-    closed = true;
-    clearInterval(heartbeatTimer);
-    clearTimeout(reconnectTimer);
-    marisonRealtimeClients.delete(res);
-    client.removeChannel(channel).catch(() => {});
-  };
-
-  channel.subscribe((status) => {
-    if (closed || res.destroyed) return;
-    if (status === "SUBSCRIBED") {
-      res.write("event: ready\ndata: {}\n\n");
-    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-      res.write(`event: stream_error\ndata: ${JSON.stringify({ status })}\n\n`);
-      res.end();
-    }
-  });
-
-  req.on("close", cleanup);
-  req.on("error", cleanup);
-  res.on("close", cleanup);
-};
+const bffRuntime = createBffRuntime({
+  assertSameOrigin,
+  requireCookieSession,
+  readJsonBody,
+  createUserSupabaseClient,
+  getStorageSupabase: () => storageSupabase,
+  sanitizeStoragePath: normalizeStoragePath,
+  removeStoragePathPrefix,
+  storagePathPrefix,
+});
 
 const PASSWORD_RESET_LOGO_CID = "marison-logo@sigap";
 const passwordResetLogoPath = [
@@ -927,6 +785,9 @@ const requireAdminUser = async (token) => {
   return user;
 };
 
+const { getInboxCompact, getInboxDetail } = createInboxRuntime({ getSupabase: () => supabase, requireSupabaseUser });
+const { getAttentionStateFromRequest } = createAttentionRuntime({ getSupabase: () => supabase, requireSupabaseUser });
+
 const rejectSuratByDocumentNumber = async (req) => {
   assertSameOrigin(req);
   const token = getBearerToken(req);
@@ -1141,238 +1002,6 @@ const consumeTemplatePreview = (token) => {
     throw err;
   }
   return preview.pdf;
-};
-
-const INBOX_DETAIL_SELECT = `
-  id, surat_id, user_id, role_name, label_jabatan, step_order, is_signed, action_type,
-  requires_unit_allocation, available_at, signer_snapshot,
-  attachment_requirements_snapshot,
-  verification_required, verification_status, verified_at, verified_by,
-  verification_note, verifier_snapshot,
-  surat_registrasi!inner (
-    id, no_surat, judul_surat, status, current_step, created_at, updated_at,
-    request_date, request_place, policy_snapshot,
-    requester_snapshot, location_snapshot, form_input_data, data_snapshot,
-    surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id ),
-    surat_signatures (
-      id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan,
-      available_at, signer_snapshot, verification_required, verification_status,
-      verified_at, verified_by, verification_note, verifier_snapshot,
-      profiles:user_id ( full_name, job_title )
-    )
-  )
-`.trim();
-
-const INBOX_TASK_TYPE_ALLOWLIST = ["approval", "verification"];
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-const parseInboxLimit = (raw) => {
-  if (!raw) return { error: null, value: 20 };
-  if (!/^\d+$/.test(raw)) return { error: "limit harus integer positif", value: null };
-  const n = parseInt(raw, 10);
-  if (n < 1) return { error: "limit minimum 1", value: null };
-  if (n > 50) return { error: "limit maksimum 50", value: null };
-  return { error: null, value: n };
-};
-
-const parseInboxCursor = (raw) => {
-  if (!raw) return { error: null, value: null };
-  try {
-    const decoded = Buffer.from(raw, "base64").toString("utf8");
-    const parts = decoded.split("|");
-    if (parts.length !== 3) throw new Error("format invalid");
-    const [at, taskType, id] = parts;
-    if (!at || !taskType || !id) throw new Error("field kosong");
-    if (!INBOX_TASK_TYPE_ALLOWLIST.includes(taskType)) throw new Error("task_type tidak valid");
-    const ts = new Date(at);
-    if (isNaN(ts.getTime())) throw new Error("timestamp tidak valid");
-    if (!UUID_RE.test(id)) throw new Error("id bukan UUID valid");
-    return { error: null, value: { at, taskType, id } };
-  } catch {
-    return { error: "cursor tidak valid", value: null };
-  }
-};
-
-const parseInboxSearch = (raw) => {
-  if (!raw) return { error: null, value: null };
-  const trimmed = raw.trim();
-  if (trimmed.length > 200) return { error: "search maksimum 200 karakter", value: null };
-  return { error: null, value: trimmed };
-};
-
-const parseInboxTaskType = (raw) => {
-  if (!raw) return { error: null, value: null };
-  if (!INBOX_TASK_TYPE_ALLOWLIST.includes(raw)) return { error: "task_type tidak valid", value: null };
-  return { error: null, value: raw };
-};
-
-const encodeCursor = (item) =>
-  Buffer.from(`${item.available_at}|${item.task_type}|${item.id}`).toString("base64");
-
-const getInboxCompact = async (token, url) => {
-  const user = await requireSupabaseUser(token);
-  const userId = user.id;
-
-  const rawLimit = url.searchParams.get("limit") || "20";
-  const limitResult = parseInboxLimit(rawLimit);
-  if (limitResult.error) { const err = new Error(limitResult.error); err.status = 400; throw err; }
-  const pageSize = limitResult.value;
-
-  const rawCursor = url.searchParams.get("cursor") || null;
-  const cursorResult = parseInboxCursor(rawCursor);
-  if (cursorResult.error) { const err = new Error(cursorResult.error); err.status = 400; throw err; }
-  const cursor = cursorResult.value;
-
-  const rawSearch = url.searchParams.get("search") || null;
-  const searchResult = parseInboxSearch(rawSearch);
-  if (searchResult.error) { const err = new Error(searchResult.error); err.status = 400; throw err; }
-  const search = searchResult.value;
-
-  const rawCategory = url.searchParams.get("request_category") || null;
-  const category = rawCategory && rawCategory.trim() ? rawCategory.trim() : null;
-
-  const rawTaskType = url.searchParams.get("task_type") || null;
-  const taskTypeResult = parseInboxTaskType(rawTaskType);
-  if (taskTypeResult.error) { const err = new Error(taskTypeResult.error); err.status = 400; throw err; }
-  const taskType = taskTypeResult.value;
-
-  const rpcParams = {
-    p_user_id: userId,
-    p_limit: pageSize,
-    p_cursor_at: cursor?.at || null,
-    p_cursor_task_type: cursor?.taskType || null,
-    p_cursor_id: cursor?.id || null,
-    p_search: search,
-    p_request_category: category,
-    p_task_type: taskType,
-  };
-
-  const needsCount = !cursor;
-  const queries = [supabase.rpc("get_compact_inbox", rpcParams)];
-  if (needsCount) {
-    queries.push(supabase.rpc("get_compact_inbox_count", {
-      p_user_id: userId,
-      p_search: search,
-      p_request_category: category,
-      p_task_type: taskType,
-    }));
-  }
-  const results = await Promise.all(queries);
-  const listRes = results[0];
-  const countRes = needsCount ? results[1] : null;
-
-  if (listRes.error) throw listRes.error;
-  if (countRes?.error) throw countRes.error;
-
-  const rows = listRes.data || [];
-  const hasMore = rows.length > pageSize;
-  const items = hasMore ? rows.slice(0, pageSize) : rows;
-  const total = needsCount ? Number(countRes?.data || 0) : null;
-  const lastItem = items[items.length - 1];
-  const nextCursor = hasMore && lastItem ? encodeCursor(lastItem) : null;
-
-  return { items, total, hasMore, nextCursor, pageSize };
-};
-
-const getInboxDetail = async (token, signatureId) => {
-  const user = await requireSupabaseUser(token);
-  if (!signatureId || !UUID_RE.test(signatureId)) {
-    const err = new Error("signature ID tidak valid");
-    err.status = 400;
-    throw err;
-  }
-
-  const { data: isActive, error: activeError } = await supabase.rpc("is_inbox_task_active", {
-    p_user_id: user.id,
-    p_signature_id: signatureId,
-  });
-  if (activeError) throw activeError;
-  if (!isActive) {
-    const err = new Error("Task tidak aktif atau tidak ditemukan untuk user ini");
-    err.status = 403;
-    throw err;
-  }
-
-  const { data, error } = await supabase
-    .from("surat_signatures")
-    .select(INBOX_DETAIL_SELECT)
-    .eq("id", signatureId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) {
-    const err = new Error("Not found");
-    err.status = 404;
-    throw err;
-  }
-  const surat = Array.isArray(data.surat_registrasi) ? data.surat_registrasi[0] : data.surat_registrasi;
-  if (surat?.surat_signatures) {
-    surat.surat_signatures = [...surat.surat_signatures]
-      .sort((a, b) => Number(a.step_order) - Number(b.step_order));
-  }
-
-  // Derive task_type with the SAME canonical rule as get_compact_inbox:
-  // a user who is the assigned signer (user_id) sees an approval task;
-  // otherwise a user present in verifier_snapshot of a pending, not-yet-signed,
-  // verification-required signature sees a verification task. Signer wins on
-  // overlap (mirrors the RPC's NOT EXISTS dedup). We never guess from label.
-  const isSigner = data.user_id === user.id;
-  const verifierHit = Array.isArray(data.verifier_snapshot)
-    ? data.verifier_snapshot.some((v: any) => v && v.user_id === user.id)
-    : false;
-  const taskType = isSigner
-    ? "approval"
-    : verifierHit && data.verification_required === true && data.verification_status === "pending"
-      ? "verification"
-      : null;
-
-  return { ...data, task_type: taskType, surat_registrasi: surat };
-};
-
-const getAttentionStateForUser = async (userId) => {
-  if (!supabase) throw new Error("Supabase server credentials are not configured.");
-  if (!userId) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-
-  const [attentionRes, compactCountRes, overdueSlaRes] = await Promise.all([
-    supabase.rpc("get_attention_state_for_user", { p_user_id: userId }),
-    supabase.rpc("get_compact_inbox_count", { p_user_id: userId }),
-    supabase.rpc("get_user_active_sla_breach_count", { p_user_id: userId }),
-  ]);
-  if (attentionRes.error) throw attentionRes.error;
-  if (compactCountRes.error) throw compactCountRes.error;
-  if (overdueSlaRes.error) throw overdueSlaRes.error;
-  const row = Array.isArray(attentionRes.data) ? attentionRes.data[0] : attentionRes.data;
-  const approvalCount = Number(row?.approval_count || 0);
-  const verificationCount = Number(row?.verification_count || 0);
-  const revisionCount = Number(row?.revision_count || 0);
-  const requesterRevisionCount = Number(row?.follow_up_count || 0);
-  const recommendationCount = Number(row?.recommendation_count || 0);
-  const monitoringCount = Number(row?.monitoring_count || 0);
-  const compactInboxCount = Number(compactCountRes.data || 0);
-
-  return {
-    approvalCount,
-    verificationCount,
-    revisionCount,
-    recommendationCount,
-    inboxCount: compactInboxCount,
-    unreadNotifications: Number(row?.unread_notifications || 0),
-    monitoringCount,
-    followUpCount: requesterRevisionCount,
-    masterOfficeReviewCount: Number(row?.master_office_review_count || 0),
-    profileReviewCount: Number(row?.profile_review_count || 0),
-    masterProjectReviewCount: Number(row?.master_project_review_count || 0),
-    overdueSlaCount: Number(overdueSlaRes.data || 0),
-    generatedAt: new Date().toISOString(),
-  };
-};
-
-const getAttentionStateFromRequest = async (token) => {
-  const user = await requireSupabaseUser(token);
-  return getAttentionStateForUser(user.id);
 };
 
 const normalizePushSubscription = (value) => {
@@ -2714,351 +2343,118 @@ const fillEndpointTemplate = (template, variables = {}) => {
   return path.startsWith("/") ? path : `/${path}`;
 };
 
-const normalizeMarisonEnvironment = (value) => {
-  const environment = String(value || "").trim().toLowerCase();
-  if (!MARISON_ENVIRONMENTS.has(environment)) {
-    const err = new Error("Environment Marison tidak valid.");
-    err.status = 400;
-    throw err;
-  }
-  return environment;
-};
+const marisonApiClient = createMarisonApiClient({
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  readEnv: (name) => process.env[name],
+  fetchImpl: (...args) => fetch(...args),
+  nowMs: () => Date.now(),
+  nowIso: () => new Date().toISOString(),
+  timeoutSignal: (milliseconds) => AbortSignal.timeout(milliseconds),
+});
+const {
+  normalizeMarisonEnvironment,
+  getMarisonEnvironmentState,
+  getMarisonApiConfig,
+  getMarisonAccessToken,
+  getMarisonProtectedJson,
+  getMarisonExternalJson,
+  getAllMarisonCollection,
+} = marisonApiClient;
 
-const getMarisonEnvironmentState = async () => ({
-  environment: marisonDeploymentEnvironment,
-  updatedAt: null,
-  updatedBy: null,
-  locked: true,
+const marisonPreviewRuntime = createMarisonPreviewRuntime({
+  getSupabase: () => supabase,
+  getServiceRoleKey: () => serviceRoleKey,
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  getBearerToken,
+  requireAdminUser,
+  getAllMarisonCollection: marisonApiClient.getAllMarisonCollection,
+  previewMarisonBranchSync,
+  previewMarisonProjectSync,
+  previewMarisonEmployeeSync,
 });
 
-const getMarisonApiConfig = (environment) => {
-  const normalized = normalizeMarisonEnvironment(environment);
-  const prefix = normalized === "staging" ? "MARISON_STAGING" : "MARISON_PRODUCTION";
-  const defaultBaseUrl = normalized === "staging"
-    ? "https://marison-external.digivasi.com/api"
-    : "https://external.marisonregency.id/api";
-  return {
-    environment: normalized,
-    baseUrl: String(process.env[`${prefix}_BASE_URL`] || defaultBaseUrl).replace(/\/+$/, ""),
-    clientId: process.env[`${prefix}_CLIENT_ID`] || "",
-    clientSecret: process.env[`${prefix}_CLIENT_SECRET`] || "",
-  };
-};
+const marisonSyncRuntime = createMarisonSyncRuntime({
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  readEnv: (name) => process.env[name],
+  cronToken: marisonSyncCronToken,
+  sha256Hex,
+  getBearerToken,
+  requireAdminUser,
+  assertSameOrigin,
+  readJsonBody,
+  assertMarisonBranchSyncAvailable: marisonPreviewRuntime.assertMarisonBranchSyncAvailable,
+  assertMarisonEmployeeSyncInfraAvailable: marisonPreviewRuntime.assertMarisonEmployeeSyncInfraAvailable,
+  getMarisonBranchSyncSource: marisonPreviewRuntime.getMarisonBranchSyncSource,
+  getMarisonProjectSyncSource: marisonPreviewRuntime.getMarisonProjectSyncSource,
+  getMarisonEmployeeSyncSource: marisonPreviewRuntime.getMarisonEmployeeSyncSource,
+  runTrackedMarisonSync,
+  executeMarisonBranchSync,
+  executeMarisonProjectSync,
+  executeMarisonEmployeeSync,
+});
 
-const getMarisonAccessToken = async (source, environment) => {
-  const config = getMarisonApiConfig(environment);
-  const { baseUrl, clientId, clientSecret } = config;
-  if (!clientId || !clientSecret) {
-    const err = new Error(`Credential API Marison ${config.environment} belum dikonfigurasi di server.`);
-    err.status = 500;
-    throw err;
-  }
-
-  const cacheKey = `${baseUrl}:${source.source_key}:${clientId}`;
-  const cached = externalAccessTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
-
-  const response = await fetch(`${baseUrl}/access-token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(payload?.message || "Gagal membuat access token API eksternal Marison.");
-    err.status = response.status;
-    throw err;
-  }
-
-  const token = payload?.data?.access_token;
-  if (!token) {
-    const err = new Error("Response access token API eksternal Marison tidak valid.");
-    err.status = 502;
-    throw err;
-  }
-
-  const expiresInRaw = payload?.data?.expires_in;
-  const expiresInSeconds = Number.parseInt(String(expiresInRaw ?? "900"), 10);
-  externalAccessTokenCache.set(cacheKey, {
-    token,
-    expiresAt: Date.now() + (Number.isFinite(expiresInSeconds) ? expiresInSeconds : 900) * 1000,
-  });
-  return token;
-};
-
-const getMarisonProtectedJson = async (environment, endpointPath) => {
-  const config = getMarisonApiConfig(environment);
-  const token = await getMarisonAccessToken({ source_key: "employee_sync" }, environment);
-  const url = new URL(`${config.baseUrl}${endpointPath}`);
-  const timestamp = new Date().toISOString();
-  const bodyHash = sha256Hex(Buffer.alloc(0));
-  const canonical = ["GET", url.pathname, token, bodyHash, timestamp].join(":");
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Timestamp": timestamp,
-      "X-Signature": hmacSha512Hex(token, canonical),
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(payload?.message || `Gagal mengambil ${url.pathname} dari API Marison.`);
-    err.status = response.status;
-    throw err;
-  }
-  return payload;
-};
-
-const getAllMarisonCollection = async (environment, pathname) => {
-  const rows = [];
-  for (let page = 1; page <= 100; page += 1) {
-    const payload = await getMarisonProtectedJson(
-      environment,
-      `${pathname}?per_page=100&page=${page}`
-    );
-    const pageRows = Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.data?.data)
-        ? payload.data.data
-        : [];
-    rows.push(...pageRows);
-    const totalPages = Number(payload?.meta?.total_pages || 1);
-    if (page >= totalPages || pageRows.length === 0) return rows;
-  }
-  const err = new Error(`Pagination ${pathname} melebihi batas aman.`);
-  err.status = 502;
-  throw err;
-};
-
-const getMarisonEmployeeSyncSource = async () => {
-  const branches = await getAllMarisonCollection(marisonDeploymentEnvironment, "/branches");
-  const employees = await getAllMarisonCollection(marisonDeploymentEnvironment, "/employees");
-  return { employees, branches };
-};
-
-const getMarisonBranchSyncSource = async () => (
-  getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")
-);
-
-const getMarisonProjectSyncSource = async () => {
-  const [branches, projects] = await Promise.all([
-    getAllMarisonCollection(marisonDeploymentEnvironment, "/branches"),
-    getAllMarisonCollection(marisonDeploymentEnvironment, "/projects"),
-  ]);
-  return { branches, projects };
-};
-
-const assertMarisonBranchSyncAvailable = () => {
-  if (!supabase || !serviceRoleKey) {
-    const err = new Error("Service role environment ini belum dikonfigurasi.");
-    err.status = 500;
-    throw err;
-  }
-};
-
-const previewMarisonBranches = async (req) => {
-  await requireAdminUser(getBearerToken(req));
-  assertMarisonBranchSyncAvailable();
-  const branches = await getMarisonBranchSyncSource();
-  return previewMarisonBranchSync({
-    supabase,
-    branches,
-    environment: marisonDeploymentEnvironment,
-  });
-};
-
-const syncMarisonBranches = async (req) => {
-  assertSameOrigin(req);
-  const user = await requireAdminUser(getBearerToken(req));
-  assertMarisonBranchSyncAvailable();
-  const payload = await readJsonBody(req, 4096);
-  if (payload?.confirm !== true) {
-    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
-    err.status = 400;
-    throw err;
-  }
-  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonBranchSyncInFlight = true;
-  try {
-    const branches = await getMarisonBranchSyncSource();
-    return await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "manual",
-      scope: "branches",
-      initiatedBy: user.id,
-      operation: () => executeMarisonBranchSync({
-        supabase,
-        branches,
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-  } finally {
-    marisonBranchSyncInFlight = false;
-  }
-};
-
-const previewMarisonProjects = async (req) => {
-  await requireAdminUser(getBearerToken(req));
-  assertMarisonBranchSyncAvailable();
-  const source = await getMarisonProjectSyncSource();
-  return previewMarisonProjectSync({
-    supabase,
-    ...source,
-    environment: marisonDeploymentEnvironment,
-  });
-};
-
-const syncMarisonProjects = async (req) => {
-  const user = await requireAdminUser(getBearerToken(req));
-  const body = await readJsonBody(req);
-  if (body?.confirm !== true) {
-    const err = new Error("Konfirmasi sinkronisasi proyek wajib dikirim.");
-    err.status = 400;
-    throw err;
-  }
-  assertMarisonBranchSyncAvailable();
-  if (marisonBranchSyncInFlight || marisonEmployeeSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonProjectSyncInFlight = true;
-  try {
-    const source = await getMarisonProjectSyncSource();
-    return await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "manual",
-      scope: "projects",
-      initiatedBy: user.id,
-      operation: () => executeMarisonProjectSync({
-        supabase,
-        ...source,
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-  } finally {
-    marisonProjectSyncInFlight = false;
-  }
-};
-
-const assertMarisonEmployeeSyncAvailable = () => {
-  if (!supabase || !serviceRoleKey) {
-    const err = new Error("Service role environment ini belum dikonfigurasi.");
-    err.status = 500;
-    throw err;
-  }
-};
-
-const previewMarisonEmployees = async (req) => {
-  await requireAdminUser(getBearerToken(req));
-  assertMarisonEmployeeSyncAvailable();
-  const source = await getMarisonEmployeeSyncSource();
-  return previewMarisonEmployeeSync({
-    supabase,
-    ...source,
-    environment: marisonDeploymentEnvironment,
-  });
-};
-
-const syncMarisonEmployees = async (req) => {
-  assertSameOrigin(req);
-  const user = await requireAdminUser(getBearerToken(req));
-  assertMarisonEmployeeSyncAvailable();
-  const payload = await readJsonBody(req, 4096);
-  if (payload?.confirm !== true) {
-    const err = new Error("Konfirmasi sinkronisasi diperlukan.");
-    err.status = 400;
-    throw err;
-  }
-  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonEmployeeSyncInFlight = true;
-  try {
-    const source = await getMarisonEmployeeSyncSource();
-    return await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "manual",
-      scope: "directory",
-      initiatedBy: user.id,
-      operation: () => executeMarisonEmployeeSync({
-        supabase,
-        ...source,
-        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-  } finally {
-    marisonEmployeeSyncInFlight = false;
-  }
-};
-
-const syncMarisonDirectoryFromCron = async (req) => {
-  assertMarisonEmployeeSyncAvailable();
-  if (marisonSyncCronToken.length < 32) {
-    const err = new Error("Token cron sinkronisasi belum dikonfigurasi.");
+const assertAdminUserServiceAvailable = () => {
+  if (!adminSupabase) {
+    const err = new Error("Layanan admin user belum dikonfigurasi di server.");
     err.status = 503;
     throw err;
   }
-  const suppliedToken = String(req.headers["x-internal-sync-token"] || "");
-  if (!suppliedToken || sha256Hex(suppliedToken) !== sha256Hex(marisonSyncCronToken)) {
-    const err = new Error("Unauthorized");
-    err.status = 401;
+  return adminSupabase;
+};
+
+const adminUserRuntime = createAdminUserRuntime({
+  getAuthAdmin: () => createSupabaseAuthAdminPort(assertAdminUserServiceAvailable()),
+  getProfileRepository: () => createSupabaseProfileRepositoryPort(assertAdminUserServiceAvailable()),
+  getBootstrapPassword: () => process.env.STAGING_DEFAULT_USER_PASSWORD || null,
+  getAppPublicUrl: () => process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || null,
+  deploymentEnvironment: marisonDeploymentEnvironment,
+  getBearerToken,
+  requireAdminUser,
+  assertSameOrigin,
+  readJsonBody,
+});
+
+const MARISON_UNITS_SOURCE_KEY = "marison_units_by_project";
+const MAX_EXTERNAL_DATA_SOURCE_PAGES = 100;
+
+const getExternalDataSourceItems = (payload, responsePath) => {
+  const rawItems = getPathValue(payload, responsePath) ?? [];
+  if (Array.isArray(rawItems)) return rawItems;
+  return Array.isArray(rawItems?.data) ? rawItems.data : [];
+};
+
+const getExternalPaginationMeta = (payload) => {
+  const meta = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload.meta
+    : null;
+  const nested = meta && typeof meta === "object" ? (meta.pagination || meta) : {};
+  const readPositiveInteger = (...values) => {
+    for (const value of values) {
+      const parsed = Number(value);
+      if (Number.isSafeInteger(parsed) && parsed > 0) return parsed;
+    }
+    return null;
+  };
+
+  return {
+    totalPages: readPositiveInteger(nested.total_pages, nested.totalPages, nested.last_page, nested.lastPage),
+    totalItems: readPositiveInteger(nested.total, nested.total_items, nested.totalItems),
+  };
+};
+
+const requestExternalDataSourcePage = async (source, environment, url, method) => {
+  if (source.auth_type === "marison_token_hmac_sha512") {
+    return getMarisonExternalJson(source, environment, url);
+  }
+
+  const response = await fetch(url, { method, headers: {} });
+  const responsePayload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(responsePayload?.message || "Gagal mengambil data dari API eksternal.");
+    err.status = response.status;
     throw err;
   }
-  if (marisonEmployeeSyncInFlight || marisonBranchSyncInFlight || marisonProjectSyncInFlight) {
-    const err = new Error("Sinkronisasi data external sedang berjalan.");
-    err.status = 409;
-    throw err;
-  }
-  marisonEmployeeSyncInFlight = true;
-  marisonProjectSyncInFlight = true;
-  try {
-    const source = await getMarisonEmployeeSyncSource();
-    const directory = await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "cron",
-      scope: "directory",
-      operation: () => executeMarisonEmployeeSync({
-        supabase,
-        ...source,
-        defaultPassword: String(process.env.STAGING_DEFAULT_USER_PASSWORD || ""),
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-    const projectSource = await getMarisonProjectSyncSource();
-    const projects = await runTrackedMarisonSync({
-      supabase,
-      environment: marisonDeploymentEnvironment,
-      triggerType: "cron",
-      scope: "projects",
-      operation: () => executeMarisonProjectSync({
-        supabase,
-        ...projectSource,
-        environment: marisonDeploymentEnvironment,
-      }),
-    });
-    return {
-      status: directory.status === "success" && projects.status === "success" ? "success" : "partial",
-      directory,
-      projects,
-    };
-  } finally {
-    marisonEmployeeSyncInFlight = false;
-    marisonProjectSyncInFlight = false;
-  }
+  return responsePayload;
 };
 
 const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) => {
@@ -3096,31 +2492,55 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
     }
   });
 
-  const headers = {};
-  if (source.auth_type === "marison_token_hmac_sha512") {
-    const token = await getMarisonAccessToken(source, state.environment);
-    const timestamp = new Date().toISOString();
-    const bodyHash = sha256Hex(Buffer.alloc(0));
-    const canonical = [method, url.pathname, token, bodyHash, timestamp].join(":");
-    headers.Authorization = `Bearer ${token}`;
-    headers["X-Timestamp"] = timestamp;
-    headers["X-Signature"] = hmacSha512Hex(token, canonical);
+  const shouldPaginateUnits = source.source_key === MARISON_UNITS_SOURCE_KEY;
+  const pageSize = Number(url.searchParams.get("per_page")) || 100;
+  const items = [];
+  let page = 1;
+  let paginationCompleted = !shouldPaginateUnits;
+
+  for (; page <= (shouldPaginateUnits ? MAX_EXTERNAL_DATA_SOURCE_PAGES : 1); page += 1) {
+    const pageUrl = new URL(url);
+    if (shouldPaginateUnits) pageUrl.searchParams.set("page", String(page));
+
+    const payload = await requestExternalDataSourcePage(source, state.environment, pageUrl, method);
+    const pageItems = getExternalDataSourceItems(payload, source.response_path);
+    items.push(...pageItems);
+
+    if (!shouldPaginateUnits) break;
+
+    const { totalPages, totalItems } = getExternalPaginationMeta(payload);
+    if (pageItems.length === 0 || pageItems.length > pageSize) {
+      paginationCompleted = true;
+      break;
+    }
+    if (totalPages !== null && page >= totalPages) {
+      paginationCompleted = true;
+      break;
+    }
+    if (totalItems !== null && items.length >= totalItems) {
+      paginationCompleted = true;
+      break;
+    }
+    if (totalPages === null && totalItems === null && pageItems.length < pageSize) {
+      paginationCompleted = true;
+      break;
+    }
   }
 
-  const response = await fetch(url, { method, headers });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(payload?.message || "Gagal mengambil data dari API eksternal.");
-    err.status = response.status;
+  if (shouldPaginateUnits && !paginationCompleted) {
+    const err = new Error("Pagination unit Marison melebihi batas aman.");
+    err.status = 502;
     throw err;
   }
 
-  const rawItems = getPathValue(payload, source.response_path) ?? [];
-  const items = Array.isArray(rawItems)
-    ? rawItems
-    : Array.isArray(rawItems?.data)
-      ? rawItems.data
-      : [];
+  const normalizedOptions = items
+    .map((item) => normalizeExternalOption(item, source))
+    .filter((item) => item.value && item.label);
+  const optionsByValue = new Map();
+  normalizedOptions.forEach((item) => {
+    if (!optionsByValue.has(item.value)) optionsByValue.set(item.value, item);
+  });
+  const normalizedOptionList = [...optionsByValue.values()];
 
   return {
     source: {
@@ -3128,11 +2548,58 @@ const queryExternalDataSource = async (sourceKey, variables = {}, options = {}) 
       name: source.name,
       environment: state.environment,
     },
-    options: items
-      .map((item) => normalizeExternalOption(item, source))
-      .filter((item) => item.value && item.label),
+    options: normalizedOptionList,
     raw_count: items.length,
+    total_count: normalizedOptionList.length,
   };
+};
+
+const unitRequestValidationError = (message: string, status = 422) => {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+};
+
+/**
+ * Enforcement server-side untuk SPK Unit: lookup `marison_units_by_project`
+ * terpaginasi penuh (seluruh koleksi, bukan halaman pertama). Browser tidak
+ * dipercaya untuk requested_unit_count/kapasitas; lookup hanya GET Marison.
+ */
+const assertUnitRequestAvailability = async (formInput: unknown) => {
+  const input = asPlainRecord(formInput);
+  const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
+  if (category !== "unit") return { valid: true, availableCount: null };
+
+  const requestedProject = asPlainRecord(input.requested_project);
+  const projectId = externalIdFrom(requestedProject, input);
+  if (projectId === null) {
+    throw unitRequestValidationError("Proyek unit wajib dipilih sebelum menerbitkan nomor atau submit SPK Unit.");
+  }
+
+  const requestedCount = Number(input.requested_unit_count || 0);
+  if (!Number.isFinite(requestedCount) || requestedCount < 1) {
+    throw unitRequestValidationError("Jumlah unit wajib diisi. Jumlah unit minimal 1.");
+  }
+
+  let queryResult;
+  try {
+    queryResult = await queryExternalDataSource(MARISON_UNITS_SOURCE_KEY, { project_id: String(projectId) });
+  } catch (lookupError) {
+    const lookupStatus = Number(lookupError?.status) || 0;
+    const error = new Error("Kapasitas unit belum dapat dipastikan. Coba beberapa saat lagi atau hubungi admin.");
+    // Tetap 4xx aman untuk UI; jangan gelembarkan ke 500.
+    error.status = lookupStatus >= 400 && lookupStatus < 500 ? lookupStatus : 422;
+    throw error;
+  }
+
+  const availableCount = Number(queryResult?.total_count || 0);
+  if (!Number.isFinite(availableCount) || availableCount === 0) {
+    throw unitRequestValidationError("Proyek belum punya unit tersedia. Pilih proyek lain sebelum melanjutkan SPK Unit.");
+  }
+  if (requestedCount > availableCount) {
+    throw unitRequestValidationError(`Jumlah unit melebihi ketersediaan proyek (${availableCount} unit).`);
+  }
+  return { valid: true, availableCount };
 };
 
 const getMarisonEnvironmentStatus = async (req) => {
@@ -5059,7 +4526,7 @@ export const handleRequest = async (req, res) => {
       await refreshCookieSession(req, res);
     }
     if (req.method === "GET" && url.pathname === "/api/events") {
-      await openBffRealtimeStream(req, res, url);
+      await bffRuntime.openRealtimeStream(req, res, url);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/profile/avatar/file") {
@@ -5229,37 +4696,37 @@ export const handleRequest = async (req, res) => {
       }
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/employees/preview") {
-        const result = await previewMarisonEmployees(req);
+        const result = await marisonPreviewRuntime.previewMarisonEmployees(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/branches/preview") {
-        const result = await previewMarisonBranches(req);
+        const result = await marisonPreviewRuntime.previewMarisonBranches(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/branches/sync") {
-        const result = await syncMarisonBranches(req);
+        const result = await marisonSyncRuntime.syncMarisonBranches(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "GET" && url.pathname === "/api/integrations/marison/projects/preview") {
-        const result = await previewMarisonProjects(req);
+        const result = await marisonPreviewRuntime.previewMarisonProjects(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/projects/sync") {
-        const result = await syncMarisonProjects(req);
+        const result = await marisonSyncRuntime.syncMarisonProjects(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/integrations/marison/employees/sync") {
-        const result = await syncMarisonEmployees(req);
+        const result = await marisonSyncRuntime.syncMarisonEmployees(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "POST" && url.pathname === "/api/internal/marison/directory-sync") {
-        const result = await syncMarisonDirectoryFromCron(req);
+        const result = await marisonSyncRuntime.syncMarisonDirectoryFromCron(req);
         return sendJson(res, 200, result);
       }
 
@@ -5337,18 +4804,18 @@ export const handleRequest = async (req, res) => {
       }
 
       if (req.method === "POST" && url.pathname === "/api/bff/query") {
-        const result = await handleBffQuery(req);
+        const result = await bffRuntime.handleQuery(req);
         return sendJson(res, 200, result);
       }
 
       if (req.method === "GET" && url.pathname === "/api/bff/storage/file") {
-        await handleBffStorageFile(req, res, url);
+        await bffRuntime.handleStorageFile(req, res, url);
         return;
       }
 
       const bffFunctionMatch = url.pathname.match(/^\/api\/bff\/functions\/([A-Za-z_][A-Za-z0-9_]*)$/);
       if (req.method === "POST" && bffFunctionMatch) {
-        const result = await handleBffFunction(req, bffFunctionMatch[1]);
+        const result = await bffRuntime.handleFunction(req, bffFunctionMatch[1]);
         return sendJson(res, 200, result);
       }
 
@@ -5367,6 +4834,29 @@ export const handleRequest = async (req, res) => {
       }
       if (req.method === "POST" && url.pathname === "/api/admin/marison-payload-mappings") {
         return sendJson(res, 200, await configureMarisonPayloadMapping(req));
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/admin/users") {
+        return sendJson(res, 201, await adminUserRuntime.createUser(req), { "Cache-Control": "no-store" });
+      }
+
+      const adminUserMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})$/i);
+      if (req.method === "PATCH" && adminUserMatch) {
+        return sendJson(res, 200, await adminUserRuntime.updateUser(req, adminUserMatch[1]), { "Cache-Control": "no-store" });
+      }
+
+      const adminUserResetMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/reset-password$/i);
+      if (req.method === "POST" && adminUserResetMatch) {
+        return sendJson(res, 200, await adminUserRuntime.resetUserPassword(req, adminUserResetMatch[1]), { "Cache-Control": "no-store" });
+      }
+
+      const adminUserStatusMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/status$/i);
+      if (req.method === "PATCH" && adminUserStatusMatch) {
+        return sendJson(res, 200, await adminUserRuntime.updateUserStatus(req, adminUserStatusMatch[1]), { "Cache-Control": "no-store" });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/admin/users/sync-active-import") {
+        return sendJson(res, 200, await adminUserRuntime.syncActiveImport(req), { "Cache-Control": "no-store" });
       }
 
       if (req.method === "GET" && url.pathname === "/api/surat/inbox") {
@@ -5451,6 +4941,14 @@ export const handleRequest = async (req, res) => {
         const token = getBearerToken(req);
         const payload = await readJsonBody(req);
         const result = await sendInternalNotification(token, payload);
+        return sendJson(res, 200, result);
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/surat/unit-availability/validate") {
+        const token = getBearerToken(req);
+        await requireSupabaseUser(token);
+        const payload = await readJsonBody(req);
+        const result = await assertUnitRequestAvailability(payload?.form_input_data || payload?.payload || {});
         return sendJson(res, 200, result);
       }
 

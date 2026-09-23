@@ -256,7 +256,8 @@ describe("Marison employee sync", () => {
 
     expect(server).toContain("/api/integrations/marison/branches/preview");
     expect(server).toContain("/api/integrations/marison/branches/sync");
-    expect(server).toContain('getAllMarisonCollection(marisonDeploymentEnvironment, "/branches")');
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/branches")');
     expect(page).toContain("Sinkronkan External");
     expect(page).toContain("Tambah Kantor");
     expect(page).toContain('.from("master_offices").insert');
@@ -270,12 +271,13 @@ describe("Marison employee sync", () => {
     const client = read("src/services/marison-integration.service.ts");
     const dockerfile = read("dockerfile");
 
-    expect(server).toContain("assertMarisonEmployeeSyncAvailable");
-    expect(server).toContain("await requireAdminUser(getBearerToken(req))");
-    expect(server).toContain("STAGING_DEFAULT_USER_PASSWORD");
-    expect(server).toContain("environment: marisonDeploymentEnvironment");
-    expect(server).not.toContain("Sinkronisasi karyawan external hanya tersedia di staging.");
-    expect(server).toContain("marisonEmployeeSyncInFlight");
+    const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
+    const syncRuntime = read("backend/src/modules/marison/marison-sync-runtime.ts");
+    expect(preview).toContain("assertMarisonEmployeeSyncInfraAvailable");
+    expect(syncRuntime).toContain("assertMarisonEmployeeSyncWriteAvailable");
+    expect(syncRuntime).toContain("await base.requireAdminUser(base.getBearerToken(req))");
+    expect(syncRuntime).toContain("marisonDefaultPassword");
+    expect(syncRuntime).toContain("marisonEmployeeSyncInFlight");
     expect(client).not.toContain("STAGING_DEFAULT_USER_PASSWORD");
     expect(client).not.toContain("marison123");
     expect(dockerfile).toContain(

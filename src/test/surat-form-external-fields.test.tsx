@@ -26,6 +26,12 @@ import {
   mountFormWithUsage,
   selectOptionByLabel,
   findSelectTrigger,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -46,9 +52,10 @@ afterEach(() => teardownTestHarness());
 
 async function reachExternalForm() {
   await mountFormWithUsage(EXTERNAL_SELECT_FORM_USAGE_RAW);
-  await selectLetterType();
+  await selectFormAndUsage();
+    await selectLetterType();
   await selectEntity();
-  await selectCategoryAset();
+
   await clickGetNumber();
   await screen.findByText("Unit Kerja");
 }
@@ -60,8 +67,12 @@ function parsedVariables(call: { init?: RequestInit }) {
 describe("Flow 11: External dependent fields", () => {
   it("posts auth JSON to parent endpoint, then refetches dependent endpoint with selected parent", async () => {
     await reachExternalForm();
-    await waitFor(() => expect(getFetchCalls("marison_departments")).toHaveLength(1));
-    const parentCall = getFetchCalls("marison_departments")[0];
+    // Form-first: external fields render saat usage dipilih (pre-number) dan
+    // sesudah nomor — fetch parent bisa terjadi >1x. Pastikan minimal 1x dan
+    // periksa panggilan terakhir.
+    await waitFor(() => expect(getFetchCalls("marison_departments").length).toBeGreaterThanOrEqual(1));
+    const deptCalls = getFetchCalls("marison_departments");
+    const parentCall = deptCalls[deptCalls.length - 1];
     expect(parentCall.init).toEqual(expect.objectContaining({
       method: "POST",
       headers: expect.objectContaining({ "Content-Type": "application/json", Authorization: "Bearer test-token-000000000000000000000000" }),

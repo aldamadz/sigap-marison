@@ -35,6 +35,23 @@ describe("Fund Submission user input", () => {
     ]);
   });
 
+  it("keeps in-progress whitespace for controlled text inputs but trims the outbound payload", () => {
+    const editing = [{
+      id: "one",
+      nama_barang: "Sewa ",
+      jumlah: 1,
+      satuan: "per ",
+      nominal: 1000,
+    }];
+
+    expect(normalizeFundSubmissionItems(editing)).toEqual([
+      expect.objectContaining({ nama_barang: "Sewa ", satuan: "per " }),
+    ]);
+    expect(toMarisonFundSubmissionItems(editing)).toEqual([
+      { nama_barang: "Sewa", jumlah: 1, satuan: "per", nominal: 1000 },
+    ]);
+  });
+
   it("requires complete user input but accepts a zero nominal", () => {
     expect(validateFundSubmissionItems([{
       id: "valid",

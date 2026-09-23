@@ -10,7 +10,9 @@ const read = (path: string) => readFileSync(resolve(path), "utf8");
 
 describe("inbox verification task_type preserved on detail merge", () => {
   const runtime = read("backend/src/domain-runtime.ts");
+  const inboxRuntime = read("backend/src/modules/surat/inbox-runtime.ts");
   const inbox = read("src/pages/surat/InboxPage.tsx");
+  const inboxTaskState = read("src/features/surat/inbox/lib/inbox-task-state.ts");
 
   it("1. InboxPage merges compact + detail instead of replacing", () => {
     // The selected item must keep the compact item's fields (task_type) and
@@ -21,10 +23,10 @@ describe("inbox verification task_type preserved on detail merge", () => {
     expect(inbox).toContain("...(selectedDetailItem || {})");
   });
 
-  it("1b. task_type merge is null-safe (detail null does not clobber compact)", () => {
-    // detail.task_type may be null/undefined (stale runtime/cache); it must
-    // fall back to the compact item's canonical task_type via nullish coalescing.
-    expect(inbox).toContain("task_type: selectedDetailItem?.task_type ?? selectedCompactItem.task_type");
+  it("1b. task_type always comes from the compact queue task", () => {
+    // Detail is keyed only by signature. When a user owns both responsibilities
+    // on one signature, detail cannot choose which inbox task is selected.
+    expect(inbox).toContain("task_type: selectedCompactItem.task_type ?? selectedDetailItem?.task_type");
   });
 
   it("2. Compact item remains the base of the selected item", () => {
@@ -32,7 +34,8 @@ describe("inbox verification task_type preserved on detail merge", () => {
   });
 
   it("3. isVerificationTask still keys on canonical task_type", () => {
-    expect(inbox).toContain('const isVerificationTask = (item: any) => item?.task_type === "verification"');
+    expect(inbox).toContain("isVerificationTask");
+    expect(inboxTaskState).toContain('export const isVerificationTask = (item: any) => item?.task_type === "verification"');
   });
 
   it("4. Verification UI still keys on isVerificationTask", () => {
@@ -41,28 +44,34 @@ describe("inbox verification task_type preserved on detail merge", () => {
     expect(inbox).toContain("Simpan & lanjutkan");
   });
 
+  it("4b. Verification dead-end exposes canonical Kembalikan ke Pemohon, not permanent reject", () => {
+    expect(inbox).toContain("Kembalikan ke Pemohon");
+    expect(inbox).toContain("handleReturnToRequester");
+    expect(inbox).toContain("canReturnToRequester(selectedItem)");
+    expect(inbox).toContain("targetType: \"requester\"");
+    expect(inbox).toContain("external_submission_revision: true");
+    expect(inbox).toContain("requester_must_edit: true");
+  });
+
   it("5. BFF detail derives task_type with canonical signer/verifier rule", () => {
     // signer (user_id) wins; else verifier_snapshot hit + verification pending
-    expect(runtime).toContain("const isSigner = data.user_id === user.id");
-    expect(runtime).toContain("data.verification_required === true");
-    expect(runtime).toContain('data.verification_status === "pending"');
-    expect(runtime).toContain("const taskType = isSigner");
-    expect(runtime).toContain('task_type: taskType');
+    expect(inboxRuntime).toContain("const isSigner = data.user_id === user.id");
+    expect(inboxRuntime).toContain("data.verification_required === true");
+    expect(inboxRuntime).toContain('data.verification_status === "pending"');
+    expect(inboxRuntime).toContain("const taskType = isSigner");
+    expect(inboxRuntime).toContain('task_type: taskType');
   });
 
   it("6. BFF detail never guesses task_type from label_jabatan", () => {
-    const detailBlock = runtime.slice(
-      runtime.indexOf("const getInboxDetail"),
-      runtime.indexOf("const getAttentionStateForUser"),
-    );
+    const detailBlock = inboxRuntime;
     expect(detailBlock).not.toMatch(/label_jabatan.*task_type/);
     expect(detailBlock).not.toContain("task_type: data.label_jabatan");
   });
 
   it("7. BFF detail still enforces active-task auth (403 for other users)", () => {
-    expect(runtime).toContain('supabase.rpc("is_inbox_task_active"');
-    expect(runtime).toContain("if (!isActive)");
-    expect(runtime).toContain("err.status = 403");
+    expect(inboxRuntime).toContain('rpc("is_inbox_task_active"');
+    expect(inboxRuntime).toContain("if (!isActive)");
+    expect(inboxRuntime).toContain("Task tidak aktif atau tidak ditemukan untuk user ini");
   });
 });
 
@@ -84,13 +93,13 @@ describe("inbox verification task_type — behavioral", () => {
         : null;
   };
 
-  // Mirrors src/pages/surat/InboxPage.tsx selectedItem merge (null-safe).
+  // Mirrors src/pages/surat/InboxPage.tsx selectedItem merge.
   const mergeSelected = (compact: any, detail: any) =>
     compact
       ? {
           ...compact,
           ...(detail || {}),
-          task_type: detail?.task_type ?? compact.task_type,
+          task_type: compact.task_type ?? detail?.task_type,
         }
       : detail;
 
@@ -175,8 +184,57 @@ describe("inbox verification task_type — behavioral", () => {
     expect(deriveTaskType(detail, otherUser)).toBe(null);
   });
 
-  it("signer wins over verifier on overlap (matches RPC NOT EXISTS dedup)", () => {
+  it("detail may derive approval for a dual-role user, while the compact verification task remains verification", () => {
     const detail = { user_id: "u-1", verifier_snapshot: [{ user_id: "u-1" }], verification_required: true, verification_status: "pending" };
     expect(deriveTaskType(detail, "u-1")).toBe("approval");
+    expect(mergeSelected({ task_type: "verification" }, detail).task_type).toBe("verification");
+  });
+});
+
+describe("verification dead-end recovery — behavioral", () => {
+  type VerificationItem = {
+    task_type: string | null;
+    requires_unit_allocation: boolean;
+    project?: { code?: string };
+  };
+  type UnitLookup = {
+    loading: boolean;
+    units: string[];
+    error: string | null;
+  };
+
+  // Mirrors src/pages/surat/InboxPage.tsx canReturnToRequester.
+  const canReturnToRequester = (item: VerificationItem, lookup: UnitLookup) =>
+    item.task_type === "verification" &&
+    item.requires_unit_allocation &&
+    (
+      !item.project?.code ||
+      Boolean(lookup.error) ||
+      (!lookup.loading && lookup.units.length === 0)
+    );
+
+  const item = (overrides: Partial<VerificationItem> = {}): VerificationItem => ({
+    task_type: "verification",
+    requires_unit_allocation: true,
+    project: { code: "TEST-02" },
+    ...overrides,
+  });
+
+  it("lookup kosong/gagal/proyek hilang membuat Kembalikan ke Pemohon tersedia", () => {
+    expect(canReturnToRequester(item(), { loading: false, units: [], error: null })).toBe(true);
+    expect(canReturnToRequester(item(), { loading: false, units: [], error: "Vendor Marison tidak terjangkau" })).toBe(true);
+    expect(canReturnToRequester(item({ project: undefined }), { loading: false, units: ["u1"], error: null })).toBe(true);
+  });
+
+  it("lookup valid menyembunyikan jalur pengembalian", () => {
+    expect(canReturnToRequester(item(), { loading: false, units: ["u1"], error: null })).toBe(false);
+    expect(canReturnToRequester(item(), { loading: true, units: [], error: null })).toBe(false);
+  });
+
+  it("alasan pengembalian wajib minimal 5 karakter (aturan RPC kanonikal)", () => {
+    const reasonValid = (reason: string) => reason.trim().length >= 5;
+    expect(reasonValid("")).toBe(false);
+    expect(reasonValid("unit")).toBe(false);
+    expect(reasonValid("Lookup unit kosong untuk proyek ini")).toBe(true);
   });
 });

@@ -26,7 +26,7 @@ describe("unit allocation and requester upload UX", () => {
     expect(service).toContain("aggregateLoaded");
     expect(service).toContain('phase: "saving"');
     expect(form).toContain("aria-valuenow={uploadState.percent}");
-    expect(form).toContain("Boolean(uploadingRequirement)");
-    expect(form).toContain("if (uploadingRequirement || uploadingRecommendationAttachment)");
+    expect(form).toContain("validateSuratSubmit({");
+    expect(form).toContain("uploadingRequirement: Boolean(uploadingRequirement),");
   });
 });

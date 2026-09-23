@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 
 describe("registration draft signer reconciliation", () => {
+  it("does not reuse a selected signer for a requester-bound step", () => {
+    const current = [{ step_order: 1, form_usage_step_id: "requester-step", assignee_mode: "requester", user_id: "", eligible_user_ids: [] }];
+    const persisted = [{ step_order: 1, form_usage_step_id: "requester-step", user_id: "old-signer" }];
+    expect(reconcileSignerAssignments(current, persisted)[0].user_id).toBe("");
+  });
+
   it("adds newly configured steps without losing unchanged signer selections", () => {
     const current = [
       { step_order: 1, form_usage_step_id: "step-1", label_jabatan: "Ass. Mgr. Mkt", user_id: "", eligible_user_ids: ["user-1"] },

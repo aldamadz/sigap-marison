@@ -17,7 +17,18 @@ mengikuti pola `release/YYYY-MM-DD`.
 
 ## 2. Rilis Mendatang
 
-_Tidak ada kandidat rilis yang belum dipromosikan._
+### 2.1 Unified Work Calendar (CAL-03 F1-F8)
+
+- **Status**: kandidat rilis production 2026-09-22
+- **Cabang**: `release/production-20260922`
+- **Issue**: [#332](https://github.com/aldamadz/frontend/issues/332)
+- **Lingkup**: F1, F2, F3, F4A, F4B, F5, F6, F7, dan F8.
+
+Kalender Kerja mencakup tampilan Hari, Minggu, Bulan, dan Tim; detail responsif,
+Quick Add, siklus hidup pekerjaan, hari kerja dan hari libur, dashboard,
+notifikasi, dokumentasi, serta audit aksesibilitas dan Dark Mode. Migration yang
+dipromosikan dibatasi pada tujuh migration `work_calendar_*`; fixture dan
+konfigurasi khusus staging tidak termasuk paket production.
 
 ## 3. Riwayat Rilis
 

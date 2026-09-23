@@ -18,6 +18,13 @@ import {
   configureStandardMocks,
   mountFormWithUsageAndSearchParams,
   goToWizardStep,
+  selectForm,
+  selectUsage,
+  selectFormAndUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -41,7 +48,7 @@ describe("Flow 15: numbered draft form/usage ownership", () => {
     await goToWizardStep(1);
     expect(await screen.findByText("FORM PERMOHONAN ASET")).toBeInTheDocument();
     expect(screen.getByText("Permohonan Aset")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: /Form Dokumen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Form PGD/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /Kegunaan/i })).not.toBeInTheDocument();
 
     // Langkah 2: nilai draft ter-restore di kolom form dinamis;
@@ -50,7 +57,7 @@ describe("Flow 15: numbered draft form/usage ownership", () => {
     expect(await screen.findByDisplayValue("Printer Epson")).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Isi Nama Barang/i)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Isi Keterangan Barang/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: /Form Dokumen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Form PGD/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /Kegunaan/i })).not.toBeInTheDocument();
     expect(serviceMock.generateNoSurat).not.toHaveBeenCalled();
     expect(serviceMock.createRegistrationDraft).not.toHaveBeenCalled();

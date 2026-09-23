@@ -32,6 +32,11 @@ import {
   navigateToNumberGenerated,
   navigateToReadyToSubmit,
   goToWizardStep,
+  selectForm,
+  selectUsage,
+  selectCategory,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 beforeEach(() => {
@@ -53,28 +58,35 @@ afterEach(() => {
 });
 
 describe("Flow 1: Aset Tanpa Rekomendasi", () => {
-  it("renders location section on mount", async () => {
+  it("renders Form selector on mount without location or usage", async () => {
     await mountForm();
-    expect(screen.getByText(/Lokasi dan Klasifikasi/i)).toBeInTheDocument();
-    expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Form & Lokasi/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Form PGD")).toBeInTheDocument();
+    // Progressive disclosure: Kegunaan + lokasi belum tampil sebelum Form dipilih.
+    expect(screen.queryByText("Kegunaan")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
+    // Tidak ada tombol klasifikasi manual.
+    expect(screen.queryByText("Pengajuan Aset")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pengajuan SPK")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pengajuan Dana")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pengajuan Non Unit")).not.toBeInTheDocument();
     assertStrictServiceCalls();
   });
 
-  it("shows category buttons after selecting letter type", async () => {
+  it("shows usage selector after selecting form, still without location", async () => {
     await mountForm();
-    await selectLetterType();
-    expect(screen.getByText("Aset")).toBeInTheDocument();
-    expect(screen.getByText("Unit")).toBeInTheDocument();
-    expect(screen.getByText("Non Unit")).toBeInTheDocument();
-    assertStrictServiceCalls();
-  });
-
-  it("shows form/usage selectors after clicking Aset", async () => {
-    await mountForm();
-    await selectLetterType();
-    await selectCategoryAset();
-    expect(screen.getByText("Form Dokumen")).toBeInTheDocument();
+    await selectForm();
     expect(screen.getByText("Kegunaan")).toBeInTheDocument();
+    expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
+    assertStrictServiceCalls();
+  });
+
+  it("shows location/context after selecting usage", async () => {
+    await mountForm();
+    await selectFormAndUsage();
+    expect(screen.getByText("Form PGD")).toBeInTheDocument();
+    expect(screen.getByText("Kegunaan")).toBeInTheDocument();
+    expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 
@@ -104,7 +116,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
     await clickGetNumber();
 
     expect(screen.getByText("001/FA/MKT/VIII/2026")).toBeInTheDocument();
-    expect(screen.getByText("Persetujuan dan Berkas")).toBeInTheDocument();
+    expect(screen.getAllByText("Persetujuan & Berkas").length).toBeGreaterThanOrEqual(1);
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Nomor Berhasil Didapatkan" })
     );
@@ -115,7 +127,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
     await navigateToNumberReady();
     await clickGetNumber();
 
-    expect(screen.getByText(/Persetujuan dan Berkas/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Persetujuan & Berkas/i).length).toBeGreaterThanOrEqual(1);
 
     await goToWizardStep(3);
 

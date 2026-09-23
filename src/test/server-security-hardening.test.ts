@@ -33,8 +33,9 @@ describe("server security hardening", () => {
   });
 
   it("signs Marison API requests with the access token and full URL path", () => {
-    expect(server).toContain("const canonical = [method, url.pathname, token, bodyHash, timestamp]");
-    expect(server).toContain('hmacSha512Hex(token, canonical)');
+    const client = readFileSync(join(process.cwd(), "backend/src/modules/marison/marison-api-client.ts"), "utf8");
+    expect(client).toContain('const canonical = ["GET", url.pathname, token, sha256Hex(Buffer.alloc(0)), timestamp]');
+    expect(client).toContain('hmacSha512Hex(token, canonical)');
     expect(server).not.toContain("configuredSigningSecret");
   });
 

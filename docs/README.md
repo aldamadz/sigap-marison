@@ -62,9 +62,11 @@ Garis besar dokumentasi:
 | File | Deskripsi |
 |------|-----------|
 | [FITUR.md](./FITUR.md) | Indeks fitur SIGAP: fungsional, non-fungsional, termasuk Hirarki Organisasi, dan rencana fitur berjalan |
+| [CAL-03_WORK_CALENDAR.md](./CAL-03_WORK_CALENDAR.md) | Manual singkat fitur Kalender Kerja (CAL-03 F1–F7): tampilan, siklus hidup pekerjaan, hari kerja & libur, dashboard, notifikasi, dan aksesibilitas |
 | [WORKFLOW_ASET_UNIT.md](./WORKFLOW_ASET_UNIT.md) | Flowchart lengkap Permohonan Aset dan Unit, termasuk pemeriksaan, rekomendasi, revisi, dan tanda tangan ulang |
 | [FEATURE_RELEASE_MAP.md](./FEATURE_RELEASE_MAP.md) | Status fitur per environment, dependensi, selective release, dan prosedur penarikan production |
 | [AI_COLLABORATION.md](./AI_COLLABORATION.md) | Protokol koordinasi manusia dan AI untuk branch, worktree, klaim pekerjaan, konflik, dan handoff |
+| [PROJECT_STRUCTURE_GUIDE.md](./PROJECT_STRUCTURE_GUIDE.md) | Standar struktur frontend, backend, docs, dan External API agar kode tetap ramping dan maintainable |
 | [EXTERNAL_API_SURAT.md](./EXTERNAL_API_SURAT.md) | Dokumentasi API External untuk integrasi sistem eksternal |
 | [KPI_IT_PROJECT_IMPLEMENTATION.md](./KPI_IT_PROJECT_IMPLEMENTATION.md) | KPI project berdasarkan tahap implementasi |
 | [KPI_SERVER.md](./KPI_SERVER.md) | KPI operasional server, database, dan media storage |

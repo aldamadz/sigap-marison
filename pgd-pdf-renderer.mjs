@@ -127,8 +127,31 @@ export const isPgdDocument = (source = {}) => {
     source?.location_snapshot?.form?.nama_form,
     source?.data_snapshot?.form?.nama_form,
     source?.data_snapshot?.form?.name,
+    source?.resolved_master_form?.nama_form,
   ].map((value) => String(value || "").toUpperCase());
   return names.some((name) => name.includes("PERMINTAAN BARANG"));
+};
+
+// Resolves the canonical master form for a surat through its form usage:
+// form_usage_id → form_usages.form_id → master_forms.
+// Returns the master form row ({ id, nama_form, nomor_form }) or null when
+// the usage is missing, invalid, or unresolvable. Never throws: callers
+// treat null as "not PGD" (fail-closed).
+export const resolvePgdMasterForm = async (client, formUsageId) => {
+  if (!formUsageId) return null;
+  const { data: usage, error: usageError } = await client
+    .from("form_usages")
+    // Unhinted embed: the FK-constraint hint failed on the staging schema
+    // (the constraint name is not fk_master_forms). The unhinted relation
+    // resolves via the form_usages.form_id -> master_forms(id) join.
+    .select("id, form_id, master_forms(id, nama_form, nomor_form)")
+    .eq("id", formUsageId)
+    .maybeSingle();
+
+  if (usageError) throw usageError;
+  if (!usage || !usage.form_id || !usage.master_forms) return null;
+
+  return Array.isArray(usage.master_forms) ? usage.master_forms[0] : usage.master_forms;
 };
 
 export const normalizeNativeSignatures = (signatures = [], targetStep = 0) =>
@@ -159,7 +182,7 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const targetStep = Number(options.targetStep || 0);
   const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
-    formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.PGD-01-00"),
+    formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.PGD-01-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
     isAsset: source.is_aset === true || input.request_category === "asset",
     department: text(location?.department?.name || source.department_name, "-"),

@@ -13,10 +13,16 @@ import {
   configureStandardMocks,
   selectLetterType,
   selectEntity,
-  selectCategory,
+  selectFormAndUsage,
   selectOptionByLabel,
   mountFormWithUsage,
   clickGetNumber,
+  selectForm,
+  selectUsage,
+  selectCategory,
+  selectCategoryAset,
+  selectCategoryUnit,
+  selectCategoryNonUnit
 } from "./surat-form-driver";
 
 afterEach(() => teardownTestHarness());
@@ -36,9 +42,9 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
 
   it("reserves number for dana umum without a Marison project", async () => {
     await mountFormWithUsage(FUND_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
+    await selectFormAndUsage(/Dana/i);
     await selectLetterType();
     await selectEntity();
-    await selectCategory("Non Aset");
 
     // KC tidak punya proyek siap Marison; fund bisa memilih Tanpa Proyek.
     expect(await screen.findByText("Belum ada proyek yang siap digunakan")).toBeInTheDocument();
@@ -73,6 +79,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     fireEvent.change(screen.getByLabelText("Jumlah"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("Satuan"), { target: { value: "bulan" } });
     const nominal = screen.getByRole("textbox", { name: "Nominal item 1" });
+    expect(screen.getAllByText("Rp")).toHaveLength(1);
     fireEvent.change(nominal, { target: { value: "1500000" } });
     fireEvent.blur(nominal);
     expect(await screen.findByText("Rp 1.500.000")).toBeInTheDocument();

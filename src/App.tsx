@@ -19,8 +19,7 @@ import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
 
 // LAZY IMPORT - GENERAL PAGES
 const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
-const AgendaPage = lazy(() => import("@/pages/agenda/AgendaPage"));
-const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
+const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPage"));
 const ActivityLogsPage = lazy(() => import("@/pages/activity-logs/ActivityLogsPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const PublicDocsPage = lazy(() => import("@/pages/docs/PublicDocsPage"));
@@ -190,8 +189,7 @@ const App = () => {
           element={isAuth ? <AppLayout /> : <Navigate to="/" replace />}
         >
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/agenda" element={<AgendaPage />} />
-          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/calendar" element={<WorkCalendarPage />} />
           <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
           <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
           <Route path="/settings" element={<SettingsPage />} />

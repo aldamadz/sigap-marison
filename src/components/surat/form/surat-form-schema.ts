@@ -71,7 +71,51 @@ export const isUnitExternalField = (field: TemplateField): boolean =>
 export function getWorkflowCategories(item: UsageDetailRecord | null | undefined): RequestCategory[] {
   if (item?.request_category) return [item.request_category];
   const categories = Array.isArray(item?.request_categories) ? item.request_categories : [];
-  return categories.length > 0 ? categories : ["asset", "non_unit"];
+  // Fail closed: konfigurasi tanpa kategori menghasilkan daftar kosong
+  // (bukan tebakan ["asset", "non_unit"]) agar resolver menolak usage ini
+  // dengan pesan konfigurasi yang aman.
+  return categories;
+}
+
+export function normalizeFormUsageRecord(item: UsageDetailRecord): UsageDetailRecord {
+  const departments = Array.isArray(item.form_usage_departments)
+    ? item.form_usage_departments.filter(
+        (permission): permission is { department_id: string } =>
+          Boolean(permission)
+          && typeof permission === "object"
+          && "department_id" in permission
+          && typeof permission.department_id === "string",
+      )
+    : item.workflow_allowed_departments || [];
+  const steps = Array.isArray(item.form_usage_steps) ? [...item.form_usage_steps] : [];
+
+  return {
+    ...item,
+    workflow_allowed_departments: departments,
+    request_categories: item.request_category ? [item.request_category] : item.request_categories || [],
+    is_cabang: item.scope_type === "cabang",
+    ttd_config: steps
+      .sort((left, right) => left.step_order - right.step_order)
+      .map((step) => ({
+        form_usage_step_id: step.id,
+        roleName: step.role_name,
+        labelJabatan: step.label,
+        action_type: step.action_type,
+        assignee_mode: step.assignee_mode || "select",
+        input_schema: step.input_schema || {},
+        skip_if_no_candidate: step.skip_if_no_candidate === true,
+        candidate_fallback_mode: step.candidate_fallback_mode || null,
+        candidate_scope: step.candidate_scope || "manual",
+        signer_department_id: step.signer_department_id,
+        eligible_user_ids: (step.form_usage_step_users || []).map((candidate) => candidate.user_id),
+        verifier_user_ids: (step.form_usage_step_verifiers || []).map((candidate) => candidate.user_id),
+        requires_unit_allocation: step.action_type === "unit_allocation",
+      })),
+  };
+}
+
+export function normalizeFormUsageRecords(items: UsageDetailRecord[]): UsageDetailRecord[] {
+  return items.map(normalizeFormUsageRecord);
 }
 
 export const hasUnitRequestFields = (item: UsageDetailRecord): boolean =>
