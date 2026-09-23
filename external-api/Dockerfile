@@ -3,17 +3,21 @@ FROM node:22-alpine AS builder
 
 WORKDIR /build
 
+ARG EXTERNAL_API_PUBLIC_URL=https://external.marisoncloud.com
+
 # Copy Zudoku project files
-COPY docs-zudoku/package.json docs-zudoku/.npmrc docs-zudoku/tsconfig.json docs-zudoku/zudoku.config.ts ./docs-zudoku/
+COPY docs-zudoku/package.json docs-zudoku/.npmrc docs-zudoku/tsconfig.json docs-zudoku/zudoku.config.ts docs-zudoku/generate-openapi.mjs ./docs-zudoku/
 COPY docs-zudoku/apis/ ./docs-zudoku/apis/
 COPY docs-zudoku/public/ ./docs-zudoku/public/
+COPY openapi.mjs ./openapi.mjs
 
 # Install Zudoku deps from the reviewed lockfile.
 COPY docs-zudoku/package-lock.json ./docs-zudoku/package-lock.json
 RUN cd docs-zudoku && npm ci
 
-# Build Zudoku → docs-zudoku/dist/
-RUN cd docs-zudoku && npx zudoku build
+# Generate the build-time spec from the public URL, then build Zudoku.
+RUN EXTERNAL_API_PUBLIC_URL="$EXTERNAL_API_PUBLIC_URL" node docs-zudoku/generate-openapi.mjs \
+ && cd docs-zudoku && npx zudoku build
 
 # Post-process prerendered HTML: Indonesian lang + drop unused CDN preconnect
 RUN find docs-zudoku/dist/docs -name "*.html" -exec sed -i 's/<html lang="en"/<html lang="id"/' {} + \
