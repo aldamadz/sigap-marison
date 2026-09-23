@@ -136,7 +136,6 @@ export default function MasterProjectManagementPage() {
         if (duplicate) {
           throw new Error(`ID Proyek Marison sudah dipakai oleh ${duplicate.name}.`);
         }
-        }
       }
       const payload = { 
         name: formData.name.trim(),
