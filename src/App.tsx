@@ -12,6 +12,7 @@ import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
 import { RealtimeSync } from "@/providers/RealtimeSync";
 import { MarisonEnvironmentProvider } from "@/providers/MarisonEnvironmentProvider";
+import { isWorkCalendarEnabled } from "@/lib/feature-availability";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
@@ -20,6 +21,7 @@ import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
 // LAZY IMPORT - GENERAL PAGES
 const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
 const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPage"));
+const WorkCalendarUnavailablePage = lazy(() => import("@/pages/work-calendar/WorkCalendarUnavailablePage"));
 const ActivityLogsPage = lazy(() => import("@/pages/activity-logs/ActivityLogsPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const PublicDocsPage = lazy(() => import("@/pages/docs/PublicDocsPage"));
@@ -189,7 +191,10 @@ const App = () => {
           element={isAuth ? <AppLayout /> : <Navigate to="/" replace />}
         >
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/calendar" element={<WorkCalendarPage />} />
+          <Route
+            path="/calendar"
+            element={isWorkCalendarEnabled ? <WorkCalendarPage /> : <WorkCalendarUnavailablePage />}
+          />
           <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
           <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
           <Route path="/settings" element={<SettingsPage />} />

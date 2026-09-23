@@ -8,6 +8,7 @@ const migrations = [
   "supabase/migrations/20260917133000_seed_canonical_submission_workflows.sql",
   "supabase/migrations/20260918100000_restore_asset_recommendation_config.sql",
   "supabase/migrations/20260918130000_fix_recommendation_creator_auto_approval.sql",
+  "supabase/migrations/20260923130000_production_runtime_contract_recovery.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
 
@@ -28,7 +29,7 @@ create table public.profiles (
   id uuid primary key, full_name text, job_title text, role text default 'user',
   office_id uuid references public.master_offices(id),
   department_id uuid references public.master_departments(id),
-  is_active boolean default true, deleted_at timestamptz
+  is_active boolean default true, deleted_at timestamptz, avatar_url text
 );
 create table public.master_forms (
   id uuid primary key, nama_form text not null, nomor_form text, created_at timestamptz default now()
@@ -78,7 +79,9 @@ create table public.surat_registrasi (
   office_id uuid references public.master_offices(id), dept_id uuid references public.master_departments(id),
   represented_department_id uuid, created_by uuid references public.profiles(id), status text default 'PROSES',
   current_step integer default 1, form_input_data jsonb default '{}'::jsonb,
-  data_snapshot jsonb default '{}'::jsonb, updated_at timestamptz default now()
+  data_snapshot jsonb default '{}'::jsonb, created_at timestamptz default now(), updated_at timestamptz default now(),
+  no_surat text, judul_surat text, file_path text, lampiran_path text, policy_snapshot jsonb default '{}'::jsonb,
+  requester_snapshot jsonb default '{}'::jsonb, location_snapshot jsonb default '{}'::jsonb
 );
 create table public.surat_signatures (
   id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
@@ -88,15 +91,20 @@ create table public.surat_signatures (
   requires_unit_allocation boolean default false, attachment_requirements_snapshot jsonb default '[]'::jsonb,
   verifier_snapshot jsonb default '[]'::jsonb, verification_required boolean default false,
   verification_status text default 'not_required', verified_at timestamptz, verified_by uuid,
-  verification_note text
+  verification_note text, available_at timestamptz, signer_snapshot jsonb default '{}'::jsonb, status text default 'PENDING',
+  signed_at timestamptz, catatan text
 );
 create table public.surat_attachments (
   id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
-  signature_id uuid references public.surat_signatures(id), stage text, requirement_key text
+  signature_id uuid references public.surat_signatures(id), stage text, requirement_key text, created_at timestamptz default now()
 );
 create table public.surat_revision_events (
   id uuid primary key default gen_random_uuid(), surat_id uuid references public.surat_registrasi(id),
-  status text, target_type text, target_user_ids uuid[] default array[]::uuid[], created_at timestamptz default now()
+  status text, target_type text, target_step integer, target_user_ids uuid[] default array[]::uuid[], created_at timestamptz default now()
+);
+create table public.department_kpi_configs (
+  dept_id uuid, is_active boolean default true, work_days integer[], work_start time, work_end time,
+  break_start time, break_end time, timezone text, sla_minutes integer
 );
 
 create or replace function public.is_current_user_admin() returns boolean
@@ -108,6 +116,10 @@ create or replace function public.can_read_surat(p_surat_id uuid) returns boolea
 language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.surat_registrasi where id = p_surat_id and created_by = auth.uid())
 $$;
+create or replace function public.calculate_business_minutes(
+  p_started_at timestamptz, p_ended_at timestamptz, p_work_days integer[], p_work_start time,
+  p_work_end time, p_break_start time, p_break_end time, p_timezone text
+) returns integer language sql immutable as $$ select 0 $$;
 
 create or replace function public.is_valid_external_revision_policy(p_policy jsonb)
 returns boolean language sql immutable set search_path = '' as $$
