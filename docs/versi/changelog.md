@@ -17,22 +17,45 @@ mengikuti pola `release/YYYY-MM-DD`.
 
 ## 2. Rilis Mendatang
 
-### 2.1 Unified Work Calendar (CAL-03 F1-F8)
-
-- **Status**: kandidat rilis production 2026-09-22
-- **Cabang**: `release/production-20260922`
-- **Issue**: [#332](https://github.com/aldamadz/frontend/issues/332)
-- **Lingkup**: F1, F2, F3, F4A, F4B, F5, F6, F7, dan F8.
-
-Kalender Kerja mencakup tampilan Hari, Minggu, Bulan, dan Tim; detail responsif,
-Quick Add, siklus hidup pekerjaan, hari kerja dan hari libur, dashboard,
-notifikasi, dokumentasi, serta audit aksesibilitas dan Dark Mode. Migration yang
-dipromosikan dibatasi pada tujuh migration `work_calendar_*`; fixture dan
-konfigurasi khusus staging tidak termasuk paket production.
+_Tidak ada kandidat rilis yang belum dipromosikan._
 
 ## 3. Riwayat Rilis
 
-### 3.1 Alur registrasi bertahap + editor Non Aset bergaya kartu
+### 3.1 Unified Work Calendar dan alur Surat production-safe
+
+- **Tanggal**: 2026-09-23
+- **Cabang**: `release/production-20260922`
+- **PR**: [#333](https://github.com/aldamadz/frontend/pull/333)
+- **Merge SHA**: `0acbdf1c738d8aa0948f86697d6c3618a23fd551`
+- **Lingkup**: CAL-03 F1, F2, F3, F4A, F4B, F5, F6, F7, dan F8; form-first
+  Surat, workflow kanonikal, revisi SPK Unit, PDF native, dan manajemen user
+  backend production-safe.
+
+Perubahan:
+
+- Kalender Kerja menyediakan tampilan Hari, Minggu, Bulan, dan Tim; Quick Add,
+  detail responsif, siklus hidup pekerjaan, hari kerja/libur, dashboard,
+  notifikasi, dark mode, dan aksesibilitas.
+- Form Surat memakai urutan Form → Kegunaan → Lokasi/Konteks → Nomor dengan
+  modul Aset, Dana, Unit, dan Non Unit yang fail-closed.
+- SPK Unit memvalidasi kapasitas Marison secara server-side dan menyediakan
+  jalur Kembalikan ke Pemohon saat Tim Pemeriksa menemui dead-end.
+- PDF worker mendeteksi PGD melalui master form kanonikal dan memuat factory
+  runtime yang sama dengan test.
+- Manajemen user berjalan melalui backend; production memakai email
+  undangan/pemulihan, tanpa password bootstrap staging.
+- Fixture akun/kegunaan `[UJI STAGING]`, mapping khusus staging, dan data uji
+  staging tidak dipromosikan.
+
+Validasi:
+
+- CI: 176 file / 1.734 test lulus; lint, typecheck, build, dan audit hijau.
+- SQL disposable: Work Calendar, workflow kanonikal, branch asset, revisi PDF,
+  dan REC-03 lulus.
+- Production: 15 migration diterapkan tanpa drift; app dan PDF worker memakai
+  merge SHA yang sama; live/ready, aset, SPA fallback, dan auth boundary lulus.
+
+### 3.2 Alur registrasi bertahap + editor Non Aset bergaya kartu
 
 - **Tanggal**: 2026-08-27
 - **Cabang**: `codex/release-wizard-production`
