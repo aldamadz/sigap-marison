@@ -234,7 +234,7 @@ export default function OfficeManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
+           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Memakai pemetaan manual</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
           <Button variant="outline" onClick={loadData} size="icon">
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           </Button>
@@ -262,7 +262,7 @@ export default function OfficeManagementPage() {
               <TableHead className="w-[120px] font-bold">KODE</TableHead>
               <TableHead className="font-bold">NAMA KANTOR / CABANG</TableHead>
               <TableHead className="font-bold">ID / KODE EXTERNAL</TableHead>
-              <TableHead className="min-w-[270px] font-bold">MAPPING PAYLOAD STAGING</TableHead>
+              <TableHead className="min-w-[270px] font-bold">STATUS PAYLOAD</TableHead>
               <TableHead className="w-[120px] font-bold">KEDUDUKAN</TableHead>
               <TableHead className="min-w-[260px] font-bold">KETERANGAN</TableHead>
               <TableHead className="text-right font-bold">AKSI</TableHead>

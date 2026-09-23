@@ -94,7 +94,7 @@ describe("docs-admin-content D2B", () => {
 
   it("matches exact-base runtime", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "023fbf05e8c598593309c2d22f87110ea87854b08a0f4f74585deb079addd0c0",
+      "edb6c8e4a595a355455ce7a621ebd3f72c04210dd6fc438afaefbb917c595d7a",
     );
   });
 

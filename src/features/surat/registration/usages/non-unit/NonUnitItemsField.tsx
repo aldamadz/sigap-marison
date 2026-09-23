@@ -26,7 +26,7 @@ export function NonUnitItemsField({ ctx }: { ctx: UsageModuleContext }) {
       />
       {(marisonProject?.unavailableCount ?? 0) > 0 && (
         <p className="px-1 text-xs text-muted-foreground">
-          {marisonProject?.unavailableCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
+          {marisonProject?.unavailableCount} proyek belum tersedia karena pemetaan Marison belum lengkap.
         </p>
       )}
     </div>
