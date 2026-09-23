@@ -21,7 +21,7 @@ export const adminOfficesDocs: DocsEntry = {
       "Periksa baris berwarna amber dan baca kolom Keterangan.",
       "Tambah atau edit nama kantor, kode, dan tipe kantor.",
       "Cek user yang memakai kantor tersebut.",
-      "Pada Mapping Payload Staging, kantor hasil sinkron dengan branch ID valid otomatis berstatus Siap dikirim - data external.",
+      "Pada Status Payload, kantor hasil sinkron dengan branch ID valid menampilkan tanda check sebagai siap dikirim.",
       "Untuk kantor lokal/trial, cari kantor external hasil sinkronisasi lalu klik Simpan. Reset mengembalikan penggunaan identitas external sumber atau status Belum dapat dikirim.",
     ],
     examples: [

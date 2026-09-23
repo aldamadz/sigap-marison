@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, FlaskConical, Loader2, LockKeyhole, RefreshCw, Server, UsersRound, XCircle } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, FlaskConical, Loader2, LockKeyhole, RefreshCw, Server, UsersRound, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import {
   marisonIntegrationService,
   type MarisonEmployeeSyncPreview,
   type MarisonEmployeeSyncResult,
+  type MarisonBranchSyncPreview,
+  type MarisonBranchSyncResult,
   type MarisonEnvironmentTest,
   type MarisonProbeResult,
   type MarisonProjectSyncPreview,
@@ -50,10 +52,14 @@ export function MarisonIntegrationPanel() {
   const [testResult, setTestResult] = useState<MarisonEnvironmentTest | null>(null);
   const [previewingEmployees, setPreviewingEmployees] = useState(false);
   const [syncingEmployees, setSyncingEmployees] = useState(false);
+  const [previewingBranches, setPreviewingBranches] = useState(false);
+  const [syncingBranches, setSyncingBranches] = useState(false);
   const [previewingProjects, setPreviewingProjects] = useState(false);
   const [syncingProjects, setSyncingProjects] = useState(false);
   const [employeePreview, setEmployeePreview] = useState<MarisonEmployeeSyncPreview | null>(null);
   const [employeeResult, setEmployeeResult] = useState<MarisonEmployeeSyncResult | null>(null);
+  const [branchPreview, setBranchPreview] = useState<MarisonBranchSyncPreview | null>(null);
+  const [branchResult, setBranchResult] = useState<MarisonBranchSyncResult | null>(null);
   const [projectPreview, setProjectPreview] = useState<MarisonProjectSyncPreview | null>(null);
   const [projectResult, setProjectResult] = useState<MarisonProjectSyncResult | null>(null);
 
@@ -100,6 +106,20 @@ export function MarisonIntegrationPanel() {
     }
   };
 
+  const previewBranches = async (preserveResult = false) => {
+    setPreviewingBranches(true);
+    if (!preserveResult) setBranchResult(null);
+    try {
+      const preview = await marisonIntegrationService.previewBranches();
+      setBranchPreview(preview);
+      toast.success(`${preview.toCreate + preview.toUpdate} kantor cabang perlu diselaraskan`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal memeriksa kantor cabang");
+    } finally {
+      setPreviewingBranches(false);
+    }
+  };
+
   const previewProjects = async (preserveResult = false) => {
     setPreviewingProjects(true);
     if (!preserveResult) setProjectResult(null);
@@ -142,8 +162,8 @@ export function MarisonIntegrationPanel() {
   const syncEmployees = async () => {
     if (!employeePreview) return;
     const confirmed = await appDialog.confirm({
-      title: "Sinkronkan Karyawan dan Kantor?",
-      description: `${employeePreview.employees.toCreate} akun baru, ${employeePreview.employees.toUpdate} akun lama, ${employeePreview.branches.toCreate} kantor baru, dan ${employeePreview.branches.toUpdate} kantor lama akan diproses. Role akun lama tetap dipertahankan.`,
+      title: "Sinkronkan Karyawan?",
+      description: `${employeePreview.employees.toCreate} akun baru dan ${employeePreview.employees.toUpdate} akun lama akan diproses. Relasi kantor pendukung ikut diselaraskan bila diperlukan. Role akun lama tetap dipertahankan.`,
       confirmText: "Sinkronkan",
     });
     if (!confirmed) return;
@@ -164,6 +184,31 @@ export function MarisonIntegrationPanel() {
     }
   };
 
+  const syncBranches = async () => {
+    if (!branchPreview) return;
+    const confirmed = await appDialog.confirm({
+      title: "Sinkronkan Kantor Cabang?",
+      description: `${branchPreview.toCreate} kantor cabang baru akan dibuat dan ${branchPreview.toUpdate} kantor cabang lama akan diperbarui dari Marison.`,
+      confirmText: "Sinkronkan",
+    });
+    if (!confirmed) return;
+    setSyncingBranches(true);
+    try {
+      const result = await marisonIntegrationService.syncBranches();
+      await previewBranches(true);
+      setBranchResult(result);
+      if (result.failed > 0) {
+        toast.warning(`Sinkronisasi kantor cabang selesai dengan ${result.failed} data perlu ditinjau`);
+      } else {
+        toast.success("Sinkronisasi kantor cabang selesai");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sinkronisasi kantor cabang gagal");
+    } finally {
+      setSyncingBranches(false);
+    }
+  };
+
   return (
     <Card className="border-primary/20 bg-primary/[0.025]">
       <CardHeader className="gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -173,7 +218,7 @@ export function MarisonIntegrationPanel() {
             Integrasi Marison
           </CardTitle>
           <CardDescription className="mt-2">
-            Cek koneksi sumber data, lalu sinkronkan kantor dan karyawan dari Marison ke SIGAP.
+            Cek koneksi sumber data, lalu sinkronkan kantor cabang, karyawan, atau proyek dari Marison ke SIGAP.
           </CardDescription>
         </div>
         <Badge variant={status.isStaging ? "secondary" : "default"} className="w-fit gap-1.5 px-3 py-1.5 uppercase">
@@ -206,7 +251,24 @@ export function MarisonIntegrationPanel() {
                   <Button
                     variant="outline"
                     onClick={() => void previewEmployees()}
-                    disabled={previewingEmployees || syncingEmployees || syncingProjects || !environmentConfig?.configured}
+                    disabled={previewingBranches || syncingBranches || previewingEmployees || syncingEmployees || syncingProjects || !environmentConfig?.configured}
+                    className="gap-2"
+                  >
+                    {previewingBranches ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Periksa kantor cabang
+                  </Button>
+                  <Button
+                    onClick={syncBranches}
+                    disabled={!branchPreview || previewingBranches || syncingBranches || syncingEmployees || syncingProjects}
+                    className="gap-2"
+                  >
+                    {syncingBranches ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
+                    Sinkron kantor cabang
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void previewBranches()}
+                    disabled={previewingBranches || syncingBranches || previewingEmployees || syncingEmployees || syncingProjects || !environmentConfig?.configured}
                     className="gap-2"
                   >
                     {previewingEmployees ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -214,7 +276,7 @@ export function MarisonIntegrationPanel() {
                   </Button>
                   <Button
                     onClick={syncEmployees}
-                    disabled={!employeePreview || previewingEmployees || syncingEmployees || syncingProjects}
+                    disabled={!employeePreview || previewingBranches || syncingBranches || previewingEmployees || syncingEmployees || syncingProjects}
                     className="gap-2"
                   >
                     {syncingEmployees ? <Loader2 className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
@@ -223,7 +285,7 @@ export function MarisonIntegrationPanel() {
                   <Button
                     variant="outline"
                     onClick={() => void previewProjects()}
-                    disabled={previewingProjects || syncingProjects || syncingEmployees || !environmentConfig?.configured}
+                    disabled={previewingBranches || syncingBranches || previewingProjects || syncingProjects || syncingEmployees || !environmentConfig?.configured}
                     className="gap-2"
                   >
                     {previewingProjects ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -231,7 +293,7 @@ export function MarisonIntegrationPanel() {
                   </Button>
                   <Button
                     onClick={syncProjects}
-                    disabled={!projectPreview || previewingProjects || syncingProjects || syncingEmployees}
+                    disabled={!projectPreview || previewingBranches || syncingBranches || previewingProjects || syncingProjects || syncingEmployees}
                     className="gap-2"
                   >
                     {syncingProjects ? <Loader2 className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
@@ -295,6 +357,24 @@ export function MarisonIntegrationPanel() {
           </div>
         )}
 
+        {status.isStaging && branchPreview && (
+          <div className="space-y-4">
+            <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
+              {[
+                ["Sumber kantor", branchPreview.source],
+                ["Kantor baru", branchPreview.toCreate],
+                ["Diperbarui", branchPreview.toUpdate],
+                ["Perlu tinjau", branchPreview.blocked],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="bg-background px-4 py-3">
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {status.isStaging && projectPreview && (
           <div className="space-y-4">
             <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
@@ -334,6 +414,11 @@ export function MarisonIntegrationPanel() {
         {status.isStaging && employeeResult && (
           <p className="text-sm text-muted-foreground">
             Hasil terakhir: {employeeResult.created} dibuat, {employeeResult.updated} diperbarui, {employeeResult.failed} gagal, dan {employeeResult.skipped} dilewati.
+          </p>
+        )}
+        {status.isStaging && branchResult && (
+          <p className="text-sm text-muted-foreground">
+            Hasil kantor cabang terakhir: {branchResult.created} dibuat, {branchResult.updated} diperbarui, dan {branchResult.failed} perlu ditinjau.
           </p>
         )}
         {status.isStaging && projectResult && (

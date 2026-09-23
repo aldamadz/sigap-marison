@@ -65,7 +65,7 @@ export function NonUnitRequestEditor({
           <div>
             <p className="font-semibold text-foreground">Proyek belum terhubung ke Marison</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Pilih proyek yang siap terhubung ke Marison (ID Marison lengkap atau mapping staging trial). Jika belum, admin perlu melengkapinya di Master Proyek.
+              Pilih proyek yang siap terhubung ke Marison (ID Marison lengkap atau pemetaan manual). Jika belum, admin perlu melengkapinya di Master Proyek.
             </p>
           </div>
         </div>

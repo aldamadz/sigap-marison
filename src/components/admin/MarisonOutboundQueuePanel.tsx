@@ -57,19 +57,19 @@ type ReplacementPreflightState = "idle" | "checking" | "ready" | "blocked" | "fa
 const recoveryGuidance: Record<string, { title: string; nextStep: string; href?: string; linkLabel?: string }> = {
   SIGNER_IDENTITY_MISSING: {
     title: "Mapping penandatangan belum lengkap",
-    nextStep: "Lengkapi Identitas External atau Mapping Payload Staging milik penandatangan yang disebutkan.",
+    nextStep: "Lengkapi Identitas External atau pemetaan payload manual milik penandatangan yang disebutkan.",
     href: "/admin/users",
     linkLabel: "Buka User Organization",
   },
   REQUESTER_IDENTITY_MISSING: {
     title: "Mapping pemohon belum lengkap",
-    nextStep: "Lengkapi Identitas External atau Mapping Payload Staging milik pemohon.",
+    nextStep: "Lengkapi Identitas External atau pemetaan payload manual milik pemohon.",
     href: "/admin/users",
     linkLabel: "Buka User Organization",
   },
   BRANCH_IDENTITY_MISSING: {
     title: "Identitas external kantor belum lengkap",
-    nextStep: "Lengkapi Branch ID external atau Mapping Payload Staging pada kantor terkait.",
+    nextStep: "Lengkapi Branch ID external atau pemetaan payload manual pada kantor terkait.",
     href: "/admin/offices",
     linkLabel: "Buka Master Kantor Cabang",
   },
@@ -98,7 +98,7 @@ const recoveryGuidance: Record<string, { title: string; nextStep: string; href?:
 const diagnosisAreaGuidance: Record<string, { title: string; nextStep: string; href?: string; linkLabel?: string }> = {
   identity: {
     title: "Identitas external ditolak",
-    nextStep: "Pastikan pemohon dan setiap penandatangan menggunakan employee external atau Mapping Payload Staging yang valid.",
+    nextStep: "Pastikan pemohon dan setiap penandatangan menggunakan employee external atau pemetaan payload manual yang valid.",
     href: "/admin/users",
     linkLabel: "Buka User Organization",
   },
