@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { User, Role } from '@/types/agenda';
+import { adminUserService, describeAdminUserError } from '@/services/admin-user.service';
 import { updateUserProfile } from '@/services/user.service';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -116,42 +117,40 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
     setFormData(f => ({ ...f, [k]: e.target.value }));
 
   const handleSave = async () => {
+    if (loading) return; // double-submit guard
     if (!user) return;
     if (!formData.email || !formData.fullName || !formData.nik)
       return toast.error('Email, Nama, dan NIK wajib diisi');
 
     setLoading(true);
     try {
-      const authIdentityChanged =
-        formData.email !== (user.email || '') ||
-        formData.fullName !== (user.fullName || '');
+      // Auth identity + full organization profile now go through the SIGAP
+      // backend (service-role key stays server-side). Previously this called
+      // a missing Edge Function for auth identity updates.
+      await adminUserService.updateUser(user.id, {
+        email:         formData.email,
+        full_name:     formData.fullName,
+        nik:           formData.nik,
+        job_title:     formData.jobTitle,
+        role:          formData.role,
+        phone:         formData.phone      || null,
+        join_date:     formData.join_date   || null,
+        resign_date:   formData.resign_date || null,
+        office_id:     formData.officeId     === 'none' ? null : String(formData.officeId),
+        department_id: formData.departmentId === 'none' ? null : String(formData.departmentId),
+        parent_id:     formData.parentId     === 'none' ? null : formData.parentId,
+      });
 
-      if (authIdentityChanged) {
-        const { error: edgeError } = await supabase.functions.invoke('admin-update-user', {
-          body: { userId: user.id, newEmail: formData.email, newFullName: formData.fullName },
-        });
-        if (edgeError) throw new Error(`Auth Update Error: ${edgeError.message}`);
-      }
-
+      // External identity mapping is profile-only and stays on the profile API.
       await updateUserProfile(user.id, {
-        ...(authIdentityChanged ? {} : { fullName: formData.fullName, email: formData.email }),
-        nik:          formData.nik,
-        jobTitle:     formData.jobTitle,
-        role:         formData.role,
-        phone:        formData.phone      || null,
-        join_date:    formData.join_date   || null,
-        resign_date:  formData.resign_date || null,
-        officeId:     formData.officeId     === 'none' ? null : String(formData.officeId),
-        departmentId: formData.departmentId === 'none' ? null : String(formData.departmentId),
-        parentId:     formData.parentId     === 'none' ? null : formData.parentId,
         marisonEmployeeId: formData.marisonEmployeeId.trim() || null,
       });
 
       toast.success('Data karyawan berhasil diperbarui');
       onSuccess();
       onClose();
-    } catch (err: any) {
-      toast.error('Gagal memperbarui: ' + (err.message || 'Terjadi kesalahan'));
+    } catch (err) {
+      toast.error('Gagal memperbarui: ' + describeAdminUserError(err));
     } finally {
       setLoading(false);
     }
