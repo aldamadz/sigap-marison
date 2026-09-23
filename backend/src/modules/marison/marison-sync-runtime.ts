@@ -53,14 +53,14 @@ export type MarisonSyncDependencies = {
     supabase: SupabaseClientStructural;
     branches: unknown[];
     employees: unknown[];
-    defaultPassword: string | null;
+    defaultPassword: string;
     environment: string;
   }) => unknown;
 };
 
 export type MarisonEmployeeSyncWriteAvailability = {
   supabase: SupabaseClientStructural;
-  defaultPassword: string | null;
+  defaultPassword: string;
 };
 
 /**
@@ -125,8 +125,13 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   };
 
   const marisonDefaultPassword = () => {
-    if (base.deploymentEnvironment !== "staging") return null;
-    const value = base.readEnv("STAGING_DEFAULT_USER_PASSWORD");
+    const passwordVariable = base.deploymentEnvironment === "production"
+      ? "MARISON_PRODUCTION_DEFAULT_USER_PASSWORD"
+      : base.deploymentEnvironment === "staging"
+        ? "STAGING_DEFAULT_USER_PASSWORD"
+        : null;
+    if (!passwordVariable) return null;
+    const value = base.readEnv(passwordVariable);
     if (typeof value !== "string" || value.length < 8) return null;
     return value;
   };
@@ -134,11 +139,11 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   const assertMarisonEmployeeSyncWriteAvailable = (): MarisonEmployeeSyncWriteAvailability => {
     const supabase = base.assertMarisonEmployeeSyncInfraAvailable();
     const defaultPassword = marisonDefaultPassword();
-    if (base.deploymentEnvironment === "staging" && !defaultPassword) {
-      throw errorWithStatus("Konfigurasi sinkronisasi karyawan belum lengkap.", 503);
-    }
     if (base.deploymentEnvironment !== "staging" && base.deploymentEnvironment !== "production") {
       throw errorWithStatus("Environment sinkronisasi karyawan tidak didukung.", 503);
+    }
+    if (!defaultPassword) {
+      throw errorWithStatus("Konfigurasi sinkronisasi karyawan belum lengkap.", 503);
     }
     return { supabase, defaultPassword };
   };

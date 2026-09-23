@@ -295,16 +295,20 @@ describe("syncMarisonEmployees", () => {
     await expect(h.runtime.syncMarisonEmployees(manualReq())).rejects.toMatchObject({ status: 503 });
   });
 
-  it("production tidak membaca password staging dan meneruskan null ke executor", async () => {
+  it("production hanya membaca password bootstrap production dan meneruskannya ke executor", async () => {
     h.deps.deploymentEnvironment = "production";
-    h.deps.readEnv = vi.fn(() => { throw new Error("Password staging tidak boleh dibaca di production"); });
+    const productionPassword = "production-bootstrap-123";
+    h.deps.readEnv = vi.fn((name: string) => (
+      name === "MARISON_PRODUCTION_DEFAULT_USER_PASSWORD" ? productionPassword : undefined
+    ));
     h.runtime = createMarisonSyncRuntime(h.deps);
 
     await h.runtime.syncMarisonEmployees(manualReq());
 
-    expect(h.deps.readEnv).not.toHaveBeenCalled();
+    expect(h.deps.readEnv).toHaveBeenCalledWith("MARISON_PRODUCTION_DEFAULT_USER_PASSWORD");
+    expect(h.deps.readEnv).not.toHaveBeenCalledWith("STAGING_DEFAULT_USER_PASSWORD");
     expect(h.deps.executeMarisonEmployeeSync).toHaveBeenCalledWith(expect.objectContaining({
-      defaultPassword: null,
+      defaultPassword: productionPassword,
       environment: "production",
     }));
   });

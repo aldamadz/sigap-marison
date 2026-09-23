@@ -311,16 +311,22 @@ describe("Marison employee sync", () => {
     expect(existingAuthUpdate).not.toContain("password:");
   });
 
-  it("does not create inaccessible production accounts during employee sync", () => {
+  it("uses NIK as the primary employee identity and provisions a new production account only from configured input", () => {
     const syncService = read("server/marison-employee-sync.mjs");
-    const productionBranch = syncService.slice(
-      syncService.indexOf('if (environment === "production")'),
-      syncService.indexOf("const { data: authData", syncService.indexOf('if (environment === "production")')),
+    const resolver = syncService.slice(
+      syncService.indexOf("const resolveExistingProfile"),
+      syncService.indexOf("const buildEmployeePlan"),
+    );
+    const executor = syncService.slice(
+      syncService.indexOf("export const executeMarisonEmployeeSync"),
+      syncService.indexOf("const sanitizeSyncIssueDetails"),
     );
 
-    expect(productionBranch).toContain("Akun Auth belum tersedia; buat akun melalui Manajemen User sebelum sinkronisasi.");
-    expect(productionBranch).toContain("result.skipped += 1");
-    expect(productionBranch).toContain("continue;");
-    expect(productionBranch).not.toContain("createUser");
+    expect(resolver.indexOf("nikRows")).toBeLessThan(resolver.indexOf("byExternalId"));
+    expect(resolver).not.toContain("name_requires_review");
+    expect(executor).toContain("environment === \"production\"");
+    expect(executor).toContain("defaultPassword");
+    expect(executor).toContain("supabase.auth.admin.createUser");
+    expect(executor).not.toContain("Akun Auth belum tersedia; buat akun melalui Manajemen User sebelum sinkronisasi.");
   });
 });
