@@ -1002,23 +1002,24 @@ describe("Work Calendar — batas CAL-03 F8 penutupan produk", () => {
     expect(readme).toContain("CAL-03_WORK_CALENDAR.md");
   });
 
-  it("mencatat CAL-03 F1–F8 sebagai kandidat production tanpa menimpa riwayat rilis", () => {
+  it("mencatat CAL-03 F1–F8 pada riwayat rilis production", () => {
     const changelog = readFileSync(join(root, "docs", "versi", "changelog.md"), "utf8");
 
-    // Entri tetap berada pada "Rilis Mendatang" sampai deployment production
-    // selesai, sedangkan riwayat production yang sudah ada harus dipertahankan.
     const upcomingStart = changelog.indexOf("## 2. Rilis Mendatang");
     const releaseHistoryStart = changelog.indexOf("## 3. Riwayat Rilis");
     expect(upcomingStart).toBeGreaterThan(-1);
     expect(releaseHistoryStart).toBeGreaterThan(upcomingStart);
 
     const upcoming = changelog.slice(upcomingStart, releaseHistoryStart);
-    expect(upcoming).toContain("CAL-03");
-    for (const phase of ["F1", "F2", "F3", "F4A", "F4B", "F5", "F6", "F7", "F8"]) {
-      expect(upcoming).toContain(phase);
-    }
+    expect(upcoming).toContain("Tidak ada kandidat rilis yang belum dipromosikan");
 
     const releaseHistory = changelog.slice(releaseHistoryStart);
+    expect(releaseHistory).toContain("CAL-03");
+    expect(releaseHistory).toContain("2026-09-23");
+    expect(releaseHistory).toContain("#333");
+    for (const phase of ["F1", "F2", "F3", "F4A", "F4B", "F5", "F6", "F7", "F8"]) {
+      expect(releaseHistory).toContain(phase);
+    }
     expect(releaseHistory).toContain("Alur registrasi bertahap");
   });
 
