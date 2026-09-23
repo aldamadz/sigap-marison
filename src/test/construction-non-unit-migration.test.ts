@@ -28,4 +28,3 @@ describe("branch construction category migration", () => {
     expect(migration).not.toContain("surat_registration_drafts");
   });
 });
-

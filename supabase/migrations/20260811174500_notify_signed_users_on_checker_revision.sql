@@ -103,4 +103,3 @@ where sre.status = 'open'
       and n.data->>'revision_event_id' = sre.id::text
       and n.data->>'event_type' = 'unit_revision_checker_reopened'
   );
-
