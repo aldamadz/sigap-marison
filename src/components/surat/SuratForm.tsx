@@ -3615,7 +3615,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
                         <div className="mt-1 text-xs">
                           {hasRegisteredProjectCandidates
-                            ? "Mapping proyek/kantor Marison (termasuk mapping staging trial) perlu dilengkapi admin di Master Proyek."
+                            ? "Pemetaan proyek/kantor Marison perlu dilengkapi admin di Master Proyek."
                             : "Belum ada proyek external yang tersedia untuk kantor ini."}
                         </div>
                       </div>
@@ -3627,7 +3627,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     )}
                     {requiresMarisonProject && unavailableNonUnitProjectCount > 0 && (
                       <p className="px-1 text-xs text-muted-foreground">
-                        {unavailableNonUnitProjectCount} proyek belum tersedia karena mapping Marison (atau mapping staging trial) belum lengkap.
+                        {unavailableNonUnitProjectCount} proyek belum tersedia karena pemetaan Marison belum lengkap.
                       </p>
                     )}
                   </div>

@@ -136,6 +136,7 @@ export default function MasterProjectManagementPage() {
         if (duplicate) {
           throw new Error(`ID Proyek Marison sudah dipakai oleh ${duplicate.name}.`);
         }
+        }
       }
       const payload = { 
         name: formData.name.trim(),
@@ -243,7 +244,7 @@ export default function MasterProjectManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
+           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Memakai pemetaan manual</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
           <Button onClick={() => handleOpenModal()} className="h-11 px-5 text-sm font-semibold">
             <Plus className="mr-2 h-4 w-4" /> Tambah manual
           </Button>
@@ -259,7 +260,7 @@ export default function MasterProjectManagementPage() {
               <TableHead className="w-[450px] text-xs font-semibold">Detail proyek</TableHead>
               <TableHead className="text-xs font-semibold">Kantor cabang</TableHead>
               <TableHead className="text-xs font-semibold">External</TableHead>
-              <TableHead className="min-w-[270px] text-xs font-semibold">Mapping Payload Staging</TableHead>
+              <TableHead className="min-w-[270px] text-xs font-semibold">Status Payload</TableHead>
               <TableHead className="text-xs font-semibold">Entitas</TableHead>
               <TableHead className="text-xs font-semibold">Keterangan</TableHead>
               <TableHead className="pr-8 text-right text-xs font-semibold">Aksi</TableHead>
@@ -410,7 +411,7 @@ export default function MasterProjectManagementPage() {
               <div>
                 <p className="text-sm font-semibold">Mapping Marison</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Kosongkan jika proyek hanya digunakan di SIGAP. Isi berdasarkan data API staging agar proyek dapat dipakai untuk integrasi Non Unit.
+                  Kosongkan jika proyek hanya digunakan di SIGAP. Isi berdasarkan data API production agar proyek dapat dipakai untuk integrasi Non Unit.
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
