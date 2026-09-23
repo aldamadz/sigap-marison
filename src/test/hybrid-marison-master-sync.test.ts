@@ -32,6 +32,23 @@ describe("Hybrid Marison master sync", () => {
     expect(compose).toContain('MARISON_SYNC_ENABLED: "true"');
   });
 
+  it("keeps the production scheduler opt-in and never provisions inaccessible Auth users", () => {
+    const productionCompose = read("docker-compose.prod.yml");
+    const runtime = read("backend/src/modules/marison/marison-sync-runtime.ts");
+    const sync = read("server/marison-employee-sync.mjs");
+    const migration = read("supabase/migrations/20260923120000_production_marison_master_sync.sql");
+
+    expect(productionCompose).toContain("agenda-marison-sync:");
+    expect(productionCompose).toContain('MARISON_SYNC_ENABLED: "${MARISON_SYNC_ENABLED:-false}"');
+    expect(productionCompose).toContain("http://agenda-flow/api/internal/marison/directory-sync");
+    expect(runtime).toContain('if (base.deploymentEnvironment !== "staging") return null;');
+    expect(sync).toContain('if (environment === "production")');
+    expect(sync).toContain("Akun Auth belum tersedia; buat akun melalui Manajemen User sebelum sinkronisasi.");
+    expect(sync).not.toContain("randomBytes(32)");
+    expect(migration).toContain("marison_sync_runs_one_active_uidx");
+    expect(migration).toContain("master_projects_marison_project_id_uidx");
+  });
+
   it("fetches branches before employees and never resets an existing password", () => {
     const server = read("backend/src/domain-runtime.ts");
     const sync = read("server/marison-employee-sync.mjs");

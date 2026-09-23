@@ -53,13 +53,14 @@ export type MarisonSyncDependencies = {
     supabase: SupabaseClientStructural;
     branches: unknown[];
     employees: unknown[];
-    defaultPassword: string;
+    defaultPassword: string | null;
+    environment: string;
   }) => unknown;
 };
 
 export type MarisonEmployeeSyncWriteAvailability = {
   supabase: SupabaseClientStructural;
-  defaultPassword: string;
+  defaultPassword: string | null;
 };
 
 /**
@@ -124,6 +125,7 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   };
 
   const marisonDefaultPassword = () => {
+    if (base.deploymentEnvironment !== "staging") return null;
     const value = base.readEnv("STAGING_DEFAULT_USER_PASSWORD");
     if (typeof value !== "string" || value.length < 8) return null;
     return value;
@@ -132,8 +134,11 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   const assertMarisonEmployeeSyncWriteAvailable = (): MarisonEmployeeSyncWriteAvailability => {
     const supabase = base.assertMarisonEmployeeSyncInfraAvailable();
     const defaultPassword = marisonDefaultPassword();
-    if (!defaultPassword) {
+    if (base.deploymentEnvironment === "staging" && !defaultPassword) {
       throw errorWithStatus("Konfigurasi sinkronisasi karyawan belum lengkap.", 503);
+    }
+    if (base.deploymentEnvironment !== "staging" && base.deploymentEnvironment !== "production") {
+      throw errorWithStatus("Environment sinkronisasi karyawan tidak didukung.", 503);
     }
     return { supabase, defaultPassword };
   };
@@ -223,6 +228,7 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
           supabase,
           ...source,
           defaultPassword,
+          environment: base.deploymentEnvironment,
         }),
       });
     } finally {
@@ -256,6 +262,7 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
           supabase,
           ...source,
           defaultPassword,
+          environment: base.deploymentEnvironment,
         }),
       });
       const projectSource = await base.getMarisonProjectSyncSource();

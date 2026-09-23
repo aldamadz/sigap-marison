@@ -274,6 +274,7 @@ describe("syncMarisonEmployees", () => {
       branches: [{ id: "b1" }],
       employees: [{ id: "e1" }],
       defaultPassword: VALID_PASSWORD,
+      environment: "staging",
     });
     expect(result).toMatchObject({ synced: 1, runId: "run-1" });
   });
@@ -292,6 +293,20 @@ describe("syncMarisonEmployees", () => {
   it("password terlalu pendek -> 503", async () => {
     setPassword("short");
     await expect(h.runtime.syncMarisonEmployees(manualReq())).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("production tidak membaca password staging dan meneruskan null ke executor", async () => {
+    h.deps.deploymentEnvironment = "production";
+    h.deps.readEnv = vi.fn(() => { throw new Error("Password staging tidak boleh dibaca di production"); });
+    h.runtime = createMarisonSyncRuntime(h.deps);
+
+    await h.runtime.syncMarisonEmployees(manualReq());
+
+    expect(h.deps.readEnv).not.toHaveBeenCalled();
+    expect(h.deps.executeMarisonEmployeeSync).toHaveBeenCalledWith(expect.objectContaining({
+      defaultPassword: null,
+      environment: "production",
+    }));
   });
 
   it("infra non-staging -> error diteruskan sebelum password/confirm", async () => {

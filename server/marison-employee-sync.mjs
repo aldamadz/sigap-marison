@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-
 const asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
 export const normalizeMarisonName = (value) => String(value ?? "")
@@ -861,11 +859,17 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
         const { error: authError } = await supabase.auth.admin.updateUserById(userId, authUpdates);
         if (authError) throw authError;
       } else {
+        if (environment === "production") {
+          result.skipped += 1;
+          result.errors.push(publicIssue({
+            employee,
+            reason: "Akun Auth belum tersedia; buat akun melalui Manajemen User sebelum sinkronisasi.",
+          }));
+          continue;
+        }
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: item.email,
-          password: environment === "production"
-            ? randomBytes(32).toString("base64url")
-            : defaultPassword,
+          password: defaultPassword,
           email_confirm: true,
           user_metadata: { full_name: String(employee.name || "").trim() },
         });

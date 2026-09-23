@@ -58,3 +58,25 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+  agenda-marison-sync:
+    image: agenda-flow:production
+    container_name: agenda-marison-sync
+    restart: always
+    command: ["node", "server/marison-sync-worker.mjs"]
+    depends_on:
+      agenda-flow:
+        condition: service_healthy
+    environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
+      MARISON_SYNC_ENABLED: "${MARISON_SYNC_ENABLED:-false}"
+      MARISON_SYNC_INTERNAL_URL: "http://agenda-flow/api/internal/marison/directory-sync"
+      MARISON_SYNC_CRON_TOKEN: "${MARISON_SYNC_CRON_TOKEN:-}"
+    env_file:
+      - path: .env.production
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
