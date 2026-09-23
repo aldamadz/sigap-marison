@@ -310,4 +310,17 @@ describe("Marison employee sync", () => {
     );
     expect(existingAuthUpdate).not.toContain("password:");
   });
+
+  it("does not create inaccessible production accounts during employee sync", () => {
+    const syncService = read("server/marison-employee-sync.mjs");
+    const productionBranch = syncService.slice(
+      syncService.indexOf('if (environment === "production")'),
+      syncService.indexOf("const { data: authData", syncService.indexOf('if (environment === "production")')),
+    );
+
+    expect(productionBranch).toContain("Akun Auth belum tersedia; buat akun melalui Manajemen User sebelum sinkronisasi.");
+    expect(productionBranch).toContain("result.skipped += 1");
+    expect(productionBranch).toContain("continue;");
+    expect(productionBranch).not.toContain("createUser");
+  });
 });
