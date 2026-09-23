@@ -41,7 +41,7 @@ describe("Hybrid Marison master sync", () => {
       preview.indexOf("const getMarisonEmployeeSyncSource"),
       preview.indexOf("const previewMarisonBranches"),
     );
-    expect(sourceLoader).toContain("marisonDeploymentEnvironment");
+    expect(sourceLoader).toContain("deps.deploymentEnvironment");
     expect(sourceLoader).not.toContain('getAllMarisonCollection("staging"');
     expect(sourceLoader.indexOf('"/branches"')).toBeLessThan(sourceLoader.indexOf('"/employees"'));
 

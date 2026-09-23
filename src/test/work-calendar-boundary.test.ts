@@ -1002,11 +1002,11 @@ describe("Work Calendar — batas CAL-03 F8 penutupan produk", () => {
     expect(readme).toContain("CAL-03_WORK_CALENDAR.md");
   });
 
-  it("mencatat CAL-03 F1–F7 sebagai kandidat staging tanpa menyentuh riwayat rilis production", () => {
+  it("mencatat CAL-03 F1–F8 sebagai kandidat production tanpa menimpa riwayat rilis", () => {
     const changelog = readFileSync(join(root, "docs", "versi", "changelog.md"), "utf8");
 
-    // Entri gabungan masuk ke bagian "Rilis Mendatang" (staging), bukan ke
-    // bagian "Riwayat Rilis" (production).
+    // Entri tetap berada pada "Rilis Mendatang" sampai deployment production
+    // selesai, sedangkan riwayat production yang sudah ada harus dipertahankan.
     const upcomingStart = changelog.indexOf("## 2. Rilis Mendatang");
     const releaseHistoryStart = changelog.indexOf("## 3. Riwayat Rilis");
     expect(upcomingStart).toBeGreaterThan(-1);
@@ -1014,13 +1014,12 @@ describe("Work Calendar — batas CAL-03 F8 penutupan produk", () => {
 
     const upcoming = changelog.slice(upcomingStart, releaseHistoryStart);
     expect(upcoming).toContain("CAL-03");
-    for (const phase of ["F1", "F2", "F3", "F4A", "F4B", "F5", "F6", "F7"]) {
+    for (const phase of ["F1", "F2", "F3", "F4A", "F4B", "F5", "F6", "F7", "F8"]) {
       expect(upcoming).toContain(phase);
     }
 
-    // Riwayat rilis production tetap kosong sampai instruksi rilis eksplisit.
     const releaseHistory = changelog.slice(releaseHistoryStart);
-    expect(releaseHistory).toContain("Belum ada rilis resmi yang tercatat");
+    expect(releaseHistory).toContain("Alur registrasi bertahap");
   });
 
   it("tidak menambah migration atau kolom database baru pada fase penutupan", () => {
