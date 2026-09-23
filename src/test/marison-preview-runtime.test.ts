@@ -129,12 +129,12 @@ describe("Marison Preview Runtime", () => {
     expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("production", "/branches");
   });
 
-  it("employee loader memakai literal staging", async () => {
+  it("employee loader memakai deployment environment", async () => {
     deps.deploymentEnvironment = "production";
     deps.getAllMarisonCollection.mockResolvedValue([]);
     await runtime.getMarisonEmployeeSyncSource();
-    expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("staging", "/branches");
-    expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("staging", "/employees");
+    expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("production", "/branches");
+    expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("production", "/employees");
   });
 
   it("project loader mengambil branches dan projects", async () => {
