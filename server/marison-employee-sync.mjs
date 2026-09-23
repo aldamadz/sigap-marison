@@ -317,15 +317,17 @@ const syncBranches = async (supabase, branches, dryRun) => {
     result.created += 1;
     if (dryRun) continue;
     const code = chooseOfficeCode(branch, usedCodes);
+    const officeType = deriveMarisonOfficeType(branch);
     const payload = {
       code,
       name: String(branch.name || `Branch ${externalId}`).trim(),
-      kedudukan: deriveMarisonOfficeType(branch),
+      kedudukan: officeType,
+      parent_id: null,
       marison_branch_id: externalId,
       marison_branch_code: String(branch.code || "").trim() || null,
       marison_synced_at: new Date().toISOString(),
       marison_last_seen_at: new Date().toISOString(),
-      marison_hierarchy_confirmed: false,
+      marison_hierarchy_confirmed: officeType === "Pusat",
     };
     const { data, error: insertError } = await supabase
       .from("master_offices")
