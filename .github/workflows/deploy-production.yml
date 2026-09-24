@@ -1,0 +1,64 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [Deploy Staging]
+    types: [completed]
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigap-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.parity.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Confirm live staging contains main
+        id: parity
+        run: bash scripts/check-staging-parity.sh
+
+  quality:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --workspaces --include-workspace-root
+      - run: npm run quality:ci
+      - run: npm audit --audit-level=high
+
+  deploy:
+    needs: [preflight, quality]
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: [self-hosted, linux, x64, sigap-deploy]
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Recheck live staging and deploy production app only
+        run: |
+          bash scripts/check-staging-parity.sh --require-ready
+          bash scripts/deploy-app.sh production "$(git rev-parse HEAD)"

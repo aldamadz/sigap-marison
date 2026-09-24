@@ -1,0 +1,14 @@
+[Unit]
+Description=SIGAP GitHub Actions deployment runner
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/marison/actions-runner-sigap
+ExecStart=/home/marison/actions-runner-sigap/run.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
