@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const staging = readFileSync(resolve(".github/workflows/deploy-staging.yml"), "utf8");
 const production = readFileSync(resolve(".github/workflows/deploy-production.yml"), "utf8");
 const deploy = readFileSync(resolve("scripts/deploy-app.sh"), "utf8");
+const migrationGate = readFileSync(resolve("scripts/deploy-migration-gate.mjs"), "utf8");
 const parity = readFileSync(resolve("scripts/check-staging-parity.sh"), "utf8");
 
 describe("automatic deployment boundaries", () => {
@@ -37,7 +38,8 @@ describe("automatic deployment boundaries", () => {
     expect(production).not.toContain("secrets.");
     expect(deploy).toContain('env_file="/home/marison/sigap-deploy/$environment/.env.$environment"');
     expect(deploy).toContain('up -d --no-deps --no-build "$service"');
-    expect(deploy).toContain("supabase/migrations");
+    expect(deploy).toContain("scripts/deploy-migration-gate.mjs");
+    expect(migrationGate).toContain("supabase/migrations");
     expect(deploy).toContain("server/marison-sync-worker.mjs");
     expect(deploy).toContain('git merge-base --is-ancestor "$previous_sha" "$target_sha"');
     expect(deploy).toContain('if [[ "$mode" == --check-only ]]');
