@@ -47,11 +47,6 @@ previous_sha="$(curl --fail --silent --show-error --connect-timeout 10 --max-tim
 git cat-file -e "${previous_sha}^{commit}" || { echo 'Live SHA is absent from checkout history.' >&2; exit 1; }
 git merge-base --is-ancestor "$previous_sha" "$target_sha" || { echo 'Target is not a descendant of live runtime.' >&2; exit 1; }
 
-if [[ "$previous_sha" == "$target_sha" ]]; then
-  echo "$environment is already at $target_sha."
-  exit 0
-fi
-
 if [[ -n "$(git diff --name-only "$previous_sha" "$target_sha" -- supabase/migrations)" ]]; then
   echo 'Migration files changed since live runtime; apply and verify them before a controlled app deploy.' >&2
   exit 1
@@ -107,6 +102,11 @@ trap cleanup EXIT
 
 if [[ "$mode" == --check-only ]]; then
   echo "$environment deployment preflight passed; no container was changed."
+  exit 0
+fi
+
+if [[ "$previous_sha" == "$target_sha" ]]; then
+  echo "$environment is already at $target_sha."
   exit 0
 fi
 
