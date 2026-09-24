@@ -4,7 +4,7 @@ set -euo pipefail
 environment="${1:-}"
 target_sha="${2:-}"
 mode="${3:-}"
-[[ -z "$mode" || "$mode" == --check-only ]] || { echo 'Invalid deploy mode.' >&2; exit 2; }
+[[ -z "$mode" || "$mode" == --check-only || "$mode" =~ ^[0-9]{14}(,[0-9]{14})*$ ]] || { echo 'Invalid deploy mode.' >&2; exit 2; }
 case "$environment" in
   staging)
     service=agenda-flow-staging
@@ -47,10 +47,9 @@ previous_sha="$(curl --fail --silent --show-error --connect-timeout 10 --max-tim
 git cat-file -e "${previous_sha}^{commit}" || { echo 'Live SHA is absent from checkout history.' >&2; exit 1; }
 git merge-base --is-ancestor "$previous_sha" "$target_sha" || { echo 'Target is not a descendant of live runtime.' >&2; exit 1; }
 
-if [[ -n "$(git diff --name-only "$previous_sha" "$target_sha" -- supabase/migrations)" ]]; then
-  echo 'Migration files changed since live runtime; apply and verify them before a controlled app deploy.' >&2
-  exit 1
-fi
+migration_ack="$mode"
+[[ "$mode" != --check-only ]] || migration_ack=""
+node scripts/deploy-migration-gate.mjs "$previous_sha" "$target_sha" "$migration_ack"
 
 worker_changes="$(git diff --name-only "$previous_sha" "$target_sha" -- \
   pdf-worker.mjs pgd-pdf-renderer.mjs recommendation-pdf.mjs recommendation-native-pdf.mjs \
