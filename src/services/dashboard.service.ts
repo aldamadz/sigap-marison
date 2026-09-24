@@ -1,5 +1,6 @@
 // frontend/src/services/dashboard.service.ts
 import { supabase } from '@/lib/supabase';
+import { isWorkCalendarEnabled } from '@/lib/feature-availability';
 import type { AgendaStatus } from '@/types/agenda';
 import type { 
   DepartmentActivity, 
@@ -292,7 +293,9 @@ export async function getRecentActivities(
 
     const [operational, workCalendarEvents] = await Promise.all([
       supabase.rpc('get_my_recent_operational_activities', { p_limit: limit }),
-      workCalendarRepository.listRecentActivity({ limit }).catch(() => []),
+      isWorkCalendarEnabled
+        ? workCalendarRepository.listRecentActivity({ limit }).catch(() => [])
+        : Promise.resolve([]),
     ]);
 
     if (operational.error) throw operational.error;
