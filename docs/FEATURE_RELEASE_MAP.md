@@ -234,6 +234,7 @@ Temuan keamanan outbound:
 | NTF-04 | Email notifikasi dan secure file link | Production + Staging jika SMTP tersedia | SMTP, settings, file tokens | Storage, recipients | Matikan config sebelum menghapus route |
 | NTF-05 | Indikator perhatian sidebar beranimasi | Staging only | Badge numerik, warna baris berdasarkan jenis perhatian, mode sidebar penuh/kecil | NTF-02, attention state, prefers-reduced-motion | UI-only; dapat ditarik tanpa mengubah data maupun penghitung attention |
 | OPS-04 | Pemulihan kontrak runtime production | Production hotfix candidate | Migration `20260923130000_production_runtime_contract_recovery.sql`, RPC attention/monitoring, kolom konfigurasi Kegunaan, dan feature gate Kalender Kerja | NTF-02, DOC-02, SUR-01, CAL-03 | Migration hanya additive/`create or replace`; tidak boleh mengarsipkan workflow, fixture, atau data surat. Kalender Kerja dinonaktifkan pada image production melalui `VITE_WORK_CALENDAR_ENABLED=false` dan tetap aktif di staging. |
+| OPS-06 | Quality gate berbasis perubahan | Development branch | `scripts/test-changed.mjs`, `scripts/quality-live-base.sh`, workflow CI/deploy | Git history dan runtime `/health/version` | Suite penuh tetap tersedia lewat `quality:ci`; deploy membandingkan seluruh perubahan sejak SHA runtime, bukan hanya commit terakhir. |
 | AUD-01 | Activity/Audit Log admin | Production + Staging | Audit page/service | `activity_logs`, admin | UI dapat ditarik, log sebaiknya dipertahankan |
 
 ### 4.8 Master Data dan Konfigurasi Admin

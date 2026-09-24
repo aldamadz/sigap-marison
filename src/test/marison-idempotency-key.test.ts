@@ -142,10 +142,12 @@ describe("disposable SQL runner wired into quality gate", () => {
     expect(nodeRunner).toContain("fixtureSql + migrations + integrationTests");
   });
 
-  it("package.json quality includes only test:idempotency-key-sql (not outbound-replacement)", () => {
+  it("runs idempotency SQL only when its inputs change", () => {
     const pkg = JSON.parse(read("package.json"));
+    const changedRunner = read("scripts/test-changed.mjs");
     expect(pkg.scripts["test:idempotency-key-sql"]).toContain("test-idempotency-key-sql.mjs");
-    expect(pkg.scripts.quality).toContain("test:idempotency-key-sql");
+    expect(pkg.scripts.quality).toContain("quality:changed");
+    expect(changedRunner).toContain('gates.add("test:idempotency-key-sql")');
     expect(pkg.scripts.quality).not.toContain("test:outbound-replacement-sql");
   });
 });

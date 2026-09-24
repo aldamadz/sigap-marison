@@ -27,6 +27,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          fetch-depth: 0
       - name: Confirm live staging contains main
         id: parity
         run: bash scripts/check-staging-parity.sh
@@ -44,7 +45,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --workspaces --include-workspace-root
-      - run: npm run quality:ci
+      - run: bash scripts/quality-live-base.sh production
+      - run: npm run quality:changed
       - run: npm audit --audit-level=high
 
   deploy:

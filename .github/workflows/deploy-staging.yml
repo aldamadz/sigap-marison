@@ -16,12 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci --workspaces --include-workspace-root
-      - run: npm run quality:ci
+      - run: bash scripts/quality-live-base.sh staging
+      - run: npm run quality:changed
       - run: npm audit --audit-level=high
 
   deploy:
