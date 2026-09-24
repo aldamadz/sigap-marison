@@ -16,6 +16,10 @@ editing an applied migration or marking an unapplied migration as applied.
 The deploy script checks the checkout SHA, environment identity, image revision,
 container health, and public `/health/version`, then smoke-tests live/ready and
 the root page. On a failed recreation, it restores the previous app image.
+For a read-only host preflight, run `bash scripts/deploy-app.sh staging <sha> --check-only`
+or the production equivalent from a clean checkout on the runner
+host. This verifies source, migration/worker delta, and Compose environment
+identity without building or recreating a container.
 
 The production workflow also runs when the staging workflow succeeds. A push to
 `main` that has not yet been merged and deployed to staging is skipped, not

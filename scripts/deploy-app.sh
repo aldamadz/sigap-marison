@@ -3,6 +3,8 @@ set -euo pipefail
 
 environment="${1:-}"
 target_sha="${2:-}"
+mode="${3:-}"
+[[ -z "$mode" || "$mode" == --check-only ]] || { echo 'Invalid deploy mode.' >&2; exit 2; }
 case "$environment" in
   staging)
     service=agenda-flow-staging
@@ -102,6 +104,11 @@ trap cleanup EXIT
     }
   });
 ' "$service" "$supabase_ref" "$environment" "$domain"
+
+if [[ "$mode" == --check-only ]]; then
+  echo "$environment deployment preflight passed; no container was changed."
+  exit 0
+fi
 
 "${compose[@]}" build "$service"
 image_sha="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"

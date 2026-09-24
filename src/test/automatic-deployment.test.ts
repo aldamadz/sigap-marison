@@ -36,6 +36,7 @@ describe("automatic deployment boundaries", () => {
     expect(deploy).toContain("supabase/migrations");
     expect(deploy).toContain("server/marison-sync-worker.mjs");
     expect(deploy).toContain('git merge-base --is-ancestor "$previous_sha" "$target_sha"');
+    expect(deploy).toContain('if [[ "$mode" == --check-only ]]');
     expect(deploy).not.toContain("db push");
     expect(deploy).not.toContain("migration repair");
   });
