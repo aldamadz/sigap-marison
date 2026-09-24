@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMarisonRecoveryIssue,
   isPrePostRecoveryEligible,
+  isOutboundRecoveryConfirmed,
   normalizePayloadResolutionSources,
 } from "../../server/marison-payload-identity.mjs";
 
@@ -70,13 +71,25 @@ describe("MRN-16 canonical resolution sources", () => {
     });
   });
 
-  it("allows only failed pre-POST staging jobs to recover", () => {
+  it("allows only matching-environment failed pre-POST jobs to recover", () => {
     const base = { environment: "staging", status: "failed_terminal", post_started_at: null, response: null, external_reference: null };
     expect(isPrePostRecoveryEligible(base, "staging")).toBe(true);
+    expect(isPrePostRecoveryEligible({ ...base, environment: "production" }, "production")).toBe(true);
     expect(isPrePostRecoveryEligible({ ...base, environment: "production" }, "staging")).toBe(false);
     expect(isPrePostRecoveryEligible({ ...base, post_started_at: "2026-08-03T00:00:00Z" }, "staging")).toBe(false);
+    expect(isPrePostRecoveryEligible({ ...base, response: {} }, "staging")).toBe(false);
+    expect(isPrePostRecoveryEligible({ ...base, external_reference: "received" }, "production")).toBe(false);
     expect(isPrePostRecoveryEligible(base, "production")).toBe(false);
+    expect(isPrePostRecoveryEligible(base, "unknown")).toBe(false);
     expect(isPrePostRecoveryEligible(null, "staging")).toBe(false);
+  });
+
+  it("requires explicit confirmation for production pre-POST recovery", () => {
+    expect(isOutboundRecoveryConfirmed("reopen_terminal_pre_post", "production", undefined)).toBe(false);
+    expect(isOutboundRecoveryConfirmed("reopen_terminal_pre_post", "production", false)).toBe(false);
+    expect(isOutboundRecoveryConfirmed("reopen_terminal_pre_post", "production", true)).toBe(true);
+    expect(isOutboundRecoveryConfirmed("reopen_terminal_pre_post", "staging", undefined)).toBe(true);
+    expect(isOutboundRecoveryConfirmed("mark_succeeded", "production", undefined)).toBe(true);
   });
 
   it.each([

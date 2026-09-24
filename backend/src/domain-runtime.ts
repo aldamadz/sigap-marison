@@ -71,6 +71,7 @@ import {
   classifyMarisonRecoveryIssue,
   getCanonicalRequesterProfileId,
   isPrePostRecoveryEligible,
+  isOutboundRecoveryConfirmed,
   mergePayloadResolutionSources,
   normalizePayloadResolutionSources,
   resolveProfilePayloadIdentity,
@@ -3926,6 +3927,11 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
     err.status = 400;
     throw err;
   }
+  if (!isOutboundRecoveryConfirmed(action, marisonDeploymentEnvironment, payload?.confirmProductionSend)) {
+    const err = new Error("Konfirmasi pengiriman production wajib diberikan.");
+    err.status = 400;
+    throw err;
+  }
   if (action === "reopen_terminal_pre_post") {
     const { data: job, error: jobError } = await supabase.from("marison_outbound_dispatches").select("id, surat_id, environment, status, kind, post_started_at, response, external_reference").eq("id", dispatchId).maybeSingle();
     if (jobError) throw jobError;
@@ -4760,11 +4766,6 @@ export const handleRequest = async (req, res) => {
       if (req.method === "GET" && marisonPreflightMatch) {
         assertSameOrigin(req);
         await requireAdminUser(getBearerToken(req));
-        if (marisonDeploymentEnvironment !== "staging") {
-          const err = new Error("Recovery outbound hanya tersedia di staging.");
-          err.status = 404;
-          throw err;
-        }
         const { data: job, error: jobError } = await supabase
           .from("marison_outbound_dispatches")
           .select("id, surat_id, environment, status, kind, post_started_at, response, external_reference")

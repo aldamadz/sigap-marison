@@ -199,6 +199,7 @@ export function MarisonOutboundQueuePanel() {
   const [reason, setReason] = useState("");
   const [externalReference, setExternalReference] = useState("");
   const [riskConfirmed, setRiskConfirmed] = useState(false);
+  const [productionSendConfirmed, setProductionSendConfirmed] = useState(false);
   const [preflightId, setPreflightId] = useState<string | null>(null);
   const [preflightReason, setPreflightReason] = useState<string | null>(null);
   const [preflightReasonCode, setPreflightReasonCode] = useState<string | null>(null);
@@ -226,6 +227,7 @@ export function MarisonOutboundQueuePanel() {
         reason,
         externalReference: action === "mark_succeeded" ? externalReference : undefined,
         confirmDuplicateRisk: action === "reopen_confirmed_not_received" ? riskConfirmed : undefined,
+        confirmProductionSend: action === "reopen_terminal_pre_post" && environmentStatus?.environment === "production" ? productionSendConfirmed : undefined,
       });
     },
     onSuccess: async () => {
@@ -234,6 +236,7 @@ export function MarisonOutboundQueuePanel() {
       setReason("");
       setExternalReference("");
       setRiskConfirmed(false);
+      setProductionSendConfirmed(false);
       await queryClient.invalidateQueries({ queryKey: ["marison-outbound-dispatches"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Rekonsiliasi gagal"),
@@ -267,6 +270,7 @@ export function MarisonOutboundQueuePanel() {
     setReason("");
     setExternalReference("");
     setRiskConfirmed(false);
+    setProductionSendConfirmed(false);
     setPreflightReason(null);
     setPreflightReasonCode(null);
     setRecoveryState("idle");
@@ -332,10 +336,12 @@ export function MarisonOutboundQueuePanel() {
     setPreflightReasonCode(null);
     setRecoveryState("idle");
     setReason("");
+    setProductionSendConfirmed(false);
   };
   const canSubmit = reason.trim().length > 0
     && (action !== "mark_succeeded" || externalReference.trim().length > 0)
-    && (action !== "reopen_confirmed_not_received" || riskConfirmed);
+    && (action !== "reopen_confirmed_not_received" || riskConfirmed)
+    && (action !== "reopen_terminal_pre_post" || environmentStatus?.environment !== "production" || productionSendConfirmed);
   const activeRecoveryGuidance = preflightReasonCode ? recoveryGuidance[preflightReasonCode] : null;
   const canSubmitReplacement = replacementPreflightState === "ready"
     && replacementPreflightData?.eligible === true
@@ -540,8 +546,8 @@ export function MarisonOutboundQueuePanel() {
               <div role="status" aria-live="polite" className="flex items-start gap-2 rounded-md border border-emerald-300/60 bg-emerald-50 px-3 py-3 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
-                  <p className="font-medium text-foreground">Konfigurasi payload siap</p>
-                  <p className="mt-1 text-muted-foreground">Isi alasan audit untuk membuka kembali job dan membangun payload terbaru.</p>
+                  <p className="font-medium text-foreground">Pemeriksaan awal lulus</p>
+                  <p className="mt-1 text-muted-foreground">Job belum pernah memulai POST. Setelah dibuka ulang, worker akan memprosesnya kembali.</p>
                 </div>
               </div>
             )}
@@ -559,6 +565,12 @@ export function MarisonOutboundQueuePanel() {
               <label className="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-5">
                 <Checkbox checked={riskConfirmed} onCheckedChange={(checked) => setRiskConfirmed(checked === true)} />
                 <span>Saya sudah memastikan request sebelumnya tidak diterima vendor dan memahami risiko data ganda.</span>
+              </label>
+            )}
+            {action === "reopen_terminal_pre_post" && recoveryState === "eligible" && environmentStatus?.environment === "production" && (
+              <label className="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-5">
+                <Checkbox checked={productionSendConfirmed} onCheckedChange={(checked) => setProductionSendConfirmed(checked === true)} />
+                <span>Saya memahami bahwa membuka ulang job ini akan memasukkannya ke antrean production dan worker dapat mengirim POST ke Marison.</span>
               </label>
             )}
           </div>

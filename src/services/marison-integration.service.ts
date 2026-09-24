@@ -265,6 +265,7 @@ export const marisonIntegrationService = {
       reason: string;
       externalReference?: string;
       confirmDuplicateRisk?: boolean;
+      confirmProductionSend?: boolean;
     }
   ) => request<{ success: true }>(`/api/integrations/marison/dispatches/${dispatchId}/reconcile`, {
     method: "POST",

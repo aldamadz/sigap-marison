@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 
 const baseMigration = readFileSync("supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql", "utf8");
 const replacementMigration = readFileSync("supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql", "utf8");
+const recoveryGuardMigration = readFileSync("supabase/migrations/20260924170000_guard_pre_post_outbound_recovery.sql", "utf8");
 
 const fixtureSql = `
 create extension if not exists pgcrypto;
@@ -138,7 +139,43 @@ begin
   if v_count <> 2 then raise exception 'replacement audit is incomplete: %', v_count; end if;
 end $$;
 
-select 'Outbound replacement SQL integration passed' as result;
+do $$
+declare v_id uuid;
+begin
+  insert into public.marison_outbound_dispatches (surat_id, environment, kind, endpoint, idempotency_key, status)
+  values ('10000000-0000-0000-0000-000000000003', 'production', 'unit', '/unit-submissions', 'test:production:prepost', 'failed_terminal')
+  returning id into v_id;
+
+  update public.marison_outbound_dispatches set response = '{}'::jsonb where id = v_id;
+  begin
+    perform public.reconcile_marison_outbound_dispatch(v_id, '00000000-0000-0000-0000-000000000001', 'reopen_terminal_pre_post', 'unsafe response');
+    raise exception 'reopened a job with a vendor response';
+  exception when sqlstate '55000' then null;
+  end;
+
+  update public.marison_outbound_dispatches set response = null, external_reference = 'vendor-id' where id = v_id;
+  begin
+    perform public.reconcile_marison_outbound_dispatch(v_id, '00000000-0000-0000-0000-000000000001', 'reopen_terminal_pre_post', 'unsafe reference');
+    raise exception 'reopened a job with a vendor reference';
+  exception when sqlstate '55000' then null;
+  end;
+
+  update public.marison_outbound_dispatches set external_reference = null where id = v_id;
+  perform public.reconcile_marison_outbound_dispatch(v_id, '00000000-0000-0000-0000-000000000001', 'reopen_terminal_pre_post', 'pre-POST recovery', null, true);
+  if not exists (select 1 from public.marison_outbound_dispatches where id = v_id and status = 'pending' and reconciliation_count = 1) then
+    raise exception 'safe production recovery did not queue exactly once';
+  end if;
+
+  insert into public.marison_outbound_dispatches (surat_id, environment, kind, endpoint, idempotency_key, status)
+  values ('10000000-0000-0000-0000-000000000003', 'staging', 'unit', '/unit-submissions', 'test:staging:prepost', 'failed_terminal')
+  returning id into v_id;
+  perform public.reconcile_marison_outbound_dispatch(v_id, '00000000-0000-0000-0000-000000000001', 'reopen_terminal_pre_post', 'staging pre-POST recovery');
+  if not exists (select 1 from public.marison_outbound_dispatches where id = v_id and status = 'pending') then
+    raise exception 'staging recovery regressed';
+  end if;
+end $$;
+
+select 'Outbound replacement and recovery SQL integration passed' as result;
 `;
 
 const run = (args, input = "") => {
@@ -157,7 +194,7 @@ try {
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   process.stdout.write(run(
     ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
-    fixtureSql + baseMigration + replacementMigration + assertionsSql
+    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + assertionsSql
   ));
 } finally {
   run(["rm", "-f", id]);

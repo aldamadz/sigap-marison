@@ -61,15 +61,16 @@ export const normalizePayloadResolutionSources = (sources, { kind, approvalCount
 };
 
 export const isPrePostRecoveryEligible = (job, environment) => Boolean(
-  environment === 'staging'
-  && job?.environment === 'staging'
+  (environment === 'staging' || environment === 'production')
   && job?.environment === environment
-  && job
   && job?.status === 'failed_terminal'
-  && !job?.post_started_at
-  && !job?.response
-  && !job?.external_reference
+  && job?.post_started_at == null
+  && job?.response == null
+  && job?.external_reference == null
 );
+
+export const isOutboundRecoveryConfirmed = (action, environment, confirmation) =>
+  action !== 'reopen_terminal_pre_post' || environment !== 'production' || confirmation === true;
 
 export const classifyMarisonRecoveryIssue = (value) => {
   const message = normalized(value) || 'Identitas payload belum siap.';
@@ -80,14 +81,14 @@ export const classifyMarisonRecoveryIssue = (value) => {
     const blockedStage = Number(signerMatch[1]);
     return {
       reasonCode: 'SIGNER_IDENTITY_MISSING',
-      reason: `Penandatangan tahap ${blockedStage} belum memiliki Identitas External atau Mapping Payload Staging yang valid.`,
+      reason: `Penandatangan tahap ${blockedStage} belum memiliki identitas payload Marison yang valid.`,
       blockedStage,
     };
   }
   if (lowerMessage.includes('pemohon')) {
     return {
       reasonCode: 'REQUESTER_IDENTITY_MISSING',
-      reason: 'Pemohon belum memiliki Identitas External atau Mapping Payload Staging yang valid.',
+      reason: 'Pemohon belum memiliki identitas payload Marison yang valid.',
     };
   }
   if (lowerMessage.includes('project') && lowerMessage.includes('branch') && lowerMessage.includes('tidak cocok')) {
