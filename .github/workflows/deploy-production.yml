@@ -8,6 +8,11 @@ on:
     types: [completed]
     branches: [staging]
   workflow_dispatch:
+    inputs:
+      migration_versions:
+        description: Exact applied migration versions since the live runtime, comma-separated
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -61,6 +66,8 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: Recheck live staging and deploy production app only
+        env:
+          MIGRATION_VERSIONS: ${{ inputs.migration_versions || '' }}
         run: |
           bash scripts/check-staging-parity.sh --require-ready
-          bash scripts/deploy-app.sh production "$(git rev-parse HEAD)"
+          bash scripts/deploy-app.sh production "$(git rev-parse HEAD)" "$MIGRATION_VERSIONS"
