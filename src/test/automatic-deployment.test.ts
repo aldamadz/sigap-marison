@@ -26,6 +26,7 @@ describe("automatic deployment boundaries", () => {
     expect(production).toContain("environment: production");
     expect(production).toContain("quality-live-base.sh production");
     expect(production).toContain("npm run quality:changed");
+    expect(production.match(/fetch-depth: 0/g)).toHaveLength(3);
     expect(production).toContain("check-staging-parity.sh --require-ready");
     expect(parity).toContain('git merge-base --is-ancestor "$main_sha" "$staging_sha"');
     expect(parity).toContain('git merge-base --is-ancestor "$staging_sha" origin/staging');
