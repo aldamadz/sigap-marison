@@ -137,7 +137,7 @@ for attempt in {1..12}; do
   sleep 5
 done
 [[ "$live_sha" == "$target_sha" ]] || { echo 'Public runtime revision mismatch.' >&2; exit 1; }
-curl --fail --silent --show-error --output /dev/null "$domain/health/live"
-curl --fail --silent --show-error --output /dev/null "$domain/health/ready"
-curl --fail --silent --show-error --output /dev/null "$domain/"
+curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/health/live"
+curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/health/ready"
+curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/"
 echo "$environment app deployed at $target_sha; workers were not restarted."

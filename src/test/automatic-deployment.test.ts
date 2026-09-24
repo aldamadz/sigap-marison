@@ -40,4 +40,12 @@ describe("automatic deployment boundaries", () => {
     expect(deploy).not.toContain("db push");
     expect(deploy).not.toContain("migration repair");
   });
+
+  it("bounds every public smoke probe so a stalled connection can roll back", () => {
+    for (const path of ["health/live", "health/ready", ""]) {
+      expect(deploy).toContain(
+        `curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/${path}"`,
+      );
+    }
+  });
 });
