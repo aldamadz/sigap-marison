@@ -47,7 +47,9 @@ previous_sha="$(curl --fail --silent --show-error --connect-timeout 10 --max-tim
 git cat-file -e "${previous_sha}^{commit}" || { echo 'Live SHA is absent from checkout history.' >&2; exit 1; }
 git merge-base --is-ancestor "$previous_sha" "$target_sha" || { echo 'Target is not a descendant of live runtime.' >&2; exit 1; }
 
-node scripts/deploy-migration-gate.mjs "$previous_sha" "$target_sha" "$mode"
+migration_ack="$mode"
+[[ "$mode" != --check-only ]] || migration_ack=""
+node scripts/deploy-migration-gate.mjs "$previous_sha" "$target_sha" "$migration_ack"
 
 worker_changes="$(git diff --name-only "$previous_sha" "$target_sha" -- \
   pdf-worker.mjs pgd-pdf-renderer.mjs recommendation-pdf.mjs recommendation-native-pdf.mjs \
