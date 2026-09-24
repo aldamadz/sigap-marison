@@ -96,7 +96,7 @@ describe("Master Proyek reused Marison ID", () => {
     await addProject("Proyek Lokal A");
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
       variant: "destructive",
-      description: "ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada mapping payload staging.",
+      description: "ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada pemetaan payload manual.",
     })));
     expect(mocks.inserted).toHaveLength(0);
     expect(mocks.saveMapping).not.toHaveBeenCalled();

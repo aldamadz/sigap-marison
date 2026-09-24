@@ -18,7 +18,7 @@ describe('MRN-16 override cell', () => {
     render(<AppDialogProvider><MarisonPayloadMappingCell entityType="office" recordId="office-a" source={10} sourceValid={true} mappingValid={false} field="branch" catalog={[{ id: 'target-a', name: 'KC External', external_id: 20, valid: true }]} override={null} onChanged={onChanged} /></AppDialogProvider>);
     expect(screen.getByText('Data SIGAP')).toBeInTheDocument();
     expect(screen.getAllByText('10')).toHaveLength(2);
-    fireEvent.change(screen.getByLabelText('branch mapping staging'), { target: { value: 'KC' } });
+    fireEvent.change(screen.getByLabelText('Cari pemetaan manual branch'), { target: { value: 'KC' } });
     fireEvent.click(screen.getByRole('button', { name: /kc external/i }));
     fireEvent.change(screen.getByLabelText('alasan mapping'), { target: { value: 'Uji mapping' } });
     fireEvent.click(screen.getByRole('button', { name: /simpan/i }));
@@ -51,7 +51,8 @@ describe('MRN-16 override cell', () => {
         />
       </AppDialogProvider>,
     );
-    expect(screen.getAllByText('Belum dapat dikirim')).toHaveLength(2);
+    expect(screen.getByText('Belum dapat dikirim')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Belum dapat dikirim' })).toBeInTheDocument();
 
     rerender(
       <AppDialogProvider>
@@ -79,7 +80,8 @@ describe('MRN-16 override cell', () => {
         />
       </AppDialogProvider>,
     );
-    expect(screen.getAllByText('Perlu koreksi relasi')).toHaveLength(2);
+    expect(screen.getByText('Perlu koreksi relasi')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Perlu koreksi relasi' })).toBeInTheDocument();
   });
 
   it('shows the mapped NIK instead of the external employee ID for profile payloads', () => {
@@ -119,6 +121,7 @@ describe('MRN-16 override cell', () => {
 
     expect(screen.getByText('A 001')).toBeInTheDocument();
     expect(screen.queryByText('114')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Siap dikirim' })).toBeInTheDocument();
   });
 
   it('finds a mapped project in another office and shows its office', async () => {
@@ -139,7 +142,7 @@ describe('MRN-16 override cell', () => {
         />
       </AppDialogProvider>,
     );
-    fireEvent.change(screen.getByLabelText('project mapping staging'), { target: { value: 'Sragen' } });
+    fireEvent.change(screen.getByLabelText('Cari pemetaan manual project'), { target: { value: 'Sragen' } });
     await waitFor(() => expect(marisonPayloadMappingService.catalog).toHaveBeenCalledWith('project', 'Sragen', null), { timeout: 1000 });
     expect(await screen.findByRole('button', { name: /Sragen Test - ID 23 \/ Kantor Cabang Magelang/i })).toBeInTheDocument();
   });

@@ -138,7 +138,7 @@ export default function MasterProjectManagementPage() {
           null,
         );
         if (!candidates.some((candidate) => candidate.id === mappingPlan.targetRecordId && candidate.valid)) {
-          throw new Error("ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada mapping payload staging.");
+          throw new Error("ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada pemetaan payload manual.");
         }
       }
       const payload = { 
@@ -167,10 +167,10 @@ export default function MasterProjectManagementPage() {
           });
         } catch (mappingError) {
           void loadData();
-          throw new Error(`Proyek tersimpan, tetapi pemetaan ID Marison gagal: ${mappingError instanceof Error ? mappingError.message : "coba lagi"}. Coba simpan kembali atau perbaiki pada kolom Mapping Payload Staging.`);
+          throw new Error(`Proyek tersimpan, tetapi pemetaan ID Marison gagal: ${mappingError instanceof Error ? mappingError.message : "coba lagi"}. Coba simpan kembali atau perbaiki pada kolom Status Payload.`);
         }
       }
-      toast({ title: "Berhasil", description: mappingPlan.targetRecordId ? "Proyek tersimpan dan memakai ID Marison yang sama melalui mapping staging." : "Data proyek telah disimpan" });
+      toast({ title: "Berhasil", description: mappingPlan.targetRecordId ? "Proyek tersimpan dan memakai ID Marison yang sama melalui pemetaan manual." : "Data proyek telah disimpan" });
       setIsModalOpen(false);
       void loadData();
     } catch (error: any) {
@@ -251,7 +251,7 @@ export default function MasterProjectManagementPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Menggunakan mapping staging</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
+           <Select value={overrideFilter} onValueChange={setOverrideFilter}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="external">Siap dari data external</SelectItem><SelectItem value="override">Memakai pemetaan manual</SelectItem><SelectItem value="unavailable">Belum dapat dikirim</SelectItem><SelectItem value="invalid">Perlu koreksi relasi</SelectItem></SelectContent></Select>
           <Button onClick={() => handleOpenModal()} className="h-11 px-5 text-sm font-semibold">
             <Plus className="mr-2 h-4 w-4" /> Tambah manual
           </Button>
@@ -267,7 +267,7 @@ export default function MasterProjectManagementPage() {
               <TableHead className="w-[450px] text-xs font-semibold">Detail proyek</TableHead>
               <TableHead className="text-xs font-semibold">Kantor cabang</TableHead>
               <TableHead className="text-xs font-semibold">External</TableHead>
-              <TableHead className="min-w-[270px] text-xs font-semibold">Mapping Payload Staging</TableHead>
+              <TableHead className="min-w-[270px] text-xs font-semibold">Status Payload</TableHead>
               <TableHead className="text-xs font-semibold">Entitas</TableHead>
               <TableHead className="text-xs font-semibold">Keterangan</TableHead>
               <TableHead className="pr-8 text-right text-xs font-semibold">Aksi</TableHead>
@@ -328,7 +328,7 @@ export default function MasterProjectManagementPage() {
                       )}
                     </div>
                   ) : overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id && entry.mapping_valid) ? (
-                    <span className="text-xs text-foreground">ID {overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapped_external_id} via mapping staging</span>
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />ID {overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapped_external_id}</span>
                   ) : <span className="text-xs text-muted-foreground">Manual SIGAP</span>}
                 </TableCell>
                   <TableCell><MarisonPayloadMappingCell entityType="project" recordId={item.id} sigapLabel={`${item.name} / ${item.code || '-'}`} externalIdentity={item.marison_project_id > 0 && item.master_offices?.marison_branch_id > 0 ? `Project ${item.marison_project_id} / Branch ${item.master_offices.marison_branch_id}` : '-'} source={item.marison_project_id} sourceValid={Boolean(item.marison_project_id > 0 && item.marison_synced_at && item.master_offices?.marison_branch_id > 0 && item.master_offices?.marison_synced_at)} mappingValid={Boolean(overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id)?.mapping_valid)} field="project" override={overrides.find((entry) => entry.entity_type === "project" && entry.record_id === item.id) || null} onChanged={(next) => setOverrides((current) => next ? [...current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)), next] : current.filter((entry) => !(entry.entity_type === "project" && entry.record_id === item.id)))} /></TableCell>
@@ -418,7 +418,7 @@ export default function MasterProjectManagementPage() {
               <div>
                 <p className="text-sm font-semibold">Mapping Marison</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Kosongkan jika proyek hanya digunakan di SIGAP. ID yang sudah dipakai proyek lain dapat digunakan bersama lewat mapping payload staging; branch outbound mengikuti proyek Marison tujuan, bukan kantor lokal.
+                  Kosongkan jika proyek hanya digunakan di SIGAP. ID yang sudah dipakai proyek lain dapat digunakan bersama lewat pemetaan payload manual; branch outbound mengikuti proyek Marison tujuan, bukan kantor lokal.
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

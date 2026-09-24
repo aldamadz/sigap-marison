@@ -50,6 +50,11 @@ describe("Marison deployment environment", () => {
     expect(client).not.toContain("confirmSwitch");
     expect(panel).toContain("Credential server");
     expect(panel).toContain("Cek koneksi");
+    expect(panel).toContain("Sinkron kantor cabang");
+    expect(panel).toContain("Sinkron karyawan");
+    expect(panel).toContain("Sinkron proyek");
+    expect(panel).toContain("previewBranches");
+    expect(panel).toContain("syncBranches");
     expect(panel).not.toContain("InputOTP");
   });
 

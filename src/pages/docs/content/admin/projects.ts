@@ -31,7 +31,7 @@ export const adminProjectsDocs: DocsEntry = {
     ],
     troubleshooting: [
       "Jika proyek tidak muncul, cek data source proyek dan status aktif proyek.",
-      "Jika proyek manual tidak muncul pada Non Unit, pastikan ID Proyek Marison dan ID Branch Marison pada kantor proyek sudah terisi, atau lengkapi mapping staging trial untuk proyek yang memakai identitas external.",
+      "Jika proyek manual tidak muncul pada Non Unit, pastikan ID Proyek Marison dan ID Branch Marison pada kantor proyek sudah terisi, atau lengkapi pemetaan manual untuk proyek yang memakai identitas external.",
       "Jika ID external ditolak, cari proyek lain yang sudah memakai ID tersebut. Satu ID hanya boleh terhubung ke satu proyek SIGAP.",
       "Jika unit tidak muncul, cek integrasi unit/proyek dan konfigurasi pengajuan Unit.",
       "Jika badge Master Proyek masih tampil, periksa proyek amber yang belum memiliki entitas atau mapping cabang lengkap.",
