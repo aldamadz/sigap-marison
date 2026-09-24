@@ -156,7 +156,7 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("assertSameOrigin(req)");
   });
 
-  it("exposes staging recovery preflight separately from reconciliation", () => {
+  it("exposes read-only recovery preflight separately from reconciliation", () => {
     const routes = read("backend/src/routes/domain.routes.ts");
     const server = read("backend/src/domain-runtime.ts");
     const identityImports = [...server.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']\.\.\/\.\.\/server\/marison-payload-identity\.mjs["'];/g)]
@@ -169,6 +169,17 @@ describe("durable Marison outbound dispatch", () => {
     expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
     expect(server).toMatch(/return sendJson\(res, 200, \{\r?\n\s+eligible: preflight\.eligible/);
     expect(server).toContain('return sendJson(res, 404, { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Surat tidak ditemukan." });');
+  });
+
+  it("guards production recovery at the API and atomically at the database transition", () => {
+    const server = read("backend/src/domain-runtime.ts");
+    const migration = read("supabase/migrations/20260924170000_guard_pre_post_outbound_recovery.sql");
+    expect(server).toContain("isOutboundRecoveryConfirmed(action, marisonDeploymentEnvironment, payload?.confirmProductionSend)");
+    expect(server).toContain("preflightMarisonOutboundRecovery(job, surat)");
+    expect(migration).toContain("before update of status on public.marison_outbound_dispatches");
+    expect(migration).toContain("old.post_started_at is not null");
+    expect(migration).toContain("old.response is not null");
+    expect(migration).toContain("old.external_reference is not null");
   });
 
   it("keeps HTTP 422 replacements generation-aware, deterministic, and single-child", () => {

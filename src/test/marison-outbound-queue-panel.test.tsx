@@ -5,8 +5,9 @@ import { MemoryRouter } from "react-router";
 import { MarisonOutboundQueuePanel } from "@/components/admin/MarisonOutboundQueuePanel";
 import { marisonIntegrationService } from "@/services/marison-integration.service";
 
+const environment = vi.hoisted(() => ({ current: "staging" as "staging" | "production" }));
 vi.mock("@/providers/MarisonEnvironmentProvider", () => ({
-  useMarisonEnvironment: () => ({ status: { canManage: true, outbound: { ready: true } } }),
+  useMarisonEnvironment: () => ({ status: { canManage: true, environment: environment.current, outbound: { ready: true } } }),
 }));
 
 vi.mock("@/services/marison-integration.service", async () => {
@@ -31,6 +32,7 @@ const eligiblePreflight = {
 describe("Marison outbound recovery dialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    environment.current = "staging";
     vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row] });
     vi.mocked(marisonIntegrationService.reconcileDispatch).mockResolvedValue({ success: true });
     vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
@@ -71,7 +73,7 @@ describe("Marison outbound recovery dialog", () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /bangun ulang/i }));
     expect(await screen.findByLabelText(/alasan dan bukti/i)).toBeInTheDocument();
-    expect(screen.getByText(/konfigurasi payload siap/i)).toBeInTheDocument();
+    expect(screen.getByText(/pemeriksaan awal lulus/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /tutup/i }));
     await waitFor(() => expect(screen.queryByLabelText(/alasan dan bukti/i)).not.toBeInTheDocument());
     expect(marisonIntegrationService.preflightDispatch).toHaveBeenCalledTimes(1);
@@ -86,6 +88,25 @@ describe("Marison outbound recovery dialog", () => {
     fireEvent.click(button);
     expect(marisonIntegrationService.preflightDispatch).toHaveBeenCalledTimes(1);
     await act(async () => resolve({ eligible: true, reasonCode: null, reason: null }));
+  });
+
+  it("requires a separate production confirmation before queuing recovery", async () => {
+    environment.current = "production";
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "production", page: 1, pageSize: 20, total: 1, items: [{ ...row, environment: "production" }] });
+    vi.mocked(marisonIntegrationService.preflightDispatch).mockResolvedValue({ eligible: true, reasonCode: null, reason: null });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /bangun ulang/i }));
+    fireEvent.change(await screen.findByLabelText(/alasan dan bukti/i), { target: { value: "Schema token sudah diperbaiki." } });
+    const submit = screen.getByRole("button", { name: /simpan rekonsiliasi/i });
+    expect(submit).toBeDisabled();
+    expect(marisonIntegrationService.reconcileDispatch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /worker dapat mengirim POST ke Marison/i }));
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(marisonIntegrationService.reconcileDispatch).toHaveBeenCalledWith("job-1", expect.objectContaining({
+      action: "reopen_terminal_pre_post",
+      confirmProductionSend: true,
+    })));
   });
 });
 
