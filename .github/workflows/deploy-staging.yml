@@ -1,33 +1,39 @@
 name: Deploy Staging
 on:
   push:
-    branches: [ staging ]
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigap-staging-deploy
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'npm'
-      - run: npm ci
-      - name: Run deployment quality gate
-        run: npm run quality:ci
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-      - name: Create staging env file
-        run: echo "${{ secrets.STAGING_ENV_FILE }}" > .env.staging
-      - name: Deploy to staging
-        run: |
-          docker context create remote --docker "host=ssh://${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
-          DEPLOY_GIT_SHA=${{ github.sha }} docker --context remote compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
-          docker context rm remote
-      - name: Smoke test staging
-        run: |
-          curl -f https://sigap.marison-testing.biz.id/health/ready || (echo 'Staging smoke test failed' && exit 1)
+          cache: npm
+      - run: npm ci --workspaces --include-workspace-root
+      - run: npm run quality:ci
+      - run: npm audit --audit-level=high
+
+  deploy:
+    needs: quality
+    if: github.ref == 'refs/heads/staging'
+    runs-on: [self-hosted, linux, x64, sigap-deploy]
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Deploy staging app only
+        run: bash scripts/deploy-app.sh staging "$GITHUB_SHA"
