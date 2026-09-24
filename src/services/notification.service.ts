@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { isWorkCalendarEnabled } from '@/lib/feature-availability'
 import {
   createSupabaseWorkCalendarDashboardRepository,
   type SupabaseWorkCalendarDashboardClient,
@@ -153,6 +154,7 @@ export const notificationService = {
    * notifikasi, sehingga pemanggil menangani error secara terpisah.
    */
   async generateWorkCalendarNotifications() {
+    if (!isWorkCalendarEnabled) return 0
     const repository = createSupabaseWorkCalendarDashboardRepository(
       supabase as SupabaseWorkCalendarDashboardClient,
     )

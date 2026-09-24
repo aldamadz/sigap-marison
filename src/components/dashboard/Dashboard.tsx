@@ -38,6 +38,7 @@ import { ActivityLog } from '@/types/agenda';
 
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/lib/supabase';
+import { isWorkCalendarEnabled } from '@/lib/feature-availability';
 import {
   WorkCalendarDashboardWidget,
   buildWorkCalendarDashboardSummary,
@@ -252,7 +253,7 @@ const Dashboard = () => {
         today,
         signal,
       }),
-    enabled: isReady && !!selectedUserId,
+    enabled: isWorkCalendarEnabled && isReady && !!selectedUserId,
     ...queryBase,
   });
 
@@ -344,12 +345,14 @@ const Dashboard = () => {
       </section>
 
       {/* ── CAL-03 F7: Ringkasan Kalender Kerja ────────────────────────────── */}
-      <WorkCalendarDashboardWidget
-        summary={workCalendarSummary}
-        today={today}
-        loading={workCalendarLoading}
-        error={workCalendarErrorMessage}
-      />
+      {isWorkCalendarEnabled && (
+        <WorkCalendarDashboardWidget
+          summary={workCalendarSummary}
+          today={today}
+          loading={workCalendarLoading}
+          error={workCalendarErrorMessage}
+        />
+      )}
 
       <RecentActivity logs={recentActivities} />
     </div>
