@@ -8,11 +8,12 @@ const deploy = readFileSync(resolve("scripts/deploy-app.sh"), "utf8");
 const parity = readFileSync(resolve("scripts/check-staging-parity.sh"), "utf8");
 
 describe("automatic deployment boundaries", () => {
-  it("runs staging only from staging after a full quality gate", () => {
+  it("runs staging only from staging after an affected quality gate", () => {
     expect(staging).toContain("branches: [staging]");
     expect(staging).toContain("needs: quality");
     expect(staging).toContain("github.ref == 'refs/heads/staging'");
-    expect(staging).toContain("npm run quality:ci");
+    expect(staging).toContain("quality-live-base.sh staging");
+    expect(staging).toContain("npm run quality:changed");
     expect(staging).toContain("npm audit --audit-level=high");
     expect(staging).toContain('bash scripts/deploy-app.sh staging "$GITHUB_SHA"');
   });
@@ -23,6 +24,8 @@ describe("automatic deployment boundaries", () => {
     expect(production).toContain("github.event.workflow_run.conclusion == 'success'");
     expect(production).toContain("needs: [preflight, quality]");
     expect(production).toContain("environment: production");
+    expect(production).toContain("quality-live-base.sh production");
+    expect(production).toContain("npm run quality:changed");
     expect(production).toContain("check-staging-parity.sh --require-ready");
     expect(parity).toContain('git merge-base --is-ancestor "$main_sha" "$staging_sha"');
     expect(parity).toContain('git merge-base --is-ancestor "$staging_sha" origin/staging');
