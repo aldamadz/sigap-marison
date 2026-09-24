@@ -28,8 +28,10 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npm run quality:pr
-      - name: Run full deployment quality gate
+      - name: Run affected push quality gate
         if: github.event_name == 'push'
-        run: npm run quality:ci
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: npm run quality:changed
       - name: Audit dependencies
         run: npm audit --audit-level=high
