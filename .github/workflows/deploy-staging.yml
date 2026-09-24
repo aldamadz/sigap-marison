@@ -3,6 +3,11 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+    inputs:
+      migration_versions:
+        description: Exact applied migration versions since the live runtime, comma-separated
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -39,4 +44,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Deploy staging app only
-        run: bash scripts/deploy-app.sh staging "$GITHUB_SHA"
+        env:
+          MIGRATION_VERSIONS: ${{ inputs.migration_versions || '' }}
+        run: bash scripts/deploy-app.sh staging "$GITHUB_SHA" "$MIGRATION_VERSIONS"
