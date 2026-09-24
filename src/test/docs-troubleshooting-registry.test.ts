@@ -47,7 +47,7 @@ describe("docs-troubleshooting-registry D2C", () => {
   });
 
   it("matches exact-base runtime", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("68f19963a5a2ee53d1f345e1021f02a20006c82c41b9f467f8e283d4561246cf");
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("453bb1a9bd96d9213aec87c21c2e7aa4aa892683337cd535721c4dfbf9377c39");
   });
 
   it("keeps facade and imports acyclic", () => {

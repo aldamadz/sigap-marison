@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-
 const asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
 export const normalizeMarisonName = (value) => String(value ?? "")
@@ -668,16 +666,14 @@ export const canUseMarisonNameFallback = (employee, profile) => {
 };
 
 const resolveExistingProfile = (employee, indexes) => {
-  const external = indexes.byExternalId.get(Number(employee.id));
-  if (external) return { profile: external, match: "external_id" };
   const nikRows = indexes.byNik.get(marisonNikKey(employee.nik)) || [];
   if (nikRows.length === 1) return { profile: nikRows[0], match: "nik" };
   if (nikRows.length > 1) return { profile: null, match: "ambiguous_nik" };
+  const external = indexes.byExternalId.get(Number(employee.id));
+  if (external) return { profile: external, match: "external_id" };
   const emailRows = isValidEmail(employee.email) ? indexes.byEmail.get(normalizeEmail(employee.email)) || [] : [];
   if (emailRows.length === 1) return { profile: emailRows[0], match: "email" };
   if (emailRows.length > 1) return { profile: null, match: "ambiguous_email" };
-  const names = indexes.byName.get(normalizeMarisonName(employee.name)) || [];
-  if (names.length > 0) return { profile: null, match: "name_requires_review" };
   return { profile: null, match: "new" };
 };
 
@@ -703,11 +699,10 @@ const buildEmployeePlan = (employees, state, officeMappings, environment = "stag
 
   for (const employee of employees) {
     const resolved = resolveExistingProfile(employee, indexes);
-    if (["ambiguous_nik", "ambiguous_email", "name_requires_review"].includes(resolved.match)) {
+    if (["ambiguous_nik", "ambiguous_email"].includes(resolved.match)) {
       const reasons = {
         ambiguous_nik: "NIK cocok dengan lebih dari satu profil SIGAP",
         ambiguous_email: "Email cocok dengan lebih dari satu profil SIGAP",
-        name_requires_review: "Nama sudah ada tetapi NIK/email tidak cocok; mapping harus dikonfirmasi admin",
       };
       plan.push({ employee, action: "blocked", reason: reasons[resolved.match] });
       continue;
@@ -816,8 +811,9 @@ export const previewMarisonEmployeeSync = async ({ supabase, employees, branches
 };
 
 export const executeMarisonEmployeeSync = async ({ supabase, employees, branches, defaultPassword, environment = "staging" }) => {
-  if (environment === "staging" && (typeof defaultPassword !== "string" || defaultPassword.length < 8)) {
-    throw new Error("STAGING_DEFAULT_USER_PASSWORD belum dikonfigurasi dengan aman.");
+  if ((environment === "staging" || environment === "production")
+    && (typeof defaultPassword !== "string" || defaultPassword.length < 8)) {
+    throw new Error("Password bootstrap sinkronisasi karyawan belum dikonfigurasi dengan aman.");
   }
   const branchResult = await syncBranches(supabase, branches, false);
   const departmentResult = await syncDepartments(supabase, employees, branchResult.mappings, false);
@@ -863,9 +859,7 @@ export const executeMarisonEmployeeSync = async ({ supabase, employees, branches
       } else {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: item.email,
-          password: environment === "production"
-            ? randomBytes(32).toString("base64url")
-            : defaultPassword,
+          password: defaultPassword,
           email_confirm: true,
           user_metadata: { full_name: String(employee.name || "").trim() },
         });

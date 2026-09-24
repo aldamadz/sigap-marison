@@ -7,7 +7,7 @@
   "servers": [
     {
       "url": "https://external.marison-testing.biz.id",
-      "description": "SIGAP External API staging"
+      "description": "SIGAP External API"
     }
   ],
   "tags": [

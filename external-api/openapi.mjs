@@ -60,7 +60,7 @@ export const buildExternalOpenApi = (publicUrl) => ({
     title: "SIGAP External API Docs",
     version: "2.0.0",
   },
-  servers: [{ url: publicUrl, description: "SIGAP External API staging" }],
+  servers: [{ url: publicUrl, description: "SIGAP External API" }],
   tags: [{ name: "Authentication" }, { name: "Submission Decisions" }],
   components: {
     securitySchemes: {

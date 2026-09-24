@@ -10,6 +10,7 @@ services:
         VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
+        VITE_WORK_CALENDAR_ENABLED: "false"
     image: agenda-flow:production
     container_name: agenda-flow-prod
     restart: always
@@ -27,6 +28,8 @@ services:
       SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.production}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in .env.production}"
       MARISON_DEPLOYMENT_ENVIRONMENT: "production"
+      MARISON_SUBMISSION_DISPATCH_ENABLED: "${MARISON_SUBMISSION_DISPATCH_ENABLED:-false}"
+      MARISON_OUTBOUND_INTERNAL_TOKEN: "${MARISON_OUTBOUND_INTERNAL_TOKEN:-}"
       SUBMISSION_DECISIONS_API_TOKEN: "${SUBMISSION_DECISIONS_API_TOKEN:-}"
       MARISON_STAGING_BASE_URL: "${MARISON_STAGING_BASE_URL:-https://marison-external.digivasi.com/api}"
       MARISON_STAGING_CLIENT_ID: "${MARISON_STAGING_CLIENT_ID:-}"
@@ -53,6 +56,72 @@ services:
       timeout: 10s
       retries: 3
       start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  agenda-marison-outbound:
+    image: agenda-flow:production
+    container_name: agenda-marison-outbound
+    restart: always
+    command: ["node", "server/marison-outbound-worker.mjs"]
+    depends_on:
+      agenda-flow:
+        condition: service_healthy
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
+      NODE_ENV: production
+      SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.production}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY in .env.production}"
+      MARISON_DEPLOYMENT_ENVIRONMENT: "production"
+      MARISON_SUBMISSION_DISPATCH_ENABLED: "${MARISON_SUBMISSION_DISPATCH_ENABLED:-false}"
+      MARISON_PRODUCTION_BASE_URL: "${MARISON_PRODUCTION_BASE_URL:-https://external.marisonregency.id/api}"
+      MARISON_PRODUCTION_CLIENT_ID: "${MARISON_PRODUCTION_CLIENT_ID:-}"
+      MARISON_PRODUCTION_CLIENT_SECRET: "${MARISON_PRODUCTION_CLIENT_SECRET:-}"
+      MARISON_OUTBOUND_INTERNAL_TOKEN: "${MARISON_OUTBOUND_INTERNAL_TOKEN:-}"
+      MARISON_OUTBOUND_INTERNAL_URL: "http://agenda-flow"
+      MARISON_OUTBOUND_POLL_MS: "${MARISON_OUTBOUND_POLL_MS:-5000}"
+      MARISON_OUTBOUND_MAX_BACKOFF_MS: "${MARISON_OUTBOUND_MAX_BACKOFF_MS:-60000}"
+      MARISON_OUTBOUND_DATABASE_TIMEOUT_MS: "${MARISON_OUTBOUND_DATABASE_TIMEOUT_MS:-15000}"
+      MARISON_OUTBOUND_TOKEN_TIMEOUT_MS: "${MARISON_OUTBOUND_TOKEN_TIMEOUT_MS:-15000}"
+      MARISON_OUTBOUND_BUILD_TIMEOUT_MS: "${MARISON_OUTBOUND_BUILD_TIMEOUT_MS:-60000}"
+      MARISON_OUTBOUND_TIMEOUT_MS: "${MARISON_OUTBOUND_TIMEOUT_MS:-30000}"
+    env_file:
+      - path: .env.production
+        required: false
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  agenda-marison-sync:
+    image: agenda-flow:production
+    container_name: agenda-marison-sync
+    restart: always
+    command: ["node", "server/marison-sync-worker.mjs"]
+    depends_on:
+      agenda-flow:
+        condition: service_healthy
+    environment:
+      GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
+      MARISON_SYNC_ENABLED: "${MARISON_SYNC_ENABLED:-false}"
+      MARISON_SYNC_INTERNAL_URL: "http://agenda-flow/api/internal/marison/directory-sync"
+      MARISON_SYNC_CRON_TOKEN: "${MARISON_SYNC_CRON_TOKEN:-}"
+    env_file:
+      - path: .env.production
+        required: false
     logging:
       driver: json-file
       options:
