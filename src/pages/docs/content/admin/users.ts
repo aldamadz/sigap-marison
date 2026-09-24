@@ -23,7 +23,7 @@ export const adminUsersDocs: DocsEntry = {
       "Edit profil user atau lakukan import data karyawan.",
       "Cek hasil import, termasuk data berhasil, gagal, dan user yang dinonaktifkan.",
       "User hasil sinkron dengan NIK external valid otomatis berstatus Siap dikirim - data external.",
-      "Untuk user lokal/trial, cari employee external dari katalog Mapping Payload Staging. Simpan atau Reset hanya mengubah nilai outbound, bukan NIK SIGAP.",
+      "Untuk user lokal/trial, cari employee external dari katalog pemetaan payload manual. Simpan atau Reset hanya mengubah nilai outbound, bukan NIK SIGAP.",
     ],
     examples: [
       "Jika NIK sama tetapi nama atau jabatan berubah, sistem memperbarui data user yang sama.",

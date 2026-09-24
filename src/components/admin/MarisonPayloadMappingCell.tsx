@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, RotateCcw, Save } from 'lucide-react';
+import { CheckCircle2, Loader2, RotateCcw, Save, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppDialog } from '@/components/app/AppDialogProvider';
 import { Button } from '@/components/ui/button';
@@ -55,11 +55,9 @@ export function MarisonPayloadMappingCell({
     : mappedPayloadValue ?? (sourceValid ? source : 'Belum dapat dikirim');
   const status = override && !mappingValid
     ? 'Perlu koreksi relasi'
-    : mappingValid
-      ? 'Siap dikirim - mapping staging'
-      : sourceValid
-        ? 'Siap dikirim - data external'
-        : 'Belum dapat dikirim';
+    : mappingValid || sourceValid
+      ? 'Siap dikirim'
+      : 'Belum dapat dikirim';
 
   useEffect(() => {
     let active = true;
@@ -157,14 +155,23 @@ export function MarisonPayloadMappingCell({
         <b className={sourceValid ? 'text-foreground' : 'text-destructive'}>{sigapLabel || source || '-'}</b>
         <span>Identitas External</span>
         <b className={sourceValid ? 'text-foreground' : 'text-muted-foreground'}>{externalIdentity || '-'}</b>
-        <span>Mapping Payload Staging</span>
+        <span>Pemetaan manual</span>
         <b className={override && !mappingValid ? 'text-destructive' : 'text-amber-700 dark:text-amber-300'}>
           {selected?.name || override?.mapped_name || '-'}
         </b>
         <span>Nilai yang Dikirim</span>
         <b className={effectiveInvalid ? 'text-destructive' : 'text-primary'}>{effective}</b>
-        <span>Status</span>
-        <b className={effectiveInvalid ? 'text-destructive' : 'text-primary'}>{status}</b>
+        <span>Status payload</span>
+        <span
+          className={effectiveInvalid ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}
+          role="img"
+          aria-label={status}
+          title={status}
+        >
+          {effectiveInvalid
+            ? <XCircle className="h-4 w-4" aria-hidden="true" />
+            : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+        </span>
       </div>
       <div className="relative flex gap-1">
         <Input
@@ -174,8 +181,8 @@ export function MarisonPayloadMappingCell({
             setQuery(event.target.value);
             setValue('');
           }}
-          placeholder={`Cari mapping ${field} staging`}
-          aria-label={`${field} mapping staging`}
+          placeholder={`Cari pemetaan ${field}`}
+          aria-label={`Cari pemetaan manual ${field}`}
         />
         <Button size="sm" className="h-7 px-2 text-[11px]" onClick={() => void save()} disabled={busy || !value || !selected?.valid}>
           <Save className="mr-1 h-3.5 w-3.5" />Simpan

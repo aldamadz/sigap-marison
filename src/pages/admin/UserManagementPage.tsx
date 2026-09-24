@@ -41,8 +41,9 @@ import { MarisonPayloadMappingCell } from '@/components/admin/MarisonPayloadMapp
 import { marisonPayloadMappingService, type MarisonPayloadMapping } from '@/services/marison-payload-mapping.service';
 import { matchesMarisonPayloadMappingFilter } from '@/lib/marison-payload-mapping';
 import { isMarisonProfileExternalIdentityValid } from '@/lib/marison-payload-mapping';
+import { compareUserListOrder, type UserListSort } from '@/lib/user-list-order';
 
-type UserSort = 'name_asc' | 'job_asc' | 'department_asc' | 'office_asc' | 'status_asc';
+type UserSort = UserListSort;
 
 const STAGING_DEFAULT_PASSWORD_LABEL = 'password default staging';
 
@@ -460,20 +461,7 @@ export default function UserManagementPage() {
         && (jobFilter    === 'all' || u.jobTitle === jobFilter)
         && (statusFilter === 'all' || (statusFilter === 'active' ? isActive : !isActive));
     })
-    .sort((a, b) => {
-      const reviewA = (a as any).marison_review_required ? 0 : 1;
-      const reviewB = (b as any).marison_review_required ? 0 : 1;
-      if (reviewA !== reviewB) return reviewA - reviewB;
-      if (sortBy === 'job_asc') return `${a.jobTitle || ''} ${a.fullName}`.localeCompare(`${b.jobTitle || ''} ${b.fullName}`, 'id');
-      if (sortBy === 'department_asc') return `${a.departmentName || ''} ${a.fullName}`.localeCompare(`${b.departmentName || ''} ${b.fullName}`, 'id');
-      if (sortBy === 'office_asc') return `${a.officeName || ''} ${a.fullName}`.localeCompare(`${b.officeName || ''} ${b.fullName}`, 'id');
-      if (sortBy === 'status_asc') {
-        const statusA = (a as any).is_active === false ? '1-nonaktif' : '0-aktif';
-        const statusB = (b as any).is_active === false ? '1-nonaktif' : '0-aktif';
-        return `${statusA} ${a.fullName}`.localeCompare(`${statusB} ${b.fullName}`, 'id');
-      }
-      return String(a.fullName || '').localeCompare(String(b.fullName || ''), 'id');
-    }), [users, overrides, overrideFilter, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
+    .sort((a, b) => compareUserListOrder(a, b, sortBy)), [users, overrides, overrideFilter, searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, sortBy]);
 
   useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [searchQuery, officeFilter, deptFilter, jobFilter, statusFilter, overrideFilter, sortBy, pageSize]);
 
@@ -1035,7 +1023,7 @@ export default function UserManagementPage() {
               { val: statusFilter, set: (value: string) => setStatusFilter(value), icon: <AlertCircle className="w-4 h-4 text-primary" />, ph: "Status Akun",
                 opts: [["all","Semua Status"],["active","Aktif"],["inactive","Nonaktif"]] },
               { val: overrideFilter, set: (value: string) => setOverrideFilter(value), icon: <Hash className="w-4 h-4 text-primary" />, ph: "Outbound",
-                 opts: [["all","Semua"],["external","Siap dari data external"],["override","Menggunakan mapping staging"],["unavailable","Belum dapat dikirim"],["invalid","Perlu koreksi relasi"]] },
+                 opts: [["all","Semua"],["external","Siap dari data external"],["override","Memakai pemetaan manual"],["unavailable","Belum dapat dikirim"],["invalid","Perlu koreksi relasi"]] },
               { val: officeFilter, set: (value: string) => setOfficeFilter(value), icon: <Building2 className="w-4 h-4 text-primary" />,   ph: "Kantor",
                 opts: [["all","Semua Kantor"], ...uniqueOffices.map(o => [o,o])] },
               { val: deptFilter,   set: (value: string) => setDeptFilter(value),   icon: <Briefcase className="w-4 h-4 text-primary" />,   ph: "Departemen",
@@ -1084,7 +1072,7 @@ export default function UserManagementPage() {
                 { label: "Karyawan", className: "min-w-[280px]" },
                 { label: "No. HP", className: "min-w-[150px]" },
                 { label: "ID External", className: "min-w-[120px]" },
-                { label: "Mapping Payload Staging", className: "min-w-[280px]" },
+                { label: "Status Payload", className: "min-w-[280px]" },
                 { label: "Role", className: "min-w-[120px]" },
                 { label: "Jabatan & Unit", className: "min-w-[260px]" },
                 { label: "Masa Kerja", className: "min-w-[170px]" },

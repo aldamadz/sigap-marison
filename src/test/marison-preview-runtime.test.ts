@@ -97,12 +97,17 @@ describe("Marison Preview Runtime", () => {
 
   // --- Availability: employee (assertMarisonEmployeeSyncInfraAvailable) ---
 
-  it("employee preview di production -> 403", async () => {
+  it("employee preview di production memakai infrastruktur yang sama", async () => {
     deps.deploymentEnvironment = "production";
-    await expect(runtime.previewMarisonEmployees({})).rejects.toMatchObject({
-      message: "Sinkronisasi karyawan external hanya tersedia di staging.",
-      status: 403,
-    });
+    await expect(runtime.previewMarisonEmployees({})).resolves.toBeUndefined();
+    expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("production", "/branches");
+    expect(deps.getAllMarisonCollection).toHaveBeenCalledWith("production", "/employees");
+  });
+
+  it("employee sync fails closed for an unsupported environment", async () => {
+    deps.deploymentEnvironment = "development";
+    await expect(runtime.previewMarisonEmployees({})).rejects.toMatchObject({ status: 503 });
+    expect(deps.getAllMarisonCollection).not.toHaveBeenCalled();
   });
 
   it("Supabase null pada employee -> 500", async () => {

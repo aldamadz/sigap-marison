@@ -27,9 +27,14 @@ describe("Marison deployment environment", () => {
     expect(stagingCompose).toContain('VITE_APP_PUBLIC_URL: "https://sigap.marison-testing.biz.id"');
     expect(productionCompose).toContain('APP_PUBLIC_URL: "https://sigap.marisoncloud.com"');
     expect(productionCompose).toContain('VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"');
+    expect(stagingCompose).toContain('VITE_WORK_CALENDAR_ENABLED: "true"');
+    expect(productionCompose).toContain('VITE_WORK_CALENDAR_ENABLED: "false"');
     expect(stagingCompose).toContain("Set SUPABASE_URL in .env.staging");
     expect(stagingCompose.match(/GIT_SHA: "\$\{DEPLOY_GIT_SHA:\?DEPLOY_GIT_SHA is required\}"/g)).toHaveLength(5);
     expect(productionCompose).toContain("Set SUPABASE_URL in .env.production");
+    expect(productionCompose).toContain("agenda-marison-outbound:");
+    expect(productionCompose).toContain('MARISON_SUBMISSION_DISPATCH_ENABLED: "${MARISON_SUBMISSION_DISPATCH_ENABLED:-false}"');
+    expect(productionCompose).toContain('MARISON_OUTBOUND_INTERNAL_URL: "http://agenda-flow"');
     expect(stagingCompose).not.toContain("xuhyodtmgwteyslhrkfx");
   });
 
@@ -50,6 +55,11 @@ describe("Marison deployment environment", () => {
     expect(client).not.toContain("confirmSwitch");
     expect(panel).toContain("Credential server");
     expect(panel).toContain("Cek koneksi");
+    expect(panel).toContain("Sinkron kantor cabang");
+    expect(panel).toContain("Sinkron karyawan");
+    expect(panel).toContain("Sinkron proyek");
+    expect(panel).toContain("previewBranches");
+    expect(panel).toContain("syncBranches");
     expect(panel).not.toContain("InputOTP");
   });
 

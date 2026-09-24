@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         GIT_SHA: "${DEPLOY_GIT_SHA:?DEPLOY_GIT_SHA is required}"
+        EXTERNAL_API_PUBLIC_URL: "${EXTERNAL_API_PUBLIC_URL:-https://external.marisoncloud.com}"
     image: agenda-flow-external-api:production
     container_name: agenda-flow-external-api
     restart: always

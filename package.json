@@ -34,6 +34,7 @@
     "test:work-calendar-sql": "node scripts/test-work-calendar-sql.mjs",
     "test:canonical-submission-workflows-sql": "node scripts/test-canonical-submission-workflows-sql.mjs",
     "test:staging-split-account-fixtures-sql": "node scripts/test-staging-split-account-fixtures-sql.mjs",
+    "test:production-runtime-contract-recovery-sql": "node scripts/test-production-runtime-contract-recovery-sql.mjs",
     "import:holidays": "node scripts/import-holidays.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",

@@ -129,7 +129,8 @@ describe("Work Calendar — batas modul CAL-03 F3", () => {
   it("terpasang pada canonical route /calendar dan route legacy /agenda tidak terdaftar", () => {
     const app = readFileSync(join(root, "src", "App.tsx"), "utf8");
     expect(app).toContain('const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPage"));');
-    expect(app).toContain('<Route path="/calendar" element={<WorkCalendarPage />} />');
+    expect(app).toContain('path="/calendar"');
+    expect(app).toContain('isWorkCalendarEnabled ? <WorkCalendarPage /> : <WorkCalendarUnavailablePage />');
     expect(app).not.toContain('<Route path="/agenda"');
     expect(app).not.toContain("@/pages/agenda/AgendaPage");
     expect(app).not.toContain("@/pages/calendar/CalendarPage");

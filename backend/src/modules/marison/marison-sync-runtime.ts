@@ -54,6 +54,7 @@ export type MarisonSyncDependencies = {
     branches: unknown[];
     employees: unknown[];
     defaultPassword: string;
+    environment: string;
   }) => unknown;
 };
 
@@ -124,7 +125,13 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   };
 
   const marisonDefaultPassword = () => {
-    const value = base.readEnv("STAGING_DEFAULT_USER_PASSWORD");
+    const passwordVariable = base.deploymentEnvironment === "production"
+      ? "MARISON_PRODUCTION_DEFAULT_USER_PASSWORD"
+      : base.deploymentEnvironment === "staging"
+        ? "STAGING_DEFAULT_USER_PASSWORD"
+        : null;
+    if (!passwordVariable) return null;
+    const value = base.readEnv(passwordVariable);
     if (typeof value !== "string" || value.length < 8) return null;
     return value;
   };
@@ -132,6 +139,9 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
   const assertMarisonEmployeeSyncWriteAvailable = (): MarisonEmployeeSyncWriteAvailability => {
     const supabase = base.assertMarisonEmployeeSyncInfraAvailable();
     const defaultPassword = marisonDefaultPassword();
+    if (base.deploymentEnvironment !== "staging" && base.deploymentEnvironment !== "production") {
+      throw errorWithStatus("Environment sinkronisasi karyawan tidak didukung.", 503);
+    }
     if (!defaultPassword) {
       throw errorWithStatus("Konfigurasi sinkronisasi karyawan belum lengkap.", 503);
     }
@@ -223,6 +233,7 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
           supabase,
           ...source,
           defaultPassword,
+          environment: base.deploymentEnvironment,
         }),
       });
     } finally {
@@ -256,6 +267,7 @@ export function createMarisonSyncRuntime(baseDependencies: MarisonSyncDependenci
           supabase,
           ...source,
           defaultPassword,
+          environment: base.deploymentEnvironment,
         }),
       });
       const projectSource = await base.getMarisonProjectSyncSource();
