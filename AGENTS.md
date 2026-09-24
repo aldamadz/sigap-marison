@@ -63,6 +63,9 @@ Kalimat seperti "kerjakan", "perbaiki", "buatkan", "commit", "push", atau
    yang sama menuju `main`. Dengan cara ini fitur lain di staging tidak ikut rilis.
 8. Setelah rilis production berhasil, sinkronkan `main` kembali ke `staging` agar
    kedua branch tidak menyimpang.
+9. Sebelum deploy production, pastikan commit target `main` sudah menjadi ancestor
+   dari source `staging` **dan runtime staging yang hidup**. Jika `main` lebih
+   dulu bergerak, sinkronkan dan deploy staging sebelum production.
 
 Jika suatu fitur bergantung pada fitur lain yang belum ada di production, agent
 wajib menjelaskan dependensinya sebelum membuka PR ke `main`. Jangan diam-diam
@@ -99,9 +102,8 @@ membawa seluruh isi staging ke production.
 
 ## Kondisi Repository Saat Ini
 
-Branch remote `staging` sudah tersedia dan menjadi target integrasi PR untuk
-pengujian. Workflow CI/deployment berbasis branch belum tersedia. Sampai workflow
-tersebut dibuat dan diverifikasi, deployment tetap dilakukan secara manual dengan
-pemetaan environment di atas. Keberadaan commit pada `staging` tidak membuktikan
-bahwa runtime staging sudah menggunakan commit tersebut; selalu verifikasi image,
-container, domain, dan smoke test setelah deployment.
+Branch remote `staging` menjadi target integrasi PR untuk pengujian. Workflow
+deploy otomatis hanya menangani container aplikasi dan wajib memverifikasi
+image, runtime SHA, domain, dan smoke test. Perubahan migration atau source worker
+memerlukan rollout terkoordinasi terpisah. Keberadaan commit pada `staging` tidak
+membuktikan bahwa runtime staging sudah menggunakan commit tersebut.
