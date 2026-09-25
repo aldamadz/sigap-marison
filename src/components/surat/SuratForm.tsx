@@ -48,6 +48,7 @@ import { executeRecommendationPostSubmit } from "@/features/surat/recommendation
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
+import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
 import { selectUsage } from "@/features/surat/registration/usages";
 import type {
   NumberContextIssue,
@@ -230,8 +231,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       externalRevision?.eventId && activeDraftId ? formData.dept_id : requesterDepartmentId);
 
 
-  const getInitialAttachmentRequirements = () =>
-    selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
+  const getInitialAttachmentRequirements = (): AttachmentRequirement[] => {
+    const configured = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
+    return withOptionalRequesterAttachmentRequirement(configured);
+  };
 
   const getMissingInitialAttachmentLabels = () =>
     getInitialAttachmentRequirements()
@@ -2992,6 +2995,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const local = initialAttachmentFiles[rule.requirement_key] || [];
     const remainingSlots = Math.max(Number(rule.max_files || 1) - persisted.length - local.length, 0);
     const selected = selectedFiles.slice(0, remainingSlots);
+    if (rule.requirement_key === REQUESTER_ADDITIONAL_ATTACHMENT_KEY) {
+      try {
+        validateOptionalAttachmentFiles(selectedFiles);
+        if (local.length + persisted.length + selectedFiles.length > rule.max_files) {
+          throw new Error(`Maksimal ${rule.max_files} lampiran tambahan.`);
+        }
+      } catch (error) {
+        toast({ variant: "destructive", title: "Lampiran Tidak Valid", description: error instanceof Error ? error.message : "Periksa file yang dipilih." });
+        return;
+      }
+    }
     if (selected.length === 0) {
       toast({
         variant: "destructive",
@@ -3096,7 +3110,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const renderAttachmentUploader = () => {
-    const configuredRequirements = getInitialAttachmentRequirements();
+    const configuredRequirements = getInitialAttachmentRequirements().filter(rule =>
+      !externalRevision || getRequestCategory() !== "unit" ||
+      rule.requirement_key === REQUESTER_ADDITIONAL_ATTACHMENT_KEY
+    );
     if (configuredRequirements.length > 0) {
       return (
         <div className="space-y-4 rounded-3xl border border-border/50 bg-muted/10 p-5 md:p-6">
@@ -3194,8 +3211,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 )}
                 <Input
                   type="file"
+                  aria-label={`Unggah ${rule.label}`}
                   multiple={rule.allow_multiple || rule.max_files > 1}
                   accept={rule.allowed_types?.join(",")}
+                  className="min-h-11"
                   disabled={Boolean(uploadingRequirement) || totalFiles >= rule.max_files}
                   onChange={event => {
                     const selected = Array.from(event.target.files || []);
@@ -3856,7 +3875,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
               )}
 
-              {!(externalRevision && getRequestCategory() === "unit") && renderAttachmentUploader()}
+              {renderAttachmentUploader()}
             </section>
             )}
 
