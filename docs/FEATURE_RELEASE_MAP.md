@@ -271,6 +271,7 @@ Temuan keamanan outbound:
 | DOCS-01 | Dokumentasi publik dalam aplikasi | Production + Staging | `/docs` routes | Aman ditarik sebagai UI |
 | DOCS-02 | Protokol koordinasi manusia dan AI | Staging only | Root `AGENTS.md`, `docs/AI_COLLABORATION.md`, GitHub Issue/draft PR | Dokumentasi operasional; pertahankan selama pekerjaan paralel diizinkan |
 | EXT-01 | External API read-only surat milik SIGAP | Dormant | Source dan schema ada, container tidak berjalan | Audit consumer sebelum menghapus source/schema |
+| EXT-02 | External API keputusan pengajuan SIGAP | Production aktif; staging memakai runtime terpisah | Fastify M2M API, client credentials, Zudoku/OpenAPI, container per environment | SUR-16, DNS/tunnel dan Supabase per environment | Staging wajib memakai `docker-compose.external.staging.yml`, `.env.staging`, dan port lokal 3021; hostname staging tidak boleh merutekan ke container production port 3020. Client secret disimpan sebagai hash dan plaintext hanya dibuat sekali pada file operator. |
 | PIC-01 | Monitoring/PIC/chat/payment lama | Removed dari alur aktif | Riwayat commit lama; route/service aktif tidak ada | Jangan hidupkan kembali tanpa desain baru |
 | ENV-01 | Switch environment Marison lewat UI/OTP | Removed, diganti environment lock | Provider/status locked | Jangan hidupkan; bertentangan dengan isolasi deployment |
 
