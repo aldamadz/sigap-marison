@@ -227,7 +227,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
   const canCurrentDepartmentRequestUnit = (item: UsageDetailRecord) =>
-    canDepartmentRequestUnit(item, requesterDepartmentId);
+    canDepartmentRequestUnit(item,
+      externalRevision?.eventId && activeDraftId ? formData.dept_id : requesterDepartmentId);
 
 
   const getInitialAttachmentRequirements = (): AttachmentRequirement[] => {
@@ -1119,6 +1120,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     draftToRestore,
     selectedUsage,
     linkedDocumentContext,
+    externalRevision,
     effectiveFormData,
     selectedFormId,
     signers,
@@ -1382,7 +1384,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return;
     }
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
-    const restoredExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
+    const storedExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
+    const restoredExternalRevision = draftToRestore.revision_context
+      || (draftToRestore.revision_event_id
+        ? storedExternalRevision?.eventId === draftToRestore.revision_event_id
+          ? storedExternalRevision
+          : { eventId: draftToRestore.revision_event_id }
+        : storedExternalRevision);
     const opensUnitRevisionContext = Boolean(
       restoredExternalRevision?.eventId && restoredInput.request_category === "unit",
     );
@@ -1806,6 +1814,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const handleResetNumber = async () => {
     if (isResettingNumber) return;
     if (!generatedNoSurat) return;
+    if (externalRevision?.eventId) return;
     const confirmed = await appDialog.confirm({
       title: "Batalkan Nomor Surat?",
       description: "Nomor ini akan dikosongkan dari antrean dan tidak dipakai untuk pengajuan ini.",
@@ -1911,6 +1920,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             selectedFormId,
             selectedUsageId: selectedUsage?.id || "",
             linkedDocumentContext,
+            externalRevision,
           },
           signers,
           "details"

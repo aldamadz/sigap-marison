@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const migration = readFileSync("supabase/migrations/20260818170000_external_submission_decisions.sql", "utf8");
+const unitProjectRevision = readFileSync("supabase/migrations/20260924180000_allow_validated_unit_project_revision.sql", "utf8");
 
 const schema = String.raw`
 create schema auth;
@@ -36,6 +37,7 @@ create table public.surat_revision_events(
  status text default 'open',resolved_at timestamptz,resolved_by uuid references public.profiles(id),created_at timestamptz default now()
 );
 create table public.surat_reservations(id uuid primary key);
+create table public.master_projects(id uuid primary key default gen_random_uuid(),marison_project_id bigint,code text,marison_synced_at timestamptz);
 create table public.surat_registration_drafts(
  id uuid primary key default gen_random_uuid(),reservation_id uuid not null unique references public.surat_reservations(id),created_by uuid references auth.users(id),
  no_surat text,status text default 'DRAFT',payload jsonb default '{}',signer_assignments jsonb default '[]',current_section text default 'details',
@@ -65,6 +67,7 @@ begin
  return true;
 end$$;
 ${migration}
+${unitProjectRevision}
 `;
 
 const tests = String.raw`
@@ -81,6 +84,7 @@ values('40000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000
 ('40000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002',2,'menyetujui','Manager',true,'APPROVED');
 insert into public.marison_outbound_dispatches(id,surat_id,environment,generation,kind,endpoint,idempotency_key,status,post_started_at,response,external_reference)
 values('50000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','staging',1,'unit','/unit-submissions','sigap:staging:unit:test','succeeded',now(),'{"ok":true}','EXT-1');
+insert into public.master_projects(marison_project_id,code,marison_synced_at) values(14,'PRJ-14',now());
 
 do $$declare result jsonb; event_id uuid; draft public.surat_registration_drafts;begin
  result:=public.apply_external_submission_decision('60000000-0000-4000-8000-000000000001','UNIT-EXT-001','revision_required','Jumlah unit harus dikurangi.',now(),'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','staging');
@@ -93,10 +97,22 @@ do $$declare result jsonb; event_id uuid; draft public.surat_registration_drafts
  perform set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
  draft:=public.create_external_submission_revision_draft(event_id);
  if draft.reservation_id is not null or draft.no_surat<>'UNIT-EXT-001' then raise exception 'revision draft invalid';end if;
+ begin
+   perform public.submit_external_submission_revision(event_id,draft.id,
+     jsonb_build_object('entity_id','30000000-0000-4000-8000-000000000001','office_id','30000000-0000-4000-8000-000000000002','project_id','30000000-0000-4000-8000-000000000003','dept_id','30000000-0000-4000-8000-000000000004','letter_type_id','30000000-0000-4000-8000-000000000005','form_usage_id','30000000-0000-4000-8000-000000000006','form_input_data',jsonb_build_object('request_category','unit','requested_unit_count',2,'requested_project',jsonb_build_object('id','999','code','UNKNOWN'))),null);
+   raise exception 'unmapped project accepted';
+ exception when sqlstate '22023' then null; end;
+ begin
+   perform public.submit_external_submission_revision(event_id,draft.id,
+     jsonb_build_object('entity_id','30000000-0000-4000-8000-000000000001','office_id','30000000-0000-4000-8000-000000000002','project_id','30000000-0000-4000-8000-000000000003','dept_id','30000000-0000-4000-8000-000000000004','letter_type_id','30000000-0000-4000-8000-000000000005','form_usage_id','30000000-0000-4000-8000-000000000006','form_input_data',jsonb_build_object('request_category','unit','requested_unit_count',2,'requested_project',jsonb_build_object('id','not-a-number','code','PRJ-14'))),null);
+   raise exception 'malformed project accepted';
+ exception when sqlstate '22023' then null; end;
  result:=public.submit_external_submission_revision(event_id,draft.id,
-   jsonb_build_object('entity_id','30000000-0000-4000-8000-000000000001','office_id','30000000-0000-4000-8000-000000000002','project_id','30000000-0000-4000-8000-000000000003','dept_id','30000000-0000-4000-8000-000000000004','letter_type_id','30000000-0000-4000-8000-000000000005','form_usage_id','30000000-0000-4000-8000-000000000006','form_input_data',jsonb_build_object('request_category','unit','request_mode','unit','requested_unit_count',2,'requested_project',jsonb_build_object('id','13','code','PRJ-13'))),
+   jsonb_build_object('entity_id','30000000-0000-4000-8000-000000000001','office_id','30000000-0000-4000-8000-000000000002','project_id','30000000-0000-4000-8000-000000000003','dept_id','30000000-0000-4000-8000-000000000004','letter_type_id','30000000-0000-4000-8000-000000000005','form_usage_id','30000000-0000-4000-8000-000000000006','form_input_data',jsonb_build_object('request_category','unit','request_mode','unit','requested_unit_count',2,'requested_project',jsonb_build_object('id','14','code','PRJ-14'))),
    'Disesuaikan menjadi dua unit');
  if (select form_input_data->>'requested_unit_count' from public.surat_registrasi where no_surat='UNIT-EXT-001')<>'2' then raise exception 'unit count not updated';end if;
+ if (select form_input_data#>>'{requested_project,id}' from public.surat_registrasi where no_surat='UNIT-EXT-001')<>'14' then raise exception 'unit project not updated';end if;
+ if (select form_input_data ? 'allocated_units' from public.surat_registrasi where no_surat='UNIT-EXT-001') then raise exception 'stale unit allocation retained';end if;
  if (select project_id::text from public.surat_registrasi where no_surat='UNIT-EXT-001')<>'30000000-0000-4000-8000-000000000003' then raise exception 'identity changed';end if;
 end$$;
 

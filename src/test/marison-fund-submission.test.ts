@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveMarisonApprovalRoleLabel } from "../../server/marison-outbound-contract.mjs";
 import {
   mapMarisonFundSubmission,
   normalizeMarisonFundApprovalRole,
@@ -15,6 +16,62 @@ const approval = {
 };
 
 describe("Marison Fund Submission mapper", () => {
+  it.each([
+    ["Pemohon", "Staff Admin Teknik", "staff"],
+    ["Pemohon HRD & GA", "Manager Pengembangan Organisasi", "manager"],
+  ])("maps generic approval label %s using the actual signer job %s", (label, jobTitle, expected) => {
+    const role = resolveMarisonApprovalRoleLabel({ label, workflowRole: "membuat", jobTitle });
+    expect(normalizeMarisonFundApprovalRole(role)).toBe(expected);
+  });
+
+  it("keeps explicit approval titles and fails closed without a real requester job", () => {
+    expect(resolveMarisonApprovalRoleLabel({
+      label: "Direktur I", workflowRole: "menyetujui", jobTitle: "Staff Admin Teknik",
+    })).toBe("Direktur I");
+    expect(resolveMarisonApprovalRoleLabel({
+      label: "Pemohon", jobTitle: "", snapshotJobTitle: "Staff Admin Teknik",
+    })).toBe("Staff Admin Teknik");
+    expect(resolveMarisonApprovalRoleLabel({
+      label: "Pemohon", jobTitle: "Manager Pengembangan Organisasi", snapshotJobTitle: "Staff Admin Teknik",
+    })).toBe("Staff Admin Teknik");
+    expect(() => normalizeMarisonFundApprovalRole(resolveMarisonApprovalRoleLabel({
+      label: "Pemohon", workflowRole: "membuat", jobTitle: "",
+    }))).toThrow("Role approval Fund Submission tidak dikenali");
+  });
+
+  it.each([
+    {
+      scope: "Cabang",
+      requesterJob: "Staff Admin Teknik",
+      labels: ["Pemohon", "Branch Manager", "Manager Terkait", "Direktur I", "Direktur Utama"],
+      expected: ["staff", "manager", "manager", "director", "director"],
+    },
+    {
+      scope: "Pusat",
+      requesterJob: "Manager Pengembangan Organisasi",
+      labels: ["Pemohon", "Mgr. Departemen", "Mgr. HRD & GA", "Direktur I", "Direktur Utama"],
+      expected: ["manager", "manager", "manager", "director", "director"],
+    },
+  ])("builds all Fund approval roles for the $scope single-account fixture", ({ requesterJob, labels, expected }) => {
+    const result = mapMarisonFundSubmission({
+      request: { submissionNumber: "004/TEST/IX/2026", type: "operational", title: "Dana uji" },
+      projectId: 16,
+      branchId: 2,
+      division: "Teknik",
+      approvals: labels.map((label) => ({
+        role: resolveMarisonApprovalRoleLabel({
+          label,
+          workflowRole: "membuat",
+          snapshotJobTitle: requesterJob,
+        }),
+        nik: "TEST-001",
+        action: "approved",
+        actioned_at: "2026-09-25T08:00:00+07:00",
+      })),
+    });
+    expect((result.payload.approvals as Array<{ role: string }>).map((item) => item.role)).toEqual(expected);
+  });
+
   it.each([
     ["Staff IT", "staff"],
     ["Staff Departemen", "staff"],

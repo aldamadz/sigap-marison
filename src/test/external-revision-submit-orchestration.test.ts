@@ -179,7 +179,7 @@ describe("external-revision-submit orchestration (Pass K2B)", () => {
     it("12c. default (lainnya) description identik", () => {
       const result = getExternalRevisionSuccessDescription("approval");
       expect(result).toBe("Approval dimulai ulang menggunakan data revisi terbaru.");
-
+      
       const resultEmpty = getExternalRevisionSuccessDescription("");
       expect(resultEmpty).toBe("Approval dimulai ulang menggunakan data revisi terbaru.");
     });

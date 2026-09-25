@@ -177,8 +177,8 @@ begin
   if not v_failed then raise exception 'C6: cross-office fallback should be rejected'; end if;
 end $$;
 
--- assert_branch_asset_fallback_eligible — entity uses the authorized requester
--- department, not a forged department supplied by a normal user
+-- assert_branch_asset_fallback_eligible — supplied department must match the
+-- authoritative requester department resolved by validate_form_usage_for_actor.
 do $$
 declare v_failed boolean := false;
 begin
@@ -186,17 +186,38 @@ begin
     perform public.assert_branch_asset_fallback_eligible(
       'f0000000-0000-4000-8000-000000000001'::uuid,
       'a0000000-0000-4000-8000-000000000031'::uuid,
-      'a0000000-0000-4000-8000-000000000011'::uuid,  -- forged entity is 11
-      'a0000000-0000-4000-8000-000000000021'::uuid,  -- forged department is also entity 11
+      'a0000000-0000-4000-8000-000000000010'::uuid,
+      'a0000000-0000-4000-8000-000000000021'::uuid,  -- differs from actor department 20
       'a0000000-0000-4000-8000-000000000060'::uuid
     );
   exception when others then
     v_failed := true;
-    if sqlerrm not like '%Entitas reservasi%' then
+    if sqlerrm not like '%Departemen reservasi%' then
       raise exception 'C7: unexpected error: %', sqlerrm;
     end if;
   end;
-  if not v_failed then raise exception 'C7: cross-entity fallback should be rejected'; end if;
+  if not v_failed then raise exception 'C7: forged requester department should be rejected'; end if;
+end $$;
+
+-- assert_branch_asset_fallback_eligible — entity must exist in canonical master data.
+do $$
+declare v_failed boolean := false;
+begin
+  begin
+    perform public.assert_branch_asset_fallback_eligible(
+      'f0000000-0000-4000-8000-000000000001'::uuid,
+      'a0000000-0000-4000-8000-000000000031'::uuid,
+      'a0000000-0000-4000-8000-999999999999'::uuid,
+      'a0000000-0000-4000-8000-000000000020'::uuid,
+      'a0000000-0000-4000-8000-000000000060'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like '%Entitas reservasi tidak ditemukan%' then
+      raise exception 'C7b: unexpected error: %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'C7b: unknown entity should be rejected'; end if;
 end $$;
 
 -- assert_branch_asset_fallback_eligible — admin allowed cross-office

@@ -89,6 +89,11 @@ export interface SuratRegistrationDraft {
   updated_at: string;
   surat_registration_draft_files?: SuratRegistrationDraftFile[];
   usage_configuration?: UsageDetailRecord | null;
+  revision_context?: {
+    eventId: string;
+    generation?: number;
+    reason?: string;
+  } | null;
 }
 
 export interface RecommendationTask {
@@ -368,6 +373,25 @@ export const suratService = {
       .single();
     if (error) throw error;
     const draft = data as SuratRegistrationDraft;
+    if (draft.revision_event_id) {
+      const { data: event, error: eventError } = await supabase
+        .from("surat_revision_events")
+        .select("id, status, target_type, reason, changes")
+        .eq("id", draft.revision_event_id)
+        .single();
+      if (eventError) throw eventError;
+      if (event?.status !== "open" || event.target_type !== "requester"
+        || event.changes?.external_submission_revision !== true) {
+        throw new Error("Permintaan perbaikan pengajuan tidak tersedia.");
+      }
+      draft.revision_context = {
+        eventId: event.id,
+        reason: event.reason,
+        ...(typeof event.changes?.revision_generation === "number"
+          ? { generation: event.changes.revision_generation }
+          : {}),
+      };
+    }
     const formData = draft.payload?.formData;
     const usageId = formData && typeof formData === "object"
       ? String(

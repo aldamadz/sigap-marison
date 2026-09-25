@@ -47,6 +47,7 @@ import {
   MARISON_ASSET_CONTRACT_VERSION,
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
+  resolveMarisonApprovalRoleLabel,
 } from "../../server/marison-outbound-contract.mjs";
 import { mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
@@ -3230,7 +3231,7 @@ const loadMarisonProfileIdentityResolver = async (profileIds) => {
   };
 };
 
-const buildMarisonApprovals = async (surat, resolveIdentity) => {
+const buildMarisonApprovals = async (surat, resolveIdentity, kind) => {
   const sources = {};
   const approvals = await Promise.all(asArrayValue(surat?.surat_signatures)
     .filter((signature) => signature?.is_signed && signature?.signed_at)
@@ -3245,7 +3246,14 @@ const buildMarisonApprovals = async (surat, resolveIdentity) => {
       );
       sources[buildApprovalResolutionKey(signature.step_order, firstString(signature.user_id, profile.id), index)] = signer.source;
       return {
-        role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
+        role: kind === "fund"
+          ? resolveMarisonApprovalRoleLabel({
+            label: signature.label_jabatan,
+            workflowRole: signature.role_name,
+            jobTitle: profile.job_title,
+            snapshotJobTitle: signerSnapshot.job_title,
+          })
+          : firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
         nik: signer.nik,
         action: "approved",
         actioned_at: new Date(signature.signed_at).toISOString(),
@@ -3261,7 +3269,7 @@ const buildMarisonApprovals = async (surat, resolveIdentity) => {
   return { approvals, sources };
 };
 
-const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true } = {}) => {
+const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true, kind } = {}) => {
   const requesterProfileId = getCanonicalRequesterProfileId(surat);
   const signatures = asArrayValue(surat?.surat_signatures)
     .filter((signature) => signature?.is_signed && signature?.signed_at);
@@ -3274,7 +3282,7 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true }
     firstString(surat?.requester_snapshot?.nik, surat?.data_snapshot?.requester?.nik),
     "Pemohon",
   ) : null;
-  const approvalResult = await buildMarisonApprovals(surat, resolveIdentity);
+  const approvalResult = await buildMarisonApprovals(surat, resolveIdentity, kind);
   return {
     requester,
     approvals: approvalResult.approvals,
@@ -3605,7 +3613,7 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
   const input = getMarisonDispatchInput(surat);
   const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
   const isFund = category === "non_asset" || category === "nonasset";
-  const identity = await resolveMarisonOutboundIdentity(surat);
+  const identity = await resolveMarisonOutboundIdentity(surat, { kind: isFund ? "fund" : category });
   const resolvedOverrides = {
     ...overrides,
     ...(identity.requester ? { nik: identity.requester.nik } : {}),
@@ -3924,7 +3932,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
   try {
-    const identity = await resolveMarisonOutboundIdentity(surat);
+    const identity = await resolveMarisonOutboundIdentity(surat, { kind: job.kind });
     const mappings = await getMarisonOutboundMappings(surat, job.kind);
     const sources = { ...mappings.sources, ...identity.sources };
     if (job.kind === "fund" && mappings.projectId == null) {
@@ -4121,7 +4129,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
           id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
           office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
           surat_signatures (
-            id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
+            id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot, pdf_path_snap,
             profiles:user_id ( id, full_name, nik, job_title, is_active, deleted_at, marison_employee_id, marison_synced_at )
           ),
           surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
@@ -4150,7 +4158,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
 
       if (!localValidationIssues) {
         try {
-          const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund" });
+          const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund", kind: job.kind });
           const mappings = await getMarisonOutboundMappings(surat, job.kind);
           const overrides = {
             ...mappings,

@@ -33,8 +33,16 @@ export const normalizeMarisonApprovalRole = (kind, role) => {
 
   const normalized = value.toLowerCase();
   if (normalized.includes("marketing")) return "marketing";
+  if (kind === "non_unit" && /\b(branch manager|(?:ass|asst|assistant|asisten)\.?\s*bm|bm)\b/.test(normalized)) return "marketing";
   if (/\b(direktur|director|direksi|dirut)\b/.test(normalized)) return "director";
   return "planning";
+};
+
+export const resolveMarisonApprovalRoleLabel = ({ label, workflowRole, jobTitle, snapshotJobTitle }) => {
+  const displayLabel = String(label ?? "").trim();
+  const actualJobTitle = String(snapshotJobTitle ?? "").trim() || String(jobTitle ?? "").trim();
+  if (/^pemohon(?:\s|$)/iu.test(displayLabel)) return actualJobTitle;
+  return displayLabel || String(workflowRole ?? "").trim() || actualJobTitle;
 };
 
 export const normalizeMarisonSubmissionApprovals = (kind, approvals) =>
@@ -80,7 +88,15 @@ export const marisonNonUnitSubmissionSchema = z.object({
   }).strict()).min(1),
   attachments: z.array(externalLink).optional(),
   approvals: z.array(approval).min(1),
-}).strict();
+}).strict().superRefine((payload, context) => {
+  if (!payload.approvals.some((item) => item.role === "marketing")) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["approvals"],
+      message: "Persetujuan marketing belum tersedia untuk pengiriman Non Unit.",
+    });
+  }
+});
 
 export const marisonAssetPurchaseRequestSchema = z.object({
   request_number: nonEmptyText,

@@ -21,7 +21,12 @@ const readFixture = (name) => JSON.parse(readFileSync(
 describe("Marison outbound contract v1", () => {
   it("maps Unit and Non Unit signer labels to vendor approval roles", () => {
     expect(normalizeMarisonApprovalRole("non_unit", "Spv. Teknik")).toBe("planning");
-    expect(normalizeMarisonApprovalRole("non_unit", "Branch Manager")).toBe("planning");
+    expect(normalizeMarisonApprovalRole("non_unit", "Branch Manager")).toBe("marketing");
+    expect(normalizeMarisonApprovalRole("non_unit", "Assistant Branch Manager")).toBe("marketing");
+    expect(normalizeMarisonApprovalRole("non_unit", "ASS BM")).toBe("marketing");
+    expect(normalizeMarisonApprovalRole("non_unit", "Asst. BM")).toBe("marketing");
+    expect(normalizeMarisonApprovalRole("non_unit", "BM")).toBe("marketing");
+    expect(normalizeMarisonApprovalRole("unit", "Branch Manager")).toBe("planning");
     expect(normalizeMarisonApprovalRole("non_unit", "Mgr. Marketing")).toBe("marketing");
     expect(normalizeMarisonApprovalRole("non_unit", "Direktur Utama")).toBe("director");
     expect(normalizeMarisonApprovalRole("unit", "Direksi")).toBe("director");
@@ -110,6 +115,32 @@ describe("Marison outbound contract v1", () => {
     const fixture = readFixture("non-unit-submission.example.json");
 
     expect(marisonNonUnitSubmissionSchema.parse(fixture)).toEqual(fixture);
+    expect(assertMarisonOutboundContract("non_unit", fixture)).toEqual(fixture);
+  });
+
+  it("stops Non Unit without marketing before calling the vendor", () => {
+    const fixture = readFixture("non-unit-submission.example.json");
+    fixture.approvals = fixture.approvals.filter((item) => item.role !== "marketing");
+    expect(() => assertMarisonOutboundContract("non_unit", fixture)).toThrow(
+      "Payload Marison non_unit tidak sesuai kontrak."
+    );
+  });
+
+  it("accepts the signed branch Non Unit sequence after role normalization", () => {
+    const fixture = readFixture("non-unit-submission.example.json");
+    const signedRoles = [
+      "SPV Teknik", "Assistant Branch Manager", "Branch Manager",
+      "Mgr. Perencanaan", "Direktur II", "Direktur I", "Direktur Utama",
+    ];
+    fixture.approvals = normalizeMarisonSubmissionApprovals("non_unit", signedRoles.map((role) => ({
+      role,
+      nik: "EMP-001",
+      action: "approved",
+      actioned_at: "2026-07-21T11:05:45+07:00",
+    })));
+    expect(fixture.approvals.map((approval) => approval.role)).toEqual([
+      "planning", "marketing", "marketing", "planning", "director", "director", "director",
+    ]);
     expect(assertMarisonOutboundContract("non_unit", fixture)).toEqual(fixture);
   });
 
