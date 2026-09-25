@@ -5,6 +5,7 @@ import { mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { VERIFIER_OPTIONAL_ATTACHMENT_KEY, validateVerifierOptionalUpload, hasValidOptionalFileSignature } from "./lib/verifier-optional-attachment.js";
 import nodemailer from "nodemailer";
 import webpush from "web-push";
 import sharp from "sharp";
@@ -2226,7 +2227,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
 
   const { data: signature, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, surat_id, user_id, verifier_snapshot")
+    .select("id, surat_id, user_id, verifier_snapshot, verification_required, verification_status")
     .eq("id", signatureId)
     .eq("surat_id", suratId)
     .maybeSingle();
@@ -2251,6 +2252,36 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     throw err;
   }
 
+  validateVerifierOptionalUpload({
+    stage,
+    metadata,
+    files,
+    actorId: user.id,
+    verifierIds,
+    verificationRequired: signature.verification_required === true,
+    verificationStatus: signature.verification_status,
+  });
+  if (metadata.some((item) => item?.key === VERIFIER_OPTIONAL_ATTACHMENT_KEY)) {
+    const { data: activeTask, error: activeTaskError } = await supabase.rpc("is_inbox_task_active", {
+      p_user_id: user.id,
+      p_signature_id: signatureId,
+    });
+    if (activeTaskError) throw activeTaskError;
+    if (!activeTask) {
+      const err = new Error("Tugas pemeriksaan tidak aktif.");
+      err.status = 403;
+      throw err;
+    }
+  }
+  for (const [index, file] of files.entries()) {
+    if (metadata[index]?.key !== VERIFIER_OPTIONAL_ATTACHMENT_KEY) continue;
+    if (!hasValidOptionalFileSignature(file.type, new Uint8Array(await file.arrayBuffer()))) {
+      const err = new Error(`Isi file ${file.name} tidak sesuai tipe yang dipilih.`);
+      err.status = 422;
+      throw err;
+    }
+  }
+
   const requirementKeys = Array.from(new Set(metadata.map((item) => String(item.key || "").trim()).filter(Boolean)));
   if (requirementKeys.length === 0) {
     const err = new Error("Requirement lampiran tidak valid.");
@@ -2260,15 +2291,25 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
 
   const { data: oldRows, error: oldRowsError } = await supabase
     .from("surat_attachments")
-    .select("id, file_url")
+    .select("id, file_url, requirement_key")
     .eq("surat_id", suratId)
     .eq("signature_id", signatureId)
     .eq("stage", stage)
     .in("requirement_key", requirementKeys);
   if (oldRowsError) throw oldRowsError;
 
-  if ((oldRows || []).length > 0) {
-    await Promise.all((oldRows || []).map(async (row) => {
+  const existingOptionalCount = (oldRows || []).filter((row) => row.requirement_key === VERIFIER_OPTIONAL_ATTACHMENT_KEY).length;
+  const incomingOptionalCount = metadata.filter((item) => item?.key === VERIFIER_OPTIONAL_ATTACHMENT_KEY).length;
+  if (existingOptionalCount + incomingOptionalCount > 5) {
+    const err = new Error("Maksimal 5 lampiran tambahan pemeriksaan.");
+    err.status = 422;
+    throw err;
+  }
+  const rowsToReplace = (oldRows || []).filter((row) => row.requirement_key !== VERIFIER_OPTIONAL_ATTACHMENT_KEY);
+  const keysToReplace = requirementKeys.filter((key) => key !== VERIFIER_OPTIONAL_ATTACHMENT_KEY);
+
+  if (rowsToReplace.length > 0) {
+    await Promise.all(rowsToReplace.map(async (row) => {
       const ref = parseStorageRef(row.file_url);
       if (!ref?.bucket || !ref?.path) return;
       const { error } = await storageClientForRef(ref).storage.from(ref.bucket).remove([ref.path]);
@@ -2281,7 +2322,7 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
       .eq("surat_id", suratId)
       .eq("signature_id", signatureId)
       .eq("stage", stage)
-      .in("requirement_key", requirementKeys);
+      .in("requirement_key", keysToReplace);
     if (deleteError) throw deleteError;
   }
 

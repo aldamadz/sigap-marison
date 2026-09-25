@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
+import { REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT, VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles } from "@/lib/optional-surat-attachments";
 import {
   buildRegistrationAttachmentRows,
   classifyRegistrationDraftAttachments,
@@ -882,7 +883,8 @@ export const suratService = {
       }
 
       const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
-        .filter((requirement: any) => Number(requirement.stage_order) === 0);
+        .filter((requirement: any) => Number(requirement.stage_order) === 0 && requirement.requirement_key !== REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT.requirement_key)
+        .concat(REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
       const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
         files: persistedDraftAttachments,
@@ -1494,6 +1496,7 @@ export const suratService = {
       ? sigInfo.attachment_requirements_snapshot
       : [];
     const approvalAttachments = options.approvalAttachments || [];
+    validateOptionalAttachmentFiles(approvalAttachments.filter(item => item.key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY).map(item => item.file));
     const { data: existingApprovalAttachments, error: existingApprovalError } = await supabase
       .from("surat_attachments")
       .select("id, requirement_key")
@@ -1501,6 +1504,11 @@ export const suratService = {
       .eq("signature_id", signatureId)
       .eq("stage", "approval");
     if (existingApprovalError) throw existingApprovalError;
+    const existingOptionalCount = (existingApprovalAttachments || []).filter(item => item.requirement_key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY).length;
+    const incomingOptionalCount = approvalAttachments.filter(item => item.key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY).length;
+    if (existingOptionalCount + incomingOptionalCount > 5) {
+      throw new Error("Maksimal 5 lampiran tambahan pemeriksaan.");
+    }
 
     approvalRequirements.forEach((requirement: any) => {
       const files = approvalAttachments.filter(item => item.key === requirement.requirement_key);
