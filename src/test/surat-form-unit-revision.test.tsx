@@ -11,11 +11,13 @@ import {
   setSearchParamsOverride,
   setupTestHarness,
   teardownTestHarness,
+  toastMock,
 } from "./surat-form-harness";
 import {
   configureStandardMocks,
   clickGetNumber,
   findSelectTrigger,
+  goToWizardStep,
   mountFormWithUsage,
   selectEntity,
   selectFormAndUsage,
@@ -23,6 +25,7 @@ import {
 } from "./surat-form-driver";
 import {
   FORM_USAGES_RAW,
+  CURRENT_PROFILE_DEFAULT,
   MASTER_DATA_WITH_PROJECTS,
   UNIT_FORM_USAGE_RAW,
   UUID,
@@ -33,6 +36,7 @@ const REVISION_EVENT_ID = "963b7fab-d4f7-4251-aeb2-5e56a32a66ee";
 
 const unitRevisionDraft = {
   id: UUID.draft,
+  revision_event_id: REVISION_EVENT_ID,
   reservation_id: UUID.reservation,
   no_surat: "003/UAI/MKT.1.TEST-02/IX/2026",
   no_urut: 3,
@@ -42,7 +46,7 @@ const unitRevisionDraft = {
   payload: {
     formData: {
       entity_id: UUID.entity,
-      dept_id: UUID.dept_pbo,
+      dept_id: UUID.dept_pbo as string,
       letter_type_id: UUID.letter_type,
       office_id: UUID.office_pusat,
       project_id: "",
@@ -124,9 +128,16 @@ function registerUnitSources() {
 
 async function mountUnitRevisionDraft(
   activeUsageData: unknown[] = UNIT_FORM_USAGE_RAW,
-  draft: typeof unitRevisionDraft & {
-    usage_configuration?: (typeof UNIT_FORM_USAGE_RAW)[number];
+  draft: Omit<typeof unitRevisionDraft, "payload"> & {
+    payload: Omit<typeof unitRevisionDraft.payload, "externalRevision"> & {
+      externalRevision?: typeof unitRevisionDraft.payload.externalRevision;
+    };
+    revision_context?: { eventId: string; generation?: number; reason?: string };
+    usage_configuration?: Omit<(typeof UNIT_FORM_USAGE_RAW)[number], "form_usage_departments"> & {
+      form_usage_departments: Array<{ department_id: string }>;
+    };
   } = unitRevisionDraft,
+  profile = CURRENT_PROFILE_DEFAULT,
 ) {
   setSearchParamsOverride(
     new URLSearchParams(`?draft=${UUID.draft}&revision=${REVISION_EVENT_ID}`),
@@ -142,7 +153,7 @@ async function mountUnitRevisionDraft(
     "saveRegistrationDraft",
   );
 
-  await mountFormWithUsage(activeUsageData);
+  await mountFormWithUsage(activeUsageData, profile);
   await screen.findByText("Perbaiki Proyek dan Jumlah Unit");
 }
 
@@ -185,6 +196,60 @@ describe("SPK Unit requester revision", () => {
     await waitFor(() => expect(project).not.toBeDisabled());
     expect(count).not.toBeDisabled();
     expect(count).toHaveValue(2);
+    assertStrictServiceCalls();
+  });
+
+  it("recovers edit mode when autosave removed revision metadata from the payload", async () => {
+    const payloadWithoutRevision = { ...unitRevisionDraft.payload, externalRevision: undefined };
+    await mountUnitRevisionDraft(UNIT_FORM_USAGE_RAW, {
+      ...unitRevisionDraft,
+      payload: payloadWithoutRevision,
+      revision_context: {
+        eventId: REVISION_EVENT_ID,
+        generation: 2,
+        reason: "Jumlah unit dan proyek perlu disesuaikan.",
+      },
+    });
+
+    expect(screen.getByText("Jumlah unit dan proyek perlu disesuaikan.")).toBeInTheDocument();
+    await waitFor(() => expect(findSelectTrigger(/^Proyek$/i)).not.toBeDisabled());
+    expect(screen.getByLabelText("Jumlah Unit Diajukan")).not.toBeDisabled();
+    await waitFor(() => expect(serviceMock.saveRegistrationDraft).toHaveBeenCalledWith(
+      UUID.draft,
+      expect.objectContaining({ externalRevision: expect.objectContaining({ eventId: REVISION_EVENT_ID }) }),
+      expect.any(Array),
+      expect.any(String),
+    ), { timeout: 2000 });
+    assertStrictServiceCalls();
+  });
+
+  it("keeps the original Marketing department valid for an admin revising its historical Unit letter", async () => {
+    const archivedUsage = {
+      ...UNIT_FORM_USAGE_RAW[0],
+      status: "archived",
+      form_usage_departments: [{ department_id: UUID.dept_sales }],
+    };
+    await mountUnitRevisionDraft(
+      FORM_USAGES_RAW,
+      {
+        ...unitRevisionDraft,
+        payload: {
+          ...unitRevisionDraft.payload,
+          formData: { ...unitRevisionDraft.payload.formData, dept_id: UUID.dept_sales },
+        },
+        usage_configuration: archivedUsage,
+      },
+      { ...CURRENT_PROFILE_DEFAULT, role: "admin" },
+    );
+
+    expect(screen.queryByRole("button", { name: /Ubah Identitas/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(findSelectTrigger(/^Proyek$/i)).not.toBeDisabled());
+    expect(screen.getByLabelText("Jumlah Unit Diajukan")).not.toBeDisabled();
+    await goToWizardStep(3);
+    const review = screen.getByRole("button", { name: "Tinjau dan Kirim Perbaikan" });
+    await waitFor(() => expect(review).not.toBeDisabled());
+    fireEvent.click(review);
+    expect(toastMock).not.toHaveBeenCalledWith(expect.objectContaining({ title: "Mode Unit Tidak Diizinkan" }));
     assertStrictServiceCalls();
   });
 
