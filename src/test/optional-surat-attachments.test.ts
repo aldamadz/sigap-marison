@@ -3,6 +3,7 @@ import {
   REQUESTER_ADDITIONAL_ATTACHMENT_KEY,
   REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT,
   validateOptionalAttachmentFiles,
+  withOptionalRequesterAttachmentRequirement,
   withOptionalVerifierAttachmentRequirement,
 } from "@/lib/optional-surat-attachments";
 import { classifyRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
@@ -43,5 +44,11 @@ describe("optional surat attachments", () => {
     ]);
     const configured = [{ requirement_key: "rab", label: "RAB" }];
     expect(withOptionalVerifierAttachmentRequirement(configured, true).map(item => item.requirement_key)).toEqual(["rab", "verifier_additional"]);
+  });
+
+  it("preserves a configured requester requirement even when its key collides with the optional key", () => {
+    const configured = [{ requirement_key: REQUESTER_ADDITIONAL_ATTACHMENT_KEY, label: "Lampiran wajib", is_required: true }];
+    expect(withOptionalRequesterAttachmentRequirement(configured)).toEqual(configured);
+    expect(withOptionalRequesterAttachmentRequirement([])).toEqual([REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT]);
   });
 });

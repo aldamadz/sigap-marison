@@ -48,7 +48,7 @@ import { executeRecommendationPostSubmit } from "@/features/surat/recommendation
 import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
-import { REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT, REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles } from "@/lib/optional-surat-attachments";
+import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
 import { selectUsage } from "@/features/surat/registration/usages";
 import type {
   NumberContextIssue,
@@ -231,12 +231,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       externalRevision?.eventId && activeDraftId ? formData.dept_id : requesterDepartmentId);
 
 
-  const getInitialAttachmentRequirements = (): AttachmentRequirement[] => [
-    ...(selectedUsage?.form_usage_attachment_requirements?.filter(rule =>
-      rule.stage_order === 0 && rule.requirement_key !== REQUESTER_ADDITIONAL_ATTACHMENT_KEY
-    ) || []),
-    REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT,
-  ];
+  const getInitialAttachmentRequirements = (): AttachmentRequirement[] => {
+    const configured = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
+    return withOptionalRequesterAttachmentRequirement(configured);
+  };
 
   const getMissingInitialAttachmentLabels = () =>
     getInitialAttachmentRequirements()
