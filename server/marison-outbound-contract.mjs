@@ -38,6 +38,13 @@ export const normalizeMarisonApprovalRole = (kind, role) => {
   return "planning";
 };
 
+export const resolveMarisonApprovalRoleLabel = ({ label, workflowRole, jobTitle, snapshotJobTitle }) => {
+  const displayLabel = String(label ?? "").trim();
+  const actualJobTitle = String(snapshotJobTitle ?? "").trim() || String(jobTitle ?? "").trim();
+  if (/^pemohon(?:\s|$)/iu.test(displayLabel)) return actualJobTitle;
+  return displayLabel || String(workflowRole ?? "").trim() || actualJobTitle;
+};
+
 export const normalizeMarisonSubmissionApprovals = (kind, approvals) =>
   approvals.map((item) => ({
     ...item,
