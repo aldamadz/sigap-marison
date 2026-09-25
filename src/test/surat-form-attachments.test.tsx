@@ -9,7 +9,8 @@ import {
   allowServiceCalls,
   assertStrictServiceCalls,
 } from "./surat-form-harness";
-import { MASTER_DATA_DEFAULT, ATTACHMENT_FORM_USAGE_RAW, UUID } from "./surat-form-fixtures";
+import { MASTER_DATA_DEFAULT, ATTACHMENT_FORM_USAGE_RAW, FORM_USAGES_RAW, UUID } from "./surat-form-fixtures";
+import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY } from "@/lib/optional-surat-attachments";
 import {
   configureStandardMocks,
   selectLetterType,
@@ -67,6 +68,30 @@ async function reachReadyAttachmentForm() {
 }
 
 describe("Flow 10: Required attachment", () => {
+  it("offers optional attachments when a usage has no configured attachment requirement", async () => {
+    serviceMock.uploadRegistrationDraftFiles.mockResolvedValueOnce([{
+      id: UUID.draft_file,
+      file_name: "tambahan.pdf",
+      file_type: "application/pdf",
+      file_size: 12,
+      requirement_key: REQUESTER_ADDITIONAL_ATTACHMENT_KEY,
+      requirement_label: "Lampiran tambahan",
+    }]);
+    await mountFormWithUsage(FORM_USAGES_RAW);
+    await selectFormAndUsage();
+    await selectLetterType();
+    await selectEntity();
+    await clickGetNumber();
+    expect(screen.getByText("Lampiran tambahan")).toBeInTheDocument();
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["pdf content"], "tambahan.pdf", { type: "application/pdf" });
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
+    await waitFor(() => expect(serviceMock.uploadRegistrationDraftFiles).toHaveBeenCalledWith(
+      UUID.draft, [file], { key: REQUESTER_ADDITIONAL_ATTACHMENT_KEY, label: "Lampiran tambahan" }, expect.any(Function),
+    ));
+  });
+
   it("blocks summary before required attachment is persisted", async () => {
     await reachReadyAttachmentForm();
     await goToWizardStep(3);
