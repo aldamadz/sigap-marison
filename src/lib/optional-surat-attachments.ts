@@ -32,6 +32,14 @@ export const REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT = {
   max_size_bytes: OPTIONAL_ATTACHMENT_MAX_SIZE_BYTES,
 };
 
+export function withOptionalRequesterAttachmentRequirement<T extends { requirement_key: string }>(
+  requirements: T[],
+): Array<T | typeof REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT> {
+  return requirements.some(item => item.requirement_key === REQUESTER_ADDITIONAL_ATTACHMENT_KEY)
+    ? requirements
+    : [...requirements, REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT];
+}
+
 export const VERIFIER_ADDITIONAL_ATTACHMENT_REQUIREMENT = {
   requirement_key: VERIFIER_ADDITIONAL_ATTACHMENT_KEY,
   label: "Lampiran tambahan pemeriksaan",

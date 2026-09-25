@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
-import { REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT, VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles } from "@/lib/optional-surat-attachments";
+import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
 import {
   buildRegistrationAttachmentRows,
   classifyRegistrationDraftAttachments,
@@ -882,9 +882,9 @@ export const suratService = {
         await this.validateUnitRequestAvailability(normalizedFormInputData);
       }
 
-      const initialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
-        .filter((requirement: any) => Number(requirement.stage_order) === 0 && requirement.requirement_key !== REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT.requirement_key)
-        .concat(REQUESTER_ADDITIONAL_ATTACHMENT_REQUIREMENT);
+      const configuredInitialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
+        .filter((requirement: any) => Number(requirement.stage_order) === 0);
+      const initialRequirements = withOptionalRequesterAttachmentRequirement(configuredInitialRequirements);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
       const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
         files: persistedDraftAttachments,
