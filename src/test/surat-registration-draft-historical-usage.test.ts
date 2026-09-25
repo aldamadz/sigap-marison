@@ -57,6 +57,23 @@ function createUsageQuery(result = { data: archivedUsage, error: null }) {
   };
 }
 
+function createRevisionQuery(result = {
+  data: {
+    id: draft.revision_event_id,
+    status: "open",
+    target_type: "requester",
+    reason: "Perbaiki jumlah unit.",
+    changes: { external_submission_revision: true, revision_generation: 2 },
+  },
+  error: null,
+}) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue(result),
+  };
+}
+
 beforeEach(() => {
   supabaseMock.from.mockReset();
 });
@@ -65,8 +82,10 @@ describe("registration draft historical usage", () => {
   it("loads the exact stored usage even when its status is archived", async () => {
     const draftQuery = createDraftQuery();
     const usageQuery = createUsageQuery();
+    const revisionQuery = createRevisionQuery();
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === "surat_registration_drafts") return draftQuery;
+      if (table === "surat_revision_events") return revisionQuery;
       if (table === "form_usages") return usageQuery;
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -74,6 +93,11 @@ describe("registration draft historical usage", () => {
     const result = await suratService.getRegistrationDraft(draft.id);
 
     expect(result.usage_configuration).toBe(archivedUsage);
+    expect(result.revision_context).toEqual({
+      eventId: draft.revision_event_id,
+      generation: 2,
+      reason: "Perbaiki jumlah unit.",
+    });
     expect(usageQuery.eq).toHaveBeenCalledTimes(1);
     expect(usageQuery.eq).toHaveBeenCalledWith("id", archivedUsage.id);
     expect(usageQuery.eq).not.toHaveBeenCalledWith("status", "active");
@@ -83,12 +107,34 @@ describe("registration draft historical usage", () => {
     const usageError = { code: "PGRST301", message: "row is not readable" };
     const draftQuery = createDraftQuery();
     const usageQuery = createUsageQuery({ data: archivedUsage, error: usageError });
+    const revisionQuery = createRevisionQuery();
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === "surat_registration_drafts") return draftQuery;
+      if (table === "surat_revision_events") return revisionQuery;
       if (table === "form_usages") return usageQuery;
       throw new Error(`Unexpected table: ${table}`);
     });
 
     await expect(suratService.getRegistrationDraft(draft.id)).rejects.toBe(usageError);
+  });
+
+  it("refuses a linked draft whose revision event is no longer open", async () => {
+    const revisionQuery = createRevisionQuery({
+      data: {
+        id: draft.revision_event_id,
+        status: "resolved",
+        target_type: "requester",
+        reason: "Perbaiki jumlah unit.",
+        changes: { external_submission_revision: true, revision_generation: 2 },
+      },
+      error: null,
+    });
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "surat_registration_drafts") return createDraftQuery();
+      if (table === "surat_revision_events") return revisionQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(suratService.getRegistrationDraft(draft.id)).rejects.toThrow("Permintaan perbaikan pengajuan tidak tersedia.");
   });
 });

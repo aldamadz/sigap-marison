@@ -155,6 +155,16 @@ opsi pengajuan baru. Restore Form, Kegunaan, Proyek, dan Jumlah Unit tidak lagi
 bergantung pada daftar Kegunaan aktif; teks escape literal pada Form & Lokasi
 juga dihapus. Tidak ada migration atau perubahan data.
 
+Koreksi staging SUR-16 (Issue #385): draft revisi yang kehilangan
+`payload.externalRevision` dipulihkan dari `revision_event_id` dan event terbuka;
+autosave mempertahankan konteks revisi. Validasi departemen pada revisi Unit
+memakai departemen surat asal (bukan departemen profil tester), sementara
+pengajuan baru tetap memeriksa departemen akun. Migration forward-only
+`20260924180000_allow_validated_unit_project_revision.sql` mengizinkan proyek
+Marison tersinkron yang valid pada revisi, menghapus alokasi lama ketika proyek
+berubah, dan membiarkan alur checker membuka ulang verifikasi. Nomor dan
+identitas surat tidak berubah. Production tidak termasuk koreksi ini.
+
 ### 4.5 Permohonan Unit, Non-Unit, Aset, dan Marison
 
 | ID | Fitur | Status | Komponen utama | Dependensi | Penarikan production |
