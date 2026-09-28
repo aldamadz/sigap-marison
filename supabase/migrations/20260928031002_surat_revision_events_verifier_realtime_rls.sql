@@ -1,4 +1,4 @@
--- Migration: 20260928100001_surat_revision_events_verifier_realtime_rls.sql
+-- Migration: 20260928031002_surat_revision_events_verifier_realtime_rls.sql
 -- Purpose: make the verifier path of public.surat_revision_events SELECT policy
 --          evaluable by Supabase Realtime delivery.
 --

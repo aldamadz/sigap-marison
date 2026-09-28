@@ -84,8 +84,8 @@ re-audit. Do not proceed on stale assumptions.
 
 Apply to production, in order, with verification between:
 
-1. `20260928100000_realtime_publish_inbox_agenda_tables.sql`
-2. `20260928100001_surat_revision_events_verifier_realtime_rls.sql`
+1. `20260928030948_realtime_publish_inbox_agenda_tables.sql`
+2. `20260928031002_surat_revision_events_verifier_realtime_rls.sql`
 
 Both are forward-only and idempotent (re-runnable), so a partial-apply retry is
 safe. They do not depend on each other, but order keeps RLS last so that events

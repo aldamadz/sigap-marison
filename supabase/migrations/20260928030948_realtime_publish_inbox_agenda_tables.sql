@@ -1,4 +1,4 @@
--- Migration: 20260928100000_realtime_publish_inbox_agenda_tables.sql
+-- Migration: 20260928030948_realtime_publish_inbox_agenda_tables.sql
 -- Purpose: publish the remaining tables subscribed by the realtime surfaces so
 --          that postgres_change events are actually delivered.
 --

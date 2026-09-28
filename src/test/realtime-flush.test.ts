@@ -288,7 +288,7 @@ describe("migration contract", () => {
   };
 
   it("publishes only the four audited tables, idempotently", async () => {
-    const src = await read("supabase/migrations/20260928100000_realtime_publish_inbox_agenda_tables.sql");
+    const src = await read("supabase/migrations/20260928030948_realtime_publish_inbox_agenda_tables.sql");
     for (const table of ["surat_attachments", "surat_linked_documents", "agendas", "activity_logs"]) {
       expect(src).toContain(`'${table}'`);
     }
@@ -300,7 +300,7 @@ describe("migration contract", () => {
   });
 
   it("revision-events RLS migration replaces jsonb_array_elements with containment", async () => {
-    const src = await read("supabase/migrations/20260928100001_surat_revision_events_verifier_realtime_rls.sql");
+    const src = await read("supabase/migrations/20260928031002_surat_revision_events_verifier_realtime_rls.sql");
     expect(src).toContain("verifier_snapshot @> jsonb_build_array(jsonb_build_object('user_id', auth.uid()::text))");
     const body = src.slice(src.indexOf("using ("));
     expect(body).not.toContain("jsonb_array_elements");
