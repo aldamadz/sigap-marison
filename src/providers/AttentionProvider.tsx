@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { attentionService, type AttentionState } from "@/services/attention.service";
 import { pushService } from "@/services/push.service";
-import { supabase } from "@/lib/supabase";
+import { supabase, onRealtimeReconnect } from "@/lib/supabase";
+import { createRealtimeFlush, type FlushController } from "@/lib/realtime-flush";
 
 type AttentionContextValue = {
   state: AttentionState;
@@ -24,7 +25,7 @@ const queryKey = ["attention-state"];
 
 export const AttentionProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
-  const refreshTimerRef = useRef<number | null>(null);
+  const flushRef = useRef<FlushController | null>(null);
   const pushPermissionRequestedRef = useRef(false);
   const [eventVersion, setEventVersion] = useState(0);
 
@@ -36,20 +37,25 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
   });
   const refetchAttention = attentionQuery.refetch;
 
-  const applyAttentionState = useCallback((nextState: AttentionState) => {
-    queryClient.setQueryData(queryKey, nextState);
-    setEventVersion((value) => value + 1);
-  }, [queryClient]);
+  // A refetch changes query data; bump eventVersion so notification surfaces
+  // that key off it (Header) reload even when the object identity is preserved.
+  useEffect(() => {
+    if (attentionQuery.data) setEventVersion((value) => value + 1);
+  }, [attentionQuery.data]);
 
   useEffect(() => {
     pushService.ensureSubscription({ requestPermission: false }).catch(() => {});
+
+    const flush = createRealtimeFlush({
+      queryClient,
+      debounceMs: 200,
+      maxFlushDelayMs: 800,
+    });
+    flushRef.current = flush;
+
     const scheduleRefresh = () => {
-      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = window.setTimeout(async () => {
-        refreshTimerRef.current = null;
-        const result = await refetchAttention();
-        if (result.data) applyAttentionState(result.data);
-      }, 350);
+      // Fast but batched: union of triggers fires one bounded refetch.
+      flush.add("attention-state", "notifications");
     };
 
     const channel = supabase
@@ -65,11 +71,15 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
       .on("postgres_changes", { event: "*", schema: "public", table: "marison_sync_issues" }, scheduleRefresh)
       .subscribe();
 
+    // Missed events during an offline gap change attention state; revalidate.
+    const reconnectSubscription = onRealtimeReconnect(() => scheduleRefresh());
+
     return () => {
-      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+      reconnectSubscription.unsubscribe();
+      flush.cancel();
       supabase.removeChannel(channel);
     };
-  }, [applyAttentionState, refetchAttention]);
+  }, [refetchAttention, queryClient]);
 
   const value = useMemo<AttentionContextValue>(() => ({
     state: attentionQuery.data || attentionService.emptyState,

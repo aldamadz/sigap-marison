@@ -184,6 +184,26 @@ type RealtimeBinding = {
 
 let realtimeSource: EventSource | null = null;
 let realtimeReconnectTimer: number | null = null;
+let realtimeHasConnected = false;
+let realtimeBackoffMs = 1_000;
+const realtimeReconnectListeners = new Set<() => void>();
+
+/**
+ * Register a callback fired once after the stream (re)connects following a
+ * disconnect. Providers use it to revalidate query data, because events that
+ * arrived while the client was offline are lost — Supabase Realtime does not
+ * replay them.
+ */
+export const onRealtimeReconnect = (listener: () => void): { unsubscribe: () => void } => {
+  realtimeReconnectListeners.add(listener);
+  return { unsubscribe: () => { realtimeReconnectListeners.delete(listener); } };
+};
+
+const notifyReconnect = () => {
+  for (const listener of realtimeReconnectListeners) {
+    try { listener(); } catch { /* a listener error must not break the stream */ }
+  }
+};
 
 const subscribedTables = () => [...new Set(
   Array.from(activeChannels).flatMap((channel) => channel.tables()),
@@ -196,6 +216,8 @@ const closeRealtimeSource = () => {
 
 const openRealtimeSource = () => {
   closeRealtimeSource();
+  if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);
+  realtimeReconnectTimer = null;
   const tables = subscribedTables();
   if (!tables.length || document.visibilityState !== 'visible') return;
 
@@ -203,6 +225,10 @@ const openRealtimeSource = () => {
   realtimeSource = source;
   source.addEventListener('ready', () => {
     activeChannels.forEach((channel) => channel.notifyStatus('SUBSCRIBED'));
+    // Events during the offline gap are lost; revalidate after reconnect only.
+    if (realtimeHasConnected) notifyReconnect();
+    realtimeHasConnected = true;
+    realtimeBackoffMs = 1_000;
   });
   source.addEventListener('postgres_change', (event) => {
     try {
@@ -219,7 +245,11 @@ const openRealtimeSource = () => {
     if (realtimeSource !== source) return;
     closeRealtimeSource();
     if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);
-    realtimeReconnectTimer = window.setTimeout(openRealtimeSource, 3_000);
+    // Fixed 1s..5s bounded backoff. No exponential blowup: the BFF already caps
+    // stream lifetime, and a healed connection must not be delayed long.
+    const delay = realtimeBackoffMs;
+    realtimeBackoffMs = Math.min(realtimeBackoffMs * 2, 5_000);
+    realtimeReconnectTimer = window.setTimeout(openRealtimeSource, delay);
   };
 };
 
@@ -381,9 +411,24 @@ export const supabase: any = {
 };
 
 window.setInterval(() => { void refreshSessionState(); }, 5 * 60_000);
+
+// Session transitions must reopen the stream: the old session's tables and RLS
+// no longer apply, and the new session may be entitled to different rows.
+auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') {
+    realtimeHasConnected = false;
+    closeRealtimeSource();
+  } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+    realtimeHasConnected = false;
+    scheduleRealtimeReconnect(0);
+  }
+});
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     void refreshSessionState();
+    // The source is closed while hidden; reopening also revalidates via the
+    // reconnect listener because realtimeHasConnected stays true.
     scheduleRealtimeReconnect(0);
   } else {
     if (realtimeReconnectTimer !== null) window.clearTimeout(realtimeReconnectTimer);
