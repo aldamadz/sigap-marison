@@ -20,7 +20,7 @@
  */
 export type QueryClientLike = {
   refetchQueries: (options: { predicate: (query: any) => boolean; type: "active" }) => Promise<unknown>;
-  invalidateQueries: (options: { predicate: (query: any) => boolean }) => void;
+  invalidateQueries: (options: { predicate: (query: any) => boolean; refetchType?: "none" }) => void;
 };
 
 export type QueryKeyExtractor = (query: any) => string | undefined;
@@ -79,7 +79,12 @@ export const createRealtimeFlush = (options: {
     };
     // Inactive queries are marked stale so a returning view refetches; active
     // ones refetch in place, keeping filters/pagination.
-    queryClient.invalidateQueries({ predicate: matches });
+    //
+    // invalidateQueries defaults to refetchType: "active", which would refetch
+    // active queries here AND again in refetchQueries below (two fetches per
+    // flush). Suppress its implicit refetch; the explicit refetchQueries is
+    // the single source of fetches for active queries.
+    queryClient.invalidateQueries({ predicate: matches, refetchType: "none" });
     await queryClient.refetchQueries({ predicate: matches, type: "active" });
   };
 

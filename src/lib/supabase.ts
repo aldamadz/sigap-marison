@@ -419,7 +419,9 @@ auth.onAuthStateChange((event) => {
     realtimeHasConnected = false;
     closeRealtimeSource();
   } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-    realtimeHasConnected = false;
+    // Do NOT reset realtimeHasConnected: the stream is torn down and reopened
+    // below, so a gap exists. Keeping the flag lets the ready handler fire
+    // notifyReconnect() to revalidate changes made during the gap.
     scheduleRealtimeReconnect(0);
   }
 });
