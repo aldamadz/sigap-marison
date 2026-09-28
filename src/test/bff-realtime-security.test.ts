@@ -36,3 +36,72 @@ describe("user-scoped BFF realtime stream", () => {
     expect(stream).toContain("payload.old || {}");
   });
 });
+
+describe("realtime table allowlist (PII boundary)", () => {
+  const ALLOWED = [
+    "activity_logs",
+    "agendas",
+    "marison_sync_issues",
+    "master_offices",
+    "master_projects",
+    "notifications",
+    "surat_attachments",
+    "surat_linked_documents",
+    "surat_recommendation_tasks",
+    "surat_registrasi",
+    "surat_revision_events",
+    "surat_signatures",
+  ];
+
+  it("rejects tables outside REALTIME_ALLOWED_TABLES with 400", () => {
+    const bffRuntime = read("backend/src/modules/bff/bff-runtime.ts");
+
+    expect(bffRuntime).toContain("REALTIME_ALLOWED_TABLES");
+    for (const table of ALLOWED) {
+      expect(bffRuntime).toContain(`"${table}"`);
+    }
+    // profiles must never be subscribable: its SELECT policy is
+    // all-authenticated and postgres_changes ships full rows (nik, email, phone).
+    const allowlistStart = bffRuntime.indexOf("REALTIME_ALLOWED_TABLES: ReadonlySet<string> = new Set([");
+    const allowlistBlock = bffRuntime.slice(allowlistStart, bffRuntime.indexOf("]);", allowlistStart));
+    expect(allowlistStart).toBeGreaterThan(-1);
+    expect(allowlistBlock).not.toContain('"profiles"');
+    expect(bffRuntime).toContain("rejectedTables");
+    expect(bffRuntime).toContain("Tabel realtime tidak diizinkan");
+    expect(bffRuntime).toContain("err.status = 400");
+  });
+
+  it("never subscribes to profiles from any frontend surface", () => {
+    const sources = [
+      "src/providers/AttentionProvider.tsx",
+      "src/providers/RealtimeSync.tsx",
+      "src/pages/admin/OrganizationHierarchyPage.tsx",
+      "src/pages/surat/InboxPage.tsx",
+      "src/components/surat/SuratForm.tsx",
+    ];
+    for (const file of sources) {
+      const content = read(file);
+      expect(content).not.toContain('table: "profiles"');
+      expect(content).not.toContain("table: 'profiles'");
+    }
+  });
+
+  it("does not subscribe to tables outside the publication", () => {
+    // Dead subscriptions stayed SUBSCRIBED but never delivered; worse, they
+    // would now 400 the whole /api/events stream via the allowlist.
+    const deadTables = [
+      "master_forms",
+      "form_usages",
+      "form_usage_departments",
+      "form_usage_steps",
+      "form_usage_step_users",
+      "form_usage_attachment_requirements",
+      "master_penggunaan_detail",
+      "workflow_allowed_departments",
+    ];
+    const suratForm = read("src/components/surat/SuratForm.tsx");
+    for (const table of deadTables) {
+      expect(suratForm).not.toContain(`table: "${table}"`);
+    }
+  });
+});

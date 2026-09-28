@@ -67,7 +67,10 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "master_offices" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "master_projects" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
+      // NOTE: `profiles` is intentionally NOT subscribed here. Its RLS SELECT
+      // policy allows every authenticated user to read all active profiles,
+      // and postgres_changes delivers full rows (nik, email, phone). See
+      // REALTIME_ALLOWED_TABLES in backend/src/modules/bff/bff-runtime.ts.
       .on("postgres_changes", { event: "*", schema: "public", table: "marison_sync_issues" }, scheduleRefresh)
       .subscribe();
 

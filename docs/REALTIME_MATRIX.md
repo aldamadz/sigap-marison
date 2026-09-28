@@ -147,3 +147,46 @@ which costs no network until the view is shown again.
 ponytail: single in-memory reconnect registry, no persistence. Upgrade path:
 if tab-level dedupe across windows is needed later, move the registry into a
 SharedWorker or BroadcastChannel.
+
+## 4. Security hardening addendum (2026-09-28, takeover)
+
+### 4.1 `profiles` removed from the realtime surface
+
+- Staging `profiles_select_authenticated` allows every authenticated user to
+  read every profile with `deleted_at IS NULL`; the table carries `nik`,
+  `email`, and `phone`. postgres_changes delivers full rows, so every profile
+  change was broadcast (also via `/api/events?tables=profiles`) to all
+  logged-in users.
+- The app needs broad profiles QUERY access (user directory pickers, Team
+  hierarchy, parent-user lookups, admin user management) — that is unchanged.
+  Tightening the SELECT policy would break those features and needs an
+  explicit product decision about who may read employee profiles.
+- Fix (forward-only migration
+  `20260928120000_realtime_drop_profiles_from_publication.sql`):
+  `ALTER PUBLICATION supabase_realtime DROP TABLE public.profiles`.
+  Publication membership does not affect PostgREST queries.
+- Frontend bindings removed: `AttentionProvider` (badge refresh falls back to
+  5-minute session refresh, tab-focus refetch, reconnect revalidation),
+  `RealtimeSync` (`userKeys` still revalidated on reconnect/focus),
+  `OrganizationHierarchyPage` (admin; refetches `['users']` on window
+  focus/visibilitychange).
+
+### 4.2 `/api/events` table allowlist (server boundary)
+
+- `backend/src/modules/bff/bff-runtime.ts` now enforces
+  `REALTIME_ALLOWED_TABLES` (12 tables: the published set minus `profiles`).
+  Any requested table outside the list fails the whole stream with 400
+  (`Tabel realtime tidak diizinkan`), so a future `profiles` (or arbitrary
+  table) subscription cannot re-open the broadcast. RLS stays the row-level
+  guard; the allowlist is the table-level guard.
+
+### 4.3 Dead `SuratForm` subscriptions removed
+
+- The `surat-form-configuration-sync` channel subscribed to 8 tables
+  (`master_forms`, `form_usages`, `form_usage_departments`, `form_usage_steps`,
+  `form_usage_step_users`, `form_usage_attachment_requirements`,
+  `master_penggunaan_detail`, `workflow_allowed_departments`) that are not in
+  the publication: SUBSCRIBED but never delivered. They are also outside the
+  new allowlist, so keeping them would 400 the stream. Removed; the form
+  reloads usage details on mount. Re-adding a subscription requires adding
+  the table to the publication AND the allowlist.

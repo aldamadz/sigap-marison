@@ -36,9 +36,10 @@ export const RealtimeSync = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
       )
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () =>
-        handleSync(userKeys)
-      )
+      // NOTE: `profiles` is intentionally NOT subscribed. Full profile rows
+      // (nik, email, phone) must not be broadcast to every authenticated
+      // user; the user directory still refreshes on focus/reconnect via
+      // userKeys below.
       .subscribe();
 
     // Events received while the client was offline are not replayed by Supabase
