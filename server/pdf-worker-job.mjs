@@ -56,6 +56,60 @@ export const createPgdJobHandler = ({
   return await renderPgdPdf(documentData, { logoPath });
 };
 
+export const createKeu1JobHandler = ({
+  supabase,
+  isKeu1Document,
+  resolveKeu1MasterForm,
+  normalizeKeu1DocumentData,
+  renderKeu1Pdf,
+  logoPath,
+}) => async (job) => {
+  const { data: surat, error: suratError } = await supabase
+    .from("surat_registrasi")
+    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
+    .eq("id", job.surat_id)
+    .maybeSingle();
+  if (suratError) throw suratError;
+  if (!surat) return null;
+
+  let detectionSource = surat;
+  if (!isKeu1Document(surat) && surat.form_usage_id) {
+    const masterForm = await resolveKeu1MasterForm(supabase, surat.form_usage_id);
+    if (masterForm) detectionSource = { ...surat, resolved_master_form: masterForm };
+  }
+  if (!isKeu1Document(detectionSource)) return null;
+
+  const { data: signatures, error: signatureError } = await supabase
+    .from("surat_signatures")
+    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
+    .eq("surat_id", job.surat_id)
+    .order("step_order", { ascending: true });
+  if (signatureError) throw signatureError;
+
+  const userIds = [...new Set((signatures || []).map((item) => item.user_id).filter(Boolean))];
+  let profileMap = new Map();
+  if (userIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, full_name, job_title")
+      .in("id", userIds);
+    if (profileError) throw profileError;
+    profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+  }
+  const enrichedSignatures = (signatures || []).map((signature) => ({
+    ...signature,
+    profile: profileMap.get(signature.user_id) || null,
+  }));
+  const targetSignature = job.signature_id
+    ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
+    : null;
+  const documentData = normalizeKeu1DocumentData(detectionSource, {
+    signatures: enrichedSignatures,
+    targetStep: targetSignature?.step_order || null,
+  });
+  return await renderKeu1Pdf(documentData, { logoPath });
+};
+
 export const createRecommendationJobHandler = ({
   supabase,
   normalizeRecommendationDocumentData,

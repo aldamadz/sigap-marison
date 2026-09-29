@@ -11,6 +11,7 @@ import webpush from "web-push";
 import sharp from "sharp";
 import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
+import { createKeu1PreviewData, renderKeu1Pdf } from "../../keu1-pdf-renderer.mjs";
 import { resolveRecommendationSource } from "../../recommendation-pdf.mjs";
 import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "../../recommendation-native-pdf.mjs";
 import { buildProductionCode } from "../../production-code.mjs";
@@ -915,10 +916,19 @@ const generateTemplatePreviewPdf = async (formId, options = {}) => {
   }
 
   const formName = String(form.nama_form || "").toUpperCase();
+  const formNumber = String(form.nomor_form || "").toUpperCase();
   if (formName.includes("PERMINTAAN BARANG")) {
     const previewData = createPgdPreviewData(options);
     previewData.formNumber = String(form.nomor_form || previewData.formNumber);
     return await renderPgdPdf(previewData, {
+      logoPath: join(distDir, "logo-marison-regency-group.png"),
+    });
+  }
+
+  if (formName.includes("KAS KECIL") || formName.includes("PENGAJUAN KAS") || formNumber.includes("KEU")) {
+    const previewData = createKeu1PreviewData(options);
+    previewData.formNumber = String(form.nomor_form || previewData.formNumber);
+    return await renderKeu1Pdf(previewData, {
       logoPath: join(distDir, "logo-marison-regency-group.png"),
     });
   }
