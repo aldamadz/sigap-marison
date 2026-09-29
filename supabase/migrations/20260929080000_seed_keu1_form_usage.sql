@@ -18,6 +18,16 @@ declare
   v_existing_pusat uuid;
   v_existing_cabang uuid;
 begin
+  select id into v_keuangan_id
+  from public.master_departments
+  where upper(coalesce(code, '')) = 'KEU' or name ilike 'Keuangan%'
+  order by case when upper(coalesce(code, '')) = 'KEU' then 0 else 1 end
+  limit 1;
+
+  if v_keuangan_id is null then
+    raise exception 'Departemen Keuangan tidak ditemukan; seed KEU 1 dibatalkan.';
+  end if;
+
   -- Master form KEU 1
   select id into v_form_id
   from public.master_forms
@@ -27,22 +37,17 @@ begin
   limit 1;
 
   if v_form_id is null then
-    insert into public.master_forms (nama_form, nomor_form, status, signature_layout)
+    insert into public.master_forms (nama_form, nomor_form, department_id, input_schema)
     values (
       'FORM PENGAJUAN KAS KECIL',
       'FM-UAI.KEU-01-00',
-      'active',
-      '{"enabled":true,"sheet":1,"region":"lower_right","max_per_row":2,"show_role":true,"show_name":true,"show_job_title":true}'::jsonb
+      v_keuangan_id,
+      '[]'::jsonb
     )
     returning id into v_form_id;
   end if;
 
   select id into v_hrd_id from public.master_departments where name = 'HRD & GA';
-  select id into v_keuangan_id
-  from public.master_departments
-  where upper(coalesce(code, '')) = 'KEU' or name ilike 'Keuangan%'
-  order by case when upper(coalesce(code, '')) = 'KEU' then 0 else 1 end
-  limit 1;
   select id into v_direksi_id from public.master_departments where name = 'Direksi';
 
   if v_hrd_id is null or v_keuangan_id is null or v_direksi_id is null then
