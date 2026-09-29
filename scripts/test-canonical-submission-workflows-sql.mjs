@@ -36,8 +36,9 @@ create table public.profiles (
   is_active boolean default true, deleted_at timestamptz, avatar_url text
 );
 create table public.master_forms (
-  id uuid primary key default gen_random_uuid(), nama_form text not null, nomor_form text, status text default 'active',
-  signature_layout jsonb default '{}'::jsonb, created_at timestamptz default now()
+  id uuid primary key default gen_random_uuid(), nama_form text not null, nomor_form text,
+  department_id uuid references public.master_departments(id), input_schema jsonb not null default '[]'::jsonb,
+  created_at timestamptz default now()
 );
 create table public.approval_route_steps (
   id uuid primary key default gen_random_uuid(),
