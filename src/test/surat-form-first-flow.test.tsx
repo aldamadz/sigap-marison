@@ -71,7 +71,7 @@ afterEach(() => {
 describe("SUR-01 form-first acceptance", () => {
   it("1-3. initial hanya Form; Kegunaan muncul setelah Form; lokasi setelah Kegunaan", async () => {
     await mountForm();
-    expect(screen.getByText("Form PGD")).toBeInTheDocument();
+    expect(screen.getByText("Pilih Formulir")).toBeInTheDocument();
     expect(screen.queryByText("Kegunaan")).not.toBeInTheDocument();
     expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
 

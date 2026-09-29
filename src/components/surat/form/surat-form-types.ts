@@ -11,6 +11,7 @@ export type MasterRecord = {
   name?: string;
   code?: string;
   kedudukan?: string;
+  parent_id?: string | null;
   dept_index?: number;
   office_id?: string;
   entity_id?: string;
