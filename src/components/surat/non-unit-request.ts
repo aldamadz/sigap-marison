@@ -1,4 +1,5 @@
 import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
+import { isPgdItemStatus } from "@/components/surat/pgd-item-status";
 
 export type NonUnitExternalOption = {
   value: string;
@@ -12,11 +13,12 @@ export type NonUnitRequestRow = Record<string, unknown> & {
   nama_barang?: string;
   subtotal?: number;
   planning_notes?: string;
+  status?: string;
 };
 
 export type NonUnitRowError = {
   index: number;
-  field: "non_unit_id" | "item_name" | "subtotal";
+  field: "non_unit_id" | "item_name" | "subtotal" | "status";
   message: string;
 };
 
@@ -163,7 +165,7 @@ export const updateNonUnitRow = (
     sat: "Pekerjaan",
     satuan: "Pekerjaan",
     jumlah: "1",
-    status: "2",
+    status: String(next.status ?? ""),
     keterangan: subtotal > 0 ? formatNonUnitCurrency(subtotal) : "",
   };
 };
@@ -211,6 +213,9 @@ export const validateNonUnitRows = (value: unknown): NonUnitRowError[] => {
     }
     if (parseNonUnitMoney(row.subtotal) <= 0) {
       errors.push({ index, field: "subtotal", message: `Isi nilai pengajuan lebih dari 0 untuk item ${index + 1}.` });
+    }
+    if (!isPgdItemStatus(row.status)) {
+      errors.push({ index, field: "status", message: `Pilih status 1–4 untuk pekerjaan ${index + 1}.` });
     }
     return errors;
   });

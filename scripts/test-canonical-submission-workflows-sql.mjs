@@ -11,6 +11,10 @@ const migrations = [
   "supabase/migrations/20260923130000_production_runtime_contract_recovery.sql",
 ].map((file) => readFileSync(file, "utf8")).join("\n\n");
 const assertions = readFileSync("supabase/tests/canonical_submission_workflows.integration.sql", "utf8");
+const nonPlanningMigration = readFileSync("supabase/migrations/20260929090000_remove_inherited_planning_checkers_from_fund.sql", "utf8");
+const nonPlanningAssertions = readFileSync("supabase/tests/non_planning_checker_defaults.integration.sql", "utf8");
+const keu1Migration = readFileSync("supabase/migrations/20260929080000_seed_keu1_form_usage.sql", "utf8");
+const keu1Assertions = readFileSync("supabase/tests/keu1_form_usage.integration.sql", "utf8");
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -32,7 +36,8 @@ create table public.profiles (
   is_active boolean default true, deleted_at timestamptz, avatar_url text
 );
 create table public.master_forms (
-  id uuid primary key, nama_form text not null, nomor_form text, created_at timestamptz default now()
+  id uuid primary key default gen_random_uuid(), nama_form text not null, nomor_form text, status text default 'active',
+  signature_layout jsonb default '{}'::jsonb, created_at timestamptz default now()
 );
 create table public.approval_route_steps (
   id uuid primary key default gen_random_uuid(),
@@ -263,6 +268,12 @@ insert into public.surat_signatures (
 
 ${migrations}
 ${assertions}
+${nonPlanningMigration}
+${nonPlanningMigration}
+${nonPlanningAssertions}
+${keu1Migration}
+${keu1Migration}
+${keu1Assertions}
 `;
 
 const run = (args, input = "") => {
@@ -285,6 +296,12 @@ try {
   const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], sql);
   if (!output.includes("SUR-17 canonical submission workflows: all assertions passed")) {
     throw new Error(`SQL success marker missing.\n${output}`);
+  }
+  if (!output.includes("Non-Planning checker defaults: all assertions passed")) {
+    throw new Error(`Checker migration success marker missing.\n${output}`);
+  }
+  if (!output.includes("KEU 1 workflow: all assertions passed")) {
+    throw new Error(`KEU 1 migration success marker missing.\n${output}`);
   }
   process.stdout.write(output);
 } finally {

@@ -9,6 +9,7 @@ import { fundModule } from "@/features/surat/registration/usages/fund/fund-modul
 import { unitModule } from "@/features/surat/registration/usages/unit/unit-module";
 import { nonUnitModule } from "@/features/surat/registration/usages/non-unit/non-unit-module";
 import type { UnitAvailabilityState } from "@/features/surat/registration/usages/unit/unit-availability";
+import { getPgdUnitStatus } from "@/components/surat/pgd-item-status";
 
 function ctxFor(
   key: UsageModuleKey,
@@ -50,6 +51,7 @@ function ctxForUnitAvailability(availability: UnitAvailabilityState, input: Reco
   const ctx = ctxFor("unit", {
     requested_project: { code: "GA01" },
     requested_unit_count: 2,
+    unit_item_status: "2",
     ...input,
   });
   ctx.unitAvailability = availability;
@@ -57,6 +59,20 @@ function ctxForUnitAvailability(availability: UnitAvailabilityState, input: Reco
 }
 
 describe("fund module", () => {
+  it("KEU 1 does not inherit PGD fund project/type requirements", () => {
+    const ctx = ctxFor("non_asset", { items: [] });
+    ctx.usage = { id: "keu1", master_forms: { nomor_form: "FM-UAI.KEU-01-00" } } as never;
+    expect(fundModule.requiresMasterProjectMappingForUsage?.(ctx.usage)).toBe(false);
+    expect(fundModule.validateNumberContext(ctx)).toEqual([]);
+    const output = fundModule.normalizeInput({ items: [] } as never, ctx);
+    expect(output).toMatchObject({ fund_type: "operational", fund_without_project: true });
+  });
+
+  it("KEU 10 is not classified as KEU 1", () => {
+    const ctx = ctxFor("non_asset", { items: [] });
+    ctx.usage = { id: "keu10", master_forms: { nomor_form: "FM-UAI.KEU-10-00" } } as never;
+    expect(fundModule.requiresMasterProjectMappingForUsage?.(ctx.usage)).toBe(true);
+  });
   it("validate: proyek wajib kecuali dana umum; jenis wajib", () => {
     expect(fundModule.validateNumberContext(ctxFor("non_asset", { fund_type: "operational" }))[0].title)
       .toBe("Proyek Tujuan Wajib Dipilih");
@@ -141,7 +157,7 @@ describe("non-unit module", () => {
     expect(nonUnitModule.validateSubmit?.(ctxFor("non_unit", { items: [] }))[0].title)
       .toBe("Data Non Unit Belum Lengkap");
     expect(nonUnitModule.validateSubmit?.(
-      ctxFor("non_unit", { items: [{ non_unit_id: 12, item_name: "Jalan", subtotal: 1000000 }] })
+      ctxFor("non_unit", { items: [{ non_unit_id: 12, item_name: "Jalan", subtotal: 1000000, status: "2" }] })
     )).toEqual([]);
   });
 
@@ -165,7 +181,7 @@ describe("non-unit module", () => {
   });
 
   it("G.7 baseline payload unit sama seperti sebelum refactor", () => {
-    const out = unitModule.normalizeInput({ requested_unit_count: 3 } as never, ctxFor("unit"));
+    const out = unitModule.normalizeInput({ requested_unit_count: 3, unit_item_status: "2" } as never, ctxFor("unit"));
     const items = (out as Record<string, unknown>).items as Array<Record<string, unknown>>;
     expect((out as Record<string, unknown>).request_category).toBe("unit");
     expect((out as Record<string, unknown>).request_mode).toBe("unit");
@@ -201,6 +217,10 @@ describe("non-unit module", () => {
 });
 
 describe("unit module", () => {
+  it("preserves status on a legacy numbered draft without silently defaulting a new request", () => {
+    expect(getPgdUnitStatus({ items: [{ status: "2" }] })).toBe("2");
+    expect(getPgdUnitStatus({ requested_unit_count: 2 })).toBe("");
+  });
   it("requirements jujur untuk derivasi orchestrator", () => {
     expect(unitModule.requirements.requiresMasterProjectMapping).toBe(false);
     expect(unitModule.requirements.requiresUnitAllocation).toBe(true);
@@ -219,8 +239,11 @@ describe("unit module", () => {
       ctxFor("unit", { requested_project: { code: "GA01" }, requested_unit_count: 0 })
     )[0].title).toBe("Jumlah Unit Wajib Diisi");
     expect(unitModule.validateNumberContext(
-      ctxFor("unit", { requested_project: { code: "GA01" }, requested_unit_count: 3 })
+      ctxFor("unit", { requested_project: { code: "GA01" }, requested_unit_count: 3, unit_item_status: "2" })
     )).toEqual([]);
+    expect(unitModule.validateNumberContext(
+      ctxFor("unit", { requested_project: { code: "GA01" }, requested_unit_count: 3 })
+    )[0].title).toBe("Status Wajib Dipilih");
   });
 
   it("fail-closed: lookup loading/error/nol/jumlah melampaui memblokir nomor & submit", () => {

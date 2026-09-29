@@ -37,6 +37,8 @@ as $$
 declare
   v_actor uuid := p_actor;
   v_actor_department_id uuid;
+  v_actor_office_id uuid;
+  v_actor_role text;
   v_legacy_workflow_id uuid := nullif(p_payload->>'penggunaan_id', '')::uuid;
   v_form_usage_id uuid := nullif(p_payload->>'form_usage_id', '')::uuid;
   v_request_category text := nullif(p_payload->'form_input_data'->>'request_category', '');
@@ -51,14 +53,13 @@ declare
   v_office_id uuid := nullif(p_payload->>'office_id', '')::uuid;
   v_project_id uuid := nullif(p_payload->>'project_id', '')::uuid;
   v_office_kedudukan text;
-  v_allowed_project_ids uuid[];
 begin
   if v_actor is null then
     raise exception 'Sesi login tidak tersedia. Silakan login ulang.';
   end if;
 
-  select profile.department_id
-  into v_actor_department_id
+  select profile.department_id, profile.office_id, profile.role
+  into v_actor_department_id, v_actor_office_id, v_actor_role
   from public.profiles as profile
   where profile.id = v_actor
     and coalesce(profile.is_active, true) = true;
@@ -117,21 +118,24 @@ begin
   end if;
 
   -- MAR-10: server-side cross-branch project guard for non_unit.
-  if v_request_category = 'non_unit' and v_project_id is not null and v_office_id is not null then
+  if v_request_category = 'non_unit' then
+    if v_project_id is null or v_office_id is null then
+      raise exception 'Kantor dan proyek Non Unit wajib dipilih.';
+    end if;
+    if v_actor_role is distinct from 'admin' and v_office_id is distinct from v_actor_office_id then
+      raise exception 'Kantor pengaju tidak sesuai profil pemohon.';
+    end if;
     select o.kedudukan into v_office_kedudukan
     from public.master_offices o
     where o.id = v_office_id;
 
-    if v_office_kedudukan = 'KC' then
-      select array_agg(descendant.id)
-      into v_allowed_project_ids
-      from (
-        select descendant_id
-        from public.get_office_descendant_ids(v_office_id) as g(descendant_id)
-      ) descendant
-      join public.master_projects p on p.office_id = descendant.descendant_id;
-
-      if v_allowed_project_ids is null or not (v_project_id = any(v_allowed_project_ids)) then
+    if upper(coalesce(v_office_kedudukan, '')) = 'KC' then
+      if not exists (
+        select 1 from public.master_projects project
+        join public.get_office_descendant_ids(v_office_id) descendant
+          on descendant = project.office_id
+        where project.id = v_project_id
+      ) then
         raise exception 'Proyek tidak tersedia untuk kantor cabang ini atau turunannya.';
       end if;
     else
@@ -256,10 +260,6 @@ begin
     nullif(p_payload->>'pdf_path', ''),
     coalesce(p_payload->'data_snapshot', '{}'::jsonb),
     coalesce(p_payload->'policy_snapshot', '{}'::jsonb),
-    coalesce(
-      nullif(p_payload->>'represented_department_id', '')::uuid,
-      nullif(v_usage_validation->>'requester_department_id', '')::uuid
-    ),
     coalesce(
       nullif(p_payload->>'represented_department_id', '')::uuid,
       nullif(v_usage_validation->>'requester_department_id', '')::uuid

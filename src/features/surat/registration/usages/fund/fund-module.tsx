@@ -28,11 +28,11 @@ import { FundContextPanel } from "./FundContextPanel";
 const FUND_TYPES = ["operational", "production_cost"];
 
 const isKeu1Usage = (ctx: UsageModuleContext): boolean => {
-  const form = ctx.usage.master_forms;
-  const nomor = String(form?.nomor_form ?? "").toUpperCase();
-  const nama = String(form?.nama_form ?? "").toUpperCase();
-  return nomor.includes("KEU") || nomor.includes("FM-UAI.KEU") || nama.includes("KAS KECIL");
+  return isKeu1Form(ctx.usage.master_forms);
 };
+
+const isKeu1Form = (form: UsageModuleContext["usage"]["master_forms"]): boolean =>
+  String(form?.nomor_form ?? "").trim().toUpperCase() === "FM-UAI.KEU-01-00";
 
 export const fundModule: UsageModule = {
   meta: {
@@ -49,8 +49,11 @@ export const fundModule: UsageModule = {
     allowsLinkedRecommendation: false,
     requiresMasterProjectMapping: true,
   },
+  requiresMasterProjectMappingForUsage(usage) {
+    return !isKeu1Form(usage.master_forms);
+  },
   renderContextPanel(ctx) {
-    return <FundContextPanel ctx={ctx} />;
+    return isKeu1Usage(ctx) ? null : <FundContextPanel ctx={ctx} />;
   },
   renderDetailsPanel(ctx) {
     if (isKeu1Usage(ctx)) {
@@ -114,6 +117,7 @@ export const fundModule: UsageModule = {
     return input;
   },
   validateNumberContext(ctx): NumberContextIssue[] {
+    if (isKeu1Usage(ctx)) return [];
     const fundWithoutProject = ctx.input.fund_without_project === true;
     if (!fundWithoutProject && !ctx.formData.project_id) {
       return [{
@@ -154,6 +158,8 @@ export const fundModule: UsageModule = {
       });
       next.items = keu1Items;
       next.fund_amount = getKeu1SubmissionAmount(keu1Items);
+      next.fund_type = "operational";
+      next.fund_without_project = !ctx.formData.project_id;
     } else {
       const fundItems = normalizeFundSubmissionItems(next.items);
       next.items = fundItems;

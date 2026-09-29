@@ -56,7 +56,7 @@ describe("buildAutoTitle — category: asset", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Aset Dept. Pengembangan Organisasi Kantor Pusat");
   });
 
   it("returns 'Permohonan Aset : <items>' when items are present", () => {
@@ -69,7 +69,7 @@ describe("buildAutoTitle — category: asset", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Aset : Printer Epson dan Laptop ASUS Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Aset: Printer Epson dan Laptop ASUS Dept. Pengembangan Organisasi Kantor Pusat");
   });
 });
 
@@ -82,7 +82,7 @@ describe("buildAutoTitle — category: unit", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Order Bangun Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan SPK Unit Dept. Pengembangan Organisasi Kantor Pusat");
   });
 
   it("returns 'Permohonan Order Bangun SPK Pembangunan Rumah N Unit' when count > 0", () => {
@@ -94,7 +94,7 @@ describe("buildAutoTitle — category: unit", () => {
         selectedDepartment: deptPbo,
       })
     ).toBe(
-      "Permohonan Order Bangun SPK Pembangunan Rumah 3 Unit Cluster Magelang Dept. Pengembangan Organisasi Kantor Pusat"
+      "Pengajuan SPK Unit: 3 Unit Cluster Magelang Dept. Pengembangan Organisasi Kantor Pusat"
     );
   });
 });
@@ -108,11 +108,25 @@ describe("buildAutoTitle — category: non_unit", () => {
         selectedOffice: officeBandung,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Non Unit : Pembangunan Talud Kantor Cabang Bandung");
+    ).toBe("Pengajuan SPK Non Unit: Pembangunan Talud Kantor Cabang Bandung");
   });
 });
 
 describe("buildAutoTitle — category: non_asset (fund)", () => {
+  it("uses production title when fund type is production_cost", () => {
+    expect(buildAutoTitle({
+      category: "non_asset",
+      formInputData: { fund_type: "production_cost", items: [{ nama_barang: "Material proyek" }] },
+    })).toBe("Pengajuan Dana Produksi: Material proyek");
+  });
+
+  it("keeps Kas Kecil separate from PGD fund titles", () => {
+    expect(buildAutoTitle({
+      category: "non_asset",
+      formNumber: "FM-UAI.KEU-01-00",
+      formInputData: { items: [{ keterangan: "Listrik kantor" }] },
+    })).toBe("Pengajuan Kas Kecil: Listrik kantor");
+  });
   it("returns 'Permohonan Non Aset' + office suffix when no items", () => {
     expect(
       buildAutoTitle({
@@ -121,7 +135,7 @@ describe("buildAutoTitle — category: non_asset (fund)", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Non Aset Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Dana Operasional Dept. Pengembangan Organisasi Kantor Pusat");
   });
 
   it("returns 'Permohonan Non Aset : <items>' when items are present", () => {
@@ -132,7 +146,7 @@ describe("buildAutoTitle — category: non_asset (fund)", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Non Aset : Pembelian ATK Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Dana Operasional: Pembelian ATK Dept. Pengembangan Organisasi Kantor Pusat");
   });
 });
 
@@ -145,7 +159,7 @@ describe("buildAutoTitle — fallback (no category)", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Dept. Pengembangan Organisasi Kantor Pusat");
   });
 
   it("returns 'Permohonan : <items>' when category is null with items", () => {
@@ -156,7 +170,7 @@ describe("buildAutoTitle — fallback (no category)", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan : Generic Item Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan: Generic Item Dept. Pengembangan Organisasi Kantor Pusat");
   });
 });
 
@@ -314,6 +328,15 @@ describe("buildAutoTitle — linked recommendation flow", () => {
 });
 
 describe("buildAutoTitle — empty / edge inputs", () => {
+  it("compacts long item lists without hiding the first item", () => {
+    expect(buildAutoTitle({
+      category: "asset",
+      formInputData: { items: [
+        { nama_barang: "Printer" }, { nama_barang: "Scanner" },
+        { nama_barang: "Laptop" }, { nama_barang: "Monitor" },
+      ] },
+    })).toBe("Pengajuan Aset: Printer dan 3 item lainnya");
+  });
   it("still produces a non-empty title for empty formInputData + null category", () => {
     expect(
       buildAutoTitle({
@@ -331,7 +354,7 @@ describe("buildAutoTitle — empty / edge inputs", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Aset : Valid Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Aset: Valid Dept. Pengembangan Organisasi Kantor Pusat");
   });
 
   it("falls back to row.name when row.nama_barang is missing", () => {
@@ -342,7 +365,7 @@ describe("buildAutoTitle — empty / edge inputs", () => {
         selectedOffice: officePusat,
         selectedDepartment: deptPbo,
       })
-    ).toBe("Permohonan Aset : Laptop Dept. Pengembangan Organisasi Kantor Pusat");
+    ).toBe("Pengajuan Aset: Laptop Dept. Pengembangan Organisasi Kantor Pusat");
   });
 });
 

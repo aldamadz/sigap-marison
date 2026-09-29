@@ -822,6 +822,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const nextTitle = buildAutoTitle({
       category: getRequestCategory(),
       formInputData: formData.form_input_data,
+      formNumber: selectedUsage?.master_forms?.nomor_form,
       selectedOffice,
       selectedDepartment,
       linkedDocumentContext,
@@ -904,7 +905,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
   // Tanpa flag mode kategori di orchestrator: kebutuhan mapping proyek
   // dibaca dari requirements modul aktif.
-  const requiresMarisonProject = activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false;
+  const requiresMarisonProject = selectedUsage && activeUsageData
+    ? activeUsageData.module.requiresMasterProjectMappingForUsage?.(selectedUsage)
+      ?? activeUsageData.module.requirements.requiresMasterProjectMapping
+    : false;
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;

@@ -12,6 +12,7 @@ describe("NonUnitRequestEditor", () => {
           item_name: "Pembangunan saluran blok A",
           nama_barang: "Pembangunan saluran blok A",
           subtotal: 1_500_000,
+          status: "1",
           raw: { id: 12, code: "INFRA", name: "Pekerjaan Infrastruktur" },
         }]}
         options={[]}
@@ -27,6 +28,7 @@ describe("NonUnitRequestEditor", () => {
     expect(screen.getAllByText(/Rp\s*1\.500\.000/).length).toBeGreaterThan(0);
     expect(screen.getByLabelText(/Nama pekerjaan/)).toHaveValue("Pembangunan saluran blok A");
     expect(screen.getByLabelText(/Nilai pengajuan/)).toHaveValue("1.500.000");
+    expect(screen.getByRole("combobox", { name: /Status/ })).toHaveTextContent("1");
   });
 
   it("explains why a project without Marison mapping cannot load classifications", () => {
