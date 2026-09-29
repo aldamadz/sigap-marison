@@ -15,9 +15,11 @@ assert.ok(
   "migration should guard non_unit request category",
 );
 assert.ok(
-  migration.includes("v_office_kedudukan = 'KC'"),
+  migration.includes("upper(coalesce(v_office_kedudukan, '')) = 'KC'"),
   "migration should differentiate KC branch office",
 );
+assert.ok(migration.includes("v_project_id is null or v_office_id is null"), "missing project or office must fail closed");
+assert.ok(migration.includes("v_office_id is distinct from v_actor_office_id"), "non-admin cannot spoof a branch");
 assert.ok(
   migration.includes("Proyek tidak tersedia untuk kantor cabang ini atau turunannya."),
   "migration should reject cross-branch project for KC descendants",

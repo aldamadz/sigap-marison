@@ -1,6 +1,7 @@
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 import { buildProductionCode as buildProductionCodeLib } from "@/lib/production-code";
 import { canUseAssetRecommendation } from "@/lib/asset-recommendation-policy";
+import { getPgdUnitStatus } from "@/components/surat/pgd-item-status";
 import {
   flattenRecommendationItems,
   withoutRecommendationEstimatedPrices,
@@ -174,7 +175,7 @@ export const normalizeFormInputData = (
       sat: "Unit",
       satuan: "Unit",
       jumlah: unitLabel,
-      status: "2",
+      status: getPgdUnitStatus(normalized),
       keterangan: "",
     }];
   } else {

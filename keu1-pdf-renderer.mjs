@@ -45,7 +45,7 @@ const formatMoneyId = (value) => {
 
 const asObject = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
-const KEU1_NAMES = ["KEU", "KAS KECIL", "PENGAJUAN KAS KECIL", "FM-UAI.KEU"];
+const KEU1_FORM_NUMBER = "FM-UAI.KEU-01-00";
 
 export const isKeu1Document = (source = {}) => {
   const names = [
@@ -57,7 +57,7 @@ export const isKeu1Document = (source = {}) => {
     source?.resolved_master_form?.nama_form,
     source?.resolved_master_form?.nomor_form,
   ].map((value) => String(value || "").toUpperCase());
-  return names.some((name) => KEU1_NAMES.some((marker) => name.includes(marker)));
+  return names.some((name) => [KEU1_FORM_NUMBER, "FORM PENGAJUAN KAS KECIL"].includes(name.trim()));
 };
 
 export const resolveKeu1MasterForm = async (client, formUsageId) => {

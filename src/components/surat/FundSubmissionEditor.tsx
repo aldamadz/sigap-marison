@@ -3,6 +3,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PGD_ITEM_STATUSES } from "@/components/surat/pgd-item-status";
 import { NominalInput } from "@/components/surat/NominalInput";
 import { formatRupiahZero } from "@/lib/rupiah";
 import {
@@ -99,6 +101,18 @@ export function FundSubmissionEditor({ value, onChange }: Props) {
                     className="h-10 w-full"
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`fund-item-status-${index}`}>Status <span aria-hidden="true">*</span></Label>
+                <Select value={row.status || ""} onValueChange={(status) => updateRow(index, { status })}>
+                  <SelectTrigger id={`fund-item-status-${index}`} className="min-h-11" aria-invalid={rowIssues.some((issue) => issue.field === "status")}>
+                    <SelectValue placeholder="Pilih status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PGD_ITEM_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">1 = H+1, 2 = H+3, 3 = H+7, 4 = H+10</p>
               </div>
             </div>
             <div className="mt-4 flex min-h-9 flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">

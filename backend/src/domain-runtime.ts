@@ -926,7 +926,7 @@ const generateTemplatePreviewPdf = async (formId, options = {}) => {
     });
   }
 
-  if (formName.includes("KAS KECIL") || formName.includes("PENGAJUAN KAS") || formNumber.includes("KEU")) {
+  if (formName === "FORM PENGAJUAN KAS KECIL" || formNumber === "FM-UAI.KEU-01-00") {
     const previewData = createKeu1PreviewData(options);
     previewData.formNumber = String(form.nomor_form || previewData.formNumber);
     return await renderKeu1Pdf(previewData, {

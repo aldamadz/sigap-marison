@@ -11,6 +11,7 @@ import type { FormInputData } from "@/components/surat/form/surat-form-types";
 import { registerUsageModule } from "../usage-registry";
 import { UnitContextPanel } from "./UnitContextPanel";
 import { unitAvailabilityIssues } from "./unit-availability";
+import { getPgdUnitStatus, isPgdItemStatus } from "@/components/surat/pgd-item-status";
 
 const unitRequestIssues = (ctx: UsageModuleContext) => {
   const project = ctx.input.requested_project as { code?: string } | undefined;
@@ -22,7 +23,12 @@ const unitRequestIssues = (ctx: UsageModuleContext) => {
     return [{ title: "Jumlah Unit Wajib Diisi", description: "Jumlah unit minimal 1." }];
   }
   // Fail-closed: lookup loading/gagal/nol atau jumlah > kapasitas aktual memblokir.
-  return unitAvailabilityIssues(ctx.unitAvailability, count);
+  const availabilityIssues = unitAvailabilityIssues(ctx.unitAvailability, count);
+  if (availabilityIssues.length > 0) return availabilityIssues;
+  if (!isPgdItemStatus(getPgdUnitStatus(ctx.input))) {
+    return [{ title: "Status Wajib Dipilih", description: "Pilih status 1–4 untuk pengajuan unit." }];
+  }
+  return [];
 };
 
 export const unitModule: UsageModule = {
@@ -60,7 +66,7 @@ export const unitModule: UsageModule = {
   },
   cleanup(ctx, reason): CleanupResult {
     return {
-      inputKeysToDelete: ["requested_project", "requested_unit_count", "unit_request_sentence", "unit_config_snapshot", "items"],
+      inputKeysToDelete: ["requested_project", "requested_unit_count", "unit_item_status", "unit_request_sentence", "unit_config_snapshot", "items"],
       resetSelection: [],
     };
   },
@@ -82,7 +88,7 @@ export const unitModule: UsageModule = {
       sat: "Unit",
       satuan: "Unit",
       jumlah: unitLabel,
-      status: "2",
+      status: getPgdUnitStatus(next),
       keterangan: "",
     }];
     return next;
