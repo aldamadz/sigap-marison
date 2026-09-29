@@ -6,6 +6,8 @@ export type FundSubmissionItem = {
   jumlah?: number | string;
   satuan?: string;
   nominal?: number | string;
+  estimasi_harga_satuan?: number | string;
+  total?: number | string;
 };
 
 export type FundSubmissionValidationIssue = {
@@ -38,6 +40,8 @@ export function normalizeFundSubmissionItems(value: unknown): FundSubmissionItem
       jumlah: scalar(row.jumlah ?? row.quantity),
       satuan: editableText(row.satuan ?? row.sat ?? row.unit),
       nominal: scalar(row.nominal ?? row.subtotal ?? row.nilai),
+      estimasi_harga_satuan: scalar(row.estimasi_harga_satuan ?? row.harga_satuan ?? row.unit_price),
+      total: scalar(row.total),
     }));
 }
 

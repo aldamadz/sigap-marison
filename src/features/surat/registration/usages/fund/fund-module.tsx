@@ -1,10 +1,16 @@
 import React from "react";
 import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
+import { Keu1SubmissionEditor } from "@/components/surat/Keu1SubmissionEditor";
 import {
   getFundSubmissionAmount,
   normalizeFundSubmissionItems,
   validateFundSubmissionItems,
 } from "@/components/surat/fund-submission";
+import {
+  getKeu1SubmissionAmount,
+  normalizeKeu1SubmissionItems,
+  validateKeu1SubmissionItems,
+} from "@/components/surat/keu1-submission";
 import type {
   UsageModule,
   UsageModuleContext,
@@ -20,6 +26,13 @@ import { registerUsageModule } from "../usage-registry";
 import { FundContextPanel } from "./FundContextPanel";
 
 const FUND_TYPES = ["operational", "production_cost"];
+
+const isKeu1Usage = (ctx: UsageModuleContext): boolean => {
+  const form = ctx.usage.master_forms;
+  const nomor = String(form?.nomor_form ?? "").toUpperCase();
+  const nama = String(form?.nama_form ?? "").toUpperCase();
+  return nomor.includes("KEU") || nomor.includes("FM-UAI.KEU") || nama.includes("KAS KECIL");
+};
 
 export const fundModule: UsageModule = {
   meta: {
@@ -40,6 +53,14 @@ export const fundModule: UsageModule = {
     return <FundContextPanel ctx={ctx} />;
   },
   renderDetailsPanel(ctx) {
+    if (isKeu1Usage(ctx)) {
+      return (
+        <Keu1SubmissionEditor
+          value={ctx.input.items}
+          onChange={(items) => ctx.setInputValue("items", items)}
+        />
+      );
+    }
     return (
       <FundSubmissionEditor
         value={ctx.input.items}
@@ -52,13 +73,29 @@ export const fundModule: UsageModule = {
   },
   isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
     if (field.key !== "items" && field.key !== "fund_amount") return null;
+    if (isKeu1Usage(ctx)) {
+      return validateKeu1SubmissionItems(ctx.input.items).length === 0;
+    }
     return validateFundSubmissionItems(ctx.input.items).length === 0;
   },
   validateSubmit(ctx: UsageModuleContext): SubmitIssue[] {
+    if (isKeu1Usage(ctx)) {
+      const first = validateKeu1SubmissionItems(ctx.input.items)[0];
+      return first ? [{ title: "Rincian Kas Kecil Belum Lengkap", description: first.message }] : [];
+    }
     const first = validateFundSubmissionItems(ctx.input.items)[0];
     return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
   },
   buildSummaryFields(ctx: UsageModuleContext): SummaryField[] {
+    if (isKeu1Usage(ctx)) {
+      return [
+        {
+          key: "fund_amount",
+          label: "Grand Total",
+          value: formatRupiahZero(getKeu1SubmissionAmount(ctx.input.items)),
+        },
+      ];
+    }
     const fundType = String(ctx.input.fund_type || "");
     return [
       {
@@ -104,14 +141,24 @@ export const fundModule: UsageModule = {
       resetSelection: ["fundWithoutProject"],
     };
   },
-  normalizeInput(input) {
+  normalizeInput(input, ctx) {
     const next = { ...input };
     next.request_category = "non_asset";
     next.request_mode = "barang";
     delete next.is_aset;
-    const fundItems = normalizeFundSubmissionItems(next.items);
-    next.items = fundItems;
-    next.fund_amount = getFundSubmissionAmount(fundItems);
+    if (isKeu1Usage(ctx)) {
+      const keu1Items = normalizeKeu1SubmissionItems(next.items).map((item) => {
+        const quantity = Number(item.jumlah) || 0;
+        const unitPrice = Number(item.estimasi_harga_satuan) || 0;
+        return { ...item, total: quantity * unitPrice };
+      });
+      next.items = keu1Items;
+      next.fund_amount = getKeu1SubmissionAmount(keu1Items);
+    } else {
+      const fundItems = normalizeFundSubmissionItems(next.items);
+      next.items = fundItems;
+      next.fund_amount = getFundSubmissionAmount(fundItems);
+    }
     return next;
   },
 };
