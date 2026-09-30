@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import {
+  buildKeu1DocumentDefinition,
   createKeu1PreviewData,
   isKeu1Document,
   normalizeKeu1DocumentData,
@@ -42,6 +43,8 @@ assert.equal(data.formNumber, "FM-UAI.KEU-01-00");
 assert.equal(data.noSurat, "042/UAI/KEU/VIII/2026");
 assert.equal(data.branch, "Jepara");
 assert.equal(data.department, "Keuangan & Akuntansi");
+assert.equal(data.locationLabel, "Cabang");
+assert.equal(data.locationValue, "Jepara");
 assert.equal(data.items.length, 3);
 assert.strictEqual(data.grandTotal, 2_250_000);
 assert.strictEqual(data.previousFreeCash, 250_000);
@@ -49,6 +52,24 @@ assert.strictEqual(data.kebutuhanDana, 2_000_000);
 assert.strictEqual(data.items[0].total, 1_000_000);
 assert.strictEqual(data.items[1].total, 500_000);
 assert.strictEqual(data.items[2].total, 750_000);
+
+const branchHeader = buildKeu1DocumentDefinition(data).content[1].table.body;
+assert.equal(branchHeader[0][0].text, "Cabang");
+assert.equal(branchHeader[0][2].text, "Tanggal");
+assert.equal(branchHeader[1][0].text, "No. Dokumen");
+assert.equal(branchHeader.flat().some((cell) => cell.text === "Proyek" || cell.text === "Departemen"), false);
+
+const pusatData = normalizeKeu1DocumentData({
+  ...surat,
+  location_snapshot: {
+    ...surat.location_snapshot,
+    office: { name: "Kantor Pusat", kedudukan: "Pusat" },
+  },
+});
+const pusatHeader = buildKeu1DocumentDefinition(pusatData).content[1].table.body;
+assert.equal(pusatHeader[0][0].text, "Departemen");
+assert.equal(pusatHeader[0][1].text, ": Keuangan & Akuntansi");
+assert.equal(pusatHeader.flat().some((cell) => cell.text === "Cabang" || cell.text === "Proyek"), false);
 
 const previewData = createKeu1PreviewData({ signature_count: 4, signature_roles: [1, 2, 1] });
 assert.equal(previewData.items.length >= 3, true);

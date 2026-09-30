@@ -101,6 +101,8 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     await mountFormWithUsage(keu1Usage, CURRENT_PROFILE_KC);
     await selectForm(/KAS KECIL/i);
     await selectUsage(/Kas Kecil/i);
+    expect(screen.queryByText("Proyek Cabang")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proyek Tujuan")).not.toBeInTheDocument();
     await selectLetterType();
     await selectEntity();
     await clickGetNumber();
