@@ -92,7 +92,8 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain("resolveMarisonFundDivision");
     expect(server).toContain('requireExternalInteger(overrides.branchId, "Branch ID proyek")');
     expect(server).toContain("amount: input.fund_amount");
-    expect(server).toContain("items: input.items");
+    expect(server).toContain("resolveKeu1MasterForm(supabase, surat.form_usage_id)");
+    expect(server).toContain("items: keu1 ? mapKeu1ItemsForFund(input.items) : input.items");
     expect(server).not.toContain("division: department.name");
     expect(worker).toContain('fund: "/fund-submissions"');
     expect(fundModule).toContain('setInputValue("fund_type", value)');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  mapKeu1ItemsForFund,
   mapMarisonFundSubmission,
   normalizeMarisonFundApprovalRole,
   resolveMarisonFundBranch,
@@ -15,6 +16,23 @@ const approval = {
 };
 
 describe("Marison Fund Submission mapper", () => {
+  it("maps KEU 1 descriptions and quantity times unit price without PGD item keys", () => {
+    const mapped = mapKeu1ItemsForFund([{
+      keterangan: "Listrik kantor", jumlah: 2, satuan: "bulan", estimasi_harga_satuan: 150000,
+    }]);
+    expect(mapped).toEqual([{ nama_barang: "Listrik kantor", jumlah: 2, satuan: "bulan", nominal: 300000 }]);
+    const outbound = mapMarisonFundSubmission({
+      request: { submissionNumber: "001/UAI/KEU/IX/2026", type: "operational", title: "Kas kecil", amount: 250000, items: mapped },
+      branchId: 2,
+      division: "Keuangan",
+      approvals: [approval],
+    });
+    expect(outbound.payload).toMatchObject({ amount: 250000, items: mapped });
+    expect(() => mapKeu1ItemsForFund([{ keterangan: "Listrik", jumlah: 2, satuan: "bulan" }]))
+      .toThrow("Rincian Kas Kecil item 1 tidak valid");
+    expect(() => mapKeu1ItemsForFund([{ keterangan: "Listrik", jumlah: 2, satuan: "bulan", estimasi_harga_satuan: "1e6" }]))
+      .toThrow("Rincian Kas Kecil item 1 tidak valid");
+  });
   it.each([
     ["Staff IT", "staff"],
     ["Staff Departemen", "staff"],

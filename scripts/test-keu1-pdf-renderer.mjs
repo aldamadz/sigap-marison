@@ -64,7 +64,9 @@ const branchDefinition = buildKeu1DocumentDefinition(data);
 assert.deepEqual(branchDefinition.content[0].table.widths, ["18%", "52%", "30%"]);
 assert.equal(branchDefinition.content[0].table.body[0][2].table.body[0][1].text, "FM-UAI.KEU-01-00");
 assert.equal(branchDefinition.content[1].layout.vLineWidth(1), 0);
+assert.equal(branchDefinition.content[1].layout.vLineWidth(2), 0);
 assert.equal(branchDefinition.content[1].layout.vLineWidth(3), 0);
+assert.equal(branchDefinition.content[1].layout.hLineWidth(1), 0);
 assert.equal(branchDefinition.content[3].table.body[4][0].text, "");
 assert.equal(branchDefinition.content[3].table.body[4][4].text, "");
 assert.equal(branchDefinition.content[3].table.body[4][5].text, "");
@@ -72,8 +74,13 @@ assert.equal(branchDefinition.content[4].table.body.length, 3);
 assert.equal(branchDefinition.content[4].table.body[0][0].alignment, "left");
 assert.equal(branchDefinition.content[4].table.body[1][0].text, "Free Cash Sisa Bulan Lalu");
 assert.equal(branchDefinition.content[4].layout.vLineWidth(1), 0.7);
-assert.equal(branchDefinition.content[4].layout.vLineWidth(0), 0);
-assert.equal(branchDefinition.content[4].layout.hLineWidth(1), 0);
+assert.equal(branchDefinition.content[4].layout.vLineWidth(0), 0.7);
+assert.equal(branchDefinition.content[4].layout.vLineWidth(2), 0.7);
+assert.equal(branchDefinition.content[4].layout.hLineWidth(1, branchDefinition.content[4]), 0);
+assert.equal(branchDefinition.content[4].layout.hLineWidth(0, branchDefinition.content[4]), 0.7);
+assert.equal(branchDefinition.content[4].layout.hLineWidth(3, branchDefinition.content[4]), 0.7);
+assert.equal(branchDefinition.content[6].columns[1].stack[0].table.body[0][0].text, "Jepara, 15 Agustus 2024");
+assert.equal(branchDefinition.content[6].columns[1].stack[0].layout.vLineWidth(0), 0.7);
 
 const pusatData = normalizeKeu1DocumentData({
   ...surat,

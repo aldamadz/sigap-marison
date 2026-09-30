@@ -7,7 +7,7 @@ import { NominalInput } from "@/components/surat/NominalInput";
 import { formatRupiahZero } from "@/lib/rupiah";
 import {
   createKeu1SubmissionItem,
-  getKeu1SubmissionAmount,
+  getKeu1FinancialSummary,
   normalizeKeu1SubmissionItems,
   validateKeu1SubmissionItems,
   parseKeu1Quantity,
@@ -17,15 +17,17 @@ import {
 
 type Props = {
   value: unknown;
+  freeCashValue: unknown;
   onChange: (items: Keu1SubmissionItem[]) => void;
+  onFreeCashChange: (value: string) => void;
 };
 
-export function Keu1SubmissionEditor({ value, onChange }: Props) {
+export function Keu1SubmissionEditor({ value, freeCashValue, onChange, onFreeCashChange }: Props) {
   const normalized = normalizeKeu1SubmissionItems(value);
   const blankRow = useMemo(createKeu1SubmissionItem, []);
   const rows = normalized.length > 0 ? normalized : [blankRow];
   const issues = validateKeu1SubmissionItems(rows);
-  const total = getKeu1SubmissionAmount(rows);
+  const financial = getKeu1FinancialSummary(rows, freeCashValue);
 
   const updateRow = (index: number, patch: Partial<Keu1SubmissionItem>) => {
     const nextRows = rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row));
@@ -53,7 +55,7 @@ export function Keu1SubmissionEditor({ value, onChange }: Props) {
         </div>
         <div className="rounded-md border border-border bg-muted/30 px-4 py-2 text-right">
           <p className="text-[11px] font-medium text-muted-foreground">Grand Total</p>
-          <p className="text-sm font-semibold tabular-nums text-foreground">{formatRupiahZero(total)}</p>
+          <p className="text-sm font-semibold tabular-nums text-foreground">{formatRupiahZero(financial.grandTotal)}</p>
         </div>
       </div>
 
@@ -134,6 +136,23 @@ export function Keu1SubmissionEditor({ value, onChange }: Props) {
       <Button type="button" variant="outline" className="min-h-11 w-full border-dashed" onClick={() => onChange([...rows, createKeu1SubmissionItem()])}>
         <Plus className="mr-2 h-4 w-4" /> Tambah item
       </Button>
+
+      <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-end">
+        <div className="space-y-2">
+          <Label htmlFor="keu1-free-cash">Free Cash Sisa Bulan Lalu</Label>
+          <NominalInput
+            value={freeCashValue}
+            onCommit={onFreeCashChange}
+            placeholder="Kosongkan jika tidak ada"
+            ariaLabel="Free Cash Sisa Bulan Lalu"
+            className="h-11 w-full"
+          />
+        </div>
+        <div className="border-l-2 border-primary/40 pl-4">
+          <p className="text-xs text-muted-foreground">Kebutuhan Dana</p>
+          <p className="text-base font-semibold tabular-nums text-foreground">{formatRupiahZero(financial.kebutuhanDana)}</p>
+        </div>
+      </div>
     </section>
   );
 }

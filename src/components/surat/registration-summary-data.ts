@@ -165,6 +165,7 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
     category: mergedInput.request_category || snapshotSurat.request_category || "-",
     usageName: String(policy.usage_name || "-"),
     formName: String(form.nama_form || "-"),
+    formNumber: String(form.nomor_form || ""),
     requesterName: String(requester.full_name || "-"),
     requesterJobTitle: requester.job_title ? String(requester.job_title) : undefined,
     departmentName: String(department.name || "-"),

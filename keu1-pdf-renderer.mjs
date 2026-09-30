@@ -200,13 +200,14 @@ const compactBorderLayout = {
 
 const metadataLayout = {
   ...compactBorderLayout,
-  vLineWidth: (index) => index === 1 || index === 3 ? 0 : 0.7,
+  hLineWidth: (index) => index === 1 ? 0 : 0.7,
+  vLineWidth: (index) => index === 0 || index === 4 ? 0.7 : 0,
 };
 
 const summaryLayout = {
   ...compactBorderLayout,
-  hLineWidth: () => 0,
-  vLineWidth: (index) => index === 1 ? 0.7 : 0,
+  hLineWidth: (index, node) => index === 0 || index === node.table.body.length ? 0.7 : 0,
+  vLineWidth: () => 0.7,
 };
 
 const headerCell = (value) => ({ text: value, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 2, 0, 2] });
@@ -339,7 +340,13 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
           {
             width: "45%",
             stack: [
-              { text: data.requestDate ? `${data.signaturePlace || data.branch}, ${data.requestDate}` : data.signaturePlace || data.branch, alignment: "center" },
+              {
+                table: {
+                  widths: ["*"],
+                  body: [[{ text: data.requestDate ? `${data.signaturePlace || data.branch}, ${data.requestDate}` : data.signaturePlace || data.branch, alignment: "center" }]],
+                },
+                layout: compactBorderLayout,
+              },
               buildNativeSignatureBlock(data.signatures),
             ],
           },

@@ -2143,6 +2143,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       category: formData.form_input_data.request_category,
       usageName: selectedUsage?.name || "-",
       formName: selectedUsage?.master_forms?.nama_form || "-",
+      formNumber: selectedUsage?.master_forms?.nomor_form || "",
       requesterName: requester?.full_name || "-",
       requesterJobTitle: requester?.job_title || undefined,
       departmentName: department?.name || "-",

@@ -69,6 +69,22 @@ describe("fund module", () => {
     expect(output).toMatchObject({ fund_type: "operational", fund_without_project: true });
   });
 
+  it("KEU 1 subtracts Free Cash from requested funds and clears it for another usage", () => {
+    const input = {
+      items: [{ keterangan: "Listrik", jumlah: 2, satuan: "bulan", estimasi_harga_satuan: 150000 }],
+      free_cash_sisa_bulan_lalu: "50000",
+    };
+    const ctx = ctxFor("non_asset", input);
+    ctx.usage = { id: "keu1", master_forms: { nomor_form: "FM-UAI.KEU-01-00" } } as never;
+    expect(fundModule.validateSubmit?.(ctx)).toEqual([]);
+    const normalized = fundModule.normalizeInput(input as never, ctx);
+    expect(normalized).toMatchObject({ fund_amount: 250000, free_cash_sisa_bulan_lalu: 50000 });
+    expect(fundModule.buildSummaryFields?.(ctx)?.map((field) => field.label)).toEqual([
+      "Rincian Pengajuan Kas Kecil", "Grand Total", "Free Cash Sisa Bulan Lalu", "Kebutuhan Dana",
+    ]);
+    expect(fundModule.cleanup(ctx, "usage_change").inputKeysToDelete).toContain("free_cash_sisa_bulan_lalu");
+  });
+
   it("KEU 10 is not classified as KEU 1", () => {
     const ctx = ctxFor("non_asset", { items: [] });
     ctx.usage = { id: "keu10", master_forms: { nomor_form: "FM-UAI.KEU-10-00" } } as never;
