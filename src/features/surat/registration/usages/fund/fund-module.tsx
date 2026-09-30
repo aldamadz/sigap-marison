@@ -24,15 +24,13 @@ import type { FormInputData } from "@/components/surat/form/surat-form-types";
 import { formatRupiahZero } from "@/lib/rupiah";
 import { registerUsageModule } from "../usage-registry";
 import { FundContextPanel } from "./FundContextPanel";
+import { isKeu1Form } from "../../lib/keu1-form";
 
 const FUND_TYPES = ["operational", "production_cost"];
 
 const isKeu1Usage = (ctx: UsageModuleContext): boolean => {
   return isKeu1Form(ctx.usage.master_forms);
 };
-
-const isKeu1Form = (form: UsageModuleContext["usage"]["master_forms"]): boolean =>
-  String(form?.nomor_form ?? "").trim().toUpperCase() === "FM-UAI.KEU-01-00";
 
 export const fundModule: UsageModule = {
   meta: {
@@ -50,6 +48,9 @@ export const fundModule: UsageModule = {
     requiresMasterProjectMapping: true,
   },
   requiresMasterProjectMappingForUsage(usage) {
+    return !isKeu1Form(usage.master_forms);
+  },
+  usesProjectForUsage(usage) {
     return !isKeu1Form(usage.master_forms);
   },
   renderContextPanel(ctx) {
@@ -159,7 +160,7 @@ export const fundModule: UsageModule = {
       next.items = keu1Items;
       next.fund_amount = getKeu1SubmissionAmount(keu1Items);
       next.fund_type = "operational";
-      next.fund_without_project = !ctx.formData.project_id;
+      next.fund_without_project = true;
     } else {
       const fundItems = normalizeFundSubmissionItems(next.items);
       next.items = fundItems;

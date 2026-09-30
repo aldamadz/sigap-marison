@@ -137,6 +137,7 @@ export interface UsageModule {
   meta: UsageModuleMeta;
   requirements: UsageModuleRequirements;
   requiresMasterProjectMappingForUsage?(usage: UsageDetailRecord): boolean;
+  usesProjectForUsage?(usage: UsageDetailRecord): boolean;
 
   /** Panel konteks Section 1 (pra-nomor). */
   renderContextPanel(ctx: UsageModuleContext): React.ReactNode | null;
