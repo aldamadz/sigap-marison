@@ -12,24 +12,27 @@
 --     VOID permanently and must never be reused.
 --   * A number that was ever USED can never be reused.
 --   * The original draft stays recorded as cancelled; re-use by another actor
---     keeps an audit trail (voided_at / voided_by / reused_count /
---     last_reused_at on the reservation, plus the new draft row).
+--     keeps an audit trail (event log + reservation audit columns).
 --   * Historic VOID reservations (pre-migration, reuse_until IS NULL) are never
 --     resurrected.
 --   * Counter-start changes must not clobber USED, PENDING, in-window, or VOID
---     numbers. This is guaranteed structurally: reuse only selects VOID rows in
---     window; PENDING and USED are excluded; the "insert new" branch takes
---     max+1 so lowering start_from cannot reuse an occupied number.
+--     numbers. Reclaim only selects VOID rows in window; PENDING and USED are
+--     excluded; the "insert new" branch takes max+1.
 --
--- Implementation notes:
---   * Allocation is serialized with pg_advisory_xact_lock per scope; the
---     reclaim step adds a row lock (SELECT ... FOR UPDATE), so two concurrent
---     requests can never claim the same number twice.
---   * The reuse window is snapshotted onto the reservation at void time, so a
---     later admin change to the policy does not retroactively extend or shorten
---     an already-voided number.
---   * Forward-only: CREATE OR REPLACE everywhere; no DROP of existing objects
---     that are still in use. Old applied migrations are not edited.
+-- Review hardening (PR #413):
+--   * claim_reusable_letter_number is an INTERNAL function: server now() only
+--     (no client timestamp), execute granted only to service_role, reached
+--     exclusively through the scope-validating allocators.
+--   * Reclaim atomically detaches any stale cancelled draft so the next owner
+--     starts a fresh draft; create_surat_registration_draft is guarded so it
+--     can never revive a VOID draft (fail closed).
+--   * Cancel audit is preserved: voided_at/voided_by/reuse_until remain on the
+--     reservation, and every cancel + reclaim is appended to
+--     letter_number_reservation_events.
+--   * Allocation/reclaim is serialized with pg_advisory_xact_lock per scope +
+--     row lock, so two concurrent requests can never claim the same number.
+--
+-- Forward-only: CREATE OR REPLACE + new tables. No applied migration edited.
 
 -- ──────────────────────────────────────────────────────────────────────
 -- 1. Reuse policy (single active row)
@@ -100,7 +103,8 @@ where not exists (
 );
 
 -- The reuse window at the time the draft is voided. NULL means reuse is
--- disabled (the number becomes permanently VOID immediately).
+-- disabled (the number becomes permanently VOID immediately). Internal use
+-- only (called from definer functions); not granted to authenticated.
 create or replace function public.get_letter_number_reuse_window()
 returns interval
 language sql
@@ -118,32 +122,28 @@ as $$
   limit 1;
 $$;
 
-revoke all on function public.get_letter_number_reuse_window() from public, anon;
-grant execute on function public.get_letter_number_reuse_window() to authenticated, service_role;
+revoke all on function public.get_letter_number_reuse_window() from public, anon, authenticated;
+grant execute on function public.get_letter_number_reuse_window() to service_role;
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2. Reservation audit columns
+-- 2. Reservation audit columns + event log
 -- ──────────────────────────────────────────────────────────────────────
 
 alter table public.surat_reservations
   add column if not exists voided_at timestamptz;
-
 alter table public.surat_reservations
   add column if not exists voided_by uuid references auth.users(id);
-
 alter table public.surat_reservations
   add column if not exists reuse_until timestamptz;
-
 alter table public.surat_reservations
   add column if not exists reused_count integer not null default 0 check (reused_count >= 0);
-
 alter table public.surat_reservations
   add column if not exists last_reused_at timestamptz;
 
 comment on column public.surat_reservations.voided_at is
-  'Waktu draft bernomor dibatalkan.';
+  'Waktu pembatalan terakhir (riwayat lengkap di letter_number_reservation_events).';
 comment on column public.surat_reservations.voided_by is
-  'Akun yang membatalkan draft.';
+  'Akun yang membatalkan terakhir (riwayat lengkap di letter_number_reservation_events).';
 comment on column public.surat_reservations.reuse_until is
   'Batas waktu nomor boleh dipakai ulang. NULL/lewat => nomor VOID permanen.';
 comment on column public.surat_reservations.reused_count is
@@ -151,21 +151,72 @@ comment on column public.surat_reservations.reused_count is
 comment on column public.surat_reservations.last_reused_at is
   'Waktu terakhir nomor dipakai ulang.';
 
+-- Event log: every cancel (void) and every reclaim, with actor + time, so the
+-- history of who cancelled and who took the number is never lost.
+create table if not exists public.letter_number_reservation_events (
+  id uuid primary key default gen_random_uuid(),
+  reservation_id uuid not null references public.surat_reservations(id) on delete cascade,
+  kind text not null check (kind in ('void', 'reclaimed')),
+  actor_id uuid references auth.users(id),
+  occurred_at timestamptz not null default now(),
+  reuse_window interval,
+  notes text
+);
+
+create index if not exists letter_number_reservation_events_reservation_idx
+  on public.letter_number_reservation_events(reservation_id, occurred_at);
+
+alter table public.letter_number_reservation_events enable row level security;
+
+drop policy if exists "Admins can read reservation events" on public.letter_number_reservation_events;
+create policy "Admins can read reservation events"
+on public.letter_number_reservation_events
+for select
+to authenticated
+using (
+  exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('admin', 'super_admin')
+      and coalesce(p.is_active, true) = true
+  )
+);
+
+create or replace function public.log_letter_number_reservation_event(
+  p_reservation_id uuid,
+  p_kind text,
+  p_actor_id uuid,
+  p_reuse_window interval default null,
+  p_notes text default null
+)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into public.letter_number_reservation_events
+    (reservation_id, kind, actor_id, reuse_window, notes)
+  values
+    (p_reservation_id, p_kind, p_actor_id, p_reuse_window, p_notes);
+$$;
+
+revoke all on function public.log_letter_number_reservation_event(uuid, text, uuid, interval, text) from public, anon, authenticated;
+grant execute on function public.log_letter_number_reservation_event(uuid, text, uuid, interval, text) to service_role;
+
 -- ──────────────────────────────────────────────────────────────────────
--- 3. Reclaim helper (atomic, per-scope locked)
+-- 3. Reclaim helper (internal, atomic, per-scope locked, audit-preserving)
 -- ──────────────────────────────────────────────────────────────────────
 
 create or replace function public.claim_reusable_letter_number(
-  p_entity_id        uuid,
-  p_year             integer,
+  p_entity_id         uuid,
+  p_year              integer,
   p_number_scope_type text,
-  p_office_id        uuid,
-  p_project_id       uuid,
-  p_dept_id          uuid,
-  p_start_from       integer,
-  p_type_id          uuid,
-  p_reserved_by      uuid,
-  p_reserved_at      timestamptz default now()
+  p_office_id         uuid,
+  p_project_id        uuid,
+  p_dept_id           uuid,
+  p_start_from        integer,
+  p_type_id           uuid,
+  p_reserved_by       uuid
 )
 returns integer
 language plpgsql
@@ -176,6 +227,7 @@ declare
   v_actor uuid := auth.uid();
   v_next  integer;
   v_row_id uuid;
+  v_now timestamptz := now();
 begin
   if v_actor is null or p_reserved_by is distinct from v_actor then
     raise exception 'Sesi penomoran tidak valid.' using errcode = '42501';
@@ -191,9 +243,10 @@ begin
       || ':' || coalesce(p_dept_id::text, '-')
   ));
 
-  -- Only VOID rows that were voided with a reuse window still open are
-  -- eligible. Historical VOID rows (reuse_until IS NULL) and expired ones
-  -- (reuse_until <= now) are skipped. USED rows are never touched.
+  -- Only VOID rows voided with a reuse window still open are eligible. The
+  -- cutoff is server now(); there is no client-supplied timestamp to bypass.
+  -- Historic VOID rows (reuse_until IS NULL) and expired rows are skipped.
+  -- USED rows are never touched.
   select r.id, r.no_urut
   into v_row_id, v_next
   from public.surat_reservations r
@@ -201,7 +254,7 @@ begin
     and r.year = p_year
     and r.status = 'VOID'
     and r.voided_at is not null
-    and r.reuse_until > p_reserved_at
+    and r.reuse_until > v_now
     and r.no_urut >= p_start_from
     and r.number_scope_type = p_number_scope_type
     and (p_number_scope_type = 'pusat' or r.office_id = p_office_id)
@@ -212,22 +265,35 @@ begin
   for update;
 
   if v_row_id is not null then
+    -- Detach any stale cancelled draft so the next owner starts a fresh draft;
+    -- the original applicant's cancelled history stays intact.
+    update public.surat_registration_drafts
+    set reservation_id = null
+    where reservation_id = v_row_id
+      and status = 'VOID';
+
+    -- Audit: record the reclaim (actor + time).
+    perform public.log_letter_number_reservation_event(
+      v_row_id, 'reclaimed', p_reserved_by, null, 'Nomor dipakai ulang oleh pemohon baru.'
+    );
+
     update public.surat_reservations
     set status = 'PENDING',
         type_id = p_type_id,
-        office_id = p_office_id,
-        project_id = p_project_id,
-        dept_id = p_dept_id,
+        -- Preserve the reservation's scope keys: the reclaimed number belongs
+        -- to its original scope, and callers pass null for dimensions that do
+        -- not apply to that scope (e.g. office_id for 'pusat').
+        office_id = coalesce(p_office_id, office_id),
+        project_id = coalesce(p_project_id, project_id),
+        dept_id = coalesce(p_dept_id, dept_id),
         number_scope_type = p_number_scope_type,
         reserved_by = p_reserved_by,
-        created_at = p_reserved_at,
-        expires_at = p_reserved_at + interval '30 minutes',
+        created_at = v_now,
+        expires_at = v_now + interval '30 minutes',
         reused_count = reused_count + 1,
-        last_reused_at = p_reserved_at,
-        reuse_until = null,
-        voided_at = null,
-        voided_by = null
+        last_reused_at = v_now
     where id = v_row_id;
+
     return v_next;
   end if;
 
@@ -235,11 +301,11 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_reusable_letter_number(uuid, integer, text, uuid, uuid, uuid, integer, uuid, uuid, timestamptz) from public, anon;
-grant execute on function public.claim_reusable_letter_number(uuid, integer, text, uuid, uuid, uuid, integer, uuid, uuid, timestamptz) to authenticated, service_role;
+revoke all on function public.claim_reusable_letter_number(uuid, integer, text, uuid, uuid, uuid, integer, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.claim_reusable_letter_number(uuid, integer, text, uuid, uuid, uuid, integer, uuid, uuid) to service_role;
 
 -- ──────────────────────────────────────────────────────────────────────
--- 4. Void: snapshot the reuse window and keep the draft as cancelled
+-- 4. Void: keep the cancel audit and append an event
 -- ──────────────────────────────────────────────────────────────────────
 
 create or replace function public.void_surat_registration_draft(p_draft_id uuid)
@@ -254,6 +320,7 @@ declare
   v_reservation_id uuid;
   v_draft_status text;
   v_reservation_status text;
+  v_window interval;
 begin
   if v_user_id is null then
     raise exception 'Sesi login tidak tersedia.';
@@ -297,14 +364,21 @@ begin
     raise exception 'Reservasi nomor sudah tidak aktif (%).', v_reservation_status;
   end if;
 
+  -- Window snapshotted at void time. No window configured => reuse_until equals
+  -- void time => the number is permanently VOID.
+  v_window := coalesce(public.get_letter_number_reuse_window(), interval '0');
+
   update public.surat_reservations reservation
   set status = 'VOID',
       voided_at = now(),
       voided_by = v_user_id,
-      -- Window snapshotted at void time. No window configured => reuse_until
-      -- equals void time => the number is permanently VOID.
-      reuse_until = now() + coalesce(public.get_letter_number_reuse_window(), interval '0')
+      reuse_until = now() + v_window
   where reservation.id = v_reservation_id;
+
+  -- Audit: record the cancel (actor + time + window used).
+  perform public.log_letter_number_reservation_event(
+    v_reservation_id, 'void', v_user_id, v_window, 'Draft dibatalkan oleh pemohon.'
+  );
 
   update public.surat_registration_drafts draft
   set status = 'VOID',
@@ -318,10 +392,78 @@ revoke all on function public.void_surat_registration_draft(uuid) from public, a
 grant execute on function public.void_surat_registration_draft(uuid) to authenticated, service_role;
 
 -- ──────────────────────────────────────────────────────────────────────
--- 5. Rewire every allocator to reclaim in-window VOID numbers
+-- 5. Draft RPC guard: never resurrect a cancelled draft
+-- ──────────────────────────────────────────────────────────────────────
+-- Forward-only override of create_surat_registration_draft (original in
+-- 20260622143000). The ON CONFLICT branch must not revive a VOID draft; if a
+-- cancelled draft still references the reservation it fails closed instead.
+
+create or replace function public.create_surat_registration_draft(
+  p_no_urut integer,
+  p_no_surat text,
+  p_payload jsonb default '{}'::jsonb,
+  p_signer_assignments jsonb default '[]'::jsonb
+)
+returns public.surat_registration_drafts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_reservation_id uuid;
+  v_draft public.surat_registration_drafts;
+begin
+  if v_user_id is null then
+    raise exception 'Sesi login tidak tersedia.';
+  end if;
+
+  select r.id
+  into v_reservation_id
+  from public.surat_reservations r
+  where r.no_urut = p_no_urut
+    and r.year = extract(year from now())::integer
+    and r.reserved_by = v_user_id
+    and r.status = 'PENDING'
+  order by r.created_at desc
+  limit 1;
+
+  if v_reservation_id is null then
+    raise exception 'Reservation nomor tidak ditemukan.';
+  end if;
+
+  insert into public.surat_registration_drafts (
+    reservation_id, created_by, no_surat, payload, signer_assignments
+  ) values (
+    v_reservation_id, v_user_id, p_no_surat, coalesce(p_payload, '{}'::jsonb),
+    coalesce(p_signer_assignments, '[]'::jsonb)
+  )
+  on conflict (reservation_id) do update
+  set no_surat = excluded.no_surat,
+      payload = excluded.payload,
+      signer_assignments = excluded.signer_assignments,
+      status = 'DRAFT',
+      expires_at = now() + interval '7 days',
+      voided_at = null
+  where surat_registration_drafts.status is distinct from 'VOID'
+  returning * into v_draft;
+
+  if v_draft is null then
+    raise exception 'Reservasi masih memiliki draft pembatalan. Hubungi administrator.';
+  end if;
+
+  return v_draft;
+end;
+$$;
+
+revoke all on function public.create_surat_registration_draft(integer, text, jsonb, jsonb) from public, anon;
+grant execute on function public.create_surat_registration_draft(integer, text, jsonb, jsonb) to authenticated, service_role;
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 6. Rewire every allocator to reclaim in-window VOID numbers
 -- ──────────────────────────────────────────────────────────────────────
 
--- 5a. generate_new_letter_number (6 args): pusat + cabang (project).
+-- 6a. generate_new_letter_number (6 args): pusat + cabang (project).
 create or replace function public.generate_new_letter_number(
   p_entity_id  uuid,
   p_type_id    uuid,
@@ -382,7 +524,7 @@ $$;
 revoke all on function public.generate_new_letter_number(uuid, uuid, uuid, uuid, uuid, uuid) from public, anon;
 grant execute on function public.generate_new_letter_number(uuid, uuid, uuid, uuid, uuid, uuid) to authenticated, service_role;
 
--- 5b. generate_new_letter_number (7 args, form_usage): pusat + cabang + cabang_000 fallback.
+-- 6b. generate_new_letter_number (7 args, form_usage): pusat + cabang + cabang_000 fallback.
 create or replace function public.generate_new_letter_number(
   p_entity_id          uuid,
   p_type_id            uuid,
@@ -458,7 +600,7 @@ $$;
 revoke all on function public.generate_new_letter_number(uuid, uuid, uuid, uuid, uuid, uuid, uuid) from public, anon;
 grant execute on function public.generate_new_letter_number(uuid, uuid, uuid, uuid, uuid, uuid, uuid) to authenticated, service_role;
 
--- 5c. generate_keu1_branch_letter_number: KEU 1 cabang tanpa proyek.
+-- 6c. generate_keu1_branch_letter_number: KEU 1 cabang tanpa proyek.
 create or replace function public.generate_keu1_branch_letter_number(
   p_entity_id uuid,
   p_type_id uuid,
