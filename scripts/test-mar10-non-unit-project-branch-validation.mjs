@@ -5,6 +5,10 @@ const migration = readFileSync(
   "supabase/migrations/20260929070000_mar10_non_unit_project_branch_validation.sql",
   "utf8",
 );
+const reservationGuard = readFileSync(
+  "supabase/migrations/20260930140000_mar10_kc_descendant_number_scope.sql",
+  "utf8",
+);
 
 assert.ok(
   migration.includes("public.get_office_descendant_ids"),
@@ -30,3 +34,8 @@ assert.ok(
 );
 
 console.log("MAR-10 non_unit project branch validation migration checks passed");
+assert.match(reservationGuard, /v_kedudukan = 'KC' and project\.office_id in/);
+assert.match(reservationGuard, /v_category = 'non_unit' and v_kedudukan = 'KC'/);
+assert.match(reservationGuard, /branch_keu1_000/);
+assert.match(reservationGuard, /assert_branch_asset_fallback_eligible/);
+assert.doesNotMatch(reservationGuard, /department\.entity_id|dept\.entity_id/);
