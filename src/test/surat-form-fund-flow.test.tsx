@@ -8,7 +8,7 @@ import {
   allowServiceCalls,
   assertStrictServiceCalls,
 } from "./surat-form-harness";
-import { MASTER_DATA_DEFAULT, CURRENT_PROFILE_KC, FUND_FORM_USAGE_RAW } from "./surat-form-fixtures";
+import { MASTER_DATA_DEFAULT, MASTER_DATA_WITH_PROJECTS, CURRENT_PROFILE_KC, FUND_FORM_USAGE_RAW } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
   selectLetterType,
@@ -84,6 +84,34 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     fireEvent.blur(nominal);
     expect(await screen.findByText("Rp 1.500.000")).toBeInTheDocument();
 
+    assertStrictServiceCalls();
+  });
+
+  it("reserves a KEU 1 number without choosing a project even when the branch has projects", async () => {
+    serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_WITH_PROJECTS);
+    const keu1Usage = FUND_FORM_USAGE_RAW.map((usage) => ({
+      ...usage,
+      name: "Pengajuan Kas Kecil - Kantor Cabang",
+      master_forms: {
+        ...usage.master_forms,
+        nama_form: "FORM PENGAJUAN KAS KECIL",
+        nomor_form: "FM-UAI.KEU-01-00",
+      },
+    }));
+    await mountFormWithUsage(keu1Usage, CURRENT_PROFILE_KC);
+    await selectForm(/KAS KECIL/i);
+    await selectUsage(/Kas Kecil/i);
+    await selectLetterType();
+    await selectEntity();
+    await clickGetNumber();
+
+    expect(serviceMock.generateNoSurat).toHaveBeenCalledWith(expect.objectContaining({
+      project_id: "",
+      form_input_data: expect.objectContaining({
+        fund_type: "operational",
+        fund_without_project: true,
+      }),
+    }));
     assertStrictServiceCalls();
   });
 });
