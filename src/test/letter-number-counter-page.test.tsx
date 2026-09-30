@@ -63,6 +63,10 @@ beforeEach(() => {
   mocks.toast.mockReset();
   mocks.confirm.mockReset().mockResolvedValue(true);
   mocks.updated.length = 0;
+  // Radix Select scrolls the highlighted option into view on open; jsdom has
+  // no scrollIntoView. Without the stub the open triggers an unhandled error
+  // and the CI quality gate fails.
+  Element.prototype.scrollIntoView = () => {};
 
   mocks.from.mockImplementation((table: string) => {
     // Thenable chain: any .eq/.order/.limit returns the same chain; awaiting it
