@@ -7,7 +7,7 @@ import {
   validateFundSubmissionItems,
 } from "@/components/surat/fund-submission";
 import {
-  getKeu1SubmissionAmount,
+  getKeu1FinancialSummary,
   normalizeKeu1SubmissionItems,
   validateKeu1SubmissionItems,
 } from "@/components/surat/keu1-submission";
@@ -61,7 +61,9 @@ export const fundModule: UsageModule = {
       return (
         <Keu1SubmissionEditor
           value={ctx.input.items}
+          freeCashValue={ctx.input.free_cash_sisa_bulan_lalu}
           onChange={(items) => ctx.setInputValue("items", items)}
+          onFreeCashChange={(value) => ctx.setInputValue("free_cash_sisa_bulan_lalu", value)}
         />
       );
     }
@@ -73,7 +75,7 @@ export const fundModule: UsageModule = {
     );
   },
   hiddenFieldKeys() {
-    return ["items", "fund_amount", "fund_type", "fund_without_project"];
+    return ["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu"];
   },
   isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
     if (field.key !== "items" && field.key !== "fund_amount") return null;
@@ -85,19 +87,27 @@ export const fundModule: UsageModule = {
   validateSubmit(ctx: UsageModuleContext): SubmitIssue[] {
     if (isKeu1Usage(ctx)) {
       const first = validateKeu1SubmissionItems(ctx.input.items)[0];
-      return first ? [{ title: "Rincian Kas Kecil Belum Lengkap", description: first.message }] : [];
+      if (first) return [{ title: "Rincian Kas Kecil Belum Lengkap", description: first.message }];
+      const financial = getKeu1FinancialSummary(ctx.input.items, ctx.input.free_cash_sisa_bulan_lalu);
+      return financial.hasFreeCash && financial.freeCash === null
+        ? [{ title: "Free Cash Tidak Valid", description: "Isi nominal Free Cash dengan angka Rupiah atau kosongkan." }]
+        : [];
     }
     const first = validateFundSubmissionItems(ctx.input.items)[0];
     return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
   },
   buildSummaryFields(ctx: UsageModuleContext): SummaryField[] {
     if (isKeu1Usage(ctx)) {
+      const financial = getKeu1FinancialSummary(ctx.input.items, ctx.input.free_cash_sisa_bulan_lalu);
       return [
+        { key: "items", label: "Rincian Pengajuan Kas Kecil", value: ctx.input.items },
         {
-          key: "fund_amount",
+          key: "keu1_grand_total",
           label: "Grand Total",
-          value: formatRupiahZero(getKeu1SubmissionAmount(ctx.input.items)),
+          value: formatRupiahZero(financial.grandTotal),
         },
+        ...(financial.hasFreeCash ? [{ key: "free_cash_sisa_bulan_lalu", label: "Free Cash Sisa Bulan Lalu", value: formatRupiahZero(financial.freeCash) }] : []),
+        { key: "fund_amount", label: "Kebutuhan Dana", value: formatRupiahZero(financial.kebutuhanDana) },
       ];
     }
     const fundType = String(ctx.input.fund_type || "");
@@ -142,7 +152,7 @@ export const fundModule: UsageModule = {
   },
   cleanup(): CleanupResult {
     return {
-      inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project"],
+      inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project", "free_cash_sisa_bulan_lalu"],
       resetSelection: ["fundWithoutProject"],
     };
   },
@@ -158,7 +168,10 @@ export const fundModule: UsageModule = {
         return { ...item, total: quantity * unitPrice };
       });
       next.items = keu1Items;
-      next.fund_amount = getKeu1SubmissionAmount(keu1Items);
+      const financial = getKeu1FinancialSummary(keu1Items, next.free_cash_sisa_bulan_lalu);
+      if (financial.hasFreeCash && financial.freeCash !== null) next.free_cash_sisa_bulan_lalu = financial.freeCash;
+      else delete next.free_cash_sisa_bulan_lalu;
+      next.fund_amount = financial.kebutuhanDana;
       next.fund_type = "operational";
       next.fund_without_project = true;
     } else {
