@@ -85,7 +85,8 @@ export function validateStep1ForNumberGeneration(
   } else if (
     input.branchHasRegisteredProjects &&
     !input.projectId &&
-    cat !== "non_unit"
+    cat !== "non_unit" &&
+    !(cat === "non_asset" && input.fundWithoutProject)
   ) {
     return fail(
       "Proyek Cabang Belum Dipilih",
