@@ -224,6 +224,33 @@ describe("surat-wizard-validation — validateStep1ForNumberGeneration", () => {
     expect(r.valid).toBe(true);
   });
 
+  it("17a. branch fund without project remains valid when the office has projects", () => {
+    const r = validateStep1ForNumberGeneration(
+      validAssetInput({
+        requestCategory: "non_asset",
+        branchHasRegisteredProjects: true,
+        fundWithoutProject: true,
+        projectId: "",
+        fundType: "operational",
+      }),
+    );
+    expect(r.valid).toBe(true);
+  });
+
+  it("17b. branch fund still requires a project when without-project is false", () => {
+    const r = validateStep1ForNumberGeneration(
+      validAssetInput({
+        requestCategory: "non_asset",
+        branchHasRegisteredProjects: true,
+        fundWithoutProject: false,
+        projectId: "",
+        fundType: "operational",
+      }),
+    );
+    expect(r.valid).toBe(false);
+    expect(r.errorTitle).toBe("Proyek Cabang Belum Dipilih");
+  });
+
   it("18. non_asset: passes with project ready + production_cost", () => {
     const r = validateStep1ForNumberGeneration(
       validAssetInput({
