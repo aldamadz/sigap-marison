@@ -20,6 +20,7 @@ describe("Non Unit request normalization", () => {
       item_name: "Pembangunan saluran blok A",
       subtotal: "1.000.000" as unknown as number,
       planning_notes: "Termasuk material",
+      status: "4",
     });
 
     expect(row).toMatchObject({
@@ -30,7 +31,7 @@ describe("Non Unit request normalization", () => {
       kode: "INFRA",
       sat: "Pekerjaan",
       jumlah: "1",
-      status: "2",
+      status: "4",
       keterangan: "Rp\u00a01.000.000",
     });
   });
@@ -42,8 +43,10 @@ describe("Non Unit request normalization", () => {
 
   it("reports actionable errors for incomplete rows", () => {
     expect(validateNonUnitRows([{}])[0].message).toContain("minimal satu");
-    expect(validateNonUnitRows([{ non_unit_id: 12, item_name: "Jalan", subtotal: 0 }]))
+    expect(validateNonUnitRows([{ non_unit_id: 12, item_name: "Jalan", subtotal: 0, status: "1" }]))
       .toEqual([{ index: 0, field: "subtotal", message: "Isi nilai pengajuan lebih dari 0 untuk item 1." }]);
+    expect(validateNonUnitRows([{ non_unit_id: 12, item_name: "Jalan", subtotal: 1000 }]))
+      .toEqual([{ index: 0, field: "status", message: "Pilih status 1–4 untuk pekerjaan 1." }]);
   });
 
   it("preserves the external project snapshot during registration normalization", () => {

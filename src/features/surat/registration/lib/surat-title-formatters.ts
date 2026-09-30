@@ -10,9 +10,7 @@
  * (the form) still owns the lifecycle, the manual-override flag,
  * the `setFormData` write and the surrounding `useEffect` deps.
  *
- * Output is byte-for-byte identical to the prior inline helper.
- * Punctuation, capitalisation, separators and fallback strings are
- * preserved verbatim. No new behaviour is added.
+ * Title generation is independent of I/O and form lifecycle.
  *
  * Linked recommendation path
  * --------------------------
@@ -83,6 +81,7 @@ export type BuildAutoTitleOptions = {
   category: RequestCategory | null;
   /** The form's current `form_input_data` (raw object). */
   formInputData: Record<string, unknown>;
+  formNumber?: string | null;
   /** Currently selected office (used for the office suffix). */
   selectedOffice?: MasterRecord | null;
   /** Currently selected department (used for the office suffix). */
@@ -121,6 +120,7 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
   const {
     category,
     formInputData,
+    formNumber,
     selectedOffice = null,
     selectedDepartment = null,
     linkedDocumentContext = null,
@@ -132,9 +132,11 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
   const isRecommendationDocument = linkedDocumentContext?.type === "recommendation";
   const rows = normalizeTableRows(formInputData.items);
   const itemNames = rows
-    .map((row) => String(row.nama_barang || row.name || "").trim())
+    .map((row) => String(row.nama_barang || row.item_name || row.keterangan || row.name || "").trim())
     .filter(Boolean);
-  const itemText = formatIndonesianList(itemNames);
+  const itemText = itemNames.length > 2
+    ? `${itemNames[0]} dan ${itemNames.length - 1} item lainnya`
+    : formatIndonesianList(itemNames);
 
   if (isRecommendationDocument) {
     const recommendationRows = normalizeTableRows(formInputData[RECOMMENDATION_ITEMS_KEY]);
@@ -175,6 +177,11 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
     return [title, parentOfficeSuffix].filter(Boolean).join(" ");
   }
 
+  if (String(formNumber || "").toUpperCase().includes("KEU-01")) {
+    return [itemText ? `Pengajuan Kas Kecil: ${itemText}` : "Pengajuan Kas Kecil", officeSuffix]
+      .filter(Boolean).join(" ");
+  }
+
   if (category === "unit") {
     const count = Number((formInputData as Record<string, unknown>).requested_unit_count || 0);
     const project = (formInputData as Record<string, unknown>).requested_project as
@@ -182,8 +189,8 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
       | undefined;
     const title =
       count > 0
-        ? `Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit`
-        : "Permohonan Order Bangun";
+        ? `Pengajuan SPK Unit: ${count} Unit`
+        : "Pengajuan SPK Unit";
     return [title, project?.name, officeSuffix].filter(Boolean).join(" ");
   }
 
@@ -193,12 +200,14 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
 
   const categoryLabel =
     category === "asset"
-      ? "Permohonan Aset"
+      ? "Pengajuan Aset"
       : category === "non_asset"
-        ? "Permohonan Non Aset"
-        : "Permohonan";
+        ? String(formInputData.fund_type) === "production_cost"
+          ? "Pengajuan Dana Produksi"
+          : "Pengajuan Dana Operasional"
+        : "Pengajuan";
   return [
-    itemText ? `${categoryLabel} : ${itemText}` : categoryLabel,
+    itemText ? `${categoryLabel}: ${itemText}` : categoryLabel,
     officeSuffix,
   ]
     .filter(Boolean)

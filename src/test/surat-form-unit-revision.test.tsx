@@ -20,6 +20,7 @@ import {
   selectEntity,
   selectFormAndUsage,
   selectLetterType,
+  selectOptionByLabel,
 } from "./surat-form-driver";
 import {
   FORM_USAGES_RAW,
@@ -231,6 +232,7 @@ describe("SPK Unit requester revision", () => {
     await act(async () => { fireEvent.click(project); });
     await act(async () => { fireEvent.click(await screen.findByText(/GA01 - Griya Asri/)); });
     fireEvent.change(screen.getByLabelText("Jumlah Unit Diajukan"), { target: { value: "2" } });
+    await selectOptionByLabel(/^Status$/i, /^2$/);
     await clickGetNumber();
 
     await act(async () => {

@@ -52,7 +52,7 @@ migration_ack="$mode"
 node scripts/deploy-migration-gate.mjs "$previous_sha" "$target_sha" "$migration_ack"
 
 worker_changes="$(git diff --name-only "$previous_sha" "$target_sha" -- \
-  pdf-worker.mjs pgd-pdf-renderer.mjs recommendation-pdf.mjs recommendation-native-pdf.mjs \
+  pdf-worker.mjs pgd-pdf-renderer.mjs keu1-pdf-renderer.mjs recommendation-pdf.mjs recommendation-native-pdf.mjs \
   document-layout-rules.mjs server/pdf-worker-job.mjs server/marison-sync-worker.mjs \
   server/marison-outbound-worker.mjs)"
 if [[ -n "$worker_changes" ]]; then

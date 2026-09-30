@@ -11,6 +11,7 @@ function FundEditorHarness() {
     jumlah: 1,
     satuan: "",
     nominal: 0,
+    status: "2",
   }]);
 
   return <FundSubmissionEditor value={items} onChange={setItems} />;
@@ -35,5 +36,11 @@ describe("FundSubmissionEditor", () => {
       fireEvent.change(input, { target: { value } });
       expect(input).toHaveValue(value);
     }
+  });
+
+  it("shows the PGD status choices", () => {
+    render(<FundEditorHarness />);
+    expect(screen.getByRole("combobox", { name: /Status/ })).toHaveTextContent("2");
+    expect(screen.getByText(/1 = H\+1/)).toBeInTheDocument();
   });
 });

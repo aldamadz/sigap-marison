@@ -63,7 +63,7 @@ async function reachReadyAttachmentForm() {
   await clickGetNumber();
   await fillNamaBarang("Printer Epson");
   await waitFor(() => expect(screen.getByPlaceholderText(/Contoh.*Permohonan/i)).toHaveValue(
-    "Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat"
+    "Pengajuan Aset Dept. Pengembangan Organisasi Kantor Pusat"
   ));
 }
 

@@ -61,7 +61,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
   it("renders Form selector on mount without location or usage", async () => {
     await mountForm();
     expect(screen.getAllByText(/Form & Lokasi/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Form PGD")).toBeInTheDocument();
+    expect(screen.getByText("Pilih Formulir")).toBeInTheDocument();
     // Progressive disclosure: Kegunaan + lokasi belum tampil sebelum Form dipilih.
     expect(screen.queryByText("Kegunaan")).not.toBeInTheDocument();
     expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
   it("shows location/context after selecting usage", async () => {
     await mountForm();
     await selectFormAndUsage();
-    expect(screen.getByText("Form PGD")).toBeInTheDocument();
+    expect(screen.getByText("Pilih Formulir")).toBeInTheDocument();
     expect(screen.getByText("Kegunaan")).toBeInTheDocument();
     expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
     assertStrictServiceCalls();

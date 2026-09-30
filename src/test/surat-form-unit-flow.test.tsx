@@ -66,6 +66,7 @@ describe("Flow 3: Unit pusat", () => {
 
     await selectOptionByLabel(/^Proyek$/i, /GA01 - Griya Asri/i);
     fireEvent.change(screen.getByPlaceholderText("Contoh: 10"), { target: { value: "3" } });
+    await selectOptionByLabel(/^Status$/i, /^2$/);
     await clickGetNumber();
 
     expect(serviceMock.generateNoSurat).toHaveBeenCalledWith(expect.objectContaining({
@@ -132,6 +133,7 @@ describe("Flow 3: Unit pusat", () => {
     expect(serviceMock.generateNoSurat).not.toHaveBeenCalled();
 
     unitsDeferred.resolve({ options: [{ value: "unit-a1", label: "A-01" }] });
+    await selectOptionByLabel(/^Status$/i, /^2$/);
     await clickGetNumber();
 
     expect(serviceMock.generateNoSurat).toHaveBeenCalledTimes(1);

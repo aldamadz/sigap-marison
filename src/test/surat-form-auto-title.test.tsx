@@ -51,10 +51,10 @@ describe("Flow 8: Auto-title and Auto-place", () => {
     await clickGetNumber();
 
     await waitFor(() => expect(setJudulForDisplayMock).toHaveBeenLastCalledWith(
-      "Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat"
+      "Pengajuan Aset Dept. Pengembangan Organisasi Kantor Pusat"
     ));
     expect(screen.getByPlaceholderText(/Contoh.*Permohonan/i)).toHaveValue(
-      "Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat"
+      "Pengajuan Aset Dept. Pengembangan Organisasi Kantor Pusat"
     );
     assertStrictServiceCalls();
   });
@@ -84,10 +84,10 @@ describe("Flow 8: Auto-title and Auto-place", () => {
 
     fireEvent.change(perihal, { target: { value: "" } });
     await waitFor(() => expect(perihal).toHaveValue(
-      "Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat"
+      "Pengajuan Aset Dept. Pengembangan Organisasi Kantor Pusat"
     ));
     expect(setJudulForDisplayMock).toHaveBeenLastCalledWith(
-      "Permohonan Aset Dept. Pengembangan Organisasi Kantor Pusat"
+      "Pengajuan Aset Dept. Pengembangan Organisasi Kantor Pusat"
     );
     assertStrictServiceCalls();
   });

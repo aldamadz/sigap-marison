@@ -78,6 +78,7 @@ import { NominalInput } from "@/components/surat/NominalInput";
 import {
   resolveNonUnitProjectMapping,
 } from "@/components/surat/non-unit-request";
+import { getDescendantOfficeIds } from "@/lib/office-hierarchy";
 import {
   canDepartmentRequestUnit,
   getExternalInputFields,
@@ -821,6 +822,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const nextTitle = buildAutoTitle({
       category: getRequestCategory(),
       formInputData: formData.form_input_data,
+      formNumber: selectedUsage?.master_forms?.nomor_form,
       selectedOffice,
       selectedDepartment,
       linkedDocumentContext,
@@ -903,7 +905,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
   // Tanpa flag mode kategori di orchestrator: kebutuhan mapping proyek
   // dibaca dari requirements modul aktif.
-  const requiresMarisonProject = activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false;
+  const requiresMarisonProject = selectedUsage && activeUsageData
+    ? activeUsageData.module.requiresMasterProjectMappingForUsage?.(selectedUsage)
+      ?? activeUsageData.module.requirements.requiresMasterProjectMapping
+    : false;
+  const usageUsesProject = selectedUsage && activeUsageData
+    ? activeUsageData.module.usesProjectForUsage?.(selectedUsage) ?? true
+    : true;
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;
@@ -939,10 +947,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     Boolean(generatedNoSurat),
     signers.length > 0,
   );
-  const nonUnitProjectCandidates = useMemo(
-    () => isPusatSelected ? (master.projects || []) : filteredProjects,
-    [filteredProjects, isPusatSelected, master.projects],
-  );
+  const nonUnitProjectCandidates = useMemo(() => {
+    if (isPusatSelected) return master.projects || [];
+    if (!formData.office_id || !master.projects) return [];
+
+    const selectedOffice = master.offices?.find((o) => o.id === formData.office_id);
+    const isKantorCabang = selectedOffice?.kedudukan === "KC";
+
+    if (isKantorCabang) {
+      const allowedOfficeIds = getDescendantOfficeIds(master.offices || [], formData.office_id);
+      return master.projects.filter((p: MasterRecord) => allowedOfficeIds.has(String(p.office_id)));
+    }
+
+    return filteredProjects;
+  }, [filteredProjects, isPusatSelected, master.projects, master.offices, formData.office_id]);
   const readyNonUnitProjects = useMemo(
     () => nonUnitProjectCandidates.filter((project) =>
       resolveNonUnitProjectMapping(project, master.offices).ready
@@ -959,7 +977,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const selectedMarisonBranchId = selectedNonUnitProjectMapping.branchId || 0;
   const isMarisonProjectReady = requiresMarisonProject && selectedNonUnitProjectMapping.ready;
   const shouldShowProjectSelector = Boolean(
-    formData.office_id && (!isPusatSelected || requiresMarisonProject)
+    formData.office_id && usageUsesProject && (!isPusatSelected || requiresMarisonProject)
   );
   const hasRegisteredProjectCandidates = requiresMarisonProject
     ? nonUnitProjectCandidates.length > 0
@@ -1085,6 +1103,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         project_is_default: true,
       };
     }
+    if (!usageUsesProject) {
+      delete input.requested_project;
+      delete input.project_code;
+      delete input.project_name;
+      delete input.project_is_default;
+    }
     if (input.project_is_default === true) {
       delete input.project_code;
       delete input.project_name;
@@ -1102,13 +1126,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     shouldUseDefaultBranchProject,
     activeUsageData,
     moduleCtx,
+    usageUsesProject,
   ]);
 
   const effectiveFormData = useMemo(() => ({
     ...formData,
-    project_id: shouldUseDefaultBranchProject ? "" : formData.project_id,
+    project_id: !usageUsesProject || shouldUseDefaultBranchProject ? "" : formData.project_id,
     form_input_data: effectiveFormInputData,
-  }), [formData, shouldUseDefaultBranchProject, effectiveFormInputData]);
+  }), [formData, shouldUseDefaultBranchProject, usageUsesProject, effectiveFormInputData]);
 
   // Autosave controller — owns draftSaveState + the 900ms debounce timer.
   // Hook is invoked here so the live `effectiveFormData` reference is what
@@ -1126,13 +1151,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
     project_id: requiresMarisonProject ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
-    project_code: shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
-    project_name: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
+    project_code: !usageUsesProject ? "" : shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
+    project_name: !usageUsesProject ? "" : shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
     office_id: formData.office_id,
     entity_id: formData.entity_id,
     dept_id: formData.dept_id,
     ...effectiveFormInputData,
-  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, requiresMarisonProject, selectedMarisonProjectId]);
+  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, usageUsesProject, requiresMarisonProject, selectedMarisonProjectId]);
 
   const isDirty = useMemo(
     () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
@@ -1638,7 +1663,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         ...prev,
         // Ganti Kegunaan: proyek hanya dipertahankan bila kategori sama;
         // lintas kategori, proyek lama tidak lagi sah.
-        project_id: previousUsageData && previousUsageData.category !== usageData.category ? "" : prev.project_id,
+        project_id: usageData.module.usesProjectForUsage?.(detail) === false ||
+          (previousUsageData && previousUsageData.category !== usageData.category) ? "" : prev.project_id,
         penggunaan_id: isNewUsage ? "" : detail.id,
         form_usage_id: isNewUsage ? detail.id : "",
         // Flag warisan dibaca dari output normalisasi modul, bukan dari branch kategori.
@@ -1735,11 +1761,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       unitProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
       unitCount: Number(getFormFieldValue("requested_unit_count") || 0),
       branchHasRegisteredProjects,
-      projectId: formData.project_id,
+      projectId: effectiveFormData.project_id,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
-      fundWithoutProject: isGeneralFund,
-      fundType: String(getFormFieldValue("fund_type") || ""),
+      fundWithoutProject: effectiveFormInputData.fund_without_project === true,
+      fundType: String(effectiveFormInputData.fund_type || ""),
     });
     if (!step1Check.valid) {
       return toast({
@@ -1970,8 +1996,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
       firstNonUnitError: undefined,
-      fundWithoutProject: isGeneralFund,
-      fundType: String(getFormFieldValue("fund_type") || ""),
+      fundWithoutProject: effectiveFormInputData.fund_without_project === true,
+      fundType: String(effectiveFormInputData.fund_type || ""),
       firstFundIssue: undefined,
 
       missingField: missingField ? { key: missingField.key, label: missingField.label } : undefined,
@@ -2079,7 +2105,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       requesterJobTitle: requester?.job_title || undefined,
       departmentName: department?.name || "-",
       officeName: office?.name || "-",
-      projectName: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name || undefined,
+      projectName: !usageUsesProject ? undefined : shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name || undefined,
       requestPlace: formData.request_place,
       requestDate: formData.request_date,
       fields,
@@ -3473,7 +3499,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {!generatedNoSurat && !draftLoading && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
+                <Label htmlFor="form-select" className="text-[11px] font-black uppercase text-muted-foreground">Pilih Formulir</Label>
                 <Select
                   value={selectedFormId}
                   onValueChange={value => {
@@ -3500,8 +3526,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     });
                   }}
                 >
-                  <SelectTrigger className="h-12 bg-background">
-                    <SelectValue placeholder="Pilih Form PGD" />
+                  <SelectTrigger id="form-select" className="h-12 bg-background">
+                    <SelectValue placeholder="Pilih formulir" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableForms.map(form => (
@@ -3547,7 +3573,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {generatedNoSurat && selectedUsage && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Pilih Formulir</Label>
                 <div className="flex min-h-12 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground">
                   {selectedFormName}
                 </div>
