@@ -76,7 +76,9 @@ const normalizeKeu1Item = (row, index) => {
   const record = asObject(row);
   const quantity = Number(record.jumlah ?? record.quantity ?? record.qty ?? 1);
   const safeQuantity = Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1;
-  const unitPrice = parseMoney(record.estimasi_harga_satuan ?? record.harga_satuan ?? record.unit_price ?? record.nominal ?? 0);
+  const rawUnitPrice = record.estimasi_harga_satuan ?? record.harga_satuan ?? record.unit_price ?? record.nominal;
+  const hasUnitPrice = rawUnitPrice != null && String(rawUnitPrice).trim() !== "";
+  const unitPrice = parseMoney(rawUnitPrice);
   const total = safeQuantity * unitPrice;
   return {
     no: index + 1,
@@ -84,8 +86,17 @@ const normalizeKeu1Item = (row, index) => {
     jumlah: safeQuantity,
     satuan: text(record.satuan ?? record.sat ?? record.unit, ""),
     hargaSatuan: unitPrice,
+    hasUnitPrice,
     total,
   };
+};
+
+const signaturePlaceForOffice = (office, fallbackName) => {
+  const name = text(office.name || fallbackName, "");
+  if (String(office.kedudukan || "").toLowerCase() === "pusat" || /^kantor pusat\b/i.test(name)) {
+    return "Magelang";
+  }
+  return text(name.replace(/^(?:kantor\s+cabang|kcp\.?|kc\.?|cabang)\s*/i, "").trim(), "-");
 };
 
 export const normalizeKeu1DocumentData = (source = {}, options = {}) => {
@@ -96,20 +107,22 @@ export const normalizeKeu1DocumentData = (source = {}, options = {}) => {
     : [];
   const normalizedItems = items.map(normalizeKeu1Item);
   const grandTotal = normalizedItems.reduce((sum, item) => sum + item.total, 0);
-  const previousFreeCash = parseMoney(input.free_cash_sisa_bulan_lalu ?? input.sisa_bulan_lalu ?? 0);
+  const rawPreviousFreeCash = input.free_cash_sisa_bulan_lalu ?? input.sisa_bulan_lalu;
+  const hasPreviousFreeCash = rawPreviousFreeCash != null && String(rawPreviousFreeCash).trim() !== "";
+  const previousFreeCash = parseMoney(rawPreviousFreeCash);
   const kebutuhanDana = Math.max(0, grandTotal - previousFreeCash);
   const targetStep = Number(options.targetStep || 0);
   const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   const office = location.office || {};
-  const officeName = office.kedudukan === "Pusat"
-    ? `Kantor Pusat - ${text(office.name, "Pusat")}`
-    : text(office.name, source.office_name, "-");
+  const isPusat = String(office.kedudukan || "").toLowerCase() === "pusat";
+  const officeName = text(office.name || source.office_name, "-");
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.KEU-01-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/KEU/VI/2026"),
     branch: officeName,
-    locationLabel: office.kedudukan === "Pusat" ? "Departemen" : "Cabang",
-    locationValue: office.kedudukan === "Pusat"
+    signaturePlace: signaturePlaceForOffice(office, source.office_name),
+    locationLabel: isPusat ? "Departemen" : "Cabang",
+    locationValue: isPusat
       ? text(location?.department?.name || source.department_name, "-")
       : officeName,
     requestDate: formatDateId(source.request_date),
@@ -117,6 +130,7 @@ export const normalizeKeu1DocumentData = (source = {}, options = {}) => {
     items: normalizedItems,
     grandTotal,
     previousFreeCash,
+    hasPreviousFreeCash,
     kebutuhanDana,
     notes: text(input.catatan || source.notes, ""),
     signatures,
@@ -146,6 +160,7 @@ export const createKeu1PreviewData = (options = {}) => {
     formNumber: "FM-UAI.KEU-01-00",
     noSurat: "001/UAI/KEU/VI/2026",
     branch: "Cabang Jepara",
+    signaturePlace: "Jepara",
     locationLabel: "Cabang",
     locationValue: "Cabang Jepara",
     requestDate: "1 Juli 2026",
@@ -157,6 +172,7 @@ export const createKeu1PreviewData = (options = {}) => {
     ],
     grandTotal: 2_250_000,
     previousFreeCash: 0,
+    hasPreviousFreeCash: false,
     kebutuhanDana: 2_250_000,
     notes: "Contoh pratinjau template KEU 1.",
     signatures,
@@ -182,21 +198,45 @@ const compactBorderLayout = {
   paddingBottom: () => 1,
 };
 
+const metadataLayout = {
+  ...compactBorderLayout,
+  vLineWidth: (index) => index === 1 || index === 3 ? 0 : 0.7,
+};
+
+const summaryLayout = {
+  ...compactBorderLayout,
+  hLineWidth: () => 0,
+  vLineWidth: (index) => index === 1 ? 0.7 : 0,
+};
+
 const headerCell = (value) => ({ text: value, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 2, 0, 2] });
 const itemCell = (value, alignment = "center", extra = {}) => ({ text: text(value, ""), alignment, fontSize: 8, margin: [0, 0, 0, 0], ...extra });
-const moneyCell = (value) => itemCell(formatMoneyId(value), "right");
+const moneyCell = (value, visible = true) => itemCell(visible ? formatMoneyId(value) : "", "right");
 
 export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
   const items = Array.from({ length: 12 }, (_item, index) => ({
-    no: index + 1,
+    no: "",
     keterangan: "",
     jumlah: "",
     satuan: "",
-    hargaSatuan: 0,
-    total: 0,
+    hargaSatuan: null,
+    total: null,
     ...(data.items[index] || {}),
-    no: index + 1,
   }));
+  const summaryRows = [[
+    { text: "GRAND TOTAL", bold: true, alignment: "left", margin: [0, 2, 0, 2] },
+    { text: formatMoneyId(data.grandTotal), bold: true, alignment: "right" },
+  ]];
+  if (data.hasPreviousFreeCash ?? (data.previousFreeCash != null && data.previousFreeCash !== 0)) {
+    summaryRows.push([
+      { text: "Free Cash Sisa Bulan Lalu", alignment: "left", margin: [0, 2, 0, 2], color: MUTED },
+      { text: formatMoneyId(data.previousFreeCash), alignment: "right", color: MUTED },
+    ]);
+  }
+  summaryRows.push([
+    { text: "KEBUTUHAN DANA", bold: true, alignment: "left", margin: [0, 2, 0, 2], fillColor: GREEN },
+    { text: formatMoneyId(data.kebutuhanDana), bold: true, alignment: "right", fillColor: GREEN },
+  ]);
   return {
     pageSize: "A4",
     pageOrientation: "portrait",
@@ -205,15 +245,15 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
     content: [
       {
         table: {
-          widths: ["18%", "60%", "22%"],
+          widths: ["18%", "52%", "30%"],
           body: [[
             logoDataUrl ? { image: logoDataUrl, fit: [82, 30], alignment: "center", margin: [0, 6, 0, 0], fillColor: HEADER_TINT } : { text: "MARISON\nREGENCY GROUP", bold: true, color: "#087b9c", alignment: "center", margin: [0, 8, 0, 0], fillColor: HEADER_TINT },
-            { text: "FORM PENGAJUAN KAS KECIL", bold: true, fontSize: 14, alignment: "center", margin: [0, 10, 0, 0], fillColor: HEADER_TINT },
+            { text: "FORM PENGAJUAN KAS KECIL", bold: true, fontSize: 12, alignment: "center", margin: [0, 10, 0, 0], fillColor: HEADER_TINT },
             {
               table: {
-                widths: ["48%", "52%"],
+                widths: ["42%", "58%"],
                 body: [
-                  [{ text: "No. Formulir", bold: true, fillColor: HEADER_TINT }, { text: data.formNumber, bold: true, alignment: "center", fillColor: HEADER_TINT }],
+                  [{ text: "No. Formulir", bold: true, fontSize: 8, fillColor: HEADER_TINT }, { text: data.formNumber, bold: true, fontSize: 8, alignment: "center", fillColor: HEADER_TINT }],
                   [{ text: "Halaman", bold: true, fillColor: HEADER_TINT }, { text: "1 Dari 1", bold: true, alignment: "center", fillColor: HEADER_TINT }],
                   [{ text: "Berlaku Efektif", bold: true, fillColor: HEADER_TINT }, { text: "1 Januari 2024", bold: true, alignment: "center", fillColor: HEADER_TINT }],
                 ],
@@ -242,7 +282,7 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
             ],
           ],
         },
-        layout: compactBorderLayout,
+        layout: metadataLayout,
       },
       {
         table: {
@@ -262,12 +302,12 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
           body: [
             ["No", "Keterangan", "Jumlah", "Satuan", "Estimasi Harga Satuan", "Total"].map(headerCell),
             ...items.map((item) => [
-              itemCell(item.no),
+              itemCell(item.keterangan || item.satuan || Number(item.jumlah) > 1 || item.hasUnitPrice ? item.no : ""),
               itemCell(item.keterangan, "left"),
               itemCell(typeof item.jumlah === "number" ? item.jumlah.toLocaleString("id-ID") : item.jumlah),
               itemCell(item.satuan),
-              moneyCell(item.hargaSatuan),
-              moneyCell(item.total),
+              moneyCell(item.hargaSatuan, item.hasUnitPrice ?? item.hargaSatuan != null),
+              moneyCell(item.total, item.hasUnitPrice ?? item.total != null),
             ]),
           ],
         },
@@ -275,34 +315,10 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
       },
       {
         table: {
-          widths: ["58%", "24%", "18%"],
-          body: [
-            [
-              { text: "GRAND TOTAL", bold: true, alignment: "right", margin: [0, 2, 4, 2] },
-              { text: "", colSpan: 0 },
-              { text: formatMoneyId(data.grandTotal), bold: true, alignment: "right" },
-            ],
-          ],
+          widths: ["82%", "18%"],
+          body: summaryRows,
         },
-        layout: compactBorderLayout,
-      },
-      {
-        table: {
-          widths: ["58%", "24%", "18%"],
-          body: [
-            [
-              { text: "Free Cash Sisa Bulan Lalu", alignment: "right", margin: [0, 2, 4, 2], color: MUTED },
-              { text: "" },
-              { text: formatMoneyId(data.previousFreeCash), alignment: "right", color: MUTED },
-            ],
-            [
-              { text: "KEBUTUHAN DANA", bold: true, alignment: "right", margin: [0, 2, 4, 2], fillColor: GREEN },
-              { text: "", fillColor: GREEN },
-              { text: formatMoneyId(data.kebutuhanDana), bold: true, alignment: "right", fillColor: GREEN },
-            ],
-          ],
-        },
-        layout: compactBorderLayout,
+        layout: summaryLayout,
       },
       {
         table: {
@@ -323,7 +339,7 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
           {
             width: "45%",
             stack: [
-              { text: data.requestDate ? `${data.branch}, ${data.requestDate}` : data.branch, alignment: "center" },
+              { text: data.requestDate ? `${data.signaturePlace || data.branch}, ${data.requestDate}` : data.signaturePlace || data.branch, alignment: "center" },
               buildNativeSignatureBlock(data.signatures),
             ],
           },
