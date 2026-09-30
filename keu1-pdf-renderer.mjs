@@ -108,6 +108,10 @@ export const normalizeKeu1DocumentData = (source = {}, options = {}) => {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.KEU-01-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/KEU/VI/2026"),
     branch: officeName,
+    locationLabel: office.kedudukan === "Pusat" ? "Departemen" : "Cabang",
+    locationValue: office.kedudukan === "Pusat"
+      ? text(location?.department?.name || source.department_name, "-")
+      : officeName,
     requestDate: formatDateId(source.request_date),
     department: text(location?.department?.name || source.department_name, "-"),
     items: normalizedItems,
@@ -142,6 +146,8 @@ export const createKeu1PreviewData = (options = {}) => {
     formNumber: "FM-UAI.KEU-01-00",
     noSurat: "001/UAI/KEU/VI/2026",
     branch: "Cabang Jepara",
+    locationLabel: "Cabang",
+    locationValue: "Cabang Jepara",
     requestDate: "1 Juli 2026",
     department: "Keuangan & Akuntansi",
     items: [
@@ -223,16 +229,16 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
           widths: ["25%", "35%", "15%", "25%"],
           body: [
             [
-              { text: "No. Dokumen", bold: true },
-              { text: `: ${data.noSurat}`, bold: true },
-              { text: "Cabang", bold: true, alignment: "right" },
-              { text: `: ${data.branch}` },
+              { text: data.locationLabel, bold: true },
+              { text: `: ${data.locationValue}` },
+              { text: "Tanggal", bold: true, alignment: "right" },
+              { text: `: ${data.requestDate}` },
             ],
             [
-              { text: "Tanggal", bold: true },
-              { text: `: ${data.requestDate}` },
-              { text: "Departemen", bold: true, alignment: "right" },
-              { text: `: ${data.department}` },
+              { text: "No. Dokumen", bold: true },
+              { text: `: ${data.noSurat}`, bold: true },
+              { text: "", colSpan: 2 },
+              {},
             ],
           ],
         },

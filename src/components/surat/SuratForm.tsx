@@ -909,6 +909,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     ? activeUsageData.module.requiresMasterProjectMappingForUsage?.(selectedUsage)
       ?? activeUsageData.module.requirements.requiresMasterProjectMapping
     : false;
+  const usageUsesProject = selectedUsage && activeUsageData
+    ? activeUsageData.module.usesProjectForUsage?.(selectedUsage) ?? true
+    : true;
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;
@@ -974,7 +977,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const selectedMarisonBranchId = selectedNonUnitProjectMapping.branchId || 0;
   const isMarisonProjectReady = requiresMarisonProject && selectedNonUnitProjectMapping.ready;
   const shouldShowProjectSelector = Boolean(
-    formData.office_id && (!isPusatSelected || requiresMarisonProject)
+    formData.office_id && usageUsesProject && (!isPusatSelected || requiresMarisonProject)
   );
   const hasRegisteredProjectCandidates = requiresMarisonProject
     ? nonUnitProjectCandidates.length > 0
@@ -1100,6 +1103,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         project_is_default: true,
       };
     }
+    if (!usageUsesProject) {
+      delete input.requested_project;
+      delete input.project_code;
+      delete input.project_name;
+      delete input.project_is_default;
+    }
     if (input.project_is_default === true) {
       delete input.project_code;
       delete input.project_name;
@@ -1117,13 +1126,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     shouldUseDefaultBranchProject,
     activeUsageData,
     moduleCtx,
+    usageUsesProject,
   ]);
 
   const effectiveFormData = useMemo(() => ({
     ...formData,
-    project_id: shouldUseDefaultBranchProject ? "" : formData.project_id,
+    project_id: !usageUsesProject || shouldUseDefaultBranchProject ? "" : formData.project_id,
     form_input_data: effectiveFormInputData,
-  }), [formData, shouldUseDefaultBranchProject, effectiveFormInputData]);
+  }), [formData, shouldUseDefaultBranchProject, usageUsesProject, effectiveFormInputData]);
 
   // Autosave controller — owns draftSaveState + the 900ms debounce timer.
   // Hook is invoked here so the live `effectiveFormData` reference is what
@@ -1141,13 +1151,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
     project_id: requiresMarisonProject ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
-    project_code: shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
-    project_name: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
+    project_code: !usageUsesProject ? "" : shouldUseDefaultBranchProject ? "000" : selectedProjectCode,
+    project_name: !usageUsesProject ? "" : shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name ?? "",
     office_id: formData.office_id,
     entity_id: formData.entity_id,
     dept_id: formData.dept_id,
     ...effectiveFormInputData,
-  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, requiresMarisonProject, selectedMarisonProjectId]);
+  }), [effectiveFormData.project_id, formData.office_id, formData.entity_id, formData.dept_id, effectiveFormInputData, selectedProject, selectedProjectCode, shouldUseDefaultBranchProject, usageUsesProject, requiresMarisonProject, selectedMarisonProjectId]);
 
   const isDirty = useMemo(
     () => !!generatedNoSurat || formData.judul_surat.length > 0 || Object.keys(formData.form_input_data).length > 0,
@@ -1653,7 +1663,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         ...prev,
         // Ganti Kegunaan: proyek hanya dipertahankan bila kategori sama;
         // lintas kategori, proyek lama tidak lagi sah.
-        project_id: previousUsageData && previousUsageData.category !== usageData.category ? "" : prev.project_id,
+        project_id: usageData.module.usesProjectForUsage?.(detail) === false ||
+          (previousUsageData && previousUsageData.category !== usageData.category) ? "" : prev.project_id,
         penggunaan_id: isNewUsage ? "" : detail.id,
         form_usage_id: isNewUsage ? detail.id : "",
         // Flag warisan dibaca dari output normalisasi modul, bukan dari branch kategori.
@@ -1750,7 +1761,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       unitProjectCode: (getFormFieldValue("requested_project") as { code?: string } | undefined)?.code,
       unitCount: Number(getFormFieldValue("requested_unit_count") || 0),
       branchHasRegisteredProjects,
-      projectId: formData.project_id,
+      projectId: effectiveFormData.project_id,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
       fundWithoutProject: effectiveFormInputData.fund_without_project === true,
@@ -2094,7 +2105,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       requesterJobTitle: requester?.job_title || undefined,
       departmentName: department?.name || "-",
       officeName: office?.name || "-",
-      projectName: shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name || undefined,
+      projectName: !usageUsesProject ? undefined : shouldUseDefaultBranchProject ? "Tanpa proyek" : selectedProject?.name || undefined,
       requestPlace: formData.request_place,
       requestDate: formData.request_date,
       fields,

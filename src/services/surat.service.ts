@@ -8,6 +8,7 @@ import {
   formatCreateRegistrasiError,
 } from "@/lib/registration-draft-attachment-classification";
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
+import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import {
   canonicalizeCheckerInput,
   validateCheckerInput,
@@ -682,6 +683,12 @@ export const suratService = {
       const office  = officeRes.data;
       const isPusat = office?.kedudukan === "Pusat";
       const requestCategory = payload.form_input_data?.request_category;
+      const context = !isPusat && !projectIdClean && payload.form_usage_id
+        ? await this.getRegistrationContext(payload)
+        : null;
+      const isBranchKeu1WithoutProject = context?.usage?.request_category === "non_asset"
+        && isKeu1Form(context.form)
+        && payload.form_input_data?.fund_without_project === true;
       const isUnitRequest = requestCategory === "unit" || payload.form_input_data?.request_mode === "unit";
       if (isUnitRequest) {
         const context = await this.getRegistrationContext(payload);
@@ -725,7 +732,7 @@ export const suratService = {
         });
       }
 
-      if (!isPusat && !projectIdClean && !fallbackEligible) {
+      if (!isPusat && !projectIdClean && !fallbackEligible && !isBranchKeu1WithoutProject) {
         throw new Error("Pilih proyek cabang sebelum mengambil nomor surat.");
       }
 
@@ -738,7 +745,18 @@ export const suratService = {
       // original 6-parameter RPC.
       let nextNumber, rpcError;
 
-      if (fallbackEligible) {
+      if (isBranchKeu1WithoutProject) {
+        const { data: n, error: e } = await supabase.rpc("generate_keu1_branch_letter_number", {
+          p_entity_id: payload.entity_id,
+          p_type_id: payload.letter_type_id,
+          p_office_id: officeIdClean,
+          p_user_id: user?.id,
+          p_dept_id: deptIdClean,
+          p_form_usage_id: this.cleanUuid(payload.form_usage_id),
+        });
+        nextNumber = n;
+        rpcError = e;
+      } else if (fallbackEligible) {
         const { data: n, error: e } = await supabase.rpc("generate_new_letter_number", {
           p_entity_id:          payload.entity_id,
           p_type_id:            payload.letter_type_id,

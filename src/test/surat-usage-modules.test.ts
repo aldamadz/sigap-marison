@@ -63,6 +63,7 @@ describe("fund module", () => {
     const ctx = ctxFor("non_asset", { items: [] });
     ctx.usage = { id: "keu1", master_forms: { nomor_form: "FM-UAI.KEU-01-00" } } as never;
     expect(fundModule.requiresMasterProjectMappingForUsage?.(ctx.usage)).toBe(false);
+    expect(fundModule.usesProjectForUsage?.(ctx.usage)).toBe(false);
     expect(fundModule.validateNumberContext(ctx)).toEqual([]);
     const output = fundModule.normalizeInput({ items: [] } as never, ctx);
     expect(output).toMatchObject({ fund_type: "operational", fund_without_project: true });
@@ -72,6 +73,7 @@ describe("fund module", () => {
     const ctx = ctxFor("non_asset", { items: [] });
     ctx.usage = { id: "keu10", master_forms: { nomor_form: "FM-UAI.KEU-10-00" } } as never;
     expect(fundModule.requiresMasterProjectMappingForUsage?.(ctx.usage)).toBe(true);
+    expect(fundModule.usesProjectForUsage?.(ctx.usage)).toBe(true);
   });
   it("validate: proyek wajib kecuali dana umum; jenis wajib", () => {
     expect(fundModule.validateNumberContext(ctxFor("non_asset", { fund_type: "operational" }))[0].title)
