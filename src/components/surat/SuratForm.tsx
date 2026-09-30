@@ -1755,8 +1755,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       projectId: formData.project_id,
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
-      fundWithoutProject: isGeneralFund,
-      fundType: String(getFormFieldValue("fund_type") || ""),
+      fundWithoutProject: effectiveFormInputData.fund_without_project === true,
+      fundType: String(effectiveFormInputData.fund_type || ""),
     });
     if (!step1Check.valid) {
       return toast({
@@ -1989,8 +1989,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       shouldUseDefaultBranchProject,
       isMarisonProjectReady,
       firstNonUnitError: undefined,
-      fundWithoutProject: isGeneralFund,
-      fundType: String(getFormFieldValue("fund_type") || ""),
+      fundWithoutProject: effectiveFormInputData.fund_without_project === true,
+      fundType: String(effectiveFormInputData.fund_type || ""),
       firstFundIssue: undefined,
 
       missingField: missingField ? { key: missingField.key, label: missingField.label } : undefined,
