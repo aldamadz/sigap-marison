@@ -21,6 +21,13 @@ export function mapMarisonFundSubmission(input: MarisonFundSubmissionInput): {
   payload: Record<string, unknown>;
 };
 
+export function mapKeu1ItemsForFund(items: unknown): Array<{
+  nama_barang: string;
+  jumlah: number;
+  satuan: string;
+  nominal: number;
+}>;
+
 export function resolveMarisonFundDivision(input: {
   employees?: Array<{ nik?: unknown; division?: unknown }>;
   requesterNik?: unknown;

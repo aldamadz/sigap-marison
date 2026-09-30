@@ -21,6 +21,8 @@ import {
   type NonUnitRequestRow,
 } from "@/components/surat/non-unit-request";
 import { formatRupiahZero } from "@/lib/rupiah";
+import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
+import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
 
 export type RegistrationSummaryField = {
   key: string;
@@ -51,6 +53,7 @@ export type RegistrationSummaryData = {
   category: unknown;
   usageName: string;
   formName: string;
+  formNumber?: string;
   requesterName: string;
   requesterJobTitle?: string;
   departmentName: string;
@@ -92,6 +95,9 @@ const ITEM_COLUMNS = [
   { key: "keterangan", label: "Keterangan", getValue: (row: Record<string, unknown>) => row.keterangan },
 ];
 const normalizeFieldKey = (key: string) => key.trim().toLowerCase();
+const KEU1_FINANCIAL_KEYS = new Set(["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu", "keu1_grand_total"]);
+const isKeu1Summary = (data: RegistrationSummaryData) => isKeu1Form({ nomor_form: data.formNumber });
+const getKeu1FieldValue = (data: RegistrationSummaryData, key: string) => data.fields.find((field) => field.key === key)?.value;
 
 const formatRevisionSummary = (revision: NonNullable<ReturnType<typeof getRowRevision>>, row: Record<string, unknown>) => {
   if (revision.action === "reject") return "Item tidak disetujui.";
@@ -357,9 +363,10 @@ export function RegistrationSummaryDocument({
     data.fields.find((field) => field.key === "requested_project")?.value ||
     data.projectName;
   const identityProject = data.projectName || formatSummaryValue(allocatedProject);
+  const keu1 = isKeu1Summary(data);
   const requestedUnitCount = data.fields.find((field) => field.key === "requested_unit_count")?.value ||
     data.fields.find((field) => field.key === "allocated_unit_count")?.value;
-  const detailFields = data.fields.filter((field) => ![
+  const detailFields = data.fields.filter((field) => !(keu1 && KEU1_FINANCIAL_KEYS.has(field.key)) && ![
     "requested_project",
     "allocated_project",
     "allocated_unit_count",
@@ -383,7 +390,7 @@ export function RegistrationSummaryDocument({
         <h2 className="mt-5 text-lg font-semibold leading-snug text-foreground sm:text-xl">{data.title || "Tanpa judul"}</h2>
         <p className="mt-2 break-words text-sm font-medium tabular-nums text-foreground">{data.noSurat || "Nomor belum tersedia"}</p>
         <div className="mt-3 flex flex-wrap justify-center gap-2">
-          <Badge variant="outline">{formatRequestCategory(data.category)}</Badge>
+          <Badge variant="outline">{keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(data.category)}</Badge>
           {data.isRecommendation && <Badge>Dokumen Rekomendasi</Badge>}
         </div>
       </header>
@@ -396,7 +403,7 @@ export function RegistrationSummaryDocument({
               ["Pengaju", data.requesterName, data.requesterJobTitle],
               ["Departemen", data.departmentName, data.officeName],
               ["Form", data.formName, data.usageName],
-              ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, identityProject !== "-" ? identityProject : "Tanpa proyek"],
+              ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, keu1 ? data.formNumber : identityProject !== "-" ? identityProject : "Tanpa proyek"],
             ].map(([label, value, detail]) => (
               <div key={label} className="border-b border-border p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
                 <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
@@ -407,9 +414,10 @@ export function RegistrationSummaryDocument({
           </dl>
         </section>
 
-        {(detailFields.length > 0 || isUnitCategory) && (
+        {(detailFields.length > 0 || isUnitCategory || keu1) && (
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-foreground">Isi Dokumen</h3>
+            {keu1 && <Keu1SubmissionSummary items={getKeu1FieldValue(data, "items")} freeCashValue={getKeu1FieldValue(data, "free_cash_sisa_bulan_lalu")} />}
             {isUnitCategory && !hasAllocatedUnits && <UnitAllocationPendingNotice />}
             {detailFields.map((field) => field.type === "table" || Array.isArray(field.value) ? (
               <div key={field.key} className="space-y-2">
@@ -483,9 +491,10 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
     data.fields.find((field) => field.key === "requested_project")?.value ||
     data.projectName;
   const identityProject = data.projectName || formatSummaryValue(allocatedProject);
+  const keu1 = isKeu1Summary(data);
   const requestedUnitCount = data.fields.find((field) => field.key === "requested_unit_count")?.value ||
     data.fields.find((field) => field.key === "allocated_unit_count")?.value;
-  const detailFields = data.fields.filter((field) => ![
+  const detailFields = data.fields.filter((field) => !(keu1 && KEU1_FINANCIAL_KEYS.has(field.key)) && ![
     "requested_project",
     "allocated_project",
     "allocated_unit_count",
@@ -526,7 +535,7 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
               <h2 className="mt-5 text-lg font-semibold leading-snug text-foreground sm:text-xl">{data.title || "Tanpa judul"}</h2>
               <p className="mt-2 break-words text-sm font-medium tabular-nums text-foreground">{data.noSurat || "Nomor belum tersedia"}</p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <Badge variant="outline">{formatRequestCategory(data.category)}</Badge>
+                <Badge variant="outline">{keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(data.category)}</Badge>
                 {data.isRecommendation && <Badge>Dokumen Rekomendasi</Badge>}
               </div>
             </header>
@@ -539,7 +548,7 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
                     ["Pengaju", data.requesterName, data.requesterJobTitle],
                     ["Departemen", data.departmentName, data.officeName],
                     ["Form", data.formName, data.usageName],
-                    ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, identityProject !== "-" ? identityProject : "Tanpa proyek"],
+                    ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, keu1 ? data.formNumber : identityProject !== "-" ? identityProject : "Tanpa proyek"],
                   ].map(([label, value, detail]) => (
                     <div key={label} className="border-b border-border p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
                       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
@@ -550,9 +559,10 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
                 </dl>
               </section>
 
-              {(detailFields.length > 0 || isUnitCategory) && (
+              {(detailFields.length > 0 || isUnitCategory || keu1) && (
                 <section className="space-y-4">
                   <h3 className="text-sm font-semibold text-foreground">Isi Dokumen</h3>
+                  {keu1 && <Keu1SubmissionSummary items={getKeu1FieldValue(data, "items")} freeCashValue={getKeu1FieldValue(data, "free_cash_sisa_bulan_lalu")} />}
                   {isUnitCategory && !hasAllocatedUnits && <UnitAllocationPendingNotice />}
                   {detailFields.map((field) => field.type === "table" || Array.isArray(field.value) ? (
                     <div key={field.key} className="space-y-2">

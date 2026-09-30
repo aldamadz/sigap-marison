@@ -11,7 +11,7 @@ import webpush from "web-push";
 import sharp from "sharp";
 import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
-import { createKeu1PreviewData, renderKeu1Pdf } from "../../keu1-pdf-renderer.mjs";
+import { createKeu1PreviewData, isKeu1Document, renderKeu1Pdf, resolveKeu1MasterForm } from "../../keu1-pdf-renderer.mjs";
 import { resolveRecommendationSource } from "../../recommendation-pdf.mjs";
 import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "../../recommendation-native-pdf.mjs";
 import { buildProductionCode } from "../../production-code.mjs";
@@ -50,7 +50,7 @@ import {
   normalizeMarisonSubmissionApprovals,
   resolveMarisonApprovalRoleLabel,
 } from "../../server/marison-outbound-contract.mjs";
-import { mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
+import { mapKeu1ItemsForFund, mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
   consumedFileViewTokenResult,
@@ -3579,6 +3579,10 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 };
 
 const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) => {
+  const keu1MasterForm = !isKeu1Document(surat) && surat.form_usage_id
+    ? await resolveKeu1MasterForm(supabase, surat.form_usage_id)
+    : null;
+  const keu1 = isKeu1Document(surat) || isKeu1Document({ resolved_master_form: keu1MasterForm });
   // Fund tanpa proyek (dana umum) diizinkan: projectId null membuat payload tanpa project_id.
   const projectId = overrides.projectId == null ? null : requireExternalInteger(overrides.projectId, "Project ID");
   const fundType = firstString(input.fund_type, input.fund_submission_type);
@@ -3605,7 +3609,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
         title: surat.judul_surat,
         description: firstString(input.catatan, input.description, surat.judul_surat),
         amount: input.fund_amount,
-        items: input.items,
+        items: keu1 ? mapKeu1ItemsForFund(input.items) : input.items,
       },
       projectId,
       branchId,
@@ -3801,7 +3805,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
   const { data: surat, error } = await supabase
     .from("surat_registrasi")
     .select(`
-      id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
+      id, no_surat, judul_surat, status, current_step, created_at, created_by, form_usage_id, file_path, pdf_path,
       office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
       surat_signatures (
         id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot, file_path_snap, pdf_path_snap,

@@ -58,7 +58,19 @@ function computeItemTotal(row: Keu1SubmissionItem): number {
 
 export function getKeu1SubmissionAmount(value: unknown): number {
   return normalizeKeu1SubmissionItems(value)
-    .reduce((total, item) => total + (Number(item.total) > 0 ? Number(item.total) : computeItemTotal(item)), 0);
+    .reduce((total, item) => total + computeItemTotal(item), 0);
+}
+
+export function getKeu1FinancialSummary(items: unknown, freeCashValue: unknown) {
+  const grandTotal = getKeu1SubmissionAmount(items);
+  const hasFreeCash = freeCashValue != null && String(freeCashValue).trim() !== "";
+  const freeCash = hasFreeCash ? parseKeu1Money(freeCashValue) : null;
+  return {
+    grandTotal,
+    hasFreeCash,
+    freeCash,
+    kebutuhanDana: Math.max(0, grandTotal - (freeCash ?? 0)),
+  };
 }
 
 export function validateKeu1SubmissionItems(value: unknown): Keu1SubmissionValidationIssue[] {

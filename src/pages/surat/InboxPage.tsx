@@ -71,6 +71,9 @@ import { toast } from "sonner";
 import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
 import { RecommendationDecisionSummary } from "@/components/surat/RecommendationDecisionSummary";
+import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
+import { getKeu1FinancialSummary, normalizeKeu1SubmissionItems, parseKeu1Money, parseKeu1Quantity } from "@/components/surat/keu1-submission";
+import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { NominalInput } from "@/components/surat/NominalInput";
@@ -1457,6 +1460,7 @@ const handleApprove = async (item: any) => {
     const rawItems = Array.isArray(input.items) ? input.items : Array.isArray(dataSnapshot.detail_barang) ? dataSnapshot.detail_barang : [];
     const items = applyRevisionToItems(rawItems, getActiveRevision(surat));
     const requestedProject = input.requested_project || dataSnapshot.requested_project || {};
+    const keu1 = isKeu1Form(location.form || dataSnapshot.form);
     const category = input.request_category || dataSnapshot.request_category;
     const requestDate = surat.request_date
       ? new Date(surat.request_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })
@@ -1464,8 +1468,8 @@ const handleApprove = async (item: any) => {
     const cards = [
       { icon: UserRound, label: "Pengaju", value: requester.full_name || "-", detail: requester.job_title || "-" },
       { icon: BriefcaseBusiness, label: "Departemen", value: location.department?.name || "-", detail: location.form?.nama_form || dataSnapshot.form?.nama_form || "-" },
-      { icon: MapPin, label: "Lokasi", value: location.office?.name || "-", detail: requestedProject.name || requestedProject.label || location.project?.name || "Tanpa proyek" },
-      { icon: ClipboardList, label: "Permohonan", value: formatRequestCategory(category), detail: [surat.request_place, requestDate].filter((value) => value && value !== "-").join(", ") || "-" },
+      { icon: MapPin, label: "Lokasi", value: location.office?.name || "-", detail: keu1 ? "Kas kecil tanpa proyek" : requestedProject.name || requestedProject.label || location.project?.name || "Tanpa proyek" },
+      { icon: ClipboardList, label: "Permohonan", value: keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(category), detail: [surat.request_place, requestDate].filter((value) => value && value !== "-").join(", ") || "-" },
     ];
     const itemColumns = [
       { key: "nama_barang", label: "Nama Barang", getValue: (row: any) => row?.nama_barang ?? row?.nama ?? row?.barang },
@@ -1482,7 +1486,7 @@ const handleApprove = async (item: any) => {
       "allocated_units", "allocated_unit_count", "allocated_by_signature_id", "signers", "catatan",
     ]);
     const extraFields = Object.entries(input).filter(([key, value]) =>
-      !hiddenKeys.has(key) && value != null && value !== "" && formatSummaryValue(value) !== "-"
+      !hiddenKeys.has(key) && !(keu1 && ["free_cash_sisa_bulan_lalu", "fund_amount", "fund_type", "fund_without_project"].includes(key)) && value != null && value !== "" && formatSummaryValue(value) !== "-"
     );
 
     return (
@@ -1492,7 +1496,7 @@ const handleApprove = async (item: any) => {
             <PackageOpen className="h-5 w-5 text-primary" />
             <p className="text-sm font-semibold text-foreground">Ringkasan pengajuan</p>
           </div>
-          <Badge variant="outline">{formatRequestCategory(category)}</Badge>
+          <Badge variant="outline">{keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(category)}</Badge>
         </div>
         <div className="grid grid-cols-2 gap-2">
           {cards.map(({ icon: Icon, label, value, detail }) => (
@@ -1508,7 +1512,8 @@ const handleApprove = async (item: any) => {
             <div><p className="text-xs font-medium text-muted-foreground">Proyek yang diajukan</p><p className="mt-1 text-sm font-semibold">{requestedProject.name || requestedProject.label || "-"}</p></div>
           </div>
         )}
-        {items.length > 0 && visibleItemColumns.length > 0 && (
+        {keu1 && <div className="mt-4"><Keu1SubmissionSummary items={items} freeCashValue={input.free_cash_sisa_bulan_lalu} /></div>}
+        {!keu1 && items.length > 0 && visibleItemColumns.length > 0 && (
           <div className="mt-4 overflow-hidden rounded-md border border-border">
             <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold text-muted-foreground">Daftar barang / jasa</div>
             <div className="overflow-x-auto">
@@ -2041,6 +2046,7 @@ const handleApprove = async (item: any) => {
       const input = surat.form_input_data || surat.data_snapshot?.input || {};
       const requester = surat.requester_snapshot || surat.data_snapshot?.requester || {};
       const location = surat.location_snapshot || surat.data_snapshot?.location || {};
+      const keu1 = isKeu1Form(location.form || surat.data_snapshot?.form);
       const allocation = getUnitAllocationData(surat);
       const allocatedProject = allocation.project && typeof allocation.project === "object" && !Array.isArray(allocation.project)
         ? allocation.project as Record<string, unknown>
@@ -2074,7 +2080,7 @@ const handleApprove = async (item: any) => {
       cursorY += 30;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.text("Dibuat : Selasa, 7 Juli 2026, Pukul 09.29 WIB", margin, cursorY);
+      doc.text(`Dibuat : ${new Date(surat.created_at || Date.now()).toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB`, margin, cursorY);
       cursorY += 28;
 
       cursorY = addReportSectionTitle(doc, "Informasi Pengajuan", cursorY);
@@ -2090,8 +2096,8 @@ const handleApprove = async (item: any) => {
           ["Pengaju", requester.full_name || "-"],
           ["Departemen", location.department?.name || "-"],
           ["Kantor", location.office?.name || "-"],
-          ["Proyek", allocatedProject.name || allocatedProject.label || input.requested_project?.name || input.requested_project?.label || location.project?.name || "-"],
-          ["Kategori", formatRequestCategory(input.request_category || input.request_mode)],
+          ...(keu1 ? [["No. Formulir", location.form?.nomor_form || surat.data_snapshot?.form?.nomor_form || "-"]] : [["Proyek", allocatedProject.name || allocatedProject.label || input.requested_project?.name || input.requested_project?.label || location.project?.name || "-"]]),
+          ["Kategori", keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(input.request_category || input.request_mode)],
           ["Tempat, tanggal", [surat.request_place, surat.request_date ? new Date(surat.request_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }) : ""].filter(Boolean).join(", ") || "-"],
         ],
         columnStyles: { 0: { cellWidth: 120, fontStyle: "bold" }, 1: { cellWidth: 380 } },
@@ -2100,24 +2106,47 @@ const handleApprove = async (item: any) => {
 
       const rows = Array.isArray(input.items) ? applyRevisionToItems(input.items, getActiveRevision(surat)) : [];
       if (rows.length > 0) {
-        cursorY = addReportSectionTitle(doc, "Detail Barang atau Jasa", cursorY);
+        cursorY = addReportSectionTitle(doc, keu1 ? "Rincian Pengajuan Kas Kecil" : "Detail Barang atau Jasa", cursorY);
         autoTable(doc, {
           startY: cursorY,
           theme: "grid",
           styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
           headStyles: { fillColor: [36, 120, 74] },
-          head: [["No.", "Nama Barang", "Satuan", "Jumlah", "Status", "Keterangan"]],
-          body: rows.map((row: any, index: number) => [
-            index + 1,
-            formatSummaryValue(row.nama_barang || row.nama || row.barang),
-            formatSummaryValue(row.sat || row.satuan || row.unit),
-            formatSummaryValue(row.jumlah),
-            formatSummaryValue(row.status),
-            formatSummaryValue(row.keterangan),
-          ]),
+          head: [keu1
+            ? ["No.", "Keterangan", "Jumlah", "Satuan", "Estimasi Harga Satuan", "Total"]
+            : ["No.", "Nama Barang", "Satuan", "Jumlah", "Status", "Keterangan"]],
+          body: keu1
+            ? normalizeKeu1SubmissionItems(rows).map((row, index) => {
+              const quantity = parseKeu1Quantity(row.jumlah);
+              const price = parseKeu1Money(row.estimasi_harga_satuan);
+              return [index + 1, row.keterangan || "-", quantity ?? "-", row.satuan || "-", price === null ? "-" : formatRupiahCanonical(price), price === null || quantity === null ? "-" : formatRupiahCanonical(quantity * price)];
+            })
+            : rows.map((row: any, index: number) => [
+              index + 1,
+              formatSummaryValue(row.nama_barang || row.nama || row.barang),
+              formatSummaryValue(row.sat || row.satuan || row.unit),
+              formatSummaryValue(row.jumlah),
+              formatSummaryValue(row.status),
+              formatSummaryValue(row.keterangan),
+            ]),
           columnStyles: { 0: { cellWidth: 28, halign: "center" }, 1: { cellWidth: 170 }, 2: { cellWidth: 55 }, 3: { cellWidth: 55 }, 4: { cellWidth: 45 }, 5: { cellWidth: 145 } },
         });
         cursorY = (doc as any).lastAutoTable.finalY + 28;
+        if (keu1) {
+          const financial = getKeu1FinancialSummary(rows, input.free_cash_sisa_bulan_lalu);
+          autoTable(doc, {
+            startY: cursorY,
+            theme: "grid",
+            styles: { fontSize: 8, cellPadding: 5 },
+            body: [
+              ["Grand Total", formatRupiahCanonical(financial.grandTotal)],
+              ...(financial.hasFreeCash ? [["Free Cash Sisa Bulan Lalu", formatRupiahCanonical(financial.freeCash)]] : []),
+              ["Kebutuhan Dana", formatRupiahCanonical(financial.kebutuhanDana)],
+            ],
+            columnStyles: { 0: { fontStyle: "bold" }, 1: { halign: "right" } },
+          });
+          cursorY = (doc as any).lastAutoTable.finalY + 28;
+        }
       }
 
       if (allocation.units.length > 0) {
