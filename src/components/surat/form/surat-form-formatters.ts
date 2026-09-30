@@ -41,7 +41,7 @@ export function buildNonUnitRequestTitle(itemText: string, officeSuffix: string)
   const detail = [itemText.trim(), compactOfficeSuffix]
     .filter(Boolean)
     .join(" ");
-  return detail ? `Permohonan Non Unit : ${detail}` : "Permohonan Non Unit";
+  return detail ? `Pengajuan SPK Non Unit: ${detail}` : "Pengajuan SPK Non Unit";
 }
 
 export const toReadableLocationName = (value: string): string => value

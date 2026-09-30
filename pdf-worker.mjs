@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf, resolvePgdMasterForm } from "./pgd-pdf-renderer.mjs";
+import { isKeu1Document, normalizeKeu1DocumentData, renderKeu1Pdf, resolveKeu1MasterForm } from "./keu1-pdf-renderer.mjs";
 import {
   parseStorageRef,
   recommendationVersionPath,
@@ -13,7 +14,7 @@ import {
   isStoragePathWithinPrefix,
   normalizeStoragePathPrefix,
 } from "./storage-path-policy.mjs";
-import { createPgdJobHandler, createRecommendationJobHandler } from "./server/pdf-worker-job.mjs";
+import { createKeu1JobHandler, createPgdJobHandler, createRecommendationJobHandler } from "./server/pdf-worker-job.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -120,6 +121,15 @@ const renderDirectPgdJob = createPgdJobHandler({
   logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
 });
 
+const renderDirectKeu1Job = createKeu1JobHandler({
+  supabase,
+  isKeu1Document,
+  resolveKeu1MasterForm,
+  normalizeKeu1DocumentData,
+  renderKeu1Pdf,
+  logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
+});
+
 const renderDirectRecommendationJob = createRecommendationJobHandler({
   supabase,
   normalizeRecommendationDocumentData,
@@ -130,9 +140,15 @@ const renderDirectRecommendationJob = createRecommendationJobHandler({
 
 const processJob = async (job) => {
   const recommendation = recommendationFromSnapshot(job);
-  const pdfBuffer = recommendation
-    ? await renderDirectRecommendationJob(job, recommendation)
-    : await renderDirectPgdJob(job);
+  let pdfBuffer = null;
+  if (recommendation) {
+    pdfBuffer = await renderDirectRecommendationJob(job, recommendation);
+  } else {
+    pdfBuffer = await renderDirectKeu1Job(job);
+    if (!pdfBuffer) {
+      pdfBuffer = await renderDirectPgdJob(job);
+    }
+  }
   if (!pdfBuffer) {
     throw new Error("Renderer PDF-native tidak tersedia untuk dokumen ini.");
   }

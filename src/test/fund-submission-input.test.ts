@@ -14,19 +14,21 @@ describe("Fund Submission user input", () => {
       quantity: "2",
       unit: "bulan",
       subtotal: "1.500.000",
+      status: "3",
     }])).toEqual([expect.objectContaining({
       id: "fund-item-1",
       nama_barang: "Sewa kendaraan",
       jumlah: "2",
       satuan: "bulan",
       nominal: "1.500.000",
+      status: "3",
     })]);
   });
 
   it("calculates amount from item nominal and strips UI-only ids for Marison", () => {
     const items = [
-      { id: "one", nama_barang: "Semen", jumlah: 10, satuan: "sak", nominal: "750.000" },
-      { id: "two", nama_barang: "Pasir", jumlah: 1, satuan: "rit", nominal: 1250000 },
+      { id: "one", nama_barang: "Semen", jumlah: 10, satuan: "sak", nominal: "750.000", status: "1" },
+      { id: "two", nama_barang: "Pasir", jumlah: 1, satuan: "rit", nominal: 1250000, status: "4" },
     ];
     expect(getFundSubmissionAmount(items)).toBe(2000000);
     expect(toMarisonFundSubmissionItems(items)).toEqual([
@@ -42,6 +44,7 @@ describe("Fund Submission user input", () => {
       jumlah: 1,
       satuan: "per ",
       nominal: 1000,
+      status: "2",
     }];
 
     expect(normalizeFundSubmissionItems(editing)).toEqual([
@@ -59,6 +62,7 @@ describe("Fund Submission user input", () => {
       jumlah: 1,
       satuan: "paket",
       nominal: 0,
+      status: "3",
     }])).toEqual([]);
 
     expect(validateFundSubmissionItems([{}]).map((issue) => issue.field)).toEqual([
@@ -66,6 +70,9 @@ describe("Fund Submission user input", () => {
       "jumlah",
       "satuan",
       "nominal",
+      "status",
     ]);
+    expect(validateFundSubmissionItems([{ nama_barang: "ATK", jumlah: 1, satuan: "paket", nominal: 1000, status: "5" }]))
+      .toEqual([{ index: 0, field: "status", message: "Pilih status 1–4 untuk item 1." }]);
   });
 });

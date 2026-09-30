@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PGD_ITEM_STATUSES } from "@/components/surat/pgd-item-status";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -199,6 +201,18 @@ export function NonUnitRequestEditor({
                     aria-invalid={rowErrors.some((item) => item.field === "subtotal")}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`non-unit-status-${index}`}>Status <span aria-hidden="true">*</span></Label>
+                <Select value={row.status || ""} onValueChange={(status) => updateRow(index, { status })}>
+                  <SelectTrigger id={`non-unit-status-${index}`} className="min-h-11" aria-invalid={rowErrors.some((item) => item.field === "status")}>
+                    <SelectValue placeholder="Pilih status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PGD_ITEM_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">1 = H+1, 2 = H+3, 3 = H+7, 4 = H+10</p>
               </div>
 
               <div className="space-y-2 lg:col-span-2">

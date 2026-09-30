@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { UsageModuleContext } from "../usage-contract";
 import type { ProjectOption, ProjectRaw } from "@/components/surat/form/surat-form-types";
 import { EMPTY_UNIT_AVAILABILITY, unitAvailabilityIssues } from "./unit-availability";
+import { getPgdUnitStatus, PGD_ITEM_STATUSES } from "@/components/surat/pgd-item-status";
 
 export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
   const { input, generatedNoSurat, externalRevision, setInputValue, requestExternalOptions } = ctx;
@@ -29,6 +30,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     generatedNoSurat && externalRevision?.eventId && ctx.category === "unit",
   );
   const isNumberedContextLocked = Boolean(generatedNoSurat && !isEditableRequesterRevision);
+  const requestedStatus = getPgdUnitStatus(input);
 
   const handleExternalProjectChange = (value: string) => {
     const option = externalProjects.find(item => item.value === value);
@@ -42,7 +44,7 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     const count = Number(input.requested_unit_count || 0);
     setInputValue("requested_project", reqProject);
     setInputValue("unit_request_sentence", count > 0
-      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
+      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: ${requestedStatus}`
       : "");
   };
 
@@ -50,7 +52,15 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
     const count = Math.max(Number(val || 0), 0);
     setInputValue("requested_unit_count", count || "");
     setInputValue("unit_request_sentence", requestedProject?.name && count > 0
-      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: 2`
+      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: ${requestedStatus}`
+      : "");
+  };
+
+  const handleStatusChange = (status: string) => {
+    setInputValue("unit_item_status", status);
+    const count = Number(input.requested_unit_count || 0);
+    setInputValue("unit_request_sentence", requestedProject?.name && count > 0
+      ? `Nama Barang: Permohonan Order Bangun SPK Pembangunan Rumah ${count} Unit, SAT: Unit, Jumlah: ${count}, Status: ${status}`
       : "");
   };
 
@@ -132,6 +142,14 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
             className="h-12 bg-background/70 text-sm"
             placeholder="Contoh: 10"
           />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="unit-request-status" className="text-xs font-semibold text-muted-foreground">Status <span aria-hidden="true">*</span></Label>
+          <Select value={requestedStatus} onValueChange={handleStatusChange} disabled={isNumberedContextLocked}>
+            <SelectTrigger id="unit-request-status" className="min-h-11 bg-background/70"><SelectValue placeholder="Pilih status" /></SelectTrigger>
+            <SelectContent>{PGD_ITEM_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">1 = H+1, 2 = H+3, 3 = H+7, 4 = H+10</p>
         </div>
       </div>
     </div>

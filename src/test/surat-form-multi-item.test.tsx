@@ -85,7 +85,7 @@ describe("Flow 12: Summary Payload", () => {
     await reachMultiItemForm();
     fillTwoItems();
     await waitFor(() => expect(screen.getByPlaceholderText(/Contoh.*Permohonan/i)).toHaveValue(
-      "Permohonan Aset : Printer Epson Dept. Pengembangan Organisasi Kantor Pusat"
+      "Pengajuan Aset: Printer Epson Dept. Pengembangan Organisasi Kantor Pusat"
     ));
     await goToWizardStep(3);
     await clickConfirmRegistration();

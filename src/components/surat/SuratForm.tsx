@@ -78,6 +78,7 @@ import { NominalInput } from "@/components/surat/NominalInput";
 import {
   resolveNonUnitProjectMapping,
 } from "@/components/surat/non-unit-request";
+import { getDescendantOfficeIds } from "@/lib/office-hierarchy";
 import {
   canDepartmentRequestUnit,
   getExternalInputFields,
@@ -822,6 +823,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const nextTitle = buildAutoTitle({
       category: getRequestCategory(),
       formInputData: formData.form_input_data,
+      formNumber: selectedUsage?.master_forms?.nomor_form,
       selectedOffice,
       selectedDepartment,
       linkedDocumentContext,
@@ -904,7 +906,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const branchHasRegisteredProjects = isBranchOfficeSelected && filteredProjects.length > 0;
   // Tanpa flag mode kategori di orchestrator: kebutuhan mapping proyek
   // dibaca dari requirements modul aktif.
-  const requiresMarisonProject = activeUsageData?.module.requirements.requiresMasterProjectMapping ?? false;
+  const requiresMarisonProject = selectedUsage && activeUsageData
+    ? activeUsageData.module.requiresMasterProjectMappingForUsage?.(selectedUsage)
+      ?? activeUsageData.module.requirements.requiresMasterProjectMapping
+    : false;
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;
@@ -940,10 +945,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     Boolean(generatedNoSurat),
     signers.length > 0,
   );
-  const nonUnitProjectCandidates = useMemo(
-    () => isPusatSelected ? (master.projects || []) : filteredProjects,
-    [filteredProjects, isPusatSelected, master.projects],
-  );
+  const nonUnitProjectCandidates = useMemo(() => {
+    if (isPusatSelected) return master.projects || [];
+    if (!formData.office_id || !master.projects) return [];
+
+    const selectedOffice = master.offices?.find((o) => o.id === formData.office_id);
+    const isKantorCabang = selectedOffice?.kedudukan === "KC";
+
+    if (isKantorCabang) {
+      const allowedOfficeIds = getDescendantOfficeIds(master.offices || [], formData.office_id);
+      return master.projects.filter((p: MasterRecord) => allowedOfficeIds.has(String(p.office_id)));
+    }
+
+    return filteredProjects;
+  }, [filteredProjects, isPusatSelected, master.projects, master.offices, formData.office_id]);
   const readyNonUnitProjects = useMemo(
     () => nonUnitProjectCandidates.filter((project) =>
       resolveNonUnitProjectMapping(project, master.offices).ready
@@ -3477,7 +3492,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {!generatedNoSurat && !draftLoading && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
+                <Label htmlFor="form-select" className="text-[11px] font-black uppercase text-muted-foreground">Pilih Formulir</Label>
                 <Select
                   value={selectedFormId}
                   onValueChange={value => {
@@ -3504,8 +3519,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     });
                   }}
                 >
-                  <SelectTrigger className="h-12 bg-background">
-                    <SelectValue placeholder="Pilih Form PGD" />
+                  <SelectTrigger id="form-select" className="h-12 bg-background">
+                    <SelectValue placeholder="Pilih formulir" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableForms.map(form => (
@@ -3551,7 +3566,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {generatedNoSurat && selectedUsage && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-[11px] font-black uppercase text-muted-foreground">Form PGD</Label>
+                <Label className="text-[11px] font-black uppercase text-muted-foreground">Pilih Formulir</Label>
                 <div className="flex min-h-12 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground">
                   {selectedFormName}
                 </div>

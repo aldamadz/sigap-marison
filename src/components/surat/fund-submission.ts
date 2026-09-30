@@ -1,4 +1,5 @@
 import { parseCurrencyInput } from "@/lib/rupiah";
+import { isPgdItemStatus } from "@/components/surat/pgd-item-status";
 
 export type FundSubmissionItem = {
   id?: string;
@@ -6,11 +7,14 @@ export type FundSubmissionItem = {
   jumlah?: number | string;
   satuan?: string;
   nominal?: number | string;
+  estimasi_harga_satuan?: number | string;
+  total?: number | string;
+  status?: string;
 };
 
 export type FundSubmissionValidationIssue = {
   index: number;
-  field: "nama_barang" | "jumlah" | "satuan" | "nominal";
+  field: "nama_barang" | "jumlah" | "satuan" | "nominal" | "status";
   message: string;
 };
 
@@ -38,6 +42,9 @@ export function normalizeFundSubmissionItems(value: unknown): FundSubmissionItem
       jumlah: scalar(row.jumlah ?? row.quantity),
       satuan: editableText(row.satuan ?? row.sat ?? row.unit),
       nominal: scalar(row.nominal ?? row.subtotal ?? row.nilai),
+      estimasi_harga_satuan: scalar(row.estimasi_harga_satuan ?? row.harga_satuan ?? row.unit_price),
+      total: scalar(row.total),
+      status: editableText(row.status),
     }));
 }
 
@@ -68,6 +75,7 @@ export function validateFundSubmissionItems(value: unknown): FundSubmissionValid
     if (parseFundSubmissionQuantity(row.jumlah) === null) issues.push({ index, field: "jumlah", message: `Jumlah item ${index + 1} wajib berupa angka bulat minimal 1.` });
     if (!text(row.satuan)) issues.push({ index, field: "satuan", message: `Satuan item ${index + 1} wajib diisi.` });
     if (parseFundSubmissionNominal(row.nominal) === null) issues.push({ index, field: "nominal", message: `Nominal item ${index + 1} wajib berupa Rupiah non-negatif.` });
+    if (!isPgdItemStatus(row.status)) issues.push({ index, field: "status", message: `Pilih status 1–4 untuk item ${index + 1}.` });
     return issues;
   });
 }
