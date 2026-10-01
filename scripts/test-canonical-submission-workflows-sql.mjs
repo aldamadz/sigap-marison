@@ -19,6 +19,8 @@ const keu1SubmitMigration = readFileSync("supabase/migrations/20261001060000_keu
 const branchGuardSource = readFileSync("supabase/migrations/20260930140000_mar10_kc_descendant_number_scope.sql", "utf8");
 const branchGuard = branchGuardSource.slice(branchGuardSource.indexOf("create or replace function public.enforce_surat_registration_branch_project()"));
 const keu1SubmitAssertions = readFileSync("supabase/tests/keu1_submit_and_first_signer.integration.sql", "utf8");
+const makerMigration = readFileSync("supabase/migrations/20261001120000_contextual_first_maker_candidates.sql", "utf8");
+const makerAssertions = readFileSync("supabase/tests/contextual_first_maker_candidates.integration.sql", "utf8");
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -313,6 +315,10 @@ end $$;
 ${keu1SubmitMigration}
 ${keu1SubmitMigration}
 ${keu1SubmitAssertions}
+alter table public.master_offices add column parent_id uuid;
+${makerMigration}
+${makerMigration}
+${makerAssertions}
 `;
 
 const run = (args, input = "") => {
@@ -343,6 +349,7 @@ try {
     throw new Error(`KEU 1 migration success marker missing.\n${output}`);
   }
   process.stdout.write(output);
+  if (!output.includes("Contextual first maker: all assertions passed")) throw new Error("Maker regression marker missing.");
   if (!output.includes("KEU 1 submit and first signer: all assertions passed")) {
     throw new Error("KEU 1 submit regression marker missing.");
   }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
+import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import { useSearchParams } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -1217,16 +1218,24 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return true;
   };
 
-  const isSelectableKeu1Requester = (signer: SignerAssignment) =>
-    isKeu1RequesterStep(selectedUsage?.master_forms, signer);
+  const isSelectableFirstMaker = (signer: SignerAssignment, usage = selectedUsage) =>
+    isContextualMakerStep(usage, signer) || (usage?.first_maker_policy === undefined
+      && isKeu1RequesterStep(usage?.master_forms, signer));
+
+  const getFirstMakerCandidates = (usage: UsageDetailRecord | null, signer: SignerAssignment, officeId = formData.office_id, departmentId = formData.dept_id || requesterDepartmentId) => {
+    if (isContextualMakerStep(usage, signer)) return master.users.filter(user => isFirstMakerCandidate(user, {
+      requesterId: currentProfile?.id || "", officeId,
+      departmentId, offices: master.offices,
+    }));
+    const office = master.offices.find(item => item.id === officeId);
+    return master.users.filter(user => isKeu1FirstSignerCandidate(
+      user, currentProfile?.id || "", officeId, String(office?.kedudukan || "").toLowerCase() !== "pusat",
+    ));
+  };
 
   const getEligibleSignerUsersForSigner = (signer?: SignerAssignment) => {
     if (!signer) return [];
-    if (isSelectableKeu1Requester(signer)) {
-      return master.users.filter(user => isKeu1FirstSignerCandidate(
-        user, currentProfile?.id || "", formData.office_id, !isRequesterHeadOffice(),
-      ));
-    }
+    if (isSelectableFirstMaker(signer)) return getFirstMakerCandidates(selectedUsage, signer);
     if (signer.assignee_mode === "requester") {
       return (master.users || []).filter(user => user.id === currentProfile?.id);
     }
@@ -1250,12 +1259,15 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     persisted: SignerAssignment[],
     usage = selectedUsage,
     officeId = formData.office_id,
+    departmentId = formData.dept_id || requesterDepartmentId,
   ) => reconcileSignerAssignments(configured, persisted, (signer, persistedUserId) => {
-    if (!isKeu1RequesterStep(usage?.master_forms, signer)) return currentProfile?.id || "";
-    const office = master.offices.find(item => item.id === officeId);
-    const candidates = master.users.filter(user => isKeu1FirstSignerCandidate(
-      user, currentProfile?.id || "", officeId, String(office?.kedudukan || "").toLowerCase() !== "pusat",
-    ));
+    if (!isSelectableFirstMaker(signer, usage)) return currentProfile?.id || "";
+    const candidates = getFirstMakerCandidates(usage, signer, officeId, departmentId);
+    if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
+    return candidates.some(user => user.id === currentProfile?.id) ? currentProfile?.id || "" : "";
+  }, (signer, persistedUserId) => {
+    if (!isContextualMakerStep(usage, signer)) return undefined;
+    const candidates = getFirstMakerCandidates(usage, signer, officeId, departmentId);
     if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
     return candidates.some(user => user.id === currentProfile?.id) ? currentProfile?.id || "" : "";
   });
@@ -1330,7 +1342,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       let changed = false;
       const next = prev.map((signer) => {
         const eligibleUsers = getEligibleSignerUsersForSigner(signer);
-        if (!signer.user_id && isSelectableKeu1Requester(signer)
+        if (!signer.user_id && isSelectableFirstMaker(signer)
           && eligibleUsers.some(user => user.id === currentProfile?.id)) {
           changed = true;
           return { ...signer, user_id: currentProfile?.id || "" };
@@ -1353,7 +1365,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const loadUsageDetails = useCallback(async () => {
     const { data, error } = await supabase.from("form_usages")
       .select(`
-        id, name, form_id, request_category, scope_type, is_system_template, recommendation_config, external_revision_policy,
+        id, name, form_id, request_category, scope_type, is_system_template, first_maker_policy, recommendation_config, external_revision_policy,
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(
@@ -1472,7 +1484,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       : [];
     const configuredSigners = usage ? buildSignerAssignments(usage) : [];
     setSigners(configuredSigners.length > 0
-      ? getVisibleConfiguredSigners(reconcileConfiguredSigners(configuredSigners, persistedSigners, usage, restoredFormData.office_id))
+      ? getVisibleConfiguredSigners(reconcileConfiguredSigners(configuredSigners, persistedSigners, usage, restoredFormData.office_id, restoredFormData.dept_id))
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
     setExternalRevision(restoredExternalRevision?.eventId ? restoredExternalRevision : null);
@@ -1993,7 +2005,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const configuredSigners = getVisibleConfiguredSigners(buildSignerAssignments(latestUsage));
     if (configuredSigners.length === 0) return signers;
 
-    return reconcileConfiguredSigners(configuredSigners, signers).map((signer) => {
+    return reconcileConfiguredSigners(configuredSigners, signers, latestUsage).map((signer) => {
       const eligibleUsers = getEligibleSignerUsersForSigner(signer);
       if (signer.user_id && eligibleUsers.some((user) => user.id === signer.user_id)) return signer;
       return {
@@ -3970,17 +3982,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               <Button
                                 type="button"
                                 variant="outline"
-                                disabled={Boolean(externalRevision) || (s.assignee_mode === "requester" && !isSelectableKeu1Requester(s))}
+                                disabled={Boolean(externalRevision) || (s.assignee_mode === "requester" && !isSelectableFirstMaker(s))}
                                 className="h-10 w-full justify-between bg-muted/20 border-none ring-1 ring-border rounded-lg font-medium text-left"
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
                                   {s.user_id
-                                    ? getSelectedSignerName(s.user_id, isSelectableKeu1Requester(s) || s.candidate_fallback_mode === "request_office_all")
+                                    ? getSelectedSignerName(s.user_id, isSelectableFirstMaker(s) || s.candidate_fallback_mode === "request_office_all")
                                     : s.assignee_mode === "requester"
                                       ? "Menunggu profil pemohon"
                                       : `Pilih ${s.label_jabatan}...`}
                                 </span>
-                                {(s.assignee_mode !== "requester" || isSelectableKeu1Requester(s)) && <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />}
+                                {(s.assignee_mode !== "requester" || isSelectableFirstMaker(s)) && <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />}
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">

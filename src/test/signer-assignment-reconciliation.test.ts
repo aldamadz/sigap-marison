@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 
 describe("registration draft signer reconciliation", () => {
+  it("resolves a contextual select maker without changing its mode or later stages", () => {
+    const configured = [
+      { step_order: 1, form_usage_step_id: "maker", assignee_mode: "select", eligible_user_ids: ["old-assistant"] },
+      { step_order: 2, form_usage_step_id: "reviewer", assignee_mode: "select", eligible_user_ids: ["manager"] },
+    ];
+    const result = reconcileSignerAssignments(configured, [
+      { step_order: 1, form_usage_step_id: "maker", user_id: "local-spv" },
+      { step_order: 2, form_usage_step_id: "reviewer", user_id: "manager" },
+    ], undefined, (step, userId) => step.step_order === 1 ? userId === "local-spv" ? userId : "requester" : undefined);
+    expect(result).toEqual([{ ...configured[0], user_id: "local-spv" }, { ...configured[1], user_id: "manager" }]);
+  });
   it("preserves a context-validated requester or supervisor without moving a selection between steps", () => {
     const current = [{ step_order: 1, form_usage_step_id: "maker", assignee_mode: "requester", user_id: "", eligible_user_ids: [] }];
     const resolve = (_assignment: typeof current[number], userId: string) =>
