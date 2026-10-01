@@ -3497,7 +3497,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">1</span>
-            <h3 className="text-sm font-semibold text-foreground">Form & Lokasi</h3>
+            <h2 className="text-base font-semibold text-foreground">Form & Lokasi</h2>
           </div>
 
           {/* Form & Kegunaan */}
@@ -3811,7 +3811,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">2</span>
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold leading-tight text-foreground">Persetujuan & Berkas</h3>
+                  <h2 className="text-base font-semibold leading-tight text-foreground">{linkedDocumentContext?.type === "recommendation" ? "Isi Rekomendasi & Berkas" : "Persetujuan & Berkas"}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">Lengkapi perihal, tempat, tanggal, lampiran, dan penandatangan sebelum pengajuan didaftarkan.</p>
                 </div>
               </div>
@@ -3926,7 +3926,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               <section className="space-y-6 border-t pt-8 animate-in fade-in duration-700">
                 <div className="flex items-center gap-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">3</span>
-                  <h3 className="text-sm font-semibold text-foreground">Penetapan Pejabat Penandatangan</h3>
+                  <h2 className="text-base font-semibold text-foreground">Penetapan Pejabat Penandatangan</h2>
                 </div>
 
                 <div className="mx-auto max-w-2xl space-y-3">

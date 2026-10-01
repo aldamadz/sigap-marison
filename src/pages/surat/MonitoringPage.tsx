@@ -158,7 +158,7 @@ const MonitoringPage = () => {
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
   const canReadSelectedDocument = Boolean(selectedSurat && selectedSurat.can_read_document !== false);
 
-  const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+  const { data: selectedLinkedDocuments = [], isLoading: linkedDocumentsLoading } = useQuery({
     queryKey: ['surat-linked-documents', selectedSuratId],
     queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
     enabled: Boolean(selectedSuratId && isDetailOpen && canReadSelectedDocument),

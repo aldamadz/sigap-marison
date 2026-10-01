@@ -32,7 +32,7 @@ const MonitoringAdminPage = () => {
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
   const selectedSuratId = selectedSurat?.id || "";
 
-  const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+  const { data: selectedLinkedDocuments = [], isLoading: linkedDocumentsLoading } = useQuery({
     queryKey: ['surat-linked-documents', selectedSuratId],
     queryFn: () => suratService.getLinkedDocuments(selectedSuratId),
     enabled: Boolean(selectedSuratId),

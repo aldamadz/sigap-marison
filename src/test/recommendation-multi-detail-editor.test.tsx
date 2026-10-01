@@ -99,6 +99,26 @@ function TwoItemHarness() {
 }
 
 describe("RecommendationMultiDetailEditor", () => {
+  it("orders the responsible person before location and uses accessible section headings", () => {
+    render(<Harness />);
+    const pic = screen.getByText("PIC *");
+    const location = screen.getByText("Lokasi *");
+    expect(pic.compareDocumentPosition(location) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "Detail Rekomendasi per Item" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "Komputer SPV" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 5, name: "Detail rekomendasi" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Catatan item *")).toHaveValue("Spesifikasi baru");
+    expect(screen.getByText("Hanya untuk item ini.")).toBeInTheDocument();
+  });
+
+  it("keeps notes isolated when switching applicant items", () => {
+    render(<TwoItemHarness />);
+    fireEvent.change(screen.getByLabelText("Catatan item *"), { target: { value: "Catatan komputer" } });
+    fireEvent.click(screen.getByRole("button", { name: /Kursi Gaming/ }));
+    expect(screen.getByLabelText("Catatan item *")).toHaveValue("Spesifikasi baru");
+    fireEvent.click(screen.getByRole("button", { name: /Komputer SPV/ }));
+    expect(screen.getByLabelText("Catatan item *")).toHaveValue("Catatan komputer");
+  });
   it("splits one applicant item into stable numbered details", () => {
     render(<Harness />);
     expect(screen.getByText("1.1")).toBeInTheDocument();

@@ -281,7 +281,7 @@ export default function InboxPage() {
     : selectedDetailItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
 
-  const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+  const { data: linkedDocuments = [], isLoading: linkedDocumentsLoading } = useQuery({
     queryKey: ["surat-linked-documents", selectedSuratId],
     queryFn: () => suratInboxApi.getLinkedDocuments(selectedSuratId),
     enabled: Boolean(selectedSuratId),
