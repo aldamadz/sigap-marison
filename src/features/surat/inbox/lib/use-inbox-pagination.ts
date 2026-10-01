@@ -168,8 +168,8 @@ export const useInboxPagination = (
 
   const resetPagination = useCallback(() => {
     setInboxCursor(null);
-    setInboxAllItems([]);
-    setDetailCache({});
+    // Keep the open task visible while the first page refreshes in place.
+    // Filter changes still clear the list through the filter effect above.
   }, []);
 
   return {

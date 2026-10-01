@@ -44,7 +44,7 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     pushService.ensureSubscription({ requestPermission: false }).catch(() => {});
     const scheduleRefresh = () => {
-      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+      if (refreshTimerRef.current !== null) return;
       refreshTimerRef.current = window.setTimeout(async () => {
         refreshTimerRef.current = null;
         const result = await refetchAttention();
@@ -61,7 +61,6 @@ export const AttentionProvider = ({ children }: { children: ReactNode }) => {
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "master_offices" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "master_projects" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "marison_sync_issues" }, scheduleRefresh)
       .subscribe();
 

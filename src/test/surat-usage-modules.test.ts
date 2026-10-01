@@ -363,6 +363,8 @@ describe("asset module", () => {
     };
     expect(assetModule.renderFieldOverride?.({ key: "recommendation_items" } as never, withModel))
       .not.toBeNull();
+    expect(assetModule.hiddenFieldKeys?.(withModel)).toContain("catatan");
+    expect(assetModule.hiddenFieldKeys?.(ctx)).not.toContain("catatan");
     expect(assetModule.renderContextPanel(ctx)).not.toBeNull();
   });
 });

@@ -59,13 +59,14 @@ export const assetModule: UsageModule = {
     }
     return null;
   },
-  hiddenFieldKeys() {
+  hiddenFieldKeys(ctx) {
     // Kunci internal milik modul (juga dipakai summary agar tidak bocor ke dump generik).
     return [
       "requires_recommendation",
       "recommendation_template_name",
       "recommendation_attachment_note",
       "recommendation_multi_detail",
+      ...(ctx.recommendationIO?.model ? ["catatan"] : []),
     ];
   },
   validateNumberContext(): NumberContextIssue[] {
