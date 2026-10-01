@@ -48,7 +48,7 @@ type RouteStep = {
   input_schema: CheckerInputSchema;
   candidate_scope: CandidateScope;
   skip_if_no_candidate: boolean;
-  candidate_fallback_mode: "request_office_all" | null;
+  candidate_fallback_mode: "request_office_all" | "related_branch_manager" | null;
   signer_department_id: string;
   verifier_department_id: string;
   verifier_scope: "request_office" | "head_office" | "all_offices";
@@ -1196,23 +1196,22 @@ export default function FormUsageManagementPage() {
                                     </span>
                                   </span>
                                 </label>
-                                <label className="flex items-start gap-2 text-xs font-medium">
-                                  <input
-                                    type="checkbox"
-                                    className="mt-0.5"
-                                    checked={step.candidate_fallback_mode === "request_office_all"}
+                                <div className="space-y-2">
+                                  <Label>Kandidat berdasarkan kantor</Label>
+                                  <Select value={step.candidate_fallback_mode || "configured"}
                                     disabled={step.candidate_scope !== "request_office"}
-                                    onChange={event => updateStep(index, {
-                                      candidate_fallback_mode: event.target.checked ? "request_office_all" : null,
-                                    })}
-                                  />
-                                  <span>
-                                    Fallback ke semua karyawan kantor
-                                    <span className="mt-0.5 block font-normal text-muted-foreground">
-                                      Jika tidak ada kandidat terkonfigurasi di kantor pemohon, tampilkan nama dan jabatan asli seluruh karyawan kantor.
-                                    </span>
-                                  </span>
-                                </label>
+                                    onValueChange={value => updateStep(index, {
+                                      candidate_fallback_mode: value === "related_branch_manager" ? "related_branch_manager"
+                                        : value === "request_office_all" ? "request_office_all" : null,
+                                    })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="configured">Kandidat terkonfigurasi saja</SelectItem>
+                                      <SelectItem value="related_branch_manager">Branch Manager KC terkait saja</SelectItem>
+                                      <SelectItem value="request_office_all">Semua karyawan jika kandidat kosong</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
                               </div>
                             )}
                           </div>
