@@ -3661,8 +3661,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
                         <div className="mt-1 text-xs">
                           {hasRegisteredProjectCandidates
-                            ? "Pemetaan proyek/kantor Marison perlu dilengkapi admin di Master Proyek."
-                            : "Belum ada proyek external yang tersedia untuk kantor ini."}
+                            ? "Proyek untuk kantor ini belum siap digunakan dari sistem perencanaan. Silakan hubungi tim perencanaan untuk memastikan datanya tersedia."
+                            : "Belum ada proyek untuk kantor ini di sistem perencanaan. Silakan hubungi tim perencanaan untuk menyiapkan proyeknya."}
                         </div>
                       </div>
                     ) : (
