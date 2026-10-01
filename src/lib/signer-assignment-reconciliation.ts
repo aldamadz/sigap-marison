@@ -14,6 +14,7 @@ export type ReconciliableSignerAssignment = {
 export function reconcileSignerAssignments<T extends ReconciliableSignerAssignment>(
   currentAssignments: T[],
   persistedAssignments: ReconciliableSignerAssignment[] = [],
+  resolveRequesterUserId?: (assignment: T, persistedUserId: string) => string,
 ): T[] {
   const persistedByStepId = new Map(
     persistedAssignments
@@ -23,9 +24,6 @@ export function reconcileSignerAssignments<T extends ReconciliableSignerAssignme
   const persistedUsesStepIds = persistedByStepId.size > 0;
 
   return currentAssignments.map((current) => {
-    if (current.assignee_mode === "requester") {
-      return { ...current, user_id: "" };
-    }
     const persisted = current.form_usage_step_id
       ? persistedByStepId.get(current.form_usage_step_id)
       : undefined;
@@ -33,10 +31,13 @@ export function reconcileSignerAssignments<T extends ReconciliableSignerAssignme
       ? persistedAssignments.find((assignment) => assignment.step_order === current.step_order)
       : undefined;
     const matchingAssignment = persisted || legacyPersisted;
+    const persistedUserId = String(matchingAssignment?.user_id || "");
+    if (current.assignee_mode === "requester") {
+      return { ...current, user_id: resolveRequesterUserId?.(current, persistedUserId) || "" };
+    }
     const configuredCandidates = Array.isArray(current.eligible_user_ids)
       ? current.eligible_user_ids.filter(Boolean)
       : [];
-    const persistedUserId = String(matchingAssignment?.user_id || "");
     const userIsStillEligible = persistedUserId
       ? configuredCandidates.includes(persistedUserId)
       : false;
