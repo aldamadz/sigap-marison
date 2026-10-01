@@ -19,6 +19,7 @@ export function NonUnitItemsField({ ctx }: { ctx: UsageModuleContext }) {
         options={options}
         loading={loading}
         error={error}
+        projectSelected={Boolean(ctx.formData.project_id)}
         projectReady={marisonProject?.ready ?? false}
         projectName={marisonProject?.projectName || ""}
         onChange={(next) => setInputValue("items", next)}

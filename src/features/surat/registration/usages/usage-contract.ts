@@ -136,6 +136,8 @@ export interface CleanupResult {
 export interface UsageModule {
   meta: UsageModuleMeta;
   requirements: UsageModuleRequirements;
+  /** Location-dependent editors appear after the shared location selectors. */
+  contextPanelPlacement?: "before_location" | "after_location";
   requiresMasterProjectMappingForUsage?(usage: UsageDetailRecord): boolean;
   usesProjectForUsage?(usage: UsageDetailRecord): boolean;
 

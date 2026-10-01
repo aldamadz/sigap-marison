@@ -27,6 +27,7 @@ type Props = {
   options: NonUnitExternalOption[];
   loading: boolean;
   error?: string | null;
+  projectSelected: boolean;
   projectReady: boolean;
   projectName?: string;
   onChange: (rows: NonUnitRequestRow[]) => void;
@@ -38,6 +39,7 @@ export function NonUnitRequestEditor({
   options,
   loading,
   error,
+  projectSelected,
   projectReady,
   projectName,
   onChange,
@@ -58,6 +60,10 @@ export function NonUnitRequestEditor({
     const next = normalizedRows.filter((_, rowIndex) => rowIndex !== index);
     onChange(next.length > 0 ? next : [{}]);
   };
+
+  if (!projectSelected) {
+    return <p className="text-sm text-muted-foreground">Pilih proyek tujuan terlebih dahulu.</p>;
+  }
 
   return (
     <div className="space-y-4">

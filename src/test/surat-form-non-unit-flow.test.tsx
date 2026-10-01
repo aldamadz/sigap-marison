@@ -11,8 +11,9 @@ import {
   serviceMock,
   allowServiceCalls,
   assertStrictServiceCalls,
+  getFetchCalls,
 } from "./surat-form-harness";
-import { MASTER_DATA_DEFAULT, CURRENT_PROFILE_KC, NON_UNIT_FORM_USAGE_RAW } from "./surat-form-fixtures";
+import { MASTER_DATA_DEFAULT, MASTER_DATA_WITH_PROJECTS, CURRENT_PROFILE_KC, NON_UNIT_FORM_USAGE_RAW } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
   selectLetterType,
@@ -24,7 +25,10 @@ import {
   selectFormAndUsage,
   selectCategoryAset,
   selectCategoryUnit,
-  selectCategoryNonUnit
+  selectCategoryNonUnit,
+  findSelectTrigger,
+  selectOptionByLabel,
+  registerExternalDataRoutes,
 } from "./surat-form-driver";
 
 afterEach(() => teardownTestHarness());
@@ -56,6 +60,8 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
 
     // The Marison-not-ready banner should be visible instead.
     expect(await screen.findByText("Belum ada proyek yang siap digunakan")).toBeInTheDocument();
+    expect(screen.queryByText("Proyek belum terhubung ke Marison")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pekerjaan Non Unit")).not.toBeInTheDocument();
 
     // generateNoSurat must NOT be called: click the button directly so the
     // driver's success-path wait does not time out on the rejected branch.
@@ -64,6 +70,27 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
     await act(async () => { fireEvent.click(btn); });
     await waitFor(() => expect(serviceMock.generateNoSurat).not.toHaveBeenCalled());
 
+    assertStrictServiceCalls();
+  });
+
+  it("shows project first and loads work types only after selecting a ready project", async () => {
+    serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_WITH_PROJECTS);
+    registerExternalDataRoutes();
+    await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
+    await selectFormAndUsage(/Non Unit/i);
+
+    expect(findSelectTrigger(/^Proyek Tujuan$/)).toBeInTheDocument();
+    expect(screen.queryByText("Pekerjaan Non Unit")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proyek belum terhubung ke Marison")).not.toBeInTheDocument();
+    expect(getFetchCalls("marison_non_units_by_project")).toHaveLength(0);
+
+    await selectOptionByLabel(/^Proyek Tujuan$/, /GA01 - Griya Asri/);
+    const workType = await screen.findByRole("button", { name: /Pilih jenis pekerjaan Non Unit/ });
+    await waitFor(() => expect(workType).toBeEnabled());
+    expect(findSelectTrigger(/^Proyek Tujuan$/).compareDocumentPosition(workType) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getFetchCalls("marison_non_units_by_project")).toHaveLength(1);
+    expect(screen.queryByText("Proyek belum terhubung ke Marison")).not.toBeInTheDocument();
+    expect(serviceMock.generateNoSurat).not.toHaveBeenCalled();
     assertStrictServiceCalls();
   });
 });
