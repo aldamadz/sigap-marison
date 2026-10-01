@@ -42,8 +42,9 @@ create table if not exists public.master_dept_letter_types (
   letter_type_id uuid not null references public.master_letter_types(id),
   sort_index integer
 );
+create type public.user_role as enum ('admin', 'user');
 create table if not exists public.profiles (
-  id uuid primary key, role text not null, office_id uuid, department_id uuid,
+  id uuid primary key, role public.user_role not null, office_id uuid, department_id uuid,
   is_active boolean default true, deleted_at timestamptz
 );
 create table if not exists public.form_usages (

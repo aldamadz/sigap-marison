@@ -82,7 +82,7 @@ using (
   exists (
     select 1 from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and p.role::text in ('admin', 'super_admin')
       and coalesce(p.is_active, true) = true
   )
 )
@@ -90,7 +90,7 @@ with check (
   exists (
     select 1 from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and p.role::text in ('admin', 'super_admin')
       and coalesce(p.is_active, true) = true
   )
 );
@@ -177,7 +177,7 @@ using (
   exists (
     select 1 from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and p.role::text in ('admin', 'super_admin')
       and coalesce(p.is_active, true) = true
   )
 );
