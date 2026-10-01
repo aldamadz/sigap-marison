@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## MRN-18 Fund Requester Approval Hotfix (2026-10-01)
+
+- Branch `fix/fund-requester-approval-role-01`, tracked under Issue #125.
+- Canonical `Pemohon` maps to vendor Fund Submission `staff`; unknown roles
+  still fail closed. Approval identity, order, action, and notes are unchanged.
+- No migration or configuration change. Target staging first; selective
+  production release and one proven pre-POST recovery authorized by owner.
+- Production recovery requires confirming no transport attempt or ambiguous
+  vendor outcome before requeue; use canonical audited recovery, not raw SQL.
+
 Snapshot audit: 2026-08-04 (Asia/Jakarta)
 
 REC-01/SUR-02 corrective candidate (2026-10-01, Issue #422): migration

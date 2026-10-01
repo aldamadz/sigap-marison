@@ -93,6 +93,8 @@ describe("Marison Fund Submission mapper", () => {
   it.each([
     ["Staff IT", "staff"],
     ["Staff Departemen", "staff"],
+    ["Pemohon", "staff"],
+    ["  PEMOHON  ", "staff"],
     ["Manager Pengembangan Organisasi", "manager"],
     ["Kepala Cabang", "manager"],
     ["Pimpinan Departemen", "manager"],
@@ -106,6 +108,29 @@ describe("Marison Fund Submission mapper", () => {
   it("fails closed for an unknown approval role", () => {
     expect(() => normalizeMarisonFundApprovalRole("Penandatangan Khusus"))
       .toThrow("Role approval Fund Submission tidak dikenali");
+  });
+
+  it("maps the canonical production fund approval chain without changing identity or order", () => {
+    const approvals = ["Pemohon", "Branch Manager", "Manager Terkait", "Direktur I", "Direktur Utama"]
+      .map((role, index) => ({ ...approval, role, nik: `EMP${index + 1}`, notes: `Step ${index + 1}` }));
+    const result = mapMarisonFundSubmission({
+      request: {
+        submissionNumber: "001/TEST/FUND",
+        type: "production_cost",
+        title: "Pengajuan Dana Produksi",
+        items: [{ nama_barang: "Material jalan", jumlah: 1, satuan: "paket", nominal: 100000 }],
+      },
+      projectId: 12,
+      branchId: 1,
+      division: "Produksi",
+      attachments: [],
+      approvals,
+    });
+    expect(result.payload.approvals).toEqual(approvals.map((entry, index) => ({
+      ...entry,
+      role: ["staff", "manager", "manager", "director", "director"][index],
+    })));
+    expect(approvals[0].role).toBe("Pemohon");
   });
 
   it("uses the exact external employee division for the mapped requester NIK", () => {
