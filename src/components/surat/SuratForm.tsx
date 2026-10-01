@@ -1866,7 +1866,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (externalRevision?.eventId) return;
     const confirmed = await appDialog.confirm({
       title: "Batalkan Nomor Surat?",
-      description: "Nomor ini akan dikosongkan dari antrean dan tidak dipakai untuk pengajuan ini.",
+      description: "Nomor ini akan dikosongkan dari antrean dan dapat dipakai ulang oleh pengajuan lain selama masa berlaku yang diatur admin. Setelah itu nomor hangus. Surat yang sudah terdaftar tidak terpengaruh.",
       confirmText: "Batalkan Nomor",
       variant: "destructive",
     });
