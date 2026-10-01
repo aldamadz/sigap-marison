@@ -1337,7 +1337,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [toast]);
 
   useEffect(() => {
-    if (!formData.office_id || signers.length === 0 || master.users.length === 0) return;
+    if (externalRevision || !formData.office_id || signers.length === 0 || master.users.length === 0) return;
     setSigners(prev => {
       let changed = false;
       const next = prev.map((signer) => {
@@ -1360,7 +1360,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
       return changed ? next : prev;
     });
-  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers, currentProfile?.id, selectedUsage]);
+  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers, currentProfile?.id, selectedUsage, externalRevision]);
 
   const loadUsageDetails = useCallback(async () => {
     const { data, error } = await supabase.from("form_usages")
@@ -1483,7 +1483,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       ? draftToRestore.signer_assignments
       : [];
     const configuredSigners = usage ? buildSignerAssignments(usage) : [];
-    setSigners(configuredSigners.length > 0
+    setSigners(restoredExternalRevision ? persistedSigners : configuredSigners.length > 0
       ? getVisibleConfiguredSigners(reconcileConfiguredSigners(configuredSigners, persistedSigners, usage, restoredFormData.office_id, restoredFormData.dept_id))
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
@@ -1505,7 +1505,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [draftToRestore, usageDetails, usageDetailsLoaded, setJudulForDisplay, toast]);
 
   useEffect(() => {
-    if (!activeDraftId || !selectedUsage) return;
+    if (externalRevision || !activeDraftId || !selectedUsage) return;
     const configuredSigners = buildSignerAssignments(selectedUsage);
     if (configuredSigners.length === 0) return;
 
@@ -1513,7 +1513,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       const reconciled = getVisibleConfiguredSigners(reconcileConfiguredSigners(configuredSigners, current));
       return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
     });
-  }, [activeDraftId, selectedUsage]);
+  }, [activeDraftId, selectedUsage, externalRevision]);
 
   useEffect(() => {
     if (!generatedNoSurat) {
@@ -2000,6 +2000,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const getLatestConfiguredSignerAssignments = () => {
+    if (externalRevision) return signers;
     if (!selectedUsage?.id) return signers;
     const latestUsage = usageDetails.find((usage) => usage.id === selectedUsage.id) || selectedUsage;
     const configuredSigners = getVisibleConfiguredSigners(buildSignerAssignments(latestUsage));
