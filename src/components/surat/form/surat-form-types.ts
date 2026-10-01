@@ -56,6 +56,8 @@ export type RecommendationConfig = {
 
 export type UsageDetailRecord = {
   id: string;
+  first_maker_policy?: "contextual" | "configured";
+  is_system_template?: boolean;
   name?: string;
   form_id?: string;
   request_category?: RequestCategory;

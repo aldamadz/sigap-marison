@@ -10,6 +10,7 @@ import {
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
+import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import {
   canonicalizeCheckerInput,
   validateCheckerInput,
@@ -407,7 +408,7 @@ export const suratService = {
     const { data: usageConfiguration, error: usageError } = await supabase
       .from("form_usages")
       .select(`
-        id, name, form_id, request_category, scope_type, is_system_template, recommendation_config, external_revision_policy,
+        id, name, form_id, request_category, scope_type, is_system_template, first_maker_policy, recommendation_config, external_revision_policy,
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(
@@ -990,6 +991,11 @@ export const suratService = {
       }
 
       if (payload.form_usage_id) {
+        const contextualMaker = configContext.usage?.first_maker_policy === "contextual";
+        const { data: makerOffices, error: makerOfficeError } = contextualMaker
+          ? await supabase.from("master_offices").select("id, parent_id, kedudukan")
+          : { data: [], error: null };
+        if (makerOfficeError) throw makerOfficeError;
         const { data: validation, error: validationError } = await supabase.rpc(
           "validate_form_usage_for_actor",
           {
@@ -1016,7 +1022,10 @@ export const suratService = {
           const assignment = activeSigners[index];
           const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
           const signerProfile = signerSnapshots[assignment.user_id] ?? {};
-          const matchesAssignee = isKeu1RequesterStep(configContext.usage?.master_forms, step)
+          const matchesAssignee = isContextualMakerStep(configContext.usage, step)
+            ? isFirstMakerCandidate(signerProfile, { requesterId: user.id, officeId: payload.office_id,
+                departmentId: payload.dept_id || "", offices: makerOffices || [] })
+            : configContext.usage?.first_maker_policy === undefined && isKeu1RequesterStep(configContext.usage?.master_forms, step)
             ? isKeu1FirstSignerCandidate(signerProfile, user.id, payload.office_id,
                 String(configContext.office?.kedudukan || "").toLowerCase() !== "pusat")
             : step.assignee_mode === "requester"
