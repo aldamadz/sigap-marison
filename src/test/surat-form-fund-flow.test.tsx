@@ -1,6 +1,6 @@
 /** Flow MRN-21: Non Aset KC memilih "Tanpa Proyek (Dana Umum)" untuk dana tanpa proyek. */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import {
   setupTestHarness,
   teardownTestHarness,
@@ -8,7 +8,7 @@ import {
   allowServiceCalls,
   assertStrictServiceCalls,
 } from "./surat-form-harness";
-import { MASTER_DATA_DEFAULT, MASTER_DATA_WITH_PROJECTS, CURRENT_PROFILE_KC, FUND_FORM_USAGE_RAW } from "./surat-form-fixtures";
+import { MASTER_DATA_DEFAULT, MASTER_DATA_WITH_PROJECTS, CURRENT_PROFILE_KC, FUND_FORM_USAGE_RAW, UUID } from "./surat-form-fixtures";
 import {
   configureStandardMocks,
   selectLetterType,
@@ -38,6 +38,45 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
       "generateNoSurat",
       "createRegistrationDraft",
     );
+  });
+
+  it("offers requester and both branch supervisors on KEU 1 step one", async () => {
+    allowServiceCalls("saveRegistrationDraft");
+    serviceMock.getMasterData.mockResolvedValue({ ...MASTER_DATA_DEFAULT, users: [
+      ...MASTER_DATA_DEFAULT.users,
+      { id: "spv-marketing", full_name: "SPV Marketing Lokal", job_title: "SPV Marketing", office_id: UUID.office_kc },
+      { id: "spv-teknik", full_name: "SPV Teknik Lokal", job_title: "Supervisor Teknik", office_id: UUID.office_kc },
+      { id: "spv-other", full_name: "SPV Cabang Lain", job_title: "Supervisor Teknik", office_id: UUID.office_pusat },
+    ] });
+    const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage,
+      name: "Pengajuan Kas Kecil - Kantor Cabang",
+      master_forms: { ...usage.master_forms, nama_form: "FORM PENGAJUAN KAS KECIL", nomor_form: "FM-UAI.KEU-01-00" },
+      form_usage_steps: usage.form_usage_steps.map(step => ({ ...step, assignee_mode: step.step_order === 1 ? "requester" : "select" })),
+    }));
+    await mountFormWithUsage(usages, CURRENT_PROFILE_KC);
+    await selectForm(/KAS KECIL/i);
+    await selectUsage(/Kas Kecil/i);
+    await selectLetterType();
+    await selectEntity();
+    await clickGetNumber();
+    fireEvent.change(screen.getByLabelText("Keterangan"), { target: { value: "Listrik kantor" } });
+    fireEvent.change(screen.getByLabelText("Jumlah"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Satuan"), { target: { value: "bulan" } });
+    const price = screen.getByRole("textbox", { name: "Estimasi harga satuan item 1" });
+    fireEvent.change(price, { target: { value: "10000" } });
+    fireEvent.blur(price);
+    fireEvent.click(screen.getByRole("button", { name: "Selanjutnya" }));
+    const trigger = await screen.findByRole("button", { name: /Pemohon Staging.*Staff/ });
+    expect(trigger).toBeEnabled();
+    fireEvent.click(trigger);
+    const options = await screen.findByRole("listbox");
+    expect(within(options).getByText("Pemohon Staging")).toBeInTheDocument();
+    expect(within(options).getByText("SPV Marketing Lokal")).toBeInTheDocument();
+    expect(within(options).getByText("SPV Teknik Lokal")).toBeInTheDocument();
+    expect(within(options).queryByText("SPV Cabang Lain")).not.toBeInTheDocument();
+    fireEvent.click(within(options).getByText("SPV Marketing Lokal"));
+    expect(await screen.findByRole("button", { name: /SPV Marketing Lokal.*SPV Marketing/ })).toBeEnabled();
+    assertStrictServiceCalls();
   });
 
   it("reserves number for dana umum without a Marison project", async () => {

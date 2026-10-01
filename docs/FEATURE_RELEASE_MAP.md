@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## MAR-10 KEU 1 Submit and First Signer (2026-10-01)
+
+- Issue #434, `fix/keu1-submit-and-first-signer-01` from main; staging first.
+- Forward-only migration `20261001060000`: correct the registration trigger's
+  nonexistent `new.no_urut` reference using the validated document number prefix
+  and matching letter type. Preserve office, owner, year, status and scope guards.
+- KEU 1 requester approval step one offers requester plus active same-branch
+  supervisors from every department. Database trigger enforces the same rule;
+  other steps/forms remain unchanged. A selected supervisor is not auto-approved.
+- No historical-number repair, fixture promotion, real approval or vendor POST.
+
 ## SUR-02/REC-01 Stable Realtime and Recommendation Editor (2026-10-01)
 
 - Issue #430, branch `fix/realtime-stable-recommendation-ui-01` from main.

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { useSearchParams } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -1218,8 +1219,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     return true;
   };
 
+  const isSelectableKeu1Requester = (signer: SignerAssignment) =>
+    isKeu1RequesterStep(selectedUsage?.master_forms, signer);
+
   const getEligibleSignerUsersForSigner = (signer?: SignerAssignment) => {
     if (!signer) return [];
+    if (isSelectableKeu1Requester(signer)) {
+      return master.users.filter(user => isKeu1FirstSignerCandidate(
+        user, currentProfile?.id || "", formData.office_id, !isRequesterHeadOffice(),
+      ));
+    }
     if (signer.assignee_mode === "requester") {
       return (master.users || []).filter(user => user.id === currentProfile?.id);
     }
@@ -1308,6 +1317,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       let changed = false;
       const next = prev.map((signer) => {
         const eligibleUsers = getEligibleSignerUsersForSigner(signer);
+        if (!signer.user_id && isSelectableKeu1Requester(signer)
+          && eligibleUsers.some(user => user.id === currentProfile?.id)) {
+          changed = true;
+          return { ...signer, user_id: currentProfile?.id || "" };
+        }
         if (!signer.user_id && eligibleUsers.length === 1) {
           changed = true;
           return { ...signer, user_id: eligibleUsers[0].id };
@@ -1321,7 +1335,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
       return changed ? next : prev;
     });
-  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers, currentProfile?.id]);
+  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers, currentProfile?.id, selectedUsage]);
 
   const loadUsageDetails = useCallback(async () => {
     const { data, error } = await supabase.from("form_usages")
@@ -3946,17 +3960,17 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               <Button
                                 type="button"
                                 variant="outline"
-                                disabled={Boolean(externalRevision) || s.assignee_mode === "requester"}
+                                disabled={Boolean(externalRevision) || (s.assignee_mode === "requester" && !isSelectableKeu1Requester(s))}
                                 className="h-10 w-full justify-between bg-muted/20 border-none ring-1 ring-border rounded-lg font-medium text-left"
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
                                   {s.user_id
-                                    ? getSelectedSignerName(s.user_id, s.candidate_fallback_mode === "request_office_all")
+                                    ? getSelectedSignerName(s.user_id, isSelectableKeu1Requester(s) || s.candidate_fallback_mode === "request_office_all")
                                     : s.assignee_mode === "requester"
                                       ? "Menunggu profil pemohon"
                                       : `Pilih ${s.label_jabatan}...`}
                                 </span>
-                                {s.assignee_mode !== "requester" && <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />}
+                                {(s.assignee_mode !== "requester" || isSelectableKeu1Requester(s)) && <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />}
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
