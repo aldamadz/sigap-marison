@@ -15,6 +15,7 @@ export function reconcileSignerAssignments<T extends ReconciliableSignerAssignme
   currentAssignments: T[],
   persistedAssignments: ReconciliableSignerAssignment[] = [],
   resolveRequesterUserId?: (assignment: T, persistedUserId: string) => string,
+  resolveContextUserId?: (assignment: T, persistedUserId: string) => string | undefined,
 ): T[] {
   const persistedByStepId = new Map(
     persistedAssignments
@@ -32,6 +33,8 @@ export function reconcileSignerAssignments<T extends ReconciliableSignerAssignme
       : undefined;
     const matchingAssignment = persisted || legacyPersisted;
     const persistedUserId = String(matchingAssignment?.user_id || "");
+    const contextualUserId = resolveContextUserId?.(current, persistedUserId);
+    if (contextualUserId !== undefined) return { ...current, user_id: contextualUserId };
     if (current.assignee_mode === "requester") {
       return { ...current, user_id: resolveRequesterUserId?.(current, persistedUserId) || "" };
     }

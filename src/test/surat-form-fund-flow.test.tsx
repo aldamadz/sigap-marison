@@ -40,7 +40,12 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     );
   });
 
-  it.each(["requester", "supervisor"])("keeps the selected %s through KEU 1 confirmation", async (selected) => {
+  it.each([
+    { selected: "requester", contextual: false, mode: "requester" },
+    { selected: "supervisor", contextual: false, mode: "requester" },
+    { selected: "supervisor", contextual: true, mode: "requester" },
+    { selected: "supervisor", contextual: true, mode: "select" },
+  ])("keeps selected $selected through confirmation (contextual=$contextual, mode=$mode)", async ({ selected, contextual, mode }) => {
     allowServiceCalls("saveRegistrationDraft");
     serviceMock.getMasterData.mockResolvedValue({ ...MASTER_DATA_DEFAULT, users: [
       ...MASTER_DATA_DEFAULT.users,
@@ -49,9 +54,10 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
       { id: "spv-other", full_name: "SPV Cabang Lain", job_title: "Supervisor Teknik", office_id: UUID.office_pusat },
     ] });
     const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage,
+      ...(contextual ? { first_maker_policy: "contextual" } : {}),
       name: "Pengajuan Kas Kecil - Kantor Cabang",
       master_forms: { ...usage.master_forms, nama_form: "FORM PENGAJUAN KAS KECIL", nomor_form: "FM-UAI.KEU-01-00" },
-      form_usage_steps: usage.form_usage_steps.map(step => ({ ...step, assignee_mode: step.step_order === 1 ? "requester" : "select" })),
+      form_usage_steps: usage.form_usage_steps.map(step => ({ ...step, assignee_mode: step.step_order === 1 ? mode : "select" })),
     }));
     await mountFormWithUsage(usages, CURRENT_PROFILE_KC);
     await selectForm(/KAS KECIL/i);
