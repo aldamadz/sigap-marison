@@ -3590,7 +3590,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {/* Module specific context panels & Location */}
           {selectedUsage && (
             <>
-              {activeUsageData && moduleCtx ? activeUsageData.module.renderContextPanel(moduleCtx) : null}
+              {activeUsageData && moduleCtx && activeUsageData.module.contextPanelPlacement !== "after_location"
+                ? activeUsageData.module.renderContextPanel(moduleCtx) : null}
 
               <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5 mt-4">
                 {/* Kantor */}
@@ -3715,6 +3716,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   </Select>
                 </div>
               </div>
+              {activeUsageData && moduleCtx && activeUsageData.module.contextPanelPlacement === "after_location"
+                ? activeUsageData.module.renderContextPanel(moduleCtx) : null}
             </>
           )}
 

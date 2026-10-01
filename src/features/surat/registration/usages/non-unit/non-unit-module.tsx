@@ -14,6 +14,7 @@ import { NonUnitContextPanel } from "./NonUnitContextPanel";
 import { NonUnitItemsField } from "./NonUnitItemsField";
 
 export const nonUnitModule: UsageModule = {
+  contextPanelPlacement: "after_location",
   meta: {
     key: "non_unit",
     label: "Pengajuan Non Unit",

@@ -4,6 +4,8 @@ import { NonUnitItemsField } from "./NonUnitItemsField";
 
 /** Konteks pekerjaan Non Unit (Section 1, pra-nomor). */
 export function NonUnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
+  if (!ctx.formData.project_id) return null;
+
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-4 md:p-5">
       <p className="text-sm font-semibold text-foreground">Pekerjaan Non Unit</p>
