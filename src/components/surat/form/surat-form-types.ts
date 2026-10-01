@@ -189,7 +189,7 @@ export type SignerAssignment = {
   input_schema?: unknown;
   candidate_scope?: CandidateScope;
   skip_if_no_candidate?: boolean;
-  candidate_fallback_mode?: "request_office_all" | null;
+  candidate_fallback_mode?: "request_office_all" | "related_branch_manager" | null;
   eligible_user_ids?: string[];
   verifier_user_ids?: string[];
   attachment_requirements?: UsageDetailRecord["form_usage_attachment_requirements"];
@@ -208,7 +208,7 @@ export type UsageStepConfig = {
   input_schema?: unknown;
   candidate_scope?: CandidateScope;
   skip_if_no_candidate?: boolean;
-  candidate_fallback_mode?: "request_office_all" | null;
+  candidate_fallback_mode?: "request_office_all" | "related_branch_manager" | null;
   eligible_user_ids?: string[];
   verifier_user_ids?: string[];
   requires_unit_allocation?: boolean;

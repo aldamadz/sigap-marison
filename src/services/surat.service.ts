@@ -10,6 +10,7 @@ import {
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
+import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import {
   canonicalizeCheckerInput,
@@ -991,7 +992,8 @@ export const suratService = {
       }
 
       if (payload.form_usage_id) {
-        const contextualMaker = configContext.usage?.first_maker_policy === "contextual";
+        const contextualMaker = configContext.usage?.first_maker_policy === "contextual"
+          || configContext.usage?.form_usage_steps.some(step => step.candidate_fallback_mode === "related_branch_manager");
         const { data: makerOffices, error: makerOfficeError } = contextualMaker
           ? await supabase.from("master_offices").select("id, parent_id, kedudukan")
           : { data: [], error: null };
@@ -1028,6 +1030,8 @@ export const suratService = {
             : configContext.usage?.first_maker_policy === undefined && isKeu1RequesterStep(configContext.usage?.master_forms, step)
             ? isKeu1FirstSignerCandidate(signerProfile, user.id, payload.office_id,
                 String(configContext.office?.kedudukan || "").toLowerCase() !== "pusat")
+            : step.candidate_fallback_mode === "related_branch_manager"
+            ? isRelatedBranchManager(signerProfile, payload.office_id, makerOffices || [])
             : step.assignee_mode === "requester"
             ? assignment.user_id === user.id
             : eligibleIds.includes(assignment.user_id)

@@ -21,6 +21,8 @@ const branchGuard = branchGuardSource.slice(branchGuardSource.indexOf("create or
 const keu1SubmitAssertions = readFileSync("supabase/tests/keu1_submit_and_first_signer.integration.sql", "utf8");
 const makerMigration = readFileSync("supabase/migrations/20261001120000_contextual_first_maker_candidates.sql", "utf8");
 const makerAssertions = readFileSync("supabase/tests/contextual_first_maker_candidates.integration.sql", "utf8");
+const bmMigration = readFileSync("supabase/migrations/20261001130000_keu1_related_branch_manager.sql", "utf8");
+const bmAssertions = readFileSync("supabase/tests/keu1_branch_manager_candidates.integration.sql", "utf8");
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -319,6 +321,9 @@ alter table public.master_offices add column parent_id uuid;
 ${makerMigration}
 ${makerMigration}
 ${makerAssertions}
+${bmMigration}
+${bmMigration}
+${bmAssertions}
 `;
 
 const run = (args, input = "") => {
