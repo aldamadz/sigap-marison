@@ -137,6 +137,50 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     assertStrictServiceCalls();
   });
 
+  it("limits the Branch Manager step to active related KC managers", async () => {
+    allowServiceCalls("saveRegistrationDraft");
+    serviceMock.getMasterData.mockResolvedValue({ ...MASTER_DATA_DEFAULT, users: [
+      ...MASTER_DATA_DEFAULT.users,
+      { id: "local-bm", full_name: "BM Cabang Terkait", job_title: "Branch Manager", office_id: UUID.office_kc },
+      { id: "local-spv", full_name: "SPV Kantor", job_title: "Supervisor Teknik", office_id: UUID.office_kc },
+      { id: "local-staff", full_name: "Staff Kantor", job_title: "Staff Admin", office_id: UUID.office_kc },
+      { id: "foreign-bm", full_name: "BM Kantor Lain", job_title: "Branch Manager", office_id: UUID.office_pusat },
+    ] });
+    const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage,
+      first_maker_policy: "contextual", name: "Pengajuan Kas Kecil - Kantor Cabang",
+      master_forms: { ...usage.master_forms, nama_form: "FORM PENGAJUAN KAS KECIL", nomor_form: "FM-UAI.KEU-01-00" },
+      form_usage_steps: usage.form_usage_steps.map(step => ({ ...step,
+        assignee_mode: step.step_order === 1 ? "requester" : "select",
+        ...(step.step_order === 2 ? { label: "Branch Manager", role_name: "memeriksa", candidate_scope: "request_office",
+          candidate_fallback_mode: "related_branch_manager", form_usage_step_users: [] } : {}),
+      })),
+    }));
+    await mountFormWithUsage(usages, CURRENT_PROFILE_KC);
+    await selectForm(/KAS KECIL/i);
+    await selectUsage(/Kas Kecil/i);
+    await selectLetterType();
+    await selectEntity();
+    await clickGetNumber();
+    fireEvent.change(screen.getByLabelText("Keterangan"), { target: { value: "Kas kantor" } });
+    fireEvent.change(screen.getByLabelText("Jumlah"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Satuan"), { target: { value: "bulan" } });
+    const price = screen.getByRole("textbox", { name: "Estimasi harga satuan item 1" });
+    fireEvent.change(price, { target: { value: "10000" } });
+    fireEvent.blur(price);
+    fireEvent.click(screen.getByRole("button", { name: "Selanjutnya" }));
+    fireEvent.click(await screen.findByRole("button", { name: "BM Cabang Terkait" }));
+    const options = await screen.findByRole("listbox");
+    expect(within(options).getByText("BM Cabang Terkait")).toBeInTheDocument();
+    expect(within(options).queryByText("SPV Kantor")).not.toBeInTheDocument();
+    expect(within(options).queryByText("Staff Kantor")).not.toBeInTheDocument();
+    expect(within(options).queryByText("BM Kantor Lain")).not.toBeInTheDocument();
+    fireEvent.click(within(options).getByText("BM Cabang Terkait"));
+    fireEvent.click(screen.getByRole("button", { name: "Konfirmasi Pendaftaran" }));
+    const summary = await screen.findByRole("dialog", { name: /Periksa sebelum didaftarkan/i });
+    expect(within(summary).getByText("BM Cabang Terkait")).toBeInTheDocument();
+    assertStrictServiceCalls();
+  });
+
   it("reserves a KEU 1 number without choosing a project even when the branch has projects", async () => {
     serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_WITH_PROJECTS);
     const keu1Usage = FUND_FORM_USAGE_RAW.map((usage) => ({

@@ -22,6 +22,27 @@ const normalizeFundItems = (items) => (Array.isArray(items) ? items : []).map((i
   nominal: nonNegativeInteger(item?.nominal ?? item?.subtotal ?? item?.nilai),
 }));
 
+export const mapKeu1ItemsForFund = (items) => (Array.isArray(items) ? items : []).map((item, index) => {
+  const quantity = positiveInteger(item?.jumlah);
+  const rawUnitPrice = item?.estimasi_harga_satuan;
+  const unitPrice = typeof rawUnitPrice === "number" || /^\d+$/u.test(text(rawUnitPrice))
+    ? Number(rawUnitPrice)
+    : NaN;
+  const nominal = quantity * unitPrice;
+  if (!text(item?.keterangan) || !quantity || !text(item?.satuan) ||
+      !Number.isSafeInteger(unitPrice) || unitPrice < 0 || !Number.isSafeInteger(nominal)) {
+    const error = new Error(`Rincian Kas Kecil item ${index + 1} tidak valid untuk pengiriman.`);
+    error.status = 422;
+    throw error;
+  }
+  return {
+    nama_barang: text(item.keterangan),
+    jumlah: quantity,
+    satuan: text(item.satuan),
+    nominal,
+  };
+});
+
 export const normalizeMarisonFundApprovalRole = (value) => {
   const role = text(value).toLowerCase();
   if (role === "pemohon") return "staff";

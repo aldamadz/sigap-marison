@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
+import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
 import { useSearchParams } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -1236,6 +1237,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getEligibleSignerUsersForSigner = (signer?: SignerAssignment) => {
     if (!signer) return [];
     if (isSelectableFirstMaker(signer)) return getFirstMakerCandidates(selectedUsage, signer);
+    if (signer.candidate_fallback_mode === "related_branch_manager") {
+      return master.users.filter(user => isRelatedBranchManager(user, formData.office_id, master.offices));
+    }
     if (signer.assignee_mode === "requester") {
       return (master.users || []).filter(user => user.id === currentProfile?.id);
     }
@@ -1266,6 +1270,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
     return candidates.some(user => user.id === currentProfile?.id) ? currentProfile?.id || "" : "";
   }, (signer, persistedUserId) => {
+    if (signer.candidate_fallback_mode === "related_branch_manager") {
+      return master.users.some(user => user.id === persistedUserId && isRelatedBranchManager(user, officeId, master.offices))
+        ? persistedUserId : "";
+    }
     if (!isContextualMakerStep(usage, signer)) return undefined;
     const candidates = getFirstMakerCandidates(usage, signer, officeId, departmentId);
     if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
@@ -2143,6 +2151,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       category: formData.form_input_data.request_category,
       usageName: selectedUsage?.name || "-",
       formName: selectedUsage?.master_forms?.nama_form || "-",
+      formNumber: selectedUsage?.master_forms?.nomor_form || "",
       requesterName: requester?.full_name || "-",
       requesterJobTitle: requester?.job_title || undefined,
       departmentName: department?.name || "-",
