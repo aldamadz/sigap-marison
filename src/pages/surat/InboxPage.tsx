@@ -51,6 +51,7 @@ import {
 } from "@/features/surat/inbox/lib/inbox-task-state";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase } from "@/lib/supabase";
+import { createRealtimeFlush } from "@/lib/realtime-flush";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -162,7 +163,6 @@ export default function InboxPage() {
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const selectedItemRef = useRef<any>(null);
-  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -277,7 +277,7 @@ export default function InboxPage() {
     : selectedDetailItem;
   const selectedSuratId = selectedItem?.surat_registrasi?.id || selectedItem?.surat_id || "";
 
-  const { data: linkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+  const { data: linkedDocuments = [], isLoading: linkedDocumentsLoading } = useQuery({
     queryKey: ["surat-linked-documents", selectedSuratId],
     queryFn: () => suratInboxApi.getLinkedDocuments(selectedSuratId),
     enabled: Boolean(selectedSuratId),
@@ -349,15 +349,10 @@ export default function InboxPage() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
+    const flush = createRealtimeFlush({ queryClient, debounceMs: 150, maxFlushDelayMs: 700 });
     const scheduleInboxRefresh = () => {
-      if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
-      realtimeRefreshTimerRef.current = setTimeout(() => {
-        resetInboxPagination();
-        queryClient.invalidateQueries({ queryKey: ["surat-inbox-compact"] });
-        queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] });
-        queryClient.invalidateQueries({ queryKey: ["surat-linked-documents"] });
-        queryClient.invalidateQueries({ queryKey: ["surat-inbox-detail"] });
-      }, 700);
+      resetInboxPagination();
+      flush.add("surat-inbox-compact", "surat-inbox-kpi", "surat-linked-documents", "surat-inbox-detail", "surat-revision-history");
     };
 
     const showRealtimeToast = (key: string, title: string, description?: string) => {
@@ -416,10 +411,10 @@ export default function InboxPage() {
       .subscribe();
 
     return () => {
-      if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
+      flush.cancel();
       supabase.removeChannel(channel);
     };
-  }, [currentUser?.id, queryClient]);
+  }, [currentUser?.id, queryClient, resetInboxPagination]);
 
   const isUnitAllocationRequired = (item: any) => {
     const input = item.surat_registrasi?.form_input_data || {};

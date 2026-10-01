@@ -1,35 +1,24 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { createRealtimeFlush } from "@/lib/realtime-flush";
 
 export const RealtimeSync = () => {
   const queryClient = useQueryClient();
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const lastFocusSyncRef = useRef(0);
 
   useEffect(() => {
-    const handleSync = (keys: string[]) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-
-      timerRef.current = setTimeout(async () => {
-        const allowedKeys = new Set(keys);
-
-        await queryClient.refetchQueries({
-          predicate: (query) =>
-            allowedKeys.has(query.queryKey[0] as string),
-          type: "active",
-        });
-      }, 1000);
-    };
+    const flush = createRealtimeFlush({ queryClient });
+    const handleSync = (keys: string[]) => flush.add(...keys);
 
     const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
     const suratKeys = [
       "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
       "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",
       "surat-riwayat-keterlibatan", "surat-revision-history", "surat-linked-documents",
+      "recommendation-tasks", "surat-follow-up-requester",
     ];
-    const userKeys = ["users", "activity-logs", "recent-logs"];
 
     const channel = supabase
       .channel("db-persuratan-realtime")
@@ -37,11 +26,11 @@ export const RealtimeSync = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_attachments" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_linked_documents" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_recommendation_tasks" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_revision_events" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () =>
-        handleSync(userKeys)
       )
       .subscribe();
 
@@ -67,6 +56,11 @@ export const RealtimeSync = () => {
         "surat-list",
         "surat-inbox",
         "surat-detail",
+        "recommendation-tasks",
+        "surat-follow-up-requester",
+        "surat-linked-documents",
+        "surat-monitoring-list",
+        "admin-monitoring-list",
         "users",
       ]);
     };
@@ -74,7 +68,7 @@ export const RealtimeSync = () => {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      flush.cancel();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       supabase.removeChannel(channel);
     };

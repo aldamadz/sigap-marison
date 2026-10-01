@@ -52,7 +52,7 @@ export default function SuratPage() {
 
       {/* Header Section with PageHeader */}
       <PageHeader
-        title={isRecommendationRoute ? "Registrasi Rekomendasi" : "Registrasi Surat"}
+        title={isRecommendationRoute ? "Buat Rekomendasi" : "Registrasi Surat"}
         subtitle={isRecommendationRoute ? "Lengkapi dokumen rekomendasi berdasarkan pengajuan induk." : "Buat pengajuan baru dan pilih alur persetujuannya."}
       >
         <Button

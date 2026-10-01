@@ -394,7 +394,7 @@ const RiwayatKeterlibatanPage = () => {
     to: parseDateInput(dateTo),
   }), [dateFrom, dateTo]);
 
-  const { data: selectedLinkedDocuments = [], isFetching: linkedDocumentsLoading } = useQuery({
+  const { data: selectedLinkedDocuments = [], isLoading: linkedDocumentsLoading } = useQuery({
     queryKey: ['surat-linked-documents', selected?.id],
     queryFn: () => suratService.getLinkedDocuments(selected!.id),
     enabled: Boolean(selected?.id),
