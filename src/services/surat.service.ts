@@ -9,6 +9,7 @@ import {
 } from "@/lib/registration-draft-attachment-classification";
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
+import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import {
   canonicalizeCheckerInput,
   validateCheckerInput,
@@ -991,7 +992,10 @@ export const suratService = {
           const assignment = activeSigners[index];
           const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
           const signerProfile = signerSnapshots[assignment.user_id] ?? {};
-          const matchesAssignee = step.assignee_mode === "requester"
+          const matchesAssignee = isKeu1RequesterStep(configContext.usage?.master_forms, step)
+            ? isKeu1FirstSignerCandidate(signerProfile, user.id, payload.office_id,
+                String(configContext.office?.kedudukan || "").toLowerCase() !== "pusat")
+            : step.assignee_mode === "requester"
             ? assignment.user_id === user.id
             : eligibleIds.includes(assignment.user_id)
               || (

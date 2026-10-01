@@ -167,7 +167,7 @@ export const loadSuratMasterData = async (accessToken: string) => {
     client.from("master_departments").select("*"),
     client.from("master_letter_types").select("*"),
     client.from("master_dept_letter_types").select("dept_id, letter_type_id, sort_index"),
-    client.from("profiles").select("id, full_name, job_title, department_id, office_id").eq("is_active", true).order("full_name"),
+    client.from("profiles").select("id, full_name, job_title, department_id, office_id, is_active, deleted_at").eq("is_active", true).order("full_name"),
     client.from("master_projects").select("*").order("name"),
     client.from("master_penggunaan_detail").select("*").order("created_at", { ascending: false }),
   ]);

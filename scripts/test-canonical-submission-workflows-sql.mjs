@@ -15,6 +15,10 @@ const nonPlanningMigration = readFileSync("supabase/migrations/20260929090000_re
 const nonPlanningAssertions = readFileSync("supabase/tests/non_planning_checker_defaults.integration.sql", "utf8");
 const keu1Migration = readFileSync("supabase/migrations/20260929080000_seed_keu1_form_usage.sql", "utf8");
 const keu1Assertions = readFileSync("supabase/tests/keu1_form_usage.integration.sql", "utf8");
+const keu1SubmitMigration = readFileSync("supabase/migrations/20261001060000_keu1_submit_and_first_signer.sql", "utf8");
+const branchGuardSource = readFileSync("supabase/migrations/20260930140000_mar10_kc_descendant_number_scope.sql", "utf8");
+const branchGuard = branchGuardSource.slice(branchGuardSource.indexOf("create or replace function public.enforce_surat_registration_branch_project()"));
+const keu1SubmitAssertions = readFileSync("supabase/tests/keu1_submit_and_first_signer.integration.sql", "utf8");
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -275,6 +279,40 @@ ${nonPlanningAssertions}
 ${keu1Migration}
 ${keu1Migration}
 ${keu1Assertions}
+alter table public.surat_registrasi add column entity_id uuid, add column letter_type_id uuid,
+  add column project_id uuid;
+create table public.master_projects (id uuid primary key, office_id uuid);
+create table public.surat_reservations (
+ id uuid primary key default gen_random_uuid(), entity_id uuid, type_id uuid, office_id uuid,
+ project_id uuid, dept_id uuid, year integer, no_urut integer, reserved_by uuid,
+ number_scope_type text, status text
+);
+create function public.branch_has_registered_projects(uuid) returns boolean language sql as $$ select false $$;
+create function public.get_office_descendant_ids(uuid) returns setof uuid language sql as $$ select null::uuid where false $$;
+create function public.resolve_form_usage_category(p_form_usage_id uuid)
+returns text language sql stable security definer set search_path = '' as $$
+  select lower(usage.request_category) from public.form_usages usage where usage.id = p_form_usage_id;
+$$;
+${branchGuard}
+create trigger registration_branch_guard before insert or update on public.surat_registrasi
+ for each row execute function public.enforce_surat_registration_branch_project();
+do $$ declare v_usage uuid; begin
+ select usage.id into v_usage from public.form_usages usage
+ join public.master_forms form on form.id = usage.form_id
+ where form.nomor_form = 'FM-UAI.KEU-01-00' and usage.scope_type = 'cabang';
+ begin
+  insert into public.surat_registrasi (form_usage_id, office_id, created_by, no_surat, form_input_data)
+  values (v_usage, '20000000-0000-4000-8000-000000000002',
+    '40000000-0000-4000-8000-000000000020', '017/UAI/000/X/2026', '{"fund_without_project":true}');
+  raise exception 'Expected original nonexistent-column regression';
+ exception when undefined_column then
+  if position('no_urut' in sqlerrm) = 0 then raise; end if;
+ end;
+ raise notice 'Original KEU 1 no_urut failure reproduced';
+end $$;
+${keu1SubmitMigration}
+${keu1SubmitMigration}
+${keu1SubmitAssertions}
 `;
 
 const run = (args, input = "") => {
@@ -305,6 +343,9 @@ try {
     throw new Error(`KEU 1 migration success marker missing.\n${output}`);
   }
   process.stdout.write(output);
+  if (!output.includes("KEU 1 submit and first signer: all assertions passed")) {
+    throw new Error("KEU 1 submit regression marker missing.");
+  }
 } finally {
   spawnSync("docker", ["rm", "-f", id], { encoding: "utf8" });
 }
