@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 
 describe("registration draft signer reconciliation", () => {
+  it("preserves a context-validated requester or supervisor without moving a selection between steps", () => {
+    const current = [{ step_order: 1, form_usage_step_id: "maker", assignee_mode: "requester", user_id: "", eligible_user_ids: [] }];
+    const resolve = (_assignment: typeof current[number], userId: string) =>
+      ["requester", "local-spv"].includes(userId) ? userId : "requester";
+    for (const userId of ["requester", "local-spv"]) {
+      expect(reconcileSignerAssignments(current, [{ step_order: 1, form_usage_step_id: "maker", user_id: userId }], resolve)[0].user_id).toBe(userId);
+    }
+    expect(reconcileSignerAssignments(current, [{ step_order: 1, form_usage_step_id: "other-step", user_id: "local-spv" }], resolve)[0].user_id).toBe("requester");
+    expect(reconcileSignerAssignments(current, [{ step_order: 1, form_usage_step_id: "maker", user_id: "foreign-spv" }], resolve)[0].user_id).toBe("requester");
+  });
   it("does not reuse a selected signer for a requester-bound step", () => {
     const current = [{ step_order: 1, form_usage_step_id: "requester-step", assignee_mode: "requester", user_id: "", eligible_user_ids: [] }];
     const persisted = [{ step_order: 1, form_usage_step_id: "requester-step", user_id: "old-signer" }];

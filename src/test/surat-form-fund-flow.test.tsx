@@ -40,7 +40,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     );
   });
 
-  it("offers requester and both branch supervisors on KEU 1 step one", async () => {
+  it.each(["requester", "supervisor"])("keeps the selected %s through KEU 1 confirmation", async (selected) => {
     allowServiceCalls("saveRegistrationDraft");
     serviceMock.getMasterData.mockResolvedValue({ ...MASTER_DATA_DEFAULT, users: [
       ...MASTER_DATA_DEFAULT.users,
@@ -74,8 +74,13 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     expect(within(options).getByText("SPV Marketing Lokal")).toBeInTheDocument();
     expect(within(options).getByText("SPV Teknik Lokal")).toBeInTheDocument();
     expect(within(options).queryByText("SPV Cabang Lain")).not.toBeInTheDocument();
-    fireEvent.click(within(options).getByText("SPV Marketing Lokal"));
-    expect(await screen.findByRole("button", { name: /SPV Marketing Lokal.*SPV Marketing/ })).toBeEnabled();
+    const selectedName = selected === "supervisor" ? "SPV Marketing Lokal" : "Pemohon Staging";
+    fireEvent.click(within(options).getByText(selectedName));
+    expect(await screen.findByRole("button", { name: new RegExp(`${selectedName}.*(Staff|SPV Marketing)`) })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Konfirmasi Pendaftaran" }));
+    const summary = await screen.findByRole("dialog", { name: /Periksa sebelum didaftarkan/i });
+    expect(within(summary).getAllByText(selectedName).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Pejabat Belum Lengkap")).not.toBeInTheDocument();
     assertStrictServiceCalls();
   });
 

@@ -1247,6 +1247,21 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const getVisibleConfiguredSigners = (assignments: SignerAssignment[]) =>
     assignments.filter((signer) => !signer.skip_if_no_candidate || getEligibleSignerUsersForSigner(signer).length > 0);
 
+  const reconcileConfiguredSigners = (
+    configured: SignerAssignment[],
+    persisted: SignerAssignment[],
+    usage = selectedUsage,
+    officeId = formData.office_id,
+  ) => reconcileSignerAssignments(configured, persisted, (signer, persistedUserId) => {
+    if (!isKeu1RequesterStep(usage?.master_forms, signer)) return currentProfile?.id || "";
+    const office = master.offices.find(item => item.id === officeId);
+    const candidates = master.users.filter(user => isKeu1FirstSignerCandidate(
+      user, currentProfile?.id || "", officeId, String(office?.kedudukan || "").toLowerCase() !== "pusat",
+    ));
+    if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
+    return candidates.some(user => user.id === currentProfile?.id) ? currentProfile?.id || "" : "";
+  });
+
   const getFilteredSignerUsers = (index: number) => {
     const tokens = normalizeNameSearch(signerSearch[index] || "").split(" ").filter(Boolean);
     const signer = signers[index];
@@ -1459,7 +1474,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       : [];
     const configuredSigners = usage ? buildSignerAssignments(usage) : [];
     setSigners(configuredSigners.length > 0
-      ? getVisibleConfiguredSigners(reconcileSignerAssignments(configuredSigners, persistedSigners))
+      ? getVisibleConfiguredSigners(reconcileConfiguredSigners(configuredSigners, persistedSigners, usage, restoredFormData.office_id))
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
     setExternalRevision(restoredExternalRevision?.eventId ? restoredExternalRevision : null);
@@ -1485,7 +1500,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (configuredSigners.length === 0) return;
 
     setSigners((current) => {
-      const reconciled = getVisibleConfiguredSigners(reconcileSignerAssignments(configuredSigners, current));
+      const reconciled = getVisibleConfiguredSigners(reconcileConfiguredSigners(configuredSigners, current));
       return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
     });
   }, [activeDraftId, selectedUsage]);
@@ -1982,7 +1997,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const configuredSigners = getVisibleConfiguredSigners(buildSignerAssignments(latestUsage));
     if (configuredSigners.length === 0) return signers;
 
-    return reconcileSignerAssignments(configuredSigners, signers).map((signer) => {
+    return reconcileConfiguredSigners(configuredSigners, signers).map((signer) => {
       const eligibleUsers = getEligibleSignerUsersForSigner(signer);
       if (signer.user_id && eligibleUsers.some((user) => user.id === signer.user_id)) return signer;
       return {
