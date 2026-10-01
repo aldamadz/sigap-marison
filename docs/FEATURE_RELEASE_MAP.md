@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## SUR-02/REC-01 Stable Realtime and Recommendation Editor (2026-10-01)
+
+- Issue #430, branch `fix/realtime-stable-recommendation-ui-01` from main.
+- Keep inbox tasks/details mounted while realtime refreshes; distinguish first
+  load from background refresh for linked documents. Union event keys with a
+  bounded flush; recommendation tasks and requester follow-up refresh too.
+- Recommendation editor: PIC before derived location, semantic section headings,
+  explicit per-item notes. Hide the duplicate global note only for the multi-item
+  recommendation model; historical stored notes remain intact.
+- No migration, approval, document mutation, or vendor POST. Validate staging
+  before selective production release; retain existing staging reconnect fixes.
+
 ## MRN-18 Fund Requester Approval Hotfix (2026-10-01)
 
 - Branch `fix/fund-requester-approval-role-01`, tracked under Issue #125.

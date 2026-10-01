@@ -18,12 +18,13 @@
  *  - the primitive cannot start a fetch loop: a flush is triggered only by an
  *    incoming event or the visibility/auth transition hooks.
  */
-export type QueryClientLike = {
-  refetchQueries: (options: { predicate: (query: any) => boolean; type: "active" }) => Promise<unknown>;
-  invalidateQueries: (options: { predicate: (query: any) => boolean; refetchType?: "none" }) => void;
-};
+import type { Query } from "@tanstack/react-query";
 
-export type QueryKeyExtractor = (query: any) => string | undefined;
+export type QueryClientLike = {
+  refetchQueries: (options: { predicate: (query: Query) => boolean; type: "active" }) => Promise<unknown>;
+  invalidateQueries: (options: { predicate: (query: Query) => boolean; refetchType?: "none" }) => void;
+};
+export type QueryKeyExtractor = (query: Query) => string | undefined;
 
 export type FlushController = {
   /** Register query keys to refresh on the next flush. Idempotent per key. */
@@ -73,7 +74,7 @@ export const createRealtimeFlush = (options: {
     const keys = new Set(pending);
     pending.clear();
 
-    const matches = (query: any) => {
+    const matches = (query: Query) => {
       const key = extractKey(query);
       return key !== undefined && keys.has(key);
     };

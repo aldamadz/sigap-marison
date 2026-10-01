@@ -8,11 +8,14 @@ const suratKeys = [
   "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
   "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",
   "surat-riwayat-keterlibatan", "surat-revision-history", "surat-linked-documents",
+  "recommendation-tasks", "surat-follow-up-requester",
 ];
 const userKeys = ["users", "activity-logs", "recent-logs"];
 const focusKeys = [
   "agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs",
   "surat-list", "surat-inbox", "surat-detail", "users",
+  "recommendation-tasks", "surat-follow-up-requester", "surat-linked-documents",
+  "surat-monitoring-list", "admin-monitoring-list",
 ];
 
 export const RealtimeSync = () => {
@@ -33,6 +36,9 @@ export const RealtimeSync = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_registrasi" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_signatures" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "surat_attachments" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_linked_documents" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_recommendation_tasks" }, () => handleSync(suratKeys))
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_revision_events" }, () => handleSync(suratKeys))
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
       )

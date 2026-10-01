@@ -180,7 +180,7 @@ function RecommendationMultiDetailEditorContent({
       <div className="border-y border-border bg-muted/30 px-4 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-foreground">Detail Rekomendasi per Item</p>
+            <h3 className="text-base font-semibold text-foreground">Detail Rekomendasi per Item</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Pecah satu item menjadi beberapa komponen atau spesifikasi bila diperlukan.
             </p>
@@ -235,7 +235,7 @@ function RecommendationMultiDetailEditorContent({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold text-muted-foreground">Item permohonan {activeParent.order + 1}</p>
-            <h3 className="mt-1 text-base font-semibold text-foreground">{activeParent.applicant_original.name}</h3>
+            <h4 className="mt-1 text-base font-semibold text-foreground">{activeParent.applicant_original.name}</h4>
             <p className="mt-1 text-xs text-muted-foreground">
               Jumlah {activeParent.applicant_original.quantity}
               {activeParent.applicant_original.notes ? ` · ${activeParent.applicant_original.notes}` : ""}
@@ -270,15 +270,7 @@ function RecommendationMultiDetailEditorContent({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold">Lokasi *</Label>
-            <Input
-              value={activeParent.location}
-              onChange={(event) => setParent((parent) => ({ ...parent, location: event.target.value }))}
-              placeholder="Contoh: Kantor Pusat / Departemen PO"
-            />
-          </div>
+        <div className="mt-4 space-y-4">
           <div className="space-y-2">
             <Label className="text-xs font-semibold">PIC *</Label>
             <Popover open={picOpen} onOpenChange={setPicOpen}>
@@ -312,6 +304,17 @@ function RecommendationMultiDetailEditorContent({
               </PopoverContent>
             </Popover>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor={`location-${activeParent.id}`} className="text-sm font-medium">Lokasi *</Label>
+            <Input
+              id={`location-${activeParent.id}`}
+              value={activeParent.location}
+              onChange={(event) => setParent((parent) => ({ ...parent, location: event.target.value }))}
+              placeholder="Contoh: Kantor Pusat / Departemen PO"
+              aria-describedby={`location-help-${activeParent.id}`}
+            />
+            <p id={`location-help-${activeParent.id}`} className="text-xs text-muted-foreground">Terisi otomatis sesuai PIC.</p>
+          </div>
         </div>
 
         {activeParent.status === "not_recommended" ? (
@@ -334,7 +337,7 @@ function RecommendationMultiDetailEditorContent({
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold text-primary">{activeParent.order + 1}.{detailIndex + 1}</p>
-                      <p className="text-sm font-semibold text-foreground">Detail rekomendasi</p>
+                      <h5 className="text-sm font-semibold text-foreground">Detail rekomendasi</h5>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
@@ -443,13 +446,16 @@ function RecommendationMultiDetailEditorContent({
                   </div>
 
                   <div className="mt-4 space-y-2">
-                    <Label className="text-xs font-semibold">Keterangan *</Label>
+                    <Label htmlFor={`notes-${detail.id}`} className="text-sm font-medium">Catatan item *</Label>
                     <Textarea
+                      id={`notes-${detail.id}`}
+                      aria-describedby={`notes-help-${detail.id}`}
                       value={detail.notes}
                       onChange={(event) => setDetail(detail.id, (item) => ({ ...item, notes: event.target.value }))}
                       placeholder="Catatan pemeriksaan atau alasan pemilihan spesifikasi."
                       className="min-h-20"
                     />
+                    <p id={`notes-help-${detail.id}`} className="text-xs text-muted-foreground">Hanya untuk item ini.</p>
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
