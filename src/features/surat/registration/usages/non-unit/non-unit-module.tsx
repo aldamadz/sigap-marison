@@ -11,10 +11,8 @@ import type {
 import type { FormInputData } from "@/components/surat/form/surat-form-types";
 import { registerUsageModule } from "../usage-registry";
 import { NonUnitContextPanel } from "./NonUnitContextPanel";
-import { NonUnitItemsField } from "./NonUnitItemsField";
 
 export const nonUnitModule: UsageModule = {
-  contextPanelPlacement: "after_location",
   meta: {
     key: "non_unit",
     label: "Pengajuan Non Unit",
@@ -29,14 +27,11 @@ export const nonUnitModule: UsageModule = {
     allowsLinkedRecommendation: false,
     requiresMasterProjectMapping: true,
   },
-  renderContextPanel(ctx) {
-    return <NonUnitContextPanel ctx={ctx} />;
-  },
-  renderFieldOverride(field, ctx) {
-    if (field.key === "items") {
-      return <NonUnitItemsField ctx={ctx} />;
-    }
+  renderContextPanel() {
     return null;
+  },
+  renderDetailsPanel(ctx) {
+    return ctx.generatedNoSurat ? <NonUnitContextPanel ctx={ctx} /> : null;
   },
   hiddenFieldKeys() {
     return ["items"];

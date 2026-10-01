@@ -203,15 +203,16 @@ describe("non-unit module", () => {
       .toBe(input);
   });
 
-  it("cleanup + normalize milik modul; render slot bukan null", () => {
+  it("cleanup + normalize milik modul; pekerjaan hanya pada detail bernomor", () => {
     expect(nonUnitModule.cleanup(ctxFor("non_unit"), "usage_change").inputKeysToDelete)
       .toEqual(expect.arrayContaining(["items"]));
     const out = nonUnitModule.normalizeInput({ request_mode: "unit" } as never, ctxFor("non_unit"));
     expect((out as Record<string, unknown>).request_mode).toBe("barang");
     const ctx = ctxFor("non_unit");
-    expect(nonUnitModule.renderContextPanel(ctx)).not.toBeNull();
-    expect(nonUnitModule.renderFieldOverride?.({ key: "items" } as never, ctx)).not.toBeNull();
-    expect(nonUnitModule.renderFieldOverride?.({ key: "nama_barang" } as never, ctx)).toBeNull();
+    expect(nonUnitModule.renderContextPanel(ctx)).toBeNull();
+    expect(nonUnitModule.renderDetailsPanel?.(ctx)).toBeNull();
+    expect(nonUnitModule.renderDetailsPanel?.({ ...ctx, generatedNoSurat: "001/NU/2026" })).not.toBeNull();
+    expect(nonUnitModule.renderFieldOverride).toBeUndefined();
     expect(nonUnitModule.hiddenFieldKeys?.(ctx)).toEqual(
       expect.arrayContaining(["items"])
     );

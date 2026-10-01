@@ -73,7 +73,7 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
     assertStrictServiceCalls();
   });
 
-  it("shows project first and loads work types only after selecting a ready project", async () => {
+  it("reserves a number before showing project work and loading work types", async () => {
     serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_WITH_PROJECTS);
     registerExternalDataRoutes();
     await mountFormWithUsage(NON_UNIT_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
@@ -85,12 +85,20 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
     expect(getFetchCalls("marison_non_units_by_project")).toHaveLength(0);
 
     await selectOptionByLabel(/^Proyek Tujuan$/, /GA01 - Griya Asri/);
+    expect(screen.queryByText("Pekerjaan Non Unit")).not.toBeInTheDocument();
+    expect(getFetchCalls("marison_non_units_by_project")).toHaveLength(0);
+    await selectLetterType();
+    await selectEntity();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Dapatkan Nomor Surat/i })); });
+    await waitFor(() => expect(serviceMock.createRegistrationDraft).toHaveBeenCalledTimes(1));
     const workType = await screen.findByRole("button", { name: /Pilih jenis pekerjaan Non Unit/ });
     await waitFor(() => expect(workType).toBeEnabled());
-    expect(findSelectTrigger(/^Proyek Tujuan$/).compareDocumentPosition(workType) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Pilih jenis pekerjaan Non Unit/ })).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Persetujuan & Berkas" })).toBeInTheDocument();
+    expect(serviceMock.generateNoSurat).toHaveBeenCalledTimes(1);
+    expect(serviceMock.createRegistrationDraft.mock.calls[0][0].payload.formData.project_id).toBeTruthy();
     expect(getFetchCalls("marison_non_units_by_project")).toHaveLength(1);
     expect(screen.queryByText("Proyek belum terhubung ke Marison")).not.toBeInTheDocument();
-    expect(serviceMock.generateNoSurat).not.toHaveBeenCalled();
     assertStrictServiceCalls();
   });
 });
