@@ -21,6 +21,8 @@ export type MasterRecord = {
   departmentSortIndexes?: Record<string, number>;
   dept_sort_indexes?: Record<string, number>;
   job_title?: string | null;
+  is_active?: boolean;
+  deleted_at?: string | null;
   marison_project_id?: number | null;
   marison_branch_id?: number | null;
   marison_review_reasons?: unknown;

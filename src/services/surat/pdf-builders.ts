@@ -173,7 +173,7 @@ export const getSignerSnapshots = async (signers: any[]) => {
   const [{ data }, { data: overrides }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, nik, job_title, email, department_id, office_id")
+      .select("id, full_name, nik, job_title, email, department_id, office_id, is_active, deleted_at")
       .in("id", userIds),
     supabase
       .from("job_title_display_overrides")
