@@ -2,6 +2,14 @@
 
 Snapshot audit: 2026-08-04 (Asia/Jakarta)
 
+REC-01/SUR-02 corrective candidate (2026-10-01, Issue #422): migration
+`20261001090000_restore_recommendation_partial_submission_recovery.sql` restores
+owned draft/USED-reservation retry and draft-based recommendation task linkage.
+Fresh registrations still delegate to the current core (including MAR-10 guards).
+No business record is rewritten. MRN-14 empty-project copy refers to the planning
+system, distinguishing unavailable data from projects not yet ready for use.
+Target: staging validation before selective production promotion.
+
 Dokumen ini adalah baseline untuk menentukan fitur mana yang berada di staging,
 fitur mana yang boleh dipromosikan ke production, dan cara menarik fitur dari
 production tanpa merusak data atau fitur lain. Perbarui dokumen ini pada setiap

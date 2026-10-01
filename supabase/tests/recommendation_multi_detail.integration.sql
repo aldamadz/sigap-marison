@@ -50,6 +50,8 @@ update public.surat_registration_drafts set reservation_id='20000000-0000-4000-8
 update public.surat_registrasi set form_input_data=form_input_data||'{"recommendation_multi_detail":{"broken":true},"recommendation_items":[{"nama_barang":"Legacy","jumlah":1}]}'::jsonb where id='10000000-0000-4000-8000-000000000004';
 do $$begin begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004');raise exception 'malformed canonical downgraded to legacy';exception when invalid_parameter_value then null;end;end$$;
 do $$begin begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003');raise exception 'wrong linkage accepted';exception when invalid_parameter_value then null;end;end$$;
+-- Real registrations do not persist a reservation_id column; the draft is authoritative.
+update public.surat_registrasi set reservation_id=null where id='10000000-0000-4000-8000-000000000002';
 select public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');
 do $$declare recovered public.surat_registrasi; before_count integer;begin
  select count(*) into before_count from public.surat_registrasi;
@@ -58,6 +60,20 @@ do $$declare recovered public.surat_registrasi; before_count integer;begin
  assert recovered.id='10000000-0000-4000-8000-000000000002','partial registration retry did not reuse existing surat';
  assert(select count(*)=before_count from public.surat_registrasi),'partial registration retry duplicated surat';
 end$$;
+do $$begin
+ begin
+  perform public.create_surat_registrasi(jsonb_build_object('draft_id','40000000-0000-4000-8000-000000000001','reservation_id','20000000-0000-4000-8000-000000000002','no_surat','REC-001'));
+  raise exception 'mismatched reservation accepted on retry';
+ exception when invalid_parameter_value then null; end;
+end$$;
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',false);
+do $$begin
+ begin
+  perform public.create_surat_registrasi(jsonb_build_object('draft_id','40000000-0000-4000-8000-000000000001','reservation_id','20000000-0000-4000-8000-000000000001','no_surat','REC-001'));
+  raise exception 'another actor recovered a used reservation';
+ exception when sqlstate '55000' then null; end;
+end$$;
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 do $$begin assert(select not (data_snapshot ? 'recommendation') from public.surat_registrasi where id='10000000-0000-4000-8000-000000000001'),'parent snapshot published before PDF';end$$;
 do $$declare t timestamptz;begin select submitted_at into t from public.surat_recommendation_tasks where id='30000000-0000-4000-8000-000000000001';perform pg_sleep(.01);perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');assert(select submitted_at=t from public.surat_recommendation_tasks where id='30000000-0000-4000-8000-000000000001'),'same child not idempotent';begin perform public.complete_recommendation_task('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003');raise exception 'different child accepted';exception when sqlstate '55000' then null;end;end$$;
 
