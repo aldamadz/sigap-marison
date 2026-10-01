@@ -129,7 +129,8 @@ function registerUnitSources() {
 
 async function mountUnitRevisionDraft(
   activeUsageData: unknown[] = UNIT_FORM_USAGE_RAW,
-  draft: Omit<typeof unitRevisionDraft, "payload"> & {
+  draft: Omit<typeof unitRevisionDraft, "payload" | "signer_assignments"> & {
+    signer_assignments: Array<Omit<(typeof unitRevisionDraft.signer_assignments)[number], "user_id"> & { user_id: string }>;
     payload: Omit<typeof unitRevisionDraft.payload, "externalRevision"> & {
       externalRevision?: typeof unitRevisionDraft.payload.externalRevision;
     };
@@ -166,6 +167,26 @@ beforeEach(() => {
 afterEach(() => teardownTestHarness());
 
 describe("SPK Unit requester revision", () => {
+  it("preserves a locked historical maker instead of applying new candidate rules", async () => {
+    const draft = { ...unitRevisionDraft, signer_assignments: [{
+      ...unitRevisionDraft.signer_assignments[0], user_id: UUID.user2, label_jabatan: "Pejabat historis",
+    }] };
+    const usages = UNIT_FORM_USAGE_RAW.map(usage => ({
+      ...usage,
+      first_maker_policy: "contextual",
+      form_usage_steps: usage.form_usage_steps.map(step => step.id === UUID_UNIT.step1
+        ? { ...step, form_usage_step_users: [{ user_id: UUID.user }, { user_id: UUID.user2 }] }
+        : step),
+    }));
+    await mountUnitRevisionDraft(usages, draft);
+    fireEvent.change(screen.getByLabelText("Jumlah Unit Diajukan"), { target: { value: "3" } });
+    await waitFor(() => expect(serviceMock.saveRegistrationDraft).toHaveBeenCalledWith(
+      UUID.draft, expect.any(Object), expect.arrayContaining([
+        expect.objectContaining({ form_usage_step_id: UUID_UNIT.step1, user_id: UUID.user2 }),
+      ]), expect.any(String),
+    ), { timeout: 2000 });
+    assertStrictServiceCalls();
+  });
   it("restores its archived usage configuration without exposing it as an active option", async () => {
     const archivedUsage = {
       ...UNIT_FORM_USAGE_RAW[0],
