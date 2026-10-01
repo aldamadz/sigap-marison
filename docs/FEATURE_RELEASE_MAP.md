@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## MAR-10 KEU 1 Confirmation Reconciliation (2026-10-01, Issue #438)
+
+Candidate: `fix/keu1-confirmation-signer-reconciliation-01` from main.
+Preserve a context-validated requester or local supervisor during draft restore,
+workflow reconciliation and confirmation. Requester-only steps still resolve to
+the current actor; invalid supervisor choices fall back to the requester.
+No database migration, reservation rewrite, outbound or approval mutation.
+Deployment and runtime acceptance remain to be verified in both environments.
+
 ## MAR-10 KEU 1 Submit and First Signer (2026-10-01)
 
 - Issue #434, `fix/keu1-submit-and-first-signer-01` from main; staging first.
