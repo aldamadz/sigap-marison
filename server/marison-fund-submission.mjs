@@ -24,6 +24,7 @@ const normalizeFundItems = (items) => (Array.isArray(items) ? items : []).map((i
 
 export const normalizeMarisonFundApprovalRole = (value) => {
   const role = text(value).toLowerCase();
+  if (role === "pemohon") return "staff";
   if (/\b(direktur|director|direksi|dirut)\b/u.test(role)) return "director";
   if (/\b(manager|manajer|kepala|head|pimpinan|mgr)\b/u.test(role)) return "manager";
   if (/\b(staff|staf|officer|specialist|admin|pelaksana)\b/u.test(role)) return "staff";
