@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
-import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { ApprovalAttachmentPicker } from "@/features/surat/inbox/components/ApprovalAttachmentPicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import {
@@ -1967,15 +1968,15 @@ const handleApprove = async (item: any) => {
             const key = requirement.requirement_key;
             const files = approvalFiles[item.id]?.[key] || [];
             const existingFiles = getExistingApprovalAttachments(item, key);
-            const multiple = requirement.allow_multiple || Number(requirement.max_files || 1) > 1;
-            const satisfied = files.length > 0 || existingFiles.length > 0;
             return (
-              <label key={key} className={cn("block rounded-lg border p-3", satisfied ? "border-emerald-500/30 bg-emerald-500/5" : "border-border")}>
-                <div className="mb-2 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{requirement.label || key}{requirement.is_required && <span className="ml-1 text-destructive">*</span>}</p><p className="text-xs text-muted-foreground">{files.length ? files.length + (key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY ? " file baru akan ditambahkan" : " file baru akan mengganti lampiran lama") : existingFiles.length ? existingFiles.length + " file sudah tersedia" : "Belum ada file"}</p></div>{satisfied && <CircleCheck className="h-5 w-5 text-emerald-600" />}</div>
-                {existingFiles.length > 0 && (files.length === 0 || key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY) && existingFiles.map((file: any) => <div key={file.id || file.file_url} className="mb-2 flex justify-between gap-2 rounded bg-background px-2 py-1 text-xs"><span className="truncate">{file.file_name || "Lampiran tersimpan"}</span><span className="shrink-0 text-muted-foreground">Sudah ada</span></div>)}
-                {files.map((file) => <div key={file.name + file.lastModified} className="mb-2 flex justify-between gap-2 rounded bg-background px-2 py-1 text-xs"><span className="truncate">{file.name}</span><span className="shrink-0 text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span></div>)}
-                <Input type="file" multiple={multiple} accept={Array.isArray(requirement.allowed_types) ? requirement.allowed_types.join(",") : undefined} disabled={isUploading || (key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY && existingFiles.length >= 5)} className="min-h-11 text-xs" onChange={(event) => { const selected = Array.from(event.target.files || []); if (key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY) { try { validateOptionalAttachmentFiles(selected); if (existingFiles.length + selected.length > 5) throw new Error("Maksimal 5 lampiran tambahan pemeriksaan."); } catch (error) { toast.error(error instanceof Error ? error.message : "Lampiran tidak valid."); event.currentTarget.value = ""; return; } } setApprovalFiles((previous) => ({ ...previous, [item.id]: { ...(previous[item.id] || {}), [key]: selected.slice(0, Number(requirement.max_files || 1)) } })); }} />
-              </label>
+              <ApprovalAttachmentPicker
+                key={key} requirement={requirement} files={files} existingFiles={existingFiles}
+                disabled={isUploading} onError={message => toast.error(message)}
+                onChange={selected => setApprovalFiles(previous => ({
+                  ...previous,
+                  [item.id]: { ...(previous[item.id] || {}), [key]: selected },
+                }))}
+              />
             );
           })}
         </div>
