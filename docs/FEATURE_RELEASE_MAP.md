@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## UI-03 Theme Bootstrap Cascade (2026-10-05, Issue #459)
+
+- Branch `fix/theme-bootstrap-cascade-01` from main; staging validation first.
+- Initial HTML styles use the same CSS layer order and dynamic background/text
+  tokens as the application. This prevents the light bootstrap background from
+  overriding the dark theme after the Tailwind 4 build-tool upgrade.
+- Verify compiled HTML and CSS together in desktop/mobile light and dark modes.
+  No migration or worker changes; production rollout follows staging acceptance.
+
 ## MAR-10 KEU 1 Confirmation Reconciliation (2026-10-01, Issue #438)
 
 Candidate: `fix/keu1-confirmation-signer-reconciliation-01` from main.
