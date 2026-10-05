@@ -404,6 +404,7 @@ export function RegistrationSummaryDocument({
               ["Departemen", data.departmentName, data.officeName],
               ["Form", data.formName, data.usageName],
               ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, keu1 ? data.formNumber : identityProject !== "-" ? identityProject : "Tanpa proyek"],
+              ...(keu1 && data.projectName ? [["Proyek", data.projectName, ""]] : []),
             ].map(([label, value, detail]) => (
               <div key={label} className="border-b border-border p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
                 <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
@@ -549,6 +550,7 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
                     ["Departemen", data.departmentName, data.officeName],
                     ["Form", data.formName, data.usageName],
                     ["Tempat, tanggal", `${data.requestPlace}, ${formatLongDate(data.requestDate)}`, keu1 ? data.formNumber : identityProject !== "-" ? identityProject : "Tanpa proyek"],
+                    ...(keu1 && data.projectName ? [["Proyek", data.projectName, ""]] : []),
                   ].map(([label, value, detail]) => (
                     <div key={label} className="border-b border-border p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
                       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>

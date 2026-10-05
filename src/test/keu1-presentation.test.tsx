@@ -38,6 +38,12 @@ function EditorHarness() {
 }
 
 describe("KEU 1 presentation", () => {
+  it("shows an optional project in the KEU 1 identity without changing the financial table", () => {
+    render(<RegistrationSummaryDocument data={{ ...summaryData, projectName: "Kuwasen" }} />);
+    expect(screen.getByText("Proyek")).toBeInTheDocument();
+    expect(screen.getByText("Kuwasen")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Estimasi Harga Satuan" })).toBeInTheDocument();
+  });
   it("accepts Free Cash during input and recalculates kebutuhan dana", () => {
     render(<EditorHarness />);
     expect(screen.getAllByText("Rp 300.000")).toHaveLength(2);
