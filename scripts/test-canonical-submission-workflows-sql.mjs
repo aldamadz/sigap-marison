@@ -326,8 +326,8 @@ ${makerAssertions}
 ${bmMigration}
 ${bmMigration}
 ${bmAssertions}
-${optionalProjectMigration}
-${optionalProjectMigration}
+${optionalProjectMigration.replace(/\r\n/g, "\n")}
+${optionalProjectMigration.replace(/\r?\n/g, "\r\n")}
 ${optionalProjectAssertions}
 `;
 

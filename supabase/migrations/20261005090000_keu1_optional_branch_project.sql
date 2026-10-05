@@ -16,6 +16,8 @@ declare
     end if;
   end if;$body$;
 begin
+  v_old := replace(v_old, E'\r\n', E'\n');
+  v_new := replace(v_new, E'\r\n', E'\n');
   if position(v_old in v_definition) > 0 then
     execute replace(v_definition, v_old, v_new);
   elsif position(v_new in v_definition) = 0 then
