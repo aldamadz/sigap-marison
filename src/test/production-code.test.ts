@@ -18,6 +18,22 @@ describe("production code serial", () => {
       .toBe("001/UAI/PRC/5.2/01/01/2026");
   });
 
+  it.each([
+    "2026-09-25",
+    "2026-09-25T23:30:00-07:00",
+    "25/09/2026",
+  ])("formats the outbound date as dd/mm/yyyy without timezone drift: %s", (date) => {
+    expect(buildProductionCode({ serial: 1, block: "5.2", date }))
+      .toBe("001/UAI/PRC/5.2/25/09/2026");
+  });
+
+  it("keeps empty dates and existing day-first dates unchanged", () => {
+    expect(buildProductionCode({ serial: "012", block: "A-1", date: "" }))
+      .toBe("012/UAI/PRC/A-1/");
+    expect(buildProductionCode({ serial: "012", block: "A-1", date: "09/10/2026" }))
+      .toBe("012/UAI/PRC/A-1/09/10/2026");
+  });
+
   it("formats and normalizes the allocation spreadsheet boundary", () => {
     const excel = readFileSync(join(process.cwd(), "src/lib/excel.ts"), "utf8");
     const inbox = readFileSync(join(process.cwd(), "src/pages/surat/InboxPage.tsx"), "utf8");

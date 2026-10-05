@@ -140,6 +140,7 @@ export interface UsageModule {
   contextPanelPlacement?: "before_location" | "after_location";
   requiresMasterProjectMappingForUsage?(usage: UsageDetailRecord): boolean;
   usesProjectForUsage?(usage: UsageDetailRecord): boolean;
+  allowsOptionalProjectForUsage?(usage: UsageDetailRecord): boolean;
 
   /** Panel konteks Section 1 (pra-nomor). */
   renderContextPanel(ctx: UsageModuleContext): React.ReactNode | null;

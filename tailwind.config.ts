@@ -1,17 +1,10 @@
 import type { Config } from "tailwindcss";
 
 export default {
-  darkMode: ["class"],
+  darkMode: "class",
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
-    container: {
-      center: true,
-      padding: "2rem",
-      screens: {
-        "2xl": "1400px",
-      },
-    },
     screens: {
       'xs': '480px',
       'sm': '640px',
@@ -141,11 +134,15 @@ export default {
         "pulse-ring": "pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite",
       },
       boxShadow: {
+        sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        DEFAULT: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
         'card': '0 4px 24px -4px hsl(222 47% 3% / 0.5)',
         'elevated': '0 8px 32px -8px hsl(222 47% 3% / 0.6)',
         'glow': '0 0 40px -12px hsl(217 91% 60% / 0.3)',
         'mobile-nav': '0 -4px 20px -4px hsl(222 47% 3% / 0.4)',
       },
+      blur: { sm: '4px', DEFAULT: '8px' },
+      backdropBlur: { sm: '4px', DEFAULT: '8px' },
       spacing: {
         '18': '4.5rem',
         '88': '22rem',

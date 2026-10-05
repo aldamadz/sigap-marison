@@ -8,7 +8,15 @@ const jobId = "10000000-0000-4000-8000-000000000001";
 const userId = "40000000-0000-4000-8000-000000000004";
 const pdfUrl = "https://storage.test/storage/v1/object/public/dokumen_surat/staging/pdf/cached.pdf";
 
-const createQuery = (table: string, tokenInserts: unknown[], recommendation = false) => {
+type PreviewFixtureOptions = {
+  recommendation?: boolean;
+  createdBy?: string;
+  signer?: boolean;
+  readJob?: (kind: "active" | "done") => Promise<void>;
+  activeJob?: boolean;
+};
+
+const createQuery = (table: string, tokenInserts: unknown[], options: PreviewFixtureOptions) => {
   const equal = new Map<string, unknown>();
   const included = new Map<string, unknown[]>();
   const builder: any = {
@@ -32,18 +40,27 @@ const createQuery = (table: string, tokenInserts: unknown[], recommendation = fa
           file_path: "dokumen_surat/staging/source.xlsx",
           pdf_path: null,
           lampiran_path: null,
-          created_by: userId,
+          created_by: options.createdBy ?? userId,
         },
         error: null,
       };
       if (table === "document_pdf_jobs") {
-        if (included.has("status")) return { data: null, error: null };
-        if (equal.get("status") === "done") return {
-          data: { id: jobId, status: "done", pdf_url: pdfUrl, error_message: null, signature_id: null },
-          error: null,
-        };
+        if (included.has("status")) {
+          await options.readJob?.("active");
+          return {
+            data: options.activeJob ? { id: jobId, status: "processing", pdf_url: null, error_message: null, signature_id: null } : null,
+            error: null,
+          };
+        }
+        if (equal.get("status") === "done") {
+          await options.readJob?.("done");
+          return {
+            data: { id: jobId, status: "done", pdf_url: pdfUrl, error_message: null, signature_id: null },
+            error: null,
+          };
+        }
       }
-      if (table === "surat_linked_documents" && recommendation) return {
+      if (table === "surat_linked_documents" && options.recommendation) return {
         data: { child_surat_id: suratId },
         error: null,
       };
@@ -56,18 +73,21 @@ const createQuery = (table: string, tokenInserts: unknown[], recommendation = fa
       };
       return { data: null, error: null };
     },
-    then: (resolve: (value: unknown) => unknown) => resolve({ data: [], error: null }),
+    then: (resolve: (value: unknown) => unknown) => resolve({
+      data: table === "surat_signatures" && options.signer ? [{ id: "signature-id", user_id: userId, verifier_snapshot: [] }] : [],
+      error: null,
+    }),
   };
   return builder;
 };
 
-const createClients = ({ recommendation = false } = {}) => {
+const createClients = (options: PreviewFixtureOptions = {}) => {
   const tokenInserts: unknown[] = [];
   const supabase = {
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: userId } }, error: null })) },
-    from: vi.fn((table: string) => createQuery(table, tokenInserts, recommendation)),
+    from: vi.fn((table: string) => createQuery(table, tokenInserts, options)),
     rpc: vi.fn(async (name: string) => {
-      if (name === "enqueue_recommendation_pdf_job" && recommendation) return {
+      if (name === "enqueue_recommendation_pdf_job" && options.recommendation) return {
         data: { id: jobId, status: "done", pdf_url: pdfUrl },
         error: null,
       };
@@ -109,6 +129,7 @@ describe("PDF job preview fast path", () => {
       viewUrl: expect.stringMatching(/^\/api\/files\/view\/[A-Za-z0-9_-]+\/Permohonan_Aset\.pdf$/),
     });
     expect(clients.tokenInserts).toHaveLength(1);
+    expect(clients.supabase.from).not.toHaveBeenCalledWith("surat_attachments");
   });
 
   it("authenticates only once when a polled PDF job becomes ready", async () => {
@@ -125,6 +146,7 @@ describe("PDF job preview fast path", () => {
     expect(response.json()).toMatchObject({ status: "done", jobId, viewUrl: expect.stringMatching(/^\/api\/files\/view\//) });
     expect(clients.supabase.auth.getUser).toHaveBeenCalledTimes(1);
     expect(clients.tokenInserts).toHaveLength(1);
+    expect(clients.supabase.from).not.toHaveBeenCalledWith("surat_attachments");
   });
 
   it("returns the current recommendation PDF without queueing another render", async () => {
@@ -152,6 +174,67 @@ describe("PDF job preview fast path", () => {
       p_requested_by: userId,
       p_refresh: false,
     });
+    expect(clients.tokenInserts).toHaveLength(1);
+  });
+
+  it("starts active and cached-job reads together and preserves active-job priority", async () => {
+    let releaseReads!: () => void;
+    const barrier = new Promise<void>((resolve) => { releaseReads = resolve; });
+    const readJob = vi.fn(async (_kind: "active" | "done") => barrier);
+    const clients = createClients({ readJob, activeJob: true });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const pendingResponse = booted!.app.inject({
+      method: "GET",
+      url: `/api/documents/${suratId}/pdf`,
+      headers: { authorization: "Bearer session-token" },
+    }).then((response) => response);
+
+    try {
+      await vi.waitFor(() => expect(readJob.mock.calls).toEqual([["active"], ["done"]]));
+    } finally {
+      releaseReads();
+    }
+    const response = await pendingResponse;
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "processing", jobId });
+    expect(clients.tokenInserts).toHaveLength(0);
+  });
+
+  it("allows the assigned signer without loading unrelated attachments", async () => {
+    const clients = createClients({ createdBy: "other-requester", signer: true });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({
+      method: "GET", url: `/api/documents/${suratId}/pdf`,
+      headers: { authorization: "Bearer session-token" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "ready" });
+    expect(clients.supabase.from).toHaveBeenCalledWith("surat_signatures");
+    expect(clients.supabase.from).not.toHaveBeenCalledWith("surat_attachments");
+  });
+
+  it("rejects another user before reading jobs or minting a viewer token", async () => {
+    const clients = createClients({ createdBy: "other-requester" });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({
+      method: "GET", url: `/api/documents/${suratId}/pdf`,
+      headers: { authorization: "Bearer session-token" },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(clients.supabase.from).not.toHaveBeenCalledWith("document_pdf_jobs");
+    expect(clients.tokenInserts).toHaveLength(0);
+  });
+
+  it("still loads attachment references for the arbitrary file-token route", async () => {
+    const clients = createClients();
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({
+      method: "POST",
+      url: `/api/documents/${suratId}/file-token?path=${encodeURIComponent("dokumen_surat/staging/source.xlsx")}`,
+      headers: { authorization: "Bearer session-token" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(clients.supabase.from).toHaveBeenCalledWith("surat_attachments");
     expect(clients.tokenInserts).toHaveLength(1);
   });
 });

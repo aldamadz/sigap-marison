@@ -4217,7 +4217,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
   return result;
 };
 
-const getAuthorizedSurat = async (suratId, token, authenticatedUser = null) => {
+const getAuthorizedSurat = async (suratId, token, authenticatedUser = null, { includeAttachments = true } = {}) => {
   if (!supabase) throw new Error("Supabase server credentials are not configured.");
 
   let userRes = authenticatedUser ? { user: authenticatedUser } : null;
@@ -4248,10 +4248,12 @@ const getAuthorizedSurat = async (suratId, token, authenticatedUser = null) => {
       .from("surat_signatures")
       .select("id, user_id, verifier_snapshot, file_path_snap, pdf_path_snap")
       .eq("surat_id", suratId),
-    supabase
-      .from("surat_attachments")
-      .select("file_url")
-      .eq("surat_id", suratId),
+    includeAttachments
+      ? supabase
+        .from("surat_attachments")
+        .select("file_url")
+        .eq("surat_id", suratId)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (signaturesRes.error) console.error("getAuthorizedSurat signatures query failed:", signaturesRes.error);
@@ -4303,7 +4305,7 @@ const addPdfViewerAccess = async (result, surat, user) => {
 };
 
 const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = null } = {}) => {
-  const { surat, user } = await getAuthorizedSurat(suratId, token);
+  const { surat, user } = await getAuthorizedSurat(suratId, token, null, { includeAttachments: false });
 
   if (!surat.file_path) throw new Error("Sumber dokumen belum tersedia.");
 
@@ -4353,18 +4355,6 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
 
   if (signatureId) activeJobQuery = activeJobQuery.eq("signature_id", signatureId);
 
-  const { data: activeJob, error: activeJobError } = await activeJobQuery.maybeSingle();
-  if (activeJobError) throw activeJobError;
-  if (activeJob) {
-    return {
-      status: activeJob.status,
-      jobId: activeJob.id,
-      pdfUrl: activeJob.pdf_url,
-      error: activeJob.error_message,
-      signatureId: activeJob.signature_id,
-    };
-  }
-
   let latestDoneJobQuery = supabase
     .from("document_pdf_jobs")
     .select("id, status, pdf_url, error_message, signature_id")
@@ -4377,7 +4367,23 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
 
   if (signatureId) latestDoneJobQuery = latestDoneJobQuery.eq("signature_id", signatureId);
 
-  const { data: latestDoneJob, error: latestDoneJobError } = await latestDoneJobQuery.maybeSingle();
+  // Preserve active-job priority without serial database round trips on a cache hit.
+  const [activeJobResult, latestDoneJobResult] = await Promise.all([
+    activeJobQuery.maybeSingle(),
+    latestDoneJobQuery.maybeSingle(),
+  ]);
+  const { data: activeJob, error: activeJobError } = activeJobResult;
+  if (activeJobError) throw activeJobError;
+  if (activeJob) {
+    return {
+      status: activeJob.status,
+      jobId: activeJob.id,
+      pdfUrl: activeJob.pdf_url,
+      error: activeJob.error_message,
+      signatureId: activeJob.signature_id,
+    };
+  }
+  const { data: latestDoneJob, error: latestDoneJobError } = latestDoneJobResult;
   if (latestDoneJobError) throw latestDoneJobError;
   if (latestDoneJob?.pdf_url && !refresh) {
     return addPdfViewerAccess({
@@ -4429,7 +4435,7 @@ const getPdfJobStatus = async (jobId, token) => {
     throw err;
   }
 
-  const { surat, user } = await getAuthorizedSurat(job.surat_id, token, userRes.user);
+  const { surat, user } = await getAuthorizedSurat(job.surat_id, token, userRes.user, { includeAttachments: false });
   return addPdfViewerAccess({ status: job.status, jobId: job.id, signatureId: job.signature_id, pdfUrl: job.pdf_url, error: job.error_message }, surat, user);
 };
 

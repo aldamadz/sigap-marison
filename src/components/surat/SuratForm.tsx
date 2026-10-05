@@ -916,6 +916,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const usageUsesProject = selectedUsage && activeUsageData
     ? activeUsageData.module.usesProjectForUsage?.(selectedUsage) ?? true
     : true;
+  const allowsOptionalProject = Boolean(selectedUsage && activeUsageData
+    && activeUsageData.module.allowsOptionalProjectForUsage?.(selectedUsage));
   // Single source of truth: status "Tanpa Proyek" hidup di form_input_data
   // (milik modul Dana), bukan useState orchestrator.
   const isGeneralFund = formData.form_input_data.fund_without_project === true;
@@ -3690,14 +3692,16 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   <div className="space-y-2 animate-in slide-in-from-top-2">
                     <Label className="ml-1 flex items-center gap-2 text-xs font-semibold text-primary">
                       <Briefcase className="w-3 h-3" />
-                      {requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
+                      {allowsOptionalProject ? "Proyek Cabang (opsional)" : requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
                     </Label>
-                    {hasRegisteredProjectCandidates && projectSelectionOptions.length > 0 ? (
-                      <Select disabled={!!generatedNoSurat} value={formData.project_id} onValueChange={handleProjectChange}>
+                    {allowsOptionalProject || (hasRegisteredProjectCandidates && projectSelectionOptions.length > 0) ? (
+                      <Select disabled={!!generatedNoSurat} value={formData.project_id || (allowsOptionalProject ? "without-project" : "")}
+                        onValueChange={value => handleProjectChange(value === "without-project" ? "" : value)}>
                         <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
                           <SelectValue placeholder="Pilih Proyek..." />
                         </SelectTrigger>
                         <SelectContent>
+                          {allowsOptionalProject && <SelectItem value="without-project">Tanpa proyek</SelectItem>}
                           {projectSelectionOptions.map((p: MasterRecord) => {
                             const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
                             const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;

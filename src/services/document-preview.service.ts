@@ -112,6 +112,7 @@ export const documentPreviewService = {
     options: { refresh?: boolean; signatureId?: string | null; pollIntervalMs?: number; timeoutMs?: number } = {}
   ): Promise<PdfJobResponse> {
     const initial = await this.requestPdfJob(suratId, options);
+    if (initial.status === "failed") throw new Error(initial.error || "Gagal membuat PDF dokumen.");
     if ((initial.status === "ready" || initial.status === "done") && initial.pdfUrl) {
       return initial;
     }
@@ -120,10 +121,12 @@ export const documentPreviewService = {
 
     const startedAt = Date.now();
     const timeoutMs = options.timeoutMs ?? 180000;
-    const pollIntervalMs = options.pollIntervalMs ?? 2000;
+    const pollIntervalMs = options.pollIntervalMs ?? 1000;
+    let delay = Math.min(pollIntervalMs, 500);
 
     while (Date.now() - startedAt < timeoutMs) {
-      await sleep(pollIntervalMs);
+      await sleep(delay);
+      delay = pollIntervalMs;
       const status = await this.getJobStatus(initial.jobId);
       if ((status.status === "done" || status.status === "ready") && status.pdfUrl) {
         return status;

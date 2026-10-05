@@ -845,13 +845,14 @@ export const suratService = {
         middleCode = `${deptCode}.${tIndex}`;
       } else {
         const projCode = projectRes.data?.code || defaultProjectCode || "000";
+        const projectSegment = isBranchKeu1WithoutProject ? "" : `-${projCode}`;
         if (office?.kedudukan === "KC") {
-          middleCode = `${office.code}-${projCode}.${dIndex}.${tIndex}`;
+          middleCode = `${office.code}${projectSegment}.${dIndex}.${tIndex}`;
         } else {
           const { data: parent } = await supabase
             .from("master_offices").select("code").eq("id", office?.parent_id).single();
           const parentCode = parent?.code || "??";
-          middleCode = `${parentCode}.${office?.code}-${projCode}.${dIndex}.${tIndex}`;
+          middleCode = `${parentCode}.${office?.code}${projectSegment}.${dIndex}.${tIndex}`;
         }
       }
 

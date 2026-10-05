@@ -48,10 +48,13 @@ export const fundModule: UsageModule = {
     requiresMasterProjectMapping: true,
   },
   requiresMasterProjectMappingForUsage(usage) {
-    return !isKeu1Form(usage.master_forms);
+    return !isKeu1Form(usage.master_forms) || usage.scope_type === "cabang";
   },
   usesProjectForUsage(usage) {
-    return !isKeu1Form(usage.master_forms);
+    return !isKeu1Form(usage.master_forms) || usage.scope_type === "cabang";
+  },
+  allowsOptionalProjectForUsage(usage) {
+    return isKeu1Form(usage.master_forms) && usage.scope_type === "cabang";
   },
   renderContextPanel(ctx) {
     return isKeu1Usage(ctx) ? null : <FundContextPanel ctx={ctx} />;
@@ -128,7 +131,11 @@ export const fundModule: UsageModule = {
     return input;
   },
   validateNumberContext(ctx): NumberContextIssue[] {
-    if (isKeu1Usage(ctx)) return [];
+    if (isKeu1Usage(ctx)) {
+      return !ctx.isPusatSelected && ctx.formData.project_id && !ctx.marisonProject?.ready
+        ? [{ title: "Proyek Belum Terhubung", description: "Pilih proyek yang siap digunakan atau pilih Tanpa proyek." }]
+        : [];
+    }
     const fundWithoutProject = ctx.input.fund_without_project === true;
     if (!fundWithoutProject && !ctx.formData.project_id) {
       return [{
@@ -173,7 +180,7 @@ export const fundModule: UsageModule = {
       else delete next.free_cash_sisa_bulan_lalu;
       next.fund_amount = financial.kebutuhanDana;
       next.fund_type = "operational";
-      next.fund_without_project = true;
+      next.fund_without_project = ctx.isPusatSelected || !ctx.formData.project_id;
     } else {
       const fundItems = normalizeFundSubmissionItems(next.items);
       next.items = fundItems;
