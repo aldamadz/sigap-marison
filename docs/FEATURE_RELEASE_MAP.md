@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## SUR-04A Incremental Verifier Attachments (2026-10-05, Issue #389)
+
+- Status: staging candidate; production unchanged.
+- Components: `ApprovalAttachmentPicker`, `InboxPage`; depends on SUR-04.
+- Repeated selections append queued files; individual queued files can be removed.
+- Persisted optional evidence is retained. New files persist through the canonical
+  verification action. Count/type/size limits and authorization remain unchanged.
+- No migration, worker, or vendor contract change.
+
 ## UI-03 Theme Bootstrap Cascade (2026-10-05, Issue #459)
 
 - Branch `fix/theme-bootstrap-cascade-01` from main; staging validation first.
