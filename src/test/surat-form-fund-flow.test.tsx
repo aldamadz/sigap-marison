@@ -195,7 +195,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     await mountFormWithUsage(keu1Usage, CURRENT_PROFILE_KC);
     await selectForm(/KAS KECIL/i);
     await selectUsage(/Kas Kecil/i);
-    expect(screen.queryByText("Proyek Cabang")).not.toBeInTheDocument();
+    expect(screen.getByText("Proyek Cabang (opsional)")).toBeInTheDocument();
     expect(screen.queryByText("Proyek Tujuan")).not.toBeInTheDocument();
     await selectLetterType();
     await selectEntity();
@@ -208,6 +208,32 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
         fund_without_project: true,
       }),
     }));
+    assertStrictServiceCalls();
+  });
+
+  it("keeps an optional KEU 1 project in the number and draft payload, and permits clearing it", async () => {
+    serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_WITH_PROJECTS);
+    const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage,
+      scope_type: "cabang", name: "Pengajuan Kas Kecil - Kantor Cabang",
+      master_forms: { ...usage.master_forms, nama_form: "FORM PENGAJUAN KAS KECIL", nomor_form: "FM-UAI.KEU-01-00" },
+    }));
+    await mountFormWithUsage(usages, CURRENT_PROFILE_KC);
+    await selectForm(/KAS KECIL/i);
+    await selectUsage(/Kas Kecil/i);
+    await selectOptionByLabel(/Proyek Cabang \(opsional\)/i, /Griya Asri/i);
+    await selectOptionByLabel(/Proyek Cabang \(opsional\)/i, /^Tanpa proyek$/i);
+    await selectOptionByLabel(/Proyek Cabang \(opsional\)/i, /Griya Asri/i);
+    await selectLetterType();
+    await selectEntity();
+    await clickGetNumber();
+    expect(serviceMock.generateNoSurat).toHaveBeenCalledWith(expect.objectContaining({
+      project_id: "proj-001",
+      form_input_data: expect.objectContaining({ fund_without_project: false,
+        requested_project: expect.objectContaining({ id: 19, code: "GA01" }) }),
+    }));
+    const draft = serviceMock.createRegistrationDraft.mock.calls[0][0];
+    expect(draft.payload.formData.project_id).toBe("proj-001");
+    expect(draft.payload.formData.form_input_data.fund_without_project).toBe(false);
     assertStrictServiceCalls();
   });
 });

@@ -23,6 +23,8 @@ const makerMigration = readFileSync("supabase/migrations/20261001120000_contextu
 const makerAssertions = readFileSync("supabase/tests/contextual_first_maker_candidates.integration.sql", "utf8");
 const bmMigration = readFileSync("supabase/migrations/20261001130000_keu1_related_branch_manager.sql", "utf8");
 const bmAssertions = readFileSync("supabase/tests/keu1_branch_manager_candidates.integration.sql", "utf8");
+const optionalProjectMigration = readFileSync("supabase/migrations/20261005090000_keu1_optional_branch_project.sql", "utf8");
+const optionalProjectAssertions = readFileSync("supabase/tests/keu1_optional_project.integration.sql", "utf8");
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -324,6 +326,9 @@ ${makerAssertions}
 ${bmMigration}
 ${bmMigration}
 ${bmAssertions}
+${optionalProjectMigration}
+${optionalProjectMigration}
+${optionalProjectAssertions}
 `;
 
 const run = (args, input = "") => {
@@ -355,6 +360,7 @@ try {
   }
   process.stdout.write(output);
   if (!output.includes("Contextual first maker: all assertions passed")) throw new Error("Maker regression marker missing.");
+  if (!output.includes("KEU 1 optional project: all assertions passed")) throw new Error("Optional project regression marker missing.");
   if (!output.includes("KEU 1 submit and first signer: all assertions passed")) {
     throw new Error("KEU 1 submit regression marker missing.");
   }
