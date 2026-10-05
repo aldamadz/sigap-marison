@@ -16,21 +16,25 @@
     <meta property="og:image" content="/og-image.png" />
 
     <style>
-      :root {
-        --font-sigap: 'Geist Variable', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      
-      body {
-        font-family: var(--font-sigap);
-        background-color: #fcfcfd; /* Subtle off-white */
-        margin: 0;
-        -webkit-font-smoothing: antialiased;
-        color: #0f172a;
-      }
+      @layer theme, base, components, utilities;
 
-      /* Loading State CSS */
-      #root {
-        min-height: 100vh;
+      /* Bootstrap styles share the theme layer order used by the app stylesheet. */
+      @layer base {
+        :root {
+          --font-sigap: 'Geist Variable', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body {
+          font-family: var(--font-sigap);
+          background-color: hsl(var(--background, 210 20% 97%));
+          margin: 0;
+          -webkit-font-smoothing: antialiased;
+          color: hsl(var(--foreground, 220 31% 11%));
+        }
+
+        #root {
+          min-height: 100vh;
+        }
       }
     </style>
   </head>
