@@ -175,12 +175,11 @@ export function buildWorkEntryStates(
 /**
  * Batas preview pekerjaan per hari pada tampilan Minggu.
  *
- * Desktop/tablet memuat empat preview, mobile tiga preview. Kontrak ini
- * menggantikan scroll internal per kolom: kolom Minggu selalu punya tinggi
- * terbatas dan sisa pekerjaan dibuka lewat tombol "+N pekerjaan lainnya".
+ * Desktop/tablet dan mobile memuat dua preview, supaya kolom Minggu ringkas
+ * dan sisa pekerjaan dibuka lewat tombol "+N pekerjaan lainnya".
  */
-export const WORK_WEEK_PREVIEW_LIMIT_DESKTOP = 4;
-export const WORK_WEEK_PREVIEW_LIMIT_MOBILE = 3;
+export const WORK_WEEK_PREVIEW_LIMIT_DESKTOP = 2;
+export const WORK_WEEK_PREVIEW_LIMIT_MOBILE = 2;
 
 export function getWorkWeekPreviewLimit(isMobile: boolean): number {
   return isMobile ? WORK_WEEK_PREVIEW_LIMIT_MOBILE : WORK_WEEK_PREVIEW_LIMIT_DESKTOP;

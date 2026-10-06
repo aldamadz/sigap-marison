@@ -720,11 +720,11 @@ describe("work-progress", () => {
     expect(groups[0].entries).toHaveLength(0);
   });
 
-  it("CAL-03 F4A: batas preview Minggu 4 desktop/tablet dan 3 mobile", () => {
-    expect(WORK_WEEK_PREVIEW_LIMIT_DESKTOP).toBe(4);
-    expect(WORK_WEEK_PREVIEW_LIMIT_MOBILE).toBe(3);
-    expect(getWorkWeekPreviewLimit(false)).toBe(4);
-    expect(getWorkWeekPreviewLimit(true)).toBe(3);
+  it("CAL-03 F4A: batas preview Minggu 2 desktop/tablet dan 2 mobile", () => {
+    expect(WORK_WEEK_PREVIEW_LIMIT_DESKTOP).toBe(2);
+    expect(WORK_WEEK_PREVIEW_LIMIT_MOBILE).toBe(2);
+    expect(getWorkWeekPreviewLimit(false)).toBe(2);
+    expect(getWorkWeekPreviewLimit(true)).toBe(2);
   });
 
   it("CAL-03 F4A: preview Minggu menghitung +N dan menjaga total seluruh entry", () => {
