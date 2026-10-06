@@ -223,7 +223,7 @@ export function WeeklyWorkView({
                           setPanel({ date: summary.date, anchor: event.currentTarget });
                         }}
                         aria-label={`Buka ${hiddenCount} pekerjaan lainnya pada ${formatWorkDateShort(summary.date)}`}
-                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm border border-border/60 bg-muted/30 px-2 text-xs font-medium text-primary underline-offset-2 hover:border-primary/30 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm border border-border/60 bg-muted/30 px-1 py-1.5 text-center text-[11px] leading-tight font-medium text-primary hover:border-primary/30 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2 sm:text-xs"
                       >
                         +{hiddenCount} pekerjaan lainnya
                       </button>
