@@ -2,8 +2,9 @@
  * Aksi cepat siklus hidup pekerjaan di panel detail (CAL-03 F5).
  *
  * Aturan produk:
- * - "Lanjutkan hari ini" dan "Ubah jadwal" memindahkan tanggal kerja pada
- *   baris yang sama (`workDate`), tidak pernah membuat pekerjaan baru;
+ * - "Lanjutkan hari ini" mengubah status menjadi `in_progress` tanpa
+ *   memindahkan tanggal kerja; "Ubah jadwal" mengubah `workDate`;
+ * - kedua aksi memperbarui baris yang sama, tidak membuat pekerjaan baru;
  * - "Terhambat" dan "Selesai" mengubah status pada baris yang sama dan
  *   meminta input lanjutan secara inline (alasan / hasil pekerjaan);
  * - seluruh perubahan dikirim sebagai satu PATCH lewat `onSave`.

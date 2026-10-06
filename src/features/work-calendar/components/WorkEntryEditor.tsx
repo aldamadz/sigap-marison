@@ -177,7 +177,7 @@ export function WorkEntryEditor({ entry, isSaving, onSubmit, onClose }: WorkEntr
             className="h-11 w-full rounded-sm border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <p className="text-xs text-muted-foreground">
-            Opsional. Tanpa tenggat, tanggal kerja menjadi tenggat.
+            Opsional. Kosong berarti tanpa tenggat.
           </p>
           {errorText("dueDate") && <p className="text-xs text-destructive">{errorText("dueDate")}</p>}
         </div>

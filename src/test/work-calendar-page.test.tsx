@@ -91,6 +91,7 @@ function createMockQueryBuilder<T>(result: { data: T; error: { message: string }
   const builder = {
     eq: vi.fn().mockImplementation(() => builder),
     gte: vi.fn().mockImplementation(() => builder),
+    or: vi.fn().mockImplementation(() => builder),
     lte: vi.fn().mockImplementation(() => builder),
     is: vi.fn().mockImplementation(() => builder),
     order: vi.fn().mockImplementation(() => builder),

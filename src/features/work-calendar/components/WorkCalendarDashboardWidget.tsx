@@ -117,7 +117,7 @@ export function WorkCalendarDashboardWidget({
               {summary.overdueCount}
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Belum selesai dan tanggal kerja sudah lewat
+              Belum selesai dan tenggat sudah lewat
             </p>
           </div>
         </div>

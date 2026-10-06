@@ -49,6 +49,7 @@ import type {
 import { isWorkEntryConflictError } from "../lib/work-entry-conflict";
 import { formatWorkDateFull, getWorkCalendarDateRange } from "../lib/work-calendar-date";
 import { getWorkEntryStatusFollowUp } from "../lib/work-entry-status";
+import { isWorkEntryVisibleInRange, selectWorkEntriesForDate } from "../lib/work-entry-carryover";
 import {
   computeWorkProgress,
   createWorkCalendarPermissions,
@@ -162,6 +163,12 @@ export function WorkCalendarWorkspace({  currentUser,
   const effectiveWorkSettings =
     workSettingsOverride ?? loadedWorkSettings ?? DEFAULT_WORK_CALENDAR_WORK_SETTINGS;
   const effectiveHolidays = holidaysOverride ?? loadedHolidays ?? [];
+  const [exportSettingsStatus, setExportSettingsStatus] = useState<"loading" | "ready" | "error">(
+    settingsRepository && !(workSettingsOverride && holidaysOverride) ? "loading" : "ready",
+  );
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportControllerRef = useRef<AbortController | null>(null);
 
   const visibleMetaDates = useMemo<readonly WorkDate[]>(() => {
     if (calendar.view === "month") return derived.monthDates;
@@ -193,8 +200,10 @@ export function WorkCalendarWorkspace({  currentUser,
 
     const controller = new AbortController();
     let active = true;
+    setExportSettingsStatus("loading");
 
     const load = async (): Promise<void> => {
+      let failed = false;
       if (!workSettingsOverride) {
         try {
           const settings = await settingsRepository.getWorkSettings(controller.signal);
@@ -203,6 +212,7 @@ export function WorkCalendarWorkspace({  currentUser,
         } catch {
           if (!active || controller.signal.aborted) return;
           setLoadedWorkSettings(DEFAULT_WORK_CALENDAR_WORK_SETTINGS);
+          failed = true;
         }
       }
 
@@ -218,8 +228,10 @@ export function WorkCalendarWorkspace({  currentUser,
         } catch {
           if (!active || controller.signal.aborted) return;
           setLoadedHolidays([]);
+          failed = true;
         }
       }
+      if (active && !controller.signal.aborted) setExportSettingsStatus(failed ? "error" : "ready");
     };
 
     void load();
@@ -229,6 +241,11 @@ export function WorkCalendarWorkspace({  currentUser,
       controller.abort();
     };
   }, [settingsRepository, workSettingsOverride, holidaysOverride, metaRange.fromDate, metaRange.toDate]);
+
+  useEffect(() => {
+    setExportError(null);
+    return () => exportControllerRef.current?.abort();
+  }, [calendar.view, calendar.anchorDate, currentUser.id]);
 
   /**
    * Sinkronisasi URL (React Router) untuk tanggal acuan dan tampilan:
@@ -486,8 +503,8 @@ export function WorkCalendarWorkspace({  currentUser,
 
   const monthPanelEntries = useMemo(() => {
     if (!monthPanelDate) return [] as WorkEntry[];
-    return calendar.entries.filter((entry) => entry.workDate === monthPanelDate);
-  }, [calendar.entries, monthPanelDate]);
+    return selectWorkEntriesForDate(calendar.entries, monthPanelDate, calendar.today);
+  }, [calendar.entries, monthPanelDate, calendar.today]);
 
   const monthPanelProgress = useMemo<WorkProgressCounts>(
     () => computeWorkProgress(monthPanelEntries, calendar.today),
@@ -1039,6 +1056,46 @@ export function WorkCalendarWorkspace({  currentUser,
     today: calendar.today,
   });
 
+  const handleExportPdf = async (): Promise<void> => {
+    if (exportControllerRef.current || calendar.isLoading || calendar.error || calendar.view === "team") return;
+    if (exportSettingsStatus !== "ready") {
+      setExportError("Pengaturan jam kerja atau hari libur belum berhasil dimuat. Muat ulang halaman lalu coba kembali.");
+      return;
+    }
+    const controller = new AbortController();
+    exportControllerRef.current = controller;
+    setIsExporting(true);
+    setExportError(null);
+    const range = { ...metaRange };
+    const exportEntries = filterEntries(calendar.ownEntries).filter((entry) =>
+      isWorkEntryVisibleInRange(entry, range.fromDate, range.toDate, calendar.today),
+    );
+    const snapshotNow = now ? now() : new Date();
+    try {
+      const { exportWorkCalendarPdf } = await import("../lib/work-calendar-pdf");
+      if (controller.signal.aborted) return;
+      const pdf = await exportWorkCalendarPdf({
+        entries: exportEntries,
+        repository,
+        owner: currentUser,
+        settings: effectiveWorkSettings,
+        holidays: effectiveHolidays,
+        fromDate: range.fromDate,
+        toDate: range.toDate,
+        now: snapshotNow,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) pdf.save(`kalender-kerja-${range.fromDate}-${range.toDate}.pdf`);
+    } catch {
+      if (!controller.signal.aborted) setExportError("PDF belum dapat dibuat. Pastikan riwayat pekerjaan dapat dimuat, lalu coba kembali.");
+    } finally {
+      if (exportControllerRef.current === controller) {
+        exportControllerRef.current = null;
+        setIsExporting(false);
+      }
+    }
+  };
+
   return (
     <div className="sigap-page work-calendar-scope">
       <WorkCalendarToolbar
@@ -1058,6 +1115,9 @@ export function WorkCalendarWorkspace({  currentUser,
         onToday={calendar.goToToday}
         onSelectOwner={(ownerId) => calendar.setOwnerFilterId(ownerId)}
         onAdd={handleAdd}
+        onExportPdf={() => { void handleExportPdf(); }}
+        exportDisabled={calendar.isLoading || calendar.error !== null || filterEntries(calendar.ownEntries).length === 0 || exportSettingsStatus === "loading"}
+        isExporting={isExporting}
       >
         {calendar.view === "day" ? (
           <div className="space-y-2.5 border-t border-border pt-2.5">
@@ -1076,6 +1136,8 @@ export function WorkCalendarWorkspace({  currentUser,
           </div>
         ) : null}
       </WorkCalendarToolbar>
+
+      {exportError ? <p role="alert" className="text-sm text-destructive">{exportError}</p> : null}
 
       {mutationError && (
         <div

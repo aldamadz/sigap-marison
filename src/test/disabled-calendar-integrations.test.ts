@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFileSync(path, "utf8");
 
 describe("disabled work calendar integrations", () => {
-  it("keeps production disabled and staging enabled", () => {
-    expect(source("docker-compose.prod.yml")).toContain('VITE_WORK_CALENDAR_ENABLED: "false"');
+  it("enables the approved calendar release in both environments", () => {
+    expect(source("docker-compose.prod.yml")).toContain('VITE_WORK_CALENDAR_ENABLED: "true"');
     expect(source("docker-compose.staging.yml")).toContain('VITE_WORK_CALENDAR_ENABLED: "true"');
   });
 

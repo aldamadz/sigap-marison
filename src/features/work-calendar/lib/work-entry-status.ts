@@ -115,8 +115,8 @@ export function isUnfinishedWorkEntryStatus(status: WorkEntryStatus): boolean {
 }
 
 /**
- * Tenggat efektif sebuah pekerjaan (CAL-03 F5): `dueDate` bila diisi,
- * jika tidak `workDate` (tenggat default = tanggal kerja).
+ * Compatibility date for existing labels. This fallback is not a deadline:
+ * overdue must inspect the explicit dueDate instead.
  */
 export function getWorkEntryEffectiveDueDate(
   entry: Pick<WorkEntry, "workDate"> & { dueDate?: WorkDate | null },
@@ -130,16 +130,12 @@ export type WorkEntryDeadlineInput = Pick<WorkEntry, "status" | "workDate"> & {
 };
 
 /**
- * Overdue diturunkan: status belum selesai dan tenggat efektif
- * (`dueDate ?? workDate`) sudah lewat dibanding `today`. Entry `blocked`
- * pada tanggal lampau tetap overdue.
- *
- * `dueDate` bersifat opsional agar pemanggil lama yang hanya memiliki
- * `workDate` tetap kompatibel: tanpa tenggat, overdue mengikuti tanggal kerja.
+ * Unfinished work is overdue only after its explicitly assigned deadline.
+ * An absent deadline never makes an entry overdue, including blocked work.
  */
 export function isWorkEntryOverdue(entry: WorkEntryDeadlineInput, today: string): boolean {
   if (isFinalWorkEntryStatus(entry.status)) return false;
-  return getWorkEntryEffectiveDueDate(entry) < today;
+  return entry.dueDate != null && entry.dueDate < today;
 }
 
 /**
@@ -163,7 +159,7 @@ export function isWorkEntryCompletedLate(
 export const WORK_ENTRY_OVERDUE_META = {
   key: "overdue",
   label: "Terlambat",
-  description: "Belum selesai dan tanggal kerja sudah lewat",
+  description: "Belum selesai dan tenggat sudah lewat",
   icon: Hourglass,
   toneClassName: "text-overdue",
 } as const;
