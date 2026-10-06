@@ -251,6 +251,11 @@ describe("surat-wizard-validation — validateStep1ForNumberGeneration", () => {
     expect(r.errorTitle).toBe("Proyek Cabang Belum Dipilih");
   });
 
+  it("accepts marketing_cost when generating a fund number", () => {
+    expect(validateStep1ForNumberGeneration(validAssetInput({ requestCategory: "non_asset", fundWithoutProject: false,
+      projectId: "proj-1", isMarisonProjectReady: true, fundType: "marketing_cost" })).valid).toBe(true);
+  });
+
   it("18. non_asset: passes with project ready + production_cost", () => {
     const r = validateStep1ForNumberGeneration(
       validAssetInput({

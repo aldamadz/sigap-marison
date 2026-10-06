@@ -31,6 +31,7 @@
  * callers' effective behaviour.
  */
 import { normalizeTableRows } from "@/components/surat/form/surat-form-schema";
+import { isKeu10Form } from "./keu10-form";
 import type {
   LinkedDocumentContext,
   MasterRecord,
@@ -182,6 +183,10 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
       .filter(Boolean).join(" ");
   }
 
+  if (isKeu10Form({ nomor_form: formNumber })) {
+    return [itemText ? `Pengajuan Biaya Tanah dan Izin: ${itemText}` : "Pengajuan Biaya Tanah dan Izin", officeSuffix].filter(Boolean).join(" ");
+  }
+
   if (category === "unit") {
     const count = Number((formInputData as Record<string, unknown>).requested_unit_count || 0);
     const project = (formInputData as Record<string, unknown>).requested_project as
@@ -204,6 +209,8 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
       : category === "non_asset"
         ? String(formInputData.fund_type) === "production_cost"
           ? "Pengajuan Dana Produksi"
+          : String(formInputData.fund_type) === "marketing_cost"
+            ? "Pengajuan Dana Marketing"
           : "Pengajuan Dana Operasional"
         : "Pengajuan";
   return [

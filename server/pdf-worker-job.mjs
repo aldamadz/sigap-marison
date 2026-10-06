@@ -110,6 +110,37 @@ export const createKeu1JobHandler = ({
   return await renderKeu1Pdf(documentData, { logoPath });
 };
 
+export const createKeu10JobHandler = ({
+  supabase,
+  isKeu10Document,
+  resolveKeu10MasterForm,
+  normalizeKeu10DocumentData,
+  renderKeu10Pdf,
+  logoPath,
+}) => async (job) => {
+  if (job.render_payload?.kind === "keu10") {
+    const payload = job.render_payload;
+    if (payload.document?.id !== job.surat_id || !isKeu10Document(payload.document)
+      || !Array.isArray(payload.signatures) || !Number.isSafeInteger(payload.generation) || payload.generation < 1) {
+      throw new Error("Snapshot PDF KEU 10 tidak valid.");
+    }
+    const target = job.signature_id ? payload.signatures.find(signature => signature.id === job.signature_id) : null;
+    if (job.signature_id && !target) throw new Error("Tanda tangan PDF KEU 10 tidak ditemukan dalam versi dokumen.");
+    return renderKeu10Pdf(normalizeKeu10DocumentData(payload.document, {
+      signatures: payload.signatures,
+      targetStep: target?.step_order || null,
+    }), { logoPath });
+  }
+  return createKeu1JobHandler({
+  supabase,
+  isKeu1Document: isKeu10Document,
+  resolveKeu1MasterForm: resolveKeu10MasterForm,
+  normalizeKeu1DocumentData: normalizeKeu10DocumentData,
+  renderKeu1Pdf: renderKeu10Pdf,
+  logoPath,
+  })(job);
+};
+
 export const createRecommendationJobHandler = ({
   supabase,
   normalizeRecommendationDocumentData,

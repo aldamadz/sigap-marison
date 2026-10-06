@@ -1,6 +1,9 @@
 import React from "react";
 import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import { Keu1SubmissionEditor } from "@/components/surat/Keu1SubmissionEditor";
+import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   getFundSubmissionAmount,
   normalizeFundSubmissionItems,
@@ -25,12 +28,48 @@ import { formatRupiahZero } from "@/lib/rupiah";
 import { registerUsageModule } from "../usage-registry";
 import { FundContextPanel } from "./FundContextPanel";
 import { isKeu1Form } from "../../lib/keu1-form";
+import { getKeu10SubmissionAmount, isKeu10Form, normalizeKeu10SubmissionItems, validateKeu10SubmissionItems } from "../../lib/keu10-form";
+import { normalizeKeu10Config } from "../../lib/keu10-config";
+import { getFundSubmissionTypeLabel, isFundSubmissionType } from "./fund-types";
 
-const FUND_TYPES = ["operational", "production_cost"];
+const getFundTypeIssues = (value: unknown): NumberContextIssue[] => isFundSubmissionType(value) ? [] : [{
+  title: "Jenis Pengajuan Dana Wajib Dipilih",
+  description: "Pilih Biaya Operasional, Biaya Produksi, atau Biaya Marketing.",
+}];
 
 const isKeu1Usage = (ctx: UsageModuleContext): boolean => {
   return isKeu1Form(ctx.usage.master_forms);
 };
+
+const getKeu10NumberContextIssues = (ctx: UsageModuleContext): NumberContextIssue[] => {
+  if (!ctx.formData.office_id || ctx.isPusatSelected) {
+    return [{ title: "Cabang Wajib Dipilih", description: "Pilih cabang tujuan pengajuan dana." }];
+  }
+  if (!ctx.formData.project_id) {
+    return [{ title: "Proyek Tujuan Wajib Dipilih", description: "Pilih proyek tujuan pengajuan dana." }];
+  }
+  return ctx.marisonProject?.ready ? [] : [{ title: "Proyek Belum Terhubung", description: "Pilih proyek yang siap digunakan." }];
+};
+
+function Keu10PurposeSelect({ ctx }: { ctx: UsageModuleContext }) {
+  const config = normalizeKeu10Config(ctx.usage.keu10_config);
+  const code = typeof ctx.input.keu10_purpose_code === "string" ? ctx.input.keu10_purpose_code : "";
+  const valid = Boolean(config?.purposes.some((purpose) => purpose.code === code));
+  return (
+    <div className="mb-5 min-w-0 space-y-2">
+      <Label htmlFor="keu10-purpose">Tujuan Pengajuan</Label>
+      <Select value={valid ? code : ""} onValueChange={(value) => ctx.setInputValue("keu10_purpose_code", value)} disabled={!config}>
+        <SelectTrigger id="keu10-purpose" className="h-auto min-h-11 w-full text-left [&>span]:whitespace-normal [&>span]:break-words" aria-required aria-invalid={!valid} aria-describedby="keu10-purpose-error">
+          <SelectValue placeholder="Pilih tujuan pengajuan" />
+        </SelectTrigger>
+        <SelectContent>{config?.purposes.map((purpose) => <SelectItem key={purpose.code} value={purpose.code} className="whitespace-normal break-words">{purpose.label}</SelectItem>)}</SelectContent>
+      </Select>
+      <p id="keu10-purpose-error" className="text-xs text-destructive" role="status">
+        {!config ? "Konfigurasi tujuan pengajuan belum tersedia. Hubungi administrator." : !valid ? "Tujuan pengajuan wajib dipilih." : ""}
+      </p>
+    </div>
+  );
+}
 
 export const fundModule: UsageModule = {
   meta: {
@@ -57,9 +96,12 @@ export const fundModule: UsageModule = {
     return isKeu1Form(usage.master_forms) && usage.scope_type === "cabang";
   },
   renderContextPanel(ctx) {
-    return isKeu1Usage(ctx) ? null : <FundContextPanel ctx={ctx} />;
+    return isKeu1Usage(ctx) ? null : <FundContextPanel ctx={ctx} allowsWithoutProject={!isKeu10Form(ctx.usage.master_forms)} />;
   },
   renderDetailsPanel(ctx) {
+    if (isKeu10Form(ctx.usage.master_forms)) {
+      return <><Keu10PurposeSelect ctx={ctx} /><Keu10SubmissionEditor value={ctx.input.items} onChange={(items) => ctx.setInputValue("items", items)} /></>;
+    }
     if (isKeu1Usage(ctx)) {
       return (
         <Keu1SubmissionEditor
@@ -77,10 +119,19 @@ export const fundModule: UsageModule = {
       />
     );
   },
-  hiddenFieldKeys() {
-    return ["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu"];
+  hiddenFieldKeys(ctx) {
+    return ["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu",
+      ...(isKeu10Form(ctx.usage.master_forms) ? ["total", "grand_total", "keu10_grand_total", "keu1_grand_total", "keu10_purpose_code"] : []),
+    ];
   },
   isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
+    if (field.key === "fund_type") return isKeu1Usage(ctx) || isFundSubmissionType(ctx.input.fund_type);
+    if (isKeu10Form(ctx.usage.master_forms) && field.key === "keu10_purpose_code") {
+      return Boolean(normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.some((purpose) => purpose.code === ctx.input.keu10_purpose_code));
+    }
+    if (isKeu10Form(ctx.usage.master_forms) && ["items", "fund_amount", "total", "grand_total", "keu10_grand_total"].includes(field.key)) {
+      return validateKeu10SubmissionItems(ctx.input.items).length === 0;
+    }
     if (field.key !== "items" && field.key !== "fund_amount") return null;
     if (isKeu1Usage(ctx)) {
       return validateKeu1SubmissionItems(ctx.input.items).length === 0;
@@ -88,6 +139,19 @@ export const fundModule: UsageModule = {
     return validateFundSubmissionItems(ctx.input.items).length === 0;
   },
   validateSubmit(ctx: UsageModuleContext): SubmitIssue[] {
+    if (isKeu10Form(ctx.usage.master_forms)) {
+      const contextIssues = getKeu10NumberContextIssues(ctx);
+      if (contextIssues.length > 0) return contextIssues;
+      const fundTypeIssues = getFundTypeIssues(ctx.input.fund_type);
+      if (fundTypeIssues.length > 0) return fundTypeIssues;
+      const config = normalizeKeu10Config(ctx.usage.keu10_config);
+      if (!config) return [{ title: "Konfigurasi KEU 10 Tidak Valid", description: "Hubungi administrator untuk melengkapi tujuan pengajuan." }];
+      if (!config.purposes.some((purpose) => purpose.code === ctx.input.keu10_purpose_code)) {
+        return [{ title: "Tujuan Pengajuan Wajib Dipilih", description: "Pilih tujuan pengajuan yang tersedia." }];
+      }
+      const first = validateKeu10SubmissionItems(ctx.input.items)[0];
+      return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
+    }
     if (isKeu1Usage(ctx)) {
       const first = validateKeu1SubmissionItems(ctx.input.items)[0];
       if (first) return [{ title: "Rincian Kas Kecil Belum Lengkap", description: first.message }];
@@ -96,10 +160,20 @@ export const fundModule: UsageModule = {
         ? [{ title: "Free Cash Tidak Valid", description: "Isi nominal Free Cash dengan angka Rupiah atau kosongkan." }]
         : [];
     }
+    const fundTypeIssues = getFundTypeIssues(ctx.input.fund_type);
+    if (fundTypeIssues.length > 0) return fundTypeIssues;
     const first = validateFundSubmissionItems(ctx.input.items)[0];
     return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
   },
   buildSummaryFields(ctx: UsageModuleContext): SummaryField[] {
+    if (isKeu10Form(ctx.usage.master_forms)) {
+      return [
+        { key: "fund_type", label: "Jenis Pengajuan Dana", value: getFundSubmissionTypeLabel(ctx.input.fund_type) },
+        { key: "keu10_purpose_code", label: "Tujuan Pengajuan", value: normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.find((purpose) => purpose.code === ctx.input.keu10_purpose_code)?.label || "-" },
+        { key: "items", label: "Rincian Pengajuan Dana", value: normalizeKeu10SubmissionItems(ctx.input.items) },
+        { key: "keu10_grand_total", label: "Grand Total", value: formatRupiahZero(getKeu10SubmissionAmount(ctx.input.items)) },
+      ];
+    }
     if (isKeu1Usage(ctx)) {
       const financial = getKeu1FinancialSummary(ctx.input.items, ctx.input.free_cash_sisa_bulan_lalu);
       return [
@@ -113,12 +187,11 @@ export const fundModule: UsageModule = {
         { key: "fund_amount", label: "Kebutuhan Dana", value: formatRupiahZero(financial.kebutuhanDana) },
       ];
     }
-    const fundType = String(ctx.input.fund_type || "");
     return [
       {
         key: "fund_type",
         label: "Jenis Pengajuan Dana",
-        value: fundType === "production_cost" ? "Biaya Produksi" : "Biaya Operasional",
+        value: getFundSubmissionTypeLabel(ctx.input.fund_type),
       },
       {
         key: "fund_amount",
@@ -127,10 +200,21 @@ export const fundModule: UsageModule = {
       },
     ];
   },
-  reconcileInputForContext(input: FormInputData): FormInputData {
+  reconcileInputForContext(input: FormInputData, ctx): FormInputData {
+    if (isKeu10Form(ctx.usage.master_forms)) {
+      const next: FormInputData = { ...input, fund_without_project: false };
+      delete next.free_cash_sisa_bulan_lalu;
+      delete next.keu1_grand_total;
+      if (!normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.some((purpose) => purpose.code === next.keu10_purpose_code)) delete next.keu10_purpose_code;
+      return next;
+    }
     return input;
   },
   validateNumberContext(ctx): NumberContextIssue[] {
+    if (isKeu10Form(ctx.usage.master_forms)) {
+      const issues = getKeu10NumberContextIssues(ctx);
+      return issues.length > 0 ? issues : getFundTypeIssues(ctx.input.fund_type);
+    }
     if (isKeu1Usage(ctx)) {
       return !ctx.isPusatSelected && ctx.formData.project_id && !ctx.marisonProject?.ready
         ? [{ title: "Proyek Belum Terhubung", description: "Pilih proyek yang siap digunakan atau pilih Tanpa proyek." }]
@@ -149,17 +233,13 @@ export const fundModule: UsageModule = {
         description: "Pilih proyek yang memiliki ID proyek dan kantor external yang valid.",
       }];
     }
-    if (!FUND_TYPES.includes(String(ctx.input.fund_type || ""))) {
-      return [{
-        title: "Jenis Pengajuan Dana Wajib Dipilih",
-        description: "Pilih Biaya Operasional atau Biaya Produksi.",
-      }];
-    }
-    return [];
+    return getFundTypeIssues(ctx.input.fund_type);
   },
-  cleanup(): CleanupResult {
+  cleanup(ctx): CleanupResult {
     return {
-      inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project", "free_cash_sisa_bulan_lalu"],
+      inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project", "free_cash_sisa_bulan_lalu",
+        ...(isKeu10Form(ctx.usage.master_forms) ? ["total", "grand_total", "keu10_grand_total", "keu10_purpose_code"] : []),
+      ],
       resetSelection: ["fundWithoutProject"],
     };
   },
@@ -168,7 +248,16 @@ export const fundModule: UsageModule = {
     next.request_category = "non_asset";
     next.request_mode = "barang";
     delete next.is_aset;
-    if (isKeu1Usage(ctx)) {
+    if (isKeu10Form(ctx.usage.master_forms)) {
+      next.items = normalizeKeu10SubmissionItems(next.items);
+      next.fund_amount = getKeu10SubmissionAmount(next.items);
+      next.fund_without_project = false;
+      delete next.free_cash_sisa_bulan_lalu;
+      delete next.keu1_grand_total;
+      delete next.keu10_grand_total;
+      delete next.total;
+      delete next.grand_total;
+    } else if (isKeu1Usage(ctx)) {
       const keu1Items = normalizeKeu1SubmissionItems(next.items).map((item) => {
         const quantity = Number(item.jumlah) || 0;
         const unitPrice = Number(item.estimasi_harga_satuan) || 0;

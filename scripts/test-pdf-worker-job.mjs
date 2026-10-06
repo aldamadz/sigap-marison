@@ -9,7 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createPgdJobHandler, createRecommendationJobHandler } from "../server/pdf-worker-job.mjs";
+import { createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler } from "../server/pdf-worker-job.mjs";
 import {
   isPgdDocument,
   resolvePgdMasterForm,
@@ -99,6 +99,55 @@ const makeHandler = (supabase, renderPgdPdfStub = async () => FAKE_PDF, capture 
   });
 
 const JOB = (suratId) => ({ id: "job-1", surat_id: suratId, signature_id: null });
+
+test("KEU10 worker carries canonical form and signed verifier into renderer", async () => {
+  const surat = { ...SURAT_EMPTY_SNAPSHOT, form_usage_id: "usage-keu10" };
+  const signatures = [{ id: "finance", user_id: "manager", role_name: "verifikator", step_order: 4, is_signed: true }];
+  const capture = {};
+  const result = await createKeu10JobHandler({
+    supabase: makeSupabase({
+      surat_registrasi: { data: surat, error: null },
+      surat_signatures: { data: signatures, error: null },
+      profiles: { data: [{ id: "manager", full_name: "Finance", job_title: "Manager Keuangan" }], error: null },
+    }),
+    isKeu10Document: source => source.resolved_master_form?.nomor_form === "FM-UAI.KEU-10-00",
+    resolveKeu10MasterForm: async () => ({ nomor_form: "FM-UAI.KEU-10-00" }),
+    normalizeKeu10DocumentData: (source, options) => ({ source, options }),
+    renderKeu10Pdf: async data => { capture.data = data; return FAKE_PDF; },
+    logoPath: "/fake/logo.png",
+  })({ ...JOB(surat.id), signature_id: "finance" });
+  assert.equal(result, FAKE_PDF);
+  assert.equal(capture.data.source.resolved_master_form.nomor_form, "FM-UAI.KEU-10-00");
+  assert.equal(capture.data.options.targetStep, 4);
+  assert.equal(capture.data.options.signatures[0].role_name, "verifikator");
+  assert.equal(capture.data.options.signatures[0].profile.full_name, "Finance");
+});
+
+test("KEU10 renderer is packaged and called before PGD fallback", () => {
+  const docker = readFileSync(new URL("../dockerfile", import.meta.url), "utf8");
+  const worker = readFileSync(new URL("../pdf-worker.mjs", import.meta.url), "utf8");
+  assert.match(docker, /COPY keu10-pdf-renderer\.mjs \.\/keu10-pdf-renderer\.mjs/);
+  assert.ok(worker.indexOf("await renderDirectKeu10Job(job)") < worker.indexOf("await renderDirectPgdJob(job)"));
+});
+
+test("KEU10 snapshot rendering never rereads changed live values or signatures", async () => {
+  const payload = {
+    kind: "keu10", generation: 1,
+    document: { id: "original", formNumber: "FM-UAI.KEU-10-00", form_input_data: { items: [{ total: 2000000 }] } },
+    signatures: [{ id: "old-finance", role_name: "verifikator", step_order: 3, is_signed: true }],
+  };
+  const handler = createKeu10JobHandler({
+    supabase: { from() { throw new Error("Live query forbidden for immutable snapshot"); } },
+    isKeu10Document: source => source.formNumber === "FM-UAI.KEU-10-00",
+    normalizeKeu10DocumentData: (document, options) => ({ document, options }),
+    renderKeu10Pdf: async data => data,
+  });
+  const rendered = await handler({ surat_id: "original", signature_id: "old-finance", render_payload: payload });
+  assert.equal(rendered.document, payload.document);
+  assert.equal(rendered.options.signatures, payload.signatures);
+  assert.equal(rendered.options.targetStep, 3);
+  await assert.rejects(handler({ surat_id: "different", render_payload: payload }), /Snapshot PDF KEU 10 tidak valid/);
+});
 
 // ─── tests ───────────────────────────────────────────────────────────────────
 

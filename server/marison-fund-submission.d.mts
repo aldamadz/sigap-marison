@@ -17,7 +17,7 @@ export interface MarisonFundSubmissionInput {
 export function mapMarisonFundSubmission(input: MarisonFundSubmissionInput): {
   endpoint: "/fund-submissions";
   kind: "fund";
-  contractVersion: "vendor-openapi-fund-2026-08-26-branch-items";
+  contractVersion: "vendor-openapi-fund-2026-10-06-marketing-cost";
   payload: Record<string, unknown>;
 };
 

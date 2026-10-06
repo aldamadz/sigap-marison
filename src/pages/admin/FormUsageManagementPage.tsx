@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
+import { Keu10UsageConfigEditor } from "@/components/surat/Keu10UsageConfigEditor";
+import { normalizeKeu10Config, type Keu10Config } from "@/features/surat/registration/lib/keu10-config";
 import {
   normalizeCheckerInputSchema,
   type CheckerInputField,
@@ -21,7 +23,7 @@ import {
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 type UsageStatus = "draft" | "active" | "archived";
-type RoleName = "membuat" | "memeriksa" | "menyetujui";
+type RoleName = "membuat" | "memeriksa" | "verifikator" | "menyetujui";
 type ActionType = "approval" | "unit_allocation" | "configured_input";
 type AssigneeMode = "select" | "requester";
 type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
@@ -80,6 +82,7 @@ type RouteTemplate = {
 };
 type UsageRecord = {
   id: string;
+  keu10_config?: Keu10Config | null;
   name: string;
   description?: string | null;
   request_category: RequestCategory;
@@ -216,6 +219,7 @@ export default function FormUsageManagementPage() {
   const [open, setOpen] = useState(false);
   const [selectedUsageId, setSelectedUsageId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    keu10_config: null as Keu10Config | null,
     name: "",
     description: "",
     form_id: "",
@@ -295,6 +299,7 @@ export default function FormUsageManagementPage() {
         const matrixSteps = Array.isArray(rawConfig) ? rawConfig : [];
         setSelectedUsageId(null);
         setFormData({
+          keu10_config: null,
           name: `Salinan ${data.membuat || "Matrix Lama"}`,
           description: "Dibuat dari dokumentasi matrix lama. Lengkapi departemen dan kandidat signer sebelum diaktifkan.",
           form_id: data.form_id || forms[0]?.id || "",
@@ -356,6 +361,7 @@ export default function FormUsageManagementPage() {
     setSelectedUsageId(null);
     setFormData({
       name: "",
+      keu10_config: null,
       description: "",
       form_id: forms[0]?.id || "",
       route_id: "",
@@ -379,6 +385,7 @@ export default function FormUsageManagementPage() {
     setSelectedUsageId(usage.id);
     setFormData({
       name: usage.name,
+      keu10_config: normalizeKeu10Config(usage.keu10_config),
       description: usage.description || "",
       form_id: usage.form_id,
       route_id: usage.route_id || "",
@@ -749,6 +756,7 @@ export default function FormUsageManagementPage() {
     try {
       setSaving(true);
       const payload = {
+        ...(formData.keu10_config ? { keu10_config: formData.keu10_config } : {}),
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         form_id: formData.form_id,
@@ -972,6 +980,8 @@ export default function FormUsageManagementPage() {
               </div>
             </section>
 
+            {formData.keu10_config && <Keu10UsageConfigEditor value={formData.keu10_config} onChange={keu10_config => setFormData(previous => ({ ...previous, keu10_config }))} />}
+
             <section className="space-y-4 rounded-lg border border-border p-4">
               <div>
                 <h3 className="text-sm font-bold">Keputusan Sistem Departemen</h3>
@@ -1089,6 +1099,7 @@ export default function FormUsageManagementPage() {
                             <SelectContent>
                               <SelectItem value="membuat">Membuat</SelectItem>
                               <SelectItem value="memeriksa">Memeriksa</SelectItem>
+                              <SelectItem value="verifikator">Verifikator</SelectItem>
                               <SelectItem value="menyetujui">Menyetujui</SelectItem>
                             </SelectContent>
                           </Select>

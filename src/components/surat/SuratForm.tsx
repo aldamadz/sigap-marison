@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
+import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
+import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
 import { useSearchParams } from "react-router";
@@ -1249,6 +1251,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const configuredEligible = (master.users || []).filter(
       user => eligibleIds.includes(user.id) && isSignerAllowedByScope(user, signer),
     );
+    if (isKeu10Form(selectedUsage?.master_forms) && signer.role_name === "menyetujui") {
+      return configuredEligible.filter(user => isKeu10FinalCandidate(user, selectedUsage?.keu10_config, formData.form_input_data.items));
+    }
     if (configuredEligible.length > 0) return configuredEligible;
     if (signer.candidate_fallback_mode === "request_office_all") {
       return (master.users || []).filter(user => isSignerAllowedByScope(user, signer));
@@ -1370,12 +1375,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
       return changed ? next : prev;
     });
-  }, [formData.office_id, formData.dept_id, requesterDepartmentId, master.users, signers, currentProfile?.id, selectedUsage, externalRevision]);
+  }, [formData.office_id, formData.dept_id, formData.form_input_data.items, requesterDepartmentId, master.users, signers, currentProfile?.id, selectedUsage, externalRevision]);
 
   const loadUsageDetails = useCallback(async () => {
     const { data, error } = await supabase.from("form_usages")
       .select(`
-        id, name, form_id, request_category, scope_type, is_system_template, first_maker_policy, recommendation_config, external_revision_policy,
+        id, name, form_id, request_category, scope_type, is_system_template, first_maker_policy, recommendation_config, external_revision_policy, keu10_config,
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(

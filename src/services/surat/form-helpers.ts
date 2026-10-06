@@ -27,9 +27,9 @@ export const normalizeRoleName = (
   raw: any,
   stepOrder: number,
   totalSteps: number,
-): "membuat" | "memeriksa" | "menyetujui" => {
+): "membuat" | "memeriksa" | "verifikator" | "menyetujui" => {
   const v = String(raw ?? "").toLowerCase().trim();
-  if (v === "membuat" || v === "memeriksa" || v === "menyetujui") return v as any;
+  if (v === "membuat" || v === "memeriksa" || v === "verifikator" || v === "menyetujui") return v;
   if (
     v.includes("setuju") ||
     v.includes("approve") ||
