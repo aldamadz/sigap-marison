@@ -130,7 +130,7 @@ function WorkEntryRowControls({
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               disabled={isSaving}
               data-testid={`work-entry-status-control-${entry.id}`}

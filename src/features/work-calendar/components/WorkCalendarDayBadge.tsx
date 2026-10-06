@@ -30,7 +30,7 @@ export function WorkCalendarDayBadge({ meta, className }: WorkCalendarDayBadgePr
       data-day-kind={meta.kind}
       className={cn(
         "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium",
-        isHoliday ? "bg-warning/15 text-foreground" : "bg-muted text-muted-foreground",
+        isHoliday ? "bg-warning/10 text-foreground/90" : "bg-muted/80 text-muted-foreground",
         className,
       )}
     >

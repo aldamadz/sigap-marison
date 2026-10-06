@@ -57,7 +57,7 @@ export function MonthlyWorkView({
 }: MonthlyWorkViewProps) {
   return (
     <section aria-label="Tampilan bulan" className="space-y-2">
-      <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-foreground/70">
         {[1, 2, 3, 4, 5, 6, 0].map((weekday) => (
           <span key={weekday}>{WORK_WEEKDAY_LABELS_ID[weekday]}</span>
         ))}
