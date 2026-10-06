@@ -22,6 +22,8 @@ if (mode === "--all") {
 
 const migrationFiles = readdirSync(migrationsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
+  .filter((name) => !name.endsWith("_work_calendar_bootstrap.sql"))
+  .filter((name) => !name.endsWith("_work_calendar_notification_scope.sql"))
   .filter((name) => mode !== "--baseline" || name !== carryoverMigration)
   .sort();
 
@@ -37,6 +39,8 @@ const migrations = migrationFiles
 const testsDir = "supabase/tests";
 const testFiles = readdirSync(testsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
+  .filter((name) => name !== "work_calendar_bootstrap.integration.sql")
+  .filter((name) => name !== "work_calendar_notification_scope.integration.sql")
   .filter((name) => mode === "--carryover" ? name === carryoverTest : mode !== "--baseline" || name !== carryoverTest)
   .sort();
 

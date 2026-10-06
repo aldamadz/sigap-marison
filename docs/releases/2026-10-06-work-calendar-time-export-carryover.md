@@ -56,8 +56,35 @@ Production is **not ready for this migration**: the five calendar RPCs and the
 seven CAL-03 migration ledger entries are absent, and the calendar feature flag
 is disabled. Production also has historical migration version aliases. Do not
 run old migrations, repair the ledger, acknowledge an unapplied migration, or
-enable the feature implicitly. Audit a forward-only CAL-03 bootstrap separately
-before production promotion; keep the existing flag until user confirmation.
+enable the feature implicitly. User confirmation to initialize and activate
+production was received on 2026-10-06 after staging acceptance. The forward-only
+`20261006110000_work_calendar_bootstrap.sql` initializes only a completely absent
+Calendar schema and rejects partial/unsafe dependencies. On initialized staging,
+it is a verified no-op. Production must explicitly apply the bootstrap first,
+then the exact `20261006080000` carryover replacement and the final notification
+scope overlay; record only the three actually executed files, never fabricate
+historic CAL-03 ledger rows or repair
+unrelated aliases. The production image enables Calendar only after these gates.
+
+Independent bootstrap review also found two legacy notification risks. The new
+`20261006120000_work_calendar_notification_scope.sql` is the final overlay after
+bootstrap/carryover: it scopes uniqueness to `work-calendar:` keys, leaving other
+modules free to reuse business keys, and matches escalation traversal to active
+team/event-RLS paths. Applied carryover and historic files remain unmodified.
+The bootstrap's embedded baseline adapts only that index predicate; its harness
+checks every other embedded byte against the seven canonical sources. Staging
+must also receive the final overlay before production activation.
+
+Staging `99e5a3d74ff0ec6c8c468180b54627d4828dc50e` passed live browser rename,
+original-day retention, Tuesday continuation, blocked/resume/complete and
+Wednesday exclusion. Only the tagged disposable fixture was soft-deleted.
+Release evidence: PR #467 comment `6007927757` and deploy run `37401703612`.
+
+Correction to legacy release-map claims: production source contained CAL-03 but
+the production catalog audit on 2026-10-06 found no calendar tables or RPCs.
+Historic statements claiming production database application are not runtime
+evidence. Shared notifications exist with RLS and zero duplicate dedupe groups;
+their rows, policies and grants must be preserved by initialization.
 
 Application rollback uses the previous runtime revision. A database rollback,
 if required, restores the backed-up canonical function definitions through a
