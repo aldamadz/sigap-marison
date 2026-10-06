@@ -14,7 +14,7 @@
  * - seluruh target sentuh minimal 44px dan tidak ada overflow horizontal.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   CalendarClock,
   Check,
@@ -216,19 +216,19 @@ function WorkEntryRowControls({
           <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
             {readOnly ? "Entry bawahan" : "Tindakan"}
           </DropdownMenuLabel>
-          <DropdownMenuItem onSelect={onOpenDetail}>
-            <Eye aria-hidden="true" />
+          <DropdownMenuItem className="gap-2" onSelect={onOpenDetail}>
+            <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
             {readOnly ? "Lihat detail" : "Buka detail"}
           </DropdownMenuItem>
           {!readOnly && (
             <>
-              <DropdownMenuItem onSelect={onStartEditTitle}>
-                <Pencil aria-hidden="true" />
+              <DropdownMenuItem className="gap-2" onSelect={onStartEditTitle}>
+                <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
                 Ubah judul
               </DropdownMenuItem>
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <CalendarClock className="mr-2" aria-hidden="true" />
+                <DropdownMenuSubTrigger className="gap-2">
+                  <CalendarClock className="h-4 w-4 shrink-0" aria-hidden="true" />
                   Pindahkan tanggal
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="work-calendar-scope w-52">
@@ -255,10 +255,10 @@ function WorkEntryRowControls({
               </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
+                className="gap-2 text-destructive focus:text-destructive"
                 onSelect={onDelete}
               >
-                <Trash2 aria-hidden="true" />
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                 Hapus
               </DropdownMenuItem>
             </>
@@ -297,7 +297,7 @@ export function WorkEntryRow({
     if (!isEditingTitle) setTitleDraft(entry.title);
   }, [entry.title, isEditingTitle]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isEditingTitle) titleInputRef.current?.focus();
   }, [isEditingTitle]);
 
@@ -336,17 +336,9 @@ export function WorkEntryRow({
       compact={isCompact}
       onRequestStatus={onRequestStatus}
       onStartEditTitle={() => {
-        // Editor judul baru dibuka setelah menu benar-benar tertutup supaya
-        // pemulihan fokus Radix tidak langsung memblur input judul.
+        // onSelect closes the menu, but its exit animation may keep it mounted.
+        // Wait for onCloseAutoFocus instead of racing Radix with a frame timer.
         isStartingTitleEditRef.current = true;
-        // Fallback bila `onCloseAutoFocus` tidak dipanggil (mis. klik pointer
-        // tanpa fokus item). Ref dikosongkan oleh `onCloseAutoFocus` bila
-        // handler itu memang berjalan.
-        window.requestAnimationFrame(() => {
-          if (!isStartingTitleEditRef.current) return;
-          isStartingTitleEditRef.current = false;
-          setIsEditingTitle(true);
-        });
       }}
       onCloseAutoFocus={(event) => {
         if (!isStartingTitleEditRef.current) return;
@@ -381,7 +373,7 @@ export function WorkEntryRow({
       )}
     >
       <div className={cn("flex items-start", isCompact ? "gap-1" : "gap-2")}>
-        <span className={isCompact ? "mt-0.5 shrink-0" : "mt-2 shrink-0"}>
+        <span className="flex h-11 shrink-0 items-center">
           <WorkEntryStatusGlyph status={entry.status} />
         </span>
 

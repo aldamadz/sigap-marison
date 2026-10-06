@@ -83,7 +83,7 @@ export interface WorkEntry {
   endsAt: WorkTimestamp | null;
   blockedReason: string | null;
   completedAt: WorkTimestamp | null;
-  /** Tenggat opsional; `null` berarti tenggat mengikuti `workDate`. */
+  /** Optional explicit deadline; null means no deadline. */
   dueDate: WorkDate | null;
   /** Penanda warna statis; `null` berarti tanpa penanda. */
   colorSwatch: WorkEntryColorSwatch | null;
@@ -265,6 +265,8 @@ export interface WorkEntryRepository {
     ownerId: WorkEntryOwnerId;
     fromDate: WorkDate;
     toDate: WorkDate;
+    /** Projection cutoff in Asia/Jakarta; defaults to the current day. */
+    today?: WorkDate;
     signal?: AbortSignal;
   }): Promise<readonly WorkEntry[]>;
   listTeamEntries(input: {

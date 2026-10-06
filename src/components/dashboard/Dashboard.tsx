@@ -44,6 +44,7 @@ import {
   buildWorkCalendarDashboardSummary,
   createSupabaseWorkCalendarDashboardRepository,
   todayWorkDate,
+  workDateToUtcRange,
   type SupabaseWorkCalendarDashboardClient,
 } from '@/features/work-calendar';
 
@@ -243,7 +244,27 @@ const Dashboard = () => {
   });
 
   // ── CAL-03 F7: widget ringkasan Kalender Kerja ────────────────────────────
-  const today = useMemo(() => todayWorkDate(), []);
+  const [today, setToday] = useState(() => todayWorkDate());
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshToday = () => {
+      clearTimeout(timer);
+      const current = new Date();
+      const date = todayWorkDate(current);
+      setToday(date);
+      const midnight = new Date(workDateToUtcRange(date).endUtc).getTime();
+      timer = setTimeout(refreshToday, Math.max(1, midnight - current.getTime()));
+    };
+    refreshToday();
+    window.addEventListener('focus', refreshToday);
+    document.addEventListener('visibilitychange', refreshToday);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('focus', refreshToday);
+      document.removeEventListener('visibilitychange', refreshToday);
+    };
+  }, []);
 
   const { data: workCalendarEntries = [], isLoading: workCalendarLoading, error: workCalendarError } = useQuery({
     queryKey: ['work-calendar-dashboard', selectedUserId, today],

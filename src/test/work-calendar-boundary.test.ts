@@ -1030,8 +1030,10 @@ describe("Work Calendar — batas CAL-03 F8 penutupan produk", () => {
 
     // Snapshot migration CAL-03 dibekukan pada penutupan: F2 entries, F3 team
     // members, F4A team overview + scale, F5 lifecycle, F6 holidays, F7
-    // notifications. F8 tidak boleh menambah satu pun.
-    const cal03Migrations = migrations.filter((name) => name.includes("work_calendar")).sort();
+    // notifications. CAL-04 is tested separately by its carryover SQL contract.
+    const cal03Migrations = migrations.filter((name) =>
+      name.includes("work_calendar") && name.slice(0, 14) <= "20260918120000",
+    ).sort();
     expect(cal03Migrations).toEqual([
       "20260915072607_work_calendar_entries.sql",
       "20260915093000_work_calendar_team_members.sql",

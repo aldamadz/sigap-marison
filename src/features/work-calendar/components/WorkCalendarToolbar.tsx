@@ -16,7 +16,7 @@
  */
 
 import { type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Plus, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, LoaderCircle, Plus, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,9 @@ export interface WorkCalendarToolbarProps {
   onToday: () => void;
   onSelectOwner: (ownerId: WorkEntryOwnerId | "all") => void;
   onAdd: () => void;
+  onExportPdf?: () => void;
+  exportDisabled?: boolean;
+  isExporting?: boolean;
   /** Slot quick entry + strip ringkasan progres (mode Hari). */
   children?: ReactNode;
 }
@@ -100,6 +103,9 @@ export function WorkCalendarToolbar({
   onToday,
   onSelectOwner,
   onAdd,
+  onExportPdf,
+  exportDisabled = false,
+  isExporting = false,
   children,
 }: WorkCalendarToolbarProps) {
   const rangeLabel =
@@ -192,7 +198,7 @@ export function WorkCalendarToolbar({
             </div>
 
             {showStatusFilter && onSelectStatusFilter !== undefined ? (
-              <div className="w-full sm:w-44">
+              <div className="min-w-0 flex-1 basis-48 sm:flex-none sm:basis-auto sm:w-44">
                 <label htmlFor="work-calendar-status-filter" className="sr-only">
                   Filter status pekerjaan
                 </label>
@@ -246,6 +252,20 @@ export function WorkCalendarToolbar({
               </div>
             ) : null}
 
+            {onExportPdf && view !== "team" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 rounded-sm"
+                aria-label="Export kalender ke PDF"
+                title="Export kalender ke PDF"
+                disabled={exportDisabled || isExporting}
+                onClick={onExportPdf}
+              >
+                {isExporting ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
+              </Button>
+            ) : null}
             {showAdd ? (
               <Button
                 type="button"

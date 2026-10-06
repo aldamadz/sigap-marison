@@ -337,19 +337,20 @@ describe("WorkCalendarWorkspace — kontrol status per baris", () => {
 });
 
 describe("WorkCalendarWorkspace — overdue dan navigasi", () => {
-  it("menurunkan overdue dari tanggal tanpa menyimpan status baru", async () => {
+  it("menurunkan overdue dari tenggat eksplisit tanpa menyimpan status baru", async () => {
     // Senin 9 Maret 2026 berada pada minggu yang sama dengan hari fixture,
     // sehingga entry masih termuat tetapi tanggalnya sudah lewat.
     renderWorkspace({
       view: "week",
       entries: [
-        createFixtureWorkEntry({ id: "late", title: "Pekerjaan terlambat", status: "planned", workDate: "2026-03-09" }),
+        createFixtureWorkEntry({ id: "late", title: "Pekerjaan terlambat", status: "planned", workDate: "2026-03-09", dueDate: "2026-03-09" }),
       ],
     });
 
-    expect(await screen.findByTestId("work-entry-overdue-late")).toHaveTextContent("Terlambat");
+    const originalDay = within(await screen.findByTestId("work-week-column-2026-03-09"));
+    expect(await originalDay.findByTestId("work-entry-overdue-late")).toHaveTextContent("Terlambat");
     // Overdue tetap status `planned`; tidak ada status tersimpan bernama overdue.
-    expect(screen.getByTestId("work-entry-row-late")).toHaveAttribute("data-entry-status", "planned");
+    expect(originalDay.getByTestId("work-entry-row-late")).toHaveAttribute("data-entry-status", "planned");
   });
 
   it("menandai pekerjaan blocked pada tanggal lampau sebagai terlambat", async () => {
@@ -362,12 +363,14 @@ describe("WorkCalendarWorkspace — overdue dan navigasi", () => {
           status: "blocked",
           blockedReason: "Menunggu vendor.",
           workDate: "2026-03-09",
+          dueDate: "2026-03-09",
         }),
       ],
     });
 
-    expect(await screen.findByTestId("work-entry-overdue-late-blocked")).toHaveTextContent("Terlambat");
-    expect(screen.getByTestId("work-entry-row-late-blocked")).toHaveAttribute(
+    const originalDay = within(await screen.findByTestId("work-week-column-2026-03-09"));
+    expect(await originalDay.findByTestId("work-entry-overdue-late-blocked")).toHaveTextContent("Terlambat");
+    expect(originalDay.getByTestId("work-entry-row-late-blocked")).toHaveAttribute(
       "data-entry-status",
       "blocked",
     );
@@ -719,7 +722,7 @@ describe("WorkCalendarWorkspace — CAL-03 F4A filter Tim", () => {
       expect(await screen.findByTestId(`work-team-row-${member.id}`)).toBeInTheDocument();
     }
     expect(screen.getByTestId("work-team-scope-progress")).toHaveTextContent(
-      "2 selesai dari 5 pekerjaan",
+      "2 selesai dari 6 pekerjaan",
     );
   });
 

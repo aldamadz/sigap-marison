@@ -12,6 +12,7 @@ import type {
   WorkEntryColorSwatch,
   WorkEntryEvent,
   WorkEntryEventType,
+  WorkEntryKind,
   WorkEntryPatch,
   WorkEntryStatus,
 } from "../types/work-calendar";
@@ -83,16 +84,15 @@ export function isWorkEntryColorSwatch(value: unknown): value is WorkEntryColorS
 }
 
 /**
- * Aksi "Lanjutkan hari ini": pindahkan tanggal kerja ke hari ini pada baris
- * yang sama. Bila sudah hari ini, tidak ada perubahan (mengembalikan `null`)
- * supaya tidak ada peristiwa jadwal kosong.
+ * Continue older work without changing its original schedule. Already-running,
+ * finished, and today/future-scheduled work require no continuation transition.
  */
 export function buildContinueTodayPatch(
-  entry: { workDate: WorkDate },
+  entry: { workDate: WorkDate; status: WorkEntryStatus; kind: WorkEntryKind },
   today: WorkDate,
 ): WorkEntryPatch | null {
-  if (entry.workDate === today) return null;
-  return { workDate: today };
+  if (entry.kind !== "work" || entry.workDate >= today || entry.status === "completed" || entry.status === "in_progress") return null;
+  return { status: "in_progress", blockedReason: null };
 }
 
 /** Aksi "Ubah jadwal": pindahkan tanggal kerja ke tanggal pilihan. */

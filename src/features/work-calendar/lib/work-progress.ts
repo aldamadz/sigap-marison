@@ -22,6 +22,7 @@ import {
   isUnfinishedWorkEntryStatus,
   isWorkEntryOverdue,
 } from "./work-entry-status";
+import { selectWorkEntriesForDate } from "./work-entry-carryover";
 
 export const EMPTY_WORK_PROGRESS: WorkProgressCounts = Object.freeze({
   total: 0,
@@ -128,9 +129,8 @@ export function buildWorkCalendarDaySummaries(
   dates: readonly WorkDate[],
   today: WorkDate,
 ): WorkCalendarDaySummary[] {
-  const grouped = groupWorkEntriesByDate(entries);
   return dates.map((date) => {
-    const dayEntries = grouped.get(date) ?? [];
+    const dayEntries = selectWorkEntriesForDate(entries, date, today);
     return { date, entries: dayEntries, progress: computeWorkProgress(dayEntries, today) };
   });
 }

@@ -23,7 +23,9 @@ import type {
   WorkTeamOverviewOption,
   WorkTeamOverviewRepository,
 } from "../types/work-team-overview";
-import { isWorkDateWithin, shiftWorkDate } from "../lib/work-calendar-date";
+import { shiftWorkDate } from "../lib/work-calendar-date";
+import { isWorkEntryVisibleInRange, selectWorkEntriesForDate } from "../lib/work-entry-carryover";
+import { isWorkEntryOverdue } from "../lib/work-entry-status";
 import { WorkEntryConflictError } from "../lib/work-entry-conflict";
 import { buildWorkEntryEventDrafts } from "../lib/work-entry-lifecycle";
 import { computeWorkProgress } from "../lib/work-progress";
@@ -122,6 +124,7 @@ export function createFixtureWorkEntries(): WorkEntry[] {
       title: "Kirim berita acara serah terima",
       status: "planned",
       workDate: shiftWorkDate(today, -4),
+      dueDate: shiftWorkDate(today, -4),
     }),
     createFixtureWorkEntry({
       id: "own-week-1",
@@ -176,6 +179,7 @@ export function createFixtureWorkEntries(): WorkEntry[] {
       title: "Setor bukti kas kecil",
       status: "planned",
       workDate: shiftWorkDate(today, -2),
+      dueDate: shiftWorkDate(today, -2),
     }),
   ];
 
@@ -211,6 +215,8 @@ export function createFixtureWorkEntryRepository(
   seed: readonly WorkEntry[] = createFixtureWorkEntries(),
   options: {
     failOnList?: boolean;
+    /** Reference clock for deterministic completion and event timestamps. */
+    now?: () => Date;
     /**
      * Meniru RLS: bila diisi, `getEntryById` hanya mengembalikan entry milik
      * pemilik yang terotorisasi. `undefined` berarti semua owner diizinkan.
@@ -223,6 +229,7 @@ export function createFixtureWorkEntryRepository(
   } = {},
 ): WorkEntryRepository {
   const store = new Map<string, WorkEntry>(seed.map((entry) => [entry.id, entry]));
+  const readNow = options.now ?? workCalendarFixtureNow;
   let counter = seed.length;
 
   /**
@@ -243,7 +250,7 @@ export function createFixtureWorkEntryRepository(
   ): void => {
     if (drafts.length === 0) return;
     const history = eventStore.get(entryId) ?? [];
-    const now = new Date().toISOString();
+    const now = readNow().toISOString();
     for (const draft of drafts) {
       history.push({
         id: nextEventId(),
@@ -274,15 +281,15 @@ export function createFixtureWorkEntryRepository(
     appendEvents(entry.ownerId, entry.id, buildWorkEntryEventDrafts(null, entry));
   }
 
-  const listInRange = (fromDate: WorkDate, toDate: WorkDate): WorkEntry[] =>
+  const listInRange = (fromDate: WorkDate, toDate: WorkDate, today = WORK_CALENDAR_FIXTURE_TODAY): WorkEntry[] =>
     [...store.values()]
-      .filter((entry) => entry.deletedAt === null && isWorkDateWithin(entry.workDate, fromDate, toDate))
+      .filter((entry) => isOwnerAuthorized(entry.ownerId) && isWorkEntryVisibleInRange(entry, fromDate, toDate, today))
       .sort((left, right) => (left.workDate < right.workDate ? -1 : left.workDate > right.workDate ? 1 : 0));
 
   return {
-    async listEntries({ ownerId, fromDate, toDate }) {
+    async listEntries({ ownerId, fromDate, toDate, today }) {
       if (options.failOnList) throw new Error("Gagal memuat data pekerjaan (fixture).");
-      return listInRange(fromDate, toDate).filter((entry) => entry.ownerId === ownerId);
+      return listInRange(fromDate, toDate, today).filter((entry) => entry.ownerId === ownerId);
     },
     async listTeamEntries({ fromDate, toDate }) {
       if (options.failOnList) throw new Error("Gagal memuat data pekerjaan (fixture).");
@@ -306,7 +313,7 @@ export function createFixtureWorkEntryRepository(
     },
     async createEntry(draft: WorkEntryDraft) {
       counter += 1;
-      const now = new Date().toISOString();
+      const now = readNow().toISOString();
       const entry: WorkEntry = {
         id: `created-${counter}`,
         ownerId: draft.ownerId,
@@ -341,7 +348,15 @@ export function createFixtureWorkEntryRepository(
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
         throw new WorkEntryConflictError("Data telah berubah");
       }
-      const next: WorkEntry = { ...current, ...patch, updatedAt: new Date().toISOString() };
+      const now = new Date(Math.max(readNow().getTime(), new Date(current.updatedAt).getTime() + 1)).toISOString();
+      const next: WorkEntry = { ...current, ...patch, updatedAt: now };
+      if (next.status === "completed") {
+        next.completedAt = current.status === "completed" ? current.completedAt : now;
+      } else {
+        next.completedAt = null;
+        next.realization = null;
+      }
+      if (next.status !== "blocked") next.blockedReason = null;
       store.set(entryId, next);
       appendEvents(next.ownerId, entryId, buildWorkEntryEventDrafts(current, next));
       return next;
@@ -352,7 +367,7 @@ export function createFixtureWorkEntryRepository(
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
         throw new WorkEntryConflictError("Data telah berubah");
       }
-      store.set(entryId, { ...current, deletedAt: new Date().toISOString() });
+      store.set(entryId, { ...current, deletedAt: readNow().toISOString() });
     },
   };
 }
@@ -372,11 +387,13 @@ export function createFixtureWorkTeamOverviewRepository(
     failOnOverview?: boolean;
     failOnOptions?: boolean;
     failOnMemberEntries?: boolean;
+    today?: WorkDate;
     /** Memberi jeda agar test dapat mengamati pembatalan permintaan lama. */
     delayMs?: number;
     signalRef?: { current: AbortSignal | null };
   } = {},
 ): WorkTeamOverviewRepository {
+  const today = options.today ?? WORK_CALENDAR_FIXTURE_TODAY;
   const providedOptions = options.members;
   const defaultMemberOptions: readonly WorkTeamOverviewOption[] =
     WORK_CALENDAR_FIXTURE_TEAM_MEMBERS.map<WorkTeamOverviewOption>((member, index) => ({
@@ -465,9 +482,7 @@ export function createFixtureWorkTeamOverviewRepository(
   };
 
   const entriesFor = (memberId: string, date: WorkDate): WorkEntry[] =>
-    seed.filter(
-      (entry) => entry.deletedAt === null && entry.ownerId === memberId && entry.workDate === date,
-    );
+    selectWorkEntriesForDate(seed.filter((entry) => entry.ownerId === memberId), date, today);
 
   return {
     async hasAuthorizedTeamMembers(signal) {
@@ -528,17 +543,19 @@ export function createFixtureWorkTeamOverviewRepository(
 
       const withProgress = candidates.map((option) => ({
         option,
-        entries: entriesFor(option.id, filters.workDate),
+        entries: entriesFor(option.id, filters.workDate).filter((entry) =>
+          filters.status === "all" || (filters.status === "overdue" ? isWorkEntryOverdue(entry, today) : entry.status === filters.status),
+        ),
       }));
 
       const statusFiltered = withProgress.filter(({ entries }) => {
         if (filters.status === "all") return true;
-        return entries.some((entry) => entry.status === filters.status);
+        return entries.length > 0;
       });
 
       const aggregate = statusFiltered.reduce<WorkProgressCounts>(
         (accumulator, { entries }) => {
-          const progress = computeWorkProgress(entries, filters.workDate);
+          const progress = computeWorkProgress(entries, today);
           return {
             total: accumulator.total + progress.total,
             planned: accumulator.planned + progress.planned,
@@ -566,7 +583,7 @@ export function createFixtureWorkTeamOverviewRepository(
           departmentName:
             departmentOptions.find((department) => department.id === option.departmentId)?.label ??
             null,
-          progress: computeWorkProgress(entries, filters.workDate),
+          progress: computeWorkProgress(entries, today),
         }),
       );
 

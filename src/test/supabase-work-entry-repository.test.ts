@@ -136,6 +136,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -165,12 +166,16 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         ownerId: "u1000000-0000-4000-8000-000000000001",
         fromDate: "2026-09-01",
         toDate: "2026-09-30",
+        today: "2026-09-15",
         signal: controller.signal,
       });
 
       expect(mockClient.from).toHaveBeenCalledWith("work_calendar_entries");
       expect(mockQueryBuilder.eq).toHaveBeenCalledWith("owner_id", "u1000000-0000-4000-8000-000000000001");
-      expect(mockQueryBuilder.gte).toHaveBeenCalledWith("work_date", "2026-09-01");
+      expect(mockQueryBuilder.gte).not.toHaveBeenCalled();
+      expect(mockQueryBuilder.or).toHaveBeenCalledWith(
+        "work_date.gte.2026-09-01,and(kind.eq.work,work_date.lt.2026-09-01,status.neq.completed),and(kind.eq.work,work_date.lt.2026-09-01,status.eq.completed,completed_at.gte.2026-08-31T17:00:00.000Z)",
+      );
       expect(mockQueryBuilder.lte).toHaveBeenCalledWith("work_date", "2026-09-30");
       expect(mockQueryBuilder.is).toHaveBeenCalledWith("deleted_at", null);
       expect(mockQueryBuilder.order).toHaveBeenCalledWith("work_date", { ascending: true });
@@ -182,6 +187,13 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe(row.id);
+      await repo.listEntries({ ownerId: "u1", fromDate: "2026-09-16", toDate: "2026-09-16", today: "2026-09-15" });
+      expect(mockQueryBuilder.or).toHaveBeenLastCalledWith("work_date.gte.2026-09-16");
+      const calls = vi.mocked(mockClient.from).mock.calls.length;
+      for (const fromDate of ["2026-09-01),status.eq.completed", "2026-02-30", " 2026-09-01", "2026-10-01"]) {
+        await expect(repo.listEntries({ ownerId: "u1", fromDate, toDate: "2026-09-30", today: "2026-09-15" })).rejects.toThrow("Rentang tanggal pekerjaan tidak valid.");
+      }
+      expect(mockClient.from).toHaveBeenCalledTimes(calls);
     });
 
     it("menangani pagination otomatis jika baris lebih dari 1000", async () => {
@@ -195,6 +207,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -238,6 +251,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -398,6 +412,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -482,6 +497,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -523,6 +539,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -604,6 +621,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -640,7 +658,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
       );
       expect(mockQueryBuilder.order).toHaveBeenCalledWith("created_at", { ascending: true });
       expect(mockQueryBuilder.order).toHaveBeenCalledWith("id", { ascending: true });
-      expect(mockQueryBuilder.range).toHaveBeenCalledWith(0, 199);
+      expect(mockQueryBuilder.range).toHaveBeenCalledWith(0, 999);
       expect(mockQueryBuilder.abortSignal).toHaveBeenCalledWith(controller.signal);
       expect(result).toHaveLength(2);
       expect(result[0].type).toBe("created");
@@ -660,11 +678,59 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
       expect(mockClient.from).not.toHaveBeenCalled();
     });
 
+    it.each(["complete", "error", "abort"] as const)("fully paginates history beyond 200 events; second page %s never yields partial history", async (mode) => {
+      const controller = new AbortController();
+      const rows = Array.from({ length: 1251 }, (_, index) => createMockEventRow({ id: `event-${String(index).padStart(4, "0")}` }));
+      let page = 0;
+      const builder: WorkCalendarDbQueryFilter<WorkCalendarEventRow[] | null> = {
+        select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(), or: vi.fn().mockReturnThis(), lte: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), range: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn().mockReturnThis(), single: vi.fn(), maybeSingle: vi.fn(),
+        then: (fulfilled, rejected) => {
+          page += 1;
+          if (mode === "abort" && page === 2) controller.abort();
+          const response = mode === "error" && page === 2
+            ? { data: null, error: { message: "history failure" } }
+            : { data: rows.slice((page - 1) * 1000, page * 1000), error: null };
+          return Promise.resolve(response).then(fulfilled, rejected);
+        },
+      };
+      const client: SupabaseWorkCalendarClient = {
+        from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue(builder) }), rpc: vi.fn(),
+      };
+      const promise = createSupabaseWorkEntryRepository(client).listEntryEvents({
+        entryId: "e1000000-0000-4000-8000-000000000001", signal: controller.signal,
+      });
+      if (mode === "complete") {
+        const result = await promise;
+        expect(result.map((event) => event.id)).toEqual(rows.map((event) => event.id));
+        expect(result).toHaveLength(1251);
+      } else {
+        await expect(promise).rejects.toThrow(mode === "error" ? "Gagal memuat riwayat pekerjaan." : "Pencarian dibatalkan.");
+      }
+      expect(builder.range).toHaveBeenNthCalledWith(1, 0, 999);
+      expect(builder.range).toHaveBeenNthCalledWith(2, 1000, 1999);
+      expect(builder.order).toHaveBeenCalledWith("created_at", { ascending: true });
+      expect(builder.order).toHaveBeenCalledWith("id", { ascending: true });
+      expect(builder.eq).toHaveBeenCalledWith("entry_id", "e1000000-0000-4000-8000-000000000001");
+      expect(builder.abortSignal).toHaveBeenCalledWith(controller.signal);
+    });
+
+    it("does not start a history query when already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const client: SupabaseWorkCalendarClient = { from: vi.fn(), rpc: vi.fn() };
+      await expect(createSupabaseWorkEntryRepository(client).listEntryEvents({ entryId: "e1000000-0000-4000-8000-000000000001", signal: controller.signal })).rejects.toThrow("Pencarian dibatalkan.");
+      expect(client.from).not.toHaveBeenCalled();
+    });
+
     it("meneruskan error aplikasi yang stabil saat riwayat gagal dimuat", async () => {
       const mockQueryBuilder: WorkCalendarDbQueryFilter = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -712,6 +778,7 @@ describe("SupabaseWorkEntryRepository & Mapper", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         is: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),

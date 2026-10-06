@@ -2,9 +2,8 @@
  * Ringkasan dashboard murni CAL-03 F7.
  *
  * Widget dashboard menampilkan dua kelompok:
- * 1. pekerjaan hari ini yang belum selesai (`workDate === today`), dan
- * 2. pekerjaan tertunda, yaitu entry belum selesai dengan tenggat efektif
- *    (`dueDate ?? workDate`) sudah lewat dibanding `today`.
+ * 1. pekerjaan belum selesai yang terlihat hari ini, termasuk carry-forward,
+ * 2. pekerjaan belum selesai yang sudah melewati tenggat eksplisit.
  *
  * Definisi ini identik dengan RPC `get_work_calendar_dashboard_entries` supaya
  * tampilan tetap benar walau data berasal dari repository maupun fixture.
@@ -13,6 +12,7 @@
 import type { WorkCalendarDashboardSummary } from "../types/work-calendar-notifications";
 import type { WorkDate, WorkEntry } from "../types/work-calendar";
 import { compareWorkEntries, isUnfinishedWorkEntryStatus, isWorkEntryOverdue } from "./work-entry-status";
+import { isWorkEntryVisibleOnDate } from "./work-entry-carryover";
 
 export const EMPTY_WORK_CALENDAR_DASHBOARD_SUMMARY: WorkCalendarDashboardSummary = Object.freeze({
   todayEntries: Object.freeze([]) as readonly WorkEntry[],
@@ -35,11 +35,11 @@ export function buildWorkCalendarDashboardSummary(
   let blockedCount = 0;
 
   for (const entry of entries) {
-    if (!isUnfinishedWorkEntryStatus(entry.status)) continue;
+    if (entry.deletedAt !== null || !isUnfinishedWorkEntryStatus(entry.status)) continue;
 
     if (isWorkEntryOverdue(entry, today)) overdueEntries.push(entry);
 
-    if (entry.workDate === today) {
+    if (isWorkEntryVisibleOnDate(entry, today, today)) {
       todayEntries.push(entry);
       if (entry.status === "planned") plannedCount += 1;
       if (entry.status === "in_progress") inProgressCount += 1;

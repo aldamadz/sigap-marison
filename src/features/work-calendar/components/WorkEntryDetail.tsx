@@ -42,7 +42,6 @@ import type {
 } from "../types/work-calendar";
 import { formatWorkDateFull, formatWorkTimeLabelFromIso } from "../lib/work-calendar-date";
 import {
-  getWorkEntryEffectiveDueDate,
   getWorkEntryStatusLabel,
   isWorkEntryCompletedLate,
   isWorkEntryOverdue,
@@ -107,7 +106,6 @@ export function WorkEntryDetail({
 
   const overdue = isWorkEntryOverdue(entry, today);
   const completedLate = isWorkEntryCompletedLate(entry);
-  const effectiveDueDate = getWorkEntryEffectiveDueDate(entry);
   const colorSwatch = isWorkEntryColorSwatch(entry.colorSwatch) ? entry.colorSwatch : null;
   const colorInfo = colorSwatch ? getWorkEntryColorMeta(colorSwatch) : null;
   const startLabel = formatWorkTimeLabelFromIso(entry.startsAt);
@@ -356,8 +354,7 @@ export function WorkEntryDetail({
                           completedLate && "font-medium text-overdue",
                         )}
                       >
-                        {formatWorkDateFull(effectiveDueDate)}
-                        {entry.dueDate === null ? " (mengikuti tanggal kerja)" : ""}
+                        {entry.dueDate ? formatWorkDateFull(entry.dueDate) : "Tanpa tenggat"}
                       </dd>
                     </div>
                   </div>

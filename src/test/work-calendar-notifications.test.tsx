@@ -114,7 +114,7 @@ describe("Work Calendar F7 — ringkasan dashboard murni", () => {
 
   it("menghitung pekerjaan tertunda dari tenggat efektif yang lewat", () => {
     const entries = [
-      createFixtureWorkEntry({ id: "overdue-1", status: "planned", workDate: "2026-03-08" }),
+      createFixtureWorkEntry({ id: "overdue-1", status: "planned", workDate: "2026-03-08", dueDate: "2026-03-08" }),
       createFixtureWorkEntry({ id: "overdue-2", status: "blocked", dueDate: "2026-03-09" }),
       createFixtureWorkEntry({ id: "done-late", status: "completed", workDate: "2026-03-01" }),
       createFixtureWorkEntry({ id: "future", status: "planned", workDate: "2026-03-20" }),
@@ -124,8 +124,29 @@ describe("Work Calendar F7 — ringkasan dashboard murni", () => {
 
     expect(summary.overdueCount).toBe(2);
     expect(summary.overdueEntries.map((entry) => entry.id)).toEqual(["overdue-1", "overdue-2"]);
-    // `overdue-2` tanpa `workDate` eksplisit memakai tanggal kerja hari ini.
+    // The older unfinished task also remains visible today.
+    expect(summary.todayCount).toBe(2);
+  });
+
+  it("includes older unfinished work without an implicit deadline and ignores deleted/completed work", () => {
+    const carried = createFixtureWorkEntry({ id: "carried", status: "in_progress", workDate: "2026-03-09", dueDate: null });
+    const entries = [
+      carried,
+      createFixtureWorkEntry({ id: "deleted", status: "blocked", workDate: "2026-03-09", dueDate: "2026-03-09", deletedAt: "2026-03-10T00:00:00Z" }),
+      createFixtureWorkEntry({ id: "done", status: "completed", workDate: "2026-03-09", completedAt: "2026-03-10T01:00:00Z", dueDate: "2026-03-09" }),
+      createFixtureWorkEntry({ id: "future", workDate: "2026-03-11" }),
+      createFixtureWorkEntry({ id: "event", kind: "event", workDate: "2026-03-09" }),
+      createFixtureWorkEntry({ id: "availability", kind: "availability", workDate: "2026-03-09" }),
+    ];
+    const summary = buildWorkCalendarDashboardSummary(entries, WORK_CALENDAR_FIXTURE_TODAY);
+    expect(summary.todayEntries).toEqual([carried]);
     expect(summary.todayCount).toBe(1);
+    expect(summary.inProgressCount).toBe(1);
+    expect(summary.plannedCount).toBe(0);
+    expect(summary.blockedCount).toBe(0);
+    expect(summary.overdueEntries).toEqual([]);
+    expect(summary.overdueCount).toBe(0);
+    expect(carried.workDate).toBe("2026-03-09");
   });
 
   it("mengembalikan ringkasan kosong yang stabil", () => {
@@ -370,7 +391,8 @@ describe("Work Calendar F7 — widget dashboard", () => {
     expect(screen.getByTestId("work-calendar-dashboard-widget")).toBeInTheDocument();
     expect(screen.getByTestId("work-calendar-dashboard-today")).toHaveTextContent("Pekerjaan hari ini");
     expect(screen.getByTestId("work-calendar-dashboard-overdue")).toHaveTextContent("Tertunda");
-    expect(screen.getByText("1 direncanakan · 1 berjalan")).toBeInTheDocument();
+    expect(screen.getByTestId("work-calendar-dashboard-overdue")).toHaveTextContent("Belum selesai dan tenggat sudah lewat");
+    expect(screen.getByText("2 direncanakan · 1 berjalan")).toBeInTheDocument();
   });
 
   it("menampilkan pesan kosong ketika tidak ada pekerjaan", () => {
