@@ -74,7 +74,7 @@ export function WorkEntryList({
       data-variant={variant}
       className={cn(
         variant === "full"
-          ? "divide-y divide-border overflow-hidden rounded-sm border border-border bg-card"
+          ? "flex flex-col gap-0" // The WorkEntryRow itself handles mb-3 and borders now
           : "divide-y divide-border/60",
       )}
     >
