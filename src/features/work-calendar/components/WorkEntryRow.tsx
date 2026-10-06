@@ -137,28 +137,17 @@ function WorkEntryRowControls({
               data-active-status={entry.status}
               aria-label={`Ubah status pekerjaan ${entry.title}. Status saat ini ${statusMeta.label}.`}
               className={cn(
-                "h-11 min-w-touch gap-1.5 rounded-sm px-1.5 font-medium sm:px-2",
-                // Badge status memberi bentuk + label + warna sehingga status
-                // tetap dibedakan tanpa mengandalkan warna saja, juga pada
-                // mode gelap. Warna teks dipaksa ke token status agar
-                // kontrasnya tidak diturunkan oleh varian outline.
+                "h-11 w-11 shrink-0 justify-center rounded-sm px-0 font-medium",
+                // Badge status memberi bentuk + warna, sementara ikon sudah cukup
+                // mewakili label status tanpa memakan ruang baris.
                 statusMeta.badgeClassName,
                 "hover:brightness-110 dark:hover:brightness-125",
-                compact && "w-11 justify-center px-0",
               )}
             >
               <WorkEntryStatusGlyph
                 status={entry.status}
                 className={cn("h-4 w-4", statusMeta.iconClassName)}
               />
-              {!compact && (
-                <span className="hidden whitespace-nowrap sm:inline" data-testid={`work-entry-status-label-${entry.id}`}>
-                  {statusMeta.label}
-                </span>
-              )}
-              {!compact && (
-                <ChevronDown className="hidden h-3.5 w-3.5 opacity-70 sm:block" aria-hidden="true" />
-              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="work-calendar-scope w-56">

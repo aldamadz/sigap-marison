@@ -314,7 +314,7 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
     const iconControls: ReadonlyArray<readonly [string, string]> = [
       ["components/WorkCalendarToolbar.tsx", 'className="h-11 w-11 shrink-0 rounded-sm"'],
       ["components/WorkEntryRow.tsx", 'className="w-11 shrink-0 rounded-sm"'],
-      ["components/WorkEntryRow.tsx", '"h-11 min-w-touch gap-1.5 rounded-sm px-1.5 font-medium sm:px-2"'],
+      ["components/WorkEntryRow.tsx", '"h-11 w-11 shrink-0 justify-center rounded-sm px-0 font-medium"'],
     ];
     for (const [file, marker] of iconControls) {
       const source = readFileSync(join(featureDir, file), "utf8");
