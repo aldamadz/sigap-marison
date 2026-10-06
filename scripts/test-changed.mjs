@@ -109,6 +109,7 @@ for (const file of allChangedFiles) {
   if (/external.*submission.*decision.*\.sql$|validated_unit_project_revision\.sql$|test-external-submission-decisions-sql\.mjs$/u.test(file)) gates.add("test:external-submission-decisions-sql");
   if (/branch-asset-without-project.*\.sql$|branch-asset-without-project\.integration\.sql$|test-branch-asset-without-project-sql\.mjs$/u.test(file)) gates.add("test:branch-asset-without-project-sql");
   if (/work.calendar.*\.sql$|test-work-calendar-sql\.mjs$/u.test(file)) gates.add("test:work-calendar-sql");
+  if (/work.calendar.bootstrap.*\.sql$|test-work-calendar-bootstrap-sql\.mjs$/u.test(file)) gates.add("test:work-calendar-bootstrap-sql");
 }
 
 for (const gate of gates) run(npm, ["run", gate]);

@@ -10,7 +10,7 @@ services:
         VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"
-        VITE_WORK_CALENDAR_ENABLED: "false"
+        VITE_WORK_CALENDAR_ENABLED: "true"
     image: agenda-flow:production
     container_name: agenda-flow-prod
     restart: always

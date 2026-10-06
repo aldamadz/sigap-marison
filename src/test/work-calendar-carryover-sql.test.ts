@@ -81,15 +81,24 @@ describe("forward-only calendar carryover SQL", () => {
     expect(generator.match(/public\.work_calendar_emit_notification\(/g)).toHaveLength(3);
   });
 
-  it("is the last checked-in definition, including production recovery migrations", () => {
+  it("keeps carryover effective after the guarded bootstrap and notification security overlay", () => {
     const migrations = readdirSync(migrationDir).filter((file) => file.endsWith(".sql"))
-      .map((file) => ({ file, sql: source(file) }));
+      .map((file) => ({ file, sql: source(file).replace(/execute\s+\$cal03_\d+\$[\s\S]*?\$cal03_\d+\$;/g, "") }));
     for (const name of Object.keys(canonicalFiles)) {
       const definingFiles = migrations.filter((migration) =>
         new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${name}\\s*\\(`, "i").test(migration.sql),
       ).map((migration) => migration.file).sort();
-      expect(definingFiles.at(-1)).toBe(migrationName);
+      expect(definingFiles.at(-1)).toBe(name === "generate_work_calendar_notifications"
+        ? "20261006120000_work_calendar_notification_scope.sql" : migrationName);
     }
+  });
+
+  it("only hardens active escalation paths in the final generator, preserving carryover and signature", () => {
+    const name = "generate_work_calendar_notifications";
+    const hardened = definition(source("20261006120000_work_calendar_notification_scope.sql"), name);
+    expect(hardened).toContain("and p.is_active is true");
+    expect(hardened).toContain("and child.is_active is true");
+    expect(hardened.replace(/\n {10}and (?:p|child)\.is_active is true/g, "")).toBe(definition(sql, name));
   });
 
   it("defaults to sequential baseline/carryover children before any outer database setup", () => {

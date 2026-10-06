@@ -28,7 +28,7 @@ describe("Marison deployment environment", () => {
     expect(productionCompose).toContain('APP_PUBLIC_URL: "https://sigap.marisoncloud.com"');
     expect(productionCompose).toContain('VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"');
     expect(stagingCompose).toContain('VITE_WORK_CALENDAR_ENABLED: "true"');
-    expect(productionCompose).toContain('VITE_WORK_CALENDAR_ENABLED: "false"');
+    expect(productionCompose).toContain('VITE_WORK_CALENDAR_ENABLED: "true"');
     expect(stagingCompose).toContain("Set SUPABASE_URL in .env.staging");
     expect(stagingCompose.match(/GIT_SHA: "\$\{DEPLOY_GIT_SHA:\?DEPLOY_GIT_SHA is required\}"/g)).toHaveLength(5);
     expect(productionCompose).toContain("Set SUPABASE_URL in .env.production");
