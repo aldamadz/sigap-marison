@@ -173,4 +173,3 @@ $bootstrap_rpc_tests$;
 
 rollback;
 select 'CAL-04 work calendar bootstrap integration: all assertions passed';
-

@@ -563,4 +563,3 @@ try {
   const removed = spawnSync("docker", ["rm", "-f", id], { encoding: "utf8", timeout: 30_000 });
   if (removed.error || removed.status !== 0) throw new Error("Disposable PostgreSQL cleanup failed.");
 }
-

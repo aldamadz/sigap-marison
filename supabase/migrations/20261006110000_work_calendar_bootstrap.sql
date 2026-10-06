@@ -2458,4 +2458,3 @@ $cal03_7$;
     raise notice 'CAL-04 bootstrap: canonical CAL-03 baseline installed; apply carryover second';
 end
 $calendar_bootstrap$;
-
