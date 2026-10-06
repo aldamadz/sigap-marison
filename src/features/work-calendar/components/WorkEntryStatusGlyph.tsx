@@ -33,6 +33,7 @@ export function WorkEntryStatusGlyph({ status, className }: WorkEntryStatusGlyph
     <Glyph
       aria-hidden="true"
       data-status-glyph={status}
+      data-testid={`work-entry-status-glyph-${status}`}
       className={cn("h-3.5 w-3.5 shrink-0", TONE_CLASSES[status], className)}
     />
   );
