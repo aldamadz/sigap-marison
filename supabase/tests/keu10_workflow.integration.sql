@@ -391,4 +391,17 @@ begin
   perform keu10_test.assert(v_candidate.job_title='Direktur I','Candidate API resolves canonical display title without exposing profile fields');
 end $$;
 reset role;
+-- Non-KEU10 vendor decisions still use the preserved canonical implementation.
+update public.surat_registrasi set status='DONE' where id=(select surat_id from keu10_test.results where key='non_keu10');
+insert into public.marison_outbound_dispatches(surat_id,environment,status,post_started_at,response)
+  select surat_id,'staging','succeeded',now(),'{"ok":true}' from keu10_test.results where key='non_keu10';
+set role service_role;
+do $$ declare v_surat public.surat_registrasi%rowtype; v_result jsonb;
+begin
+  select * into v_surat from public.surat_registrasi where id=(select surat_id from keu10_test.results where key='non_keu10');
+  v_result:=public.apply_external_submission_decision(keu10_test.id(8200),v_surat.no_surat,'rejected',
+    'Non KEU10 vendor regression',now(),repeat('c',64),'staging');
+  perform keu10_test.assert(v_result->>'status'='REJECTED' and v_result->>'terminal'='true','Non-KEU10 vendor contract preserved');
+end $$;
+reset role;
 do $$ begin raise notice 'KEU10 workflow: all assertions passed'; end $$;
