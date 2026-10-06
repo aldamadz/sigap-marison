@@ -362,7 +362,7 @@ export function WorkEntryRow({
       data-selected={isSelected ? "true" : "false"}
       className={cn(
         "transition-colors",
-        isCompact ? "px-1.5 py-1.5" : "px-3 py-2",
+        isCompact ? "px-2 py-2" : "px-3 py-2",
         // Kanvas utama: tidak ada border/kartu per baris. Hover lembut, dan
         // baris terpilih tetap jelas melalui ring + latar (bukan warna saja).
         isSelected

@@ -115,7 +115,7 @@ export function WeeklyWorkView({
               className={cn(
                 "flex min-w-0 flex-col rounded-sm border p-2",
                 getWorkCalendarDaySurfaceClassName(meta),
-                isToday ? "border-primary/50 bg-primary/5" : "border-border",
+                isToday ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30" : "border-border",
               )}
             >
               <div className="flex items-center gap-1">
@@ -129,12 +129,12 @@ export function WeeklyWorkView({
                   aria-label={`Buka tampilan hari ${formatWorkDateShort(summary.date)}`}
                 >
                   <span className="flex items-baseline justify-between gap-1">
-                    <span className="text-xs font-semibold text-foreground">
+                    <span className="text-sm font-semibold text-foreground">
                       {getDayName(summary.date, { short: true })}
                     </span>
                     <span
                       className={cn(
-                        "text-xs",
+                        "text-sm",
                         isToday ? "font-semibold text-primary" : "text-muted-foreground",
                       )}
                     >
@@ -142,8 +142,11 @@ export function WeeklyWorkView({
                     </span>
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {summary.progress.completed}/{summary.progress.total} selesai
-                    {summary.progress.overdue > 0 ? `, ${summary.progress.overdue} terlambat` : ""}
+                    <span className="font-semibold text-foreground">{summary.progress.completed}</span>
+                    /{summary.progress.total} selesai
+                    {summary.progress.overdue > 0 ? (
+                      <span className="text-overdue">, {summary.progress.overdue} terlambat</span>
+                    ) : ""}
                   </span>
                 </button>
                 {/*
@@ -159,7 +162,7 @@ export function WeeklyWorkView({
                     onQuickAdd(summary.date, event.currentTarget);
                   }}
                   aria-label={`Tambah pekerjaan pada ${formatWorkDateShort(summary.date)}`}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-70 transition-opacity hover:bg-accent hover:text-accent-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:bg-muted hover:text-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Plus className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -193,7 +196,7 @@ export function WeeklyWorkView({
                       onQuickAdd(summary.date, event.currentTarget);
                     }}
                     aria-label={`Tambah pekerjaan pada ${formatWorkDateShort(summary.date)}`}
-                    className="flex min-h-touch w-full flex-col items-center justify-center rounded-sm border border-dashed border-border px-2 py-3 text-center text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-touch w-full flex-col items-center justify-center rounded-sm border border-dashed border-border bg-muted/30 px-2 py-3 text-center text-xs text-muted-foreground hover:bg-muted/50 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Plus className="mx-auto mb-1 h-3.5 w-3.5" aria-hidden="true" />
                     Tambah pekerjaan
@@ -220,7 +223,7 @@ export function WeeklyWorkView({
                           setPanel({ date: summary.date, anchor: event.currentTarget });
                         }}
                         aria-label={`Buka ${hiddenCount} pekerjaan lainnya pada ${formatWorkDateShort(summary.date)}`}
-                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm px-2 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm border border-border/60 bg-muted/30 px-2 text-xs font-medium text-primary underline-offset-2 hover:border-primary/30 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         +{hiddenCount} pekerjaan lainnya
                       </button>
