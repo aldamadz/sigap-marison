@@ -2,6 +2,9 @@ import type { RegistrationSummaryData, RegistrationSummaryField } from "@/compon
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { applyRevisionToItems, getActiveRevision } from "@/components/surat/revision-utils";
+import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
+import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
+import { getFundSubmissionTypeLabel } from "@/features/surat/registration/usages/fund/fund-types";
 
 const SUMMARY_HIDDEN_KEYS = new Set([
   "request_mode",
@@ -118,13 +121,18 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
       ? [...surat.surat_signatures].sort((a: any, b: any) => Number(a.step_order || 0) - Number(b.step_order || 0))
       : [];
 
+  const locationForm = asRecord(location.form);
+  const form = Object.keys(locationForm).length > 0 ? locationForm : asRecord(snapshot.form);
+  const policy = asRecord(surat?.policy_snapshot);
+  const keu10 = isKeu10Form({ nomor_form: typeof form.nomor_form === "string" ? form.nomor_form : null });
+  const purpose = normalizeKeu10Config(policy.keu10_config)?.purposes.find((entry) => entry.code === mergedInput.keu10_purpose_code);
   const fields: RegistrationSummaryField[] = Object.entries(mergedInput)
-    .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) && formatSummaryValue(value) !== "-")
+    .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) && !(keu10 && key === "keu10_purpose_label") && formatSummaryValue(value) !== "-")
     .map(([key, value]) => ({
       key,
-      label: humanizeInputKey(key),
+      label: key === "fund_type" ? "Jenis Pengajuan Dana" : keu10 && key === "keu10_purpose_code" ? "Tujuan Pengajuan" : humanizeInputKey(key),
       type: Array.isArray(value) ? "table" : undefined,
-      value,
+      value: key === "fund_type" ? getFundSubmissionTypeLabel(value) : keu10 && key === "keu10_purpose_code" ? purpose?.label || "-" : value,
     }));
 
   if (unitAllocation.units.length > 0 && !fields.some((field) => field.key === "allocated_units")) {
@@ -154,9 +162,6 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
   const office = asRecord(location.office);
   const project = asRecord(location.project);
   const requestedProject = asRecord(mergedInput.requested_project);
-  const locationForm = asRecord(location.form);
-  const form = Object.keys(locationForm).length > 0 ? locationForm : asRecord(snapshot.form);
-  const policy = asRecord(surat?.policy_snapshot);
   const snapshotSurat = asRecord(snapshot.surat);
 
   return {

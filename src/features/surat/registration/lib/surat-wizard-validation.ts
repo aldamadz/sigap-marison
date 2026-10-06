@@ -5,6 +5,8 @@
  * No React hooks, no toast, no fetch, no side effects.
  */
 
+import { isFundSubmissionType } from "../usages/fund/fund-types";
+
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 
 // ── Input snapshot ──────────────────────────────────────────────────────────
@@ -123,11 +125,11 @@ export function validateStep1ForNumberGeneration(
   }
   if (
     cat === "non_asset" &&
-    !["operational", "production_cost"].includes(input.fundType)
+    !isFundSubmissionType(input.fundType)
   ) {
     return fail(
       "Jenis Pengajuan Dana Wajib Dipilih",
-      "Pilih Biaya Operasional atau Biaya Produksi.",
+      "Pilih Biaya Operasional, Biaya Produksi, atau Biaya Marketing.",
     );
   }
 

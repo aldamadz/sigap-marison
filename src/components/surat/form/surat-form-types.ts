@@ -1,3 +1,5 @@
+import type { Keu10Config } from "@/features/surat/registration/lib/keu10-config";
+
 export interface SuratFormProps {
   onSuccess: (noSurat: string, judul: string) => void;
   isLoading: boolean;
@@ -56,6 +58,7 @@ export type RecommendationConfig = {
 
 export type UsageDetailRecord = {
   id: string;
+  keu10_config?: Keu10Config | null;
   first_maker_policy?: "contextual" | "configured";
   is_system_template?: boolean;
   name?: string;

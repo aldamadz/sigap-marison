@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
@@ -9,6 +10,8 @@ import {
 } from "@/lib/registration-draft-attachment-classification";
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
+import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
+import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
@@ -309,7 +312,7 @@ export const suratService = {
               *,
               form_usage_departments(department_id),
               form_usage_steps(
-                id, step_order, role_name, label, action_type, assignee_mode, input_schema, signer_department_id,
+                id, step_order, role_name, label, action_type, assignee_mode, input_schema, signer_department_id, candidate_scope, skip_if_no_candidate, candidate_fallback_mode,
                 form_usage_step_users(user_id)
               ),
               form_usage_attachment_requirements(*),
@@ -409,7 +412,7 @@ export const suratService = {
     const { data: usageConfiguration, error: usageError } = await supabase
       .from("form_usages")
       .select(`
-        id, name, form_id, request_category, scope_type, is_system_template, first_maker_policy, recommendation_config, external_revision_policy,
+        id, name, form_id, request_category, scope_type, is_system_template, first_maker_policy, recommendation_config, external_revision_policy, keu10_config,
         master_forms(id, nama_form, nomor_form, department_id, input_schema),
         form_usage_departments(department_id),
         form_usage_steps(
@@ -1043,6 +1046,10 @@ export const suratService = {
           if (assignment.form_usage_step_id !== step.id || !matchesAssignee) {
             throw new Error(`Penandatangan tahap ${step.step_order} tidak sesuai konfigurasi.`);
           }
+          if (isKeu10Form(configContext.form) && step.role_name === "menyetujui"
+            && !isKeu10FinalCandidate(signerProfile, configContext.usage?.keu10_config, payload.form_input_data?.items)) {
+            throw new Error("Penyetuju KEU 10 tidak sesuai nilai rincian pengajuan.");
+          }
         });
         payload.policy_validation = validation;
       }
@@ -1072,6 +1079,7 @@ export const suratService = {
           form_id: configContext.form?.id || null,
           request_category: configContext.usage?.request_category || null,
           recommendation_config: configContext.usage?.recommendation_config || {},
+          ...(isKeu10Form(configContext.form) ? { keu10_config: configContext.usage?.keu10_config } : {}),
           external_revision_policy: configContext.usage?.external_revision_policy || {
             recipient_type: "requester",
             recipient_step_order: null,
@@ -1109,16 +1117,50 @@ export const suratService = {
 
       cleanPayload.file_path = `native://document/${payloadDraftId || payloadReservationId || encodeURIComponent(String(payload.no_surat || "draft"))}`;
 
-      const { data: surat, error: suratError } = await supabase
-        .rpc("create_surat_registrasi", { p_payload: cleanPayload });
+      const keu10Registration = isKeu10Form(context.form);
+      const { data: registrationResult, error: suratError } = keu10Registration
+        ? await supabase.rpc("create_keu10_registration", {
+            p_payload: cleanPayload,
+            p_signers: activeSigners.map((signer) => ({
+              user_id: signer.user_id,
+              form_usage_step_id: this.cleanUuid(signer.form_usage_step_id),
+            })),
+          })
+        : await supabase.rpc("create_surat_registrasi", { p_payload: cleanPayload });
 
       if (suratError) throw suratError;
+      const surat = keu10Registration ? registrationResult?.surat : registrationResult;
       if (!surat?.id) throw new Error("Surat gagal dibuat.");
 
       // A previous attempt may have committed the registration before a later
       // recommendation-link step failed. In that case the RPC returns the same
       // surat; do not duplicate its attachments, snapshots, or signatures.
-      if (payloadDraftId) {
+      if (keu10Registration && registrationResult.created !== true) {
+        await this.uploadAttachmentFiles(surat.id, attachmentFiles, user.id, {
+          stage: "initial", requirements: payload.initial_attachment_meta || {}, idempotent: true,
+        });
+        // A committed registration may be retried after draft-file linking failed.
+        // Link only missing stored files; never replace the frozen document/signers.
+        const { data: existingAttachments, error: attachmentReadError } = await supabase
+          .from("surat_attachments").select("file_url, stage, requirement_key").eq("surat_id", surat.id);
+        if (attachmentReadError) throw attachmentReadError;
+        const retryRows = buildRegistrationAttachmentRows({
+          suratId: surat.id, userId: user.id,
+          initialAttachments: classifiedDraftAttachments.initialAttachments,
+          recommendationAttachments: classifiedDraftAttachments.activeRecommendationAttachments,
+        }).filter((row) => !(existingAttachments || []).some((existing) =>
+          existing.file_url === row.file_url && existing.stage === row.stage
+          && existing.requirement_key === row.requirement_key));
+        if (retryRows.length > 0) {
+          const { error: attachmentLinkError } = await supabase.from("surat_attachments").insert(retryRows);
+          if (attachmentLinkError) throw attachmentLinkError;
+        }
+        await this.autoApproveRequesterFirstStep(surat.id).catch((autoApproveError) => {
+          console.error("Gagal melanjutkan auto-approval pemohon:", autoApproveError);
+        });
+        return surat;
+      }
+      if (payloadDraftId && !keu10Registration) {
         const { count: existingSignatureCount, error: existingSignatureError } = await supabase
           .from("surat_signatures")
           .select("id", { count: "exact", head: true })
@@ -1137,6 +1179,7 @@ export const suratService = {
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
         stage: "initial",
         requirements: payload.initial_attachment_meta || {},
+        idempotent: keu10Registration,
       });
       let reusedDraftAttachments: any[] = [];
       const draftAttachmentRows = buildRegistrationAttachmentRows({
@@ -1166,12 +1209,15 @@ export const suratService = {
       }
       surat.surat_attachments = uploadedAttachments;
 
-      const dataSnapshot = this.buildDataSnapshot(context, payload, snapshotSigners, normalizedFormInputData, uploadedAttachments);
-      await supabase
-        .from("surat_registrasi")
-        .update({ data_snapshot: dataSnapshot })
-        .eq("id", surat.id);
-      surat.data_snapshot = dataSnapshot;
+      // KEU 10 keeps its server-stamped input, workflow and generation snapshot.
+      if (!keu10Registration) {
+        const dataSnapshot = this.buildDataSnapshot(context, payload, snapshotSigners, normalizedFormInputData, uploadedAttachments);
+        await supabase
+          .from("surat_registrasi")
+          .update({ data_snapshot: dataSnapshot })
+          .eq("id", surat.id);
+        surat.data_snapshot = dataSnapshot;
+      }
 
       if (!cleanPayload.reservation_id) {
         await supabase.from("surat_reservations")
@@ -1210,10 +1256,12 @@ export const suratService = {
 
       let requesterAutoApproved = false;
       if (signerPayload.length > 0) {
-        const { error: signerInsertError } = await supabase.from("surat_signatures").insert(signerPayload);
-        if (signerInsertError) {
-          await supabase.from("surat_registrasi").delete().eq("id", surat.id);
-          throw signerInsertError;
+        if (!keu10Registration) {
+          const { error: signerInsertError } = await supabase.from("surat_signatures").insert(signerPayload);
+          if (signerInsertError) {
+            await supabase.from("surat_registrasi").delete().eq("id", surat.id);
+            throw signerInsertError;
+          }
         }
         
         const firstStepOrd = Math.min(...signerPayload.map((s: any) => s.step_order));
@@ -1734,6 +1782,22 @@ export const suratService = {
     return true;
   },
 
+  async acceptKeu10RequesterRevision(eventId: string, options: {
+    items?: unknown;
+    note: string;
+    finalSignerId?: string | null;
+  }) {
+    const { data, error } = await supabase.rpc("accept_keu10_requester_revision", {
+      p_event_id: eventId,
+      p_items: options.items ?? null,
+      p_note: options.note,
+      p_final_signer_id: options.finalSignerId ?? null,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Gagal mengonfirmasi revisi KEU 10.");
+    return true;
+  },
+
   async cancelAfterRevision(eventId: string, note: string) {
     const { data, error } = await supabase.rpc("cancel_surat_after_revision", {
       p_event_id: eventId,
@@ -1941,14 +2005,25 @@ export const suratService = {
       stage?: string;
       signature_id?: string;
       requirements?: Record<string, { key?: string; label?: string }>;
+      idempotent?: boolean;
     } = {}
   ) {
+    const existing = meta.idempotent && files.length > 0
+      ? await supabase.from("surat_attachments").select("*").eq("surat_id", suratId)
+      : { data: [], error: null };
+    if (existing.error) throw existing.error;
+    const retainedRows = [];
     const rows = await Promise.all(files.filter(Boolean).map(async (file, index) => {
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
-      const filePath = `lampiran_${suratId}/${Date.now()}_${index}_${safeName}`;
-      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file });
       const requirement = meta.requirements?.[file.name] || {};
+      const identity = meta.idempotent ? await registrationUploadIdentity(file, meta.stage || "initial", requirement.key || null) : null;
+      const retained = identity ? (existing.data || []).find((row) => row.upload_identity === identity) : null;
+      if (retained) { retainedRows.push(retained); return null; }
+      const filePath = identity ? `lampiran_${suratId}/registration_${identity}_${safeName}`
+        : `lampiran_${suratId}/${Date.now()}_${index}_${safeName}`;
+      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file, upsert: meta.idempotent === true });
       return {
+        ...(identity ? { upload_identity: identity } : {}),
         surat_id: suratId,
         file_url: uploaded.publicUrl,
         file_name: file.name,
@@ -1962,14 +2037,16 @@ export const suratService = {
       };
     }));
 
-    if (rows.length === 0) return [];
+    const uniqueRows = rows.filter((row, index, all) => row !== null && (!meta.idempotent
+      || all.findIndex((candidate) => candidate?.upload_identity === row.upload_identity) === index));
+    if (uniqueRows.length === 0) return retainedRows;
 
-    const { data, error } = await supabase
-      .from("surat_attachments")
-      .insert(rows)
-      .select("*");
+    const query = supabase.from("surat_attachments");
+    const { data, error } = await (meta.idempotent
+      ? query.upsert(uniqueRows, { onConflict: "surat_id,upload_identity", ignoreDuplicates: true })
+      : query.insert(uniqueRows)).select("*");
     if (error) throw error;
-    return data || [];
+    return [...retainedRows, ...(data || [])];
   },
 
   async getAllSurat(userId?: string): Promise<SuratRegistrasi[]> {

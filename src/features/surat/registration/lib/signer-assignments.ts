@@ -8,9 +8,9 @@ const normalizeRoleName = (
   raw: unknown,
   index: number,
   total: number,
-): "membuat" | "memeriksa" | "menyetujui" => {
+): "membuat" | "memeriksa" | "verifikator" | "menyetujui" => {
   const value = String(raw ?? "").toLowerCase().trim();
-  if (value === "membuat" || value === "memeriksa" || value === "menyetujui") return value;
+  if (value === "membuat" || value === "memeriksa" || value === "verifikator" || value === "menyetujui") return value;
   if (
     value.includes("setuju") ||
     value.includes("approve") ||

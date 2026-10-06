@@ -54,7 +54,7 @@ describe("Marison outbound contract v1", () => {
   it("accepts the active Fund Submission contract and applicant-selected type", () => {
     const fixture = readFixture("fund-submission.example.json");
 
-    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-08-26-branch-items");
+    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-10-06-marketing-cost");
     expect(marisonFundSubmissionSchema.parse(fixture)).toEqual(fixture);
     expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
   });

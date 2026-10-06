@@ -75,6 +75,12 @@ import { RecommendationDecisionSummary } from "@/components/surat/Recommendation
 import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
 import { getKeu1FinancialSummary, normalizeKeu1SubmissionItems, parseKeu1Money, parseKeu1Quantity } from "@/components/surat/keu1-submission";
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
+import { getKeu10ItemTotal, getKeu10SubmissionAmount, isKeu10Form, normalizeKeu10SubmissionItems } from "@/features/surat/registration/lib/keu10-form";
+import { Keu10SubmissionSummary } from "@/components/surat/Keu10SubmissionSummary";
+import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
+import { validateKeu10SubmissionItems, type Keu10SubmissionItem } from "@/features/surat/registration/lib/keu10-form";
+import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
+import { getFundSubmissionTypeLabel } from "@/features/surat/registration/usages/fund/fund-types";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { NominalInput } from "@/components/surat/NominalInput";
@@ -139,6 +145,7 @@ export default function InboxPage() {
   const [revisionTarget, setRevisionTarget] = useState("checker");
   const [revisionDialogItem, setRevisionDialogItem] = useState<any | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
+  const [keu10RevisionItems, setKeu10RevisionItems] = useState<Keu10SubmissionItem[]>([]);
   const [revisionRows, setRevisionRows] = useState<Array<{
     index: number;
     nama_barang: string;
@@ -998,6 +1005,9 @@ const handleApprove = async (item: any) => {
     return rows.filter((row: any) => row && typeof row === "object");
   };
 
+  const isKeu10Revision = (item: any) => isKeu10Form(item?.surat_registrasi?.location_snapshot?.form || item?.surat_registrasi?.data_snapshot?.form);
+  const canProposeKeu10Correction = (item: any) => isKeu10Revision(item) && item?.role_name === "verifikator";
+
   const getRevisionContext = (item: any) => {
     const input = item?.surat_registrasi?.form_input_data || item?.surat_registrasi?.data_snapshot?.input || {};
     const category = String(input.request_category || input.request_mode || "").toLowerCase();
@@ -1120,6 +1130,8 @@ const handleApprove = async (item: any) => {
     const requestedUnitCount = getRequestedUnitCount(item);
     setRevisionDialogItem(item);
     setRevisionNote(notes[item.id] || "");
+    setKeu10RevisionItems(canProposeKeu10Correction(item) ? normalizeKeu10SubmissionItems(rows) : []);
+    if (isKeu10Revision(item)) setRevisionTarget("requester");
     setRevisionRows(rows.map((row: any, index: number) => {
       const valueType = getRevisionValueType(item, row);
       return {
@@ -1190,7 +1202,9 @@ const handleApprove = async (item: any) => {
   };
 
   const handleReturnForRevision = async (item: any) => {
-    const target = revisionTarget as "requester" | "checker" | "signer" | "recommendation";
+    const keu10 = isKeu10Revision(item);
+    const proposeKeu10Correction = canProposeKeu10Correction(item);
+    const target = keu10 ? "requester" : revisionTarget as "requester" | "checker" | "signer" | "recommendation";
     const targetLabel: Record<string, string> = {
       requester: "pemohon",
       checker: "tim pemeriksa",
@@ -1222,24 +1236,28 @@ const handleApprove = async (item: any) => {
         } : {}),
         alasan: row.alasan.trim(),
       }));
-    if (revisionRows.length > 0 && itemRevisions.length === 0) {
+    if (!keu10 && revisionRows.length > 0 && itemRevisions.length === 0) {
       toast.error("Pilih minimal satu item yang perlu diperbaiki, atau isi instruksi perbaikan pada item.");
       return;
     }
-    const note = normalizeRevisionMainNote(revisionRows.length > 0 ? "" : revisionNote, itemRevisions);
+    const note = normalizeRevisionMainNote(!keu10 && revisionRows.length > 0 ? "" : revisionNote, itemRevisions);
     if (note.trim().length < 5) {
       toast.error("Catatan revisi minimal 5 karakter.");
       return;
     }
-    const invalid = itemRevisions.find((row) => String(row.alasan || "").trim().length < 5);
+    const invalid = !keu10 && itemRevisions.find((row) => String(row.alasan || "").trim().length < 5);
     if (invalid) {
       toast.error(`Alasan perubahan item "${invalid.nama_barang}" minimal 5 karakter.`);
       return;
     }
+    if (proposeKeu10Correction) {
+      const issue = validateKeu10SubmissionItems(keu10RevisionItems)[0];
+      if (issue) { toast.error(issue.message); return; }
+    }
 
     setProcessingId(item.id);
     try {
-      const restartStep = target === "signer"
+      const restartStep = keu10 ? 1 : target === "signer"
         ? Math.max(1, Number(item.step_order || 1) - 1)
         : Number(item.step_order || 1);
       const checkerInputSnapshot = target === "checker" ? buildCheckerInputSnapshot(item) : null;
@@ -1258,7 +1276,9 @@ const handleApprove = async (item: any) => {
           requested_by: "approval_inbox",
           requires_resign: true,
           restart_step: restartStep,
-          item_revisions: itemRevisions,
+          ...(proposeKeu10Correction
+            ? { keu10_proposed_input: { items: normalizeKeu10SubmissionItems(keu10RevisionItems) } }
+            : keu10 ? {} : { item_revisions: itemRevisions }),
           ...(checkerInputSnapshot ? { checker_input_snapshot: checkerInputSnapshot } : {}),
         },
       });
@@ -1462,6 +1482,8 @@ const handleApprove = async (item: any) => {
     const items = applyRevisionToItems(rawItems, getActiveRevision(surat));
     const requestedProject = input.requested_project || dataSnapshot.requested_project || {};
     const keu1 = isKeu1Form(location.form || dataSnapshot.form);
+    const keu10 = isKeu10Form(location.form || dataSnapshot.form);
+    const keu10Purpose = normalizeKeu10Config(surat.policy_snapshot?.keu10_config)?.purposes.find((purpose) => purpose.code === input.keu10_purpose_code)?.label || "-";
     const category = input.request_category || dataSnapshot.request_category;
     const requestDate = surat.request_date
       ? new Date(surat.request_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })
@@ -1469,8 +1491,8 @@ const handleApprove = async (item: any) => {
     const cards = [
       { icon: UserRound, label: "Pengaju", value: requester.full_name || "-", detail: requester.job_title || "-" },
       { icon: BriefcaseBusiness, label: "Departemen", value: location.department?.name || "-", detail: location.form?.nama_form || dataSnapshot.form?.nama_form || "-" },
-      { icon: MapPin, label: "Lokasi", value: location.office?.name || "-", detail: keu1 ? "Kas kecil tanpa proyek" : requestedProject.name || requestedProject.label || location.project?.name || "Tanpa proyek" },
-      { icon: ClipboardList, label: "Permohonan", value: keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(category), detail: [surat.request_place, requestDate].filter((value) => value && value !== "-").join(", ") || "-" },
+      { icon: MapPin, label: keu10 ? "Cabang / Proyek" : "Lokasi", value: location.office?.name || "-", detail: keu1 ? "Kas kecil tanpa proyek" : requestedProject.name || requestedProject.label || location.project?.name || (keu10 ? "-" : "Tanpa proyek") },
+      { icon: ClipboardList, label: "Permohonan", value: keu1 ? "Pengajuan Kas Kecil" : keu10 ? "Pengajuan Dana (KEU 10)" : formatRequestCategory(category), detail: [surat.request_place, requestDate].filter((value) => value && value !== "-").join(", ") || "-" },
     ];
     const itemColumns = [
       { key: "nama_barang", label: "Nama Barang", getValue: (row: any) => row?.nama_barang ?? row?.nama ?? row?.barang },
@@ -1487,7 +1509,7 @@ const handleApprove = async (item: any) => {
       "allocated_units", "allocated_unit_count", "allocated_by_signature_id", "signers", "catatan",
     ]);
     const extraFields = Object.entries(input).filter(([key, value]) =>
-      !hiddenKeys.has(key) && !(keu1 && ["free_cash_sisa_bulan_lalu", "fund_amount", "fund_type", "fund_without_project"].includes(key)) && value != null && value !== "" && formatSummaryValue(value) !== "-"
+      !hiddenKeys.has(key) && !((keu1 || keu10) && ["free_cash_sisa_bulan_lalu", "fund_amount", "fund_type", "fund_without_project"].includes(key)) && !(keu10 && ["total", "grand_total", "keu1_grand_total", "keu10_grand_total", "keu10_purpose_code"].includes(key)) && value != null && value !== "" && formatSummaryValue(value) !== "-"
     );
 
     return (
@@ -1497,7 +1519,7 @@ const handleApprove = async (item: any) => {
             <PackageOpen className="h-5 w-5 text-primary" />
             <p className="text-sm font-semibold text-foreground">Ringkasan pengajuan</p>
           </div>
-          <Badge variant="outline">{keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(category)}</Badge>
+          <Badge variant="outline">{keu1 ? "Pengajuan Kas Kecil" : keu10 ? "Pengajuan Dana (KEU 10)" : formatRequestCategory(category)}</Badge>
         </div>
         <div className="grid grid-cols-2 gap-2">
           {cards.map(({ icon: Icon, label, value, detail }) => (
@@ -1514,7 +1536,12 @@ const handleApprove = async (item: any) => {
           </div>
         )}
         {keu1 && <div className="mt-4"><Keu1SubmissionSummary items={items} freeCashValue={input.free_cash_sisa_bulan_lalu} /></div>}
-        {!keu1 && items.length > 0 && visibleItemColumns.length > 0 && (
+        {keu10 && <div className="mt-4 space-y-4">
+          <div><p className="text-xs font-medium text-muted-foreground">Jenis Pengajuan Dana</p><p className="mt-1 text-sm font-semibold">{getFundSubmissionTypeLabel(input.fund_type)}</p></div>
+          <div><p className="text-xs font-medium text-muted-foreground">Tujuan Pengajuan</p><p className="mt-1 break-words text-sm font-semibold">{formatSummaryValue(keu10Purpose)}</p></div>
+          <Keu10SubmissionSummary items={items} />
+        </div>}
+        {!keu1 && !keu10 && items.length > 0 && visibleItemColumns.length > 0 && (
           <div className="mt-4 overflow-hidden rounded-md border border-border">
             <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold text-muted-foreground">Daftar barang / jasa</div>
             <div className="overflow-x-auto">
@@ -1552,7 +1579,7 @@ const handleApprove = async (item: any) => {
         )}
         {(extraFields.length > 0 || input.catatan) && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {extraFields.map(([key, value]) => <div key={key} className="rounded-lg border border-border bg-muted/10 p-3"><p className="text-xs font-medium text-muted-foreground">{humanizeInputKey(key)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{formatSummaryValue(value)}</p></div>)}
+            {extraFields.map(([key, value]) => <div key={key} className="rounded-lg border border-border bg-muted/10 p-3"><p className="text-xs font-medium text-muted-foreground">{key === "fund_type" ? "Jenis Pengajuan Dana" : humanizeInputKey(key)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{key === "fund_type" ? getFundSubmissionTypeLabel(value) : formatSummaryValue(value)}</p></div>)}
             {input.catatan && <div className="rounded-lg border border-border bg-muted/10 p-3 sm:col-span-2"><p className="text-xs font-medium text-muted-foreground">Catatan pemohon</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{formatSummaryValue(input.catatan)}</p></div>}
           </div>
         )}
@@ -2048,6 +2075,8 @@ const handleApprove = async (item: any) => {
       const requester = surat.requester_snapshot || surat.data_snapshot?.requester || {};
       const location = surat.location_snapshot || surat.data_snapshot?.location || {};
       const keu1 = isKeu1Form(location.form || surat.data_snapshot?.form);
+      const keu10 = isKeu10Form(location.form || surat.data_snapshot?.form);
+      const keu10Purpose = normalizeKeu10Config(surat.policy_snapshot?.keu10_config)?.purposes.find((purpose) => purpose.code === input.keu10_purpose_code)?.label || "-";
       const allocation = getUnitAllocationData(surat);
       const allocatedProject = allocation.project && typeof allocation.project === "object" && !Array.isArray(allocation.project)
         ? allocation.project as Record<string, unknown>
@@ -2097,8 +2126,11 @@ const handleApprove = async (item: any) => {
           ["Pengaju", requester.full_name || "-"],
           ["Departemen", location.department?.name || "-"],
           ["Kantor", location.office?.name || "-"],
+          ...(keu10 ? [["No. Formulir", location.form?.nomor_form || surat.data_snapshot?.form?.nomor_form || "-"]] : []),
+          ...(keu10 ? [["Tujuan Pengajuan", formatSummaryValue(keu10Purpose)]] : []),
+          ...(!keu1 && input.request_category === "non_asset" ? [["Jenis Pengajuan Dana", getFundSubmissionTypeLabel(input.fund_type)]] : []),
           ...(keu1 ? [["No. Formulir", location.form?.nomor_form || surat.data_snapshot?.form?.nomor_form || "-"]] : [["Proyek", allocatedProject.name || allocatedProject.label || input.requested_project?.name || input.requested_project?.label || location.project?.name || "-"]]),
-          ["Kategori", keu1 ? "Pengajuan Kas Kecil" : formatRequestCategory(input.request_category || input.request_mode)],
+          ["Kategori", keu1 ? "Pengajuan Kas Kecil" : keu10 ? "Pengajuan Dana (KEU 10)" : formatRequestCategory(input.request_category || input.request_mode)],
           ["Tempat, tanggal", [surat.request_place, surat.request_date ? new Date(surat.request_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }) : ""].filter(Boolean).join(", ") || "-"],
         ],
         columnStyles: { 0: { cellWidth: 120, fontStyle: "bold" }, 1: { cellWidth: 380 } },
@@ -2107,16 +2139,25 @@ const handleApprove = async (item: any) => {
 
       const rows = Array.isArray(input.items) ? applyRevisionToItems(input.items, getActiveRevision(surat)) : [];
       if (rows.length > 0) {
-        cursorY = addReportSectionTitle(doc, keu1 ? "Rincian Pengajuan Kas Kecil" : "Detail Barang atau Jasa", cursorY);
+        cursorY = addReportSectionTitle(doc, keu1 ? "Rincian Pengajuan Kas Kecil" : keu10 ? "Rincian Pengajuan Dana" : "Detail Barang atau Jasa", cursorY);
         autoTable(doc, {
           startY: cursorY,
           theme: "grid",
           styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
           headStyles: { fillColor: [36, 120, 74] },
-          head: [keu1
+          head: [keu1 || keu10
             ? ["No.", "Keterangan", "Jumlah", "Satuan", "Estimasi Harga Satuan", "Total"]
             : ["No.", "Nama Barang", "Satuan", "Jumlah", "Status", "Keterangan"]],
-          body: keu1
+          body: keu10
+            ? normalizeKeu10SubmissionItems(rows).map((row, index) => [
+              index + 1,
+              row.keterangan || "-",
+              parseKeu1Quantity(row.jumlah) ?? "-",
+              row.satuan || "-",
+              formatRupiahCanonical(parseKeu1Money(row.estimasi_harga_satuan)),
+              formatRupiahCanonical(getKeu10ItemTotal(row)),
+            ])
+            : keu1
             ? normalizeKeu1SubmissionItems(rows).map((row, index) => {
               const quantity = parseKeu1Quantity(row.jumlah);
               const price = parseKeu1Money(row.estimasi_harga_satuan);
@@ -2130,9 +2171,21 @@ const handleApprove = async (item: any) => {
               formatSummaryValue(row.status),
               formatSummaryValue(row.keterangan),
             ]),
-          columnStyles: { 0: { cellWidth: 28, halign: "center" }, 1: { cellWidth: 170 }, 2: { cellWidth: 55 }, 3: { cellWidth: 55 }, 4: { cellWidth: 45 }, 5: { cellWidth: 145 } },
+          columnStyles: keu10
+            ? { 0: { cellWidth: 28, halign: "center" }, 1: { cellWidth: 154 }, 2: { cellWidth: 40, halign: "right" }, 3: { cellWidth: 64 }, 4: { cellWidth: 118, halign: "right" }, 5: { cellWidth: 119, halign: "right" } }
+            : { 0: { cellWidth: 28, halign: "center" }, 1: { cellWidth: 170 }, 2: { cellWidth: 55 }, 3: { cellWidth: 55 }, 4: { cellWidth: 45 }, 5: { cellWidth: 145 } },
         });
         cursorY = (doc as any).lastAutoTable.finalY + 28;
+        if (keu10) {
+          autoTable(doc, {
+            startY: cursorY,
+            theme: "grid",
+            styles: { fontSize: 8, cellPadding: 5 },
+            body: [["Grand Total", formatRupiahCanonical(getKeu10SubmissionAmount(rows))]],
+            columnStyles: { 0: { fontStyle: "bold" }, 1: { halign: "right" } },
+          });
+          cursorY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 28;
+        }
         if (keu1) {
           const financial = getKeu1FinancialSummary(rows, input.free_cash_sisa_bulan_lalu);
           autoTable(doc, {
@@ -2839,7 +2892,7 @@ const handleApprove = async (item: any) => {
                       Export Summary
                     </Button>
                     <div className="col-span-2 flex min-w-[260px] gap-2">
-                      <Select value={revisionTarget} onValueChange={setRevisionTarget}>
+                      {!isKeu10Revision(selectedItem) && <Select value={revisionTarget} onValueChange={setRevisionTarget}>
                         <SelectTrigger className="h-10 text-xs">
                           <SelectValue placeholder="Kembalikan ke..." />
                         </SelectTrigger>
@@ -2849,7 +2902,7 @@ const handleApprove = async (item: any) => {
                           {Number(selectedItem.step_order || 1) > 1 && <SelectItem value="signer">Signer sebelumnya</SelectItem>}
                           {getRecommendationRequirement(selectedItem) && <SelectItem value="recommendation">Tim IT / rekomendasi</SelectItem>}
                         </SelectContent>
-                      </Select>
+                      </Select>}
                       <Button variant="outline" className="shrink-0" disabled={processingId === selectedItem.id} onClick={() => openRevisionDialog(selectedItem)}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Kembalikan
@@ -2885,16 +2938,29 @@ const handleApprove = async (item: any) => {
           <DialogHeader>
             <DialogTitle>Kembalikan proses untuk perbaikan</DialogTitle>
             <DialogDescription>
-              Tandai item yang perlu diubah. Pemohon akan melihat ringkasan perubahan sebelum proses dilanjutkan.
+              {isKeu10Revision(revisionDialogItem)
+                ? "Pengajuan dikembalikan ke pemohon. Persetujuan dimulai ulang dari Branch Manager."
+                : "Tandai item yang perlu diubah. Pemohon akan melihat ringkasan perubahan sebelum proses dilanjutkan."}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <div className="space-y-3">
-              <div>
+              {!isKeu10Revision(revisionDialogItem) && <div>
                 <p className="text-sm font-semibold">Perubahan item</p>
                 <p className="text-xs text-muted-foreground">Gunakan jika ada item yang dicoret, dikurangi, atau nilainya disetujui berbeda.</p>
-              </div>
-              {revisionRows.length === 0 ? (
+              </div>}
+              {isKeu10Revision(revisionDialogItem) ? (
+                <div className="space-y-4">
+                  {canProposeKeu10Correction(revisionDialogItem) && <Keu10SubmissionEditor value={keu10RevisionItems} onChange={setKeu10RevisionItems} />}
+                  <div className="space-y-2">
+                    <Label htmlFor="keu10-revision-reason">Alasan pengembalian / koreksi</Label>
+                    <Textarea id="keu10-revision-reason" value={revisionNote} onChange={event => setRevisionNote(event.target.value)} minLength={5} required />
+                    <p className="text-xs text-muted-foreground">{canProposeKeu10Correction(revisionDialogItem)
+                      ? "Koreksi menunggu konfirmasi pemohon. Setelah diterima, seluruh tahap menandatangani ulang."
+                      : "Pemohon akan menerima alasan perbaikan. Seluruh tahap menandatangani ulang setelah perbaikan diterima."}</p>
+                  </div>
+                </div>
+              ) : revisionRows.length === 0 ? (
                 <div className="space-y-2 rounded-lg border border-dashed border-border p-4">
                   <Label>Catatan perbaikan</Label>
                   <Textarea

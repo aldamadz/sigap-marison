@@ -12,6 +12,7 @@ import sharp from "sharp";
 import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
 import { createKeu1PreviewData, isKeu1Document, renderKeu1Pdf, resolveKeu1MasterForm } from "../../keu1-pdf-renderer.mjs";
+import { createKeu10PreviewData, isKeu10Document, renderKeu10Pdf } from "../../keu10-pdf-renderer.mjs";
 import { resolveRecommendationSource } from "../../recommendation-pdf.mjs";
 import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "../../recommendation-native-pdf.mjs";
 import { buildProductionCode } from "../../production-code.mjs";
@@ -932,6 +933,14 @@ const generateTemplatePreviewPdf = async (formId, options = {}) => {
     return await renderKeu1Pdf(previewData, {
       logoPath: join(distDir, "logo-marison-regency-group.png"),
     });
+  }
+
+  if (["FM-UAI.KEU-10-00", "FM-MBN.KEU-10-00"].includes(formNumber)) {
+    const previewData = createKeu10PreviewData({
+      signature_count: Math.min(6, Math.max(4, Number(options.signature_count || 5))),
+    });
+    previewData.formNumber = form.nomor_form;
+    return renderKeu10Pdf(previewData, { logoPath: join(distDir, "logo-marison-regency-group.png") });
   }
 
   if (formName.includes("REKOMENDASI PEREMAJAAN")) {
@@ -3579,10 +3588,11 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 };
 
 const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) => {
-  const keu1MasterForm = !isKeu1Document(surat) && surat.form_usage_id
+  const keu1MasterForm = !isKeu1Document(surat) && !isKeu10Document(surat) && surat.form_usage_id
     ? await resolveKeu1MasterForm(supabase, surat.form_usage_id)
     : null;
   const keu1 = isKeu1Document(surat) || isKeu1Document({ resolved_master_form: keu1MasterForm });
+  const keu10 = isKeu10Document(surat) || isKeu10Document({ resolved_master_form: keu1MasterForm });
   // Fund tanpa proyek (dana umum) diizinkan: projectId null membuat payload tanpa project_id.
   const projectId = overrides.projectId == null ? null : requireExternalInteger(overrides.projectId, "Project ID");
   const fundType = firstString(input.fund_type, input.fund_submission_type);
@@ -3609,7 +3619,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
         title: surat.judul_surat,
         description: firstString(input.catatan, input.description, surat.judul_surat),
         amount: input.fund_amount,
-        items: keu1 ? mapKeu1ItemsForFund(input.items) : input.items,
+        items: keu1 || keu10 ? mapKeu1ItemsForFund(input.items) : input.items,
       },
       projectId,
       branchId,
@@ -4308,6 +4318,15 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
   const { surat, user } = await getAuthorizedSurat(suratId, token, null, { includeAttachments: false });
 
   if (!surat.file_path) throw new Error("Sumber dokumen belum tersedia.");
+  const requestedSignature = signatureId
+    ? (surat.surat_signatures || []).find((signature) => signature.id === signatureId)
+    : null;
+  if (signatureId && (!requestedSignature?.is_signed || !requestedSignature.file_path_snap)) {
+    const err = new Error("Snapshot tanda tangan belum tersedia.");
+    err.status = 422;
+    throw err;
+  }
+  const sourceFilePath = requestedSignature?.file_path_snap || surat.file_path;
 
   if (!signatureId && ["PDF_PENDING", "DONE", "SELESAI", "COMPLETED"].includes(String(surat.status || "").toUpperCase())) {
     const { data: recommendationLink, error: recommendationLinkError } = await supabase
@@ -4348,7 +4367,7 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
     .from("document_pdf_jobs")
     .select("id, status, pdf_url, error_message, signature_id")
     .eq("surat_id", suratId)
-    .eq("source_file_path", surat.file_path)
+    .eq("source_file_path", sourceFilePath)
     .in("status", ["queued", "processing"])
     .order("created_at", { ascending: false })
     .limit(1);
@@ -4359,7 +4378,7 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
     .from("document_pdf_jobs")
     .select("id, status, pdf_url, error_message, signature_id")
     .eq("surat_id", suratId)
-    .eq("source_file_path", surat.file_path)
+    .eq("source_file_path", sourceFilePath)
     .eq("status", "done")
     .not("pdf_url", "is", null)
     .order("created_at", { ascending: false })
@@ -4399,7 +4418,7 @@ const enqueuePdfJob = async (suratId, token, { refresh = false, signatureId = nu
     .from("document_pdf_jobs")
     .insert([{
       surat_id: suratId,
-      source_file_path: surat.file_path,
+      source_file_path: sourceFilePath,
       signature_id: signatureId,
       requested_by: user.id,
       refresh,

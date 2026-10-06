@@ -46,6 +46,7 @@ const normalizeRole = (value) => {
   const role = String(value || "").trim().toLowerCase();
   if (role.includes("buat")) return "Membuat";
   if (role.includes("periksa")) return "Memeriksa";
+  if (role === "verifikator") return "Verifikator";
   if (role.includes("setuju")) return "Menyetujui";
   return text(value, "Tahap Persetujuan");
 };

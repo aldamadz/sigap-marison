@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
 export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-08-11-no-estimated-price";
-export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-08-26-branch-items";
+export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-10-06-marketing-cost";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
@@ -115,7 +115,7 @@ export const marisonAssetPurchaseRequestSchema = z.object({
 
 export const marisonFundSubmissionSchema = z.object({
   submission_number: nonEmptyText,
-  type: z.enum(["production_cost", "operational"]),
+  type: z.enum(["production_cost", "operational", "marketing_cost"]),
   // Kontrak vendor 26 Agustus 2026 mewajibkan branch_id untuk seluruh Fund.
   // project_id tetap opsional, tetapi bila ada harus berasal dari branch yang sama.
   project_id: positiveInteger.optional(),

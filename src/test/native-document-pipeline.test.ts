@@ -25,6 +25,15 @@ describe("native document pipeline", () => {
     expect(createBody).not.toContain("ExcelJS");
   });
 
+  it("uses atomic KEU10 registration without replacing its server generation or inserting signers twice", () => {
+    expect(createBody).toContain('supabase.rpc("create_keu10_registration"');
+    expect(createBody).toContain("registrationResult?.surat");
+    expect(createBody).toContain("registrationResult.created !== true");
+    expect(createBody).toContain("Link only missing stored files");
+    expect(createBody).toMatch(/if \(!keu10Registration\) \{\s+const dataSnapshot/);
+    expect(createBody).toMatch(/if \(!keu10Registration\) \{\s+const \{ error: signerInsertError \}/);
+  });
+
   it("keeps approval database-native and generates only the final PDF asynchronously", () => {
     expect(approveBody).toContain("handle_approve_surat_v2");
     expect(approveBody).toContain("native://document/${suratId}/approval/${signatureId}");

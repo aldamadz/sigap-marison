@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## KEU-10 Land and Permit Cost Submission (2026-10-06, Issue #471)
+
+- Candidate branch `feature/keu10-configurable-workflow-01` from production main.
+- Separate KEU 10 editor, confirmation/detail views, native PDF and worker routing.
+- Three grouped purposes reuse existing approval-route templates. Maker is the
+  related branch manager; Finance is a signed verifier before final approval.
+- Tactical land approval uses server-computed totals: at most Rp2 million goes
+  to Director I; above that goes to the President Director. Confirmed corrections
+  restart approvals and retain historical values, identities and signatures.
+- New forward-only migration and real Postgres tests required. Stage acceptance
+  precedes selective production release; no test fixtures or vendor POST in prod.
+- Fund submissions explicitly accept operational, production and marketing costs;
+  KEU 1 remains operational. The live vendor OpenAPI documents `marketing_cost`.
+- Status: implementation in progress, not yet migrated or deployed.
+
 ## SUR-04A Incremental Verifier Attachments (2026-10-05, Issue #389)
 
 - Status: staging candidate; production unchanged.
