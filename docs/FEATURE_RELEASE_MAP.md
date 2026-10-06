@@ -13,7 +13,13 @@
   precedes selective production release; no test fixtures or vendor POST in prod.
 - Fund submissions explicitly accept operational, production and marketing costs;
   KEU 1 remains operational. The live vendor OpenAPI documents `marketing_cost`.
-- Status: implementation in progress, not yet migrated or deployed.
+- Staging: migrations `20261006170000` / `20261006171000` applied, PR #473
+  deployed at `a930cde`; canonical rollback smoke and browser draft/confirmation PASS.
+- Production prerequisite audit: the original vendor decision RPC is present but
+  its historical routing alias is absent. `20261006164500` is a forward-only,
+  idempotent compatibility prerequisite (no-op with existing alias); it preserves
+  the original implementation without applying unrelated historical migrations.
+  Real PostgreSQL tests cover both database shapes. Production rollout pending.
 
 ## SUR-04A Incremental Verifier Attachments (2026-10-05, Issue #389)
 
