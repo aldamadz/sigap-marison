@@ -25,7 +25,6 @@ import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { Keu10SubmissionSummary } from "@/components/surat/Keu10SubmissionSummary";
-import { getFundSubmissionTypeLabel } from "@/features/surat/registration/usages/fund/fund-types";
 
 export type RegistrationSummaryField = {
   key: string;
@@ -105,7 +104,6 @@ const getKeu1FieldValue = (data: RegistrationSummaryData, key: string) => data.f
 
 function Keu10ContextSummary({ data }: { data: RegistrationSummaryData }) {
   return <dl className="grid gap-4 sm:grid-cols-2">
-    <div><dt className="text-xs font-medium text-muted-foreground">Jenis Pengajuan Dana</dt><dd className="mt-1 break-words text-sm font-semibold">{getFundSubmissionTypeLabel(getKeu1FieldValue(data, "fund_type"))}</dd></div>
     <div><dt className="text-xs font-medium text-muted-foreground">Tujuan Pengajuan</dt><dd className="mt-1 break-words text-sm font-semibold">{formatSummaryValue(getKeu1FieldValue(data, "keu10_purpose_code"))}</dd></div>
   </dl>;
 }

@@ -44,7 +44,7 @@ describe("KEU 10 fund module", () => {
     expect(select).toHaveTextContent("Pengurusan tanah");
     expect(select.compareDocumentPosition(screen.getByLabelText("Keterangan")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Jenis Pengajuan Dana" })).toHaveTextContent("Biaya Operasional");
+    expect(screen.queryByRole("combobox", { name: "Jenis Pengajuan Dana" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Free Cash|Kebutuhan Dana/)).not.toBeInTheDocument();
     fireEvent.click(select);
     fireEvent.click(screen.getByRole("option", { name: "Sertifikat tanah" }));
@@ -72,10 +72,10 @@ describe("KEU 10 fund module", () => {
     const result = fundModule.normalizeInput({ ...ctx.input, free_cash_sisa_bulan_lalu: 50_000, fund_without_project: true, fund_type: "production_cost", total: 1 }, ctx);
     expect(result).toMatchObject({ fund_amount: 300_000, fund_without_project: false, keu10_purpose_code: "land", items: [{ total: 300_000 }] });
     expect(result).not.toHaveProperty("free_cash_sisa_bulan_lalu");
-    expect(result).toHaveProperty("fund_type", "production_cost");
+    expect(result).toHaveProperty("fund_type", "operational");
     expect(result).not.toHaveProperty("total");
     expect(fundModule.hiddenFieldKeys?.(ctx)).toContain("total");
-    expect(fundModule.buildSummaryFields?.(ctx)?.map((field) => field.label)).toEqual(["Jenis Pengajuan Dana", "Tujuan Pengajuan", "Rincian Pengajuan Dana", "Grand Total"]);
+    expect(fundModule.buildSummaryFields?.(ctx)?.map((field) => field.label)).toEqual(["Tujuan Pengajuan", "Rincian Pengajuan Dana", "Grand Total"]);
     expect(fundModule.cleanup(ctx, "usage_change").inputKeysToDelete).toContain("keu10_purpose_code");
   });
   it("removes stale purpose/free cash values on context reconciliation", () => {
@@ -85,33 +85,31 @@ describe("KEU 10 fund module", () => {
     expect(result).not.toHaveProperty("free_cash_sisa_bulan_lalu");
     expect(fundModule.reconcileInputForContext?.(ctx.input, ctx)).toHaveProperty("keu10_purpose_code", "land");
   });
-  it.each(FUND_SUBMISSION_TYPES)("accepts and preserves $value for KEU 10", ({ value, label }) => {
+  it.each(FUND_SUBMISSION_TYPES)("clears stale PGD type $value for KEU 10", ({ value }) => {
     const ctx = context();
     ctx.input.fund_type = value;
     expect(fundModule.validateNumberContext(ctx)).toEqual([]);
     expect(fundModule.validateSubmit?.(ctx)).toEqual([]);
     expect(fundModule.isFieldComplete?.({ key: "fund_type" }, ctx)).toBe(true);
-    expect(fundModule.reconcileInputForContext?.(ctx.input, ctx)).toHaveProperty("fund_type", value);
-    expect(fundModule.normalizeInput(ctx.input, ctx)).toHaveProperty("fund_type", value);
-    expect(fundModule.buildSummaryFields?.(ctx)?.find((field) => field.key === "fund_type")?.value).toBe(label);
+    expect(fundModule.reconcileInputForContext?.(ctx.input, ctx)).toHaveProperty("fund_type", "operational");
+    expect(fundModule.normalizeInput(ctx.input, ctx)).toHaveProperty("fund_type", "operational");
+    expect(fundModule.buildSummaryFields?.(ctx)?.find((field) => field.key === "fund_type")).toBeUndefined();
     expect(fundModule.buildSummaryFields?.(ctx)?.find((field) => field.key === "keu10_purpose_code")?.value).toBe("Pengurusan tanah");
   });
-  it.each([undefined, "", "invalid", "marketing", "Biaya Marketing"])("blocks invalid KEU 10 fund type %s instead of defaulting", (value) => {
+  it.each([undefined, "", "invalid", "marketing", "Biaya Marketing"])("does not require a user-selected type for KEU 10: %s", (value) => {
     const ctx = context();
     ctx.input.fund_type = value;
-    expect(fundModule.validateNumberContext(ctx)[0].title).toBe("Jenis Pengajuan Dana Wajib Dipilih");
-    expect(fundModule.validateSubmit?.(ctx)?.[0].title).toBe("Jenis Pengajuan Dana Wajib Dipilih");
-    expect(fundModule.isFieldComplete?.({ key: "fund_type" }, ctx)).toBe(false);
-    expect(fundModule.normalizeInput(ctx.input, ctx).fund_type).toBe(value);
+    expect(fundModule.validateNumberContext(ctx)).toEqual([]);
+    expect(fundModule.validateSubmit?.(ctx)).toEqual([]);
+    expect(fundModule.isFieldComplete?.({ key: "fund_type" }, ctx)).toBe(true);
+    expect(fundModule.normalizeInput(ctx.input, ctx).fund_type).toBe("operational");
   });
-  it.each(FUND_SUBMISSION_TYPES)("selects $label for KEU 10 with the canonical value", ({ value, label }) => {
+  it.each(["FM-UAI.KEU-01-00", "FM-UAI.KEU-10-00", "FM-MBN.KEU-10-00"])("never exposes a fund type selector for %s", (formNumber) => {
     const ctx = context();
+    ctx.usage.master_forms = { nomor_form: formNumber };
     delete ctx.input.fund_type;
     render(<>{fundModule.renderContextPanel(ctx)}</>);
-    fireEvent.click(screen.getByRole("combobox", { name: "Jenis Pengajuan Dana" }));
-    expect(screen.getAllByRole("option")).toHaveLength(3);
-    fireEvent.click(screen.getByRole("option", { name: label }));
-    expect(ctx.setInputValue).toHaveBeenCalledWith("fund_type", value);
+    expect(screen.queryByRole("combobox", { name: "Jenis Pengajuan Dana" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
   it("shows exactly the three canonical types for PGD and retains its without-project option", () => {

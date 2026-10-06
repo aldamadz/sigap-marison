@@ -24,6 +24,12 @@ function validAssetInput(overrides: Partial<Step1ValidationInput> = {}): Step1Va
 }
 
 describe("surat-wizard-validation — validateStep1ForNumberGeneration", () => {
+  it.each(["FM-UAI.KEU-01-00", "FM-UAI.KEU-10-00", "FM-MBN.KEU-10-00"])("does not require a fund type for KEU %s", (formNumber) => {
+    const input = validAssetInput({ requestCategory: "non_asset", formNumber, fundType: "", projectId: "project", isMarisonProjectReady: true });
+    expect(validateStep1ForNumberGeneration(input).valid).toBe(true);
+    expect(validateStep1ForNumberGeneration({ ...input, formNumber: "FM-UAI.PGD-01-00" }).errorTitle).toBe("Jenis Pengajuan Dana Wajib Dipilih");
+    expect(validateStep1ForNumberGeneration({ ...input, projectId: "" }).valid).toBe(false);
+  });
   // ── Common gates ──────────────────────────────────────────────────────────
 
   it("1. rejects when profile location not ready", () => {

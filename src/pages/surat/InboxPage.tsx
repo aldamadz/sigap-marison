@@ -1519,7 +1519,6 @@ const handleApprove = async (item: any) => {
         )}
         {keu1 && <div className="mt-4"><Keu1SubmissionSummary items={items} freeCashValue={input.free_cash_sisa_bulan_lalu} /></div>}
         {keu10 && <div className="mt-4 space-y-4">
-          <div><p className="text-xs font-medium text-muted-foreground">Jenis Pengajuan Dana</p><p className="mt-1 text-sm font-semibold">{getFundSubmissionTypeLabel(input.fund_type)}</p></div>
           <div><p className="text-xs font-medium text-muted-foreground">Tujuan Pengajuan</p><p className="mt-1 break-words text-sm font-semibold">{formatSummaryValue(keu10Purpose)}</p></div>
           <Keu10SubmissionSummary items={items} />
         </div>}
@@ -2110,7 +2109,7 @@ const handleApprove = async (item: any) => {
           ["Kantor", location.office?.name || "-"],
           ...(keu10 ? [["No. Formulir", location.form?.nomor_form || surat.data_snapshot?.form?.nomor_form || "-"]] : []),
           ...(keu10 ? [["Tujuan Pengajuan", formatSummaryValue(keu10Purpose)]] : []),
-          ...(!keu1 && input.request_category === "non_asset" ? [["Jenis Pengajuan Dana", getFundSubmissionTypeLabel(input.fund_type)]] : []),
+          ...(!keu1 && !keu10 && input.request_category === "non_asset" ? [["Jenis Pengajuan Dana", getFundSubmissionTypeLabel(input.fund_type)]] : []),
           ...(keu1 ? [["No. Formulir", location.form?.nomor_form || surat.data_snapshot?.form?.nomor_form || "-"]] : [["Proyek", allocatedProject.name || allocatedProject.label || input.requested_project?.name || input.requested_project?.label || location.project?.name || "-"]]),
           ["Kategori", keu1 ? "Pengajuan Kas Kecil" : keu10 ? "Pengajuan Dana (KEU 10)" : formatRequestCategory(input.request_category || input.request_mode)],
           ["Tempat, tanggal", [surat.request_place, surat.request_date ? new Date(surat.request_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }) : ""].filter(Boolean).join(", ") || "-"],

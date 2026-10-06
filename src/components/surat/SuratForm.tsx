@@ -1822,6 +1822,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       isMarisonProjectReady,
       fundWithoutProject: effectiveFormInputData.fund_without_project === true,
       fundType: String(effectiveFormInputData.fund_type || ""),
+      formNumber: selectedUsage?.master_forms?.nomor_form,
     });
     if (!step1Check.valid) {
       return toast({
@@ -2055,6 +2056,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       firstNonUnitError: undefined,
       fundWithoutProject: effectiveFormInputData.fund_without_project === true,
       fundType: String(effectiveFormInputData.fund_type || ""),
+      formNumber: selectedUsage?.master_forms?.nomor_form,
       firstFundIssue: undefined,
 
       missingField: missingField ? { key: missingField.key, label: missingField.label } : undefined,

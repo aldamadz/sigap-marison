@@ -90,6 +90,8 @@ try {
   run(psqlArgs, read(migrationRoot + "20261006164500_keu10_vendor_routing_prerequisite.sql"));
   run(psqlArgs, read(migrationRoot + "20261006170000_keu10_canonical_workflow.sql"));
   run(psqlArgs, read(migrationRoot + "20261006171000_seed_keu10_grouped_workflows.sql"));
+  run(psqlArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
+  run(psqlArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
   // Seed is repeatable but refuses identity/configuration drift.
   run(psqlArgs, read(migrationRoot + "20261006171000_seed_keu10_grouped_workflows.sql"));
   const output = run(psqlArgs, read("supabase/tests/keu10_workflow.integration.sql"));
@@ -136,6 +138,7 @@ where result.key='concurrency' and signature.step_order=1;`;
       and not has_function_privilege('service_role','public.apply_external_submission_decision_pre_configurable_routing(uuid,text,text,text,timestamptz,text,text)','execute'),'Standalone prerequisite ACL');`);
   run(legacyArgs, read(migrationRoot + "20261006170000_keu10_canonical_workflow.sql"));
   run(legacyArgs, read(migrationRoot + "20261006171000_seed_keu10_grouped_workflows.sql"));
+  run(legacyArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
   const legacyOutput = run(legacyArgs, read("supabase/tests/keu10_workflow.integration.sql"));
   if (!legacyOutput.includes("KEU10 workflow: all assertions passed")) throw new Error(`Legacy vendor compatibility failed:\n${legacyOutput}`);
   process.stdout.write("KEU10 original vendor RPC compatibility: all assertions passed.\n");

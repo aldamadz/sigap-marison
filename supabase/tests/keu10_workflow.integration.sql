@@ -96,7 +96,7 @@ begin
   perform keu10_test.assert((v_result->>'created')::boolean,'First registration created=true');
   insert into keu10_test.results(key,surat_id,input) values('main',(v_result#>>'{surat,id}')::uuid,jsonb_build_object('payload',v_payload,'signers',v_signers));
   perform keu10_test.assert(v_result#>>'{surat,form_input_data,fund_amount}'='2000000','Ignore forged browser total');
-  perform keu10_test.assert(v_result#>>'{surat,form_input_data,fund_type}'='marketing_cost','Retain explicitly selected marketing type');
+  perform keu10_test.assert(v_result#>>'{surat,form_input_data,fund_type}'='operational','Server authors KEU type, ignoring stale PGD choice');
   perform keu10_test.assert(not ((v_result#>'{surat,form_input_data}') ? 'free_cash'),'Strip KEU1 Free Cash');
   perform keu10_test.assert(not ((v_result#>'{surat,form_input_data,items,0}') ? 'status'),'Strip PGD item status');
   perform keu10_test.assert(v_result#>>'{surat,location_snapshot,form,nomor_form}'='FM-UAI.KEU-10-00','Server authors form identity');
@@ -108,13 +108,9 @@ begin
   perform keu10_test.assert((select count(*)=1 from public.document_pdf_jobs where surat_id=(v_result#>>'{surat,id}')::uuid),'Exactly one initial frozen PDF job');
 end $$;
 
--- Input enum, purpose, bounds and ownership fail closed without defaulting.
+-- KEU requires purpose, bounds and ownership, but no PGD type choice.
 do $$ declare v_payload jsonb := keu10_test.payload(2,2,2000001); v_signers jsonb := keu10_test.signers(2,7); v_result jsonb;
 begin
-  perform keu10_test.expect_error('22023',format('select public.create_keu10_registration(%L::jsonb,%L::jsonb)',
-    jsonb_set(v_payload,'{form_input_data,fund_type}','"unknown"'),v_signers));
-  perform keu10_test.expect_error('22023',format('select public.create_keu10_registration(%L::jsonb,%L::jsonb)',
-    v_payload#-'{form_input_data,fund_type}',v_signers));
   perform keu10_test.expect_error('22023',format('select public.create_keu10_registration(%L::jsonb,%L::jsonb)',
     jsonb_set(v_payload,'{form_input_data,keu10_purpose_code}','"other"'),v_signers));
   perform keu10_test.expect_error('22023',format('select public.create_keu10_registration(%L::jsonb,%L::jsonb)',
@@ -126,18 +122,20 @@ begin
   perform set_config('request.jwt.claim.sub',keu10_test.id(12)::text,false);
   perform keu10_test.expect_error('P0001',format('select public.create_keu10_registration(%L::jsonb,%L::jsonb)',v_payload,v_signers));
   perform set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
-  v_result := public.create_keu10_registration(v_payload,v_signers);
+  v_result := public.create_keu10_registration(v_payload#-'{form_input_data,fund_type}',v_signers);
+  perform keu10_test.assert(v_result#>>'{surat,form_input_data,fund_type}'='operational','Registration works without user-selected type');
   insert into keu10_test.results(key,surat_id) values('above',(v_result#>>'{surat,id}')::uuid);
 end $$;
 
--- Pure normalizer accepts all three documented types, never an implicit type.
+-- Pure normalizer never trusts a browser-provided PGD type for KEU.
 do $$ declare v_input jsonb; v_config jsonb; v_type text;
 begin
   select form_input_data,policy_snapshot->'keu10_config' into v_input,v_config from public.surat_registrasi
     where id=(select surat_id from keu10_test.results where key='main');
-  foreach v_type in array array['operational','production_cost','marketing_cost'] loop
-    perform keu10_test.assert(public.normalize_keu10_input(v_input||jsonb_build_object('fund_type',v_type),v_config)->>'fund_type'=v_type,'Fund type preserved: '||v_type);
+  foreach v_type in array array['operational','production_cost','marketing_cost','unknown',''] loop
+    perform keu10_test.assert(public.normalize_keu10_input(v_input||jsonb_build_object('fund_type',v_type),v_config)->>'fund_type'='operational','Automatic KEU type: '||v_type);
   end loop;
+  perform keu10_test.assert(public.normalize_keu10_input(v_input-'fund_type',v_config)->>'fund_type'='operational','No type choice required');
 end $$;
 
 -- Users cannot forge canonical updates, signature state, permits or history.

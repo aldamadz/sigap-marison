@@ -5,7 +5,7 @@
  * No React hooks, no toast, no fetch, no side effects.
  */
 
-import { isFundSubmissionType } from "../usages/fund/fund-types";
+import { isFundSubmissionType, usesFundSubmissionType } from "../usages/fund/fund-types";
 
 export interface SignerAssignmentSnapshot {
   user_id?: string;
@@ -44,6 +44,7 @@ export interface SuratSubmitValidationInput {
   // Non Aset (Fund) mode
   fundWithoutProject: boolean;
   fundType: string;
+  formNumber?: string | null;
   firstFundIssue?: string;
 
   // Manual fields & Recommendation
@@ -126,7 +127,7 @@ export function validateSuratSubmit(input: SuratSubmitValidationInput): SuratSub
         "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
       );
     }
-    if (!isFundSubmissionType(input.fundType)) {
+    if (usesFundSubmissionType({ nomor_form: input.formNumber }) && !isFundSubmissionType(input.fundType)) {
       return fail("Jenis Pengajuan Dana Wajib Dipilih", "Pilih Biaya Operasional, Biaya Produksi, atau Biaya Marketing.");
     }
     if (input.firstFundIssue) {

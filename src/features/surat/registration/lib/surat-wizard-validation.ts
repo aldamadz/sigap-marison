@@ -5,7 +5,7 @@
  * No React hooks, no toast, no fetch, no side effects.
  */
 
-import { isFundSubmissionType } from "../usages/fund/fund-types";
+import { isFundSubmissionType, usesFundSubmissionType } from "../usages/fund/fund-types";
 
 type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
 
@@ -27,6 +27,7 @@ export interface Step1ValidationInput {
   isMarisonProjectReady: boolean;
   fundWithoutProject: boolean;
   fundType: string;
+  formNumber?: string | null;
 }
 
 // ── Result ──────────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export function validateStep1ForNumberGeneration(
   }
   if (
     cat === "non_asset" &&
+    usesFundSubmissionType({ nomor_form: input.formNumber }) &&
     !isFundSubmissionType(input.fundType)
   ) {
     return fail(
