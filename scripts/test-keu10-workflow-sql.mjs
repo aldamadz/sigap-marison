@@ -69,12 +69,14 @@ grant select,insert,update,delete on all tables in schema public to authenticate
 grant execute on all functions in schema public to authenticated,service_role;
 `;
 
-const run = (args, input = "") => {
+const run = (args, input = "", stdoutOnly = false) => {
   const result = spawnSync("docker", args, { input, encoding: "utf8", timeout: 240_000, maxBuffer: 8_000_000 });
   if (result.status !== 0) throw new Error(`Disposable docker command failed (${result.status}):\n${result.stderr}\n${result.stdout}`);
-  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  return stdoutOnly ? result.stdout : `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 };
-const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
+// A cold CI runner emits image-download progress to stderr, not the container ID.
+const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"], "", true).trim();
+if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error("Docker returned an invalid disposable container ID");
 const psqlArgs = ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-Atq"];
 try {
   let ready = false;
