@@ -439,7 +439,7 @@ export function WorkEntryRow({
                 data-testid={`work-entry-status-label-${entry.id}`}
               >
                 <WorkEntryStatusGlyph status={entry.status} />
-                {statusMeta.label}
+                <span className="hidden sm:inline">{statusMeta.label}</span>
               </span>
             )}
 
