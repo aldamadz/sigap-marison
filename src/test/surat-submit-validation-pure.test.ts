@@ -27,6 +27,7 @@ function validSubmitInput(overrides: Partial<SuratSubmitValidationInput> = {}): 
 
     fundWithoutProject: false,
     fundType: "",
+    formNumber: "FM-UAI.PGD-01-00",
     firstFundIssue: undefined,
 
     missingField: undefined,
@@ -38,6 +39,12 @@ function validSubmitInput(overrides: Partial<SuratSubmitValidationInput> = {}): 
 }
 
 describe("surat-submit-validation — validateSuratSubmit", () => {
+  it.each(["FM-UAI.KEU-01-00", "FM-UAI.KEU-10-00", "FM-MBN.KEU-10-00"])("does not require a fund type for KEU %s", (formNumber) => {
+    const input = validSubmitInput({ requestCategory: "non_asset", formNumber, fundType: "" });
+    expect(validateSuratSubmit(input).valid).toBe(true);
+    expect(validateSuratSubmit({ ...input, formNumber: "FM-UAI.PGD-01-00" }).errorTitle).toBe("Jenis Pengajuan Dana Wajib Dipilih");
+    expect(validateSuratSubmit({ ...input, signerAssignments: [{}] }).errorTitle).toBe("Pejabat Belum Lengkap");
+  });
   // ── Global Checks ─────────────────────────────────────────────────────────
 
   it("1. rejects when upload is in progress", () => {

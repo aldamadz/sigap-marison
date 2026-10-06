@@ -1,3 +1,7 @@
+export function usesFundSubmissionType(form: { nomor_form?: string | null } | null | undefined, category: unknown): boolean {
+  return category === "non_asset" && /(?:^|[.-])PGD(?:[.-]|$)/.test(String(form?.nomor_form ?? "").trim().toUpperCase());
+}
+
 export const FUND_SUBMISSION_TYPES = [
   { value: "operational", label: "Biaya Operasional" },
   { value: "production_cost", label: "Biaya Produksi" },

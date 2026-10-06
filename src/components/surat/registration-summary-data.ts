@@ -4,7 +4,7 @@ import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { applyRevisionToItems, getActiveRevision } from "@/components/surat/revision-utils";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
-import { getFundSubmissionTypeLabel } from "@/features/surat/registration/usages/fund/fund-types";
+import { getFundSubmissionTypeLabel, usesFundSubmissionType } from "@/features/surat/registration/usages/fund/fund-types";
 
 const SUMMARY_HIDDEN_KEYS = new Set([
   "request_mode",
@@ -124,10 +124,12 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
   const locationForm = asRecord(location.form);
   const form = Object.keys(locationForm).length > 0 ? locationForm : asRecord(snapshot.form);
   const policy = asRecord(surat?.policy_snapshot);
-  const keu10 = isKeu10Form({ nomor_form: typeof form.nomor_form === "string" ? form.nomor_form : null });
+  const formIdentity = { nomor_form: typeof form.nomor_form === "string" ? form.nomor_form : null };
+  const keu10 = isKeu10Form(formIdentity);
+  const showFundType = usesFundSubmissionType(formIdentity, mergedInput.request_category || asRecord(snapshot.surat).request_category);
   const purpose = normalizeKeu10Config(policy.keu10_config)?.purposes.find((entry) => entry.code === mergedInput.keu10_purpose_code);
   const fields: RegistrationSummaryField[] = Object.entries(mergedInput)
-    .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) && !(keu10 && key === "keu10_purpose_label") && formatSummaryValue(value) !== "-")
+    .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) && !(key === "fund_type" && !showFundType) && !(keu10 && key === "keu10_purpose_label") && formatSummaryValue(value) !== "-")
     .map(([key, value]) => ({
       key,
       label: key === "fund_type" ? "Jenis Pengajuan Dana" : keu10 && key === "keu10_purpose_code" ? "Tujuan Pengajuan" : humanizeInputKey(key),

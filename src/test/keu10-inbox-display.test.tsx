@@ -90,23 +90,25 @@ describe("KEU 10 inbox display and summary export", () => {
     await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
     const tables = mocks.pdfTables.mock.calls.map(([, options]) => options);
     expect(tables[0].body).toEqual(expect.arrayContaining([
-      ["No. Formulir", "FM-MBN.KEU-10-00"], ["Tujuan Pengajuan", "Sertifikat tanah"], ["Proyek", "Proyek Solo"], ["Jenis Pengajuan Dana", "Biaya Marketing"],
+      ["No. Formulir", "FM-MBN.KEU-10-00"], ["Tujuan Pengajuan", "Sertifikat tanah"], ["Proyek", "Proyek Solo"],
     ]));
     expect(tables[1].head).toEqual([["No.", "Keterangan", "Jumlah", "Satuan", "Estimasi Harga Satuan", "Total"]]);
     expect(tables[1].body).toEqual([[1, "Biaya sertifikat", 3, "dokumen", "Rp 150.000", "Rp 450.000"]]);
     expect(tables[2].body).toEqual([["Grand Total", "Rp 450.000"]]);
-    expect(JSON.stringify(tables)).not.toMatch(/Free Cash|Kebutuhan Dana|Kas Kecil|Nama Barang/);
+    expect(JSON.stringify(tables)).not.toMatch(/Free Cash|Kebutuhan Dana|Kas Kecil|Nama Barang|Jenis Pengajuan Dana/);
   });
-  it.each(FUND_SUBMISSION_TYPES)("displays and exports $label without raw codes", async ({ value, label }) => {
+  it.each(FUND_SUBMISSION_TYPES)("omits legacy $label from KEU detail and export", async ({ value, label }) => {
     mocks.fixture.surat_registrasi.form_input_data.fund_type = value;
     render(<MemoryRouter><InboxPage /></MemoryRouter>);
-    expect(screen.getAllByText(label)).toHaveLength(1);
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
+    expect(screen.queryByText("Jenis Pengajuan Dana")).not.toBeInTheDocument();
     expect(screen.queryByText(value)).not.toBeInTheDocument();
     expect(screen.queryByText("certificate")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Export Summary" }));
     await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
     const tables = mocks.pdfTables.mock.calls.map(([, options]) => options);
-    expect(tables[0].body).toEqual(expect.arrayContaining([["Jenis Pengajuan Dana", label], ["Tujuan Pengajuan", "Sertifikat tanah"]]));
+    expect(tables[0].body).toEqual(expect.arrayContaining([["Tujuan Pengajuan", "Sertifikat tanah"]]));
+    expect(JSON.stringify(tables)).not.toContain("Jenis Pengajuan Dana");
     expect(JSON.stringify(tables)).not.toContain(value);
   });
   it.each([
