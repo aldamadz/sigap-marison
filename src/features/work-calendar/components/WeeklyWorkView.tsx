@@ -115,7 +115,7 @@ export function WeeklyWorkView({
               className={cn(
                 "flex min-w-0 flex-col rounded-sm border p-2",
                 getWorkCalendarDaySurfaceClassName(meta),
-                isToday ? "border-primary/50" : "border-border",
+                isToday ? "border-primary/50 bg-primary/5" : "border-border",
               )}
             >
               <div className="flex items-center gap-1">
@@ -141,7 +141,7 @@ export function WeeklyWorkView({
                       {summary.date.slice(8)}
                     </span>
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
                     {summary.progress.completed}/{summary.progress.total} selesai
                     {summary.progress.overdue > 0 ? `, ${summary.progress.overdue} terlambat` : ""}
                   </span>
@@ -193,7 +193,7 @@ export function WeeklyWorkView({
                       onQuickAdd(summary.date, event.currentTarget);
                     }}
                     aria-label={`Tambah pekerjaan pada ${formatWorkDateShort(summary.date)}`}
-                    className="flex min-h-touch w-full flex-col items-center justify-center rounded-sm border border-dashed border-border px-2 py-3 text-center text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-touch w-full flex-col items-center justify-center rounded-sm border border-dashed border-border px-2 py-3 text-center text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Plus className="mx-auto mb-1 h-3.5 w-3.5" aria-hidden="true" />
                     Tambah pekerjaan
@@ -220,7 +220,7 @@ export function WeeklyWorkView({
                           setPanel({ date: summary.date, anchor: event.currentTarget });
                         }}
                         aria-label={`Buka ${hiddenCount} pekerjaan lainnya pada ${formatWorkDateShort(summary.date)}`}
-                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm px-2 text-[11px] font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="mt-1.5 flex min-h-touch w-full items-center justify-center rounded-sm px-2 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         +{hiddenCount} pekerjaan lainnya
                       </button>

@@ -57,7 +57,7 @@ export function MonthlyWorkView({
 }: MonthlyWorkViewProps) {
   return (
     <section aria-label="Tampilan bulan" className="space-y-2">
-      <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted-foreground">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
         {[1, 2, 3, 4, 5, 6, 0].map((weekday) => (
           <span key={weekday}>{WORK_WEEKDAY_LABELS_ID[weekday]}</span>
         ))}
@@ -99,7 +99,7 @@ export function MonthlyWorkView({
               className={cn(
                 "group/month-cell flex min-w-0 flex-col rounded-sm border p-1.5",
                 getWorkCalendarDaySurfaceClassName(meta, { isCurrentMonth: cell.isCurrentMonth }),
-                isToday ? "border-primary/60" : "border-border",
+                isToday ? "border-primary/60 bg-primary/5" : "border-border",
               )}
             >
               <button
@@ -127,7 +127,7 @@ export function MonthlyWorkView({
                 {progress.total > 0 && (
                   <span
                     data-testid={`work-month-count-${cell.date}`}
-                    className="rounded-sm bg-muted px-1 text-[11px] font-medium text-muted-foreground"
+                    className="rounded-sm bg-muted px-1 text-xs font-medium text-muted-foreground"
                   >
                     {progress.completed}/{progress.total}
                   </span>
@@ -153,7 +153,7 @@ export function MonthlyWorkView({
                     }}
                     title={mobilePreview.title}
                     aria-label={`Buka ${mobilePreview.title} pada ${cell.date}`}
-                    className="flex min-h-touch w-full min-w-0 items-center gap-1 rounded-sm px-0.5 text-left text-[11px] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-touch w-full min-w-0 items-center gap-1 rounded-sm px-0.5 text-left text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <WorkEntryStatusGlyph status={mobilePreview.status} className="h-3 w-3 shrink-0" />
                     <span className="truncate">{mobilePreview.title}</span>
@@ -162,13 +162,13 @@ export function MonthlyWorkView({
                   {(compactItems.length > 0 || progress.overdue > 0) && (
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                       {compactItems.map((item) => (
-                        <span key={item.key} className="inline-flex items-center text-[11px] text-muted-foreground">
+                        <span key={item.key} className="inline-flex items-center text-xs text-muted-foreground">
                           <WorkEntryStatusGlyph status={item.key} className="h-3 w-3" />
                           <span className="ml-0.5 font-semibold text-foreground">{item.value}</span>
                         </span>
                       ))}
                       {progress.overdue > 0 && (
-                        <span className="inline-flex items-center text-[11px] font-medium text-overdue">
+                        <span className="inline-flex items-center text-xs font-medium text-overdue">
                           <Hourglass className="h-3 w-3" aria-hidden="true" />
                           <span className="ml-0.5">{progress.overdue}</span>
                         </span>
@@ -204,7 +204,7 @@ export function MonthlyWorkView({
                     }}
                     title={entry.title}
                     aria-label={`Buka ${entry.title} pada ${cell.date}`}
-                    className="flex min-h-touch w-full min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 text-left text-[11px] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-touch w-full min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 text-left text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <WorkEntryStatusGlyph status={entry.status} className="h-3 w-3" />
                     <span className="truncate">{entry.title}</span>
@@ -220,14 +220,14 @@ export function MonthlyWorkView({
                     event.stopPropagation();
                     onOpenDay(cell.date);
                   }}
-                  className="mt-1 hidden min-h-touch items-center self-start rounded-sm px-1 text-[11px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+                  className="mt-1 hidden min-h-touch items-center self-start rounded-sm px-1 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
                 >
                   +{hiddenCount} lainnya
                 </button>
               )}
 
               {progress.overdue > 0 && (
-                <span className="mt-1 hidden text-[11px] font-medium text-overdue md:block">
+                <span className="mt-1 hidden text-xs font-medium text-overdue md:block">
                   {progress.overdue} terlambat
                 </span>
               )}

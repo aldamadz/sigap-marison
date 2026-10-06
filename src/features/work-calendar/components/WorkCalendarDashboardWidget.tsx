@@ -102,7 +102,7 @@ export function WorkCalendarDashboardWidget({
           >
             <p className="text-xs font-medium text-muted-foreground">Pekerjaan hari ini</p>
             <p className="mt-1 text-2xl font-bold text-foreground">{summary.todayCount}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               {summary.plannedCount} direncanakan · {summary.inProgressCount} berjalan
               {summary.blockedCount > 0 ? ` · ${summary.blockedCount} terhambat` : ""}
             </p>
@@ -116,7 +116,7 @@ export function WorkCalendarDashboardWidget({
             <p className={cn("mt-1 text-2xl font-bold", summary.overdueCount > 0 ? "text-overdue" : "text-foreground")}>
               {summary.overdueCount}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Belum selesai dan tenggat sudah lewat
             </p>
           </div>
