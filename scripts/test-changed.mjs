@@ -94,6 +94,8 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/keu10.*pdf.*\.mjs$/u.test(file)) gates.add("test:keu10-pdf");
+  if (/keu10.*\.sql$|test-keu10-workflow-sql\.mjs$/u.test(file)) gates.add("test:keu10-workflow-sql");
   if (/^(server|scripts|src)\/.*(document|docx|layout)/u.test(file)) gates.add("test:document-layout");
   if (/^(server|scripts|src)\/.*pgd.*pdf/u.test(file)) gates.add("test:pgd-pdf");
   if (/^(pdf-worker\.mjs|server\/pdf-worker-job\.mjs|scripts\/test-pdf-worker-job\.mjs)$/u.test(file)) gates.add("test:worker-job");

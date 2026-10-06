@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf, resolvePgdMasterForm } from "./pgd-pdf-renderer.mjs";
 import { isKeu1Document, normalizeKeu1DocumentData, renderKeu1Pdf, resolveKeu1MasterForm } from "./keu1-pdf-renderer.mjs";
+import { isKeu10Document, normalizeKeu10DocumentData, renderKeu10Pdf, resolveKeu10MasterForm } from "./keu10-pdf-renderer.mjs";
 import {
   parseStorageRef,
   recommendationVersionPath,
@@ -14,7 +15,7 @@ import {
   isStoragePathWithinPrefix,
   normalizeStoragePathPrefix,
 } from "./storage-path-policy.mjs";
-import { createKeu1JobHandler, createPgdJobHandler, createRecommendationJobHandler } from "./server/pdf-worker-job.mjs";
+import { createKeu1JobHandler, createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler } from "./server/pdf-worker-job.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -82,7 +83,7 @@ const downloadStorageFile = async (filePath, label, expectedBucket) => {
   return Buffer.from(await data.arrayBuffer());
 };
 
-const recommendationFromSnapshot = (job) => job.render_payload ? ({
+const recommendationFromSnapshot = (job) => job.render_payload && job.render_payload.kind !== "keu10" ? ({
   finalized: true,
   items: resolveRecommendationSource(
     job.render_payload.child_input,
@@ -138,13 +139,23 @@ const renderDirectRecommendationJob = createRecommendationJobHandler({
   logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
 });
 
+const renderDirectKeu10Job = createKeu10JobHandler({
+  supabase,
+  isKeu10Document,
+  resolveKeu10MasterForm,
+  normalizeKeu10DocumentData,
+  renderKeu10Pdf,
+  logoPath: join(process.cwd(), "dist", "logo-marison-regency-group.png"),
+});
+
 const processJob = async (job) => {
   const recommendation = recommendationFromSnapshot(job);
   let pdfBuffer = null;
   if (recommendation) {
     pdfBuffer = await renderDirectRecommendationJob(job, recommendation);
   } else {
-    pdfBuffer = await renderDirectKeu1Job(job);
+    pdfBuffer = await renderDirectKeu10Job(job);
+    if (!pdfBuffer) pdfBuffer = await renderDirectKeu1Job(job);
     if (!pdfBuffer) {
       pdfBuffer = await renderDirectPgdJob(job);
     }

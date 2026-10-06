@@ -12,6 +12,8 @@ import { formatRevisionValue, getRevisionItemChanges } from "@/components/surat/
 import { supabase } from "@/lib/supabase";
 import { suratService } from "@/services/surat.service";
 import { cn } from "@/lib/utils";
+import { Keu10RequesterRevision } from "@/components/surat/Keu10RequesterRevision";
+import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 
 const getOpenRequesterRevision = (surat: any) => {
   const revision = surat?.data_snapshot?.revision;
@@ -28,7 +30,7 @@ const fetchFollowUps = async () => {
     .select(`
       *,
       surat_signatures (
-        id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan, signer_snapshot,
+        id, user_id, form_usage_step_id, step_order, is_signed, status, role_name, label_jabatan, signed_at, catatan, signer_snapshot,
         profiles:user_id ( full_name, job_title )
       ),
       surat_attachments ( id, file_url, file_name, file_type, file_size, requirement_label )
@@ -70,6 +72,7 @@ export default function TindakLanjutSuratPage() {
   const activeRevision = getOpenRequesterRevision(selected);
   const revisionChanges = getRevisionItemChanges(activeRevision);
   const isExternalRevision = activeRevision?.changes?.external_submission_revision === true;
+  const isKeu10Revision = isKeu10Form(selected?.location_snapshot?.form || selected?.data_snapshot?.form);
 
   const mutation = useMutation({
     mutationFn: async ({ action, eventId, note }: { action: "accept" | "cancel"; eventId: string; note: string }) => {
@@ -228,15 +231,27 @@ export default function TindakLanjutSuratPage() {
                         <XCircle className="mr-2 h-4 w-4" />
                         Batalkan
                       </Button>
-                      <Button onClick={() => openActionDialog("accept")}>
+                      {!isKeu10Revision && <Button onClick={() => openActionDialog("accept")}>
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         Lanjutkan
-                      </Button>
+                      </Button>}
                         </>
                       )}
                     </div>
                   </div>
                 </section>
+
+                {isKeu10Revision && !isExternalRevision && activeRevision?.event_id && (
+                  <Keu10RequesterRevision key={activeRevision.event_id} eventId={activeRevision.event_id}
+                    input={selected.form_input_data} changes={activeRevision.changes} policy={selected.policy_snapshot}
+                    signatures={selected._sigs} onSuccess={async () => {
+                      await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: ["surat-follow-up-requester"] }),
+                        queryClient.invalidateQueries({ queryKey: ["attention-state"] }),
+                        queryClient.invalidateQueries({ queryKey: ["surat-monitoring-list"] }),
+                      ]);
+                    }} />
+                )}
 
                 {revisionChanges.length > 0 && (
                   <section className="sigap-panel">

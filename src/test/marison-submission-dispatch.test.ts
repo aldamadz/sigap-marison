@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { FUND_SUBMISSION_TYPES } from "@/features/surat/registration/usages/fund/fund-types";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
@@ -93,12 +94,17 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('requireExternalInteger(overrides.branchId, "Branch ID proyek")');
     expect(server).toContain("amount: input.fund_amount");
     expect(server).toContain("resolveKeu1MasterForm(supabase, surat.form_usage_id)");
-    expect(server).toContain("items: keu1 ? mapKeu1ItemsForFund(input.items) : input.items");
+    expect(server).toContain("items: keu1 || keu10 ? mapKeu1ItemsForFund(input.items) : input.items");
+    expect(server).toContain("isKeu10Document({ resolved_master_form: keu1MasterForm })");
     expect(server).not.toContain("division: department.name");
     expect(worker).toContain('fund: "/fund-submissions"');
     expect(fundModule).toContain('setInputValue("fund_type", value)');
-    expect(fundModule).toContain('<SelectItem value="operational">Biaya Operasional</SelectItem>');
-    expect(fundModule).toContain('<SelectItem value="production_cost">Biaya Produksi</SelectItem>');
+    expect(fundModule).toContain("FUND_SUBMISSION_TYPES.map");
+    expect(FUND_SUBMISSION_TYPES).toEqual([
+      { value: "operational", label: "Biaya Operasional" },
+      { value: "production_cost", label: "Biaya Produksi" },
+      { value: "marketing_cost", label: "Biaya Marketing" },
+    ]);
     expect(fundModuleDef).toContain("<FundSubmissionEditor");
     expect(form).not.toContain("<FundSubmissionEditor");
     expect(form).toContain("renderDetailsPanel");

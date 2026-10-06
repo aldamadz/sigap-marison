@@ -113,6 +113,11 @@ describe("buildAutoTitle — category: non_unit", () => {
 });
 
 describe("buildAutoTitle — category: non_asset (fund)", () => {
+  it("uses the marketing title without treating it as operational", () => {
+    expect(buildAutoTitle({ category: "non_asset", formInputData: {
+      fund_type: "marketing_cost", items: [{ nama_barang: "Media promosi" }],
+    } })).toBe("Pengajuan Dana Marketing: Media promosi");
+  });
   it("uses production title when fund type is production_cost", () => {
     expect(buildAutoTitle({
       category: "non_asset",

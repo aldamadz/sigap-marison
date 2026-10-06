@@ -60,6 +60,7 @@ COPY server/pdf-worker-job.mjs ./server/pdf-worker-job.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
 COPY keu1-pdf-renderer.mjs ./keu1-pdf-renderer.mjs
+COPY keu10-pdf-renderer.mjs ./keu10-pdf-renderer.mjs
 COPY recommendation-pdf.mjs ./recommendation-pdf.mjs
 COPY recommendation-native-pdf.mjs ./recommendation-native-pdf.mjs
 COPY production-code.mjs ./production-code.mjs

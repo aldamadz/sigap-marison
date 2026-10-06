@@ -178,6 +178,11 @@ describe("surat-submit-validation — validateSuratSubmit", () => {
     expect(r.errorTitle).toBe("Proyek Belum Terhubung");
   });
 
+  it("accepts marketing_cost on final registration", () => {
+    expect(validateSuratSubmit(validSubmitInput({ requestCategory: "non_asset", fundWithoutProject: true,
+      fundType: "marketing_cost" })).valid).toBe(true);
+  });
+
   it("15. fund mode: rejects invalid fund type", () => {
     const r = validateSuratSubmit(
       validSubmitInput({

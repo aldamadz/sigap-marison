@@ -16,6 +16,21 @@ const approval = {
 };
 
 describe("Marison Fund Submission mapper", () => {
+  it.each(["operational", "production_cost", "marketing_cost"])("preserves the explicit %s fund type", (type) => {
+    const result = mapMarisonFundSubmission({
+      request: { submissionNumber: "001/TEST/FUND", type, title: "Pengajuan dana", amount: 1000,
+        items: [{ nama_barang: "Kebutuhan", jumlah: 1, satuan: "paket", nominal: 1000 }] },
+      branchId: 1, division: "Marketing", approvals: [approval],
+    });
+    expect(result.payload.type).toBe(type);
+  });
+
+  it("rejects unknown fund types without silently defaulting to operational", () => {
+    expect(() => mapMarisonFundSubmission({
+      request: { submissionNumber: "001/TEST/FUND", type: "marketing", title: "Dana", items: [] },
+      branchId: 1, division: "Marketing", approvals: [approval],
+    })).toThrow("Payload Marison fund tidak sesuai kontrak");
+  });
   it("maps KEU 1 descriptions and quantity times unit price without PGD item keys", () => {
     const mapped = mapKeu1ItemsForFund([{
       keterangan: "Listrik kantor", jumlah: 2, satuan: "bulan", estimasi_harga_satuan: 150000,

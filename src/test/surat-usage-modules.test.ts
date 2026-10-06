@@ -120,7 +120,7 @@ describe("fund module", () => {
   });
 
   it("submit + isFieldComplete + summary milik modul dana", () => {
-    expect(fundModule.validateSubmit?.(ctxFor("non_asset", { items: [] }))[0].title)
+    expect(fundModule.validateSubmit?.(ctxFor("non_asset", { fund_type: "operational", items: [] }))[0].title)
       .toBe("Rincian Dana Belum Lengkap");
     const ctx = ctxFor("non_asset", { fund_type: "operational", items: [] });
     expect(fundModule.isFieldComplete?.({ key: "items" } as never, ctx)).toBe(false);
