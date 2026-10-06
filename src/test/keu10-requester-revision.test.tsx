@@ -5,8 +5,8 @@ import { Keu10RequesterRevision } from "@/components/surat/Keu10RequesterRevisio
 const mocks = vi.hoisted(() => ({
   accept: vi.fn().mockResolvedValue(true),
   profiles: [
-    { id: "di", full_name: "Direktur Pertama", job_title: "Direktur I", is_active: true, department_id: "dir", office: { kedudukan: "Pusat" } },
-    { id: "du", full_name: "Direktur Utama", job_title: "Direktur Utama", is_active: true, department_id: "dir", office: { kedudukan: "Pusat" } },
+    { id: "di", full_name: "Direktur Pertama", job_title: "Direktur I", is_active: true, department_id: "dir", kedudukan: "Pusat" },
+    { id: "du", full_name: "Direktur Utama", job_title: "Direktur Utama", is_active: true, department_id: "dir", kedudukan: "Pusat" },
   ],
 }));
 vi.mock("@tanstack/react-query", () => ({

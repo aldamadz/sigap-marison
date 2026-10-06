@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
@@ -1112,7 +1113,7 @@ export const suratService = {
       // surat; do not duplicate its attachments, snapshots, or signatures.
       if (keu10Registration && registrationResult.created !== true) {
         await this.uploadAttachmentFiles(surat.id, attachmentFiles, user.id, {
-          stage: "initial", requirements: payload.initial_attachment_meta || {},
+          stage: "initial", requirements: payload.initial_attachment_meta || {}, idempotent: true,
         });
         // A committed registration may be retried after draft-file linking failed.
         // Link only missing stored files; never replace the frozen document/signers.
@@ -1154,6 +1155,7 @@ export const suratService = {
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
         stage: "initial",
         requirements: payload.initial_attachment_meta || {},
+        idempotent: keu10Registration,
       });
       let reusedDraftAttachments: any[] = [];
       const draftAttachmentRows = buildRegistrationAttachmentRows({
@@ -1979,14 +1981,25 @@ export const suratService = {
       stage?: string;
       signature_id?: string;
       requirements?: Record<string, { key?: string; label?: string }>;
+      idempotent?: boolean;
     } = {}
   ) {
+    const existing = meta.idempotent && files.length > 0
+      ? await supabase.from("surat_attachments").select("*").eq("surat_id", suratId)
+      : { data: [], error: null };
+    if (existing.error) throw existing.error;
+    const retainedRows = [];
     const rows = await Promise.all(files.filter(Boolean).map(async (file, index) => {
       const safeName = file.name.replace(/[^\w.-]+/g, "_");
-      const filePath = `lampiran_${suratId}/${Date.now()}_${index}_${safeName}`;
-      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file });
       const requirement = meta.requirements?.[file.name] || {};
+      const identity = meta.idempotent ? await registrationUploadIdentity(file, meta.stage || "initial", requirement.key || null) : null;
+      const retained = identity ? (existing.data || []).find((row) => row.upload_identity === identity) : null;
+      if (retained) { retainedRows.push(retained); return null; }
+      const filePath = identity ? `lampiran_${suratId}/registration_${identity}_${safeName}`
+        : `lampiran_${suratId}/${Date.now()}_${index}_${safeName}`;
+      const uploaded = await appStorageService.upload({ bucket: "lampiran_surat", path: filePath, file, upsert: meta.idempotent === true });
       return {
+        ...(identity ? { upload_identity: identity } : {}),
         surat_id: suratId,
         file_url: uploaded.publicUrl,
         file_name: file.name,
@@ -2000,14 +2013,16 @@ export const suratService = {
       };
     }));
 
-    if (rows.length === 0) return [];
+    const uniqueRows = rows.filter((row, index, all) => row !== null && (!meta.idempotent
+      || all.findIndex((candidate) => candidate?.upload_identity === row.upload_identity) === index));
+    if (uniqueRows.length === 0) return retainedRows;
 
-    const { data, error } = await supabase
-      .from("surat_attachments")
-      .insert(rows)
-      .select("*");
+    const query = supabase.from("surat_attachments");
+    const { data, error } = await (meta.idempotent
+      ? query.upsert(uniqueRows, { onConflict: "surat_id,upload_identity", ignoreDuplicates: true })
+      : query.insert(uniqueRows)).select("*");
     if (error) throw error;
-    return data || [];
+    return [...retainedRows, ...(data || [])];
   },
 
   async getAllSurat(userId?: string): Promise<SuratRegistrasi[]> {

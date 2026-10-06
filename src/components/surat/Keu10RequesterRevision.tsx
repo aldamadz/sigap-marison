@@ -46,15 +46,13 @@ export function Keu10RequesterRevision({ eventId, input, changes, policy, signat
     queryKey: ["keu10-revision-directors", eventId, ids.join(",")],
     enabled: ids.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles")
-        .select("id, full_name, job_title, is_active, deleted_at, department_id, office:office_id(kedudukan)")
-        .in("id", ids).eq("is_active", true).is("deleted_at", null);
+      const { data, error } = await supabase.rpc("get_keu10_revision_final_candidates", { p_event_id: eventId });
       if (error) throw error;
       return (data || []).map(record);
     },
   });
   const candidates = useMemo(() => (candidatesQuery.data || []).filter((candidate) =>
-    ids.includes(String(candidate.id)) && String(record(candidate.office).kedudukan || "").trim().toLowerCase() === "pusat"
+    ids.includes(String(candidate.id)) && String(candidate.kedudukan || "").trim().toLowerCase() === "pusat"
     && (!finalStep?.signer_department_id || candidate.department_id === finalStep.signer_department_id)
     && isKeu10FinalCandidate({ job_title: String(candidate.job_title || ""), is_active: candidate.is_active === true },
       frozenPolicy.keu10_config, effectiveItems)),

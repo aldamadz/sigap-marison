@@ -1,6 +1,8 @@
 begin;
 
 alter table public.form_usages add column if not exists keu10_config jsonb;
+alter table public.surat_attachments add column upload_identity text;
+alter table public.surat_attachments add constraint surat_attachments_upload_identity_key unique(surat_id,upload_identity);
 
 create function public.is_valid_keu10_config(p_config jsonb)
 returns boolean language plpgsql immutable set search_path = '' as $$
@@ -606,6 +608,10 @@ begin
     or v_event.changes#>'{keu10_base,document_snapshot,form_input_data}' is distinct from v_surat.form_input_data then
     raise exception 'KEU10 revision is stale or not awaiting requester' using errcode='40001'; end if;
   v_input := v_surat.form_input_data;
+  if v_event.changes->>'external_submission_revision'='true' and not exists(
+    select 1 from keu10_internal.mutation_permits where transaction_id=txid_current()
+      and surat_id=v_surat.id and operation='vendor_revision_input') then
+    raise exception 'External KEU10 revision requires canonical draft submission' using errcode='42501'; end if;
   if v_event.changes ? 'keu10_external_confirmed_input' then
     if v_event.changes->>'external_submission_revision' is distinct from 'true' then
       raise exception 'KEU10 external revision identity is invalid' using errcode='42501'; end if;
@@ -622,7 +628,14 @@ begin
     v_input := v_input || jsonb_build_object('items',p_items);
   end if;
   v_input := public.normalize_keu10_input(v_input,v_surat.policy_snapshot->'keu10_config');
-  select coalesce(max(generation),0)+1 into v_generation from public.surat_external_revision_history where surat_id=v_surat.id;
+  if v_event.changes->>'external_submission_revision'='true' then
+    select generation into v_generation from public.surat_external_revision_history
+      where surat_id=v_surat.id and decision_event_id=(v_event.changes->>'external_decision_event_id')::uuid;
+    if v_generation is null then raise exception 'External KEU10 history is missing' using errcode='40001'; end if;
+  else
+    select coalesce(max(generation),0)+1 into v_generation from public.surat_external_revision_history where surat_id=v_surat.id;
+  end if;
+  delete from keu10_internal.mutation_permits where transaction_id=txid_current() and surat_id=v_surat.id and operation='vendor_revision_input';
   insert into keu10_internal.mutation_permits values(txid_current(),v_surat.id,'accept_revision');
   if v_event.changes->>'external_submission_revision' is distinct from 'true' then
   insert into public.surat_external_revision_history(surat_id,revision_event_id,generation,document_snapshot,signatures_snapshot,attachments_snapshot)
@@ -952,7 +965,6 @@ begin
     where step->>'role_name'='menyetujui';
   insert into keu10_internal.mutation_permits values(txid_current(),v_surat.id,'vendor_revision_input');
   update public.surat_revision_events set changes=changes||jsonb_build_object('keu10_external_confirmed_input',v_input) where id=v_event.id;
-  delete from keu10_internal.mutation_permits where transaction_id=txid_current() and surat_id=v_surat.id;
   perform keu10_internal.accept_revision(v_event.id,p_requester_note,null,v_final);
   -- Existing external history already froze the old attachments at decision time.
   delete from public.surat_attachments attachment where surat_id=v_surat.id and stage='initial'
@@ -970,6 +982,28 @@ begin
 end $$;
 revoke all on function public.submit_external_submission_revision(uuid,uuid,jsonb,text) from public,anon;
 grant execute on function public.submit_external_submission_revision(uuid,uuid,jsonb,text) to authenticated,service_role;
+
+create function public.get_keu10_revision_final_candidates(p_event_id uuid)
+returns table(id uuid,full_name text,job_title text,is_active boolean,department_id uuid,kedudukan text)
+language plpgsql stable security definer set search_path='' as $$
+declare v_surat public.surat_registrasi%rowtype;
+begin
+  select surat.* into v_surat from public.surat_registrasi surat join public.surat_revision_events event on event.surat_id=surat.id
+    where event.id=p_event_id and event.status in ('open','awaiting_requester') and event.target_type='requester';
+  if auth.uid() is distinct from v_surat.created_by or not public.is_keu10_surat(v_surat.id)
+    or not exists(select 1 from public.profiles actor where actor.id=auth.uid() and actor.is_active is true and actor.deleted_at is null) then
+    raise exception 'Only actual requester may read KEU10 revision candidates' using errcode='42501'; end if;
+  return query select profile.id,profile.full_name,coalesce(nullif(to_jsonb(profile)->>'job_title_display',''),profile.job_title),
+    profile.is_active,profile.department_id,office.kedudukan from public.profiles profile
+    join public.master_offices office on office.id=profile.office_id
+    where profile.is_active is true and profile.deleted_at is null and lower(btrim(office.kedudukan))='pusat'
+      and public.keu10_director_code(profile.job_title,to_jsonb(profile)->>'job_title_display') is not null
+      and exists(select 1 from jsonb_array_elements(v_surat.policy_snapshot->'keu10_steps') step
+        where step->>'role_name'='menyetujui' and step->'candidate_user_ids' @> jsonb_build_array(profile.id::text)
+          and (nullif(step->>'signer_department_id','') is null or profile.department_id=(step->>'signer_department_id')::uuid));
+end $$;
+revoke all on function public.get_keu10_revision_final_candidates(uuid) from public,anon;
+grant execute on function public.get_keu10_revision_final_candidates(uuid) to authenticated,service_role;
 
 -- Internal helpers must not become a second browser mutation surface.
 revoke all on function public.is_keu10_surat(uuid),public.assert_keu10_signer(uuid,uuid,uuid),

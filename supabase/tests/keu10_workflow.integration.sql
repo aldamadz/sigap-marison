@@ -344,6 +344,8 @@ do $$ declare v_id uuid := (select surat_id from keu10_test.results where key='m
   v_event uuid := (select event_id from keu10_test.results where key='main'); v_draft public.surat_registration_drafts%rowtype; v_payload jsonb;
 begin
   v_draft := public.create_external_submission_revision_draft(v_event);
+  perform keu10_test.expect_error('42501',format('select public.accept_surat_process_revision(%L,null)',v_event));
+  perform keu10_test.expect_error('42501',format('select public.accept_keu10_requester_revision(%L,null,null,%L)',v_event,keu10_test.id(7)));
   select to_jsonb(surat)||jsonb_build_object('form_input_data',form_input_data||jsonb_build_object(
     'fund_type','marketing_cost','items',jsonb_build_array(jsonb_build_object('id','line_1',
       'keterangan','Vendor corrected estimate','jumlah',1,'satuan','Paket','estimasi_harga_satuan',1000000))))
@@ -356,6 +358,7 @@ begin
   perform keu10_test.assert((select form_input_data->>'fund_amount'='1000000' and current_step=1 and status='PROSES'
     and data_snapshot->>'keu10_generation'='3' from public.surat_registrasi where id=v_id),'Vendor correction starts new BM generation');
   perform keu10_test.assert((select count(*)=2 from public.surat_external_revision_history where surat_id=v_id),'Vendor confirmation does not duplicate frozen history');
+  perform keu10_test.assert((select data_snapshot#>>'{applied_revision,history_generation}'='2' from public.surat_registrasi where id=v_id),'Vendor acceptance points to actual frozen history');
   perform keu10_test.assert((select user_id=keu10_test.id(6) from public.surat_signatures where surat_id=v_id and step_order=4),'Vendor correction reroutes threshold');
   perform keu10_test.approve(v_id,1); perform keu10_test.approve(v_id,2);
   perform keu10_test.approve(v_id,3); perform keu10_test.approve(v_id,4);
@@ -368,5 +371,24 @@ set role authenticated;
 select keu10_test.assert(not has_function_privilege('authenticated','public.apply_external_submission_decision_pre_keu10(uuid,text,text,text,timestamptz,text,text)','execute'),'Vendor bypass is private');
 select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
 select keu10_test.expect_error('22023',format('select public.create_keu10_registration(%L,%L)',keu10_test.payload(99,2,0),keu10_test.signers(2,6)));
+reset role;
+-- Both deployments currently lack job_title_display; also certify an installation
+-- that has it and stores its canonical director identity there instead.
+alter table public.profiles add column job_title_display text;
+update public.profiles set job_title='Manager',job_title_display='Direktur I' where id=keu10_test.id(6);
+set role authenticated;
+select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+do $$ declare v_result jsonb; v_id uuid; v_sig uuid; v_event uuid; v_candidate record;
+begin
+  v_result := public.create_keu10_registration(keu10_test.payload(41,2,1000),keu10_test.signers(2,6));
+  v_id := (v_result#>>'{surat,id}')::uuid;
+  select id into v_sig from public.surat_signatures where surat_id=v_id and step_order=1;
+  perform set_config('request.jwt.claim.sub',keu10_test.id(2)::text,false);
+  v_event := public.request_surat_process_revision(v_id,v_sig,'requester',1,'Correct the request details','{}');
+  perform keu10_test.expect_error('42501',format('select public.get_keu10_revision_final_candidates(%L)',v_event));
+  perform set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+  select * into v_candidate from public.get_keu10_revision_final_candidates(v_event) where id=keu10_test.id(6);
+  perform keu10_test.assert(v_candidate.job_title='Direktur I','Candidate API resolves canonical display title without exposing profile fields');
+end $$;
 reset role;
 do $$ begin raise notice 'KEU10 workflow: all assertions passed'; end $$;
