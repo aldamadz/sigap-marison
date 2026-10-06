@@ -122,6 +122,20 @@ describe("KEU 10 fund module", () => {
     fireEvent.click(screen.getByRole("option", { name: "Biaya Marketing" }));
     expect(ctx.setInputValue).toHaveBeenCalledWith("fund_type", "marketing_cost");
   });
+  it.each([
+    { form: undefined, category: "non_asset" },
+    { form: "UNKNOWN-01", category: "non_asset" },
+    { form: "FM-UAI.KEU-02-00", category: "non_asset" },
+    { form: "FM-UAI.PGD-01-00", category: "asset" },
+    { form: "FM-UAI.PGD-01-00", category: "non_unit" },
+    { form: "FM-UAI.PGD-01-00", category: "unit" },
+  ] as const)("does not offer fund type for $form / $category", ({ form, category }) => {
+    const ctx = context();
+    ctx.usage.master_forms = form ? { nomor_form: form } : undefined;
+    ctx.category = category;
+    expect(fundModule.renderContextPanel(ctx)).toBeNull();
+    expect(fundModule.buildSummaryFields?.(ctx)?.find(field => field.key === "fund_type")).toBeUndefined();
+  });
   it.each(FUND_SUBMISSION_TYPES)("preserves $value for PGD and keeps KEU 1 operational", ({ value, label }) => {
     const ctx = context();
     ctx.input.fund_type = value;

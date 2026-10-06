@@ -127,7 +127,7 @@ export function validateSuratSubmit(input: SuratSubmitValidationInput): SuratSub
         "Pilih proyek yang siap Marison atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tanpa proyek.",
       );
     }
-    if (usesFundSubmissionType({ nomor_form: input.formNumber }) && !isFundSubmissionType(input.fundType)) {
+    if (usesFundSubmissionType({ nomor_form: input.formNumber }, input.requestCategory) && !isFundSubmissionType(input.fundType)) {
       return fail("Jenis Pengajuan Dana Wajib Dipilih", "Pilih Biaya Operasional, Biaya Produksi, atau Biaya Marketing.");
     }
     if (input.firstFundIssue) {

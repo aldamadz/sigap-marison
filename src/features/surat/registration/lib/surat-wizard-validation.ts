@@ -126,7 +126,7 @@ export function validateStep1ForNumberGeneration(
   }
   if (
     cat === "non_asset" &&
-    usesFundSubmissionType({ nomor_form: input.formNumber }) &&
+    usesFundSubmissionType({ nomor_form: input.formNumber }, input.requestCategory) &&
     !isFundSubmissionType(input.fundType)
   ) {
     return fail(

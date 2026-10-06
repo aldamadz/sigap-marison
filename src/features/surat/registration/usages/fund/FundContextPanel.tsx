@@ -3,13 +3,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { UsageModuleContext } from "../usage-contract";
-import { FUND_SUBMISSION_TYPES, isFundSubmissionType } from "./fund-types";
+import { FUND_SUBMISSION_TYPES, isFundSubmissionType, usesFundSubmissionType } from "./fund-types";
 
 /**
  * Konteks Dana (Section 1, pra-nomor): jenis pengajuan + opsi tanpa proyek.
  * Checkbox tampil setelah kantor penerbit terisi (syarat selector proyek).
  */
 export function FundContextPanel({ ctx, allowsWithoutProject = true }: { ctx: UsageModuleContext; allowsWithoutProject?: boolean }) {
+  if (!usesFundSubmissionType(ctx.usage.master_forms, ctx.category)) return null;
   const { input, formData, generatedNoSurat, setInputValue, setSelection } = ctx;
   const fundType = isFundSubmissionType(input.fund_type) ? input.fund_type : "";
   const fundWithoutProject = input.fund_without_project === true;

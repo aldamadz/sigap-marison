@@ -111,6 +111,13 @@ describe("KEU 10 form-specific presentation", () => {
     expectKeu10Table();
     expect(screen.getByText("Proyek Solo")).toBeInTheDocument();
   });
+  it.each([undefined, "asset", "unit", "non_unit"])("does not expose stale PGD fund type for category %s", (category) => {
+    const summary = buildRegistrationSummaryData({
+      form_input_data: { request_category: category, fund_type: "marketing_cost" },
+      location_snapshot: { form: { nomor_form: "FM-UAI.PGD-01-00" } },
+    });
+    expect(summary.fields.find(field => field.key === "fund_type")).toBeUndefined();
+  });
   it.each(FUND_SUBMISSION_TYPES)("hides legacy $label but keeps the frozen purpose in detail and confirmation", ({ value, label }) => {
     const persisted = buildRegistrationSummaryData({
       no_surat: data.noSurat,

@@ -96,7 +96,7 @@ export const fundModule: UsageModule = {
     return isKeu1Form(usage.master_forms) && usage.scope_type === "cabang";
   },
   renderContextPanel(ctx) {
-    return usesFundSubmissionType(ctx.usage.master_forms) ? <FundContextPanel ctx={ctx} /> : null;
+    return usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? <FundContextPanel ctx={ctx} /> : null;
   },
   renderDetailsPanel(ctx) {
     if (isKeu10Form(ctx.usage.master_forms)) {
@@ -125,7 +125,7 @@ export const fundModule: UsageModule = {
     ];
   },
   isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
-    if (field.key === "fund_type") return !usesFundSubmissionType(ctx.usage.master_forms) || isFundSubmissionType(ctx.input.fund_type);
+    if (field.key === "fund_type") return !usesFundSubmissionType(ctx.usage.master_forms, ctx.category) || isFundSubmissionType(ctx.input.fund_type);
     if (isKeu10Form(ctx.usage.master_forms) && field.key === "keu10_purpose_code") {
       return Boolean(normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.some((purpose) => purpose.code === ctx.input.keu10_purpose_code));
     }
@@ -158,7 +158,7 @@ export const fundModule: UsageModule = {
         ? [{ title: "Free Cash Tidak Valid", description: "Isi nominal Free Cash dengan angka Rupiah atau kosongkan." }]
         : [];
     }
-    const fundTypeIssues = getFundTypeIssues(ctx.input.fund_type);
+    const fundTypeIssues = usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? getFundTypeIssues(ctx.input.fund_type) : [];
     if (fundTypeIssues.length > 0) return fundTypeIssues;
     const first = validateFundSubmissionItems(ctx.input.items)[0];
     return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
@@ -185,11 +185,11 @@ export const fundModule: UsageModule = {
       ];
     }
     return [
-      {
+      ...(usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? [{
         key: "fund_type",
         label: "Jenis Pengajuan Dana",
         value: getFundSubmissionTypeLabel(ctx.input.fund_type),
-      },
+      }] : []),
       {
         key: "fund_amount",
         label: "Total Pengajuan Dana",
@@ -229,7 +229,7 @@ export const fundModule: UsageModule = {
         description: "Pilih proyek yang memiliki ID proyek dan kantor external yang valid.",
       }];
     }
-    return getFundTypeIssues(ctx.input.fund_type);
+    return usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? getFundTypeIssues(ctx.input.fund_type) : [];
   },
   cleanup(ctx): CleanupResult {
     return {

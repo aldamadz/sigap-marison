@@ -1,5 +1,5 @@
 -- Actual canonical RPCs, with authenticated callers and no job_title_display column.
-create function keu10_test.payload(p_n integer,p_group integer,p_amount bigint,p_type text default 'marketing_cost')
+create or replace function keu10_test.payload(p_n integer,p_group integer,p_amount bigint,p_type text default 'marketing_cost')
 returns jsonb language plpgsql as $$
 declare v_reservation uuid := keu10_test.id(1000+p_n); v_draft uuid := keu10_test.id(2000+p_n);
   v_usage uuid := ('6e102000-0000-4000-8000-'||lpad(p_group::text,12,'0'))::uuid;
@@ -24,7 +24,7 @@ begin
       'items',jsonb_build_array(jsonb_build_object('id','line_1','keterangan','Land preparation',
         'jumlah',1,'satuan','Paket','estimasi_harga_satuan',p_amount,'total',1,'status','4'))));
 end $$;
-create function keu10_test.signers(p_group integer,p_director integer default 6)
+create or replace function keu10_test.signers(p_group integer,p_director integer default 6)
 returns jsonb language sql as $$
   select jsonb_agg(jsonb_build_object('form_usage_step_id',step.id,'user_id',keu10_test.id(case
     when step.step_order=1 then 2 when step.role_name='verifikator' then 3
@@ -33,7 +33,7 @@ returns jsonb language sql as $$
   from public.form_usage_steps step
   where step.usage_id=('6e102000-0000-4000-8000-'||lpad(p_group::text,12,'0'))::uuid;
 $$;
-create function keu10_test.approve(p_id uuid,p_step integer)
+create or replace function keu10_test.approve(p_id uuid,p_step integer)
 returns json language plpgsql as $$
 declare v_sig public.surat_signatures%rowtype; v_result json;
 begin

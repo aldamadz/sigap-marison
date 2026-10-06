@@ -19,6 +19,7 @@ function validAssetInput(overrides: Partial<Step1ValidationInput> = {}): Step1Va
     isMarisonProjectReady: false,
     fundWithoutProject: false,
     fundType: "",
+    formNumber: "FM-UAI.PGD-01-00",
     ...overrides,
   };
 }

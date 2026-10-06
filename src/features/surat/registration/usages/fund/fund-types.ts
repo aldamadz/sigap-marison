@@ -1,8 +1,5 @@
-import { isKeu1Form } from "../../lib/keu1-form";
-import { isKeu10Form } from "../../lib/keu10-form";
-
-export function usesFundSubmissionType(form: { nomor_form?: string | null } | null | undefined): boolean {
-  return !isKeu1Form(form) && !isKeu10Form(form);
+export function usesFundSubmissionType(form: { nomor_form?: string | null } | null | undefined, category: unknown): boolean {
+  return category === "non_asset" && /(?:^|[.-])PGD(?:[.-]|$)/.test(String(form?.nomor_form ?? "").trim().toUpperCase());
 }
 
 export const FUND_SUBMISSION_TYPES = [
