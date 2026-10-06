@@ -3,8 +3,26 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 const migrationsDir = "supabase/migrations";
+const carryoverMigration = "20261006080000_work_calendar_carryover_deadlines.sql";
+const carryoverTest = "work_calendar_carryover_deadlines.integration.sql";
+const mode = process.argv[2] ?? "--all";
+if (!["--all", "--baseline", "--carryover"].includes(mode) || process.argv.length > 3) {
+  throw new Error("Usage: node scripts/test-work-calendar-sql.mjs [--all|--baseline|--carryover]");
+}
+
+// Historic assertions and the new contract need separate disposable databases.
+if (mode === "--all") {
+  for (const suite of ["--baseline", "--carryover"]) {
+    const result = spawnSync(process.execPath, [process.argv[1], suite], { stdio: "inherit" });
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  }
+  process.exit(0);
+}
+
 const migrationFiles = readdirSync(migrationsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
+  .filter((name) => mode !== "--baseline" || name !== carryoverMigration)
   .sort();
 
 if (migrationFiles.length === 0) {
@@ -12,17 +30,96 @@ if (migrationFiles.length === 0) {
 }
 
 const migrations = migrationFiles
+  .filter((file) => file !== carryoverMigration)
   .map((file) => readFileSync(join(migrationsDir, file), "utf8"))
   .join("\n\n");
 
 const testsDir = "supabase/tests";
 const testFiles = readdirSync(testsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
+  .filter((name) => mode === "--carryover" ? name === carryoverTest : mode !== "--baseline" || name !== carryoverTest)
   .sort();
 
 const assertions = testFiles
   .map((file) => readFileSync(join(testsDir, file), "utf8"))
   .join("\n\n");
+
+// Replacement/replay must preserve the existing RPC contracts and privileges.
+const replacementContractSql = mode === "--baseline" ? "" : `
+${mode !== "--carryover" ? "" : `
+-- Non-empty preservation fixtures: applying/replaying definitions must not
+-- reschedule a task, fill due_date, reset read state or manufacture events.
+insert into public.profiles (id, full_name) values
+  ('46699999-0000-4000-8000-000000000001', 'Migration preservation fixture');
+insert into public.work_calendar_entries (id, owner_id, work_date, title, due_date) values
+  ('46699999-0000-4000-8000-000000000002', '46699999-0000-4000-8000-000000000001',
+   (now() at time zone 'Asia/Jakarta')::date - 10, 'No implicit deadline', null),
+  ('46699999-0000-4000-8000-000000000003', '46699999-0000-4000-8000-000000000001',
+   (now() at time zone 'Asia/Jakarta')::date - 10, 'Preserve explicit deadline',
+   (now() at time zone 'Asia/Jakarta')::date - 3);
+insert into public.notifications (user_id, title, message, is_read, read_at, data) values
+  ('46699999-0000-4000-8000-000000000001', 'Preserve read state', 'Existing notification', true,
+   now() - interval '1 day', '{"dedupe_key":"work-calendar:test-preservation"}');
+`}
+create temp table calendar_rpc_contract_before as
+select oid, proowner, proacl, prosecdef, provolatile, proconfig,
+       pg_get_function_arguments(oid) as arguments,
+       pg_get_function_result(oid) as result
+from pg_proc
+where pronamespace = 'public'::regnamespace
+  and proname in (
+    'list_work_calendar_team_entries', 'list_work_calendar_team_overview',
+    'list_work_calendar_member_entries', 'get_work_calendar_dashboard_entries',
+    'generate_work_calendar_notifications'
+  );
+create temp table calendar_table_contract_before as
+select oid, relacl, relrowsecurity, relforcerowsecurity
+from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r';
+create temp table calendar_policies_before as select * from pg_policy;
+create temp table calendar_data_before as
+select 'entries' as source, to_jsonb(e) as row from public.work_calendar_entries e
+union all select 'events', to_jsonb(e) from public.work_calendar_events e
+union all select 'notifications', to_jsonb(e) from public.notifications e
+union all select 'activity_logs', to_jsonb(e) from public.activity_logs e
+union all select 'agendas', to_jsonb(e) from public.agendas e;
+${readFileSync(join(migrationsDir, carryoverMigration), "utf8")}
+${readFileSync(join(migrationsDir, carryoverMigration), "utf8")}
+do $$
+begin
+  if (select count(*) from calendar_rpc_contract_before) <> 5 or exists (
+    select 1 from calendar_rpc_contract_before b
+    left join pg_proc a on a.oid = b.oid
+    where a.oid is null
+       or row(a.proowner, a.proacl, a.prosecdef, a.provolatile, a.proconfig,
+              pg_get_function_arguments(a.oid), pg_get_function_result(a.oid))
+          is distinct from row(b.proowner, b.proacl, b.prosecdef, b.provolatile,
+                               b.proconfig, b.arguments, b.result)
+  ) then raise exception 'Carryover replacement changed an RPC contract/ACL'; end if;
+  if exists (
+    select 1 from calendar_table_contract_before b
+    left join pg_class a on a.oid = b.oid
+    where a.oid is null or row(a.relacl, a.relrowsecurity, a.relforcerowsecurity)
+      is distinct from row(b.relacl, b.relrowsecurity, b.relforcerowsecurity)
+  ) or exists (
+    (select * from pg_policy except select * from calendar_policies_before)
+    union all
+    (select * from calendar_policies_before except select * from pg_policy)
+  ) then raise exception 'Carryover replacement changed table ACL/RLS'; end if;
+  if exists (
+    with after_data as (
+      select 'entries' as source, to_jsonb(e) as row from public.work_calendar_entries e
+      union all select 'events', to_jsonb(e) from public.work_calendar_events e
+      union all select 'notifications', to_jsonb(e) from public.notifications e
+      union all select 'activity_logs', to_jsonb(e) from public.activity_logs e
+      union all select 'agendas', to_jsonb(e) from public.agendas e
+    )
+    (select * from after_data except select * from calendar_data_before)
+    union all
+    (select * from calendar_data_before except select * from after_data)
+  ) then raise exception 'Carryover replacement wrote stored data'; end if;
+end $$;
+select 'CAL-03 carryover replacement/replay contracts: all assertions passed';
+`;
 
 const baseSchemaSql = `
 create extension if not exists pgcrypto;
@@ -178,6 +275,8 @@ insert into public.agendas (id, title) values
 -- Apply migrations
 ${migrations}
 
+${replacementContractSql}
+
 -- Run integration tests
 ${assertions}
 `;
@@ -194,6 +293,7 @@ const run = (args, input = "") => {
 
 const id = run([
   "run", "-d",
+  "--label", "sigap.disposable-test=work-calendar",
   "-e", "POSTGRES_PASSWORD=test",
   "postgres:17-alpine",
 ]).trim();
@@ -219,7 +319,7 @@ try {
     "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
   ], baseSchemaSql);
 
-  if (
+  if (mode !== "--carryover" && (
     !output.includes("CAL-03 work calendar integration: all assertions passed") ||
     !output.includes("CAL-03 work calendar lifecycle integration: all assertions passed") ||
     !output.includes("CAL-03 work calendar holidays integration: all assertions passed") ||
@@ -227,8 +327,12 @@ try {
     !output.includes("CAL-03 team members integration: all assertions passed") ||
     !output.includes("CAL-03 team overview integration: all assertions passed") ||
     !output.includes("CAL-03 team overview scale integration: all assertions passed")
-  ) {
+  )) {
     throw new Error("SQL runner did not see all success markers.\n" + output);
+  }
+  if (mode !== "--baseline" &&
+      !output.includes("CAL-03 carryover deadlines integration: all assertions passed")) {
+    throw new Error("SQL runner did not see the carryover success marker.\n" + output);
   }
   process.stdout.write(output);
 } finally {

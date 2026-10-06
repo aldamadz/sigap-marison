@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it } from "vitest";
 
 import { WorkCalendarWorkspace } from "@/features/work-calendar/components/WorkCalendarWorkspace";
+import { WorkEntryCreateDialog } from "@/features/work-calendar/components/WorkEntryCreateDialog";
 import {
   WORK_CALENDAR_FIXTURE_CURRENT_USER,
   WORK_CALENDAR_FIXTURE_TEAM_MEMBERS,
@@ -63,6 +64,36 @@ async function openDetail(entryId: string): Promise<HTMLElement> {
 }
 
 describe("WorkCalendarWorkspace — CAL-03 F5 siklus hidup", () => {
+  it("shows no deadline when absent in detail and editor", async () => {
+    renderWorkspace([createFixtureWorkEntry({ id: "no-deadline", dueDate: null })]);
+    const detail = await openDetail("no-deadline");
+    expect(within(detail).getByTestId("work-entry-detail-due-date-no-deadline")).toHaveTextContent(/^Tanpa tenggat$/);
+    fireEvent.click(screen.getByTestId("work-entry-detail-edit-no-deadline"));
+    expect(await screen.findByText("Opsional. Kosong berarti tanpa tenggat.")).toBeInTheDocument();
+  });
+
+  it("states no deadline for an empty deadline in the creation form", () => {
+    render(<WorkEntryCreateDialog workDate={WORK_CALENDAR_FIXTURE_TODAY} initialTitle="New task" isSaving={false} error={null} onSubmit={async () => false} onClose={() => {}} onDismissError={() => {}} />);
+    expect(screen.getByTestId("work-entry-create-due-date")).toHaveValue("");
+    expect(screen.getByText("Opsional. Kosong berarti tanpa tenggat.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["event", "planned"], ["event", "blocked"],
+    ["availability", "planned"], ["availability", "blocked"],
+  ] as const)("disables continuation for older %s entries with %s status", async (kind, status) => {
+    const entry = createFixtureWorkEntry({
+      id: `${kind}-${status}`, kind, status, workDate: "2026-03-09", blockedReason: status === "blocked" ? "Waiting" : null,
+    });
+    const { repository } = renderWorkspace([entry], "2026-03-09");
+    await openDetail(entry.id);
+    const continueButton = screen.getByTestId(`work-entry-continue-today-${entry.id}`);
+    expect(continueButton).toBeDisabled();
+    fireEvent.click(continueButton);
+    expect(await repository.getEntryById({ entryId: entry.id })).toMatchObject({ workDate: "2026-03-09", status });
+    expect((await repository.listEntryEvents({ entryId: entry.id })).map((event) => event.type)).toEqual(["created"]);
+  });
+
   it("menampilkan tenggat dan warna penanda pada detail beserta timeline", async () => {
     renderWorkspace([
       createFixtureWorkEntry({
@@ -83,7 +114,7 @@ describe("WorkCalendarWorkspace — CAL-03 F5 siklus hidup", () => {
 
   it("menandai pekerjaan lampau sebagai Terlambat", async () => {
     renderWorkspace(
-      [createFixtureWorkEntry({ id: "f5-late", title: "Pekerjaan lampau", workDate: "2026-03-01" })],
+      [createFixtureWorkEntry({ id: "f5-late", title: "Pekerjaan lampau", workDate: "2026-03-01", dueDate: "2026-03-01" })],
       "2026-03-01",
     );
 
@@ -149,7 +180,7 @@ describe("WorkCalendarWorkspace — CAL-03 F5 siklus hidup", () => {
     expect(entries.filter((entry) => entry.id === "f5-block")).toHaveLength(1);
   });
 
-  it("aksi Lanjutkan hari ini memindahkan tanggal tanpa membuat baris baru", async () => {
+  it("aksi Lanjutkan hari ini mengubah status tanpa memindahkan tanggal atau membuat baris baru", async () => {
     const { repository } = renderWorkspace(
       [createFixtureWorkEntry({ id: "f5-continue", title: "Lanjutkan", workDate: "2026-03-09" })],
       "2026-03-09",
@@ -160,12 +191,14 @@ describe("WorkCalendarWorkspace — CAL-03 F5 siklus hidup", () => {
 
     await waitFor(async () => {
       const entry = await repository.getEntryById({ entryId: "f5-continue" });
-      expect(entry?.workDate).toBe(WORK_CALENDAR_FIXTURE_TODAY);
+      expect(entry?.workDate).toBe("2026-03-09");
+      expect(entry?.status).toBe("in_progress");
     });
 
     const events = await repository.listEntryEvents({ entryId: "f5-continue" });
-    expect(events.some((event) => event.type === "schedule_changed")).toBe(true);
-    await screen.findByTestId("work-entry-timeline-item-schedule_changed");
+    expect(events.some((event) => event.type === "schedule_changed")).toBe(false);
+    expect(events.map((event) => event.type)).toEqual(["created", "status_changed"]);
+    await screen.findByTestId("work-entry-timeline-item-status_changed");
   });
 
   it("aksi Selesai meminta hasil pekerjaan sebelum menyimpan", async () => {

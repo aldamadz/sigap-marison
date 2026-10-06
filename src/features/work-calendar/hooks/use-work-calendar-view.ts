@@ -22,6 +22,7 @@ import {
   workWeekDates,
   workMonthDates,
   shiftWorkDate,
+  workDateToUtcRange,
 } from "../lib/work-calendar-date";
 import {
   buildWorkCalendarDayCells,
@@ -153,6 +154,7 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
                   ownerId: currentUserId,
                   fromDate,
                   toDate,
+                  today,
                   signal: controller.signal,
                 });
         if (!active || requestRef.current !== requestId) return;
@@ -173,11 +175,27 @@ export function useWorkCalendarView(input: UseWorkCalendarViewInput): UseWorkCal
       active = false;
       controller.abort();
     };
-  }, [repository, view, fromDate, toDate, currentUserId, reloadToken, loadTeamEntries]);
+  }, [repository, view, fromDate, toDate, today, currentUserId, reloadToken, loadTeamEntries]);
 
-  // Jam dinding tidak dipakai untuk perhitungan; hanya untuk menyegarkan `today`.
+  // Refresh the projection at WIB midnight, also after returning to a sleeping tab.
   useEffect(() => {
-    setToday(todayWorkDate(readNow()));
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshToday = () => {
+      clearTimeout(timer);
+      const current = readNow();
+      const date = todayWorkDate(current);
+      setToday(date);
+      const midnight = new Date(workDateToUtcRange(date).endUtc).getTime();
+      timer = setTimeout(refreshToday, Math.max(1, midnight - current.getTime()));
+    };
+    refreshToday();
+    window.addEventListener("focus", refreshToday);
+    document.addEventListener("visibilitychange", refreshToday);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", refreshToday);
+      document.removeEventListener("visibilitychange", refreshToday);
+    };
   }, [readNow]);
 
   const goToPreviousRange = useCallback(() => {

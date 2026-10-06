@@ -157,6 +157,7 @@ describe("WorkCalendarWorkspace â€” command surface (CAL-03 redesign tahap 
         id: "flt-overdue",
         status: "planned",
         workDate: "2026-03-09",
+        dueDate: "2026-03-09",
         title: "Terlambat kemarin",
       }),
     ];
@@ -181,7 +182,7 @@ describe("WorkCalendarWorkspace â€” command surface (CAL-03 redesign tahap 
 
       await chooseStatusFilter("Perlu perhatian");
       expect(screen.getByTestId("work-entry-row-flt-blocked")).toBeInTheDocument();
-      // Entry 9 Maret tidak termasuk rentang Hari 10 Maret: verify lewat Minggu.
+      expect(screen.getByTestId("work-entry-row-flt-overdue")).toBeInTheDocument();
       expect(screen.queryByTestId("work-entry-row-flt-planned")).toBeNull();
     });
 
@@ -239,6 +240,7 @@ describe("WorkCalendarWorkspace â€” command surface (CAL-03 redesign tahap 
       expect(
         within(todayColumn).getByTestId("work-entry-row-flt-blocked"),
       ).toBeInTheDocument();
+      expect(within(todayColumn).getByTestId("work-entry-row-flt-overdue")).toBeInTheDocument();
       expect(within(todayColumn).queryByTestId("work-entry-row-flt-planned")).toBeNull();
     });
 

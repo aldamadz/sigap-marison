@@ -235,19 +235,18 @@ describe("work-entry-status", () => {
 
   it("menurunkan overdue dari status dan tanggal, bukan menyimpannya", () => {
     const today = "2026-03-10";
-    expect(isWorkEntryOverdue({ status: "planned", workDate: "2026-03-09" }, today)).toBe(true);
-    expect(isWorkEntryOverdue({ status: "in_progress", workDate: "2026-03-09" }, today)).toBe(true);
+    expect(isWorkEntryOverdue({ status: "planned", workDate: "2026-03-09" }, today)).toBe(false);
+    expect(isWorkEntryOverdue({ status: "in_progress", workDate: "2026-03-09" }, today)).toBe(false);
     expect(isWorkEntryOverdue({ status: "planned", workDate: today }, today)).toBe(false);
     expect(isWorkEntryOverdue({ status: "planned", workDate: "2026-03-11" }, today)).toBe(false);
     // Status final tidak pernah overdue, meskipun tanggal sudah lewat.
     expect(isWorkEntryOverdue({ status: "completed", workDate: "2026-03-01" }, today)).toBe(false);
   });
 
-  it("menandai blocked pada tanggal lampau sebagai overdue", () => {
+  it("tidak menandai blocked pada tanggal lampau tanpa tenggat sebagai overdue", () => {
     const today = "2026-03-10";
-    // Blocked bukan final, jadi pekerjaan lampau yang terhambat tetap terlambat.
-    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-09" }, today)).toBe(true);
-    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-01" }, today)).toBe(true);
+    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-09" }, today)).toBe(false);
+    expect(isWorkEntryOverdue({ status: "blocked", workDate: "2026-03-01", dueDate: "2026-03-09" }, today)).toBe(true);
   });
 
   it("tidak menandai blocked hari ini sebagai overdue", () => {
@@ -342,15 +341,24 @@ describe("work-entry-lifecycle (CAL-03 F5)", () => {
     expect(getWorkEntryColorMeta("blue").label).toBe("Biru");
   });
 
-  it("tidak menghasilkan patch jadwal bila tanggal tidak berubah", () => {
-    expect(buildContinueTodayPatch({ workDate: "2026-03-10" }, "2026-03-10")).toBeNull();
-    expect(buildContinueTodayPatch({ workDate: "2026-03-09" }, "2026-03-10")).toEqual({
-      workDate: "2026-03-10",
-    });
+  it("melanjutkan pekerjaan tanpa mengubah jadwal dan tidak mengulang transisi", () => {
+    expect(buildContinueTodayPatch({ workDate: "2026-03-10", status: "planned", kind: "work" }, "2026-03-10")).toBeNull();
+    expect(buildContinueTodayPatch({ workDate: "2026-03-09", status: "blocked", kind: "work" }, "2026-03-10")).toEqual({ status: "in_progress", blockedReason: null });
+    expect(buildContinueTodayPatch({ workDate: "2026-03-09", status: "in_progress", kind: "work" }, "2026-03-10")).toBeNull();
+    expect(buildContinueTodayPatch({ workDate: "2026-03-09", status: "completed", kind: "work" }, "2026-03-10")).toBeNull();
+    expect(buildContinueTodayPatch({ workDate: "2026-03-11", status: "planned", kind: "work" }, "2026-03-10")).toBeNull();
     expect(buildReschedulePatch({ workDate: "2026-03-10" }, "2026-03-10")).toBeNull();
     expect(buildReschedulePatch({ workDate: "2026-03-10" }, "2026-03-12")).toEqual({
       workDate: "2026-03-12",
     });
+  });
+
+  it.each(["event", "availability"] as const)("never continues an older %s regardless of unfinished status", (kind) => {
+    for (const status of ["planned", "blocked"] as const) {
+      const entry = { workDate: "2026-03-09", status, kind };
+      expect(buildContinueTodayPatch(entry, "2026-03-10")).toBeNull();
+      expect(entry).toEqual({ workDate: "2026-03-09", status, kind });
+    }
   });
 
   it("membangun patch status tanpa pernah membuat entri baru", () => {
@@ -478,7 +486,7 @@ describe("work-progress", () => {
     createFixtureWorkEntry({ id: "i", status: "in_progress" }),
     createFixtureWorkEntry({ id: "c", status: "completed" }),
     createFixtureWorkEntry({ id: "b", status: "blocked" }),
-    createFixtureWorkEntry({ id: "o", status: "planned", workDate: "2026-03-01" }),
+    createFixtureWorkEntry({ id: "o", status: "planned", workDate: "2026-03-01", dueDate: "2026-03-01" }),
   ];
 
   it("menghitung progres otomatis tanpa input persen", () => {
@@ -512,8 +520,8 @@ describe("work-progress", () => {
 
   it("menghitung overdue lintas status tanpa mengubah penjumlahan status", () => {
     const mixed = [
-      createFixtureWorkEntry({ id: "late-planned", status: "planned", workDate: "2026-03-01" }),
-      createFixtureWorkEntry({ id: "late-blocked", status: "blocked", workDate: "2026-03-01" }),
+      createFixtureWorkEntry({ id: "late-planned", status: "planned", workDate: "2026-03-01", dueDate: "2026-03-01" }),
+      createFixtureWorkEntry({ id: "late-blocked", status: "blocked", workDate: "2026-03-01", dueDate: "2026-03-01" }),
       createFixtureWorkEntry({ id: "done-late", status: "completed", workDate: "2026-03-01" }),
     ];
     const counts = computeWorkProgress(mixed, today);
@@ -749,6 +757,7 @@ describe("work-progress", () => {
       id: "o",
       status: "planned",
       workDate: shiftWorkDate(today, -3),
+      dueDate: shiftWorkDate(today, -3),
     });
 
     expect(getWorkWeekEntryPriority(blocked, today)).toBe(0);
@@ -1039,11 +1048,13 @@ describe("work-calendar-status-filter", () => {
     id: "f-overdue",
     status: "planned",
     workDate: "2026-03-09",
+    dueDate: "2026-03-09",
   });
   const blockedOverdue = createFixtureWorkEntry({
     id: "f-blocked-overdue",
     status: "blocked",
     workDate: "2026-03-09",
+    dueDate: "2026-03-09",
   });
 
   it("menyediakan opsi sesuai urutan pemindaian operasional", () => {

@@ -210,7 +210,7 @@ describe("CAL-03 F8 a11y — dashboard dan notifikasi (F7)", () => {
 
   it("tidak mengandalkan warna untuk penanda lewat tenggat pada dashboard", () => {
     const overdueOnly = [
-      createFixtureWorkEntry({ id: "od-1", status: "planned", workDate: "2026-03-08" }),
+      createFixtureWorkEntry({ id: "od-1", status: "planned", workDate: "2026-03-08", dueDate: "2026-03-08" }),
     ];
     render(
       <MemoryRouter>
@@ -225,7 +225,7 @@ describe("CAL-03 F8 a11y — dashboard dan notifikasi (F7)", () => {
     // Penanda tertunda punya teks eksplisit, bukan hanya warna `text-overdue`.
     expect(within(region).getByText("Tertunda (lewat tenggat)")).toBeInTheDocument();
     expect(within(region).getAllByText("Lewat tenggat").length).toBeGreaterThan(0);
-    expect(within(region).getByText(/Belum selesai dan tanggal kerja sudah lewat/)).toBeInTheDocument();
+    expect(within(region).getByText(/Belum selesai dan tenggat sudah lewat/)).toBeInTheDocument();
   });
 
   it("menyediakan label, deskripsi, tipe, dan ikon berbeda untuk tiap kategori notifikasi", () => {

@@ -5,6 +5,7 @@ import type {
   WorkEntryRepository,
 } from "../types/work-calendar";
 import { WorkEntryConflictError } from "../lib/work-entry-conflict";
+import { isValidWorkDate, todayWorkDate, workDateToUtcRange } from "../lib/work-calendar-date";
 import type { WorkCalendarEntryRow } from "./work-entry-row-mapper";
 import { mapWorkEntryRow } from "./work-entry-row-mapper";
 import type { WorkCalendarEventRow } from "./work-entry-event-row-mapper";
@@ -14,6 +15,7 @@ export interface WorkCalendarDbQueryFilter<TResult = unknown>
   extends PromiseLike<{ data: TResult; error: { message: string } | null }> {
   eq(column: string, value: unknown): WorkCalendarDbQueryFilter<TResult>;
   gte(column: string, value: unknown): WorkCalendarDbQueryFilter<TResult>;
+  or(filters: string): WorkCalendarDbQueryFilter<TResult>;
   lte(column: string, value: unknown): WorkCalendarDbQueryFilter<TResult>;
   is(column: string, value: null): WorkCalendarDbQueryFilter<TResult>;
   order(
@@ -88,9 +90,6 @@ const WORK_ENTRY_SELECT_COLUMNS =
 const WORK_ENTRY_EVENT_SELECT_COLUMNS =
   "id, entry_id, owner_id, event_type, from_status, to_status, from_work_date, to_work_date, from_due_date, to_due_date, detail, actor_id, created_at";
 
-/** Batas atas peristiwa yang ditampilkan agar timeline tetap ringan. */
-const WORK_ENTRY_EVENT_MAX_ROWS = 200;
-
 /**
  * Bentuk id kolom `work_calendar_entries.id` (uuid). Id yang tidak berbentuk
  * uuid tidak pernah dikirim ke PostgREST: query akan gagal dengan error cast
@@ -103,15 +102,15 @@ export function isWorkEntryIdShape(value: string): boolean {
   return WORK_ENTRY_ID_SHAPE_PATTERN.test(value);
 }
 
-async function paginateQuery(
+async function paginateQuery<TRow>(
   fetchPage: (
     offset: number,
     limit: number,
-  ) => Promise<{ data: WorkCalendarEntryRow[] | null; error: { message: string } | null }>,
+  ) => Promise<{ data: TRow[] | null; error: { message: string } | null }>,
   signal: AbortSignal | undefined,
   errorMessage: string,
-): Promise<WorkCalendarEntryRow[]> {
-  const allData: WorkCalendarEntryRow[] = [];
+): Promise<TRow[]> {
+  const allData: TRow[] = [];
   let offset = 0;
   const limit = 1000;
   while (true) {
@@ -119,6 +118,9 @@ async function paginateQuery(
       throw new Error("Pencarian dibatalkan.");
     }
     const { data, error } = await fetchPage(offset, limit);
+    if (signal?.aborted) {
+      throw new Error("Pencarian dibatalkan.");
+    }
     if (error) {
       throw new Error(errorMessage);
     }
@@ -138,15 +140,28 @@ export function createSupabaseWorkEntryRepository(
   client: SupabaseWorkCalendarClient,
 ): WorkEntryRepository {
   return {
-    async listEntries({ ownerId, fromDate, toDate, signal }) {
+    async listEntries({ ownerId, fromDate, toDate, today = todayWorkDate(), signal }) {
+      if (![fromDate, toDate, today].every((date) => isValidWorkDate(date) && date === date.trim()) || fromDate > toDate) {
+        throw new Error("Rentang tanggal pekerjaan tidak valid.");
+      }
+      const { startUtc } = workDateToUtcRange(fromDate);
+      // Date inputs are validated before interpolation into PostgREST grammar.
+      // Owner and soft-delete constraints stay outside OR and remain RLS-bound.
+      const dateFilter = [
+        `work_date.gte.${fromDate}`,
+        ...(fromDate <= today ? [
+          `and(kind.eq.work,work_date.lt.${fromDate},status.neq.completed)`,
+          `and(kind.eq.work,work_date.lt.${fromDate},status.eq.completed,completed_at.gte.${startUtc})`,
+        ] : []),
+      ].join(",");
       const rows = await paginateQuery(
         async (offset, limit) => {
           let query = client
             .from("work_calendar_entries")
             .select(WORK_ENTRY_SELECT_COLUMNS)
             .eq("owner_id", ownerId)
-            .gte("work_date", fromDate)
             .lte("work_date", toDate)
+            .or(dateFilter)
             .is("deleted_at", null)
             .order("work_date", { ascending: true })
             .order("starts_at", { ascending: true, nullsFirst: true })
@@ -229,25 +244,24 @@ export function createSupabaseWorkEntryRepository(
         return [];
       }
 
-      let query = client
-        .from<WorkCalendarEventRow>("work_calendar_events")
-        .select(WORK_ENTRY_EVENT_SELECT_COLUMNS)
-        .eq("entry_id", entryId)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .range(0, WORK_ENTRY_EVENT_MAX_ROWS - 1);
-
-      if (signal && "abortSignal" in query && typeof query.abortSignal === "function") {
-        query = query.abortSignal(signal);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        throw new Error("Gagal memuat riwayat pekerjaan.");
-      }
-
-      return (data ?? []).map(mapWorkEntryEventRow);
+      const rows = await paginateQuery<WorkCalendarEventRow>(
+        async (offset, limit) => {
+          let query = client
+            .from<WorkCalendarEventRow>("work_calendar_events")
+            .select(WORK_ENTRY_EVENT_SELECT_COLUMNS)
+            .eq("entry_id", entryId)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + limit - 1);
+          if (signal && typeof query.abortSignal === "function") {
+            query = query.abortSignal(signal);
+          }
+          return await query;
+        },
+        signal,
+        "Gagal memuat riwayat pekerjaan.",
+      );
+      return rows.map(mapWorkEntryEventRow);
     },
 
     async createEntry(draft: WorkEntryDraft) {
