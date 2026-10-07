@@ -54,6 +54,7 @@ import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { withRequesterRabRequirement } from "@/lib/fund-rab";
 import { selectUsage } from "@/features/surat/registration/usages";
 import type {
   NumberContextIssue,
@@ -239,7 +240,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getInitialAttachmentRequirements = (): AttachmentRequirement[] => {
     const configured = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
-    return withOptionalRequesterAttachmentRequirement(configured);
+    const storedRab = draftAttachments.some(file => file.requirement_key === "rab") || Boolean(initialAttachmentFiles.rab?.length);
+    return withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(configured, selectedUsage, formData.form_input_data, storedRab));
   };
 
   const getMissingInitialAttachmentLabels = () =>
