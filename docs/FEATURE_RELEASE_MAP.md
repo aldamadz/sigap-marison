@@ -15,6 +15,9 @@
   KEU 1 and KEU 10 do not display/require that choice; their technical vendor type
   is automatic operational. Issue #479 corrects registration, detail and export
   with forward-only migration `20261006183000`; historical documents stay unchanged.
+- Production promotion prerequisite SEC-01: sharp 0.35.5 closes high advisory
+  GHSA-wq5f-xc86-pv6w; root pin and backend minimum are aligned. Image/PDF
+  regression checks and fresh CI are required; no audit gate suppression.
 - Staging: migrations `20261006170000` / `20261006171000` applied, PR #473
   deployed at `a930cde`; canonical rollback smoke and browser draft/confirmation PASS.
 - Production prerequisite audit: the original vendor decision RPC is present but
