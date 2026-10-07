@@ -2,14 +2,18 @@
 
 ## OPS-06 Production Session Query Pressure Hotfix (2026-10-07)
 
-- Candidate `hotfix/production-session-query-pressure` from production `main`.
+- Branch `hotfix/production-session-query-pressure` from production `main`;
+  deployed blue/green at commit `9184d0e` to Proxmox LXC 104
+  (`sigap-app-prod-01`, `10.10.10.241:3010`).
 - Coalesce concurrent active-profile authorization checks per user and access
   token, then retain only successful checks for five seconds with a bounded
   in-memory cache. Upstream errors, revoked tokens, inactive profiles, and
   deleted profiles remain fail-closed and are never cached.
 - Scope is the Fastify application only: no schema, worker, business-record, or
-  vendor integration change. Production rollout requires changed tests,
-  typecheck/build, runtime SHA verification, and authenticated smoke monitoring.
+  vendor integration change. Caddy on `10.10.10.253` now sends the production
+  domain to LXC 104. The prior Ubuntu app at `10.10.10.246:3010` remains healthy
+  as the immediate rollback target; production PDF, sync, and outbound workers
+  remain on Ubuntu and were not duplicated or restarted.
 
 ## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
 
