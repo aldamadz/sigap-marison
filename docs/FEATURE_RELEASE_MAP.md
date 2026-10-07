@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SUR-17 / SUR-04 Requester RAB Choice (2026-10-07, Issue #488)
+
+- Candidate `feature/fund-requester-rab-choice-01` from main, staging target only.
+- PGD Dana with a Planning Manager examination offers Ada RAB; checked requires
+  a classified initial RAB attachment. Unchecked leaves checker RAB mandatory.
+- The choice survives drafts/revisions and is cleared for unrelated usages/forms.
+  Checker/detail/confirmation show its source; KEU and other evidence stay unchanged.
+- Forward-only `20261007110000` resolves the waiver from persisted document and
+  attachment rows in the canonical verifier. Legacy RPC uses the same guard;
+  signature snapshots and old documents are not rewritten. Internal helpers are
+  unavailable to authenticated/anonymous callers. No production release implied.
+- Focused Vitest and disposable PostgreSQL cover missing/wrong-class/deleted RAB,
+  other mandatory attachments, ownership, legacy bypass, audit and idempotence.
+
 ## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
 
 - Candidate `hotfix/external-unit-fund-checker-realtime-01` from production main.
