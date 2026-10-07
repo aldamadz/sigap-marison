@@ -25,6 +25,13 @@ const bmMigration = readFileSync("supabase/migrations/20261001130000_keu1_relate
 const bmAssertions = readFileSync("supabase/tests/keu1_branch_manager_candidates.integration.sql", "utf8");
 const optionalProjectMigration = readFileSync("supabase/migrations/20261005090000_keu1_optional_branch_project.sql", "utf8");
 const optionalProjectAssertions = readFileSync("supabase/tests/keu1_optional_project.integration.sql", "utf8");
+const fundChecklist = process.argv.includes("--fund-checklist");
+const fundChecklistSql = fundChecklist
+  ? readFileSync("supabase/tests/fund_item_checklist.setup.sql", "utf8")
+    + readFileSync("supabase/migrations/20261007090000_fund_item_verification_and_realtime.sql", "utf8")
+    + readFileSync("supabase/migrations/20261007090000_fund_item_verification_and_realtime.sql", "utf8")
+    + readFileSync("supabase/tests/fund_item_checklist.integration.sql", "utf8")
+  : "";
 
 const sql = `
 create extension if not exists pgcrypto;
@@ -329,6 +336,7 @@ ${bmAssertions}
 ${optionalProjectMigration.replace(/\r\n/g, "\n")}
 ${optionalProjectMigration.replace(/\r?\n/g, "\r\n")}
 ${optionalProjectAssertions}
+${fundChecklistSql}
 `;
 
 const run = (args, input = "") => {
@@ -348,10 +356,15 @@ try {
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready.");
-  const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], sql);
+  const executedSql = fundChecklist ? sql.slice(0, sql.indexOf(nonPlanningMigration)) + fundChecklistSql : sql;
+  const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], executedSql);
   if (!output.includes("SUR-17 canonical submission workflows: all assertions passed")) {
     throw new Error(`SQL success marker missing.\n${output}`);
   }
+  if (fundChecklist) {
+    if (!output.includes("Fund item checklist: all assertions passed")) throw new Error("Fund checklist regression marker missing.");
+    process.stdout.write(output);
+  } else {
   if (!output.includes("Non-Planning checker defaults: all assertions passed")) {
     throw new Error(`Checker migration success marker missing.\n${output}`);
   }
@@ -359,10 +372,12 @@ try {
     throw new Error(`KEU 1 migration success marker missing.\n${output}`);
   }
   process.stdout.write(output);
+  if (fundChecklist && !output.includes("Fund item checklist: all assertions passed")) throw new Error("Fund checklist regression marker missing.");
   if (!output.includes("Contextual first maker: all assertions passed")) throw new Error("Maker regression marker missing.");
   if (!output.includes("KEU 1 optional project: all assertions passed")) throw new Error("Optional project regression marker missing.");
   if (!output.includes("KEU 1 submit and first signer: all assertions passed")) {
     throw new Error("KEU 1 submit regression marker missing.");
+  }
   }
 } finally {
   spawnSync("docker", ["rm", "-f", id], { encoding: "utf8" });

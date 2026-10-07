@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
+
+- Candidate `hotfix/external-unit-fund-checker-realtime-01` from production main.
+- Unit type comes exclusively from a fresh, fully paginated external lookup;
+  slash-separated references are preserved. Missing vendor type fails closed.
+  Design replaces the visible Block label; supplied production identifiers are read-only.
+- Checklist Item Dana is configurable per usage and examination stage, with explicit
+  verifier selection (Usman, Tri or other authorized staff). PGD Dana HRD defaults
+  use Usman when available; staging tester assignments stay intact. KEU unchanged.
+- Every current item must be checked; stale item snapshots and legacy RPC bypass
+  are rejected atomically. Manager approval and historical signatures stay intact.
+- Production receives the already-tested reconnect/session/allowlist behavior from
+  staging. Scoped migration `20261007090000` publishes five RLS-protected tables,
+  excludes profiles and aligns revision verifier containment; no vendor resend.
+- Changed-only local tests plus real PostgreSQL regression precede stage acceptance
+  and selective production release. No real production submission is created.
+
 ## KEU-10 Land and Permit Cost Submission (2026-10-06, Issue #471)
 
 - Candidate branch `feature/keu10-configurable-workflow-01` from production main.

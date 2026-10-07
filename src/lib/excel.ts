@@ -107,7 +107,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
     { header: "Struktur Atas", key: "Struktur Atas", width: 18 },
     { header: "Struktur Bawah", key: "Struktur Bawah", width: 18 },
     { header: "Nomor Kode Produksi", key: "Nomor Kode Produksi", width: 22 },
-    { header: "Blok", key: "Blok", width: 14 },
+    { header: "Desain", key: "Blok", width: 14 },
     { header: "Tanggal Produksi", key: "Tanggal Produksi", width: 18 },
   ];
 
@@ -161,7 +161,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       showErrorMessage: false,
       showInputMessage: true,
       promptTitle: "Tipe Unit",
-      prompt: "Isi tipe unit, contoh: 60. Format lain seperti 60/72 tetap dapat digunakan.",
+      prompt: "Tipe berasal dari external dan tidak diubah melalui impor. Format seperti 60/72 dipertahankan.",
     };
     row.getCell(5).dataValidation = {
       type: "whole",
@@ -206,8 +206,8 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       allowBlank: true,
       showErrorMessage: false,
       showInputMessage: true,
-      promptTitle: "Blok",
-      prompt: "Isi kode blok produksi. Contoh: 5.2.",
+      promptTitle: "Desain",
+      prompt: "Isi desain hanya bila belum disediakan external. Contoh: 5.2.",
     };
     row.getCell(9).dataValidation = {
       type: "date",
