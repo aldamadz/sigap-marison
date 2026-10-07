@@ -23,7 +23,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 class MockEventSource {
   static instances: MockEventSource[] = [];
   url: string;
-  private listeners = new Map<string, Array<(e: any) => void>>();
+  private listeners = new Map<string, Array<(e: { data: string }) => void>>();
   closed = false;
 
   constructor(url: string) {
@@ -31,13 +31,13 @@ class MockEventSource {
     MockEventSource.instances.push(this);
   }
 
-  addEventListener(type: string, fn: (e: any) => void) {
+  addEventListener(type: string, fn: (e: { data: string }) => void) {
     const list = this.listeners.get(type) || [];
     list.push(fn);
     this.listeners.set(type, list);
   }
   removeEventListener() {}
-  fire(type: string, data?: any) {
+  fire(type: string, data?: unknown) {
     const event = { data: data !== undefined ? JSON.stringify(data) : "{}" };
     (this.listeners.get(type) || []).forEach((fn) => fn(event));
   }
@@ -50,7 +50,7 @@ describe("realtime reconnect after token refresh", () => {
   beforeEach(() => {
     vi.resetModules();
     MockEventSource.instances = [];
-    vi.stubGlobal("EventSource", MockEventSource as any);
+    vi.stubGlobal("EventSource", MockEventSource);
     // openRealtimeSource only opens when the page is visible.
     Object.defineProperty(document, "visibilityState", {
       configurable: true,

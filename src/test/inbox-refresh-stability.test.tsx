@@ -20,6 +20,13 @@ describe("Inbox background refresh", () => {
     act(() => result.current.resetPagination());
     expect(result.current.items).toHaveLength(1);
     expect(result.current.detailCache["signature-1"]).toBeDefined();
+    const invalidation = vi.spyOn(client, "invalidateQueries");
+    getPage.mockResolvedValueOnce({ items: [{ id: "signature-1", task_type: "approval" }], total: 1, hasMore: false, nextCursor: null });
+    act(() => result.current.refreshAfterAction());
+    expect(invalidation).toHaveBeenCalledWith({ queryKey: ["surat-monitoring-list"] });
+    expect(invalidation).toHaveBeenCalledWith({ queryKey: ["admin-monitoring-list"] });
+    expect(invalidation).toHaveBeenCalledWith({ queryKey: ["surat-detail"] });
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
     getPage.mockResolvedValueOnce({ items: [], total: 0, hasMore: false, nextCursor: null });
     await act(() => client.invalidateQueries({ queryKey: ["surat-inbox-compact"] }));
     await waitFor(() => expect(result.current.items).toHaveLength(0));
