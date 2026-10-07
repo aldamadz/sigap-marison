@@ -13,6 +13,7 @@ export type CheckerInputField = {
 };
 
 export type CheckerInputSchema = {
+  review_mode?: "fund_item_checklist";
   title?: string;
   description?: string;
   fields: CheckerInputField[];
@@ -51,10 +52,42 @@ export const normalizeCheckerInputSchema = (value: unknown): CheckerInputSchema 
   });
 
   return {
+    ...(value.review_mode === "fund_item_checklist" ? { review_mode: "fund_item_checklist" as const } : {}),
     ...(String(value.title || "").trim() ? { title: String(value.title).trim() } : {}),
     ...(String(value.description || "").trim() ? { description: String(value.description).trim() } : {}),
     fields,
   };
+};
+
+export const FUND_ITEM_CHECKLIST_SCHEMA: CheckerInputSchema = {
+  review_mode: "fund_item_checklist",
+  title: "Pemeriksaan item dana",
+  description: "Periksa setiap item sebelum diteruskan ke manager.",
+  fields: [{ key: "item_checks", label: "Checklist item dana", type: "text", required: true }],
+};
+
+export type FundItemCheck = { item_index: number; item: unknown; checked: boolean; note: string };
+export const matchesFundItemSnapshot = (left: unknown, right: unknown): boolean => {
+  if (left === right) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => matchesFundItemSnapshot(value, right[index]));
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key =>
+    Object.prototype.hasOwnProperty.call(right, key) && matchesFundItemSnapshot(left[key], right[key]));
+};
+export const readFundItemChecks = (value: unknown): FundItemCheck[] => {
+  try {
+    const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.filter((row): row is FundItemCheck =>
+      isRecord(row) && Number.isSafeInteger(row.item_index) && typeof row.checked === "boolean" && typeof row.note === "string") : [];
+  } catch { return []; }
+};
+export const isFundItemChecklistComplete = (items: unknown[], value: unknown) => {
+  const checks = readFundItemChecks(value);
+  return items.length > 0 && checks.length === items.length && items.every((item, index) =>
+    checks[index]?.item_index === index && checks[index]?.checked === true && checks[index].note.length <= 2000 && matchesFundItemSnapshot(checks[index].item, item));
 };
 
 const numericValue = (value: unknown, type: "money" | "number") => {

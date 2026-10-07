@@ -9,7 +9,7 @@ import { VERIFIER_OPTIONAL_ATTACHMENT_KEY, validateVerifierOptionalUpload, hasVa
 import nodemailer from "nodemailer";
 import webpush from "web-push";
 import sharp from "sharp";
-import { hasUnavailableMarisonProjectBranch } from "@sigap/shared";
+import { hasUnavailableMarisonProjectBranch, getExternalUnitReference, applyExternalUnitReference } from "@sigap/shared";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
 import { createKeu1PreviewData, isKeu1Document, renderKeu1Pdf, resolveKeu1MasterForm } from "../../keu1-pdf-renderer.mjs";
 import { createKeu10PreviewData, isKeu10Document, renderKeu10Pdf } from "../../keu10-pdf-renderer.mjs";
@@ -3356,10 +3356,18 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
   const requestedProject = getMarisonRequestedProject(surat, input);
    const projectId = requireExternalInteger(overrides.projectId ?? externalIdFrom(requestedProject), "Project ID");
    const branchId = requireExternalInteger(overrides.branchId ?? externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
+  const referenceResult = await queryExternalDataSource(MARISON_UNITS_SOURCE_KEY, { project_id: projectId });
+  const references = new Map(referenceResult.options.map(option => [externalIdFrom(option), option]));
   const units = getMarisonAllocatedUnits(surat, input).map((unit, index) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
-    const detail = asPlainRecord(record.allocation_detail);
+    const reference = references.get(externalIdFrom(record));
+    if (!reference || !getExternalUnitReference(reference).type) {
+      const error = new Error(`Tipe kavling baris ${index + 1} belum tersedia di Marison. Lengkapi referensi external sebelum pengiriman.`);
+      error.status = 422;
+      throw error;
+    }
+    const detail = applyExternalUnitReference(reference, asPlainRecord(record.allocation_detail));
     const productionSerial = firstString(detail.production_serial, detail.kode_produksi_nomor).padStart(3, "0");
     const productionBlock = firstString(detail.production_block, detail.kode_produksi_blok);
     const productionDate = normalizeExternalDate(firstString(detail.production_date, detail.kode_produksi_tanggal));
@@ -3371,16 +3379,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     return {
       unit_id: requireExternalInteger(externalIdFrom(record), `Unit ID baris ${index + 1}`),
       production_code: productionCode,
-      type: firstString(
-        raw.type,
-        raw.unit_type,
-        raw.tipe,
-        record.type,
-        record.unit_type,
-        detail.unit_type,
-        detail.type,
-        detail.tipe
-      ),
+      type: getExternalUnitReference(reference).type,
       addendum_atas_label: "Struktur Atas",
       addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
       addendum_bawah_label: "Struktur Bawah",

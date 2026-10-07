@@ -158,6 +158,10 @@ export const useInboxPagination = (
     void Promise.allSettled([
       queryClient.invalidateQueries({ queryKey: ["surat-inbox-compact"] }),
       queryClient.invalidateQueries({ queryKey: ["surat-inbox-kpi"] }),
+      queryClient.invalidateQueries({ queryKey: ["surat-monitoring-list"] }),
+      queryClient.invalidateQueries({ queryKey: ["admin-monitoring-list"] }),
+      queryClient.invalidateQueries({ queryKey: ["surat-detail"] }),
+      queryClient.invalidateQueries({ queryKey: ["surat-stats-dashboard"] }),
       refetchAttention(),
     ]);
   }, [queryClient, refetchAttention]);
