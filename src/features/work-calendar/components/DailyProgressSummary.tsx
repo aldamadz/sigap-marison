@@ -14,21 +14,15 @@
  * dominan di toolbar); `title` hanya dipakai untuk labeling aksesibilitas.
  */
 
-import { Ban, CircleCheck, CircleDashed, Hourglass, ListChecks, LoaderCircle } from "lucide-react";
+import { Ban, CalendarDays, CheckCircle2, CircleDashed, Clock, Hourglass, ListChecks, LoaderCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { WorkProgressCounts } from "../types/work-calendar";
 import { computeWorkCompletionPercent } from "../lib/work-progress";
 
 export interface DailyProgressSummaryProps {
-  /** Label untuk pembaca layar saja; tidak dirender sebagai heading. */
   title?: string;
   counts: WorkProgressCounts;
-  /**
-   * Strip penuh (bar + semua status) pada layar lebar; pada mobile hanya
-   * bar + ringkasan jumlah. Selalu diberi `compact` saat ditanam di command
-   * bar; responsivitas dipegang oleh kelas Tailwind.
-   */
   compact?: boolean;
 }
 
@@ -40,112 +34,91 @@ export function DailyProgressSummary({
   const percent = computeWorkCompletionPercent(counts);
   const ariaLabel = title ? `Ringkasan progres ${title}` : "Ringkasan progres pekerjaan";
 
-  const statusItems = [
-    {
-      key: "planned",
-      label: "Direncanakan",
-      value: counts.planned,
-      icon: CircleDashed,
-      tone: "text-muted-foreground",
-    },
-    {
-      key: "inProgress",
-      label: "Berjalan",
-      value: counts.inProgress,
-      icon: LoaderCircle,
-      tone: "text-pending",
-    },
-    {
-      key: "completed",
-      label: "Selesai",
-      value: counts.completed,
-      icon: CircleCheck,
-      tone: "text-success",
-    },
-    {
-      key: "blocked",
-      label: "Terhambat",
-      value: counts.blocked,
-      icon: Ban,
-      tone: "text-destructive",
-    },
-  ] as const;
-
   return (
     <section
       aria-label={ariaLabel}
       data-testid="daily-progress-summary"
-      className="min-w-0"
+      className="flex flex-col gap-4 md:flex-row items-center justify-between rounded-xl border border-border bg-card p-4 shadow-sm"
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <p className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-          <ListChecks className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <span className="font-semibold text-foreground" data-testid="progress-completed-total">
-            {counts.completed}
-          </span>{" "}
-          selesai dari{" "}
-          <span className="font-semibold text-foreground" data-testid="progress-total">
-            {counts.total}
-          </span>{" "}
-          pekerjaan
-        </p>
-
-        <div
-          className="inline-flex items-center gap-1.5"
-          data-testid="progress-overdue-group"
-        >
-          <Hourglass
-            className={cn(
-              "h-3.5 w-3.5",
-              counts.overdue > 0 ? "text-overdue" : "text-muted-foreground",
-            )}
-            aria-hidden="true"
-          />
-          <span className="text-muted-foreground">Terlambat</span>
-          <span
-            className={cn(
-              "font-semibold",
-              counts.overdue > 0 ? "text-overdue" : "text-foreground",
-            )}
-            data-testid="progress-overdue"
-          >
-            {counts.overdue}
-          </span>
+      <div className="flex flex-1 flex-wrap items-center gap-y-4 md:divide-x md:divide-border/60 w-full">
+        {/* Total Kegiatan */}
+        <div className="flex items-center gap-3 px-2 md:px-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <CalendarDays className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Total Kegiatan</p>
+            <p className="text-xl font-bold text-foreground">
+              <span data-testid="progress-completed-total" className="hidden">{counts.completed}</span>
+              <span data-testid="progress-total">{counts.total}</span> <span className="text-xs font-normal text-muted-foreground">kegiatan</span>
+            </p>
+          </div>
         </div>
 
-        {!compact ? (
-          <dl
-            className="hidden sm:contents sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-1 sm:text-xs"
-            aria-label={`Jumlah status ${title ?? "pekerjaan"}`}
-            data-testid="progress-status-items"
-          >
-            {statusItems.map((item) => (
-              <div key={item.key} className="inline-flex items-center gap-1.5">
-                <item.icon className={cn("h-3.5 w-3.5", item.tone)} aria-hidden="true" />
-                <dt className="text-muted-foreground">{item.label}</dt>
-                <dd className="font-semibold text-foreground" data-testid={`progress-${item.key}`}>
-                  {item.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-      </div>
+        {/* Terlambat */}
+        <div className="flex items-center gap-3 px-2 md:px-5" data-testid="progress-overdue-group">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Terlambat</p>
+            <p className="text-lg font-bold text-foreground">
+              <span data-testid="progress-overdue">{counts.overdue}</span> <span className="text-xs font-normal text-muted-foreground">0%</span>
+            </p>
+          </div>
+        </div>
 
-      <div
-        role="progressbar"
-        aria-label={`Progres ${title ?? "pekerjaan"}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        aria-valuetext={`${percent} persen selesai`}
-        aria-readonly="true"
-        className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"
-      >
-        <span
-          className="block h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
-          style={{ width: `${percent}%` }}
-        />
+        {/* Direncanakan */}
+        <div className="flex items-center gap-3 px-2 md:px-5" data-testid={compact ? undefined : "progress-status-items"}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-500">
+            <Clock className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Direncanakan</p>
+            <p className="text-lg font-bold text-foreground">
+              <span data-testid="progress-planned">{counts.planned}</span> <span className="text-xs font-normal text-muted-foreground">0%</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Berjalan */}
+        <div className="flex items-center gap-3 px-2 md:px-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-500">
+            <LoaderCircle className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Berjalan</p>
+            <p className="text-lg font-bold text-foreground">
+              <span data-testid="progress-inProgress">{counts.inProgress}</span> <span className="text-xs font-normal text-muted-foreground">0%</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Selesai */}
+        <div className="flex items-center gap-3 px-2 md:px-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Selesai</p>
+            <p className="text-lg font-bold text-foreground">
+              <span data-testid="progress-completed">{counts.completed}</span> <span className="text-xs font-normal text-muted-foreground">{percent}%</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Terhambat */}
+        <div className="flex items-center gap-3 px-2 md:px-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <Hourglass className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Terhambat</p>
+            <p className="text-lg font-bold text-foreground">
+              <span data-testid="progress-blocked">{counts.blocked}</span> <span className="text-xs font-normal text-muted-foreground">0%</span>
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );
