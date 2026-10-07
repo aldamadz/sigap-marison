@@ -30,7 +30,7 @@ import { FundContextPanel } from "./FundContextPanel";
 import { isKeu1Form } from "../../lib/keu1-form";
 import { getKeu10SubmissionAmount, isKeu10Form, normalizeKeu10SubmissionItems, validateKeu10SubmissionItems } from "../../lib/keu10-form";
 import { normalizeKeu10Config } from "../../lib/keu10-config";
-import { getFundSubmissionTypeLabel, isFundSubmissionType } from "./fund-types";
+import { getFundSubmissionTypeLabel, isFundSubmissionType, usesFundSubmissionType } from "./fund-types";
 
 const getFundTypeIssues = (value: unknown): NumberContextIssue[] => isFundSubmissionType(value) ? [] : [{
   title: "Jenis Pengajuan Dana Wajib Dipilih",
@@ -96,7 +96,7 @@ export const fundModule: UsageModule = {
     return isKeu1Form(usage.master_forms) && usage.scope_type === "cabang";
   },
   renderContextPanel(ctx) {
-    return isKeu1Usage(ctx) ? null : <FundContextPanel ctx={ctx} allowsWithoutProject={!isKeu10Form(ctx.usage.master_forms)} />;
+    return usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? <FundContextPanel ctx={ctx} /> : null;
   },
   renderDetailsPanel(ctx) {
     if (isKeu10Form(ctx.usage.master_forms)) {
@@ -125,7 +125,7 @@ export const fundModule: UsageModule = {
     ];
   },
   isFieldComplete(field: TemplateField, ctx: UsageModuleContext): boolean | null {
-    if (field.key === "fund_type") return isKeu1Usage(ctx) || isFundSubmissionType(ctx.input.fund_type);
+    if (field.key === "fund_type") return !usesFundSubmissionType(ctx.usage.master_forms, ctx.category) || isFundSubmissionType(ctx.input.fund_type);
     if (isKeu10Form(ctx.usage.master_forms) && field.key === "keu10_purpose_code") {
       return Boolean(normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.some((purpose) => purpose.code === ctx.input.keu10_purpose_code));
     }
@@ -142,8 +142,6 @@ export const fundModule: UsageModule = {
     if (isKeu10Form(ctx.usage.master_forms)) {
       const contextIssues = getKeu10NumberContextIssues(ctx);
       if (contextIssues.length > 0) return contextIssues;
-      const fundTypeIssues = getFundTypeIssues(ctx.input.fund_type);
-      if (fundTypeIssues.length > 0) return fundTypeIssues;
       const config = normalizeKeu10Config(ctx.usage.keu10_config);
       if (!config) return [{ title: "Konfigurasi KEU 10 Tidak Valid", description: "Hubungi administrator untuk melengkapi tujuan pengajuan." }];
       if (!config.purposes.some((purpose) => purpose.code === ctx.input.keu10_purpose_code)) {
@@ -160,7 +158,7 @@ export const fundModule: UsageModule = {
         ? [{ title: "Free Cash Tidak Valid", description: "Isi nominal Free Cash dengan angka Rupiah atau kosongkan." }]
         : [];
     }
-    const fundTypeIssues = getFundTypeIssues(ctx.input.fund_type);
+    const fundTypeIssues = usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? getFundTypeIssues(ctx.input.fund_type) : [];
     if (fundTypeIssues.length > 0) return fundTypeIssues;
     const first = validateFundSubmissionItems(ctx.input.items)[0];
     return first ? [{ title: "Rincian Dana Belum Lengkap", description: first.message }] : [];
@@ -168,7 +166,6 @@ export const fundModule: UsageModule = {
   buildSummaryFields(ctx: UsageModuleContext): SummaryField[] {
     if (isKeu10Form(ctx.usage.master_forms)) {
       return [
-        { key: "fund_type", label: "Jenis Pengajuan Dana", value: getFundSubmissionTypeLabel(ctx.input.fund_type) },
         { key: "keu10_purpose_code", label: "Tujuan Pengajuan", value: normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.find((purpose) => purpose.code === ctx.input.keu10_purpose_code)?.label || "-" },
         { key: "items", label: "Rincian Pengajuan Dana", value: normalizeKeu10SubmissionItems(ctx.input.items) },
         { key: "keu10_grand_total", label: "Grand Total", value: formatRupiahZero(getKeu10SubmissionAmount(ctx.input.items)) },
@@ -188,11 +185,11 @@ export const fundModule: UsageModule = {
       ];
     }
     return [
-      {
+      ...(usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? [{
         key: "fund_type",
         label: "Jenis Pengajuan Dana",
         value: getFundSubmissionTypeLabel(ctx.input.fund_type),
-      },
+      }] : []),
       {
         key: "fund_amount",
         label: "Total Pengajuan Dana",
@@ -202,7 +199,7 @@ export const fundModule: UsageModule = {
   },
   reconcileInputForContext(input: FormInputData, ctx): FormInputData {
     if (isKeu10Form(ctx.usage.master_forms)) {
-      const next: FormInputData = { ...input, fund_without_project: false };
+      const next: FormInputData = { ...input, fund_without_project: false, fund_type: "operational" };
       delete next.free_cash_sisa_bulan_lalu;
       delete next.keu1_grand_total;
       if (!normalizeKeu10Config(ctx.usage.keu10_config)?.purposes.some((purpose) => purpose.code === next.keu10_purpose_code)) delete next.keu10_purpose_code;
@@ -212,8 +209,7 @@ export const fundModule: UsageModule = {
   },
   validateNumberContext(ctx): NumberContextIssue[] {
     if (isKeu10Form(ctx.usage.master_forms)) {
-      const issues = getKeu10NumberContextIssues(ctx);
-      return issues.length > 0 ? issues : getFundTypeIssues(ctx.input.fund_type);
+      return getKeu10NumberContextIssues(ctx);
     }
     if (isKeu1Usage(ctx)) {
       return !ctx.isPusatSelected && ctx.formData.project_id && !ctx.marisonProject?.ready
@@ -233,7 +229,7 @@ export const fundModule: UsageModule = {
         description: "Pilih proyek yang memiliki ID proyek dan kantor external yang valid.",
       }];
     }
-    return getFundTypeIssues(ctx.input.fund_type);
+    return usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? getFundTypeIssues(ctx.input.fund_type) : [];
   },
   cleanup(ctx): CleanupResult {
     return {
@@ -249,6 +245,7 @@ export const fundModule: UsageModule = {
     next.request_mode = "barang";
     delete next.is_aset;
     if (isKeu10Form(ctx.usage.master_forms)) {
+      next.fund_type = "operational";
       next.items = normalizeKeu10SubmissionItems(next.items);
       next.fund_amount = getKeu10SubmissionAmount(next.items);
       next.fund_without_project = false;

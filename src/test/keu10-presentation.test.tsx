@@ -90,7 +90,19 @@ describe("KEU 10 form-specific presentation", () => {
     rerender(<Keu10SubmissionSummary items={[]} />);
     expect(screen.getByText("Belum ada rincian dana.")).toBeInTheDocument();
   });
-  it("reads persisted form identity without modifying the shared data builder", () => {
+  it.each(["FM-UAI.KEU-01-00", "FM-UAI.KEU-10-00", "FM-MBN.KEU-10-00"])("omits internal fund type from persisted summary %s", (formNumber) => {
+    const persisted = buildRegistrationSummaryData({
+      form_input_data: { request_category: "non_asset", items, fund_type: "marketing_cost" },
+      location_snapshot: { form: { nomor_form: formNumber } },
+    });
+    expect(persisted.fields.find(field => field.key === "fund_type")).toBeUndefined();
+    const pgd = buildRegistrationSummaryData({
+      form_input_data: { request_category: "non_asset", fund_type: "marketing_cost" },
+      location_snapshot: { form: { nomor_form: "FM-UAI.PGD-01-00" } },
+    });
+    expect(pgd.fields.find(field => field.key === "fund_type")).toMatchObject({ label: "Jenis Pengajuan Dana", value: "Biaya Marketing" });
+  });
+  it("reads persisted form identity", () => {
     const persisted = buildRegistrationSummaryData({
       no_surat: data.noSurat, form_input_data: { request_category: "non_asset", items },
       location_snapshot: { form: { nama_form: data.formName, nomor_form: data.formNumber }, office: { name: data.officeName }, project: { name: data.projectName } },
@@ -99,7 +111,14 @@ describe("KEU 10 form-specific presentation", () => {
     expectKeu10Table();
     expect(screen.getByText("Proyek Solo")).toBeInTheDocument();
   });
-  it.each(FUND_SUBMISSION_TYPES)("shows $label and the frozen purpose label once in detail and confirmation", ({ value, label }) => {
+  it.each([undefined, "asset", "unit", "non_unit"])("does not expose stale PGD fund type for category %s", (category) => {
+    const summary = buildRegistrationSummaryData({
+      form_input_data: { request_category: category, fund_type: "marketing_cost" },
+      location_snapshot: { form: { nomor_form: "FM-UAI.PGD-01-00" } },
+    });
+    expect(summary.fields.find(field => field.key === "fund_type")).toBeUndefined();
+  });
+  it.each(FUND_SUBMISSION_TYPES)("hides legacy $label but keeps the frozen purpose in detail and confirmation", ({ value, label }) => {
     const persisted = buildRegistrationSummaryData({
       no_surat: data.noSurat,
       form_input_data: { request_category: "non_asset", items, fund_type: value, keu10_purpose_code: "land", keu10_purpose_label: "Untrusted label" },
@@ -107,15 +126,15 @@ describe("KEU 10 form-specific presentation", () => {
       policy_snapshot: { keu10_config: { version: 1, disposition: "legal_land", purposes: [{ code: "land", label: "Pengurusan tanah" }], approval_threshold: null } },
     });
     const { rerender } = render(<RegistrationSummaryDocument data={persisted} />);
-    expect(screen.getAllByText(label)).toHaveLength(1);
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
     expect(screen.getAllByText("Pengurusan tanah")).toHaveLength(2);
     expect(screen.queryByText(value)).not.toBeInTheDocument();
     expect(screen.queryByText("land")).not.toBeInTheDocument();
     expect(screen.queryByText("Untrusted label")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Jenis Pengajuan Dana")).toHaveLength(1);
+    expect(screen.queryByText("Jenis Pengajuan Dana")).not.toBeInTheDocument();
     rerender(<RegistrationSummaryDialog open data={persisted} submitting={false} onOpenChange={() => {}} onConfirm={() => {}} />);
-    expect(screen.getAllByText(label)).toHaveLength(1);
-    expect(screen.getAllByText("Jenis Pengajuan Dana")).toHaveLength(1);
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
+    expect(screen.queryByText("Jenis Pengajuan Dana")).not.toBeInTheDocument();
     expectKeu10Table();
   });
   it("does not present an unknown purpose code as a user-facing label", () => {
@@ -126,6 +145,6 @@ describe("KEU 10 form-specific presentation", () => {
     });
     render(<RegistrationSummaryDocument data={persisted} />);
     expect(screen.queryByText("unknown_purpose")).not.toBeInTheDocument();
-    expect(screen.getByText("Biaya Marketing")).toBeInTheDocument();
+    expect(screen.queryByText("Biaya Marketing")).not.toBeInTheDocument();
   });
 });
