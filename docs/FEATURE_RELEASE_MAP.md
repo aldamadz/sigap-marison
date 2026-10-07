@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## OPS-06 Production Session Query Pressure Hotfix (2026-10-07)
+
+- Candidate `hotfix/production-session-query-pressure` from production `main`.
+- Coalesce concurrent active-profile authorization checks per user and access
+  token, then retain only successful checks for five seconds with a bounded
+  in-memory cache. Upstream errors, revoked tokens, inactive profiles, and
+  deleted profiles remain fail-closed and are never cached.
+- Scope is the Fastify application only: no schema, worker, business-record, or
+  vendor integration change. Production rollout requires changed tests,
+  typecheck/build, runtime SHA verification, and authenticated smoke monitoring.
+
 ## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
 
 - Candidate `hotfix/external-unit-fund-checker-realtime-01` from production main.
