@@ -911,10 +911,12 @@ export const suratService = {
 
       const configuredInitialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
         .filter((requirement: any) => Number(requirement.stage_order) === 0);
-      const initialRequirements = withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(
-        configuredInitialRequirements, configContext.usage, normalizedFormInputData,
-      ));
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
+      const storedRab = persistedDraftAttachments.some(file => file.requirement_key === "rab")
+        || attachmentFiles.some(file => initialAttachmentMeta[file.name]?.key === "rab");
+      const initialRequirements = withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(
+        configuredInitialRequirements, configContext.usage, normalizedFormInputData, storedRab,
+      ));
       const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
         files: persistedDraftAttachments,
         initialRequirementKeys: new Set(

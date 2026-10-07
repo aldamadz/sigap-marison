@@ -5,6 +5,7 @@ import type { UsageModuleContext } from "@/features/surat/registration/usages/us
 import type { UsageDetailRecord } from "@/components/surat/form/surat-form-types";
 import { effectiveFundRabRequirements, hasRequesterRab, usesRequesterRabChoice, withRequesterRabRequirement } from "@/lib/fund-rab";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
+import { classifyRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 
 const rule = { id: "rab", stage_order: 2, requirement_key: "rab", label: "RAB hasil pemeriksaan",
   is_required: true, allow_multiple: false, min_files: 1, max_files: 1, allowed_types: ["application/pdf"], max_size_bytes: 10485760 };
@@ -43,6 +44,7 @@ describe("requester RAB choice", () => {
     expect(rules).toMatchObject([{ requirement_key: "rab", stage_order: 0, is_required: true, label: "RAB dari pemohon" }]);
     expect(() => validateInitialRegistrationAttachments({ requirements: rules, newFiles: [], newFileMetadata: {}, persistedFiles: [] })).toThrow(/RAB/);
     expect(withRequesterRabRequirement([], usage, { request_category: "non_asset", requester_has_rab: false })).toEqual([]);
+    expect(withRequesterRabRequirement([{ ...rule, stage_order: 0 }], usage, { request_category: "non_asset", requester_has_rab: false })).toEqual([]);
   });
   it("does not trust checked flag without a persisted initial RAB", () => {
     const input = { requester_has_rab: true };
@@ -73,5 +75,15 @@ describe("requester RAB choice", () => {
     expect(effectiveFundRabRequirements([], true, { requester_has_rab: false }, [])).toMatchObject([{ requirement_key: "rab", is_required: true }]);
     expect(effectiveFundRabRequirements([], true, {}, [])).toEqual([]);
     expect(effectiveFundRabRequirements([{ ...rule, is_required: false, min_files: 0 }], true, { requester_has_rab: false }, [])).toMatchObject([{ is_required: true, min_files: 1 }]);
+  });
+  it("retains a stored RAB as optional after unchecking, without losing it or waiving checker evidence", () => {
+    const input = { request_category: "non_asset", requester_has_rab: false };
+    const rules = withRequesterRabRequirement([], usage, input, true);
+    expect(rules).toMatchObject([{ requirement_key: "rab", is_required: false, min_files: 0 }]);
+    const file = { id: "stored-rab", draft_id: "draft", file_url: "stored.pdf", file_name: "RAB.pdf",
+      file_type: "application/pdf", file_size: 100, requirement_key: "rab", requirement_label: "RAB", created_at: "2026-10-07" };
+    const result = classifyRegistrationDraftAttachments({ files: [file], initialRequirementKeys: new Set(rules.map(r => r.requirement_key)), formInputData: input });
+    expect(result.initialAttachments).toEqual([file]);
+    expect(effectiveFundRabRequirements([rule], true, input, [attachment])[0].is_required).toBe(true);
   });
 });

@@ -239,7 +239,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getInitialAttachmentRequirements = (): AttachmentRequirement[] => {
     const configured = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
-    return withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(configured, selectedUsage, formData.form_input_data));
+    const storedRab = draftAttachments.some(file => file.requirement_key === "rab") || Boolean(initialAttachmentFiles.rab?.length);
+    return withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(configured, selectedUsage, formData.form_input_data, storedRab));
   };
 
   const getMissingInitialAttachmentLabels = () =>
