@@ -15,6 +15,7 @@ import { useAppDialog } from "@/components/app/AppDialogProvider";
 import { Keu10UsageConfigEditor } from "@/components/surat/Keu10UsageConfigEditor";
 import { normalizeKeu10Config, type Keu10Config } from "@/features/surat/registration/lib/keu10-config";
 import {
+  FUND_ITEM_CHECKLIST_SCHEMA,
   normalizeCheckerInputSchema,
   type CheckerInputField,
   type CheckerInputSchema,
@@ -1302,11 +1303,20 @@ export default function FormUsageManagementPage() {
                                   Operator mengisi data ini sebelum signer tahap {step.step_order} dapat menyetujui.
                                 </p>
                               </div>
-                              <Button type="button" variant="outline" size="sm" onClick={() => addCheckerField(index)}>
+                              <Button type="button" variant="outline" size="sm" disabled={schema.review_mode === "fund_item_checklist"} onClick={() => addCheckerField(index)}>
                                 <Plus className="mr-2 h-4 w-4" /> Field
                               </Button>
                             </div>
                             <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-2 sm:col-span-2">
+                                <Label>Jenis pemeriksaan</Label>
+                                <Select value={schema.review_mode || "fields"} onValueChange={value => updateStep(index, {
+                                  input_schema: value === "fund_item_checklist" ? FUND_ITEM_CHECKLIST_SCHEMA : { fields: [{ key: "review_note", label: "Hasil pemeriksaan", type: "textarea", required: true }] },
+                                })}>
+                                  <SelectTrigger aria-label="Jenis pemeriksaan"><SelectValue /></SelectTrigger>
+                                  <SelectContent><SelectItem value="fields">Input khusus</SelectItem><SelectItem value="fund_item_checklist">Checklist Item Dana</SelectItem></SelectContent>
+                                </Select>
+                              </div>
                               <div className="space-y-2">
                                 <Label>Judul Panel</Label>
                                 <Input value={schema.title || ""} onChange={event => updateCheckerSchema(index, { title: event.target.value })} />
@@ -1317,7 +1327,7 @@ export default function FormUsageManagementPage() {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              {schema.fields.map((field, fieldIndex) => (
+                              {schema.review_mode !== "fund_item_checklist" && schema.fields.map((field, fieldIndex) => (
                                 <div key={`${field.key}-${fieldIndex}`} className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[1fr_1.2fr_150px_100px_auto]">
                                   <Input aria-label={`Kunci field ${fieldIndex + 1}`} value={field.key} onChange={event => updateCheckerField(index, fieldIndex, { key: event.target.value })} placeholder="approved_amount" />
                                   <Input aria-label={`Label field ${fieldIndex + 1}`} value={field.label} onChange={event => updateCheckerField(index, fieldIndex, { label: event.target.value })} placeholder="Label field" />

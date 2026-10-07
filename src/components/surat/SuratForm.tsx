@@ -1426,20 +1426,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
   }, [toast]);
 
+  // NOTE: no realtime channel for form-configuration tables. Those tables are
+  // not in the supabase_realtime publication (so subscriptions stayed
+  // SUBSCRIBED but never delivered), and they are outside the BFF
+  // REALTIME_ALLOWED_TABLES — subscribing would 400 the whole /api/events
+  // stream. Configuration reloads on mount; add a table to the publication
+  // AND the allowlist before subscribing to it.
   useEffect(() => {
     loadUsageDetails();
-    const channel = supabase.channel("surat-form-configuration-sync")
-      .on("postgres_changes", { event: "*", schema: "public", table: "master_forms" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "form_usages" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_departments" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_steps" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_step_users" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "form_usage_attachment_requirements" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "master_penggunaan_detail" }, loadUsageDetails)
-      .on("postgres_changes", { event: "*", schema: "public", table: "workflow_allowed_departments" }, loadUsageDetails)
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [loadUsageDetails]);
 
   useEffect(() => {

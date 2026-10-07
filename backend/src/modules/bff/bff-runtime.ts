@@ -33,6 +33,37 @@ const BFF_QUERY_METHODS = new Set([
   "order", "limit", "range", "single", "maybeSingle", "csv", "throwOnError",
 ]);
 
+/**
+ * Server-side allowlist for /api/events table subscriptions.
+ *
+ * The browser multiplexes every postgres_changes binding into a single
+ * EventSource, so without this list an authenticated user could subscribe to
+ * any table whose RLS SELECT policy they satisfy. In particular `profiles`
+ * must stay out: its SELECT policy allows every authenticated user to read
+ * all active profiles, and postgres_changes delivers full rows — meaning one
+ * request to /api/events?tables=profiles would broadcast nik, email, and
+ * phone numbers to every logged-in user.
+ *
+ * RLS remains the row-level guard; this list is the table-level guard.
+ * Keep in sync with the postgres_changes bindings in src/ (AttentionProvider,
+ * RealtimeSync, InboxPage). A table subscribed by the frontend but missing
+ * here fails the whole stream with 400 — loudly, instead of leaking silently.
+ */
+const REALTIME_ALLOWED_TABLES: ReadonlySet<string> = new Set([
+  "activity_logs",
+  "agendas",
+  "marison_sync_issues",
+  "master_offices",
+  "master_projects",
+  "notifications",
+  "surat_attachments",
+  "surat_linked_documents",
+  "surat_recommendation_tasks",
+  "surat_registrasi",
+  "surat_revision_events",
+  "surat_signatures",
+]);
+
 const assertBffIdentifier = (value: unknown, label: string) => {
   const normalized = String(value || "");
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(normalized)) {
@@ -153,6 +184,14 @@ export const createBffRuntime = ({
       .map((table) => assertBffIdentifier(table, "Nama tabel")))];
     if (!tables.length || tables.length > 32) {
       const err = new Error("Daftar tabel realtime harus berisi 1 sampai 32 tabel.") as Error & { status?: number };
+      err.status = 400;
+      throw err;
+    }
+    const rejectedTables = tables.filter((table) => !REALTIME_ALLOWED_TABLES.has(table));
+    if (rejectedTables.length > 0) {
+      const err = new Error(
+        `Tabel realtime tidak diizinkan: ${rejectedTables.join(", ")}.`,
+      ) as Error & { status?: number };
       err.status = 400;
       throw err;
     }

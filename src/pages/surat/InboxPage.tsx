@@ -51,8 +51,8 @@ import {
   shouldSignerInputStageData,
 } from "@/features/surat/inbox/lib/inbox-task-state";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
-import { supabase } from "@/lib/supabase";
-import { createRealtimeFlush } from "@/lib/realtime-flush";
+import { supabase, onRealtimeReconnect } from "@/lib/supabase";
+import { createRealtimeFlush, type FlushController } from "@/lib/realtime-flush";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -77,6 +77,7 @@ import { getKeu1FinancialSummary, normalizeKeu1SubmissionItems, parseKeu1Money, 
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { getKeu10ItemTotal, getKeu10SubmissionAmount, isKeu10Form, normalizeKeu10SubmissionItems } from "@/features/surat/registration/lib/keu10-form";
 import { Keu10SubmissionSummary } from "@/components/surat/Keu10SubmissionSummary";
+import { FundItemChecklist } from "@/components/surat/FundItemChecklist";
 import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
 import { validateKeu10SubmissionItems, type Keu10SubmissionItem } from "@/features/surat/registration/lib/keu10-form";
 import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
@@ -88,26 +89,17 @@ import { formatCurrencyInput, parseCurrencyInput, formatRupiah as formatRupiahCa
 import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/components/surat/revision-utils";
 import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
 import { normalizeProductionSerial } from "@/lib/production-code";
+import { applyExternalUnitReference, getExternalUnitReference } from "@sigap/shared";
 import { useAttention } from "@/providers/AttentionProvider";
 import { parseLocalDateInput } from "@/lib/local-date";
 import {
   canonicalizeCheckerInput,
   normalizeCheckerInputSchema,
   validateCheckerInput,
+  isFundItemChecklistComplete,
 } from "@/features/surat/inbox/lib/checker-input";
 
-const getAllocationUnitType = (unit: any, detail: Record<string, any> = unit?.allocation_detail || {}) =>
-  String(
-    detail.unit_type ||
-    detail.type ||
-    detail.tipe ||
-    unit?.unit_type ||
-    unit?.raw?.unit_type ||
-    unit?.raw?.type ||
-    unit?.raw?.tipe ||
-    unit?.raw?.house_type ||
-    "",
-  ).trim();
+const getAllocationUnitType = (unit: unknown, _detail?: unknown) => getExternalUnitReference(unit).type;
 
 const normalizeAllocationDetailForPersistence = (detail: Record<string, any> = {}) => ({
   ...detail,
@@ -174,6 +166,7 @@ export default function InboxPage() {
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const selectedItemRef = useRef<any>(null);
+  const inboxFlushRef = useRef<FlushController | null>(null);
   const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -361,9 +354,21 @@ export default function InboxPage() {
     if (!currentUser?.id) return;
 
     const flush = createRealtimeFlush({ queryClient, debounceMs: 150, maxFlushDelayMs: 700 });
+    inboxFlushRef.current = flush;
+
     const scheduleInboxRefresh = () => {
+      // Union of trigger tables fires one bounded flush. Filters/pagination are
+      // preserved because refetch reuses the stored query options; the list is
+      // reset to first page so newly available items are not hidden by cursor
+      // position.
       resetInboxPagination();
-      flush.add("surat-inbox-compact", "surat-inbox-kpi", "surat-linked-documents", "surat-inbox-detail", "surat-revision-history");
+      flush.add(
+        "surat-inbox-compact",
+        "surat-inbox-kpi",
+        "surat-linked-documents",
+        "surat-inbox-detail",
+        "surat-revision-history",
+      );
     };
 
     const showRealtimeToast = (key: string, title: string, description?: string) => {
@@ -421,8 +426,13 @@ export default function InboxPage() {
       })
       .subscribe();
 
+    // Events missed while offline can change the open document; revalidate.
+    const reconnectSubscription = onRealtimeReconnect(() => scheduleInboxRefresh());
+
     return () => {
+      reconnectSubscription.unsubscribe();
       flush.cancel();
+      inboxFlushRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id, queryClient, resetInboxPagination]);
@@ -452,12 +462,11 @@ export default function InboxPage() {
   // mustahil. Tim pemeriksa tidak diberi hak tolak permanen di sini.
   const canReturnToRequester = (item: any) =>
     isVerificationTask(item) &&
-    isUnitAllocationRequired(item) &&
-    (
+    (item.input_schema_snapshot?.review_mode === "fund_item_checklist" || (isUnitAllocationRequired(item) && (
       !getAllocationProject(item)?.code ||
       Boolean(allocationErrors[item.id]) ||
       (!allocationLoading[item.id] && (allocationUnits[item.id] || []).length === 0)
-    );
+    )));
 
   const getAllocationProject = (item: any) =>
     getUnitAllocationData(item.surat_registrasi).project ||
@@ -466,15 +475,17 @@ export default function InboxPage() {
     item.surat_registrasi?.form_input_data?.allocated_project;
 
   const getSelectedAllocationUnits = (item: any) => {
-    if (allocationSelected[item.id]) return allocationSelected[item.id];
-    return getUnitAllocationData(item.surat_registrasi).units;
+    const selected = allocationSelected[item.id] || getUnitAllocationData(item.surat_registrasi).units;
+    return selected.map((unit: any) => {
+      const fresh = (allocationUnits[item.id] || []).find((option: any) => option.value === unit.value);
+      return fresh ? { ...unit, ...fresh } : unit;
+    });
   };
 
   const getAllocationDetailMap = (item: any) => {
-    if (allocationDetails[item.id]) return allocationDetails[item.id];
     return Object.fromEntries(getSelectedAllocationUnits(item).map((unit: any) => [
       unit.value || unit.label,
-      unit.allocation_detail || {},
+      applyExternalUnitReference(unit, allocationDetails[item.id]?.[unit.value] || unit.allocation_detail || {}),
     ]));
   };
 
@@ -648,10 +659,10 @@ const handleApprove = async (item: any) => {
       const unitTypeInvalid = selectedUnits.find((unit: any) => {
         const detail = details[unit.value] || {};
         const t = String(getAllocationUnitType(unit, detail)).trim();
-        return !t || !/^\d+$/.test(t);
+        return !t;
       });
       if (unitTypeInvalid) {
-        throw new Error(`Tipe unit untuk kavling ${unitTypeInvalid.label || unitTypeInvalid.value} wajib diisi dengan angka (contoh: 30).`);
+        throw new Error(`Tipe kavling ${unitTypeInvalid.label || unitTypeInvalid.value} belum tersedia di Marison. Hubungi pengelola sistem perencanaan.`);
       }
       const nominalInvalid = selectedUnits.find((unit: any) => {
         const detail = details[unit.value] || {};
@@ -820,7 +831,7 @@ const handleApprove = async (item: any) => {
   const handleReturnToRequester = async (item: any) => {
     const reason = await appDialog.prompt({
       title: "Kembalikan ke Pemohon?",
-      description: `Lookup unit untuk "${item.surat_registrasi.judul_surat}" tidak dapat diselesaikan. Pemohon akan masuk ke status Menunggu Perbaikan dan dapat memperbaiki pengajuan. Alasan wajib.`,
+      description: `Pengajuan "${item.surat_registrasi.judul_surat}" perlu diperbaiki pemohon. Tuliskan item yang perlu diperbaiki beserta alasannya.`,
       label: "Alasan pengembalian",
       placeholder: "Tuliskan alasan yang jelas, minimal 5 karakter...",
       confirmText: "Kembalikan ke Pemohon",
@@ -889,6 +900,9 @@ const handleApprove = async (item: any) => {
         throw new Error(`Lampiran approval belum lengkap: ${missingApprovalAttachments.join(", ")}.`);
       }
       if (item.action_type === "configured_input") {
+        if (item.input_schema_snapshot?.review_mode === "fund_item_checklist" && !isFundItemChecklistComplete(
+          item.surat_registrasi?.form_input_data?.items || [], checkerInputs[item.id]?.item_checks,
+        )) throw new Error("Periksa dan centang semua item dana, atau kembalikan ke pemohon untuk perbaikan.");
         const checkerIssues = validateCheckerInput(
           item.input_schema_snapshot,
           checkerInputs[item.id] || {},
@@ -1383,9 +1397,8 @@ const handleApprove = async (item: any) => {
       const kavlingIndex = getImportColumnIndex(headers, ["Kavling", "Unit"]);
       const strukturAtasIndex = getImportColumnIndex(headers, ["Struktur Atas", "Atas"]);
       const strukturBawahIndex = getImportColumnIndex(headers, ["Struktur Bawah", "Bawah"]);
-      const unitTypeIndex = getImportColumnIndex(headers, ["Tipe Unit", "Tipe", "Type", "Unit Type"]);
       const serialIndex = getImportColumnIndex(headers, ["Nomor Kode Produksi", "Nomor", "Serial", "Production Serial"]);
-      const blockIndex = getImportColumnIndex(headers, ["Blok", "Production Block"]);
+      const blockIndex = getImportColumnIndex(headers, ["Desain", "Blok", "Production Block"]);
       const dateIndex = getImportColumnIndex(headers, ["Tanggal Produksi", "Tanggal", "Production Date"]);
       if (kavlingIndex < 0) throw new Error("Kolom Kavling wajib tersedia.");
 
@@ -1412,7 +1425,6 @@ const handleApprove = async (item: any) => {
           ...((allocationDetails[item.id] || {})[unitValue] || unit.allocation_detail || {}),
           ...(strukturAtasIndex >= 0 ? { struktur_atas: (() => { const v = parseCurrencyInput(row[strukturAtasIndex] || ""); return v !== null ? String(v) : ""; })() } : {}),
           ...(strukturBawahIndex >= 0 ? { struktur_bawah: (() => { const v = parseCurrencyInput(row[strukturBawahIndex] || ""); return v !== null ? String(v) : ""; })() } : {}),
-          ...(unitTypeIndex >= 0 ? { unit_type: String(row[unitTypeIndex] || "").trim().replace(/\D/g, "") } : {}),
           ...(serialIndex >= 0 ? { production_serial: normalizeProductionSerial(row[serialIndex]) } : {}),
           ...(blockIndex >= 0 ? { production_block: String(row[blockIndex] || "").trim() } : {}),
           ...(dateIndex >= 0 ? { production_date: normalizeImportDate(row[dateIndex]) } : {}),
@@ -1744,7 +1756,7 @@ const handleApprove = async (item: any) => {
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Atas</th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Bawah</th>
                       <th className="w-36 border-r border-border px-3 py-3 text-left font-semibold">Nomor</th>
-                      <th className="w-32 border-r border-border px-3 py-3 text-left font-semibold">Blok</th>
+                      <th className="w-32 border-r border-border px-3 py-3 text-left font-semibold">Desain</th>
                       <th className="w-44 border-r border-border px-3 py-3 text-left font-semibold">Tanggal</th>
                       <th className="w-64 px-3 py-3 text-left font-semibold">Kode Produksi</th>
                     </tr>
@@ -1765,16 +1777,13 @@ const handleApprove = async (item: any) => {
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
-                            inputMode="numeric"
                             value={getAllocationUnitType(unit, detail)}
-                            onChange={(event) => {
-                              const val = event.target.value.replace(/\D/g, "");
-                              updateAllocationDetail(item.id, unit.value, "unit_type", val);
-                            }}
-                            placeholder="30"
+                            readOnly
+                            placeholder="Belum tersedia di Marison"
                             aria-label={`Tipe unit kavling ${unit.label}`}
                             className="h-11 text-sm"
                           />
+                          {!getAllocationUnitType(unit) && <p className="mt-1 text-xs text-destructive">Lengkapi tipe di sistem perencanaan.</p>}
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <NominalInput
@@ -1798,6 +1807,7 @@ const handleApprove = async (item: any) => {
                           <Input
                             inputMode="numeric"
                             value={detail.production_serial || ""}
+                            readOnly={Boolean(getExternalUnitReference(unit).serial)}
                             onChange={(event) => updateAllocationDetail(
                               item.id,
                               unit.value,
@@ -1817,16 +1827,11 @@ const handleApprove = async (item: any) => {
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <Input
-                            inputMode="decimal"
                             value={detail.production_block || ""}
-                            onChange={(event) => {
-                              const val = event.target.value.replace(/[^\d.]/g, "");
-                              const parts = val.split(".");
-                              const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : val;
-                              updateAllocationDetail(item.id, unit.value, "production_block", normalized);
-                            }}
+                            readOnly={Boolean(getExternalUnitReference(unit).design)}
+                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_block", event.target.value.replace(/\//g, ""))}
                             placeholder="5.2"
-                            aria-label={`Blok kode produksi kavling ${unit.label}`}
+                            aria-label={`Desain kode produksi kavling ${unit.label}`}
                             className="h-11 font-mono text-sm"
                           />
                         </td>
@@ -1841,6 +1846,7 @@ const handleApprove = async (item: any) => {
                                 variant="outline"
                                 className="h-11 w-full justify-start font-mono text-sm"
                                 aria-label={`Pilih tanggal produksi ${unit.label}`}
+                                disabled={Boolean(getExternalUnitReference(unit).date)}
                               >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {formatDatePickerDisplay(detail.production_date || "") || "dd/mm/yyyy"}
@@ -1894,6 +1900,12 @@ const handleApprove = async (item: any) => {
       ? checkerInputs[item.id] || (draftInput && typeof draftInput === "object" ? draftInput : {})
       : savedInput && typeof savedInput === "object" ? savedInput : {};
     const editable = isVerificationTask(item);
+
+    if (schema.review_mode === "fund_item_checklist") return <FundItemChecklist
+      items={item.surat_registrasi?.form_input_data?.items || []}
+      value={values.item_checks} readOnly={!editable}
+      onChange={item_checks => setCheckerInputs(previous => ({ ...previous, [item.id]: { item_checks } }))}
+    />;
 
     return (
       <section className={cn("sigap-panel", editable ? "border-sky-500/30" : "border-emerald-500/30")}>

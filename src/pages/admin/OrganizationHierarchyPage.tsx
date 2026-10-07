@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUsers } from '@/services/user.service';
-import { supabase } from '@/lib/supabase';
 import type { User } from '@/types/agenda';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -529,6 +528,10 @@ export default function OrganizationHierarchyPage() {
 
   const { roots, flat } = useMemo(() => buildHierarchy(users), [users]);
 
+  // NOTE: no realtime subscription on `profiles` here. postgres_changes
+  // delivers full profile rows (nik, email, phone) to every subscriber, so the
+  // table is intentionally outside the BFF realtime allowlist. The hierarchy
+  // refetches when the tab regains focus instead.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const refreshUsers = () => {
@@ -538,14 +541,17 @@ export default function OrganizationHierarchyPage() {
       }, 250);
     };
 
-    const channel = supabase
-      .channel('organization-hierarchy-profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refreshUsers)
-      .subscribe();
+    const handleFocus = () => refreshUsers();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshUsers();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [queryClient]);
 

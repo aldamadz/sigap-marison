@@ -11,11 +11,11 @@ describe("unit allocation type outputs", () => {
     const server = read("backend/src/domain-runtime.ts");
 
     expect(inbox).toContain("Tipe Unit</th>");
-    expect(inbox).toContain('placeholder="30"');
-    expect(inbox).toContain('["Tipe Unit", "Tipe", "Type", "Unit Type"]');
+    expect(inbox).toContain('placeholder="Belum tersedia di Marison"');
+    expect(inbox).toContain('getExternalUnitReference(unit).type');
     expect(excel).toContain('{ header: "Tipe Unit", key: "Tipe Unit"');
-    expect(excel).toContain("Isi tipe unit, contoh: 60.");
-    expect(server).toContain("detail.unit_type");
+    expect(excel).toContain("Tipe berasal dari external");
+    expect(server).toContain("type: getExternalUnitReference(reference).type");
   });
 
   it("renders type in both generated allocation PDFs and summary PDF", () => {

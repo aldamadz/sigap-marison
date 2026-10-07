@@ -1,24 +1,34 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
-import { createRealtimeFlush } from "@/lib/realtime-flush";
+import { supabase, onRealtimeReconnect } from "@/lib/supabase";
+import { createRealtimeFlush, type FlushController } from "@/lib/realtime-flush";
+
+const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
+const suratKeys = [
+  "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
+  "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",
+  "surat-riwayat-keterlibatan", "surat-revision-history", "surat-linked-documents",
+  "recommendation-tasks", "surat-follow-up-requester",
+];
+const userKeys = ["users", "activity-logs", "recent-logs"];
+const focusKeys = [
+  "agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs",
+  "surat-list", "surat-inbox", "surat-detail", "users",
+  "recommendation-tasks", "surat-follow-up-requester", "surat-linked-documents",
+  "surat-monitoring-list", "admin-monitoring-list",
+];
 
 export const RealtimeSync = () => {
   const queryClient = useQueryClient();
+  const flushRef = useRef<FlushController | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const lastFocusSyncRef = useRef(0);
 
   useEffect(() => {
     const flush = createRealtimeFlush({ queryClient });
-    const handleSync = (keys: string[]) => flush.add(...keys);
+    flushRef.current = flush;
 
-    const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
-    const suratKeys = [
-      "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
-      "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",
-      "surat-riwayat-keterlibatan", "surat-revision-history", "surat-linked-documents",
-      "recommendation-tasks", "surat-follow-up-requester",
-    ];
+    const handleSync = (keys: string[]) => flush.add(...keys);
 
     const channel = supabase
       .channel("db-persuratan-realtime")
@@ -32,7 +42,17 @@ export const RealtimeSync = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, () =>
         handleSync(["recent-logs", "activity-logs"])
       )
+      // NOTE: `profiles` is intentionally NOT subscribed. Full profile rows
+      // (nik, email, phone) must not be broadcast to every authenticated
+      // user; the user directory still refreshes on focus/reconnect via
+      // userKeys below.
       .subscribe();
+
+    // Events received while the client was offline are not replayed by Supabase
+    // Realtime, so revalidate every surface after the stream reconnects.
+    const reconnectSubscription = onRealtimeReconnect(() => {
+      flush.add(...agendaKeys, ...suratKeys, ...userKeys);
+    });
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
@@ -46,31 +66,17 @@ export const RealtimeSync = () => {
       if (hiddenDuration < 2_000 || now - lastFocusSyncRef.current < 15_000) return;
 
       lastFocusSyncRef.current = now;
-      handleSync([
-        "agendas",
-        "kpi",
-        "status-dist",
-        "dept-activity",
-        "recent-logs",
-        "activity-logs",
-        "surat-list",
-        "surat-inbox",
-        "surat-detail",
-        "recommendation-tasks",
-        "surat-follow-up-requester",
-        "surat-linked-documents",
-        "surat-monitoring-list",
-        "admin-monitoring-list",
-        "users",
-      ]);
+      handleSync(focusKeys);
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      flush.cancel();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      reconnectSubscription.unsubscribe();
       supabase.removeChannel(channel);
+      flush.cancel();
+      flushRef.current = null;
     };
   }, [queryClient]);
 
