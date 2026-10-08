@@ -58,6 +58,7 @@ COPY --from=builder /app/backend/dist ./backend/dist
 COPY pdf-worker.mjs ./pdf-worker.mjs
 COPY server/pdf-worker-job.mjs ./server/pdf-worker-job.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
+COPY document-revision-notes.mjs ./document-revision-notes.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
 COPY keu1-pdf-renderer.mjs ./keu1-pdf-renderer.mjs
 COPY keu10-pdf-renderer.mjs ./keu10-pdf-renderer.mjs

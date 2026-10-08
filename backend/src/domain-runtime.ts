@@ -2455,12 +2455,12 @@ const marisonSyncRuntime = createMarisonSyncRuntime({
 });
 
 const assertAdminUserServiceAvailable = () => {
-  if (!adminSupabase) {
+  if (!supabase) {
     const err = new Error("Layanan admin user belum dikonfigurasi di server.");
     err.status = 503;
     throw err;
   }
-  return adminSupabase;
+  return supabase;
 };
 
 const adminUserRuntime = createAdminUserRuntime({
@@ -2836,6 +2836,17 @@ const getAllowedStorageRefs = (surat) => {
 
 const isStorageRefAllowedForSurat = async (surat, requested) => {
   if (getAllowedStorageRefs(surat).has(storageRefKey(requested))) return true;
+  // The caller has already passed document authorization. Historical attachments
+  // are unlinked from the current document but retained in immutable revision history.
+  const { data: revisionHistory, error: revisionError } = await supabase
+    .from("surat_requester_revision_history")
+    .select("before_snapshot, after_snapshot")
+    .eq("surat_id", surat.id);
+  if (revisionError) throw revisionError;
+  const historyUrls = (revisionHistory || []).flatMap(history => [history.before_snapshot, history.after_snapshot]
+    .flatMap(snapshot => Array.isArray(snapshot?.attachments) ? snapshot.attachments : [])
+    .map(attachment => attachment?.file_url));
+  if (historyUrls.map(parseStorageRef).filter(Boolean).some(ref => storageRefKey(ref) === storageRefKey(requested))) return true;
   if (requested?.bucket !== "dokumen_surat") return false;
 
   const { data: completedJobs, error } = await supabase

@@ -96,6 +96,12 @@ export interface SuratRegistrationDraft {
   updated_at: string;
   surat_registration_draft_files?: SuratRegistrationDraftFile[];
   usage_configuration?: UsageDetailRecord | null;
+  revision_context?: {
+    eventId: string;
+    generation?: number;
+    reason?: string;
+    requesterEditRequired?: boolean;
+  } | null;
 }
 
 export interface RecommendationTask {
@@ -283,6 +289,13 @@ export const suratService = {
 
     const profile = profileResult.data;
     const isAdmin = ["admin", "super_admin"].includes(String(profile?.role || "").toLowerCase());
+    if (!isAdmin && (!profile?.office_id || !profile?.department_id)) {
+      throw new Error("Kantor dan departemen profil akun belum lengkap. Hubungi administrator.");
+    }
+    if (!isAdmin && (payload.no_surat || payload.draft_id || payload.reservation_id)
+      && (payload.office_id !== profile.office_id || payload.dept_id !== profile.department_id)) {
+      throw new Error("Kantor atau departemen pengajuan tidak sesuai profil akun. Batalkan draft lama dan buat nomor surat baru.");
+    }
     const requesterProfile = isAdmin && payload?._requester_profile_override
       ? { ...profile, ...payload._requester_profile_override }
       : profile;
@@ -290,8 +303,8 @@ export const suratService = {
       ? payload
       : {
           ...payload,
-          office_id: profile?.office_id || payload.office_id,
-          dept_id: profile?.department_id || payload.dept_id,
+          office_id: profile.office_id,
+          dept_id: profile.department_id,
         };
 
     const [profileRes, officeRes, projectRes, deptRes, entityRes, usageRes] = await Promise.all([
@@ -375,6 +388,27 @@ export const suratService = {
       .single();
     if (error) throw error;
     const draft = data as SuratRegistrationDraft;
+    if (draft.revision_event_id) {
+      const { data: event, error: eventError } = await supabase
+        .from("surat_revision_events")
+        .select("id, status, target_type, reason, changes")
+        .eq("id", draft.revision_event_id)
+        .single();
+      if (eventError) throw eventError;
+      if (event?.status !== "open" || event.target_type !== "requester"
+        || (event.changes?.external_submission_revision !== true
+          && event.changes?.requester_edit_required !== true)) {
+        throw new Error("Permintaan perbaikan pengajuan tidak tersedia.");
+      }
+      draft.revision_context = {
+        eventId: event.id,
+        reason: event.reason,
+        requesterEditRequired: event.changes?.requester_edit_required === true,
+        ...(typeof event.changes?.revision_generation === "number"
+          ? { generation: event.changes.revision_generation }
+          : {}),
+      };
+    }
     const formData = draft.payload?.formData;
     const usageId = formData && typeof formData === "object"
       ? String(
@@ -673,7 +707,11 @@ export const suratService = {
 
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
     try {
-      const { data: { user } } = await supabase.auth.getUser({ force: true });
+      const context = await this.getRegistrationContext(payload);
+      const user = context.user;
+      if (payload.office_id !== context.payload.office_id || payload.dept_id !== context.payload.dept_id) {
+        throw new Error("Kantor atau departemen pengajuan tidak sesuai profil akun. Muat ulang sebelum mengambil nomor surat.");
+      }
       const officeIdClean  = this.cleanUuid(payload.office_id);
       const projectIdClean = this.cleanUuid(payload.project_id);
       const deptIdClean    = this.cleanUuid(payload.dept_id); // ← BARU: untuk partisi nomor per dept
@@ -689,15 +727,11 @@ export const suratService = {
       const office  = officeRes.data;
       const isPusat = office?.kedudukan === "Pusat";
       const requestCategory = payload.form_input_data?.request_category;
-      const context = !isPusat && !projectIdClean && payload.form_usage_id
-        ? await this.getRegistrationContext(payload)
-        : null;
       const isBranchKeu1WithoutProject = context?.usage?.request_category === "non_asset"
         && isKeu1Form(context.form)
         && payload.form_input_data?.fund_without_project === true;
       const isUnitRequest = requestCategory === "unit" || payload.form_input_data?.request_mode === "unit";
       if (isUnitRequest) {
-        const context = await this.getRegistrationContext(payload);
         const actorDepartmentId = context.profile?.department_id;
         const allowedDepartments = Array.isArray(context.usage?.workflow_allowed_departments)
           ? context.usage.workflow_allowed_departments

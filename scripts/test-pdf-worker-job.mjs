@@ -134,7 +134,7 @@ test("KEU10 snapshot rendering never rereads changed live values or signatures",
   const payload = {
     kind: "keu10", generation: 1,
     document: { id: "original", formNumber: "FM-UAI.KEU-10-00", form_input_data: { items: [{ total: 2000000 }] } },
-    signatures: [{ id: "old-finance", role_name: "verifikator", step_order: 3, is_signed: true }],
+    signatures: [{ id: "old-finance", role_name: "verifikator", step_order: 3, is_signed: true, status: "APPROVED" }],
   };
   const handler = createKeu10JobHandler({
     supabase: { from() { throw new Error("Live query forbidden for immutable snapshot"); } },

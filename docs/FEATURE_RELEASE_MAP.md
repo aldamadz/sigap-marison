@@ -1,5 +1,75 @@
 # SIGAP Feature and Release Map
 
+## Selected Production Release SUR-22 / SUR-23 / ADM-01 (2026-10-08)
+
+- Authorized production candidate `release/requester-corrections-production-20261008`
+  from `main`, selecting PRs #492, #493 and #494 with their corrective commits.
+- Retain deployed Proxmox session hotfix `9184d0e` and its original ancestry.
+- Include only migrations `20261008100000`, `20261008110000`, `20261008120000`.
+  Staging fixtures, requester RAB choice and unrelated staging changes are excluded.
+- Staging browser acceptance passed requester editing with item quantity unchanged,
+  attachment replacement after reload, signer proposal 5 to 3, same-number resumption
+  and a rejected PDF stamp. Production uses Proxmox LXC 104 for the application;
+  PDF, sync and outbound workers remain on Ubuntu. Coordinate only the PDF worker
+  with the application release and keep the previous images for rollback.
+- Read-only production audit finds Fatchul Aziz already in KC MAGELANG with external
+  employee ID 198 and no owned drafts/documents. No profile correction is necessary;
+  requester office guards prevent a conflicting form/draft context being submitted.
+- Live production acceptance and exact runtime SHA are recorded in the release PR.
+
+## OPS-06 Production Session Query Pressure Hotfix (2026-10-07)
+
+- Branch `hotfix/production-session-query-pressure` from production `main`;
+  deployed blue/green at commit `9184d0e` to Proxmox LXC 104
+  (`sigap-app-prod-01`, `10.10.10.241:3010`).
+- Coalesce concurrent active-profile authorization checks per user and access
+  token, then retain only successful checks for five seconds with a bounded
+  in-memory cache. Upstream errors, revoked tokens, inactive profiles, and
+  deleted profiles remain fail-closed and are never cached.
+- Scope is the Fastify application only: no schema, worker, business-record, or
+  vendor integration change. Caddy on `10.10.10.253` now sends the production
+  domain to LXC 104. The prior Ubuntu app at `10.10.10.246:3010` remains healthy
+  as the immediate rollback target; production PDF, sync, and outbound workers
+  remain on Ubuntu and were not duplicated or restarted.
+
+## SUR-22 Requester Corrections and Signer Proposals (2026-10-08, Issue #490)
+
+- Staging candidate `feature/requester-data-attachment-revision-01`; production unchanged.
+- Minta Perbaikan Pemohon requests details/specifications or attachments without
+  reducing items. The full original draft opens through Tindak Lanjut, preserves
+  saved edits and intentional attachment removals, and confirms deletions.
+- Revisi oleh Penandatangan retains explicit item proposals and requester confirmation.
+  Preview and PGD/KEU PDF show requested/approved values and the signer's reasons.
+- New internal revisions resume the asking step and retain earlier approval snapshots.
+  Later signatures and verification restart; canonical KEU10 totals/directors are re-evaluated.
+- Forward migration `20261008100000` extends existing revision RPCs, protects the
+  active owner/event/draft boundary, and stores immutable before/after history.
+  Legacy vendor revisions keep their established contract and are not reclassified.
+- Historical attachment files are retained and remain authorized by their document.
+- Real disposable PostgreSQL, changed UI tests, native PDF rendering and staging
+  acceptance are release gates; fixtures are not included in the migration.
+- Follow-up SLA uses requester department configuration and canonical working
+  minutes from the revision request, independently of paused manager approval SLA.
+  Migration `20261008120000` authorizes only the requester and active admins.
+- Migration `20261008110000` freezes explicit approval/rejection decisions in PDF
+  payloads, invalidates native PDFs on rejection and rejects stale publications.
+- Staging browser acceptance found the draft reader still required a vendor
+  marker. It now accepts strict internal requester-edit markers as well, while
+  rejecting closed events, other targets, string booleans and signer proposals.
+
+## SUR-23 / ADM-01 Requester Office and Admin Reset Wiring (2026-10-08, Issue #491)
+
+- Staging candidate `fix/submission-office-and-admin-reset-01`; production unchanged.
+- Load the complete ordered office/active candidate collection, resolve KCP BM
+  through the closest related KC and reject broken/cyclic/cross-office chains.
+- Ordinary requester drafts and number generation must match current profile
+  office/department. Revision identity and historical snapshots remain unchanged.
+- Native admin-user operations reuse the configured server service client;
+  authenticated admin and same-origin checks remain enforced. Secrets never return.
+- The reported Fatchul Aziz office is legacy profile data, not a UI name fallback;
+  any scoped staging data correction is audited separately from the code migration.
+- No schema changes or automatic production/user-password mutation in this PR.
+
 ## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
 
 - Candidate `hotfix/external-unit-fund-checker-realtime-01` from production main.
