@@ -1,18 +1,5 @@
 # SIGAP Feature and Release Map
 
-## SUR-23 / ADM-01 Requester Office and Admin Reset Wiring (2026-10-08, Issue #491)
-
-- Staging candidate `fix/submission-office-and-admin-reset-01`; production unchanged.
-- Load the complete ordered office/active candidate collection, resolve KCP BM
-  through the closest related KC and reject broken/cyclic/cross-office chains.
-- Ordinary requester drafts and number generation must match current profile
-  office/department. Revision identity and historical snapshots remain unchanged.
-- Native admin-user operations reuse the configured server service client;
-  authenticated admin and same-origin checks remain enforced. Secrets never return.
-- The reported Fatchul Aziz office is legacy profile data, not a UI name fallback;
-  any scoped staging data correction is audited separately from the code migration.
-- No schema changes or automatic production/user-password mutation in this PR.
-
 ## SUR-17 / SUR-04 Requester RAB Choice (2026-10-07, Issue #488)
 
 - Candidate `feature/fund-requester-rab-choice-01` from main, staging target only.
@@ -26,6 +13,19 @@
   unavailable to authenticated/anonymous callers. No production release implied.
 - Focused Vitest and disposable PostgreSQL cover missing/wrong-class/deleted RAB,
   other mandatory attachments, ownership, legacy bypass, audit and idempotence.
+
+## SUR-23 / ADM-01 Requester Office and Admin Reset Wiring (2026-10-08, Issue #491)
+
+- Staging candidate `fix/submission-office-and-admin-reset-01`; production unchanged.
+- Load the complete ordered office/active candidate collection, resolve KCP BM
+  through the closest related KC and reject broken/cyclic/cross-office chains.
+- Ordinary requester drafts and number generation must match current profile
+  office/department. Revision identity and historical snapshots remain unchanged.
+- Native admin-user operations reuse the configured server service client;
+  authenticated admin and same-origin checks remain enforced. Secrets never return.
+- The reported Fatchul Aziz office is legacy profile data, not a UI name fallback;
+  any scoped staging data correction is audited separately from the code migration.
+- No schema changes or automatic production/user-password mutation in this PR.
 
 ## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
 
