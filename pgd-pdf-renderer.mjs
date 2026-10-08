@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import { buildPgdSignatureSlotPlan, buildSignatureLayoutPlan } from "./document-layout-rules.mjs";
+import { signerRevisionNotes, revisionNotesBlock } from "./document-revision-notes.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -45,9 +46,9 @@ const formatDateTimeId = (value) => {
 const normalizeRole = (value) => {
   const role = String(value || "").trim().toLowerCase();
   if (role.includes("buat")) return "Membuat";
-  if (role.includes("periksa")) return "Memeriksa";
+  if (role.includes("periksa") || role === "memeriksa") return "Memeriksa";
   if (role === "verifikator") return "Verifikator";
-  if (role.includes("setuju")) return "Menyetujui";
+  if (role.includes("setuju") || role === "menyetujui") return "Menyetujui";
   return text(value, "Tahap Persetujuan");
 };
 
@@ -65,6 +66,7 @@ const parseRevisionItemChanges = (source = {}) => {
     .map((row) => ({
       index: Number(row.index),
       action: String(row.action || "keep").trim(),
+      valueType: String(row.value_type || row.revision_value_type || ""),
       nilaiDiajukan: row.nilai_diajukan ?? "",
       nilaiDisetujui: row.nilai_disetujui ?? "",
       alasan: String(row.alasan || row.reason || "").trim(),
@@ -114,8 +116,10 @@ const buildRevisionNote = (change, item = {}) => {
   const parts = [];
   if (change.action === "reject") parts.push("Tidak disetujui");
   if (change.action === "adjust") {
-    const approved = formatRevisionValue(change.nilaiDisetujui, item);
-    const requested = formatRevisionValue(change.nilaiDiajukan, item);
+    const format = value => change.valueType === "quantity" || change.valueType === "text" || change.valueType === "recommendation"
+      ? String(value ?? "").trim() : change.valueType === "unit_count" ? `${value} unit` : formatRevisionValue(value,item);
+    const approved = format(change.nilaiDisetujui);
+    const requested = format(change.nilaiDiajukan);
     parts.push(`Nilai disetujui: ${approved || "-"}${requested ? ` dari ${requested}` : ""}`);
   }
   if (change.alasan) parts.push(change.alasan);
@@ -162,16 +166,29 @@ export const normalizeNativeSignatures = (signatures = [], targetStep = 0) =>
     .map((signature, index) => {
       const snapshot = signature.signer_snapshot || {};
       const profile = signature.profile || {};
-      const signed = signature.is_signed === true && (!targetStep || Number(signature.step_order || index + 1) <= targetStep);
+      const withinStep = !targetStep || Number(signature.step_order || index + 1) <= targetStep;
+      const signed = signature.is_signed === true && withinStep;
       return {
         stepOrder: Number(signature.step_order || index + 1),
         role: normalizeRole(signature.role_name),
         name: text(snapshot.full_name || profile.full_name || signature.user_name, "Belum ditentukan"),
         job: text(snapshot.job_title_display || snapshot.job_title || profile.job_title_display || profile.job_title || signature.label_jabatan, "-"),
         signed,
+        status: withinStep ? String(signature.status || "").trim().toUpperCase() : "PENDING",
         signedAt: signed ? signature.signed_at : null,
       };
     });
+
+export const isNativeDocumentRejected = (source, signatures, targetStep = 0) =>
+  (!targetStep && ["REJECTED", "DITOLAK"].includes(String(source.status || "").trim().toUpperCase()))
+  || signatures.some((signature) => ["REJECTED", "DITOLAK"].includes(signature.status));
+
+export const nativeDocumentRejectionBlock = (isRejected) => isRejected ? [{
+  text: "STATUS DOKUMEN: DITOLAK",
+  bold: true,
+  color: "#991b1b",
+  margin: [0, 4, 0, 4],
+}] : [];
 
 export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const input = source.form_input_data || source?.data_snapshot?.input || {};
@@ -184,6 +201,8 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.PGD-01-00"),
+    revisionNotes: signerRevisionNotes(source),
+    isRejected: isNativeDocumentRejected(source, signatures, targetStep),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
     isAsset: source.is_aset === true || input.request_category === "asset",
     department: text(location?.department?.name || source.department_name, "-"),
@@ -300,14 +319,20 @@ const signatureRow = (signers, topCount) => {
       heights: [12, 42, 11, 11],
       body: [
         roleCells,
-        makeRow((signer) => ({
-          text: signer.signed ? `DISETUJUI SISTEM\n${formatDateTimeId(signer.signedAt)} WIB` : "",
-          alignment: "center",
-          fontSize: 6.5,
-          color: signer.signed ? "#166534" : BORDER,
-          bold: signer.signed,
-          margin: [0, 5, 0, 0],
-        })),
+        makeRow((signer) => {
+          const rejected = ["REJECTED", "DITOLAK"].includes(signer.status);
+          // is_signed records a completed action, including rejection, not approval.
+          const stamped = signer.signed && (rejected || signer.status === "APPROVED");
+          const date = formatDateTimeId(signer.signedAt);
+          return {
+            text: stamped ? `${rejected ? "DITOLAK" : "DISETUJUI"} SISTEM${date ? `\n${date} WIB` : ""}` : "",
+            alignment: "center",
+            fontSize: 6.5,
+            color: stamped ? (rejected ? "#991b1b" : "#166534") : BORDER,
+            bold: Boolean(stamped),
+            margin: [0, 5, 0, 0],
+          };
+        }),
         makeRow((signer) => ({ text: signer.name.toUpperCase(), alignment: "center", fontSize: 7 })),
         makeRow((signer) => ({ text: signer.job, alignment: "center", fontSize: 7 })),
       ],
@@ -453,6 +478,8 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
         layout: compactBorderLayout,
         margin: [0, 3, 0, 3],
       },
+      ...nativeDocumentRejectionBlock(data.isRejected),
+      ...revisionNotesBlock(data.revisionNotes),
       {
         columns: [
           { width: "60%", text: "" },

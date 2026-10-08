@@ -45,6 +45,31 @@ export const getActiveRevision = (surat: unknown): ActiveRevision | null => {
 export const getRevisionItemChanges = (revision?: ActiveRevision | null): RevisionItemChange[] => {
   const changes = asRecord(revision?.changes);
   const rows = Array.isArray(changes.item_revisions) ? changes.item_revisions : [];
+  if (rows.length === 0 && changes.keu10_finance_proposal === true) {
+    const base = asRecord(asRecord(changes.keu10_base).document_snapshot);
+    const original = asRecord(base.form_input_data);
+    const proposed = asRecord(changes.confirmed_input || changes.keu10_proposed_input);
+    const before = Array.isArray(original.items) ? original.items.map(asRecord) : [];
+    const after = Array.isArray(proposed.items) ? proposed.items.map(asRecord) : [];
+    const used = new Set<number>();
+    const describe = (item: Record<string, unknown>) => `Jumlah: ${item.jumlah}; Harga satuan: ${formatRupiahCanonical(item.estimasi_harga_satuan)}; Total: ${formatRupiahCanonical(Number(item.jumlah) * Number(item.estimasi_harga_satuan))}; Keterangan: ${String(item.keterangan || "-")}; Satuan: ${String(item.satuan || "-")}`;
+    const result = before.flatMap((item, index): RevisionItemChange[] => {
+      const match = item.id ? after.findIndex(row => row.id === item.id) : index < after.length ? index : -1;
+      const next = match >= 0 ? after[match] : undefined;
+      if (next) used.add(match);
+      if (next && describe(next) === describe(item)) return [];
+      return [{ index, action: next ? "adjust" : "reject", value_type: "text",
+        nama_barang: String(item.keterangan || `Item ${index + 1}`),
+        nilai_diajukan: describe(item), nilai_disetujui: next ? describe(next) : null,
+        alasan: String(revision?.reason || "") }];
+    });
+    after.forEach((item,index) => {
+      if (!used.has(index)) result.push({ index: before.length + index, action: "adjust", value_type: "text",
+        nama_barang: `Ditambahkan: ${String(item.keterangan || `Item ${index + 1}`)}`,
+        nilai_diajukan: "-", nilai_disetujui: describe(item), alasan: String(revision?.reason || "") });
+    });
+    return result;
+  }
   return rows
     .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
     .map((row) => ({

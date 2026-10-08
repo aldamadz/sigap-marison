@@ -68,7 +68,9 @@ export function Keu10RequesterRevision({ eventId, input, changes, policy, signat
     mutationFn: () => suratService.acceptKeu10RequesterRevision(eventId, {
       items: proposal ? undefined : items, note: note.trim(), finalSignerId: director,
     }),
-    onSuccess: async () => { toast.success("Revisi diterima; persetujuan dimulai ulang dari BM."); await onSuccess(); },
+    onSuccess: async () => { toast.success(revision.signer_revision_required === true
+      ? "Revisi dikonfirmasi dan kembali ke penandatangan yang meminta perbaikan."
+      : "Revisi diterima; persetujuan dimulai ulang dari BM."); await onSuccess(); },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Gagal menerima revisi."),
   });
   return (

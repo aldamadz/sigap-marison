@@ -202,5 +202,6 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
       jobTitle: signature.profiles?.job_title || signature.signer_snapshot?.job_title || undefined,
     })),
     isRecommendation: formInput.linked_document_type === "recommendation",
+    revision: activeRevision,
   };
 };

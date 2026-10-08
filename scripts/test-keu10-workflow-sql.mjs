@@ -44,11 +44,17 @@ const functions = [
   canonical("20260618120000_form_usage_step_verification.sql", "handle_reject_surat_v2"),
   canonical("20260706194000_preserve_checker_input_on_revision.sql", "request_surat_process_revision"),
   canonical("20260708103000_typed_revision_followup.sql", "accept_surat_process_revision")
+    .replace("public.accept_surat_process_revision(", "public.accept_surat_process_revision_pre_unit_reallocation("),
+  canonical("20260811170000_unit_revision_reallocation_guard.sql", "accept_surat_process_revision")
     .replace("public.accept_surat_process_revision(", "public.accept_surat_process_revision_pre_configurable_restart("),
   canonical("20260824100000_configurable_external_revision_and_proactive_pdf.sql", "accept_surat_process_revision"),
   canonical("20260707093000_skip_requester_acceptance_for_checker_no_item_change.sql", "resolve_surat_process_revision")
+    .replace("public.resolve_surat_process_revision(", "public.resolve_surat_process_revision_pre_unit_reallocation("),
+  canonical("20260811170000_unit_revision_reallocation_guard.sql", "resolve_surat_process_revision")
     .replace("public.resolve_surat_process_revision(", "public.resolve_surat_process_revision_pre_external_signer_routing("),
   canonical("20260824100000_configurable_external_revision_and_proactive_pdf.sql", "resolve_surat_process_revision"),
+  canonical("20260917131000_atomic_configured_checker_input.sql", "verify_surat_signature_v2"),
+  canonical("20260811170000_unit_revision_reallocation_guard.sql", "reopen_unit_revision_checker_task"),
   canonical("20260706120000_revision_item_changes_and_acceptance.sql", "cancel_surat_after_revision"),
   canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "complete_document_pdf_job"),
   canonical("20260824100000_configurable_external_revision_and_proactive_pdf.sql", "is_valid_external_revision_policy"),
@@ -63,6 +69,8 @@ const functions = [
 if (functions.some((source) => !source)) throw new Error("A canonical patch was not loaded");
 const schema = read("supabase/tests/keu10_workflow.fixture.sql");
 const setup = `${schema}\n${functions.join("\n")}\n
+create trigger reopen_unit_revision_checker_task_trg after insert or update on public.surat_revision_events
+for each row execute function public.reopen_unit_revision_checker_task();
 create trigger validate_form_usage_signature before insert or update on public.surat_signatures
 for each row execute function public.validate_form_usage_signature();
 create trigger enqueue_native_pdf_after_registration after insert on public.surat_registrasi
@@ -98,6 +106,42 @@ try {
   run(psqlArgs, read("supabase/tests/keu10_fund_type_upgrade.before.sql"));
   run(psqlArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
   run(psqlArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
+  if (process.argv.includes("--requester-edit")) {
+    run(psqlArgs, canonical("20260805083000_inbox_verifier_realtime_rls.sql", "can_read_surat"));
+    run(psqlArgs, read(migrationRoot + "20261008110000_pdf_approval_decision_status.sql"));
+    run(psqlArgs, read(migrationRoot + "20261008110000_pdf_approval_decision_status.sql"));
+    const kpiSchema = read(migrationRoot + "20260604090000_department_kpi_sla.sql");
+    run(psqlArgs, kpiSchema.slice(0, kpiSchema.indexOf("create or replace function public.calculate_business_minutes")));
+    run(psqlArgs, canonical("20260604090000_department_kpi_sla.sql", "calculate_business_minutes"));
+    run(psqlArgs, read(migrationRoot + "20261008120000_requester_follow_up_sla.sql"));
+    run(psqlArgs, read(migrationRoot + "20261008120000_requester_follow_up_sla.sql"));
+    const slaOutput = run(psqlArgs, read("supabase/tests/requester_follow_up_sla.integration.sql"));
+    if (!slaOutput.includes("Requester follow-up SLA: all assertions passed")) throw new Error("Missing requester SLA marker");
+    process.stdout.write(slaOutput);
+    run(psqlArgs, read(migrationRoot + "20261008100000_requester_data_attachment_revision.sql"));
+    run(psqlArgs, read(migrationRoot + "20261008100000_requester_data_attachment_revision.sql"));
+    const revisionOutput = run(psqlArgs, read("supabase/tests/requester_data_attachment_revision.integration.sql"));
+    if (!revisionOutput.includes("Requester corrections: all assertions passed")) throw new Error("Missing requester correction marker");
+    process.stdout.write(revisionOutput);
+    const submit = () => new Promise((resolve,reject) => {
+      const child=spawn("docker",psqlArgs);
+      let stderr="";
+      child.stderr.on("data",data=>{ stderr+=data; });
+      child.stdout.on("data",()=>{});
+      child.on("error",reject);
+      child.on("close",code=>resolve({code,stderr}));
+      child.stdin.end(`set role authenticated; select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+        select public.submit_external_submission_revision(result.event_id,draft.id,draft.payload->'formData',null)
+        from keu10_test.results result join public.surat_registration_drafts draft on draft.revision_event_id=result.event_id
+        where result.key='requester-concurrency';`);
+    });
+    const outcomes=await Promise.all([submit(),submit()]);
+    if (outcomes.filter(result=>result.code===0).length!==1 || outcomes.filter(result=>/tidak lagi aktif/.test(result.stderr)).length!==1) {
+      throw new Error(`Requester revision concurrency failed: ${JSON.stringify(outcomes)}`);
+    }
+    process.stdout.write("Requester revision concurrency: two connections, exactly one submission winner.\n");
+    process.exitCode = 0;
+  } else {
   process.stdout.write(run(psqlArgs, read("supabase/tests/keu10_fund_type_upgrade.after.sql")));
   // Seed is repeatable but refuses identity/configuration drift.
   run(psqlArgs, read(migrationRoot + "20261006171000_seed_keu10_grouped_workflows.sql"));
@@ -152,6 +196,7 @@ where result.key='concurrency' and signature.step_order=1;`;
   const legacyOutput = run(legacyArgs, read("supabase/tests/keu10_workflow.integration.sql"));
   if (!legacyOutput.includes("KEU10 workflow: all assertions passed")) throw new Error(`Legacy vendor compatibility failed:\n${legacyOutput}`);
   process.stdout.write("KEU10 original vendor RPC compatibility: all assertions passed.\n");
+  }
 } finally {
   spawnSync("docker", ["rm", "-f", id], { encoding: "utf8" });
 }

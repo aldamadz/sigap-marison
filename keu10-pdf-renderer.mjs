@@ -1,9 +1,12 @@
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
+import { signerRevisionNotes, revisionNotesBlock } from "./document-revision-notes.mjs";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import { normalizeKeu1DocumentData } from "./keu1-pdf-renderer.mjs";
 import {
   buildNativeSignatureBlock,
+  isNativeDocumentRejected,
   loadLogoDataUrl,
+  nativeDocumentRejectionBlock,
   normalizeNativeSignatures,
 } from "./pgd-pdf-renderer.mjs";
 
@@ -110,14 +113,17 @@ export const normalizeKeu10DocumentData = (source = {}, options = {}) => {
   const items = normalized.items;
   // Reuse KEU 1 item semantics, but never trust a supplied item/grand total.
   const grandTotal = sumItems(items);
+  const targetStep = Number(options.targetStep || 0);
   const signatures = normalizeNativeSignatures(
     (Array.isArray(options.signatures) ? options.signatures : []).filter((value) => Object.keys(asObject(value)).length),
-    Number(options.targetStep || 0),
+    targetStep,
   );
   const identity = source.resolved_master_form?.nomor_form || location.form?.nomor_form
     || source.data_snapshot?.form?.nomor_form || source.formNumber || source.formName;
   return {
     formNumber: formNumber(identity),
+    revisionNotes: signerRevisionNotes(source),
+    isRejected: isNativeDocumentRejected(source, signatures, targetStep),
     noSurat: text(source.no_surat, "DRAFT"),
     branch: text(location.office?.name || source.office_name, "-"),
     project: text(location.project?.name || source.data_snapshot?.location?.project?.name
@@ -278,6 +284,8 @@ export const buildKeu10DocumentDefinition = (data, logoDataUrl = null) => {
             ]] },
             layout: borderLayout,
           },
+          ...nativeDocumentRejectionBlock(data.isRejected),
+          ...revisionNotesBlock(data.revisionNotes),
           { ...buildSignatureBlock(data.signatures), margin: [82, 4, 0, 0] },
         ],
       },

@@ -120,40 +120,41 @@ describe("KEU 10 inbox display and summary export", () => {
     mocks.fixture.step_order = step;
     mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah = 0;
     render(<MemoryRouter><InboxPage /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Kembalikan" }));
-    const dialog = within(screen.getByRole("dialog", { name: "Kembalikan proses untuk perbaikan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Perbaikan" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Perbaikan pengajuan" }));
     expect(dialog.queryByLabelText("Keterangan")).not.toBeInTheDocument();
     expect(dialog.queryByRole("textbox", { name: /Estimasi harga satuan/ })).not.toBeInTheDocument();
     expect(dialog.queryByRole("combobox")).not.toBeInTheDocument();
-    fireEvent.change(dialog.getByLabelText("Alasan pengembalian / koreksi"), { target: { value: "abcd" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kembalikan proses" }));
+    fireEvent.change(dialog.getByLabelText("Alasan pengembalian"), { target: { value: "abcd" } });
+    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
-    fireEvent.change(dialog.getByLabelText("Alasan pengembalian / koreksi"), { target: { value: "Perbaiki rincian dan lampiran." } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kembalikan proses" }));
+    fireEvent.change(dialog.getByLabelText("Alasan pengembalian"), { target: { value: "Perbaiki rincian dan lampiran." } });
+    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
     await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
     expect(mocks.requestRevision).toHaveBeenCalledWith(expect.objectContaining({
       targetType: "requester", targetStep: null, reason: "Perbaiki rincian dan lampiran.",
-      changes: { note: "Perbaiki rincian dan lampiran.", requested_by: "approval_inbox", requires_resign: true, restart_step: 1 },
+      changes: { note: "Perbaiki rincian dan lampiran.", requested_by: "approval_inbox", requires_resign: true, restart_step: step, requester_edit_required: true },
     }));
   });
   it("only the formal Finance verifier can propose validated items for requester confirmation", async () => {
     mocks.fixture.role_name = "verifikator";
     mocks.fixture.step_order = 4;
     render(<MemoryRouter><InboxPage /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Kembalikan" }));
-    const dialog = within(screen.getByRole("dialog", { name: "Kembalikan proses untuk perbaikan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Perbaikan" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Perbaikan pengajuan" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" }));
     expect(dialog.getByLabelText("Keterangan")).toBeInTheDocument();
     expect(dialog.queryByRole("combobox")).not.toBeInTheDocument();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
     fireEvent.change(dialog.getByLabelText("Alasan pengembalian / koreksi"), { target: { value: "Koreksi jumlah menjadi dua dokumen." } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kembalikan proses" }));
+    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kembalikan proses" }));
+    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
     await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
     expect(mocks.requestRevision).toHaveBeenCalledWith(expect.objectContaining({
       targetType: "requester", targetStep: null,
-      changes: expect.objectContaining({ requires_resign: true, restart_step: 1, keu10_proposed_input: { items: [expect.objectContaining({ jumlah: "2", total: 300_000 })] } }),
+      changes: expect.objectContaining({ requires_resign: true, restart_step: 4, signer_revision_required: true, keu10_proposed_input: { items: [expect.objectContaining({ jumlah: "2", total: 300_000 })] } }),
     }));
     expect(mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah).toBe(3);
   });

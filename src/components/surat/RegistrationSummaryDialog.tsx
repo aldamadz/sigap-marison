@@ -25,6 +25,10 @@ import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { Keu10SubmissionSummary } from "@/components/surat/Keu10SubmissionSummary";
+import { RequesterRevisionSummary } from "@/components/surat/RequesterRevisionSummary";
+import { SignerRevisionSummary } from "@/components/surat/SignerRevisionSummary";
+import type { ActiveRevision } from "@/components/surat/revision-utils";
+import type { RequesterRevisionSnapshot } from "@/lib/requester-revision-summary";
 
 export type RegistrationSummaryField = {
   key: string;
@@ -67,6 +71,7 @@ export type RegistrationSummaryData = {
   attachments: RegistrationSummaryAttachment[];
   signers: RegistrationSummarySigner[];
   isRecommendation: boolean;
+  revision?: ActiveRevision | null;
 };
 
 type Props = {
@@ -75,6 +80,11 @@ type Props = {
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
+  revision?: {
+    baseline?: RequesterRevisionSnapshot;
+    current: RequesterRevisionSnapshot;
+    reason?: string;
+  };
 };
 
 const formatFileSize = (bytes?: number | null) => {
@@ -426,6 +436,8 @@ export function RegistrationSummaryDocument({
           </dl>
         </section>
 
+        <SignerRevisionSummary revision={data.revision || null} />
+
         {(detailFields.length > 0 || isUnitCategory || keu1 || keu10) && (
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-foreground">Isi Dokumen</h3>
@@ -502,7 +514,7 @@ export function RegistrationSummaryDocument({
   );
 }
 
-export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange, onConfirm }: Props) {
+export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange, onConfirm, revision }: Props) {
   const allocatedProject = data.fields.find((field) => field.key === "allocated_project")?.value ||
     data.fields.find((field) => field.key === "requested_project")?.value ||
     data.projectName;
@@ -532,7 +544,7 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
               <FileCheck2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-base font-semibold sm:text-lg">Periksa sebelum didaftarkan</DialogTitle>
+              <DialogTitle className="text-base font-semibold sm:text-lg">{revision ? "Periksa perbaikan sebelum dikirim" : "Periksa sebelum didaftarkan"}</DialogTitle>
               <DialogDescription className="mt-1 text-xs leading-relaxed sm:text-sm">
                 Pastikan isi dokumen, lampiran, dan penandatangan sudah sesuai.
               </DialogDescription>
@@ -558,6 +570,11 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
             </header>
 
             <div className="space-y-6 p-4 sm:p-7">
+              {revision && <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
+                {revision.reason && <p className="text-sm"><span className="font-semibold">Alasan perbaikan:</span> {revision.reason}</p>}
+                {revision.baseline ? <RequesterRevisionSummary baseline={revision.baseline} current={revision.current} showNoChanges />
+                  : <p className="text-sm text-muted-foreground">Data awal pembanding tidak tersedia untuk draft lama ini.</p>}
+              </section>}
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-foreground">Identitas Dokumen</h3>
                 <dl className="grid overflow-hidden rounded-md border border-border sm:grid-cols-2">
@@ -577,6 +594,8 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
                   ))}
                 </dl>
               </section>
+
+              <SignerRevisionSummary revision={data.revision || null} />
 
               {(detailFields.length > 0 || isUnitCategory || keu1 || keu10) && (
                 <section className="space-y-4">
@@ -634,7 +653,8 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" className="min-h-11 sm:min-w-36" disabled={submitting} onClick={() => onOpenChange(false)}>Kembali Perbaiki</Button>
             <Button type="button" className="min-h-11 sm:min-w-56" disabled={submitting} onClick={onConfirm}>
-              {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Mendaftarkan...</> : "Data Sudah Benar, Daftarkan"}
+              {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {revision ? "Mengirim perbaikan..." : "Mendaftarkan..."}</>
+                : revision ? "Data Sudah Benar, Kirim Perbaikan" : "Data Sudah Benar, Daftarkan"}
             </Button>
           </div>
         </footer>

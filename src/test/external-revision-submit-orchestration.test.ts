@@ -19,6 +19,11 @@ describe("external-revision-submit orchestration (Pass K2B)", () => {
   });
 
   describe("executeExternalRevisionSubmit", () => {
+    it("keeps the requesting signer pending after an internal correction", async () => {
+      submitRevisionMock.mockResolvedValue({ surat_id: "S-1", next_step: "requesting_step" });
+      await executeExternalRevisionSubmit({ revisionEventId: "EV-1", draftId: "D-1", formData: {} }, deps);
+      expect(autoApproveMock).not.toHaveBeenCalled();
+    });
     it("1. Command mempertahankan revisionEventId", async () => {
       submitRevisionMock.mockResolvedValue({ surat_id: "S-1", next_step: "done" });
       const cmd: ExternalRevisionSubmitCommand = {

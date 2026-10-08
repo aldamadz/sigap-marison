@@ -15,6 +15,28 @@
   as the immediate rollback target; production PDF, sync, and outbound workers
   remain on Ubuntu and were not duplicated or restarted.
 
+## SUR-22 Requester Corrections and Signer Proposals (2026-10-08, Issue #490)
+
+- Staging candidate `feature/requester-data-attachment-revision-01`; production unchanged.
+- Minta Perbaikan Pemohon requests details/specifications or attachments without
+  reducing items. The full original draft opens through Tindak Lanjut, preserves
+  saved edits and intentional attachment removals, and confirms deletions.
+- Revisi oleh Penandatangan retains explicit item proposals and requester confirmation.
+  Preview and PGD/KEU PDF show requested/approved values and the signer's reasons.
+- New internal revisions resume the asking step and retain earlier approval snapshots.
+  Later signatures and verification restart; canonical KEU10 totals/directors are re-evaluated.
+- Forward migration `20261008100000` extends existing revision RPCs, protects the
+  active owner/event/draft boundary, and stores immutable before/after history.
+  Legacy vendor revisions keep their established contract and are not reclassified.
+- Historical attachment files are retained and remain authorized by their document.
+- Real disposable PostgreSQL, changed UI tests, native PDF rendering and staging
+  acceptance are release gates; fixtures are not included in the migration.
+- Follow-up SLA uses requester department configuration and canonical working
+  minutes from the revision request, independently of paused manager approval SLA.
+  Migration `20261008120000` authorizes only the requester and active admins.
+- Migration `20261008110000` freezes explicit approval/rejection decisions in PDF
+  payloads, invalidates native PDFs on rejection and rejects stale publications.
+
 ## MRN-12 / SUR-17 / NTF-02 External Units, Fund Checks and Realtime (2026-10-07, Issue #484)
 
 - Candidate `hotfix/external-unit-fund-checker-realtime-01` from production main.
