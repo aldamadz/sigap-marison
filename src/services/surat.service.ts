@@ -102,6 +102,7 @@ export interface SuratRegistrationDraft {
     eventId: string;
     generation?: number;
     reason?: string;
+    requesterEditRequired?: boolean;
   } | null;
 }
 
@@ -397,12 +398,14 @@ export const suratService = {
         .single();
       if (eventError) throw eventError;
       if (event?.status !== "open" || event.target_type !== "requester"
-        || event.changes?.external_submission_revision !== true) {
+        || (event.changes?.external_submission_revision !== true
+          && event.changes?.requester_edit_required !== true)) {
         throw new Error("Permintaan perbaikan pengajuan tidak tersedia.");
       }
       draft.revision_context = {
         eventId: event.id,
         reason: event.reason,
+        requesterEditRequired: event.changes?.requester_edit_required === true,
         ...(typeof event.changes?.revision_generation === "number"
           ? { generation: event.changes.revision_generation }
           : {}),

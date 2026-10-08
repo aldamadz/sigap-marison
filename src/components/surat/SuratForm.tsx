@@ -1581,7 +1581,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
     const storedExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
     const restoredExternalRevision = draftToRestore.revision_context
-      || (draftToRestore.revision_event_id
+      ? {
+          ...(storedExternalRevision?.eventId === draftToRestore.revision_context.eventId
+            ? storedExternalRevision : {}),
+          ...draftToRestore.revision_context,
+        }
+      : (draftToRestore.revision_event_id
         ? storedExternalRevision?.eventId === draftToRestore.revision_event_id
           ? storedExternalRevision
           : { eventId: draftToRestore.revision_event_id }

@@ -57,7 +57,10 @@ function createUsageQuery(result = { data: archivedUsage, error: null }) {
   };
 }
 
-function createRevisionQuery(result = {
+function createRevisionQuery(result: { data: {
+  id: string; status: string; target_type: string; reason: string;
+  changes: Record<string, unknown>;
+}; error: null } = {
   data: {
     id: draft.revision_event_id,
     status: "open",
@@ -79,6 +82,45 @@ beforeEach(() => {
 });
 
 describe("registration draft historical usage", () => {
+  it.each([
+    { requester_edit_required: true },
+    { external_submission_revision: true, revision_generation: 2 },
+  ])("opens an active requester draft for a canonical revision marker %j", async (changes) => {
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "surat_registration_drafts") return createDraftQuery();
+      if (table === "surat_revision_events") return createRevisionQuery({
+        data: { id: draft.revision_event_id, status: "open", target_type: "requester",
+          reason: "Lengkapi spesifikasi dan lampiran.", changes }, error: null,
+      });
+      if (table === "form_usages") return createUsageQuery();
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    const result = await suratService.getRegistrationDraft(draft.id);
+    expect(result.revision_context).toMatchObject({
+      eventId: draft.revision_event_id, reason: "Lengkapi spesifikasi dan lampiran.",
+      requesterEditRequired: "requester_edit_required" in changes,
+    });
+    expect(result.usage_configuration).toBe(archivedUsage);
+  });
+
+  it.each([
+    { status: "resolved", target: "requester", changes: { requester_edit_required: true } },
+    { status: "open", target: "signer", changes: { requester_edit_required: true } },
+    { status: "open", target: "requester", changes: { requester_edit_required: "true" } },
+    { status: "open", target: "requester", changes: { signer_revision_required: true } },
+    { status: "open", target: "requester", changes: {} },
+  ])("rejects an invalid requester editing event %j", async ({ status, target, changes }) => {
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "surat_registration_drafts") return createDraftQuery();
+      if (table === "surat_revision_events") return createRevisionQuery({
+        data: { id: draft.revision_event_id, status, target_type: target,
+          reason: "Lengkapi spesifikasi dan lampiran.", changes }, error: null,
+      });
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    await expect(suratService.getRegistrationDraft(draft.id)).rejects.toThrow("Permintaan perbaikan pengajuan tidak tersedia.");
+  });
+
   it("loads the exact stored usage even when its status is archived", async () => {
     const draftQuery = createDraftQuery();
     const usageQuery = createUsageQuery();
@@ -97,6 +139,7 @@ describe("registration draft historical usage", () => {
       eventId: draft.revision_event_id,
       generation: 2,
       reason: "Perbaiki jumlah unit.",
+      requesterEditRequired: false,
     });
     expect(usageQuery.eq).toHaveBeenCalledTimes(1);
     expect(usageQuery.eq).toHaveBeenCalledWith("id", archivedUsage.id);

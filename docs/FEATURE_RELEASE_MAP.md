@@ -21,6 +21,9 @@
   Migration `20261008120000` authorizes only the requester and active admins.
 - Migration `20261008110000` freezes explicit approval/rejection decisions in PDF
   payloads, invalidates native PDFs on rejection and rejects stale publications.
+- Staging browser acceptance found the draft reader still required a vendor
+  marker. It now accepts strict internal requester-edit markers as well, while
+  rejecting closed events, other targets, string booleans and signer proposals.
 
 ## SUR-17 / SUR-04 Requester RAB Choice (2026-10-07, Issue #488)
 
