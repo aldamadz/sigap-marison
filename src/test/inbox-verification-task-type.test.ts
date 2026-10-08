@@ -45,12 +45,12 @@ describe("inbox verification task_type preserved on detail merge", () => {
   });
 
   it("4b. Verification dead-end exposes canonical Kembalikan ke Pemohon, not permanent reject", () => {
-    expect(inbox).toContain("Kembalikan ke Pemohon");
+    expect(inbox).toContain("Minta perbaikan");
     expect(inbox).toContain("handleReturnToRequester");
     expect(inbox).toContain("canReturnToRequester(selectedItem)");
     expect(inbox).toContain("targetType: \"requester\"");
-    expect(inbox).toContain("external_submission_revision: true");
-    expect(inbox).toContain("requester_must_edit: true");
+    expect(inbox).toContain("requester_edit_required: true");
+    expect(inbox).not.toContain("external_submission_revision: true");
   });
 
   it("5. BFF detail derives task_type with canonical signer/verifier rule", () => {

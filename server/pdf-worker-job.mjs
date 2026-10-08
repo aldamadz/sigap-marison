@@ -8,7 +8,7 @@ export const createPgdJobHandler = ({
 }) => async (job) => {
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
+    .select("id, no_surat, status, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
     .eq("id", job.surat_id)
     .maybeSingle();
   if (suratError) throw suratError;
@@ -27,7 +27,7 @@ export const createPgdJobHandler = ({
 
   const { data: signatures, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
+    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot")
     .eq("surat_id", job.surat_id)
     .order("step_order", { ascending: true });
   if (signatureError) throw signatureError;
@@ -66,7 +66,7 @@ export const createKeu1JobHandler = ({
 }) => async (job) => {
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
+    .select("id, no_surat, status, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
     .eq("id", job.surat_id)
     .maybeSingle();
   if (suratError) throw suratError;
@@ -81,7 +81,7 @@ export const createKeu1JobHandler = ({
 
   const { data: signatures, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, is_signed, signed_at, signer_snapshot")
+    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot")
     .eq("surat_id", job.surat_id)
     .order("step_order", { ascending: true });
   if (signatureError) throw signatureError;

@@ -52,6 +52,10 @@ const onlyQualityCommandsChanged = () => {
   for (const manifest of [previous, current]) {
     delete manifest.scripts.quality;
     delete manifest.scripts["quality:changed"];
+    // These additional gates are selected below; they do not alter global test setup.
+    delete manifest.scripts["test:requester-revision-sql"];
+    delete manifest.scripts["test:requester-revision-pdf"];
+    delete manifest.scripts["test:pdf-rejection"];
   }
   return JSON.stringify(previous) === JSON.stringify(current);
 };
@@ -94,6 +98,9 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/requester.*(revision|correction|follow_up_sla).*\.sql$|test-requester-revision|pdf_approval_decision_status.*\.sql$/u.test(file)) gates.add("test:requester-revision-sql");
+  if (/document-revision-notes\.mjs$|test-requester-revision-pdf\.mjs$|signer-revision-preview/u.test(file)) gates.add("test:requester-revision-pdf");
+  if (/test-pdf-rejection\.mjs$|pdf_approval_decision_status\.sql$/.test(file)) gates.add("test:pdf-rejection");
   if (/keu10.*pdf.*\.mjs$/u.test(file)) gates.add("test:keu10-pdf");
   if (/keu10.*\.sql$|test-keu10-workflow-sql\.mjs$/u.test(file)) gates.add("test:keu10-workflow-sql");
   if (/^(server|scripts|src)\/.*(document|docx|layout)/u.test(file)) gates.add("test:document-layout");

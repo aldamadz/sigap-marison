@@ -8,12 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RegistrationSummaryDocument } from "@/components/surat/RegistrationSummaryDialog";
 import { buildRegistrationSummaryData } from "@/components/surat/registration-summary-data";
-import { formatRevisionValue, getRevisionItemChanges } from "@/components/surat/revision-utils";
+import { formatRevisionValue, getRevisionItemChanges, getRevisionRequestedValue, getRevisionApprovedValue } from "@/components/surat/revision-utils";
 import { supabase } from "@/lib/supabase";
 import { suratService } from "@/services/surat.service";
 import { cn } from "@/lib/utils";
 import { Keu10RequesterRevision } from "@/components/surat/Keu10RequesterRevision";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
+import { RequesterFollowUpSla } from "@/components/surat/RequesterFollowUpSla";
 
 const getOpenRequesterRevision = (surat: any) => {
   const revision = surat?.data_snapshot?.revision;
@@ -72,10 +73,15 @@ export default function TindakLanjutSuratPage() {
   const activeRevision = getOpenRequesterRevision(selected);
   const revisionChanges = getRevisionItemChanges(activeRevision);
   const isExternalRevision = activeRevision?.changes?.external_submission_revision === true;
+  const requesterEditRequired = activeRevision?.changes?.requester_edit_required === true || isExternalRevision;
+  const isMarkedInternalRevision = !isExternalRevision && (activeRevision?.changes?.requester_edit_required === true
+    || activeRevision?.changes?.signer_revision_required === true);
   const isKeu10Revision = isKeu10Form(selected?.location_snapshot?.form || selected?.data_snapshot?.form);
+  const usesKeu10ProposalConfirmation = isKeu10Revision && !requesterEditRequired
+    && activeRevision?.changes?.keu10_finance_proposal === true;
 
   const mutation = useMutation({
-    mutationFn: async ({ action, eventId, note }: { action: "accept" | "cancel"; eventId: string; note: string }) => {
+    mutationFn: async ({ action, eventId, note }: { action: "accept" | "cancel"; eventId: string; note: string; internalRevision: boolean }) => {
       if (action === "cancel") return suratService.cancelAfterRevision(eventId, note);
       return suratService.acceptProcessRevision(eventId, note);
     },
@@ -83,7 +89,9 @@ export default function TindakLanjutSuratPage() {
       toast.success(variables.action === "cancel" ? "Pengajuan dibatalkan" : "Pengajuan dilanjutkan", {
         description: variables.action === "cancel"
           ? "Nomor surat ditandai hangus karena perubahan tidak dilanjutkan."
-          : "Persetujuan dimulai ulang agar seluruh pihak mengetahui perubahan terbaru.",
+          : variables.internalRevision
+            ? "Pengajuan kembali ke tahap yang meminta perbaikan."
+            : "Persetujuan dimulai ulang agar seluruh pihak mengetahui perubahan terbaru.",
       });
       setDialogAction(null);
       setNote("");
@@ -107,6 +115,11 @@ export default function TindakLanjutSuratPage() {
     setNote("");
   };
 
+  const refreshFollowUps = () => {
+    void queryClient.invalidateQueries({ queryKey: ["requester-follow-up-sla"] });
+    void followUpsQuery.refetch();
+  };
+
   const submitAction = () => {
     if (!activeRevision?.event_id) {
       toast.error("Event revisi tidak ditemukan.");
@@ -116,7 +129,9 @@ export default function TindakLanjutSuratPage() {
       toast.error("Alasan pembatalan minimal 5 karakter.");
       return;
     }
-    mutation.mutate({ action: dialogAction || "accept", eventId: activeRevision.event_id, note: note.trim() });
+    mutation.mutate({ action: dialogAction || "accept", eventId: activeRevision.event_id, note: note.trim(),
+      internalRevision: isMarkedInternalRevision,
+    });
   };
 
   if (followUpsQuery.isLoading) {
@@ -158,7 +173,7 @@ export default function TindakLanjutSuratPage() {
             Pengajuan yang membutuhkan keputusan Anda setelah proses dikembalikan.
           </p>
         </div>
-        <Button variant="outline" onClick={() => followUpsQuery.refetch()} disabled={followUpsQuery.isFetching}>
+        <Button variant="outline" onClick={refreshFollowUps} disabled={followUpsQuery.isFetching}>
           {followUpsQuery.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
           Segarkan
         </Button>
@@ -195,6 +210,7 @@ export default function TindakLanjutSuratPage() {
                     <span>Dari {formatRevisionTarget(revision)}</span>
                     {revision?.from_step && <span>Tahap {revision.from_step}</span>}
                   </div>
+                  <RequesterFollowUpSla eventId={revision?.event_id} requesterId={row.created_by} compact />
                 </button>
               );
             })}
@@ -207,17 +223,17 @@ export default function TindakLanjutSuratPage() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                        {isExternalRevision ? "Perlu diperbaiki oleh pemohon" : "Menunggu keputusan pemohon"}
+                        {requesterEditRequired ? "Perlu diperbaiki oleh pemohon" : "Revisi oleh Penandatangan"}
                       </p>
                       <h2 className="mt-2 text-base font-semibold">{selected.judul_surat}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {isExternalRevision
-                          ? `Sistem departemen meminta perbaikan: ${activeRevision?.reason || "Alasan belum tersedia."}`
-                          : `Perubahan dari ${formatRevisionTarget(activeRevision)} perlu Anda tinjau sebelum proses dilanjutkan.`}
+                        {requesterEditRequired
+                          ? `${isExternalRevision ? "Sistem departemen" : formatRevisionTarget(activeRevision)} meminta perbaikan: ${activeRevision?.reason || "Alasan belum tersedia."}`
+                          : `Perubahan dari ${formatRevisionTarget(activeRevision)}: ${activeRevision?.reason || "Alasan belum tersedia."}`}
                       </p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row">
-                      {isExternalRevision ? (
+                      {requesterEditRequired ? (
                         <Button
                           onClick={() => activeRevision?.event_id && openRevisionMutation.mutate(activeRevision.event_id)}
                           disabled={openRevisionMutation.isPending}
@@ -231,7 +247,7 @@ export default function TindakLanjutSuratPage() {
                         <XCircle className="mr-2 h-4 w-4" />
                         Batalkan
                       </Button>
-                      {!isKeu10Revision && <Button onClick={() => openActionDialog("accept")}>
+                      {!usesKeu10ProposalConfirmation && <Button onClick={() => openActionDialog("accept")}>
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         Lanjutkan
                       </Button>}
@@ -241,7 +257,9 @@ export default function TindakLanjutSuratPage() {
                   </div>
                 </section>
 
-                {isKeu10Revision && !isExternalRevision && activeRevision?.event_id && (
+                <RequesterFollowUpSla eventId={activeRevision?.event_id} requesterId={selected.created_by} />
+
+                {usesKeu10ProposalConfirmation && activeRevision?.event_id && (
                   <Keu10RequesterRevision key={activeRevision.event_id} eventId={activeRevision.event_id}
                     input={selected.form_input_data} changes={activeRevision.changes} policy={selected.policy_snapshot}
                     signatures={selected._sigs} onSuccess={async () => {
@@ -253,7 +271,7 @@ export default function TindakLanjutSuratPage() {
                     }} />
                 )}
 
-                {revisionChanges.length > 0 && (
+                {!requesterEditRequired && revisionChanges.length > 0 && (
                   <section className="sigap-panel">
                     <div className="mb-3 flex items-center gap-2">
                       <FileText className="h-4 w-4 text-primary" />
@@ -277,8 +295,8 @@ export default function TindakLanjutSuratPage() {
                                 {row.nama_barang || `Item ${row.index + 1}`}
                               </td>
                               <td className="px-3 py-2">{row.action === "reject" ? "Tidak disetujui" : row.action === "adjust" ? "Disetujui sebagian" : "Tidak berubah"}</td>
-                              <td className="px-3 py-2">{formatRevisionValue(row.nilai_diajukan, row)}</td>
-                              <td className="px-3 py-2">{formatRevisionValue(row.nilai_disetujui, row)}</td>
+                              <td className="px-3 py-2">{formatRevisionValue(getRevisionRequestedValue(row), row)}</td>
+                              <td className="px-3 py-2">{formatRevisionValue(getRevisionApprovedValue(row), row)}</td>
                               <td className="px-3 py-2">{row.alasan || "-"}</td>
                             </tr>
                           ))}
@@ -302,7 +320,9 @@ export default function TindakLanjutSuratPage() {
             <DialogDescription>
               {dialogAction === "cancel"
                 ? "Nomor surat akan ditandai hangus dan proses pengajuan berhenti."
-                : "Data revisi akan diterima, lalu tanda tangan dimulai ulang dari tahap pertama."}
+                : isMarkedInternalRevision
+                  ? "Data revisi akan diterima. Pengajuan kembali ke tahap yang meminta perbaikan."
+                  : "Data revisi akan diterima, lalu tanda tangan dimulai ulang dari tahap pertama."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
