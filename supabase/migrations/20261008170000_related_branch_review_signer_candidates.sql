@@ -108,10 +108,21 @@ $patch$;
 
 do $patch$
 declare
-  v_definition text:=pg_get_functiondef('public.save_form_usage_config(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)'::regprocedure);
+  v_target regprocedure:='public.save_form_usage_config(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)'::regprocedure;
+  v_definition text:=pg_get_functiondef(v_target);
   v_old text:=$body$not in ('request_office_all', 'related_branch_manager')$body$;
   v_new text:=$body$not in ('request_office_all', 'related_branch_manager', 'related_branch_officer')$body$;
 begin
+  -- KEU 10 delegates configuration to the private original RPC; preserve its wrapper.
+  if position('public.save_form_usage_config_pre_keu10(' in v_definition)>0 then
+    if position('public.assert_keu10_route(' in v_definition)=0
+      or position('public.is_current_user_admin()' in v_definition)=0 then
+      raise exception 'Unknown KEU 10 configuration wrapper; review before applying.';
+    end if;
+    v_target:=to_regprocedure('public.save_form_usage_config_pre_keu10(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)');
+    if v_target is null then raise exception 'Missing original KEU 10 configuration RPC.'; end if;
+    v_definition:=pg_get_functiondef(v_target);
+  end if;
   if position(v_new in v_definition)=0 then
     if position(v_old in v_definition)=0 then raise exception 'Unknown configuration guard; review before applying.'; end if;
     execute replace(v_definition,v_old,v_new);
