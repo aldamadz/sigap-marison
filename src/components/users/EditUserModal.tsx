@@ -15,6 +15,7 @@ import { adminUserService, describeAdminUserError } from '@/services/admin-user.
 import { updateUserProfile } from '@/services/user.service';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { usesAutomaticBranchReporting } from '@sigap/shared';
 import {
   Building2, Briefcase, UserCog, UserCircle, Fingerprint, Mail,
   Loader2, ShieldCheck, User as UserIcon, Phone, Calendar, LogOut,
@@ -89,6 +90,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
     [offices, formData.officeId]
   );
   const isCabang = isCabangOffice(selectedOffice?.kedudukan);
+  const automaticReporting = usesAutomaticBranchReporting(selectedOffice?.kedudukan, formData.jobTitle);
 
   // Filter dept sesuai tipe kantor
   const filteredDepts = useMemo(() => {
@@ -138,7 +140,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
         resign_date:   formData.resign_date || null,
         office_id:     formData.officeId     === 'none' ? null : String(formData.officeId),
         department_id: formData.departmentId === 'none' ? null : String(formData.departmentId),
-        parent_id:     formData.parentId     === 'none' ? null : formData.parentId,
+        parent_id:     automaticReporting || formData.parentId === 'none' ? null : formData.parentId,
       });
 
       // External identity mapping is profile-only and stays on the profile API.
@@ -313,6 +315,9 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
 
               <div className="space-y-2 col-span-2">
                 <Label className="text-xs font-bold">Atasan Langsung</Label>
+                {automaticReporting ? (
+                  <Input aria-label="Atasan Langsung Otomatis" readOnly value="BM KC terkait (otomatis)" className="bg-muted h-10" />
+                ) : (
                 <Select value={formData.parentId || 'none'}
                   onValueChange={v => setFormData(f => ({ ...f, parentId: v }))}>
                   <SelectTrigger className="h-10 bg-background border-dashed">
@@ -330,6 +335,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
                     ))}
                   </SelectContent>
                 </Select>
+                )}
               </div>
 
             </div>

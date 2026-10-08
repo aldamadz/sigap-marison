@@ -193,6 +193,17 @@ const validPayload = {
 };
 
 describe("admin-user validation", () => {
+  it("ignores a stale inactive parent when transferring a branch employee", async () => {
+    const { runtime, ports } = createRuntime({
+      readJsonBody: async () => ({ ...validPayload, parent_id: PARENT_ID }),
+    }, { profiles: [profile({ id: PARENT_ID, is_active: false, email: "old.bm@example.test", nik: "BM-001" })] });
+    vi.spyOn(ports.repository, "findDepartmentById").mockResolvedValue(department({ name: "Marketing (Cabang)" }));
+    vi.spyOn(ports.repository, "findOfficeById").mockResolvedValue(office({ kedudukan: "KC" }));
+    const write = vi.spyOn(ports.repository, "upsertProfile");
+    await runtime.createUser({});
+    expect(write).toHaveBeenCalledWith(expect.objectContaining({ parent_id: null, office_id: OFFICE_ID }));
+  });
+
   it("normalizes email to lowercase and trims fields", () => {
     const result = validateUserInput(validPayload);
     expect(result.valid).toBe(true);

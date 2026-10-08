@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## ORG-01 Dynamic Branch Reporting (2026-10-08, Issue #499)
+
+- Candidate `fix/dynamic-office-reporting-01` from main; initial target staging.
+- Branch/KCP/Kost employees report directly to the single active BM of their KC.
+  Canonical `profiles.parent_id` is recalculated on profile or office topology writes,
+  including transfers, BM replacement and deactivation; sync cannot restore a stale ID.
+- Missing/ambiguous BM or broken/cyclic ancestry clears the relationship fail-closed.
+  HQ, BM and director configured relationships remain unchanged. Leaving a branch
+  clears its old automatic BM relation rather than carrying it into headquarters.
+- Forward migration `20261008140000` audits parent changes in an admin-only table.
+  Existing hierarchy/RLS/calendar consumers use the canonical parent, with no new
+  public endpoint or realtime publication. Historical documents/signatures stay intact.
+- Real PostgreSQL tests and changed UI/admin tests precede staging acceptance.
+  Production application requires selected release, not a manual per-user patch.
+
 ## Selected Production Release SUR-22 / SUR-23 / ADM-01 (2026-10-08)
 
 - Authorized production candidate `release/requester-corrections-production-20261008`

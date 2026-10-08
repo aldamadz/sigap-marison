@@ -14,6 +14,7 @@ import { User, Role } from '@/types/agenda';
 import { adminUserService, describeAdminUserError } from '@/services/admin-user.service';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { usesAutomaticBranchReporting } from '@sigap/shared';
 import {
   UserPlus, Building2, Briefcase, Fingerprint, Mail,
   Loader2, ShieldCheck, User as UserIcon, Phone, Calendar, LogOut,
@@ -74,6 +75,7 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
     [offices, formData.officeId]
   );
   const isCabang = isCabangOffice(selectedOffice?.kedudukan);
+  const automaticReporting = usesAutomaticBranchReporting(selectedOffice?.kedudukan, formData.jobTitle);
 
   // Filter departemen sesuai tipe kantor:
   // - Pusat / belum dipilih → tampilkan yang TIDAK ber-suffix (Cabang)
@@ -117,7 +119,7 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
         resign_date:   formData.resign_date || null,
         department_id: formData.departmentId === 'none' ? null : String(formData.departmentId),
         office_id:     formData.officeId     === 'none' ? null : String(formData.officeId),
-        parent_id:     formData.parentId     === 'none' ? null : String(formData.parentId),
+        parent_id:     automaticReporting || formData.parentId === 'none' ? null : String(formData.parentId),
       });
       toast.success(`Akun ${formData.fullName} berhasil dibuat dengan password default staging.`);
       onSuccess();
@@ -272,6 +274,9 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
 
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Atasan Langsung</Label>
+                {automaticReporting ? (
+                  <Input aria-label="Atasan Langsung Otomatis" readOnly value="BM KC terkait (otomatis)" className="bg-muted h-10" />
+                ) : (
                 <Select value={formData.parentId || 'none'}
                   onValueChange={v => setFormData(f => ({ ...f, parentId: v }))}>
                   <SelectTrigger className="bg-background h-10 border-dashed">
@@ -289,6 +294,7 @@ export const AddUserModal = ({ isOpen, onClose, onSuccess, allUsers }: AddUserMo
                     ))}
                   </SelectContent>
                 </Select>
+                )}
               </div>
 
             </div>

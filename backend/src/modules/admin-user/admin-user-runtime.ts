@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { usesAutomaticBranchReporting } from "@sigap/shared";
 
 /**
  * Admin user management runtime.
@@ -369,6 +370,11 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     }
     assertOrganizationPairing(department, office);
 
+    // The database derives this relation; stale browser IDs must not block a transfer.
+    if (usesAutomaticBranchReporting(office?.kedudukan, input.job_title)) {
+      input.parent_id = null;
+    }
+
     if (input.parent_id) {
       const parent = await repository.findProfileById(input.parent_id);
       if (!parent || parent.deleted_at) throw errorWithStatus("Atasan langsung tidak ditemukan.", 400);
@@ -379,12 +385,6 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
 
   const assertNotDuplicate = async (input: CreateUserInput, excludeId?: string) => {
     const repository = deps.getProfileRepository();
-    if (excludeId) {
-      const self = await repository.findProfileById(excludeId);
-      if (self && input.parent_id && self.id === input.parent_id) {
-        throw errorWithStatus("Atasan langsung tidak boleh akun itu sendiri.", 400);
-      }
-    }
     const byEmail = await repository.findProfileByEmail(input.email);
     if (byEmail && byEmail.id !== excludeId) {
       throw errorWithStatus("Email sudah terdaftar. Gunakan email lain.", 409);
@@ -519,6 +519,9 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
 
     await assertNotDuplicate(input, userId);
     await resolveOrganization(input);
+    if (input.parent_id === userId) {
+      throw errorWithStatus("Atasan langsung tidak boleh akun itu sendiri.", 400);
+    }
 
     const authAdmin = deps.getAuthAdmin();
     const identityChanged = current.email !== input.email || current.full_name !== input.full_name;
