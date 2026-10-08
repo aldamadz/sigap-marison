@@ -15,16 +15,21 @@ const nonPlanningMigration = readFileSync("supabase/migrations/20260929090000_re
 const nonPlanningAssertions = readFileSync("supabase/tests/non_planning_checker_defaults.integration.sql", "utf8");
 const keu1Migration = readFileSync("supabase/migrations/20260929080000_seed_keu1_form_usage.sql", "utf8");
 const keu1Assertions = readFileSync("supabase/tests/keu1_form_usage.integration.sql", "utf8");
-const keu1SubmitMigration = readFileSync("supabase/migrations/20261001060000_keu1_submit_and_first_signer.sql", "utf8");
+const keu1SubmitMigration = readFileSync("supabase/migrations/20261001060000_keu1_submit_and_first_signer.sql", "utf8").replace(/\r\n/g, "\n");
 const branchGuardSource = readFileSync("supabase/migrations/20260930140000_mar10_kc_descendant_number_scope.sql", "utf8");
 const branchGuard = branchGuardSource.slice(branchGuardSource.indexOf("create or replace function public.enforce_surat_registration_branch_project()"));
 const keu1SubmitAssertions = readFileSync("supabase/tests/keu1_submit_and_first_signer.integration.sql", "utf8");
-const makerMigration = readFileSync("supabase/migrations/20261001120000_contextual_first_maker_candidates.sql", "utf8");
+const makerMigration = readFileSync("supabase/migrations/20261001120000_contextual_first_maker_candidates.sql", "utf8").replace(/\r\n/g, "\n");
 const makerAssertions = readFileSync("supabase/tests/contextual_first_maker_candidates.integration.sql", "utf8");
-const bmMigration = readFileSync("supabase/migrations/20261001130000_keu1_related_branch_manager.sql", "utf8");
+const bmMigration = readFileSync("supabase/migrations/20261001130000_keu1_related_branch_manager.sql", "utf8").replace(/\r\n/g, "\n");
 const bmAssertions = readFileSync("supabase/tests/keu1_branch_manager_candidates.integration.sql", "utf8");
 const optionalProjectMigration = readFileSync("supabase/migrations/20261005090000_keu1_optional_branch_project.sql", "utf8");
 const optionalProjectAssertions = readFileSync("supabase/tests/keu1_optional_project.integration.sql", "utf8");
+const branchReportingFallback = readFileSync("supabase/migrations/20261008160000_dynamic_branch_reporting_officer_fallback.sql", "utf8");
+const officerHelpers = branchReportingFallback.slice(branchReportingFallback.indexOf("create or replace function organization_internal.officer_rank"),
+  branchReportingFallback.indexOf("create or replace function organization_internal.resolve_office_superior"));
+const officerMigration = readFileSync("supabase/migrations/20261008170000_related_branch_review_signer_candidates.sql", "utf8").replace(/\r\n/g, "\n");
+const officerAssertions = readFileSync("supabase/tests/related_branch_review_signer_candidates.integration.sql", "utf8");
 const fundChecklist = process.argv.includes("--fund-checklist");
 const fundChecklistSql = fundChecklist
   ? readFileSync("supabase/tests/fund_item_checklist.setup.sql", "utf8")
@@ -336,6 +341,11 @@ ${bmAssertions}
 ${optionalProjectMigration.replace(/\r\n/g, "\n")}
 ${optionalProjectMigration.replace(/\r?\n/g, "\r\n")}
 ${optionalProjectAssertions}
+create schema organization_internal;
+${officerHelpers}
+${officerMigration}
+${officerMigration}
+${officerAssertions}
 ${fundChecklistSql}
 `;
 

@@ -14,6 +14,7 @@ import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
+import { getBranchOfficerCandidates } from "@/features/surat/registration/lib/branch-officer-candidates";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import {
   canonicalizeCheckerInput,
@@ -977,7 +978,7 @@ export const suratService = {
           job_title_display: profile.job_title_display ?? profile.job_title ?? null,
           email: profile.email ?? null,
           role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
-          label_jabatan: s.candidate_fallback_mode === "request_office_all"
+          label_jabatan: ["request_office_all", "related_branch_officer"].includes(s.candidate_fallback_mode || "")
             ? profile.job_title_display ?? profile.job_title ?? s.label_jabatan ?? null
             : s.label_jabatan ?? null,
           step_order: Number(s.step_order || idx + 1),
@@ -1007,11 +1008,16 @@ export const suratService = {
 
       if (payload.form_usage_id) {
         const contextualMaker = configContext.usage?.first_maker_policy === "contextual"
-          || configContext.usage?.form_usage_steps.some(step => step.candidate_fallback_mode === "related_branch_manager");
+          || configContext.usage?.form_usage_steps.some(step => ["related_branch_manager", "related_branch_officer"].includes(step.candidate_fallback_mode || ""));
         const { data: makerOffices, error: makerOfficeError } = contextualMaker
           ? await supabase.from("master_offices").select("id, parent_id, kedudukan")
           : { data: [], error: null };
         if (makerOfficeError) throw makerOfficeError;
+        const officerMaster = configContext.usage?.form_usage_steps.some(step => step.candidate_fallback_mode === "related_branch_officer")
+          ? await this.getMasterData() : null;
+        const officerIds = new Set(getBranchOfficerCandidates(officerMaster?.users || [], {
+          requesterId: user.id, officeId: payload.office_id, departmentId: payload.dept_id || "", offices: makerOffices || [],
+        }).map(candidate => candidate.id));
         const { data: validation, error: validationError } = await supabase.rpc(
           "validate_form_usage_for_actor",
           {
@@ -1044,6 +1050,8 @@ export const suratService = {
             : configContext.usage?.first_maker_policy === undefined && isKeu1RequesterStep(configContext.usage?.master_forms, step)
             ? isKeu1FirstSignerCandidate(signerProfile, user.id, payload.office_id,
                 String(configContext.office?.kedudukan || "").toLowerCase() !== "pusat")
+            : step.candidate_fallback_mode === "related_branch_officer"
+            ? officerIds.has(assignment.user_id)
             : step.candidate_fallback_mode === "related_branch_manager"
             ? isRelatedBranchManager(signerProfile, payload.office_id, makerOffices || [])
             : step.assignee_mode === "requester"
@@ -1247,7 +1255,7 @@ export const suratService = {
         surat_id: surat.id,
         user_id: s.user_id,
         role_name: this.normalizeRoleName(s.role_name, Number(s.step_order || idx + 1), totalSteps),
-        label_jabatan: s.candidate_fallback_mode === "request_office_all"
+        label_jabatan: ["request_office_all", "related_branch_officer"].includes(s.candidate_fallback_mode || "")
           ? (signerSnapshots[s.user_id]?.job_title_display
             ?? signerSnapshots[s.user_id]?.job_title
             ?? s.label_jabatan

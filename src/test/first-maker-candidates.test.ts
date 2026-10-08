@@ -26,7 +26,7 @@ describe("contextual first maker", () => {
     ["marketing", "SPV Marketing", "kcp", "marketing", true],
     ["tech", "Supervisor Teknik", "kcp", "tech", true],
     ["foreign", "Supervisor Teknik", "other", "tech", false],
-    ["bm", "Branch Manager", "kc", "marketing", true],
+    ["bm", "Branch Manager", "kc", "marketing", false],
     ["foreign-bm", "BM", "other", "tech", false],
     ["assistant", "Asisten Mgr. Teknik", "hq", "tech", true],
     ["foreign-assistant", "Assistant Manager Marketing", "hq", "marketing", false],

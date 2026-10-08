@@ -316,7 +316,7 @@ export const EditUserModal = ({ user, allUsers, isOpen, onClose, onSuccess }: Ed
               <div className="space-y-2 col-span-2">
                 <Label className="text-xs font-bold">Atasan Langsung</Label>
                 {automaticReporting ? (
-                  <Input aria-label="Atasan Langsung Otomatis" readOnly value="BM KC terkait (otomatis)" className="bg-muted h-10" />
+                  <Input aria-label="Atasan Langsung Otomatis" readOnly value="Atasan kantor (otomatis)" className="bg-muted h-10" />
                 ) : (
                 <Select value={formData.parentId || 'none'}
                   onValueChange={v => setFormData(f => ({ ...f, parentId: v }))}>
