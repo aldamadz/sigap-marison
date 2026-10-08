@@ -58,6 +58,8 @@ function makeDraft(usage: TestUsage = FUND_FORM_USAGE_RAW[0], rows: Record<strin
   };
   return {
     id: UUID.draft, no_surat: "001/UAI/KEU/X/2026", reservation_id: null, status: "DRAFT",
+    revision_event_id: eventId,
+    revision_context: { eventId, reason: "Lengkapi data pengajuan", requesterEditRequired: true },
     created_by: UUID.user, expires_at: "2099-10-08", no_urut: 1,
     payload: {
       formData, selectedFormId: usage.form_id, selectedUsageId: usage.id, linkedDocumentContext: null,

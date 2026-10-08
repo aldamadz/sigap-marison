@@ -102,6 +102,7 @@ export interface SuratRegistrationDraft {
     eventId: string;
     generation?: number;
     reason?: string;
+    requesterEditRequired?: boolean;
   } | null;
 }
 
@@ -404,6 +405,7 @@ export const suratService = {
       draft.revision_context = {
         eventId: event.id,
         reason: event.reason,
+        requesterEditRequired: event.changes?.requester_edit_required === true,
         ...(typeof event.changes?.revision_generation === "number"
           ? { generation: event.changes.revision_generation }
           : {}),

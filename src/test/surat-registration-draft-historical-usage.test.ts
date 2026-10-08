@@ -98,6 +98,7 @@ describe("registration draft historical usage", () => {
     const result = await suratService.getRegistrationDraft(draft.id);
     expect(result.revision_context).toMatchObject({
       eventId: draft.revision_event_id, reason: "Lengkapi spesifikasi dan lampiran.",
+      requesterEditRequired: "requester_edit_required" in changes,
     });
     expect(result.usage_configuration).toBe(archivedUsage);
   });
@@ -138,6 +139,7 @@ describe("registration draft historical usage", () => {
       eventId: draft.revision_event_id,
       generation: 2,
       reason: "Perbaiki jumlah unit.",
+      requesterEditRequired: false,
     });
     expect(usageQuery.eq).toHaveBeenCalledTimes(1);
     expect(usageQuery.eq).toHaveBeenCalledWith("id", archivedUsage.id);
