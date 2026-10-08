@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useMemo, useRef } from "react"
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
+import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
 import { useSearchParams } from "react-router";
@@ -22,7 +23,7 @@ import {
   Hash, ArrowDown, Loader2, Briefcase, Calendar as DatePickerIcon,
   Check, ChevronDown, ChevronLeft, ChevronRight, Copy, RefreshCcw,
   ShieldCheck, AlertTriangle, Archive, Home, X, Plus, Image as ImageIcon, Lock,
-  Link as LinkIcon, UploadCloud, Trash2
+  Link as LinkIcon, UploadCloud, Trash2, ExternalLink
 } from "lucide-react";
 import {
   type SuratRegistrationDraft,
@@ -57,6 +58,7 @@ import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, w
 import { withRequesterRabRequirement } from "@/lib/fund-rab";
 import { selectUsage } from "@/features/surat/registration/usages";
 import type {
+  ExternalRevisionContext,
   NumberContextIssue,
   UsageCategory,
   UsageModuleContext,
@@ -65,6 +67,7 @@ import type {
 import { useUnitAvailability } from "@/features/surat/registration/usages/unit/use-unit-availability";
 import { EMPTY_UNIT_AVAILABILITY } from "@/features/surat/registration/usages/unit/unit-availability";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentOpener, documentOperationKey } from "@/hooks/useDocumentOpener";
 import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import {
@@ -144,16 +147,13 @@ const RECOMMENDATION_ACTIONS = [
   { value: "tidak_direkomendasikan", label: "Tidak Direkomendasikan" },
 ] as const;
 type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]["value"];
-type ExternalRevisionContext = {
-  eventId: string;
-  generation?: number;
-  category?: RequestCategory;
-  reason?: string;
-};
+const revisionRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDisplay }: SuratFormProps) {
   const { toast } = useToast();
   const appDialog = useAppDialog();
+  const documentOpener = useDocumentOpener();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Linked-recommendation controller (Pass E). Owns `linkedDocumentContext`,
@@ -228,9 +228,74 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [manualPlaceOverride, setManualPlaceOverride] = useState(false);
   const [signers, setSigners] = useState<SignerAssignment[]>([]);
   const submitLockRef = useRef(false);
+  const inputRef = useRef(formData.form_input_data);
+  useEffect(() => { inputRef.current = formData.form_input_data; }, [formData.form_input_data]);
+  const [revisionCandidates, setRevisionCandidates] = useState<{
+    eventId: string; status: "loading" | "ready" | "error"; users: MasterRecord[];
+  }>({ eventId: "", status: "loading", users: [] });
+  const isKeu10RequesterEdit = Boolean(externalRevision?.requesterEditRequired && isKeu10Form(selectedUsage?.master_forms));
+  const frozenKeu10Config = useMemo(() => normalizeKeu10Config(externalRevision?.policySnapshot?.keu10_config), [externalRevision]);
+  const frozenFinalStep = useMemo(() => {
+    const steps = externalRevision?.policySnapshot?.keu10_steps;
+    const finalSteps = Array.isArray(steps) ? steps.map(revisionRecord).filter(step => step.role_name === "menyetujui") : [];
+    return finalSteps.length === 1 ? finalSteps[0] : null;
+  }, [externalRevision]);
+  const keu10FinalCandidates = useMemo(() => {
+    if (!isKeu10RequesterEdit || revisionCandidates.eventId !== externalRevision?.eventId || revisionCandidates.status !== "ready") return [];
+    const ids = frozenFinalStep?.candidate_user_ids;
+    return revisionCandidates.users.filter(user => Array.isArray(ids) && ids.includes(user.id)
+      && user.is_active === true && String(user.kedudukan || "").trim().toLowerCase() === "pusat"
+      && (!frozenFinalStep?.signer_department_id || user.department_id === frozenFinalStep.signer_department_id)
+      && isKeu10FinalCandidate(user, frozenKeu10Config, formData.form_input_data.items));
+  }, [isKeu10RequesterEdit, revisionCandidates, externalRevision?.eventId, frozenFinalStep, frozenKeu10Config, formData.form_input_data.items]);
+  const isEditableRevisionFinalSigner = (signer: SignerAssignment) => Boolean(isKeu10RequesterEdit
+    && frozenFinalStep?.id && signer.form_usage_step_id === frozenFinalStep.id && signer.role_name === "menyetujui");
+
+  useEffect(() => {
+    if (!isKeu10RequesterEdit || !externalRevision?.eventId) return;
+    const eventId = externalRevision.eventId;
+    let cancelled = false;
+    setRevisionCandidates({ eventId, status: "loading", users: [] });
+    void supabase.rpc("get_keu10_revision_final_candidates", { p_event_id: eventId }).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setRevisionCandidates({ eventId, status: "error", users: [] }); return; }
+      const users: MasterRecord[] = Array.isArray(data) ? data.filter(user => typeof revisionRecord(user).id === "string") : [];
+      setRevisionCandidates({ eventId, status: "ready", users });
+    }).catch(() => { if (!cancelled) setRevisionCandidates({ eventId, status: "error", users: [] }); });
+    return () => { cancelled = true; };
+  }, [isKeu10RequesterEdit, externalRevision?.eventId]);
+
+  useEffect(() => {
+    if (!isKeu10RequesterEdit || !frozenFinalStep?.id || revisionCandidates.status !== "ready"
+      || revisionCandidates.eventId !== externalRevision?.eventId) return;
+    setSigners(previous => {
+      const next = previous.map(signer => {
+        if (signer.form_usage_step_id !== frozenFinalStep.id || signer.role_name !== "menyetujui") return signer;
+        const userId = keu10FinalCandidates.some(user => user.id === signer.user_id) ? signer.user_id
+          : keu10FinalCandidates.length === 1 ? keu10FinalCandidates[0].id : "";
+        return userId === signer.user_id ? signer : { ...signer, user_id: userId };
+      });
+      return next.every((signer, index) => signer === previous[index]) ? previous : next;
+    });
+  }, [isKeu10RequesterEdit, frozenFinalStep, keu10FinalCandidates, revisionCandidates.status, revisionCandidates.eventId, externalRevision?.eventId]);
+  const keu10RevisionFinalValid = !isKeu10RequesterEdit || (revisionCandidates.status === "ready"
+    && revisionCandidates.eventId === externalRevision?.eventId && signers.some(signer =>
+      isEditableRevisionFinalSigner(signer) && keu10FinalCandidates.some(user => user.id === signer.user_id)));
 
   const getFormFieldValue = (key: string) => formData.form_input_data[key];
   const getDisplayFieldValue = (key: string) => getScalarFieldValue(getFormFieldValue(key));
+  const protectedRevisionAttachments = useMemo(() => {
+    const files = [
+      ...(externalRevision?.protectedAttachments || []),
+      ...(externalRevision?.baseline?.attachments || []).filter(file => file.source_signature_id || Number(file.stage_order) > 0),
+    ];
+    return files.filter((file, index) => files.findIndex(other =>
+      file.file_url ? other.file_url === file.file_url : other.id === file.id,
+    ) === index);
+  }, [externalRevision]);
+  const isProtectedRevisionAttachment = (file: SuratRegistrationDraftFile) => protectedRevisionAttachments.some(
+    other => (other.id && other.id === file.id) || (other.file_url && other.file_url === file.file_url),
+  );
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
   const canCurrentDepartmentRequestUnit = (item: UsageDetailRecord) =>
@@ -268,12 +333,37 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   // Stabil (useCallback): dipakai sebagai dep effect di modul usage.
   // Identitas tak stabil = fetch effect modul berputar tanpa henti.
+  const confirmItemRemoval = useCallback(() => appDialog.confirm({
+    title: "Hapus item pengajuan?",
+    description: "Item akan dihapus dari draft. Data pengajuan sebelumnya tetap tersimpan dalam riwayat.",
+    confirmText: "Hapus item",
+    variant: "destructive",
+  }), [appDialog.confirm]);
+  const confirmDraftAttachmentRemoval = (name: string) => appDialog.confirm({
+    title: "Hapus lampiran dari draft?",
+    description: `${name} akan dilepas dari draft. File asli dan riwayat pengajuan tidak dihapus.`,
+    confirmText: "Hapus lampiran",
+    variant: "destructive",
+  });
+
   const setInputValue = useCallback((key: string, value: unknown) => {
-    setFormData(prev => ({
-      ...prev,
-      form_input_data: { ...prev.form_input_data, [key]: value },
-    }));
-  }, []);
+    const previousValue = inputRef.current[key];
+    const previousRows = normalizeTableRows(previousValue);
+    const nextRows = normalizeTableRows(value);
+    const removesItem = Array.isArray(previousValue) && Array.isArray(value) && previousRows.length > 0 && (
+      nextRows.length < previousRows.length ||
+      previousRows.some(row => row.id && !nextRows.some(next => next.id === row.id)) ||
+      (previousRows.length === 1 && Object.keys(previousRows[0]).length > 0 && nextRows.length === 1 && Object.keys(nextRows[0]).length === 0)
+    );
+    const applyValue = () => setFormData(prev => {
+      // Do not overwrite newer edits while a removal confirmation was open.
+      if (removesItem && prev.form_input_data[key] !== previousValue) return prev;
+      return { ...prev, form_input_data: { ...prev.form_input_data, [key]: value } };
+    });
+    if (removesItem) {
+      void confirmItemRemoval().then(confirmed => { if (confirmed) applyValue(); });
+    } else applyValue();
+  }, [confirmItemRemoval]);
 
   const requestExternalOptions = useCallback(async (sourceKey: string, variables: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -400,6 +490,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   ) => {
     if (!recommendationMultiDetail) return;
     const draftFileId = String(attachment.metadata?.draft_file_id || attachment.id || "").trim();
+    if (!await confirmDraftAttachmentRemoval(attachment.caption || "Lampiran rekomendasi")) return;
     try {
       if (draftFileId) await suratRegistrationApi.deleteRegistrationDraftFile(draftFileId);
       setDraftAttachments((previous) => previous.filter((file) => file.id !== draftFileId));
@@ -426,6 +517,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const deleteRecommendationDetail = async (parentId: string, detail: RecommendationMultiDetail["items"][number]["details"][number]) => {
     if (!recommendationMultiDetail) return;
+    if (!await confirmItemRemoval()) return;
     try {
       const draftFileIds = detail.attachments
         .map((attachment) => String(attachment.metadata?.draft_file_id || attachment.id || "").trim())
@@ -480,9 +572,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setTableRows(key, [...getTableRows(key), {}]);
   };
 
-  const removeTableRow = (key: string, rowIndex: number) => {
-    const rows = getTableRows(key).filter((_, index) => index !== rowIndex);
-    setTableRows(key, rows.length > 0 ? rows : [{}]);
+  const removeTableRow = async (key: string, rowIndex: number) => {
+    const previousValue = formData.form_input_data[key];
+    if (!await confirmItemRemoval()) return;
+    setFormData(previous => {
+      if (previous.form_input_data[key] !== previousValue) return previous;
+      const rows = normalizeTableRows(previousValue).filter((_, index) => index !== rowIndex);
+      return { ...previous, form_input_data: { ...previous.form_input_data, [key]: rows.length > 0 ? rows : [{}] } };
+    });
   };
 
   const getRecommendationAttachment = (row: TableRow): RecommendationItemAttachment | null => {
@@ -589,6 +686,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const row = getTableRows(fieldKey)[rowIndex] || {};
     const attachment = getRecommendationAttachment(row);
     if (!attachment) return;
+    if (!await confirmDraftAttachmentRemoval(attachment.file_name || "Lampiran rekomendasi")) return;
     try {
       if (attachment.draft_file_id) {
         await suratRegistrationApi.deleteRegistrationDraftFile(attachment.draft_file_id);
@@ -1011,7 +1109,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const moduleCtx: UsageModuleContext | null = useMemo(() => {
     if (!selectedUsage || !activeUsageData) return null;
     return {
-      usage: selectedUsage,
+      usage: isKeu10RequesterEdit ? { ...selectedUsage, keu10_config: frozenKeu10Config } : selectedUsage,
       usageKey: activeUsageData.key,
       category: activeUsageData.category,
       formData,
@@ -1065,6 +1163,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     uploadingRecommendationAttachment,
     setInputValue,
     requestExternalOptions,
+    isKeu10RequesterEdit,
+    frozenKeu10Config,
   ]);
 
   const effectiveFormInputData = useMemo<FormInputData>(() => {
@@ -1149,7 +1249,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   // Hook is invoked here so the live `effectiveFormData` reference is what
   // gets persisted, never an empty placeholder.
   const [draftSaveState, setDraftSaveState] = useSuratAutosave({
-    activeDraftId,
+    activeDraftId: externalRevision ? null : activeDraftId,
     generatedNoSurat,
     draftToRestore,
     selectedUsage,
@@ -1159,6 +1259,23 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     selectedFormId,
     signers,
   });
+
+  // The shared hook saves ordinary drafts; revision drafts also retain their immutable baseline.
+  useEffect(() => {
+    if (!externalRevision || !activeDraftId || !generatedNoSurat || draftToRestore || !selectedUsage?.id || isLoading) return;
+    let cancelled = false;
+    setDraftSaveState("saving");
+    const timeout = window.setTimeout(() => {
+      suratRegistrationApi.saveRegistrationDraft(activeDraftId, {
+        formData: effectiveFormData, selectedFormId, selectedUsageId: selectedUsage.id,
+        linkedDocumentContext, externalRevision,
+      }, signers, "details")
+        .then(() => { if (!cancelled) setDraftSaveState("saved"); })
+        .catch(() => { if (!cancelled) setDraftSaveState("error"); });
+    }, 900);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
+  }, [externalRevision, activeDraftId, generatedNoSurat, draftToRestore, selectedUsage?.id,
+    effectiveFormData, selectedFormId, linkedDocumentContext, signers, setDraftSaveState, isLoading]);
 
   const externalVariables = useMemo<Record<string, unknown>>(() => ({
     project_id: requiresMarisonProject ? selectedMarisonProjectId || "" : effectiveFormData.project_id,
@@ -1176,7 +1293,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   );
 
   const getSelectedSignerName = (userId: string, includeJobTitle = false) => {
-    const user = master.users?.find((item: MasterRecord) => item.id === userId);
+    const user = [...keu10FinalCandidates, ...master.users].find((item: MasterRecord) => item.id === userId);
     return user
       ? [user.full_name, includeJobTitle ? user.job_title : null].filter(Boolean).join(" · ")
       : "";
@@ -1244,6 +1361,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getEligibleSignerUsersForSigner = (signer?: SignerAssignment) => {
     if (!signer) return [];
+    if (isEditableRevisionFinalSigner(signer)) return keu10FinalCandidates;
     if (isSelectableFirstMaker(signer)) return getFirstMakerCandidates(selectedUsage, signer);
     if (signer.candidate_fallback_mode === "related_branch_manager") {
       return master.users.filter(user => isRelatedBranchManager(user, formData.office_id, master.offices));
@@ -1507,6 +1625,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       : persistedSigners);
     setDraftAttachments(draftToRestore.surat_registration_draft_files || []);
     setExternalRevision(restoredExternalRevision?.eventId ? restoredExternalRevision : null);
+    if (restoredExternalRevision?.eventId) {
+      setManualTitleOverride(Boolean(String(restoredFormData.judul_surat || "").trim()));
+      setManualPlaceOverride(Boolean(String(restoredFormData.request_place || "").trim()));
+    }
     setInitialAttachmentFiles({});
     setLampiranFiles([]);
     setGeneratedNoSurat(draftToRestore.no_surat);
@@ -1858,6 +1980,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             selectedFormId,
             selectedUsageId: selectedUsage.id,
             linkedDocumentContext,
+            ...(externalRevision ? { externalRevision } : {}),
           },
           signerAssignments: signers,
         });
@@ -1999,7 +2122,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             selectedFormId,
             selectedUsageId: selectedUsage?.id || "",
             linkedDocumentContext,
-            externalRevision,
+            ...(externalRevision ? { externalRevision } : {}),
           },
           signers,
           "details"
@@ -2022,7 +2145,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const getLatestConfiguredSignerAssignments = () => {
-    if (externalRevision) return signers;
+    if (externalRevision) return signers.map(signer => !isEditableRevisionFinalSigner(signer) ? signer : {
+      ...signer, user_id: keu10FinalCandidates.some(user => user.id === signer.user_id) ? signer.user_id
+        : keu10FinalCandidates.length === 1 ? keu10FinalCandidates[0].id : "",
+    });
     if (!selectedUsage?.id) return signers;
     const latestUsage = usageDetails.find((usage) => usage.id === selectedUsage.id) || selectedUsage;
     const configuredSigners = getVisibleConfiguredSigners(buildSignerAssignments(latestUsage));
@@ -2039,6 +2165,12 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const validateRegistration = (signerAssignments: SignerAssignment[] = signers) => {
+    if (isKeu10RequesterEdit && (revisionCandidates.status !== "ready" || revisionCandidates.eventId !== externalRevision?.eventId
+      || !frozenFinalStep?.id || !signerAssignments.some(signer => isEditableRevisionFinalSigner(signer)
+        && keu10FinalCandidates.some(user => user.id === signer.user_id)))) {
+      toast({ variant: "destructive", title: "Penyetuju revisi belum valid", description: "Pilih penyetuju yang memenuhi kebijakan pengajuan semula dan nominal terbaru." });
+      return false;
+    }
     const missingField = getManualInputFields(selectedUsage).find((field: TemplateField) => !isManualFieldComplete(field));
     const firstRecommendationError = recommendationMultiDetail ? recommendationMultiDetailErrors(recommendationMultiDetail)[0] : undefined;
 
@@ -2186,7 +2318,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         })),
       ],
       signers: signers.map((signer) => {
-        const user = master.users.find((item) => item.id === signer.user_id);
+        const user = [...keu10FinalCandidates, ...master.users].find((item) => item.id === signer.user_id);
         return {
           step: signer.step_order,
           role: `${toReadableName(signer.role_name)} · ${signer.label_jabatan}`,
@@ -2229,6 +2361,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     setIsLoading(true);
     try {
       if (externalRevision?.eventId && activeDraftId) {
+        await suratRegistrationApi.saveRegistrationDraft(activeDraftId, {
+          formData: effectiveFormData, selectedFormId, selectedUsageId: selectedUsage?.id || "",
+          linkedDocumentContext, externalRevision,
+        }, latestSigners, "details");
         const result = await executeExternalRevisionSubmit({
           revisionEventId: externalRevision.eventId,
           draftId: activeDraftId,
@@ -2237,7 +2373,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
         });
         toast({
           title: "Perbaikan berhasil dikirim",
-          description: getExternalRevisionSuccessDescription(result.next_step),
+          description: externalRevision.requesterEditRequired && result.next_step !== "unit_reallocation"
+            ? "Pengajuan kembali ke tahap yang meminta perbaikan."
+            : getExternalRevisionSuccessDescription(result.next_step),
         });
         onSuccess(generatedNoSurat || "", formData.judul_surat);
         resetForm();
@@ -3179,6 +3317,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const handleRemoveDraftAttachment = async (attachment: SuratRegistrationDraftFile) => {
+    if (isProtectedRevisionAttachment(attachment)) return;
+    if (!await confirmDraftAttachmentRemoval(attachment.file_name)) return;
     try {
       await suratRegistrationApi.deleteRegistrationDraftFile(attachment.id);
       setDraftAttachments(previous => previous.filter(item => item.id !== attachment.id));
@@ -3193,7 +3333,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const renderAttachmentUploader = () => {
     const configuredRequirements = getInitialAttachmentRequirements().filter(rule =>
-      !externalRevision || getRequestCategory() !== "unit" ||
+      !externalRevision || externalRevision.requesterEditRequired || getRequestCategory() !== "unit" ||
       rule.requirement_key === REQUESTER_ADDITIONAL_ATTACHMENT_KEY
     );
     if (configuredRequirements.length > 0) {
@@ -3206,7 +3346,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           {configuredRequirements.map(rule => {
             const files = initialAttachmentFiles[rule.requirement_key] || [];
             const persistedFiles = draftAttachments.filter(
-              attachment => attachment.requirement_key === rule.requirement_key
+              attachment => attachment.requirement_key === rule.requirement_key && !isProtectedRevisionAttachment(attachment)
             );
             const totalFiles = files.length + persistedFiles.length;
             const uploadState = attachmentUploadStates[rule.requirement_key];
@@ -3307,6 +3447,32 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
               </div>
             );
           })}
+          {externalRevision && draftAttachments.filter(file =>
+            !configuredRequirements.some(rule => rule.requirement_key === file.requirement_key) && !isProtectedRevisionAttachment(file),
+          ).map(file => (
+            <div key={file.id} className="flex min-w-0 items-center justify-between gap-3 border-t py-3">
+              <p className="min-w-0 break-words text-sm">{file.file_name}</p>
+              <Button type="button" variant="ghost" size="icon" aria-label={`Hapus ${file.file_name}`}
+                onClick={() => void handleRemoveDraftAttachment(file)}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          ))}
+          {protectedRevisionAttachments.length > 0 && (
+            <section aria-label="Lampiran pihak lain" className="space-y-2 border-t pt-4">
+              <h3 className="text-sm font-semibold">Lampiran pihak lain (hanya baca)</h3>
+              {protectedRevisionAttachments.map((file, index) => {
+                const key = documentOperationKey.file(file.surat_id || "", file.id || String(index));
+                const canOpen = Boolean(file.surat_id && typeof file.file_url === "string" && file.file_url.trim());
+                return <div key={file.id || index} className="flex min-w-0 items-start justify-between gap-2 text-sm text-muted-foreground">
+                  <p className="flex min-w-0 items-start gap-2"><Lock className="mt-0.5 h-4 w-4 shrink-0" /><span className="break-words">{String(file.file_name || file.name || "Lampiran")}</span></p>
+                  {canOpen && <Button type="button" variant="outline" size="sm" disabled={documentOpener.isOpening(key)}
+                    aria-label={`Buka ${String(file.file_name || file.name || "Lampiran")}`}
+                    onClick={() => void documentOpener.openFile(file.surat_id!, String(file.file_url), key)}>
+                    {documentOpener.isOpening(key) ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-1 h-4 w-4" />} Buka
+                  </Button>}
+                </div>;
+              })}
+            </section>
+          )}
         </div>
       );
     }
@@ -3890,7 +4056,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       className="min-h-[92px] resize-none bg-background text-sm leading-relaxed"
                       placeholder="Contoh: Permohonan Pembelian Inventaris Kantor"
                       value={formData.judul_surat}
-                      disabled={Boolean(externalRevision && getRequestCategory() === "unit")}
+                      disabled={Boolean(externalRevision && !externalRevision.requesterEditRequired && getRequestCategory() === "unit")}
                       onChange={e => {
                         const nextValue = e.target.value;
                         setManualTitleOverride(Boolean(nextValue.trim()));
@@ -3911,7 +4077,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       <Label className="text-xs font-semibold text-muted-foreground">Tempat</Label>
                       <Input
                         value={formData.request_place}
-                        disabled={Boolean(externalRevision && getRequestCategory() === "unit")}
+                        disabled={Boolean(externalRevision && !externalRevision.requesterEditRequired && getRequestCategory() === "unit")}
                         onChange={e => {
                           const nextValue = e.target.value;
                           setManualPlaceOverride(Boolean(nextValue.trim()));
@@ -3928,7 +4094,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         value: formData.request_date,
                         onChange: (value) => setFormData({ ...formData, request_date: value }),
                         placeholder: "dd/mm/yyyy",
-                        disabled: Boolean(externalRevision && getRequestCategory() === "unit"),
+                        disabled: Boolean(externalRevision && !externalRevision.requesterEditRequired && getRequestCategory() === "unit"),
                       })}
                     </div>
                   </div>
@@ -3949,14 +4115,14 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
               )}
 
-              {externalRevision && getRequestCategory() === "unit" && (
+              {externalRevision && (
                 <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-4">
                   <Label htmlFor="requester-revision-note" className="text-sm font-semibold">Catatan perbaikan pemohon (opsional)</Label>
                   <Textarea
                     id="requester-revision-note"
                     value={String(getFormFieldValue("requester_revision_note") || "")}
                     onChange={(event) => setInputValue("requester_revision_note", event.target.value)}
-                    placeholder="Jelaskan perubahan jumlah unit bila diperlukan"
+                    placeholder="Catatan perbaikan (opsional)"
                     className="min-h-20 resize-y bg-background"
                   />
                 </div>
@@ -4009,7 +4175,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               <Button
                                 type="button"
                                 variant="outline"
-                                disabled={Boolean(externalRevision) || (s.assignee_mode === "requester" && !isSelectableFirstMaker(s))}
+                                disabled={(Boolean(externalRevision) && !isEditableRevisionFinalSigner(s))
+                                  || (isEditableRevisionFinalSigner(s) && revisionCandidates.status !== "ready")
+                                  || (s.assignee_mode === "requester" && !isSelectableFirstMaker(s))}
                                 className="h-10 w-full justify-between bg-muted/20 border-none ring-1 ring-border rounded-lg font-medium text-left"
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
@@ -4039,9 +4207,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                                         key={u.id}
                                         value={u.full_name}
                                         onSelect={() => {
-                                          const ns = [...signers];
-                                          ns[i].user_id = u.id;
-                                          setSigners(ns);
+                                          setSigners(previous => previous.map((signer, index) => index === i ? { ...signer, user_id: u.id } : signer));
                                           setOpenSignerIndex(null);
                                           setSignerSearch(prev => ({ ...prev, [i]: "" }));
                                         }}
@@ -4064,7 +4230,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                           </Popover>
                         </div>
                       </div>
-                      {s.assignee_mode !== "requester" && getEligibleSignerUsersForSigner(s).length === 0 && (
+                      {isEditableRevisionFinalSigner(s) && revisionCandidates.status === "error" && (
+                        <p className="mt-2 w-full text-left text-xs text-destructive" role="alert">Penyetuju revisi gagal dimuat. Muat ulang draft untuk mencoba kembali.</p>
+                      )}
+                      {!externalRevision && s.assignee_mode !== "requester" && getEligibleSignerUsersForSigner(s).length === 0 && (
                         <p className="mt-2 w-full text-left text-xs text-destructive" role="alert">
                           Belum ada kandidat aktif untuk {s.label_jabatan} pada kantor/departemen ini. Hubungi admin sebelum mengirim pengajuan.
                         </p>
@@ -4087,7 +4256,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   )}
                   <Button
                     className="h-12 flex-1 text-base font-semibold disabled:opacity-50"
-                    disabled={isLoading || Boolean(uploadingRequirement) || Boolean(uploadingRecommendationAttachment) || signers.some(s => !s.user_id) || !formData.judul_surat}
+                    disabled={isLoading || !keu10RevisionFinalValid || Boolean(uploadingRequirement) || Boolean(uploadingRecommendationAttachment) || signers.some(s => !s.user_id) || !formData.judul_surat}
                     onClick={handleOpenRegistrationSummary}
                   >
                     {uploadingRequirement || uploadingRecommendationAttachment
@@ -4111,6 +4280,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       submitting={isLoading}
       onOpenChange={setRegistrationSummaryOpen}
       onConfirm={() => void handleSubmit()}
+      revision={externalRevision ? {
+        baseline: externalRevision.baseline,
+        current: {
+          formData,
+          attachments: [
+            ...draftAttachments.filter(file => !isProtectedRevisionAttachment(file)),
+            ...lampiranFiles.map(file => ({ file_name: file.name })),
+            ...Object.entries(initialAttachmentFiles).flatMap(([requirement_key, files]) =>
+              files.map(file => ({ file_name: file.name, requirement_key }))),
+          ],
+        },
+        reason: externalRevision.reason,
+      } : undefined}
     />
     </>
   );

@@ -90,6 +90,7 @@ await assert.rejects(resolveKeu10MasterForm(mockClient(null, databaseError), "us
 const record = (step, role, name, job, signed = true) => ({
   id: `signature-${step}`, step_order: step, role_name: role,
   signer_snapshot: { full_name: name, job_title_display: job },
+  status: signed ? "APPROVED" : "PENDING",
   is_signed: signed, signed_at: signed ? `2026-10-06T0${step}:00:00.000Z` : null,
 });
 const baseSignatures = [

@@ -13,6 +13,7 @@ import type {
   RecommendationMultiDetail,
 } from "@sigap/shared";
 import type { UnitAvailabilityState } from "./unit/unit-availability";
+import type { RequesterRevisionSnapshot, RequesterRevisionAttachment } from "@/lib/requester-revision-summary";
 
 export type UsageCategory = "asset" | "unit" | "non_asset" | "non_unit";
 /** Hanya empat kategori canonical yang didukung. Tidak ada modul generic. */
@@ -36,11 +37,23 @@ export type FormDataSnapshot = {
   project_id: string;
 };
 
+export type RevisionAttachment = RequesterRevisionAttachment & {
+  id?: string;
+  surat_id?: string;
+  requirement_label?: string | null;
+  source_signature_id?: string | null;
+  stage_order?: number;
+};
+
 export type ExternalRevisionContext = {
   eventId: string;
   generation?: number;
   category?: UsageCategory;
   reason?: string;
+  requesterEditRequired?: boolean;
+  baseline?: Omit<RequesterRevisionSnapshot, "attachments"> & { attachments?: readonly RevisionAttachment[] };
+  protectedAttachments?: readonly RevisionAttachment[];
+  policySnapshot?: Record<string, unknown>;
 };
 
 /** Proyek Marison hasil mapping (single source di orchestrator, read-only bagi modul). */

@@ -65,6 +65,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAppDialog } from "@/components/app/AppDialogProvider";
 import { documentOperationKey, useDocumentOpener } from "@/hooks/useDocumentOpener";
 import { getActiveRecommendationDocuments } from "@/components/surat/linked-documents";
@@ -135,9 +136,10 @@ export default function InboxPage() {
   const [kpiFilter, setKpiFilter] = useState("all");
   const [actionFilter, setActionFilter] = useState("all");
   const [taskSwitcherOpen, setTaskSwitcherOpen] = useState(false);
-  const [revisionTarget, setRevisionTarget] = useState("checker");
+  const [revisionTarget, setRevisionTarget] = useState("requester");
   const [revisionDialogItem, setRevisionDialogItem] = useState<any | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
+  const [requesterRevisionMode, setRequesterRevisionMode] = useState<"general" | "items">("general");
   const [keu10RevisionItems, setKeu10RevisionItems] = useState<Keu10SubmissionItem[]>([]);
   const [revisionRows, setRevisionRows] = useState<Array<{
     index: number;
@@ -836,11 +838,11 @@ const handleApprove = async (item: any) => {
 
   const handleReturnToRequester = async (item: any) => {
     const reason = await appDialog.prompt({
-      title: "Kembalikan ke Pemohon?",
+      title: "Minta perbaikan pemohon?",
       description: `Pengajuan "${item.surat_registrasi.judul_surat}" perlu diperbaiki pemohon. Tuliskan item yang perlu diperbaiki beserta alasannya.`,
       label: "Alasan pengembalian",
       placeholder: "Tuliskan alasan yang jelas, minimal 5 karakter...",
-      confirmText: "Kembalikan ke Pemohon",
+      confirmText: "Minta perbaikan",
       cancelText: "Batal",
       multiline: true,
       required: true,
@@ -864,8 +866,9 @@ const handleApprove = async (item: any) => {
         changes: {
           note: reason.trim(),
           requested_by: "verification_inbox",
-          external_submission_revision: true,
-          requester_must_edit: true,
+          requester_edit_required: true,
+          requires_resign: true,
+          restart_step: Number(item.step_order || 1),
           unit_availability_dead_end: true,
         },
       });
@@ -1009,6 +1012,8 @@ const handleApprove = async (item: any) => {
 
   const isKeu10Revision = (item: any) => isKeu10Form(item?.surat_registrasi?.location_snapshot?.form || item?.surat_registrasi?.data_snapshot?.form);
   const canProposeKeu10Correction = (item: any) => isKeu10Revision(item) && item?.role_name === "verifikator";
+  const isRequesterRevision = (item: any) => isKeu10Revision(item) || revisionTarget === "requester";
+  const isGeneralRequesterRevision = (item: any) => isRequesterRevision(item) && requesterRevisionMode === "general";
 
   const getRevisionContext = (item: any) => {
     const input = item?.surat_registrasi?.form_input_data || item?.surat_registrasi?.data_snapshot?.input || {};
@@ -1131,6 +1136,7 @@ const handleApprove = async (item: any) => {
     const context = getRevisionContext(item);
     const requestedUnitCount = getRequestedUnitCount(item);
     setRevisionDialogItem(item);
+    setRequesterRevisionMode("general");
     setRevisionNote(notes[item.id] || "");
     setKeu10RevisionItems(canProposeKeu10Correction(item) ? normalizeKeu10SubmissionItems(rows) : []);
     if (isKeu10Revision(item)) setRevisionTarget("requester");
@@ -1205,7 +1211,8 @@ const handleApprove = async (item: any) => {
 
   const handleReturnForRevision = async (item: any) => {
     const keu10 = isKeu10Revision(item);
-    const proposeKeu10Correction = canProposeKeu10Correction(item);
+    const generalRequesterRevision = isGeneralRequesterRevision(item);
+    const proposeKeu10Correction = !generalRequesterRevision && canProposeKeu10Correction(item);
     const target = keu10 ? "requester" : revisionTarget as "requester" | "checker" | "signer" | "recommendation";
     const targetLabel: Record<string, string> = {
       requester: "pemohon",
@@ -1213,7 +1220,7 @@ const handleApprove = async (item: any) => {
       signer: "signer sebelumnya",
       recommendation: "tim IT/rekomendasi",
     };
-    const itemRevisions = revisionRows
+    const itemRevisions = (generalRequesterRevision ? [] : revisionRows)
       .filter((row) => row.action !== "keep" || row.alasan.trim().length > 0)
       .map((row) => ({
         index: row.index,
@@ -1238,11 +1245,13 @@ const handleApprove = async (item: any) => {
         } : {}),
         alasan: row.alasan.trim(),
       }));
-    if (!keu10 && revisionRows.length > 0 && itemRevisions.length === 0) {
+    if (!generalRequesterRevision && !keu10 && revisionRows.length > 0 && itemRevisions.length === 0) {
       toast.error("Pilih minimal satu item yang perlu diperbaiki, atau isi instruksi perbaikan pada item.");
       return;
     }
-    const note = normalizeRevisionMainNote(!keu10 && revisionRows.length > 0 ? "" : revisionNote, itemRevisions);
+    const note = generalRequesterRevision
+      ? revisionNote.trim()
+      : normalizeRevisionMainNote(!keu10 && revisionRows.length > 0 ? "" : revisionNote, itemRevisions);
     if (note.trim().length < 5) {
       toast.error("Catatan revisi minimal 5 karakter.");
       return;
@@ -1259,7 +1268,7 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
     try {
-      const restartStep = keu10 ? 1 : target === "signer"
+      const restartStep = target === "signer"
         ? Math.max(1, Number(item.step_order || 1) - 1)
         : Number(item.step_order || 1);
       const checkerInputSnapshot = target === "checker" ? buildCheckerInputSnapshot(item) : null;
@@ -1278,9 +1287,11 @@ const handleApprove = async (item: any) => {
           requested_by: "approval_inbox",
           requires_resign: true,
           restart_step: restartStep,
-          ...(proposeKeu10Correction
-            ? { keu10_proposed_input: { items: normalizeKeu10SubmissionItems(keu10RevisionItems) } }
-            : keu10 ? {} : { item_revisions: itemRevisions }),
+          ...(generalRequesterRevision
+            ? { requester_edit_required: true }
+            : proposeKeu10Correction
+            ? { signer_revision_required: true, keu10_proposed_input: { items: normalizeKeu10SubmissionItems(keu10RevisionItems) } }
+            : keu10 ? {} : { item_revisions: itemRevisions, ...(target === "requester" ? { signer_revision_required: true } : {}) }),
           ...(checkerInputSnapshot ? { checker_input_snapshot: checkerInputSnapshot } : {}),
         },
       });
@@ -2865,7 +2876,7 @@ const handleApprove = async (item: any) => {
                         onClick={() => handleReturnToRequester(selectedItem)}
                       >
                         {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                        Kembalikan ke Pemohon
+                        Minta perbaikan
                       </Button>
                     )}
                     <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
@@ -2897,7 +2908,7 @@ const handleApprove = async (item: any) => {
                     <div className="col-span-2 flex min-w-[260px] gap-2">
                       {!isKeu10Revision(selectedItem) && <Select value={revisionTarget} onValueChange={setRevisionTarget}>
                         <SelectTrigger className="h-10 text-xs">
-                          <SelectValue placeholder="Kembalikan ke..." />
+                          <SelectValue placeholder="Tujuan perbaikan" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="requester">Pemohon</SelectItem>
@@ -2908,7 +2919,7 @@ const handleApprove = async (item: any) => {
                       </Select>}
                       <Button variant="outline" className="shrink-0" disabled={processingId === selectedItem.id} onClick={() => openRevisionDialog(selectedItem)}>
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Kembalikan
+                        Perbaikan
                       </Button>
                     </div>
                     <Button variant="destructive" className="sm:min-w-28" disabled={processingId === selectedItem.id} onClick={() => handleReject(selectedItem)}>
@@ -2939,28 +2950,60 @@ const handleApprove = async (item: any) => {
       <Dialog open={Boolean(revisionDialogItem)} onOpenChange={(open) => { if (!open && !processingId) setRevisionDialogItem(null); }}>
         <DialogContent className="flex max-h-[92dvh] max-w-4xl flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Kembalikan proses untuk perbaikan</DialogTitle>
+            <DialogTitle>Perbaikan pengajuan</DialogTitle>
             <DialogDescription>
-              {isKeu10Revision(revisionDialogItem)
-                ? "Pengajuan dikembalikan ke pemohon. Persetujuan dimulai ulang dari Branch Manager."
+              {isGeneralRequesterRevision(revisionDialogItem)
+                  ? "Pemohon melengkapi data atau lampiran melalui Tindak Lanjut. Setelah dikirim ulang, pengajuan kembali ke tahap ini."
                 : "Tandai item yang perlu diubah. Pemohon akan melihat ringkasan perubahan sebelum proses dilanjutkan."}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <div className="space-y-3">
-              {!isKeu10Revision(revisionDialogItem) && <div>
+              {isRequesterRevision(revisionDialogItem) && (
+                <RadioGroup
+                  aria-label="Mode pengembalian"
+                  value={requesterRevisionMode}
+                  onValueChange={(value: "general" | "items") => setRequesterRevisionMode(value)}
+                  className="gap-3 sm:grid-cols-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="general" id="requester-revision-general" />
+                    <Label htmlFor="requester-revision-general">Minta Perbaikan Pemohon</Label>
+                  </div>
+                  {(!isKeu10Revision(revisionDialogItem) || canProposeKeu10Correction(revisionDialogItem)) && (
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="items" id="requester-revision-items" />
+                      <Label htmlFor="requester-revision-items">Revisi oleh Penandatangan</Label>
+                    </div>
+                  )}
+                </RadioGroup>
+              )}
+              {!isGeneralRequesterRevision(revisionDialogItem) && !isKeu10Revision(revisionDialogItem) && <div>
                 <p className="text-sm font-semibold">Perubahan item</p>
                 <p className="text-xs text-muted-foreground">Gunakan jika ada item yang dicoret, dikurangi, atau nilainya disetujui berbeda.</p>
               </div>}
-              {isKeu10Revision(revisionDialogItem) ? (
+              {isGeneralRequesterRevision(revisionDialogItem) ? (
+                <div className="space-y-2">
+                  <Label htmlFor="requester-revision-reason">Alasan pengembalian</Label>
+                  <Textarea
+                    id="requester-revision-reason"
+                    value={revisionNote}
+                    onChange={(event) => setRevisionNote(event.target.value)}
+                    placeholder="Contoh: Lengkapi merek, tipe, ukuran, dan lampiran spesifikasi."
+                    minLength={5}
+                    required
+                    className="min-h-24"
+                  />
+                </div>
+              ) : isKeu10Revision(revisionDialogItem) ? (
                 <div className="space-y-4">
                   {canProposeKeu10Correction(revisionDialogItem) && <Keu10SubmissionEditor value={keu10RevisionItems} onChange={setKeu10RevisionItems} />}
                   <div className="space-y-2">
                     <Label htmlFor="keu10-revision-reason">Alasan pengembalian / koreksi</Label>
                     <Textarea id="keu10-revision-reason" value={revisionNote} onChange={event => setRevisionNote(event.target.value)} minLength={5} required />
                     <p className="text-xs text-muted-foreground">{canProposeKeu10Correction(revisionDialogItem)
-                      ? "Koreksi menunggu konfirmasi pemohon. Setelah diterima, seluruh tahap menandatangani ulang."
-                      : "Pemohon akan menerima alasan perbaikan. Seluruh tahap menandatangani ulang setelah perbaikan diterima."}</p>
+                      ? "Pemohon mengonfirmasi koreksi melalui Tindak Lanjut. Pengajuan kemudian kembali ke tahap ini."
+                      : "Pemohon memperbaiki pengajuan melalui Tindak Lanjut, lalu mengirimnya kembali ke tahap ini."}</p>
                   </div>
                 </div>
               ) : revisionRows.length === 0 ? (
@@ -3055,7 +3098,7 @@ const handleApprove = async (item: any) => {
             </Button>
             <Button type="button" disabled={!revisionDialogItem || processingId === revisionDialogItem?.id} onClick={() => revisionDialogItem && handleReturnForRevision(revisionDialogItem)}>
               {processingId === revisionDialogItem?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Kembalikan proses
+              {isGeneralRequesterRevision(revisionDialogItem) ? "Minta perbaikan" : "Kirim revisi"}
             </Button>
           </DialogFooter>
         </DialogContent>
