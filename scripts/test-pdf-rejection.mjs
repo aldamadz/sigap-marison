@@ -8,7 +8,8 @@ import test from "node:test";
 import { buildPgdDocumentDefinition, isPgdDocument, normalizePgdDocumentData, renderPgdPdf } from "../pgd-pdf-renderer.mjs";
 import { buildKeu1DocumentDefinition, isKeu1Document, normalizeKeu1DocumentData, renderKeu1Pdf } from "../keu1-pdf-renderer.mjs";
 import { buildKeu10DocumentDefinition, isKeu10Document, normalizeKeu10DocumentData, renderKeu10Pdf } from "../keu10-pdf-renderer.mjs";
-import { createPgdJobHandler, createKeu1JobHandler, createKeu10JobHandler } from "../server/pdf-worker-job.mjs";
+import { createPgdJobHandler, createKeu1JobHandler, createKeu10JobHandler, createRecommendationJobHandler } from "../server/pdf-worker-job.mjs";
+import { normalizeRecommendationDocumentData, renderRecommendationPdf, buildRecommendationDocumentDefinition } from "../recommendation-native-pdf.mjs";
 
 const renderers = [
   ["PGD", normalizePgdDocumentData, buildPgdDocumentDefinition, renderPgdPdf],
@@ -235,6 +236,146 @@ test("KEU10 frozen worker: decisions come only from immutable payload, never liv
     if (targetStep === 1) assert.equal(cells[1].text, "");
     else assert.match(cells[1].text, /^DITOLAK SISTEM/);
     assert.deepEqual(payload, original, "rendering never mutates frozen evidence");
+  }
+});
+
+for (const scenario of ["approved", "rejected", "unsigned"]) {
+  test(`Recommendation worker renders explicit ${scenario} decisions in actual PDF`, async (t) => {
+    const rows = signatures(Array(4).fill(scenario === "approved" ? "APPROVED" : scenario === "rejected" ? "REJECTED" : "PENDING"), scenario !== "unsigned");
+    const document = { ...source("RECOMMENDATION"), id: "recommendation" };
+    let captured;
+    const handler = createRecommendationJobHandler({
+      supabase: projectedClient(document, rows), normalizeRecommendationDocumentData,
+      renderRecommendationPdf: async (data, options) => { captured = data; return renderRecommendationPdf(data, options); },
+      downloadStorageFile: () => { throw new Error("No images in this fixture"); },
+    });
+    const buffer = await handler({ surat_id: document.id }, { items: [] });
+    const cells = stampCells(buildRecommendationDocumentDefinition(captured, []));
+    assert.ok(cells.every((cell) => scenario === "unsigned" ? cell.text === ""
+      : cell.text.startsWith(scenario === "approved" ? "DISETUJUI SISTEM" : "DITOLAK SISTEM")));
+    await checkPdf(t, async () => buffer, captured, (text) => {
+      if (scenario === "unsigned") assert.doesNotMatch(text, /(?:DISETUJUI|DITOLAK) SISTEM/);
+      else assert.equal(text.match(scenario === "approved" ? /DISETUJUI SISTEM/g : /DITOLAK SISTEM/g)?.length, 4);
+    });
+  });
+}
+
+const legacyFixture = () => {
+  const document = { ...source("KEU10", "DONE"), id: "legacy", file_path: "native://document/legacy/generation/1" };
+  document.data_snapshot.keu10_generation = 1;
+  const rows = signatures(Array(4).fill("APPROVED")).map((row) => ({ ...row, user_id: `user-${row.step_order}`,
+    file_path_snap: `${document.file_path}/approval/${row.id}` }));
+  const canonical = { ...structuredClone(document), surat_signatures: structuredClone(rows) };
+  const frozenDocument = structuredClone(document);
+  delete frozenDocument.status;
+  delete frozenDocument.file_path;
+  const frozenRows = rows.map(({ status, file_path_snap, ...row }) => row);
+  const payload = { kind: "keu10", generation: 1, document: frozenDocument, signatures: frozenRows };
+  return { canonical, rows, payload, job: { surat_id: document.id, source_file_path: document.file_path, render_payload: payload } };
+};
+
+const legacyClient = (current, versions = []) => ({
+  from(table) {
+    assert.ok(["surat_registrasi", "surat_external_revision_history"].includes(table), "Only canonical version data may hydrate decisions");
+    const response = { data: structuredClone(table === "surat_registrasi" ? current : versions), error: null };
+    const chain = {
+      select(columns) {
+        if (table === "surat_registrasi") assert.ok(columns.includes("surat_signatures(") && columns.includes("status, is_signed"));
+        else assert.equal(columns, "document_snapshot, signatures_snapshot");
+        return chain;
+      },
+      eq(key, value) { assert.equal(value, "legacy"); return chain; },
+      maybeSingle: async () => response,
+      then: (resolve, reject) => Promise.resolve(response).then(resolve, reject),
+    };
+    return chain;
+  },
+});
+const legacyHandler = (client, render = async (data) => data) => createKeu10JobHandler({
+  supabase: client, isKeu10Document, normalizeKeu10DocumentData, renderKeu10Pdf: render,
+});
+
+test("Legacy approved queued KEU10: verified canonical statuses reach real PDF without mutating payload", async (t) => {
+  const fixture = legacyFixture();
+  const original = structuredClone(fixture.payload);
+  let captured;
+  const buffer = await legacyHandler(legacyClient(fixture.canonical), async (data) => {
+    captured = data; return renderKeu10Pdf(data);
+  })(fixture.job);
+  assert.ok(captured.signatures.every((row) => row.status === "APPROVED"));
+  assert.equal(captured.isRejected, false);
+  await checkPdf(t, async () => buffer, captured, (text) => {
+    assert.equal(text.match(/DISETUJUI SISTEM/g)?.length, 4);
+    assert.doesNotMatch(text, /DITOLAK/);
+  });
+  assert.deepEqual(fixture.payload, original);
+});
+
+test("Legacy KEU10: archived canonical version survives later generation/rejection unchanged", async (t) => {
+  const fixture = legacyFixture();
+  const original = structuredClone(fixture.payload);
+  const later = structuredClone(fixture.canonical);
+  later.data_snapshot.keu10_generation = 2;
+  later.status = "REJECTED";
+  later.surat_signatures[0].status = "REJECTED";
+  const history = [{ document_snapshot: fixture.canonical, signatures_snapshot: fixture.rows }];
+  const data = await legacyHandler(legacyClient(later, history))(fixture.job);
+  assert.ok(data.signatures.every((row) => row.status === "APPROVED"));
+  assert.equal(data.isRejected, false);
+  await checkPdf(t, renderKeu10Pdf, data, (text) => {
+    assert.equal(text.match(/DISETUJUI SISTEM/g)?.length, 4);
+    assert.doesNotMatch(text, /DITOLAK/);
+  });
+  assert.deepEqual(fixture.payload, original);
+});
+
+test("Legacy signer snapshot: later rejection in same generation cannot rewrite frozen history", async () => {
+  const fixture = legacyFixture();
+  for (let index = 1; index < 4; index += 1) {
+    fixture.payload.signatures[index].is_signed = false;
+    fixture.payload.signatures[index].signed_at = null;
+  }
+  fixture.canonical.status = "REJECTED";
+  fixture.canonical.file_path += "/rejection/later";
+  fixture.canonical.surat_signatures[1].status = "REJECTED";
+  const job = { ...fixture.job, signature_id: "signature-1", source_file_path: fixture.rows[0].file_path_snap };
+  const original = structuredClone(fixture.payload);
+  const data = await legacyHandler(legacyClient(fixture.canonical))(job);
+  assert.equal(data.isRejected, false);
+  const cells = stampCells(buildKeu10DocumentDefinition(data));
+  assert.match(cells[0].text, /^DISETUJUI SISTEM/);
+  assert.deepEqual(cells.slice(1).map((cell) => cell.text), ["", "", ""]);
+  assert.deepEqual(fixture.payload, original);
+});
+
+test("Legacy rejected snapshot: explicit canonical rejection, not signed flag, supplies decision", async (t) => {
+  const fixture = legacyFixture();
+  fixture.canonical.status = "REJECTED";
+  fixture.canonical.surat_signatures[3].status = "REJECTED";
+  const data = await legacyHandler(legacyClient(fixture.canonical))(fixture.job);
+  assert.equal(data.isRejected, true);
+  await checkPdf(t, renderKeu10Pdf, data, (text) => {
+    assert.match(text, /STATUS DOKUMEN: DITOLAK/);
+    assert.equal(text.match(/DITOLAK SISTEM/g)?.length, 1);
+    assert.equal(text.match(/DISETUJUI SISTEM/g)?.length, 3);
+  });
+});
+
+test("Legacy ambiguous or stale KEU10: fail closed instead of inferring approval", async () => {
+  for (const mutate of [
+    (current) => { delete current.surat_signatures[0].status; },
+    (current) => { current.surat_signatures[0].signed_at = "2026-10-09T01:00:00Z"; },
+    (current) => { current.surat_signatures[0].user_id = "replacement"; },
+    (current) => { current.data_snapshot.keu10_generation = 2; },
+    (current) => { current.form_input_data.items[0].jumlah = 8; },
+    (current) => { current.status = "REJECTED"; },
+    (current) => { current.file_path += "/rejection/later"; },
+  ]) {
+    const fixture = legacyFixture();
+    mutate(fixture.canonical);
+    await assert.rejects(legacyHandler(legacyClient(fixture.canonical), () => {
+      throw new Error("Ambiguous decisions must not reach renderer");
+    })(fixture.job), /lama tidak dapat diverifikasi/);
   }
 });
 
