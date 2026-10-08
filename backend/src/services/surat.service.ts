@@ -21,6 +21,22 @@ const assertQuery = (label: string, result: QueryResult) => {
   return result.data || [];
 };
 
+const loadAllCandidateRows = async (
+  label: string,
+  queryPage: (from: number, to: number) => PromiseLike<QueryResult>,
+): Promise<QueryResult> => {
+  const rows: unknown[] = [];
+  const pageSize = 500;
+  for (let page = 0; page < 100; page += 1) {
+    const result = await queryPage(page * pageSize, (page + 1) * pageSize - 1);
+    const batch = assertQuery(label, result);
+    rows.push(...batch);
+    if (batch.length < pageSize) return { data: rows, error: null };
+  }
+  // Do not return a truncated hierarchy/candidate list as a valid result.
+  return { data: null, error: { message: `Daftar ${label} melebihi batas pemuatan.` } };
+};
+
 const marisonDeploymentEnvironment = String(
   process.env.MARISON_DEPLOYMENT_ENVIRONMENT || "",
 ).trim().toLowerCase();
@@ -163,11 +179,14 @@ export const loadSuratMasterData = async (accessToken: string) => {
   const client = createUserSupabaseClient(accessToken);
   const results = await Promise.all([
     client.from("master_entities").select("*"),
-    client.from("master_offices").select("*"),
+    loadAllCandidateRows("kantor", (from, to) =>
+      client.from("master_offices").select("*").order("id").range(from, to)),
     client.from("master_departments").select("*"),
     client.from("master_letter_types").select("*"),
     client.from("master_dept_letter_types").select("dept_id, letter_type_id, sort_index"),
-    client.from("profiles").select("id, full_name, job_title, department_id, office_id, is_active, deleted_at").eq("is_active", true).order("full_name"),
+    loadAllCandidateRows("pengguna", (from, to) =>
+      client.from("profiles").select("id, full_name, job_title, department_id, office_id, is_active, deleted_at")
+        .eq("is_active", true).is("deleted_at", null).order("full_name").order("id").range(from, to)),
     client.from("master_projects").select("*").order("name"),
     client.from("master_penggunaan_detail").select("*").order("created_at", { ascending: false }),
   ]);
