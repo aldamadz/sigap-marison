@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/dynamic_branch_reporting.*\.sql$|test-dynamic-branch-reporting-sql\.mjs$/u.test(file)) gates.add("dynamic-branch-reporting-sql");
   if (/requester.*(revision|correction|follow_up_sla).*\.sql$|test-requester-revision|pdf_approval_decision_status.*\.sql$/u.test(file)) gates.add("test:requester-revision-sql");
   if (/document-revision-notes\.mjs$|test-requester-revision-pdf\.mjs$|signer-revision-preview/u.test(file)) gates.add("test:requester-revision-pdf");
   if (/test-pdf-rejection\.mjs$|pdf_approval_decision_status\.sql$/.test(file)) gates.add("test:pdf-rejection");
@@ -121,4 +122,7 @@ for (const file of allChangedFiles) {
   if (/work.calendar.bootstrap.*\.sql$|test-work-calendar-bootstrap-sql\.mjs$/u.test(file)) gates.add("test:work-calendar-bootstrap-sql");
 }
 
-for (const gate of gates) run(npm, ["run", gate]);
+for (const gate of gates) {
+  if (gate === "dynamic-branch-reporting-sql") run("node", ["scripts/test-dynamic-branch-reporting-sql.mjs"]);
+  else run(npm, ["run", gate]);
+}
