@@ -98,6 +98,7 @@ describe("registration draft historical usage", () => {
     const result = await suratService.getRegistrationDraft(draft.id);
     expect(result.revision_context).toMatchObject({
       eventId: draft.revision_event_id, reason: "Lengkapi spesifikasi dan lampiran.",
+      requesterEditRequired: "requester_edit_required" in changes,
     });
     expect(result.usage_configuration).toBe(archivedUsage);
   });
@@ -125,6 +126,7 @@ describe("registration draft historical usage", () => {
     const usageQuery = createUsageQuery();
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === "surat_registration_drafts") return draftQuery;
+      if (table === "surat_revision_events") return createRevisionQuery();
       if (table === "form_usages") return usageQuery;
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -132,6 +134,12 @@ describe("registration draft historical usage", () => {
     const result = await suratService.getRegistrationDraft(draft.id);
 
     expect(result.usage_configuration).toBe(archivedUsage);
+    expect(result.revision_context).toEqual({
+      eventId: draft.revision_event_id,
+      generation: 2,
+      reason: "Perbaiki jumlah unit.",
+      requesterEditRequired: false,
+    });
     expect(usageQuery.eq).toHaveBeenCalledTimes(1);
     expect(usageQuery.eq).toHaveBeenCalledWith("id", archivedUsage.id);
     expect(usageQuery.eq).not.toHaveBeenCalledWith("status", "active");
@@ -143,6 +151,7 @@ describe("registration draft historical usage", () => {
     const usageQuery = createUsageQuery({ data: archivedUsage, error: usageError });
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === "surat_registration_drafts") return draftQuery;
+      if (table === "surat_revision_events") return createRevisionQuery();
       if (table === "form_usages") return usageQuery;
       throw new Error(`Unexpected table: ${table}`);
     });

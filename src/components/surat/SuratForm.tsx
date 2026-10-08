@@ -1575,7 +1575,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       return;
     }
     const restoredLinkedContext = payload.linkedDocumentContext as LinkedDocumentContext | undefined;
-    const restoredExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
+    const storedExternalRevision = payload.externalRevision as ExternalRevisionContext | undefined;
+    const restoredExternalRevision = draftToRestore.revision_context
+      ? {
+          ...(storedExternalRevision?.eventId === draftToRestore.revision_context.eventId
+            ? storedExternalRevision : {}),
+          ...draftToRestore.revision_context,
+        }
+      : (draftToRestore.revision_event_id
+        ? storedExternalRevision?.eventId === draftToRestore.revision_event_id
+          ? storedExternalRevision
+          : { eventId: draftToRestore.revision_event_id }
+        : storedExternalRevision);
     const opensUnitRevisionContext = Boolean(
       restoredExternalRevision?.eventId && restoredInput.request_category === "unit",
     );
