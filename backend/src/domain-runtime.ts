@@ -2455,12 +2455,12 @@ const marisonSyncRuntime = createMarisonSyncRuntime({
 });
 
 const assertAdminUserServiceAvailable = () => {
-  if (!adminSupabase) {
+  if (!supabase) {
     const err = new Error("Layanan admin user belum dikonfigurasi di server.");
     err.status = 503;
     throw err;
   }
-  return adminSupabase;
+  return supabase;
 };
 
 const adminUserRuntime = createAdminUserRuntime({

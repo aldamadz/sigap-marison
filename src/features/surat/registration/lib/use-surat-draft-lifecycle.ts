@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
 import type { SuratRegistrationDraft } from "@/services/surat.service";
+import { assertDraftRequesterLocation, type DraftRequesterProfile } from "./draft-requester-location";
 
 export type ToastFn = (args: {
   variant?: "default" | "destructive";
@@ -15,7 +16,7 @@ export type SetSearchParams = (
 
 export type UseSuratDraftLifecycleParams = {
   /** Current profile signal — the URL→fetch effect waits until profile exists. */
-  currentProfile: { id: string } | null | undefined;
+  currentProfile: DraftRequesterProfile | null | undefined;
   /** Admin view opens the multi-draft modal; non-admin gets auto-pick when only one draft exists. */
   isCurrentUserAdmin: boolean;
   /** react-router URLSearchParams (read-only access by the hook). */
@@ -54,8 +55,7 @@ export type UseSuratDraftLifecycleResult = {
  *      a hydrate, auto-picks the only available draft for non-admins, or
  *      toasts on failure.
  *
- * Pass D refactor: behaviour-preserving extraction only. Every guard, every
- * toast, every setSearchParams call is copied verbatim from SuratForm.tsx.
+ * Ordinary drafts must match the current requester location before hydration.
  * The hydrate effect stays in the component because it writes 12+ form-state
  * setters; it consumes `draftToRestore` from the hook and clears it via the
  * exposed setter.
@@ -87,6 +87,7 @@ export const useSuratDraftLifecycle = (
     if (!currentProfile) return;
     let cancelled = false;
     const draftId = searchParams.get("draft");
+    setDraftToRestore(null);
     setDraftLoading(Boolean(draftId));
 
     Promise.all([
@@ -96,10 +97,16 @@ export const useSuratDraftLifecycle = (
       .then(([drafts, requestedDraft]) => {
         if (cancelled) return;
         if (requestedDraft) {
+          assertDraftRequesterLocation(requestedDraft, currentProfile, isCurrentUserAdmin);
           setDraftToRestore(requestedDraft);
           return;
         }
         if (!draftId && !isCurrentUserAdmin && drafts.length === 1) {
+          try {
+            assertDraftRequesterLocation(drafts[0], currentProfile, false);
+          } catch {
+            return;
+          }
           setSearchParams({ draft: drafts[0].id }, { replace: true });
         }
       })

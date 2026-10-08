@@ -30,4 +30,17 @@ describe("related Branch Manager candidates", () => {
       { id: "b", kedudukan: "KCP", parent_id: "a" },
     ])).toBe(false);
   });
+  it("uses the nearest KC through multiple KCP parents, never a sibling or headquarters BM", () => {
+    const nested = [...offices, { id: "deep", kedudukan: "KCP", parent_id: "kcp" }];
+    expect(isRelatedBranchManager(bm, "deep", nested)).toBe(true);
+    expect(isRelatedBranchManager({ ...bm, office_id: "other" }, "deep", nested)).toBe(false);
+    expect(isRelatedBranchManager({ ...bm, office_id: "hq" }, "deep", nested)).toBe(false);
+    expect(isRelatedBranchManager({ ...bm, office_id: "kcp" }, "deep", nested)).toBe(false);
+  });
+  it("rejects unknown activity and unknown, orphaned or headquarters-crossing ancestry", () => {
+    expect(isRelatedBranchManager({ ...bm, is_active: undefined }, "kcp", offices)).toBe(false);
+    expect(isRelatedBranchManager(bm, "a", [...offices, { id: "a", parent_id: "kc" }])).toBe(false);
+    expect(isRelatedBranchManager(bm, "a", [...offices, { id: "a", kedudukan: "KCP", parent_id: "missing" }])).toBe(false);
+    expect(isRelatedBranchManager(bm, "hq", offices.map(o => o.id === "hq" ? { ...o, parent_id: "kc" } : o))).toBe(false);
+  });
 });

@@ -23,14 +23,14 @@ export function getRelatedBranchOfficeId(offices: readonly MakerOffice[], office
     seen.add(current.id);
     const scope = current.kedudukan?.trim().toLowerCase();
     if (scope === "kc") return current.id;
-    if (scope === "pusat") return null;
+    if (scope !== "kcp" && scope !== "kost") return null;
     current = current.parent_id ? byId.get(current.parent_id) : undefined;
   }
   return null;
 }
 
 export function isFirstMakerCandidate(user: MakerCandidate, context: MakerContext): boolean {
-  if (!user.id || user.is_active === false || user.deleted_at || !context.requesterId) return false;
+  if (!user.id || user.is_active !== true || user.deleted_at || !context.requesterId) return false;
   if (user.id === context.requesterId) return true;
   const title = user.job_title || "";
   if (/(^|[^a-z0-9])(spv|supervisor)([^a-z0-9]|$)/i.test(title)) {
