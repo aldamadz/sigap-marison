@@ -1,0 +1,42 @@
+services:
+  agenda-external-api-staging:
+    build:
+      context: ./external-api
+      dockerfile: Dockerfile
+      args:
+        EXTERNAL_API_PUBLIC_URL: https://external.marison-testing.biz.id
+        GIT_SHA: ${DEPLOY_GIT_SHA:-unknown}
+    image: agenda-flow-external-api:staging
+    container_name: agenda-flow-external-api-staging
+    restart: always
+    ports:
+      - "127.0.0.1:3021:80"
+    environment:
+      NODE_ENV: production
+      PORT: "80"
+      SUPABASE_URL: "${SUPABASE_URL:?set staging SUPABASE_URL}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:?set staging SUPABASE_SERVICE_ROLE_KEY}"
+      EXTERNAL_API_PUBLIC_URL: https://external.marison-testing.biz.id
+      APP_PUBLIC_URL: https://sigap.marison-testing.biz.id
+      SUBMISSION_DECISIONS_API_TOKEN: "${SUBMISSION_DECISIONS_API_TOKEN:?set staging SUBMISSION_DECISIONS_API_TOKEN}"
+      STORAGE_MODE: "${STORAGE_MODE:?set staging STORAGE_MODE}"
+      STORAGE_SUPABASE_URL: "${STORAGE_SUPABASE_URL:?set staging STORAGE_SUPABASE_URL}"
+      STORAGE_SUPABASE_SERVICE_ROLE_KEY: "${STORAGE_SUPABASE_SERVICE_ROLE_KEY:?set staging STORAGE_SUPABASE_SERVICE_ROLE_KEY}"
+      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:?set staging STORAGE_PUBLIC_BASE_URL}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

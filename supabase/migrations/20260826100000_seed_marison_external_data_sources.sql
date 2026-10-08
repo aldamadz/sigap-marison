@@ -88,4 +88,3 @@ set
   value_path = excluded.value_path,
   label_path = excluded.label_path,
   is_active = excluded.is_active;
-

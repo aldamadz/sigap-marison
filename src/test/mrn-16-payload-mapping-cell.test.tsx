@@ -122,9 +122,9 @@ describe('MRN-16 override cell', () => {
     expect(screen.getByRole('img', { name: 'Siap dikirim' })).toBeInTheDocument();
   });
 
-  it('debounces a project catalog request and scopes it to the effective branch', async () => {
+  it('finds a mapped project in another office and shows its office', async () => {
     vi.mocked(marisonPayloadMappingService.catalog).mockResolvedValue([
-      { id: 'project-target', name: 'Proyek Mirror', external_id: 25, branch_id: 12, valid: true },
+      { id: 'project-target', name: 'Sragen Test', office_name: 'Kantor Cabang Magelang', external_id: 23, branch_id: 2, valid: true },
     ]);
     render(
       <AppDialogProvider>
@@ -134,15 +134,14 @@ describe('MRN-16 override cell', () => {
           source={null}
           sourceValid={false}
           mappingValid={false}
-          effectiveBranchId={12}
           field="project"
           override={null}
           onChanged={vi.fn()}
         />
       </AppDialogProvider>,
     );
-    fireEvent.change(screen.getByLabelText('Cari pemetaan manual project'), { target: { value: 'Proyek' } });
-    await waitFor(() => expect(marisonPayloadMappingService.catalog).toHaveBeenCalledWith('project', 'Proyek', 12), { timeout: 1000 });
-    expect(await screen.findByRole('button', { name: /proyek mirror/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Cari pemetaan manual project'), { target: { value: 'Sragen' } });
+    await waitFor(() => expect(marisonPayloadMappingService.catalog).toHaveBeenCalledWith('project', 'Sragen', null), { timeout: 1000 });
+    expect(await screen.findByRole('button', { name: /Sragen Test - ID 23 \/ Kantor Cabang Magelang/i })).toBeInTheDocument();
   });
 });

@@ -77,10 +77,9 @@ const isProjectUsable = (project: StagingProjectReadinessProject | null): boolea
  * `resolveMarisonEffectiveProjectBranch` (+validasi effective branch/project):
  *
  * 1. Proyek terpilih = target mapping staging bila valid, else sumber langsung.
- * 2. Branch efektif = branch mapping office (staging) bila ada, else branch
- *    kantor proyek terpilih.
- * 3. Branch efektif harus cocok dengan branch kantor proyek terpilih
- *    ("Effective project dan branch outbound tidak cocok").
+ * 2. Mapping proyek memakai branch proyek tujuan, termasuk jika kantor SIGAP
+ *    pemohon berbeda. Proyek langsung tetap menghormati mapping kantor staging.
+ * 3. Branch efektif harus cocok dengan branch proyek yang akan dikirim.
  * 4. Branch efektif harus terdaftar sebagai kantor yang ter-sync.
  */
 export const resolveStagingProjectReadiness = (
@@ -93,7 +92,9 @@ export const resolveStagingProjectReadiness = (
   if (!chosen) return { ready: false, projectId: null, branchId: null, branchSource: null };
 
   const projectBranchId = Number(chosen.officeBranchId);
-  const branchId = officeMappingBranchId !== null ? Number(officeMappingBranchId) : projectBranchId;
+  const branchId = mapped
+    ? projectBranchId
+    : officeMappingBranchId !== null ? Number(officeMappingBranchId) : projectBranchId;
   const branchMatchesProjectOffice = branchId === projectBranchId;
   const branchExistsSynced = typeof effectiveBranchExistsSynced === "function"
     ? effectiveBranchExistsSynced(branchId)
