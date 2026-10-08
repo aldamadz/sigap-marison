@@ -48,7 +48,7 @@ const run = (args, input = "") => {
   return result.stdout;
 };
 const container = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
-const psql = ["exec", "-i", container, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"];
+const psql = ["exec", "-i", container, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"];
 const concurrent = sql => new Promise((resolve, reject) => {
   const child = spawn("docker", psql, { stdio: ["pipe", "pipe", "pipe"] });
   let output = "";
@@ -61,7 +61,7 @@ const concurrent = sql => new Promise((resolve, reject) => {
 try {
   let ready = false;
   for (let n = 0; n < 40 && !ready; n += 1) {
-    ready = spawnSync("docker", ["exec", container, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
+    ready = spawnSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], { encoding: "utf8" }).status === 0;
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
   }
   if (!ready) throw new Error("Disposable PostgreSQL not ready");
