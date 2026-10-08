@@ -3,10 +3,13 @@
 ## ORG-01 Dynamic Branch Reporting (2026-10-08, Issue #499)
 
 - Candidate `fix/dynamic-office-reporting-01` from main; initial target staging.
-- Branch/KCP employees report directly to the single active BM of their KC.
+- Branch/KCP employees follow active officer priority BM > Assistant BM > SPV.
+  Equal-rank officers never report to one another; unique SPV may supervise the
+  office, while multiple SPVs require a unique department match. KCP first uses
+  related KC BM, then own-office lower officers or the related KC fallback.
   Canonical `profiles.parent_id` is recalculated on profile or office topology writes,
   including transfers, BM replacement and deactivation; sync cannot restore a stale ID.
-- Missing/ambiguous BM or broken/cyclic ancestry clears the relationship fail-closed.
+- Missing/ambiguous officers or broken/cyclic ancestry clear the relationship fail-closed.
   HQ, BM and director configured relationships remain unchanged. Leaving a branch
   clears its old automatic BM relation rather than carrying it into headquarters.
 - Forward migrations `20261008140000` and `20261008150000` audit parent changes
@@ -15,6 +18,14 @@
   public endpoint or realtime publication. Historical documents/signatures stay intact.
 - Real PostgreSQL tests and changed UI/admin tests precede staging acceptance.
   Production application requires selected release, not a manual per-user patch.
+- Forward migration `20261008160000` adds officer fallback and department-sensitive
+  refresh. Ambiguous cross-department SPVs do not become arbitrary reporting parents.
+- Forward migration `20261008170000` separates contextual maker from branch review:
+  maker offers requester, local SPVs and department Assistant Managers, not another BM.
+  Normal branch BM stages use related KC BM > Assistant BM > SPV, matching department
+  first; unmatched departments may choose among SPVs. Strict KEU 10 BM makers and
+  configured UJI STAGING tester workflows are not broadened. Signature inserts and
+  reassignments enforce the same candidate rule in PostgreSQL; existing identities stay intact.
 
 ## Selected Production Release SUR-22 / SUR-23 / ADM-01 (2026-10-08)
 

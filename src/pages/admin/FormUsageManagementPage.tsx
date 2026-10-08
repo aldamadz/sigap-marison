@@ -51,7 +51,7 @@ type RouteStep = {
   input_schema: CheckerInputSchema;
   candidate_scope: CandidateScope;
   skip_if_no_candidate: boolean;
-  candidate_fallback_mode: "request_office_all" | "related_branch_manager" | null;
+  candidate_fallback_mode: "request_office_all" | "related_branch_manager" | "related_branch_officer" | null;
   signer_department_id: string;
   verifier_department_id: string;
   verifier_scope: "request_office" | "head_office" | "all_offices";
@@ -1214,12 +1214,14 @@ export default function FormUsageManagementPage() {
                                     disabled={step.candidate_scope !== "request_office"}
                                     onValueChange={value => updateStep(index, {
                                       candidate_fallback_mode: value === "related_branch_manager" ? "related_branch_manager"
+                                        : value === "related_branch_officer" ? "related_branch_officer"
                                         : value === "request_office_all" ? "request_office_all" : null,
                                     })}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="configured">Kandidat terkonfigurasi saja</SelectItem>
                                       <SelectItem value="related_branch_manager">Branch Manager KC terkait saja</SelectItem>
+                                      <SelectItem value="related_branch_officer">BM terkait, lalu Assistant BM / SPV</SelectItem>
                                       <SelectItem value="request_office_all">Semua karyawan jika kandidat kosong</SelectItem>
                                     </SelectContent>
                                   </Select>

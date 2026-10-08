@@ -39,7 +39,7 @@ describe('branch reporting edit UI', () => {
     render(<EditUserModal user={user} allUsers={[]} isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(4));
     await chooseOffice('KC Magelang');
-    expect(screen.getByRole('textbox', { name: 'Atasan Langsung Otomatis' })).toHaveValue('BM KC terkait (otomatis)');
+    expect(screen.getByRole('textbox', { name: 'Atasan Langsung Otomatis' })).toHaveValue('Atasan kantor (otomatis)');
     expect(screen.getByRole('textbox', { name: 'Atasan Langsung Otomatis' })).toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: 'Simpan Perubahan' }));
     await waitFor(() => expect(save).toHaveBeenCalledWith('employee', expect.objectContaining({ office_id: 'branch', parent_id: null })));

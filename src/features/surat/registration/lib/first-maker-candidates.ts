@@ -36,10 +36,6 @@ export function isFirstMakerCandidate(user: MakerCandidate, context: MakerContex
   if (/(^|[^a-z0-9])(spv|supervisor)([^a-z0-9]|$)/i.test(title)) {
     return Boolean(context.officeId) && user.office_id === context.officeId;
   }
-  if (/^(branch\s+manager|bm)$/i.test(title.trim())) {
-    const branchId = getRelatedBranchOfficeId(context.offices, context.officeId);
-    return Boolean(branchId) && user.office_id === branchId;
-  }
   if (/^(asisten|assistant)\s+(manager|mgr\.?)([^a-z0-9]|$)/i.test(title.trim())) {
     return Boolean(context.departmentId) && user.department_id === context.departmentId;
   }
