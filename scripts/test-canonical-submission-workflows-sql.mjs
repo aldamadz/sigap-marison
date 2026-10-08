@@ -349,15 +349,17 @@ ${officerAssertions}
 ${fundChecklistSql}
 `;
 
-const run = (args, input = "") => {
+const run = (args, input = "", stdoutOnly = false) => {
   const result = spawnSync("docker", args, { input, encoding: "utf8", timeout: 180_000 });
   if (result.status !== 0) {
     throw new Error(`docker ${args.join(" ")} exited ${result.status}\n${result.stderr || ""}\n${result.stdout || ""}`);
   }
-  return `${result.stdout || ""}\n${result.stderr || ""}`;
+  return stdoutOnly ? result.stdout : `${result.stdout || ""}\n${result.stderr || ""}`;
 };
 
-const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
+// Docker image-download progress is stderr, not part of the container identifier.
+const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"], "", true).trim();
+if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error("Docker returned an invalid disposable container ID.");
 try {
   let ready = false;
   for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {
