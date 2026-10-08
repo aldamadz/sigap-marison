@@ -38,6 +38,7 @@ export async function getChildUsers(parentId: string): Promise<ChildUser[]> {
   if (!data) return [];
 
   const result: ChildUser[] = [];
+  const visited = new Set<string>([parentId]);
 
   /**
    * 2. Fungsi Rekursif untuk membangun daftar flat
@@ -48,6 +49,8 @@ export async function getChildUsers(parentId: string): Promise<ChildUser[]> {
     const children = data.filter(p => p.parent_id === currentParentId);
     
     children.forEach(child => {
+      if (visited.has(child.id)) return;
+      visited.add(child.id);
       // Menggunakan \u00A0 (Non-Breaking Space) agar indentasi muncul di dropdown HTML
       const indentation = "\u00A0\u00A0".repeat(level);
       const prefix = level > 0 ? "↳ " : "";
