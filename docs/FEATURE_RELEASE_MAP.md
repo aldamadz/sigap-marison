@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## Selected Production Release SUR-22 / SUR-23 / ADM-01 (2026-10-08)
+
+- Authorized production candidate `release/requester-corrections-production-20261008`
+  from `main`, selecting PRs #492, #493 and #494 with their corrective commits.
+- Retain deployed Proxmox session hotfix `9184d0e` and its original ancestry.
+- Include only migrations `20261008100000`, `20261008110000`, `20261008120000`.
+  Staging fixtures, requester RAB choice and unrelated staging changes are excluded.
+- Staging browser acceptance passed requester editing with item quantity unchanged,
+  attachment replacement after reload, signer proposal 5 to 3, same-number resumption
+  and a rejected PDF stamp. Production uses Proxmox LXC 104 for the application;
+  PDF, sync and outbound workers remain on Ubuntu. Coordinate only the PDF worker
+  with the application release and keep the previous images for rollback.
+- Read-only production audit finds Fatchul Aziz already in KC MAGELANG with external
+  employee ID 198 and no owned drafts/documents. No profile correction is necessary;
+  requester office guards prevent a conflicting form/draft context being submitted.
+- Live production acceptance and exact runtime SHA are recorded in the release PR.
+
 ## OPS-06 Production Session Query Pressure Hotfix (2026-10-07)
 
 - Branch `hotfix/production-session-query-pressure` from production `main`;
