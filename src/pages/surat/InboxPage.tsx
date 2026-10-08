@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { effectiveFundRabRequirements, hasRequesterRab } from "@/lib/fund-rab";
 import { ApprovalAttachmentPicker } from "@/features/surat/inbox/components/ApprovalAttachmentPicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
@@ -520,10 +521,15 @@ export default function InboxPage() {
     };
   };
 
-  const getApprovalAttachmentRequirements = (item: any) =>
-    Array.isArray(item.attachment_requirements_snapshot)
+  const getApprovalAttachmentRequirements = (item: any) => {
+    const surat = item.surat_registrasi || {};
+    const input = surat.form_input_data || {};
+    const form = surat.location_snapshot?.form || surat.data_snapshot?.form;
+    return effectiveFundRabRequirements(Array.isArray(item.attachment_requirements_snapshot)
       ? item.attachment_requirements_snapshot
-      : [];
+      : [], item.role_name === "memeriksa" && usesFundSubmissionType(form, input.request_category) && /perencanaan/i.test(item.label_jabatan || ""),
+      input, surat.surat_attachments || []);
+  };
 
   const getSelectedApprovalFiles = (item: any) =>
     withOptionalVerifierAttachmentRequirement(getApprovalAttachmentRequirements(item), isVerificationTask(item)).flatMap((requirement: any) =>
@@ -1583,7 +1589,7 @@ const handleApprove = async (item: any) => {
         )}
         {(extraFields.length > 0 || input.catatan) && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {extraFields.map(([key, value]) => <div key={key} className="rounded-lg border border-border bg-muted/10 p-3"><p className="text-xs font-medium text-muted-foreground">{key === "fund_type" ? "Jenis Pengajuan Dana" : humanizeInputKey(key)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{key === "fund_type" ? getFundSubmissionTypeLabel(value) : formatSummaryValue(value)}</p></div>)}
+            {extraFields.map(([key, value]) => <div key={key} className="rounded-lg border border-border bg-muted/10 p-3"><p className="text-xs font-medium text-muted-foreground">{key === "requester_has_rab" ? "RAB" : key === "fund_type" ? "Jenis Pengajuan Dana" : humanizeInputKey(key)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{key === "requester_has_rab" ? value === true ? "Dari pemohon" : "Dari tim pemeriksa Perencanaan" : key === "fund_type" ? getFundSubmissionTypeLabel(value) : formatSummaryValue(value)}</p></div>)}
             {input.catatan && <div className="rounded-lg border border-border bg-muted/10 p-3 sm:col-span-2"><p className="text-xs font-medium text-muted-foreground">Catatan pemohon</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{formatSummaryValue(input.catatan)}</p></div>}
           </div>
         )}
@@ -2013,6 +2019,10 @@ const handleApprove = async (item: any) => {
       <section className={cn("sigap-panel", missing.length ? "border-amber-500/30" : "border-emerald-500/30")}>
         <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><FileUp className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(item) ? "Lampiran pemeriksaan" : "Lampiran approval"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(item) ? "Tambahkan bukti pemeriksaan bila diperlukan." : "Persyaratan khusus tahap tanda tangan ini."}</p></div></div>{isUploading && <Badge><Loader2 className="mr-1 h-3 w-3 animate-spin" />Mengunggah</Badge>}</div>
         <div className="space-y-2">
+          {getApprovalAttachmentRequirements(item).some((rule: { requirement_key: string }) => rule.requirement_key === "rab")
+            && hasRequesterRab(item.surat_registrasi?.form_input_data || {}, item.surat_registrasi?.surat_attachments || []) && (
+            <p className="text-sm text-muted-foreground">RAB sudah dilampirkan pemohon. Tidak perlu mengunggah RAB lagi.</p>
+          )}
           {requirements.map((requirement: any) => {
             const key = requirement.requirement_key;
             const files = approvalFiles[item.id]?.[key] || [];

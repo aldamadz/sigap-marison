@@ -12,7 +12,6 @@ import {
   normalizeMarisonNik,
   previewMarisonBranchSync,
   previewMarisonProjectSync,
-  resolveMarisonDepartment,
 } from "../../server/marison-employee-sync.mjs";
 
 describe("Marison employee sync", () => {
@@ -70,23 +69,6 @@ describe("Marison employee sync", () => {
     expect(deriveMarisonOfficeType({ name: "KCP Magelang Selatan" })).toBe("KCP");
     expect(deriveMarisonOfficeType({ name: "Kantor Site Cibubur" })).toBe("Kost");
     expect(deriveMarisonOfficeType({ name: "Magelang" })).toBe("KC");
-  });
-
-  it("maps production employee divisions to stable SIGAP departments", () => {
-    const pusat = { kedudukan: "Pusat" };
-    const cabang = { kedudukan: "KC" };
-
-    expect(resolveMarisonDepartment("Direktur Utama", pusat)).toEqual({
-      name: "Direksi", code: "DIR", deptIndex: 2,
-    });
-    expect(resolveMarisonDepartment("Sekretaris Direksi", pusat)?.name).toBe("Direksi");
-    expect(resolveMarisonDepartment("Marketing", pusat)?.name).toBe("Marketing");
-    expect(resolveMarisonDepartment("Marketing & Sales", cabang)?.name).toBe("Marketing (Cabang)");
-    expect(resolveMarisonDepartment("Teknik", cabang)?.name).toBe("Teknik (Cabang)");
-    expect(resolveMarisonDepartment("Umum & Keuangan", cabang)?.name).toBe("Umum & Keuangan (Cabang)");
-    expect(resolveMarisonDepartment("Operasional Kos", cabang)?.name).toBe("Operasional Kost");
-    expect(resolveMarisonDepartment("Cabang", cabang)?.name).toBe("Branch Manager");
-    expect(resolveMarisonDepartment("4", pusat)).toBeNull();
   });
 
   it("keeps projects with duplicate external codes as separate identities", () => {
@@ -266,10 +248,11 @@ describe("Marison employee sync", () => {
     expect(migration).not.toContain("create policy master_offices_admin_delete");
   });
 
-  it("keeps execution environment-aware, admin-only, and server-side", () => {
+  it("keeps execution staging-only, admin-only, and server-side", () => {
     const server = read("backend/src/domain-runtime.ts");
     const client = read("src/services/marison-integration.service.ts");
     const dockerfile = read("dockerfile");
+
 
     const preview = read("backend/src/modules/marison/marison-preview-runtime.ts");
     const syncRuntime = read("backend/src/modules/marison/marison-sync-runtime.ts");

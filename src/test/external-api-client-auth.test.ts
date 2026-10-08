@@ -70,6 +70,19 @@ describe("external API client credential request signing", () => {
     expect(migration).toContain("submission:decide");
   });
 
+  it("isolates the staging external API from the production container and database", () => {
+    const compose = readFileSync(join(process.cwd(), "docker-compose.external.staging.yml"), "utf8");
+
+    expect(compose).toContain("container_name: agenda-flow-external-api-staging");
+    expect(compose).toContain("127.0.0.1:3021:80");
+    expect(compose).toContain("SUPABASE_URL: \"${SUPABASE_URL:?set staging SUPABASE_URL}\"");
+    expect(compose).toContain("SUPABASE_SERVICE_ROLE_KEY: \"${SUPABASE_SERVICE_ROLE_KEY:?set staging SUPABASE_SERVICE_ROLE_KEY}\"");
+    expect(compose).toContain("EXTERNAL_API_PUBLIC_URL: https://external.marison-testing.biz.id");
+    expect(compose).toContain("APP_PUBLIC_URL: https://sigap.marison-testing.biz.id");
+    expect(compose).not.toContain("xuhyodtmgwteyslhrkfx");
+    expect(compose).not.toContain("external.marisoncloud.com");
+  });
+
   it("only activates external clients with credentials and an explicit scope", () => {
     const migration = readFileSync(
       join(process.cwd(), "supabase", "migrations", "20260821143000_external_api_enable_scoped_clients.sql"),

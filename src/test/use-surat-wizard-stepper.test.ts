@@ -11,9 +11,9 @@ describe("useSuratWizardStepper pure unit tests", () => {
 
   it("2. next: 1 -> 2 -> 3 and clamps at 3 (when draft allows)", () => {
     const { result } = renderHook(() => useSuratWizardStepper(true, true, true));
-
+    
     expect(result.current.currentStep).toBe(WIZARD_STEP_LOKASI);
-
+    
     act(() => result.current.goToNextStep());
     expect(result.current.currentStep).toBe(WIZARD_STEP_BERKAS);
 
@@ -26,7 +26,7 @@ describe("useSuratWizardStepper pure unit tests", () => {
 
   it("3. previous: 3 -> 2 -> 1 and clamps at 1", () => {
     const { result } = renderHook(() => useSuratWizardStepper(true, true, true));
-
+    
     act(() => result.current.goToStep(WIZARD_STEP_SIGNERS));
     expect(result.current.currentStep).toBe(WIZARD_STEP_SIGNERS);
 
@@ -43,7 +43,7 @@ describe("useSuratWizardStepper pure unit tests", () => {
   it("4. direct navigation follows canGoToStep (blocked if no draft)", () => {
     // No draft -> blocked from reaching step 2/3
     const { result } = renderHook(() => useSuratWizardStepper(true, false, false));
-
+    
     act(() => result.current.goToStep(WIZARD_STEP_BERKAS));
     expect(result.current.currentStep).toBe(WIZARD_STEP_LOKASI);
 
@@ -54,7 +54,7 @@ describe("useSuratWizardStepper pure unit tests", () => {
 
   it("5. reset form brings wizard back to step 1", () => {
     const { result } = renderHook(() => useSuratWizardStepper(true, true, true));
-
+    
     act(() => result.current.goToStep(WIZARD_STEP_BERKAS));
     expect(result.current.currentStep).toBe(WIZARD_STEP_BERKAS);
 

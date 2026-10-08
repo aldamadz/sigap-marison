@@ -3,6 +3,8 @@ import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { effectiveFundRabRequirements, hasRequesterRab, withRequesterRabRequirement } from "@/lib/fund-rab";
+import { usesFundSubmissionType } from "@/features/surat/registration/usages/fund/fund-types";
 import {
   buildRegistrationAttachmentRows,
   classifyRegistrationDraftAttachments,
@@ -96,6 +98,11 @@ export interface SuratRegistrationDraft {
   updated_at: string;
   surat_registration_draft_files?: SuratRegistrationDraftFile[];
   usage_configuration?: UsageDetailRecord | null;
+  revision_context?: {
+    eventId: string;
+    generation?: number;
+    reason?: string;
+  } | null;
 }
 
 export interface RecommendationTask {
@@ -375,6 +382,25 @@ export const suratService = {
       .single();
     if (error) throw error;
     const draft = data as SuratRegistrationDraft;
+    if (draft.revision_event_id) {
+      const { data: event, error: eventError } = await supabase
+        .from("surat_revision_events")
+        .select("id, status, target_type, reason, changes")
+        .eq("id", draft.revision_event_id)
+        .single();
+      if (eventError) throw eventError;
+      if (event?.status !== "open" || event.target_type !== "requester"
+        || event.changes?.external_submission_revision !== true) {
+        throw new Error("Permintaan perbaikan pengajuan tidak tersedia.");
+      }
+      draft.revision_context = {
+        eventId: event.id,
+        reason: event.reason,
+        ...(typeof event.changes?.revision_generation === "number"
+          ? { generation: event.changes.revision_generation }
+          : {}),
+      };
+    }
     const formData = draft.payload?.formData;
     const usageId = formData && typeof formData === "object"
       ? String(
@@ -909,8 +935,12 @@ export const suratService = {
 
       const configuredInitialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
         .filter((requirement: any) => Number(requirement.stage_order) === 0);
-      const initialRequirements = withOptionalRequesterAttachmentRequirement(configuredInitialRequirements);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
+      const storedRab = persistedDraftAttachments.some(file => file.requirement_key === "rab")
+        || attachmentFiles.some(file => initialAttachmentMeta[file.name]?.key === "rab");
+      const initialRequirements = withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(
+        configuredInitialRequirements, configContext.usage, normalizedFormInputData, storedRab,
+      ));
       const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
         files: persistedDraftAttachments,
         initialRequirementKeys: new Set(
@@ -1552,7 +1582,7 @@ export const suratService = {
     const { data: { user } } = await supabase.auth.getUser({ force: true });
     const { data: sigInfo, error: sigError } = await supabase
       .from("surat_signatures")
-      .select("surat_id, user_id, step_order, requires_unit_allocation, action_type, input_schema_snapshot, attachment_requirements_snapshot, verification_status")
+      .select("surat_id, user_id, step_order, role_name, label_jabatan, requires_unit_allocation, action_type, input_schema_snapshot, attachment_requirements_snapshot, verification_status")
       .eq("id", signatureId)
       .single();
     if (sigError || !sigInfo) throw new Error("Data pemeriksaan tidak ditemukan.");
@@ -1560,7 +1590,7 @@ export const suratService = {
     const suratId = options.suratId || sigInfo.surat_id;
     const { data: suratFresh, error: suratErr } = await supabase
       .from("surat_registrasi")
-      .select("judul_surat, form_input_data, data_snapshot, status")
+      .select("judul_surat, form_input_data, location_snapshot, data_snapshot, status")
       .eq("id", suratId)
       .single();
     if (suratErr || !suratFresh) throw new Error("Dokumen tidak ditemukan.");
@@ -1576,9 +1606,22 @@ export const suratService = {
           return canonicalizeCheckerInput(sigInfo.input_schema_snapshot, incomingCheckerInput);
         })()
       : {};
-    const approvalRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
+    const snapshotRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
       : [];
+    const planningFund = sigInfo.role_name === "memeriksa" && /perencanaan/i.test(sigInfo.label_jabatan || "")
+      && usesFundSubmissionType(suratFresh.location_snapshot?.form || suratFresh.data_snapshot?.form, formInputData.request_category);
+    let requesterAttachments: Array<{ stage: string; requirement_key: string; signature_id: string | null }> = [];
+    if (planningFund && formInputData.requester_has_rab === true) {
+      const { data, error } = await supabase.from("surat_attachments")
+        .select("stage, requirement_key, signature_id").eq("surat_id", suratId).eq("stage", "initial").eq("requirement_key", "rab");
+      if (error) throw error;
+      requesterAttachments = data || [];
+      if (!hasRequesterRab(formInputData, requesterAttachments)) {
+        throw new Error("RAB dari pemohon belum dilampirkan. Kembalikan pengajuan untuk dilengkapi.");
+      }
+    }
+    const approvalRequirements = effectiveFundRabRequirements(snapshotRequirements, planningFund, formInputData, requesterAttachments);
     const approvalAttachments = options.approvalAttachments || [];
     validateOptionalAttachmentFiles(approvalAttachments.filter(item => item.key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY).map(item => item.file));
     const { data: existingApprovalAttachments, error: existingApprovalError } = await supabase

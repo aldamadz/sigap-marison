@@ -5,6 +5,10 @@ const migration = readFileSync(
   "supabase/migrations/20260903120000_branch_asset_without_project.sql",
   "utf8",
 );
+const compatibilityMigration = readFileSync(
+  "supabase/migrations/20260903170000_mrn22_staging_schema_compatibility.sql",
+  "utf8",
+);
 const assertions = readFileSync(
   "supabase/tests/branch_asset_without_project.integration.sql",
   "utf8",
@@ -40,8 +44,7 @@ create table if not exists public.master_entities (
 
 -- master_departments
 create table if not exists public.master_departments (
-  id uuid primary key,
-  entity_id uuid not null references public.master_entities(id)
+  id uuid primary key
 );
 
 -- master_offices
@@ -190,9 +193,9 @@ insert into public.master_offices (id, kedudukan) values
   ('a0000000-0000-4000-8000-000000000033', 'KC'),
   ('a0000000-0000-4000-8000-000000000034', 'Kost');
 
-insert into public.master_departments (id, entity_id) values
-  ('a0000000-0000-4000-8000-000000000020', 'a0000000-0000-4000-8000-000000000010'),
-  ('a0000000-0000-4000-8000-000000000021', 'a0000000-0000-4000-8000-000000000011');
+insert into public.master_departments (id) values
+  ('a0000000-0000-4000-8000-000000000020'),
+  ('a0000000-0000-4000-8000-000000000021');
 
 insert into public.profiles (id, role, office_id, department_id, is_active) values
   ('f0000000-0000-4000-8000-000000000001', 'user', 'a0000000-0000-4000-8000-000000000031', 'a0000000-0000-4000-8000-000000000020', true),
@@ -308,6 +311,8 @@ select
   gen_random_uuid(), 'a0000000-0000-4000-8000-000000000010', 'a0000000-0000-4000-8000-000000000032', 'a0000000-0000-4000-8000-000000000040', null, 2026, generate_series(1, 6);
 
 ${migration}
+
+${compatibilityMigration}
 
 ${assertions}
 `;

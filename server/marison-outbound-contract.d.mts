@@ -8,6 +8,12 @@ export const marisonNonUnitSubmissionSchema: ZodType<Record<string, unknown>>;
 export const marisonAssetPurchaseRequestSchema: ZodType<Record<string, unknown>>;
 export const marisonFundSubmissionSchema: ZodType<Record<string, unknown>>;
 export function normalizeMarisonApprovalRole(kind: string, role: unknown): string;
+export function resolveMarisonApprovalRoleLabel(input: {
+  label?: unknown;
+  workflowRole?: unknown;
+  jobTitle?: unknown;
+  snapshotJobTitle?: unknown;
+}): string;
 export function normalizeMarisonSubmissionApprovals<T extends { role?: unknown }>(
   kind: string,
   approvals: T[],
