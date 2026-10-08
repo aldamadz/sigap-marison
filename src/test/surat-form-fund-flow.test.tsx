@@ -137,7 +137,9 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     assertStrictServiceCalls();
   });
 
-  it.each(["KC", "KCP"])("limits the %s Branch Manager step to active parent KC managers through confirmation", async scope => {
+  it.each([
+    ["KC", "related_branch_manager"], ["KCP", "related_branch_manager"], ["KCP", "related_branch_officer"],
+  ])("limits the %s %s step to active parent KC managers through confirmation", async (scope, mode) => {
     allowServiceCalls("saveRegistrationDraft");
     const kcpId = "b1000000-0000-4000-8000-000000000001";
     const offices = [...MASTER_DATA_DEFAULT.offices,
@@ -159,7 +161,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
       form_usage_steps: usage.form_usage_steps.map(step => ({ ...step,
         assignee_mode: step.step_order === 1 ? "requester" : "select",
         ...(step.step_order === 2 ? { label: "Branch Manager", role_name: "memeriksa", candidate_scope: "request_office",
-          candidate_fallback_mode: "related_branch_manager", form_usage_step_users: [] } : {}),
+          candidate_fallback_mode: mode, form_usage_step_users: [] } : {}),
       })),
     }));
     await mountFormWithUsage(usages, { ...CURRENT_PROFILE_KC, office_id: scope === "KCP" ? kcpId : UUID.office_kc });
@@ -175,7 +177,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     fireEvent.change(price, { target: { value: "10000" } });
     fireEvent.blur(price);
     fireEvent.click(screen.getByRole("button", { name: "Selanjutnya" }));
-    fireEvent.click(await screen.findByRole("button", { name: "BM Cabang Terkait" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^BM Cabang Terkait/ }));
     const options = await screen.findByRole("listbox");
     expect(within(options).getByText("BM Cabang Terkait")).toBeInTheDocument();
     expect(within(options).queryByText("SPV Kantor")).not.toBeInTheDocument();

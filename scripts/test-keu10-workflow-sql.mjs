@@ -106,6 +106,28 @@ try {
   run(psqlArgs, read("supabase/tests/keu10_fund_type_upgrade.before.sql"));
   run(psqlArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
   run(psqlArgs, read(migrationRoot + "20261006183000_keu10_automatic_fund_type.sql"));
+  if (process.argv.includes("--branch-officers")) {
+    const source = read(migrationRoot + "20261008160000_dynamic_branch_reporting_officer_fallback.sql");
+    const helpers = source.slice(source.indexOf("create or replace function organization_internal.officer_rank"),
+      source.indexOf("create or replace function organization_internal.resolve_office_superior"));
+    run(psqlArgs, `create schema organization_internal; ${helpers}
+      create table keu10_test.config_wrapper_before as select md5(prosrc) body_hash from pg_proc
+        where oid='public.save_form_usage_config(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)'::regprocedure;`);
+    const migration = read(migrationRoot + "20261008170000_related_branch_review_signer_candidates.sql");
+    run(psqlArgs, migration);
+    run(psqlArgs, migration);
+    run(psqlArgs, `select keu10_test.assert((select body_hash=md5(prosrc)
+      from keu10_test.config_wrapper_before cross join pg_proc
+      where oid='public.save_form_usage_config(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)'::regprocedure),
+      'Public KEU10 configuration wrapper preserved');
+      select keu10_test.assert(position('related_branch_officer' in pg_get_functiondef(
+        'public.save_form_usage_config_pre_keu10(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)'::regprocedure))>0,
+        'New candidate mode supported by original private RPC');
+      select keu10_test.assert(not has_function_privilege('authenticated',
+        'public.save_form_usage_config_pre_keu10(uuid,jsonb,uuid[],jsonb,jsonb,jsonb)','execute'),
+        'Original config RPC remains private');`);
+    process.stdout.write("Related branch officers: canonical KEU10 wrapper preserved; private configuration guard updated.\n");
+  }
   if (process.argv.includes("--requester-edit")) {
     run(psqlArgs, canonical("20260805083000_inbox_verifier_realtime_rls.sql", "can_read_surat"));
     run(psqlArgs, read(migrationRoot + "20261008110000_pdf_approval_decision_status.sql"));

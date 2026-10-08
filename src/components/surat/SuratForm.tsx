@@ -5,6 +5,7 @@ import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-w
 import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
 import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
+import { getBranchOfficerCandidates } from "@/features/surat/registration/lib/branch-officer-candidates";
 import { useSearchParams } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -1359,6 +1360,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (!signer) return [];
     if (isEditableRevisionFinalSigner(signer)) return keu10FinalCandidates;
     if (isSelectableFirstMaker(signer)) return getFirstMakerCandidates(selectedUsage, signer);
+    if (signer.candidate_fallback_mode === "related_branch_officer") {
+      return getBranchOfficerCandidates(master.users, { requesterId: currentProfile?.id || "",
+        officeId: formData.office_id, departmentId: formData.dept_id || requesterDepartmentId, offices: master.offices });
+    }
     if (signer.candidate_fallback_mode === "related_branch_manager") {
       return master.users.filter(user => isRelatedBranchManager(user, formData.office_id, master.offices));
     }
@@ -1395,6 +1400,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
     return candidates.some(user => user.id === currentProfile?.id) ? currentProfile?.id || "" : "";
   }, (signer, persistedUserId) => {
+    if (signer.candidate_fallback_mode === "related_branch_officer") {
+      return getBranchOfficerCandidates(master.users, { requesterId: currentProfile?.id || "", officeId,
+        departmentId, offices: master.offices }).some(user => user.id === persistedUserId) ? persistedUserId : "";
+    }
     if (signer.candidate_fallback_mode === "related_branch_manager") {
       return master.users.some(user => user.id === persistedUserId && isRelatedBranchManager(user, officeId, master.offices))
         ? persistedUserId : "";
@@ -4182,7 +4191,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               >
                                 <span className={cn("truncate", !s.user_id && "text-muted-foreground")}>
                                   {s.user_id
-                                    ? getSelectedSignerName(s.user_id, isSelectableFirstMaker(s) || s.candidate_fallback_mode === "request_office_all")
+                                    ? getSelectedSignerName(s.user_id, isSelectableFirstMaker(s)
+                                      || ["request_office_all", "related_branch_officer"].includes(s.candidate_fallback_mode || ""))
                                     : s.assignee_mode === "requester"
                                       ? "Menunggu profil pemohon"
                                       : `Pilih ${s.label_jabatan}...`}
