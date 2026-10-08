@@ -193,6 +193,16 @@ const validPayload = {
 };
 
 describe("admin-user validation", () => {
+  it("preserves the configured supervisor for Kost instead of applying BM rules", async () => {
+    const { runtime, ports } = createRuntime({ readJsonBody: async () => validPayload }, {
+      profiles: [profile({ id: PARENT_ID, email: "kost.supervisor@example.test", nik: "KOST-SPV" })],
+    });
+    vi.spyOn(ports.repository, "findOfficeById").mockResolvedValue(office({ kedudukan: "Kost" }));
+    const write = vi.spyOn(ports.repository, "upsertProfile");
+    await runtime.createUser({});
+    expect(write).toHaveBeenCalledWith(expect.objectContaining({ parent_id: PARENT_ID }));
+  });
+
   it("ignores a stale inactive parent when transferring a branch employee", async () => {
     const { runtime, ports } = createRuntime({
       readJsonBody: async () => ({ ...validPayload, parent_id: PARENT_ID }),

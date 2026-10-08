@@ -6,7 +6,8 @@ import type { User } from '@/types/agenda';
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: (table: string) => ({
   select: () => ({ order: () => Promise.resolve({ error: null, data: table === 'master_offices'
-    ? [{ id: 'branch', name: 'Magelang', kedudukan: 'KC' }, { id: 'hq', name: 'Pusat', kedudukan: 'Pusat' }]
+    ? [{ id: 'branch', name: 'Magelang', kedudukan: 'KC' }, { id: 'hq', name: 'Pusat', kedudukan: 'Pusat' },
+      { id: 'kost', name: 'Palur', kedudukan: 'Kost' }]
     : [] }) }),
 }) } }));
 vi.mock('@/services/user.service', () => ({ updateUserProfile: vi.fn().mockResolvedValue(undefined) }));
@@ -48,6 +49,13 @@ describe('branch reporting edit UI', () => {
     render(<EditUserModal user={{ ...user, jobTitle: 'Branch Manager' }} allUsers={[]} isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(4));
     await chooseOffice('KC Magelang');
+    expect(screen.queryByRole('textbox', { name: 'Atasan Langsung Otomatis' })).toBeNull();
+    expect(screen.getAllByRole('combobox')).toHaveLength(4);
+  });
+  it('keeps the configured supervisor selector for Kost', async () => {
+    render(<EditUserModal user={user} allUsers={[]} isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(4));
+    await chooseOffice('Kost Palur');
     expect(screen.queryByRole('textbox', { name: 'Atasan Langsung Otomatis' })).toBeNull();
     expect(screen.getAllByRole('combobox')).toHaveLength(4);
   });
