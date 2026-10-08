@@ -13,6 +13,8 @@ const policy = agendaPolicy.slice(agendaPolicy.indexOf("create policy agendas_se
 const calendar = read("supabase/migrations/20260915093000_work_calendar_team_members.sql");
 const calendarScope = calendar.slice(0, calendar.indexOf("-- Synchronize list_work_calendar_team_entries RPC"));
 const migration = read("supabase/migrations/20261008140000_dynamic_branch_reporting.sql");
+const preserveKost = read("supabase/migrations/20261008150000_dynamic_branch_reporting_preserve_kost.sql");
+const audit = read("supabase/migrations/20260604145000_ignore_seen_fields_in_audit_logs.sql");
 const fixture = `
 create role anon; create role authenticated; create role service_role;
 create schema auth;
@@ -39,7 +41,31 @@ alter table public.work_calendar_entries enable row level security;
 grant select on public.work_calendar_entries to authenticated;
 ${calendarScope}
 create table public.surat_signatures(id bigint primary key, snapshot jsonb);
+create type public.activity_action as enum ('INSERT','UPDATE','DELETE');
+create table public.activity_logs(user_id uuid,action public.activity_action,table_name text,record_id text,old_values jsonb,new_values jsonb);
+create function public.audit_log_redact_payload(payload jsonb) returns jsonb language sql as $$select payload$$;
+${audit}
+create trigger trg_audit_profiles after insert or update or delete on public.profiles
+  for each row execute function public.audit_log_table_changes();
+insert into public.master_offices(id,kedudukan) values
+ ('00000000-0000-4000-8000-000000000098','Pusat'),('00000000-0000-4000-8000-000000000099','Kost');
+insert into public.profiles(id,job_title,office_id,parent_id) values
+ ('10000000-0000-4000-8000-000000000098','Supervisor Operasional Kost','00000000-0000-4000-8000-000000000098',null),
+ ('10000000-0000-4000-8000-000000000099','Penjaga Kost','00000000-0000-4000-8000-000000000099','10000000-0000-4000-8000-000000000098');
 ${migration}
+-- A former branch employee has prior branch audit history before moving to Kost.
+insert into public.master_offices(id,kedudukan) values ('00000000-0000-4000-8000-000000000097','KC');
+insert into public.profiles(id,job_title,office_id,parent_id) values
+ ('10000000-0000-4000-8000-000000000096','Staff','00000000-0000-4000-8000-000000000098','10000000-0000-4000-8000-000000000098');
+update public.profiles set office_id='00000000-0000-4000-8000-000000000097' where id='10000000-0000-4000-8000-000000000096';
+update public.profiles set office_id='00000000-0000-4000-8000-000000000099' where id='10000000-0000-4000-8000-000000000096';
+${preserveKost}
+do $$begin if (select parent_id from public.profiles where id='10000000-0000-4000-8000-000000000099')
+  is distinct from '10000000-0000-4000-8000-000000000098'::uuid then raise exception 'configured Kost parent not preserved'; end if;
+  if (select reporting_is_automatic from public.profiles where id='10000000-0000-4000-8000-000000000099') then
+    raise exception 'Kost treated as branch'; end if;
+  if (select parent_id from public.profiles where id='10000000-0000-4000-8000-000000000096') is not null then
+    raise exception 'transferred branch employee received ancient parent'; end if; end$$;
 ${read("supabase/tests/dynamic_branch_reporting.integration.sql")}
 `;
 const run = (args, input = "") => {
@@ -94,7 +120,7 @@ try {
   `);
   process.stdout.write("300 unchanged employee sync upserts: zero reconciliations.\n");
   // Applying the migration again must preserve the final state and existing audit history.
-  run(psql, migration);
+  run(psql, preserveKost);
   process.stdout.write("Migration reapply: PASS.\n");
 } finally {
   run(["rm", "-f", container]);
