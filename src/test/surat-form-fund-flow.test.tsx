@@ -52,7 +52,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
       { id: "spv-marketing", full_name: "SPV Marketing Lokal", job_title: "SPV Marketing", office_id: UUID.office_kc },
       { id: "spv-teknik", full_name: "SPV Teknik Lokal", job_title: "Supervisor Teknik", office_id: UUID.office_kc },
       { id: "spv-other", full_name: "SPV Cabang Lain", job_title: "Supervisor Teknik", office_id: UUID.office_pusat },
-    ] });
+    ].map(user => ({ ...user, is_active: true })) });
     const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage,
       ...(contextual ? { first_maker_policy: "contextual" } : {}),
       name: "Pengajuan Kas Kecil - Kantor Cabang",
@@ -137,14 +137,21 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     assertStrictServiceCalls();
   });
 
-  it("limits the Branch Manager step to active related KC managers", async () => {
+  it.each(["KC", "KCP"])("limits the %s Branch Manager step to active parent KC managers through confirmation", async scope => {
     allowServiceCalls("saveRegistrationDraft");
-    serviceMock.getMasterData.mockResolvedValue({ ...MASTER_DATA_DEFAULT, users: [
-      ...MASTER_DATA_DEFAULT.users,
-      { id: "local-bm", full_name: "BM Cabang Terkait", job_title: "Branch Manager", office_id: UUID.office_kc },
-      { id: "local-spv", full_name: "SPV Kantor", job_title: "Supervisor Teknik", office_id: UUID.office_kc },
-      { id: "local-staff", full_name: "Staff Kantor", job_title: "Staff Admin", office_id: UUID.office_kc },
-      { id: "foreign-bm", full_name: "BM Kantor Lain", job_title: "Branch Manager", office_id: UUID.office_pusat },
+    const kcpId = "b1000000-0000-4000-8000-000000000001";
+    const offices = [...MASTER_DATA_DEFAULT.offices,
+      { id: kcpId, name: "KCP Fixture", kedudukan: "KCP", code: "01", parent_id: UUID.office_kc }];
+    serviceMock.getMasterData.mockResolvedValue({ ...MASTER_DATA_DEFAULT, offices, users: [
+      ...[
+        ...MASTER_DATA_DEFAULT.users,
+        { id: "local-bm", full_name: "BM Cabang Terkait", job_title: "Branch Manager", office_id: UUID.office_kc },
+        { id: "local-spv", full_name: "SPV Kantor", job_title: "Supervisor Teknik", office_id: UUID.office_kc },
+        { id: "local-staff", full_name: "Staff Kantor", job_title: "Staff Admin", office_id: UUID.office_kc },
+        { id: "foreign-bm", full_name: "BM Kantor Lain", job_title: "Branch Manager", office_id: UUID.office_pusat },
+      ].map(user => ({ ...user, is_active: true })),
+      { id: "inactive-bm", full_name: "BM Nonaktif", job_title: "Branch Manager", office_id: UUID.office_kc, is_active: false },
+      { id: "deleted-bm", full_name: "BM Terhapus", job_title: "Branch Manager", office_id: UUID.office_kc, is_active: true, deleted_at: "2026-10-08" },
     ] });
     const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage,
       first_maker_policy: "contextual", name: "Pengajuan Kas Kecil - Kantor Cabang",
@@ -155,7 +162,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
           candidate_fallback_mode: "related_branch_manager", form_usage_step_users: [] } : {}),
       })),
     }));
-    await mountFormWithUsage(usages, CURRENT_PROFILE_KC);
+    await mountFormWithUsage(usages, { ...CURRENT_PROFILE_KC, office_id: scope === "KCP" ? kcpId : UUID.office_kc });
     await selectForm(/KAS KECIL/i);
     await selectUsage(/Kas Kecil/i);
     await selectLetterType();
@@ -174,6 +181,8 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     expect(within(options).queryByText("SPV Kantor")).not.toBeInTheDocument();
     expect(within(options).queryByText("Staff Kantor")).not.toBeInTheDocument();
     expect(within(options).queryByText("BM Kantor Lain")).not.toBeInTheDocument();
+    expect(within(options).queryByText("BM Nonaktif")).not.toBeInTheDocument();
+    expect(within(options).queryByText("BM Terhapus")).not.toBeInTheDocument();
     fireEvent.click(within(options).getByText("BM Cabang Terkait"));
     fireEvent.click(screen.getByRole("button", { name: "Konfirmasi Pendaftaran" }));
     const summary = await screen.findByRole("dialog", { name: /Periksa sebelum didaftarkan/i });
