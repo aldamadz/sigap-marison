@@ -420,7 +420,12 @@ export const executeMarisonBranchSync = async ({ supabase, branches, environment
 const findProjectForExternal = (project, projects) => {
   const externalId = Number(project?.id);
   const byExternalId = projects.find((row) => Number(row.marison_project_id) === externalId);
-  if (byExternalId) return { project: byExternalId, match: "external_id" };
+  if (byExternalId) {
+    if (!byExternalId.marison_synced_at || byExternalId.local_retired_at) {
+      return { project: null, match: "conflict", reason: "ID external masih dipakai proyek lokal historis. Identitas lama tidak diubah otomatis." };
+    }
+    return { project: byExternalId, match: "external_id" };
+  }
 
   // Local names/codes are not authoritative identities. Never repurpose their
   // historical FK targets when a similarly named project arrives from the API.
@@ -439,7 +444,7 @@ export const chooseProjectLocalCode = (externalCode, externalId, projects, curre
 const syncProjects = async (supabase, { projects, branches }, dryRun) => {
   const branchResult = await syncBranches(supabase, branches, dryRun);
   const [projectsResult, officesResult] = await Promise.all([
-    supabase.from("master_projects").select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons"),
+    supabase.from("master_projects").select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_synced_at,local_retired_at,marison_review_required,marison_review_reasons"),
     supabase.from("master_offices").select("id,code,name,kedudukan,marison_branch_id"),
   ]);
   if (projectsResult.error) throw projectsResult.error;
@@ -532,7 +537,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
           .from("master_projects")
           .update(payload)
           .eq("id", existing.id)
-          .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons")
+          .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_synced_at,local_retired_at,marison_review_required,marison_review_reasons")
           .single();
         if (error) {
           result.errors.push({ entityType: "project", externalId, name: externalName, reason: error.message });
@@ -565,7 +570,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
         marison_review_required: reviewReasons.length > 0,
         marison_review_reasons: reviewReasons,
       })
-      .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_review_required,marison_review_reasons")
+      .select("id,office_id,entity_id,code,name,marison_project_id,marison_project_code,marison_synced_at,local_retired_at,marison_review_required,marison_review_reasons")
       .single();
     if (error) {
       result.errors.push({ entityType: "project", externalId, name: externalName, reason: error.message });
