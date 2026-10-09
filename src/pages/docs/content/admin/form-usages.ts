@@ -21,7 +21,7 @@ export const adminFormUsagesDocs: DocsEntry = {
       "Buka Kegunaan Form.",
       "Pilih form, departemen, kategori, dan jenis surat.",
       "Atur step tanda tangan dan kandidat signer.",
-      "Kandidat #509: tim pemeriksa opt-in, dimulai dengan nol orang terpilih. Aktifkan bila perlu, lalu pilih orang yang tepat untuk setiap kegunaan dan tahap; jangan otomatis memilih seluruh kandidat.",
+      "Tim pemeriksa dimulai dengan nol orang terpilih. Aktifkan bila perlu, lalu pilih orang yang tepat untuk setiap kegunaan dan tahap; jangan otomatis memilih seluruh kandidat.",
       "Atur dokumen tertaut bila form membutuhkan rekomendasi aset atau prasyarat sebelum approval lanjut.",
       "Simpan konfigurasi dan uji pada registrasi surat.",
     ],
@@ -69,7 +69,7 @@ export const adminFormUsagesDetailSections: DocsSection[] = [
     },
     {
       type: "table",
-      title: "Pemeriksa dan RAB Dana (kandidat #509)",
+      title: "Pemeriksa dan RAB Dana",
       columns: ["Pengaturan", "Aturan"],
       rows: [
         ["Tim pemeriksa opt-in", "Nol orang terpilih saat mulai. Pilih nama petugas secara eksplisit per kegunaan dan tahap; Usman/Tri bukan pilihan otomatis."],

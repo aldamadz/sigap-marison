@@ -27,10 +27,10 @@ export const adminProjectsDocs: DocsEntry = {
       "Untuk proyek lokal/trial, pilih project external dari katalog branch efektif. Mapping branch yang tidak cocok berstatus Perlu koreksi relasi dan ditolak backend.",
     ],
     examples: [
-      "Pada approval Unit biasa, pemeriksa mengikuti proyek pemohon. Kandidat #509: hanya pemilik revisi Unit eksternal terbuka dapat mengganti proyek melalui Tindak Lanjut, tanpa mengganti nomor/identitas surat.",
+      "Pada approval Unit biasa, pemeriksa mengikuti proyek pemohon. Hanya pemilik revisi Unit eksternal terbuka dapat mengganti proyek melalui Tindak Lanjut, tanpa mengganti nomor/identitas surat.",
     ],
     troubleshooting: [
-      "Kandidat #509: setelah proyek revisi Unit eksternal berubah, kapasitas terbaru dimuat ulang dan alokasi lama dikosongkan. Pemeriksa harus mengisi ulang alokasi sesuai proyek revisi.",
+      "Setelah proyek revisi Unit eksternal berubah, kapasitas terbaru dimuat ulang dan alokasi lama dikosongkan. Pemeriksa harus mengisi ulang alokasi sesuai proyek revisi.",
       "Jika proyek tidak muncul, cek data source proyek dan status aktif proyek.",
       "Jika proyek manual tidak muncul pada Non Unit, pastikan ID Proyek Marison dan ID Branch Marison pada kantor proyek sudah terisi, atau lengkapi pemetaan manual untuk proyek yang memakai identitas external.",
       "Jika ID external ditolak, cari proyek lain yang sudah memakai ID tersebut. Satu ID hanya boleh terhubung ke satu proyek SIGAP.",

@@ -130,7 +130,7 @@ export const approvalInboxDocs: DocsEntry = {
         title: "Jika pengajuan Unit",
         columns: ["Bagian", "Aturan"],
         rows: [
-          ["Proyek", "Tim pemeriksa mengikuti proyek pemohon. Kandidat #509: proyek dapat diganti oleh pemilik revisi Unit eksternal yang masih terbuka, bukan oleh signer/pemeriksa pada approval biasa."],
+          ["Proyek", "Tim pemeriksa mengikuti proyek pemohon. Proyek dapat diganti oleh pemilik revisi Unit eksternal yang masih terbuka, bukan oleh signer/pemeriksa pada approval biasa."],
           ["Jumlah unit", "Boleh dialokasikan kurang dari jumlah permintaan jika memang hanya tersedia sebagian."],
           ["Detail unit", "Diisi dalam tabel satu baris per kavling dengan header sticky: struktur atas, struktur bawah, nomor, blok, tanggal, dan kode produksi."],
           ["Template Excel", "Tim pemeriksa dapat mengunduh template setelah memilih kavling, mengisi data di Excel, lalu import kembali untuk memperbarui tabel alokasi. Keterangan cell memberi contoh nominal, nomor kode produksi, blok, dan tanggal."],
@@ -139,7 +139,7 @@ export const approvalInboxDocs: DocsEntry = {
       },
       {
         type: "table",
-        title: "Dana dan RAB (kandidat #509)",
+        title: "Dana dan RAB",
         columns: ["Kondisi", "Kewajiban pemeriksa"],
         rows: [
           ["Dana Perencanaan", "Lampiran RAB opsional. Tim Perencanaan boleh menambahkan RAB jika pemohon belum melampirkannya; bukan syarat wajib sebelum tahap dilanjutkan."],

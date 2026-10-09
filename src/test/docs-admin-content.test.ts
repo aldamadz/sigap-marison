@@ -94,7 +94,7 @@ describe("docs-admin-content D2B", () => {
 
   it("matches documentation content after issue 509 updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "ccd6ab224d16bce8e5035b15e5760cb04ef082c0dc56b6325da991705355b222",
+      "d326fe6679074675d1aa8b4386d7c1f3297542290ba59e38e48647081c230f71",
     );
   });
 

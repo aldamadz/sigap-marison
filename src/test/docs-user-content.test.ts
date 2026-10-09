@@ -109,7 +109,7 @@ describe("docs-user-content D2A characterization", () => {
 
   it("matches documentation content after issue 509 updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("46642dd9d94a3c4d5fda01d1439c120e961099ce4986d3dd20ad8fb681da27e1");
+      .toBe("5b2108f9a8fb9cea1e82dc1a631ec28456be413bf63816d8bd871b3549559a78");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {
