@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fundModule } from "@/features/surat/registration/usages/fund/fund-module";
 import type { UsageModuleContext } from "@/features/surat/registration/usages/usage-contract";
 import type { UsageDetailRecord } from "@/components/surat/form/surat-form-types";
-import { effectiveFundRabRequirements, hasRequesterRab, usesRequesterRabChoice, withRequesterRabRequirement } from "@/lib/fund-rab";
+import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewStage, usesRequesterRabChoice, withRequesterRabRequirement } from "@/lib/fund-rab";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { classifyRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 
@@ -22,13 +22,20 @@ function context(input: UsageModuleContext["input"] = {}): UsageModuleContext {
 }
 
 describe("optional PGD Fund RAB", () => {
-  it.each(["Mgr. Perencanaan", "Mgr. HRD & GA"])("offers explicit no-RAB intent for %s without claiming a file exists", label => {
+  it.each(["Mgr. Perencanaan", "Mgr. HRD & GA", "Manager Terkait"])("offers explicit no-RAB intent for %s without claiming a file exists", label => {
     const ctx = { ...context(), usage: { ...usage, form_usage_steps: [{ id: "review", step_order: 2, role_name: "memeriksa", label }] } };
     render(fundModule.renderDetailsPanel?.(ctx));
     const checkbox = screen.getByRole("checkbox", { name: "Tidak memerlukan RAB" });
     expect(checkbox).not.toBeChecked();
     fireEvent.click(checkbox);
     expect(ctx.setInputValue).toHaveBeenCalledWith("rab_not_required", true);
+  });
+  it("limits generic manager RAB to PGD Fund review stages", () => {
+    const form = usage.master_forms;
+    expect(isFundRabReviewStage(form, "non_asset", "memeriksa", "Manager Terkait")).toBe(true);
+    expect(isFundRabReviewStage(form, "non_asset", "menyetujui", "Manager Terkait")).toBe(false);
+    expect(isFundRabReviewStage(form, "unit", "memeriksa", "Manager Terkait")).toBe(false);
+    expect(isFundRabReviewStage({ nomor_form: "FM-UAI.KEU-01-00" }, "non_asset", "memeriksa", "Manager Terkait")).toBe(false);
   });
   it.each(["FM-UAI.KEU-01-00", "FM-UAI.KEU-10-00"])("does not change RAB rules for %s", nomor_form => {
     expect(usesRequesterRabChoice({ ...usage, master_forms: { nomor_form } }, "non_asset")).toBe(false);

@@ -3,7 +3,7 @@ import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
-import { effectiveFundRabRequirements, isFundRabReviewer, withRequesterRabRequirement } from "@/lib/fund-rab";
+import { effectiveFundRabRequirements, isFundRabReviewStage, withRequesterRabRequirement } from "@/lib/fund-rab";
 import {
   buildRegistrationAttachmentRows,
   classifyRegistrationDraftAttachments,
@@ -1631,9 +1631,8 @@ export const suratService = {
       ? sigInfo.attachment_requirements_snapshot
       : [];
     const form = suratFresh.location_snapshot?.form || suratFresh.data_snapshot?.form;
-    const planningFund = isFundRabReviewer(form, formInputData.request_category, sigInfo.role_name, sigInfo.label_jabatan, "planning");
-    const hrdFund = isFundRabReviewer(form, formInputData.request_category, sigInfo.role_name, sigInfo.label_jabatan, "hrd");
-    const approvalRequirements = effectiveFundRabRequirements(snapshotRequirements, planningFund, hrdFund);
+    const fundReview = isFundRabReviewStage(form, formInputData.request_category, sigInfo.role_name, sigInfo.label_jabatan);
+    const approvalRequirements = effectiveFundRabRequirements(snapshotRequirements, fundReview);
     const approvalAttachments = options.approvalAttachments || [];
     validateOptionalAttachmentFiles(approvalAttachments.filter(item => item.key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY).map(item => item.file));
     const { data: existingApprovalAttachments, error: existingApprovalError } = await supabase
