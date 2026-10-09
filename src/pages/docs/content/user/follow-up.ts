@@ -56,7 +56,7 @@ export const followUpDocs: DocsEntry = {
       },
       {
         type: "table",
-        title: "Revisi Unit eksternal (kandidat #509)",
+        title: "Revisi Unit eksternal",
         columns: ["Batas", "Aturan"],
         rows: [
           ["Pemilik dan event", "Hanya pemilik revisi Unit eksternal yang masih terbuka dapat mengubah proyek/jumlah dari draft Tindak Lanjut."],

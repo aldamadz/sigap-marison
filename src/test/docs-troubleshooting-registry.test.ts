@@ -47,7 +47,7 @@ describe("docs-troubleshooting-registry D2C", () => {
   });
 
   it("matches documentation content after issue 509 updates", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("00fd3864f44df92b3e37b268a53e955990d8c6785453c200a257e69e03001c0a");
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("73d854832a445b6d9030bac9a12713fdfef04a08de555db103a8545aa000de35");
   });
 
   it("keeps facade and imports acyclic", () => {

@@ -38,7 +38,7 @@ export const suratRegistrationDocs: DocsEntry = {
     sections: [
       {
         type: "table",
-        title: "Dana Perencanaan dan HRD (kandidat #509)",
+        title: "Dana Perencanaan dan HRD",
         columns: ["Pengajuan", "Lampiran dan proses"],
         rows: [
           ["Dana Perencanaan", "Lampiran RAB opsional. Pemohon boleh melampirkan; tim Perencanaan boleh menambahkan RAB jika pemohon belum melampirkannya."],
