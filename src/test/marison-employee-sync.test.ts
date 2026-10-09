@@ -113,6 +113,7 @@ describe("Marison employee sync", () => {
         code: "MLO",
         name: "Project 16",
         marison_project_id: 16,
+        marison_synced_at: "2026-10-09T00:00:00Z",
         marison_project_code: "MLO",
         marison_review_required: true,
         marison_review_reasons: ["Entitas proyek belum dipilih"],
@@ -124,6 +125,7 @@ describe("Marison employee sync", () => {
         code: "MLO-11",
         name: "Project 11",
         marison_project_id: 11,
+        marison_synced_at: "2026-10-09T00:00:00Z",
         marison_project_code: "MLO",
         marison_review_required: true,
         marison_review_reasons: ["Entitas proyek belum dipilih"],
@@ -154,6 +156,30 @@ describe("Marison employee sync", () => {
       toUpdate: 0,
       blocked: 0,
     }));
+  });
+
+  it("creates API identities without overwriting similarly named local project history", async () => {
+    const office = { id: "office", code: "KC", name: "Solo", kedudukan: "KC", marison_branch_id: 1 };
+    const local = { id: "legacy", office_id: office.id, code: "JST", name: "Jeruk Sawit", marison_project_id: null };
+    const client = { from: (table: string) => ({ select: async () => ({ data: table === "master_offices" ? [office] : [local], error: null }) }) };
+    const result = await previewMarisonProjectSync({ supabase: client, branches: [{ id: 1, code: "KC", name: "Solo" }],
+      projects: [{ id: 77, code: "JST", name: "Jeruk Sawit", branch: { id: 1 } }], environment: "production" });
+    expect(result).toMatchObject({ matched: 0, toCreate: 1, blocked: 0 });
+    expect(local.marison_project_id).toBeNull();
+    const invalid = await previewMarisonProjectSync({ supabase: client, branches: [],
+      projects: [{ id: 0, code: "ZERO", name: "Invalid" }], environment: "production" });
+    expect(invalid.blocked).toBe(1);
+    expect(invalid.toCreate).toBe(0);
+  });
+
+  it("does not repurpose local history carrying a manually entered API ID", async () => {
+    const office = { id: "office", code: "KC", name: "Solo", kedudukan: "KC", marison_branch_id: 1 };
+    const local = { id: "legacy", office_id: office.id, code: "JST", name: "Local history", marison_project_id: 77, marison_synced_at: null };
+    const client = { from: (table: string) => ({ select: async () => ({ data: table === "master_offices" ? [office] : [local], error: null }) }) };
+    const result = await previewMarisonProjectSync({ supabase: client, branches: [{ id: 1, code: "KC", name: "Solo" }],
+      projects: [{ id: 77, code: "JST", name: "API Project", branch: { id: 1 } }], environment: "production" });
+    expect(result).toMatchObject({ matched: 0, toCreate: 0, blocked: 1 });
+    expect(local.name).toBe("Local history");
   });
 
   it("resolves a conflicting staging row only when one name matches an existing profile", () => {
@@ -260,7 +286,7 @@ describe("Marison employee sync", () => {
     expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/branches")');
     expect(page).toContain("Sinkronkan External");
     expect(page).toContain("Tambah Kantor");
-    expect(page).toContain('.from("master_offices").insert');
+    expect(page).toContain('supabase.rpc("save_master_office"');
     expect(migration).toContain("create policy master_offices_admin_insert");
     expect(migration).toContain("create policy master_offices_admin_update");
     expect(migration).not.toContain("create policy master_offices_admin_delete");

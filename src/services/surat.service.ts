@@ -770,7 +770,9 @@ export const suratService = {
         const projectsRes = await supabase
           .from("master_projects")
           .select("id", { count: "exact", head: true })
+          .gt("marison_project_id", 0).not("marison_synced_at", "is", null).is("local_retired_at", null)
           .eq("office_id", officeIdClean);
+        if (projectsRes.error) throw projectsRes.error;
         const branchHasProjects = (projectsRes.count ?? 0) > 0;
         fallbackEligible = isBranchAssetFallback({
           officeKedudukan: office?.kedudukan,

@@ -21,7 +21,7 @@ beforeEach(() => {
   };
   mocks.from.mockImplementation((table: string) => {
     const result = { data: records[table], count: 1, error: null };
-    const query = { select: () => query, eq: () => query, single: async () => result,
+    const query = { select: () => query, eq: () => query, gt: () => query, not: () => query, is: () => query, single: async () => result,
       then: (resolve: (value: typeof result) => unknown) => resolve(result) };
     return query;
   });
