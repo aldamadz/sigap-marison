@@ -3,8 +3,7 @@ import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
 import { VERIFIER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
-import { effectiveFundRabRequirements, hasRequesterRab, withRequesterRabRequirement } from "@/lib/fund-rab";
-import { usesFundSubmissionType } from "@/features/surat/registration/usages/fund/fund-types";
+import { effectiveFundRabRequirements, isFundRabReviewer, withRequesterRabRequirement } from "@/lib/fund-rab";
 import {
   buildRegistrationAttachmentRows,
   classifyRegistrationDraftAttachments,
@@ -461,11 +460,13 @@ export const suratService = {
   }): Promise<{ success: boolean; next_step: string; surat_id: string; revision_event_id: string }> {
     // Revisi eksternal dapat mengubah jumlah unit, maka jalur ini juga
     // memakai keputusan ketersediaan backend sebelum RPC.
-    await this.validateUnitRequestAvailability(args.formData?.form_input_data);
+    const availability = await this.validateUnitRequestAvailability(args.formData?.form_input_data, {
+      revisionEventId: args.revisionEventId, draftId: args.draftId,
+    });
     const { data, error } = await supabase.rpc("submit_external_submission_revision", {
       p_revision_event_id: args.revisionEventId,
       p_draft_id: args.draftId,
-      p_form_data: args.formData,
+      p_form_data: { ...args.formData, ...(availability.receiptId ? { unit_availability_receipt_id: availability.receiptId } : {}) },
       p_requester_note: args.requesterNote || null,
     });
     if (error) throw error;
@@ -689,7 +690,9 @@ export const suratService = {
     if (error) throw error;
   },
 
-  async validateUnitRequestAvailability(formInputData: Record<string, unknown> | undefined | null): Promise<{ valid: boolean; availableCount: number | null }> {
+  async validateUnitRequestAvailability(formInputData: Record<string, unknown> | undefined | null,
+    revision?: { revisionEventId: string; draftId: string },
+  ): Promise<{ valid: boolean; availableCount: number | null; receiptId?: string }> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Tidak terautentikasi");
     const response = await fetch("/api/surat/unit-availability/validate", {
@@ -698,14 +701,16 @@ export const suratService = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ form_input_data: formInputData || {} }),
+      body: JSON.stringify({ form_input_data: formInputData || {}, ...(revision ? {
+        revision_event_id: revision.revisionEventId, draft_id: revision.draftId,
+      } : {}) }),
       cache: "no-store",
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(String(payload?.error || "Gagal memvalidasi ketersediaan unit."));
     }
-    return payload as { valid: boolean; availableCount: number | null };
+    return payload as { valid: boolean; availableCount: number | null; receiptId?: string };
   },
 
   async generateNoSurat(payload: any): Promise<{ fullNumber: string; noUrut: number }> {
@@ -947,10 +952,8 @@ export const suratService = {
       const configuredInitialRequirements = (configContext.usage?.form_usage_attachment_requirements || [])
         .filter((requirement: any) => Number(requirement.stage_order) === 0);
       const initialAttachmentMeta = payload.initial_attachment_meta || {};
-      const storedRab = persistedDraftAttachments.some(file => file.requirement_key === "rab")
-        || attachmentFiles.some(file => initialAttachmentMeta[file.name]?.key === "rab");
       const initialRequirements = withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(
-        configuredInitialRequirements, configContext.usage, normalizedFormInputData, storedRab,
+        configuredInitialRequirements, configContext.usage, normalizedFormInputData,
       ));
       const classifiedDraftAttachments = classifyRegistrationDraftAttachments({
         files: persistedDraftAttachments,
@@ -1627,19 +1630,10 @@ export const suratService = {
     const snapshotRequirements = Array.isArray(sigInfo.attachment_requirements_snapshot)
       ? sigInfo.attachment_requirements_snapshot
       : [];
-    const planningFund = sigInfo.role_name === "memeriksa" && /perencanaan/i.test(sigInfo.label_jabatan || "")
-      && usesFundSubmissionType(suratFresh.location_snapshot?.form || suratFresh.data_snapshot?.form, formInputData.request_category);
-    let requesterAttachments: Array<{ stage: string; requirement_key: string; signature_id: string | null }> = [];
-    if (planningFund && formInputData.requester_has_rab === true) {
-      const { data, error } = await supabase.from("surat_attachments")
-        .select("stage, requirement_key, signature_id").eq("surat_id", suratId).eq("stage", "initial").eq("requirement_key", "rab");
-      if (error) throw error;
-      requesterAttachments = data || [];
-      if (!hasRequesterRab(formInputData, requesterAttachments)) {
-        throw new Error("RAB dari pemohon belum dilampirkan. Kembalikan pengajuan untuk dilengkapi.");
-      }
-    }
-    const approvalRequirements = effectiveFundRabRequirements(snapshotRequirements, planningFund, formInputData, requesterAttachments);
+    const form = suratFresh.location_snapshot?.form || suratFresh.data_snapshot?.form;
+    const planningFund = isFundRabReviewer(form, formInputData.request_category, sigInfo.role_name, sigInfo.label_jabatan, "planning");
+    const hrdFund = isFundRabReviewer(form, formInputData.request_category, sigInfo.role_name, sigInfo.label_jabatan, "hrd");
+    const approvalRequirements = effectiveFundRabRequirements(snapshotRequirements, planningFund, hrdFund);
     const approvalAttachments = options.approvalAttachments || [];
     validateOptionalAttachmentFiles(approvalAttachments.filter(item => item.key === VERIFIER_ADDITIONAL_ATTACHMENT_KEY).map(item => item.file));
     const { data: existingApprovalAttachments, error: existingApprovalError } = await supabase

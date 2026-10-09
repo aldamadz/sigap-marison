@@ -132,9 +132,9 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
     .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) && !(key === "fund_type" && !showFundType) && !(keu10 && key === "keu10_purpose_label") && formatSummaryValue(value) !== "-")
     .map(([key, value]) => ({
       key,
-      label: key === "requester_has_rab" ? "RAB" : key === "fund_type" ? "Jenis Pengajuan Dana" : keu10 && key === "keu10_purpose_code" ? "Tujuan Pengajuan" : humanizeInputKey(key),
+      label: key === "rab_not_required" ? "Kebutuhan RAB" : key === "requester_has_rab" ? "Penanda RAB pemohon (data lama)" : key === "fund_type" ? "Jenis Pengajuan Dana" : keu10 && key === "keu10_purpose_code" ? "Tujuan Pengajuan" : humanizeInputKey(key),
       type: Array.isArray(value) ? "table" : undefined,
-      value: key === "requester_has_rab" ? value === true ? "Dari pemohon" : "Dari tim pemeriksa Perencanaan" : key === "fund_type" ? getFundSubmissionTypeLabel(value) : keu10 && key === "keu10_purpose_code" ? purpose?.label || "-" : value,
+      value: key === "rab_not_required" ? value === true ? "Tidak memerlukan RAB" : "RAB dapat dilampirkan (opsional)" : key === "requester_has_rab" ? value === true ? "Ya" : "Tidak" : key === "fund_type" ? getFundSubmissionTypeLabel(value) : keu10 && key === "keu10_purpose_code" ? purpose?.label || "-" : value,
     }));
 
   if (unitAllocation.units.length > 0 && !fields.some((field) => field.key === "allocated_units")) {

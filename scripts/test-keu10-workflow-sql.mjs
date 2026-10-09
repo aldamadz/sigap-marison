@@ -2,6 +2,13 @@ import { readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 
 const read = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+const fundRabParity = process.argv.includes("--fund-rab-parity");
+const stageOverlay = process.argv.includes("--stageoverlay");
+const stageRead = (file) => {
+  const result = spawnSync("git", ["show", `origin/staging:supabase/migrations/${file}`], { encoding: "utf8" });
+  if (result.status !== 0) throw new Error(`Cannot read staging overlay ${file}: ${result.stderr}`);
+  return result.stdout.replaceAll("\r\n", "\n");
+};
 const migrationRoot = "supabase/migrations/";
 const integrationSql = read("supabase/tests/keu10_workflow.integration.sql");
 const helpersEnd = integrationSql.indexOf("\nset role authenticated;");
@@ -26,7 +33,9 @@ const functions = [
   canonical("20260818170000_external_submission_decisions.sql", "apply_external_submission_decision")
     .replace("public.apply_external_submission_decision(", "public.apply_external_submission_decision_pre_configurable_routing("),
   canonical("20260824100000_configurable_external_revision_and_proactive_pdf.sql", "apply_external_submission_decision"),
-  canonical("20260818170000_external_submission_decisions.sql", "submit_external_submission_revision"),
+  fundRabParity && stageOverlay
+    ? stageRead("20260924180000_allow_validated_unit_project_revision.sql")
+    : canonical("20260818170000_external_submission_decisions.sql", "submit_external_submission_revision"),
   canonical("20260818170000_external_submission_decisions.sql", "create_external_submission_revision_draft"),
   canonical("20260728110000_auth_07_privilege_escalation_hardening.sql", "is_current_user_admin"),
   canonical("20260609170000_form_usages_and_dynamic_signatures.sql", "validate_form_usage_for_actor"),
@@ -128,7 +137,26 @@ try {
         'Original config RPC remains private');`);
     process.stdout.write("Related branch officers: canonical KEU10 wrapper preserved; private configuration guard updated.\n");
   }
-  if (process.argv.includes("--requester-edit")) {
+  if (process.argv.includes("--requester-edit") || fundRabParity) {
+    if (fundRabParity) {
+      run(psqlArgs, `create publication supabase_realtime;
+        create table public.activity_logs(id uuid primary key);
+        alter table public.surat_attachments enable row level security;
+        alter table public.surat_revision_events enable row level security;
+        alter table public.surat_linked_documents enable row level security;
+        alter table public.surat_recommendation_tasks enable row level security;
+        alter table public.activity_logs enable row level security;
+        create policy parity_fixture_attachments on public.surat_attachments for all to authenticated using(true) with check(true);
+        create policy parity_fixture_events on public.surat_revision_events for all to authenticated using(true) with check(true);
+        alter table public.surat_recommendation_tasks add column status text default 'pending';
+        alter table public.surat_registration_drafts alter column expires_at set default (now()+interval '7 days');
+        alter table public.master_projects add column code text, add column marison_project_id bigint,
+          add column marison_synced_at timestamptz, add column marison_review_reasons text[] default '{}';
+        alter table public.master_offices add column marison_branch_id bigint, add column marison_synced_at timestamptz;`);
+      run(psqlArgs, canonical("20260618120000_form_usage_step_verification.sql", "verify_surat_signature"));
+      run(psqlArgs, read(migrationRoot + "20261007090000_fund_item_verification_and_realtime.sql"));
+      if (stageOverlay) run(psqlArgs, stageRead("20261007110000_fund_requester_rab_choice.sql"));
+    }
     run(psqlArgs, canonical("20260805083000_inbox_verifier_realtime_rls.sql", "can_read_surat"));
     run(psqlArgs, read(migrationRoot + "20261008110000_pdf_approval_decision_status.sql"));
     run(psqlArgs, read(migrationRoot + "20261008110000_pdf_approval_decision_status.sql"));
@@ -142,6 +170,42 @@ try {
     process.stdout.write(slaOutput);
     run(psqlArgs, read(migrationRoot + "20261008100000_requester_data_attachment_revision.sql"));
     run(psqlArgs, read(migrationRoot + "20261008100000_requester_data_attachment_revision.sql"));
+    if (fundRabParity) {
+      run(psqlArgs, `create table keu10_test.parity_wrappers_before as select oid,md5(prosrc) body_hash
+        from pg_proc where pronamespace in ('public'::regnamespace,'requester_revision_internal'::regnamespace,'keu10_internal'::regnamespace)
+          and oid not in ('public.verify_surat_signature_pre_fund_items(uuid,text,jsonb)'::regprocedure,
+            'public.verify_surat_signature(uuid,text)'::regprocedure,
+            'public.submit_external_submission_revision_pre_keu10(uuid,uuid,jsonb,text)'::regprocedure)
+          and proname not in ('is_fund_planning_signature','effective_fund_rab_requirements');
+        create table keu10_test.parity_acl_before as select oid,proacl from pg_proc
+        where oid in ('public.verify_surat_signature_pre_fund_items(uuid,text,jsonb)'::regprocedure,
+          'public.verify_surat_signature(uuid,text)'::regprocedure,
+          'public.submit_external_submission_revision_pre_keu10(uuid,uuid,jsonb,text)'::regprocedure);`);
+      const parityMigration = read(migrationRoot + "20261009090000_fund_rab_and_unit_revision_parity.sql");
+      run(psqlArgs, parityMigration);
+      run(psqlArgs, parityMigration);
+      const parityPatches = patches("20261009090000_fund_rab_and_unit_revision_parity.sql");
+      if (parityPatches.length !== 2) throw new Error("Fund/Unit drift-guard test boundaries changed");
+      const sqlLiteral = (value) => `'${value.replaceAll("'", "''")}'`;
+      run(psqlArgs, `begin;
+        do $drift$ declare v_source text; begin
+          select pg_get_functiondef('public.verify_surat_signature_pre_fund_items(uuid,text,jsonb)'::regprocedure) into v_source;
+          execute replace(v_source,'v_signature.verification_required is not true','v_signature.verification_required is distinct from true');
+          perform keu10_test.expect_error('P0001',${sqlLiteral(parityPatches[0])});
+          execute v_source;
+          select pg_get_functiondef('public.submit_external_submission_revision_pre_keu10(uuid,uuid,jsonb,text)'::regprocedure) into v_source;
+          execute replace(v_source,'SIGAP Unit external project parity v1','Unknown Unit revision shape');
+          perform keu10_test.expect_error('P0001',${sqlLiteral(parityPatches[1])});
+          execute v_source;
+          execute replace(v_source,'Jumlah unit perbaikan wajib minimal 1.','Drifted installed guard.');
+          perform keu10_test.expect_error('P0001',${sqlLiteral(parityPatches[1])});
+        end $drift$;
+        rollback;`);
+      process.stdout.write("Fund/Unit drift guards: unknown core and modified installed block rejected; transaction rolled back.\n");
+      const parityOutput = run(psqlArgs, read("supabase/tests/fund_rab_and_unit_revision_parity.integration.sql"));
+      if (!parityOutput.includes("Fund RAB and Unit revision parity: all assertions passed")) throw new Error("Missing Fund/Unit parity marker");
+      process.stdout.write(`${stageOverlay ? "stageoverlay" : "mainshape"}: ${parityOutput}`);
+    }
     const revisionOutput = run(psqlArgs, read("supabase/tests/requester_data_attachment_revision.integration.sql"));
     if (!revisionOutput.includes("Requester corrections: all assertions passed")) throw new Error("Missing requester correction marker");
     process.stdout.write(revisionOutput);

@@ -101,6 +101,44 @@ afterEach(async () => {
 });
 
 describe("POST /api/surat/unit-availability/validate", () => {
+  it("rejects fractional unit counts before vendor lookup", async () => {
+    const res = await booted!.app.inject({ method: "POST", url: "/api/surat/unit-availability/validate",
+      headers: { authorization: "Bearer fake-session" }, payload: unitRequestPayload(1.5) });
+    expect(res.statusCode).toBe(422);
+    expect(unitFetchUrls()).toHaveLength(0);
+  });
+  it.each([false, true])("only issues a server-bound revision receipt to its owner (foreign=%s)", async foreign => {
+    const eventId = "11111111-1111-4111-8111-111111111111";
+    const draftId = "22222222-2222-4222-8222-222222222222";
+    const upsert = vi.fn(async () => ({ error: null }));
+    const rows = {
+      surat_revision_events: { id: eventId, surat_id: "document", status: "open", target_type: "requester", changes: { external_submission_revision: true } },
+      surat_registrasi: { created_by: foreign ? "other" : "user", status: "MENUNGGU_PERBAIKAN", form_input_data: { request_category: "unit" } },
+      surat_registration_drafts: { created_by: "user", status: "DRAFT", revision_event_id: eventId, expires_at: new Date(Date.now() + 60_000).toISOString() },
+    };
+    booted!.runtime.setDomainRuntimeDependenciesForTest({ supabase: {
+      auth: { getUser: async () => ({ data: { user: { id: "user" } }, error: null }) },
+      from: (table: string) => {
+        if (table === "unit_revision_availability_receipts") return { upsert };
+        const row = rows[table as keyof typeof rows];
+        if (!row) return sourceChain;
+        const chain = { select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: row, error: null }) };
+        return chain;
+      },
+    } });
+    const res = await booted!.app.inject({ method: "POST", url: "/api/surat/unit-availability/validate",
+      headers: { authorization: "Bearer fake-session" },
+      payload: { ...unitRequestPayload(3), revision_event_id: eventId, draft_id: draftId } });
+    if (foreign) {
+      expect(res.statusCode).toBe(403); expect(upsert).not.toHaveBeenCalled();
+    } else {
+      expect(res.statusCode).toBe(200);
+      expect(res.json().receiptId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: res.json().receiptId, actor_id: "user",
+        revision_event_id: eventId, draft_id: draftId, project_id: 23, project_code: "TEST-02", requested_count: 3, available_count: 252,
+        consumed_at: null }), { onConflict: "revision_event_id,draft_id,actor_id" });
+    }
+  });
   it("membaca 252 unit (3 halaman) dan mengizinkan jumlah di dalam kapasitas", async () => {
     const res = await booted!.app.inject({
       method: "POST",
