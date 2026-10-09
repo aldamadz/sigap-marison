@@ -1,5 +1,23 @@
 # SIGAP Feature and Release Map
 
+## MRN-21 / SUR-03 Dana Umum Cabang (2026-10-09, Issue #517)
+
+- Correction for branch/KCP PGD Fund: `Tanpa Proyek (Dana Umum)` is an explicit
+  supported choice at number allocation and registration, not an Asset exception.
+- `generate_fund_branch_letter_number` verifies the active PGD Fund usage,
+  requester, office, department and letter type server-side. Immutable scope
+  `branch_fund_general` shares the existing office/year counter and lock with
+  other project-free branch forms; admin reuse windows and audit remain intact.
+- New project-free numbers omit the project segment, including `-000`; KCP
+  retains its parent-office code. Project-selected PGD, KEU 1/10, SPK and historic
+  numbers are unchanged. Reservation and registration guards prevent scope swaps,
+  conflicting project flags and direct browser reservation insertion.
+- Forward migration `20261009140000_branch_fund_without_project_numbering.sql`.
+  Source verification: affected service/UI tests and real PostgreSQL allocator,
+  draft, cancellation/reuse, submit, authorization and concurrent allocation.
+  Live deployment/acceptance evidence is recorded on Issue #517, separately from
+  source tests. Production rollout requires staging-first runtime ancestry.
+
 ## SUR-24 / SUR-17 / MRN-12 / NTF-02 Released Issue #509 (2026-10-09)
 
 - Runtime aplikasi terverifikasi setelah PR #511: production `080b02f721`, staging
@@ -16,7 +34,7 @@
 - Batas acceptance: uji dua akun/burst live belum dijalankan. Jangan menganggap
   regression test sebagai bukti approval dua sesi atau pengiriman vendor live.
   Probe Ubuntu mengalami koneksi Cloudflare lambat; probe Windows root/ready
-  sekitar 0,45 detik. Dana Cabang tanpa proyek masih punya guard penomoran lama.
+  sekitar 0,45 detik. Guard penomoran Dana Cabang tanpa proyek ditindaklanjuti #517.
 
 Acceptance browser menemukan label dinamis `Manager Terkait` pada Dana. Label
 ini memakai RAB opsional yang sama tanpa mengasumsikan HRD atau Perencanaan;

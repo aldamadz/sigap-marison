@@ -10,6 +10,7 @@ import {
   formatCreateRegistrasiError,
 } from "@/lib/registration-draft-attachment-classification";
 import { isBranchAssetFallback } from "@/features/surat/registration/lib/branch-asset-fallback";
+import { usesFundSubmissionType } from "@/features/surat/registration/usages/fund/fund-types";
 import { isKeu1Form } from "@/features/surat/registration/lib/keu1-form";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
@@ -738,6 +739,9 @@ export const suratService = {
       const isBranchKeu1WithoutProject = context?.usage?.request_category === "non_asset"
         && isKeu1Form(context.form)
         && payload.form_input_data?.fund_without_project === true;
+      const isBranchFundWithoutProject = !isPusat && !projectIdClean
+        && usesFundSubmissionType(context.form, context.usage?.request_category)
+        && payload.form_input_data?.fund_without_project === true;
       const isUnitRequest = requestCategory === "unit" || payload.form_input_data?.request_mode === "unit";
       if (isUnitRequest) {
         const actorDepartmentId = context.profile?.department_id;
@@ -780,7 +784,7 @@ export const suratService = {
         });
       }
 
-      if (!isPusat && !projectIdClean && !fallbackEligible && !isBranchKeu1WithoutProject) {
+      if (!isPusat && !projectIdClean && !fallbackEligible && !isBranchKeu1WithoutProject && !isBranchFundWithoutProject) {
         throw new Error("Pilih proyek cabang sebelum mengambil nomor surat.");
       }
 
@@ -793,8 +797,9 @@ export const suratService = {
       // original 6-parameter RPC.
       let nextNumber, rpcError;
 
-      if (isBranchKeu1WithoutProject) {
-        const { data: n, error: e } = await supabase.rpc("generate_keu1_branch_letter_number", {
+      if (isBranchKeu1WithoutProject || isBranchFundWithoutProject) {
+        const { data: n, error: e } = await supabase.rpc(isBranchFundWithoutProject
+          ? "generate_fund_branch_letter_number" : "generate_keu1_branch_letter_number", {
           p_entity_id: payload.entity_id,
           p_type_id: payload.letter_type_id,
           p_office_id: officeIdClean,
@@ -866,7 +871,7 @@ export const suratService = {
         middleCode = `${deptCode}.${tIndex}`;
       } else {
         const projCode = projectRes.data?.code || defaultProjectCode || "000";
-        const projectSegment = isBranchKeu1WithoutProject ? "" : `-${projCode}`;
+        const projectSegment = isBranchKeu1WithoutProject || isBranchFundWithoutProject ? "" : `-${projCode}`;
         if (office?.kedudukan === "KC") {
           middleCode = `${office.code}${projectSegment}.${dIndex}.${tIndex}`;
         } else {
