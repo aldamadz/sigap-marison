@@ -12,7 +12,7 @@ describe("requester RAB registration flow", () => {
     serviceMock.getMasterData.mockResolvedValue(MASTER_DATA_DEFAULT);
     allowServiceCalls("getMasterData", "getActiveRegistrationDrafts", "generateNoSurat", "createRegistrationDraft", "saveRegistrationDraft");
   });
-  it("adds/removes the classified RAB upload when checkbox changes in the real form", async () => {
+  it("keeps optional RAB upload available when no-RAB intent changes in the real form", async () => {
     const usages = FUND_FORM_USAGE_RAW.map(usage => ({ ...usage, form_usage_steps: usage.form_usage_steps.map(step =>
       step.step_order === 2 ? { ...step, role_name: "memeriksa", label: "Mgr. Perencanaan" } : step) }));
     await mountFormWithUsage(usages, CURRENT_PROFILE_KC);
@@ -22,15 +22,15 @@ describe("requester RAB registration flow", () => {
     fireEvent.click(screen.getByText("Tanpa Proyek (Dana Umum)"));
     await selectOptionByLabel(/^Jenis Pengajuan Dana$/i, /Biaya Operasional/i);
     await clickGetNumber();
-    const checkbox = await screen.findByRole("checkbox", { name: "Ada RAB" });
+    const checkbox = await screen.findByRole("checkbox", { name: "Tidak memerlukan RAB" });
     expect(checkbox).not.toBeChecked();
-    expect(screen.queryByText("RAB dari pemohon")).not.toBeInTheDocument();
+    expect(await screen.findByText("RAB (opsional)")).toBeInTheDocument();
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
-    expect(await screen.findByText("RAB dari pemohon")).toBeInTheDocument();
+    expect(screen.getByText("RAB (opsional)")).toBeInTheDocument();
     fireEvent.click(checkbox);
-    expect(screen.queryByText("RAB dari pemohon")).not.toBeInTheDocument();
-    expect(screen.getByText("RAB akan dilengkapi oleh tim pemeriksa Perencanaan.")).toBeInTheDocument();
+    expect(screen.getByText("RAB (opsional)")).toBeInTheDocument();
+    expect(screen.getByText("RAB opsional. Perencanaan dapat melengkapi; HRD dapat meminta perbaikan kepada pemohon.")).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 });

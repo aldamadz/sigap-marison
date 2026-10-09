@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useRef, useState } from "react";
+import { useMasterRealtimeReload } from "@/hooks/use-master-realtime-reload";
 import { supabase } from "@/lib/supabase";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -61,10 +62,12 @@ export default function OfficeManagementPage() {
   const [syncIssueCount, setSyncIssueCount] = useState(0);
   const [overrides, setOverrides] = useState<MarisonPayloadMapping[]>([]);
   const [overrideFilter, setOverrideFilter] = useState("all");
+  const createId = useRef<string | null>(null);
+  const saveInFlight = useRef(false);
 
-  const loadData = async () => {
+  const fetchData = async (background: boolean) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const { data, error } = await supabase
         .from("master_offices")
         .select("id,code,name,email,kedudukan,parent_id,marison_branch_id,marison_branch_code,marison_synced_at,marison_review_required,marison_review_reasons")
@@ -73,11 +76,12 @@ export default function OfficeManagementPage() {
       if (error) throw error;
       setOffices((data || []) as MasterOfficeRow[]);
       setOverrides(await marisonPayloadMappingService.list('office'));
-      const { count } = await supabase
+      const { count, error: issueError } = await supabase
         .from("marison_sync_issues")
         .select("id", { count: "exact", head: true })
         .eq("entity_type", "branch")
         .eq("status", "open");
+      if (issueError) throw issueError;
       setSyncIssueCount(count || 0);
     } catch (error: any) {
       toast({ 
@@ -86,12 +90,14 @@ export default function OfficeManagementPage() {
         description: "Gagal memuat data kantor" 
       });
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   };
+  const loadData = useMasterRealtimeReload("master-offices-live", ["master_offices", "marison_sync_issues"], fetchData);
 
   const openCreate = () => {
     setEditing(null);
+    createId.current = crypto.randomUUID();
     setForm(emptyForm);
     setFormOpen(true);
   };
@@ -103,13 +109,14 @@ export default function OfficeManagementPage() {
       name: office.name || "",
       email: office.email || "",
       kedudukan: office.kedudukan || "KC",
-      parent_id: office.parent_id || "none",
+      parent_id: office.kedudukan === "Pusat" ? "none" : office.parent_id || "none",
       marison_branch_id: office.marison_branch_id == null ? "" : String(office.marison_branch_id),
     });
     setFormOpen(true);
   };
 
   const saveOffice = async () => {
+    if (saveInFlight.current) return;
     if (!form.code.trim() || !form.name.trim()) {
       toast({ variant: "destructive", title: "Data belum lengkap", description: "Kode dan nama kantor wajib diisi." });
       return;
@@ -118,24 +125,35 @@ export default function OfficeManagementPage() {
       toast({ variant: "destructive", title: "Hirarki belum lengkap", description: "KCP/Kost wajib memiliki kantor induk." });
       return;
     }
+    if (form.kedudukan !== "Pusat" && form.parent_id !== "none") {
+      const seen = new Set(editing ? [editing.id] : []);
+      let cursor: string | null = form.parent_id;
+      while (cursor) {
+        const parent = offices.find((office) => office.id === cursor);
+        if (!parent || !["Pusat", "KC", "KCP"].includes(parent.kedudukan || "") || seen.has(cursor) || seen.size >= 128
+          || (cursor === form.parent_id && form.kedudukan === "KCP" && parent.kedudukan !== "KC")) {
+          toast({ variant: "destructive", title: "Hirarki tidak valid", description: "Pilih kantor induk yang benar dan tidak membentuk siklus." });
+          return;
+        }
+        seen.add(cursor);
+        cursor = parent.parent_id;
+      }
+    }
+    saveInFlight.current = true;
     setSaving(true);
     try {
       const externalId = form.marison_branch_id.trim() ? Number(form.marison_branch_id) : null;
       if (externalId != null && !Number.isSafeInteger(externalId)) throw new Error("ID external harus berupa angka bulat.");
-      const isHeadOffice = form.kedudukan === "Pusat";
-      const payload = {
-        code: form.code.trim().toUpperCase(),
-        name: form.name.trim(),
-        email: form.email.trim() || null,
-        kedudukan: form.kedudukan,
-        parent_id: isHeadOffice || form.parent_id === "none" ? null : form.parent_id,
-        marison_branch_id: externalId,
-        marison_hierarchy_confirmed: true,
-      };
-      const query = editing
-        ? supabase.from("master_offices").update(payload).eq("id", editing.id)
-        : supabase.from("master_offices").insert(payload);
-      const { error } = await query;
+      const { error } = await supabase.rpc("save_master_office", {
+        p_id: editing?.id || createId.current,
+        p_code: form.code.trim().toUpperCase(),
+        p_name: form.name.trim(),
+        p_email: form.email.trim() || null,
+        p_kedudukan: form.kedudukan,
+        p_parent_id: form.kedudukan === "Pusat" || form.parent_id === "none" ? null : form.parent_id,
+        p_marison_branch_id: externalId,
+        p_create: !editing,
+      });
       if (error) throw error;
       toast({ title: editing ? "Kantor diperbarui" : "Kantor ditambahkan" });
       setFormOpen(false);
@@ -147,13 +165,10 @@ export default function OfficeManagementPage() {
         description: error instanceof Error ? error.message : "Terjadi kesalahan.",
       });
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
     }
   };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
 
   const handleSync = async () => {
     try {
@@ -346,34 +361,25 @@ export default function OfficeManagementPage() {
             </div>
             <div className="space-y-2">
               <Label>Kedudukan</Label>
-              <Select
-                value={form.kedudukan}
-                onValueChange={(value) => setForm({
-                  ...form,
-                  kedudukan: value,
-                  parent_id: value === "Pusat" ? "none" : form.parent_id,
-                })}
-              >
+              <Select value={form.kedudukan} onValueChange={(value) => setForm({ ...form, kedudukan: value, parent_id: value === "Pusat" ? "none" : form.parent_id })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {["Pusat", "KC", "KCP", "Kost"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            {form.kedudukan !== "Pusat" && (
-              <div className="space-y-2">
-                <Label>Kantor induk</Label>
-                <Select value={form.parent_id} onValueChange={(value) => setForm({ ...form, parent_id: value })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Tidak ada</SelectItem>
-                    {offices.filter((office) => office.id !== editing?.id).map((office) => (
-                      <SelectItem key={office.id} value={office.id}>{office.kedudukan} {office.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {form.kedudukan !== "Pusat" && <div className="space-y-2">
+              <Label>Kantor induk</Label>
+              <Select value={form.parent_id} onValueChange={(value) => setForm({ ...form, parent_id: value })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak ada</SelectItem>
+                  {offices.filter((office) => office.id !== editing?.id && ["Pusat", "KC", "KCP"].includes(office.kedudukan || "") && (form.kedudukan !== "KCP" || office.kedudukan === "KC")).map((office) => (
+                    <SelectItem key={office.id} value={office.id}>{office.kedudukan} {office.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>}
           </div>
           {editing?.marison_review_required && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">

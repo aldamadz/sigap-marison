@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Link } from 'react-router';
 import { supabase } from '@/lib/supabase';
+import { useMasterRealtimeReload } from '@/hooks/use-master-realtime-reload';
 import { getUsers } from '@/services/user.service';
 import { adminUserService, describeAdminUserError } from '@/services/admin-user.service';
 import { User } from '@/types/agenda';
@@ -398,8 +399,8 @@ export default function UserManagementPage() {
   const [overrideFilter, setOverrideFilter] = useState('all');
   const importRef = useRef<HTMLInputElement>(null);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const loadUsers = async (background: boolean) => {
+    if (!background) setLoading(true);
     try {
       const [nextUsers, issueResult] = await Promise.all([
         getUsers(),
@@ -414,10 +415,10 @@ export default function UserManagementPage() {
       setSyncIssueCount(issueResult.count || 0);
     }
     catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    finally { if (!background) setLoading(false); }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  const fetchUsers = useMasterRealtimeReload('master-directory-live', ['master_offices', 'marison_sync_issues'], loadUsers);
 
   const uniqueOffices = useMemo(() =>
     Array.from(new Set(users.map(u => u.officeName).filter(Boolean))).sort() as string[], [users]);

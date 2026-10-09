@@ -57,6 +57,7 @@ type RouteStep = {
   verifier_scope: "request_office" | "head_office" | "all_offices";
   eligible_user_ids: string[];
   verifier_user_ids: string[];
+  verifier_team_enabled?: boolean;
 };
 type AttachmentRule = {
   id?: string;
@@ -128,6 +129,7 @@ const emptyStep = (stepOrder: number): RouteStep => ({
   verifier_scope: "request_office",
   eligible_user_ids: [],
   verifier_user_ids: [],
+  verifier_team_enabled: false,
 });
 
 const emptyAttachment = (): AttachmentRule => ({
@@ -413,6 +415,7 @@ export default function FormUsageManagementPage() {
           verifier_scope: step.verifier_scope || "request_office",
           eligible_user_ids: (step.form_usage_step_users || []).map(item => item.user_id),
           verifier_user_ids: (step.form_usage_step_verifiers || []).map(item => item.user_id),
+          verifier_team_enabled: (step.form_usage_step_verifiers || []).length > 0 || step.action_type !== "approval",
         })),
       attachments: (usage.form_usage_attachment_requirements || []).map(rule => ({
         id: rule.id,
@@ -500,6 +503,7 @@ export default function FormUsageManagementPage() {
       steps: previous.steps.map((step, stepIndex) => {
         if (stepIndex !== index) return step;
         const next = { ...step, ...patch };
+        if (patch.action_type && patch.action_type !== "approval") next.verifier_team_enabled = true;
         if (patch.signer_department_id !== undefined) {
           next.eligible_user_ids = next.eligible_user_ids.filter(userId =>
             profiles.some(profile => profile.id === userId && profile.department_id === patch.signer_department_id)
@@ -636,11 +640,9 @@ export default function FormUsageManagementPage() {
   };
 
   const setVerifierTeamEnabled = (stepIndex: number, enabled: boolean) => {
-    const step = formData.steps[stepIndex];
     updateStep(stepIndex, {
-      verifier_user_ids: enabled
-        ? getVerifierCandidates(step).map(profile => profile.id)
-        : [],
+      verifier_team_enabled: enabled,
+      ...(!enabled ? { verifier_user_ids: [] } : {}),
     });
   };
 
@@ -719,7 +721,7 @@ export default function FormUsageManagementPage() {
         missing.push("departemen penandatangan");
       }
       if (step.assignee_mode !== "requester" && step.eligible_user_ids.length === 0) missing.push("kandidat signer");
-      if (step.action_type !== "approval" && step.verifier_user_ids.length === 0) {
+      if ((step.action_type !== "approval" || step.verifier_team_enabled) && step.verifier_user_ids.length === 0) {
         missing.push("operator pemeriksa");
       }
       if (step.verifier_user_ids.some(id => !getVerifierCandidates(step).some(profile => profile.id === id))) {
@@ -1369,7 +1371,7 @@ export default function FormUsageManagementPage() {
                           <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold">
                             <input
                               type="checkbox"
-                              checked={step.verifier_user_ids.length > 0}
+                              checked={step.verifier_team_enabled ?? step.verifier_user_ids.length > 0}
                               onChange={event => setVerifierTeamEnabled(index, event.target.checked)}
                             />
                             Aktifkan
@@ -1410,7 +1412,7 @@ export default function FormUsageManagementPage() {
                             </Select>
                           </div>
                         </div>
-                        {step.verifier_user_ids.length > 0 && (() => {
+                        {(step.verifier_team_enabled ?? step.verifier_user_ids.length > 0) && (() => {
                           const candidates = getVerifierCandidates(step, verifierSearch[index] || "");
                           return (
                             <div className="space-y-2">

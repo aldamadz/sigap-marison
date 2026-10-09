@@ -37,6 +37,18 @@ export const suratRegistrationDocs: DocsEntry = {
     related: ["Status Pengajuan", "Persetujuan", "Dokumen dan Lampiran"],
     sections: [
       {
+        type: "table",
+        title: "Dana Perencanaan dan HRD (kandidat #509)",
+        columns: ["Pengajuan", "Lampiran dan proses"],
+        rows: [
+          ["Dana Perencanaan", "Lampiran RAB opsional. Pemohon boleh melampirkan; tim Perencanaan boleh menambahkan RAB jika pemohon belum melampirkannya."],
+          ["Dana HRD", "Lampiran RAB opsional. HRD dapat meminta RAB/perbaikan redaksi melalui Minta Perbaikan Pemohon; RAB kosong tidak otomatis memblokir atau menolak pengajuan."],
+          ["Tidak memerlukan RAB", "Checkbox menyatakan maksud pengecualian, misalnya servis AC/kendaraan. Tidak menghapus file yang sudah ada; dicentang atau tidak, upload RAB tetap tidak wajib."],
+          ["Jenis biaya PGD Dana", "Operasional, produksi, atau pemasaran tetap dipilih sesuai kebutuhan; checkbox Tidak memerlukan RAB tidak mengubah jenis biaya."],
+          ["KEU 1 / KEU 10", "Tidak menampilkan/mewajibkan pilihan jenis biaya PGD Dana; tipe teknis tetap operasional otomatis."],
+        ],
+      },
+      {
         type: "group",
         title: "Nomor surat, counter, dan draft",
         description:
@@ -46,7 +58,7 @@ export const suratRegistrationDocs: DocsEntry = {
             type: "callout",
             title: "Nomor tidak dilepas begitu saja",
             description:
-              "Saat nomor sudah dipesan, sistem menyimpan draft agar pengajuan bisa dilanjutkan jika halaman tertutup. Nomor yang sudah menjadi VOID tidak dipakai ulang supaya audit tetap jelas.",
+              "Saat nomor sudah dipesan, sistem menyimpan draft agar pengajuan bisa dilanjutkan jika halaman tertutup. Nomor draft yang dibatalkan hanya dapat dipakai ulang dalam jendela kebijakan admin; setelah batas waktu menjadi VOID permanen. Nomor surat terdaftar tidak dipakai ulang.",
             tone: "info",
           },
           {
@@ -119,7 +131,7 @@ export const suratRegistrationDocs: DocsEntry = {
               ["Cabang/KC/KCP dengan proyek", "Entitas + Proyek + Tahun.", "Reset ketika tahun berubah untuk proyek tersebut."],
               ["Cabang/KC/KCP tanpa proyek", "Entitas + Kantor + Departemen + Jenis + Tahun dengan kode virtual 000.", "Reset tahunan tanpa membuat master proyek 000."],
               ["Nomor awal produksi", "Nilai start_from pada Konfigurasi Penomoran.", "Dipakai saat sistem mulai dari nomor lanjutan agar tidak bentrok dengan nomor manual lama."],
-              ["Nomor VOID", "Tidak dipakai ulang.", "Dibiarkan sebagai jejak nomor yang batal."],
+              ["Nomor VOID", "Hanya dapat dipakai ulang dalam jendela kebijakan admin.", "Lewat batas waktu menjadi VOID permanen; setiap siklus pembatalan/pemakaian ulang diaudit."],
               ["Nomor CANCELLED legacy", "Dapat dipakai ulang oleh generator jika status masih CANCELLED dan >= start_from.", "Status baru memakai VOID agar tidak membingungkan produksi."],
             ],
           },
@@ -130,7 +142,7 @@ export const suratRegistrationDocs: DocsEntry = {
             rows: [
               ["DRAFT", "Nomor sudah dipesan dan form disimpan otomatis.", "Nomor tetap menempel ke draft dan tidak diberikan ke user lain."],
               ["SUBMITTED", "Draft sudah dikirim menjadi surat berjalan.", "Nomor dipakai sebagai nomor resmi dokumen setelah reservasi draft divalidasi terhadap sesi login."],
-              ["VOID", "Draft dibatalkan.", "Nomor tidak dipakai ulang agar audit tetap aman."],
+              ["VOID", "Draft dibatalkan.", "Pemakaian ulang dibatasi kebijakan admin; draft pemakai baru terpisah dari draft batal lama."],
               ["EXPIRED", "Draft melewati masa aktif.", "Perlu dibuat ulang sesuai aturan yang aktif."],
               ["Masa aktif", "Draft aktif selama 7 hari dari penyimpanan terakhir.", "User diarahkan melanjutkan draft jika kembali ke registrasi."],
             ],
@@ -304,7 +316,7 @@ export const suratRegistrationDetailSections: DocsSection[] = [
         ["Cabang/KC/KCP dengan proyek", "Entitas + Proyek + Tahun.", "Reset ketika tahun berubah untuk proyek tersebut."],
         ["Cabang/KC/KCP tanpa proyek", "Entitas + Kantor + Departemen + Jenis + Tahun dengan kode virtual 000.", "Reset tahunan tanpa membuat master proyek 000."],
         ["Nomor awal produksi", "Nilai start_from pada Konfigurasi Penomoran.", "Dipakai saat sistem mulai dari nomor lanjutan agar tidak bentrok dengan nomor manual lama."],
-        ["Nomor VOID", "Tidak dipakai ulang.", "Dibiarkan sebagai jejak nomor yang batal."],
+        ["Nomor VOID", "Hanya dapat dipakai ulang dalam jendela kebijakan admin.", "Lewat batas waktu menjadi VOID permanen; setiap siklus pembatalan/pemakaian ulang diaudit."],
         ["Nomor CANCELLED legacy", "Dapat dipakai ulang oleh generator jika status masih CANCELLED dan >= start_from.", "Status baru memakai VOID agar tidak membingungkan produksi."],
       ],
     },
@@ -315,7 +327,7 @@ export const suratRegistrationDetailSections: DocsSection[] = [
       rows: [
         ["DRAFT", "Nomor sudah dipesan dan form disimpan otomatis.", "Nomor tetap menempel ke draft dan tidak diberikan ke user lain."],
         ["SUBMITTED", "Draft sudah dikirim menjadi surat berjalan.", "Nomor dipakai sebagai nomor resmi dokumen."],
-        ["VOID", "Draft dibatalkan.", "Nomor tidak dipakai ulang agar audit tetap aman."],
+        ["VOID", "Draft dibatalkan.", "Pemakaian ulang dibatasi kebijakan admin; draft pemakai baru terpisah dari draft batal lama."],
         ["EXPIRED", "Draft melewati masa aktif.", "Perlu dibuat ulang sesuai aturan yang aktif."],
         ["Masa aktif", "Draft aktif selama 7 hari dari penyimpanan terakhir.", "User diarahkan melanjutkan draft jika kembali ke registrasi."],
       ],
