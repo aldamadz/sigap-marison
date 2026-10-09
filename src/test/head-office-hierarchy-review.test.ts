@@ -47,6 +47,7 @@ describe("head office hierarchy review", () => {
     expect(migration).toContain("new.kedudukan in ('KCP', 'Kost')");
     expect(page).toContain('parent_id: value === "Pusat" ? "none" : form.parent_id');
     expect(page).toContain('form.kedudukan !== "Pusat"');
-    expect(page).toContain('isHeadOffice || form.parent_id === "none" ? null : form.parent_id');
+    expect(page).toContain('supabase.rpc("save_master_office"');
+    expect(page).toContain('p_parent_id: form.kedudukan === "Pusat" || form.parent_id === "none" ? null : form.parent_id');
   });
 });
