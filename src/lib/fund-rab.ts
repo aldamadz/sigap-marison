@@ -17,8 +17,16 @@ export function isFundRabReviewer(
 export function usesRequesterRabChoice(usage: UsageDetailRecord, category: unknown): boolean {
   return usesFundSubmissionType(usage.master_forms, category)
     && Boolean(usage.form_usage_steps?.some(step =>
-      isFundRabReviewer(usage.master_forms, category, step.role_name, step.label, "planning")
-      || isFundRabReviewer(usage.master_forms, category, step.role_name, step.label, "hrd")));
+      isFundRabReviewStage(usage.master_forms, category, step.role_name, step.label)));
+}
+
+export function isFundRabReviewStage(
+  form: Parameters<typeof usesFundSubmissionType>[0], category: unknown, role: unknown, label: unknown,
+): boolean {
+  return isFundRabReviewer(form, category, role, label, "planning")
+    || isFundRabReviewer(form, category, role, label, "hrd")
+    || (role === "memeriksa" && usesFundSubmissionType(form, category)
+      && typeof label === "string" && /^\s*(?:manager|mgr\.?)\s+terkait\s*$/i.test(label));
 }
 
 export function withRequesterRabRequirement(

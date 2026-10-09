@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
-import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewer } from "@/lib/fund-rab";
+import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewStage } from "@/lib/fund-rab";
 import { ApprovalAttachmentPicker } from "@/features/surat/inbox/components/ApprovalAttachmentPicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
@@ -449,10 +449,8 @@ export default function InboxPage() {
   // Requester correction never grants the checker a permanent rejection action.
   const canReturnToRequester = (item: any) =>
     isVerificationTask(item) &&
-    (isFundRabReviewer(item.surat_registrasi?.location_snapshot?.form || item.surat_registrasi?.data_snapshot?.form,
-      item.surat_registrasi?.form_input_data?.request_category, item.role_name, item.label_jabatan, "planning")
-      || isFundRabReviewer(item.surat_registrasi?.location_snapshot?.form || item.surat_registrasi?.data_snapshot?.form,
-        item.surat_registrasi?.form_input_data?.request_category, item.role_name, item.label_jabatan, "hrd")
+    (isFundRabReviewStage(item.surat_registrasi?.location_snapshot?.form || item.surat_registrasi?.data_snapshot?.form,
+      item.surat_registrasi?.form_input_data?.request_category, item.role_name, item.label_jabatan)
       || item.input_schema_snapshot?.review_mode === "fund_item_checklist" || (isUnitAllocationRequired(item) && (
       !getAllocationProject(item)?.code ||
       Boolean(allocationErrors[item.id]) ||
@@ -515,8 +513,7 @@ export default function InboxPage() {
     const form = surat.location_snapshot?.form || surat.data_snapshot?.form;
     return effectiveFundRabRequirements(Array.isArray(item.attachment_requirements_snapshot)
       ? item.attachment_requirements_snapshot
-      : [], isFundRabReviewer(form, input.request_category, item.role_name, item.label_jabatan, "planning"),
-      isFundRabReviewer(form, input.request_category, item.role_name, item.label_jabatan, "hrd"));
+      : [], isFundRabReviewStage(form, input.request_category, item.role_name, item.label_jabatan));
   };
 
   const getSelectedApprovalFiles = (item: any) =>

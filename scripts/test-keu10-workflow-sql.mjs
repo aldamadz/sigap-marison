@@ -202,6 +202,9 @@ try {
         end $drift$;
         rollback;`);
       process.stdout.write("Fund/Unit drift guards: unknown core and modified installed block rejected; transaction rolled back.\n");
+      const genericRabMigration = read(migrationRoot + "20261009113000_fund_rab_generic_manager.sql");
+      run(psqlArgs, genericRabMigration);
+      run(psqlArgs, genericRabMigration);
       const parityOutput = run(psqlArgs, read("supabase/tests/fund_rab_and_unit_revision_parity.integration.sql"));
       if (!parityOutput.includes("Fund RAB and Unit revision parity: all assertions passed")) throw new Error("Missing Fund/Unit parity marker");
       process.stdout.write(`${stageOverlay ? "stageoverlay" : "mainshape"}: ${parityOutput}`);
