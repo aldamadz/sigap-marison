@@ -46,6 +46,12 @@ select keu10_test.rab_case(4,'Mgr. HRD & GA');
 select keu10_test.rab_case(5,'Mgr. Keuangan');
 select keu10_test.rab_case(6,'Mgr. Perencanaan');
 select keu10_test.rab_case(7,'Mgr. Perencanaan');
+select keu10_test.rab_case(20,'Manager Terkait');
+select keu10_test.assert(public.fund_rab_stage(keu10_test.id(13020))='reviewer',
+  'Generic Manager Terkait supports optional RAB without falsely classifying HRD or Planning');
+select keu10_test.assert((select bool_and(r->'is_required'='false'::jsonb and r->>'min_files'='0')
+  from jsonb_array_elements(public.effective_fund_rab_requirements(keu10_test.id(13020))) r
+  where r->>'requirement_key'='rab'), 'Generic manager old RAB snapshot is optional');
 update public.surat_registrasi set location_snapshot='{"form":{"nomor_form":"FM-UAI.KEU-10-00"}}'
   where id=keu10_test.id(12005);
 update public.surat_registrasi set form_input_data=jsonb_set(form_input_data,'{request_category}','"asset"')
@@ -60,6 +66,13 @@ select keu10_test.assert((select bool_and(r->'is_required'='false'::jsonb and r-
 
 set role authenticated;
 select set_config('request.jwt.claim.sub',keu10_test.id(11)::text,false);
+select keu10_test.expect_error('22023',format('select public.verify_surat_signature_v2(%L,null,%L)',
+  keu10_test.id(13020),'{"checker_input":{"memo":"OK"}}'));
+insert into public.surat_attachments(surat_id,signature_id,stage,requirement_key,file_url)
+  values(keu10_test.id(12020),keu10_test.id(13020),'approval','support','private://checker/generic-support.pdf');
+select public.verify_surat_signature_v2(keu10_test.id(13020),null,'{"checker_input":{"memo":"OK"}}');
+select keu10_test.assert((select verification_status='verified' from public.surat_signatures where id=keu10_test.id(13020)),
+  'Generic manager accepts absent RAB only when other input and attachment requirements are met');
 select keu10_test.expect_error('22023',format('select public.verify_surat_signature_v2(%L,null,%L)',
   keu10_test.id(13001),'{"checker_input":{"memo":"OK"},"requester_has_rab":true}'));
 select public.verify_surat_signature(keu10_test.id(13002),null);

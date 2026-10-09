@@ -2,6 +2,11 @@
 
 ## SUR-24 / SUR-17 / MRN-12 / NTF-02 Kandidat Issue #509 (2026-10-09)
 
+Acceptance browser menemukan label dinamis `Manager Terkait` pada Dana. Label
+ini memakai RAB opsional yang sama tanpa mengasumsikan HRD atau Perencanaan;
+migration forward-only `20261009113000_fund_rab_generic_manager.sql` melengkapi
+dua migration kandidat awal, tidak mengubah file yang sudah applied ke staging.
+
 - Branch `fix/fund-review-realtime-release-01`, basis production `main` `019d243`.
   Pengguna memilih rilis production setelah pengujian staging. Perubahan BARU
   tetap kandidat: subtask ini hanya dokumentasi, tanpa deploy, E2E, atau write DB.
