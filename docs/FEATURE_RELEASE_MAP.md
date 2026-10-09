@@ -1,8 +1,68 @@
 # SIGAP Feature and Release Map
 
+## SUR-24 / SUR-17 / MRN-12 / NTF-02 Kandidat Issue #509 (2026-10-09)
+
+Acceptance browser menemukan label dinamis `Manager Terkait` pada Dana. Label
+ini memakai RAB opsional yang sama tanpa mengasumsikan HRD atau Perencanaan;
+migration forward-only `20261009113000_fund_rab_generic_manager.sql` melengkapi
+dua migration kandidat awal, tidak mengubah file yang sudah applied ke staging.
+
+- Branch `fix/fund-review-realtime-release-01`, basis production `main` `019d243`.
+  Pengguna memilih rilis production setelah pengujian staging. Perubahan BARU
+  tetap kandidat: subtask ini hanya dokumentasi, tanpa deploy, E2E, atau write DB.
+  Parent wajib mencatat hasil staging, SHA runtime live, migration dan worker
+  terkait sebelum status diubah menjadi released; keberadaan source bukan bukti live.
+- SUR-24 (ID baru, revisi kebutuhan 2026-10-09): lampiran RAB opsional pada Dana
+  HRD dan Perencanaan; tidak ada kewajiban upload atau guard waiver checkbox.
+  Tim Perencanaan boleh melampirkan RAB jika pemohon belum melampirkannya.
+  HRD dapat meminta RAB/perbaikan redaksi melalui alur canonical
+  `Minta Perbaikan Pemohon`, bukan otomatis menolak atau memblokir karena RAB kosong.
+  Checkbox `Tidak memerlukan RAB` (`rab_not_required`) hanya menyatakan maksud
+  pengecualian, misalnya servis AC/kendaraan; tidak menghapus file yang sudah ada.
+  Pilihan jenis biaya PGD Dana tidak berubah; KEU 1/KEU 10 tetap tidak terpengaruh.
+- SUR-17: tim pemeriksa opt-in dimulai dengan nol orang terpilih. Admin memilih
+  orang yang tepat per kegunaan dan tahap; tidak otomatis memilih seluruh kandidat
+  atau menetapkan Usman/Tri hanya karena tersedia.
+- MRN-12: revisi Unit eksternal membuka proyek hanya untuk pemilik revisi yang
+  masih terbuka; identitas/nomor surat tidak berubah. Pilihan proyek memuat ulang
+  kapasitas terbaru dan mengosongkan alokasi lama agar diperiksa ulang.
+- MRN-12: kandidat tabel privat baru `unit_revision_availability_receipts`
+  menyimpan receipt kapasitas berumur pendek dari lookup external terbaru oleh
+  backend; bukan kapasitas dari browser. Server memeriksa pemilik, revisi eksternal
+  terbuka, draft aktif, proyek/kode dan jumlah yang cocok, kapasitas cukup, masa
+  berlaku serta receipt belum dipakai. Receipt dikonsumsi sekali dalam transaksi
+  pengiriman revisi; receipt basi, tidak cocok atau replay ditolak. Akses tabel
+  langsung browser ditutup. Migration dan acceptance live tetap kandidat parent.
+- AUTH-01: placeholder login generik tanpa identitas/contoh akun pribadi adalah
+  kandidat #509. Parent memiliki `LoginPage` dan tesnya; subtask ini hanya mencatat
+  cakupan, tanpa mengubah autentikasi atau mengklaim UI login sudah live.
+- NTF-02: `RealtimeSync` menangani refresh query termasuk `surat-inbox-compact`,
+  `surat-inbox-kpi` dan `surat-inbox-detail`. Listener Inbox hanya mengatur cursor
+  dan toast, tanpa refetch duplikat; event revisi/rekomendasi juga mereset cursor.
+  Tiga regresi event-only lulus menurut laporan parent 2026-10-09; ini bukan
+  acceptance E2E atau bukti deploy. Acceptance staging serta bukti live tetap
+  menjadi tanggung jawab parent.
+- ORG-01, SUR-22/SUR-23/ADM-01, kebijakan penomoran SUR-03B dan Kalender Kerja
+  adalah baseline rilis sebelumnya, bukan fitur baru kandidat #509.
+
+## Snapshot Rilis Terverifikasi dari Handoff (2026-10-09)
+
+| Area | Production | Staging |
+| --- | --- | --- |
+| Snapshot rilis sebelum #509 | `main` `019d243` | `staging` `075fb545` |
+| Aplikasi | Proxmox LXC 104; Ubuntu lama hanya rollback | Environment staging terpisah |
+| Worker PDF/sync/outbound | Tetap Ubuntu | Worker staging terpisah |
+| Supabase project | `xuhyodtmgwteyslhrkfx` | `wrufczusfopgvwvxsmjk` |
+
+Snapshot ini berasal dari handoff pengguna, bukan audit runtime baru oleh subtask.
+ORG-01 serta SUR-22/SUR-23/admin reset sudah dirilis (PR #497 dan #507).
+Catatan kandidat lama di bawah merupakan riwayat pengembangan bertanggal;
+status baseline di atas menggantikan klaim lama yang belum diperbarui.
+
 ## ORG-01 Dynamic Branch Reporting (2026-10-08, Issue #499)
 
-- Candidate `fix/dynamic-office-reporting-01` from main; initial target staging.
+- Released baseline (handoff 2026-10-09, PR #497/#507); branch
+  `fix/dynamic-office-reporting-01` initially targeted staging.
 - Branch/KCP employees follow active officer priority BM > Assistant BM > SPV.
   Equal-rank officers never report to one another; unique SPV may supervise the
   office, while multiple SPVs require a unique department match. KCP first uses
@@ -16,8 +76,8 @@
   in an admin-only table and preserve configured Kost supervisor/director relations.
   Existing hierarchy/RLS/calendar consumers use the canonical parent, with no new
   public endpoint or realtime publication. Historical documents/signatures stay intact.
-- Real PostgreSQL tests and changed UI/admin tests precede staging acceptance.
-  Production application requires selected release, not a manual per-user patch.
+- Historical release gates: real PostgreSQL and changed UI/admin tests before
+  staging acceptance; no manual per-user production patch.
 - Forward migration `20261008160000` adds officer fallback and department-sensitive
   refresh. Ambiguous cross-department SPVs do not become arbitrary reporting parents.
 - Forward migration `20261008170000` separates contextual maker from branch review:
@@ -29,7 +89,8 @@
 
 ## Selected Production Release SUR-22 / SUR-23 / ADM-01 (2026-10-08)
 
-- Authorized production candidate `release/requester-corrections-production-20261008`
+- Released baseline (handoff 2026-10-09, PR #497/#507), originally authorized as
+  `release/requester-corrections-production-20261008`
   from `main`, selecting PRs #492, #493 and #494 with their corrective commits.
 - Retain deployed Proxmox session hotfix `9184d0e` and its original ancestry.
 - Include only migrations `20261008100000`, `20261008110000`, `20261008120000`.
@@ -61,7 +122,8 @@
 
 ## SUR-22 Requester Corrections and Signer Proposals (2026-10-08, Issue #490)
 
-- Staging candidate `feature/requester-data-attachment-revision-01`; production unchanged.
+- Released in production and staging; original branch
+  `feature/requester-data-attachment-revision-01` (handoff 2026-10-09).
 - Minta Perbaikan Pemohon requests details/specifications or attachments without
   reducing items. The full original draft opens through Tindak Lanjut, preserves
   saved edits and intentional attachment removals, and confirms deletions.
@@ -86,7 +148,8 @@
 
 ## SUR-23 / ADM-01 Requester Office and Admin Reset Wiring (2026-10-08, Issue #491)
 
-- Staging candidate `fix/submission-office-and-admin-reset-01`; production unchanged.
+- Released in production and staging; original branch
+  `fix/submission-office-and-admin-reset-01` (handoff 2026-10-09).
 - Load the complete ordered office/active candidate collection, resolve KCP BM
   through the closest related KC and reject broken/cyclic/cross-office chains.
 - Ordinary requester drafts and number generation must match current profile
@@ -103,9 +166,9 @@
 - Unit type comes exclusively from a fresh, fully paginated external lookup;
   slash-separated references are preserved. Missing vendor type fails closed.
   Design replaces the visible Block label; supplied production identifiers are read-only.
-- Checklist Item Dana is configurable per usage and examination stage, with explicit
-  verifier selection (Usman, Tri or other authorized staff). PGD Dana HRD defaults
-  use Usman when available; staging tester assignments stay intact. KEU unchanged.
+- Historical checker configuration used Usman when available for PGD Dana HRD.
+  Candidate #509 replaces that default with opt-in, zero-selected exact people
+  per usage/stage; existing document snapshots stay intact. KEU unchanged.
 - Every current item must be checked; stale item snapshots and legacy RPC bypass
   are rejected atomically. Manager approval and historical signatures stay intact.
 - Production receives the already-tested reconnect/session/allowlist behavior from
@@ -222,7 +285,7 @@ Status pada dokumen ini diverifikasi dari:
 - route dan menu aplikasi React;
 - service browser dan endpoint Fastify di `backend/src`;
 - migration PostgreSQL dan schema PostgREST kedua project Supabase;
-- container yang berjalan pada `ubuntu-server`;
+- runtime aplikasi production Proxmox LXC 104 serta worker Ubuntu;
 - riwayat commit dan branch remote GitHub;
 - dokumentasi OpenAPI Marison External API staging.
 
@@ -237,7 +300,10 @@ Arti status:
 | Drift | Versi runtime tidak sama dengan source/worker yang seharusnya |
 | Development branch | Sedang dibangun dan belum boleh dianggap tersedia di staging atau production |
 
-## 2. Snapshot Environment
+## 2. Snapshot Environment Historis (2026-08-04)
+
+Tabel berikut disimpan sebagai riwayat, bukan kondisi live 2026-10-09.
+Gunakan snapshot rilis terbaru di awal dokumen untuk pekerjaan #509.
 
 | Area | Production | Staging | Kesimpulan |
 | --- | --- | --- | --- |
@@ -268,7 +334,7 @@ bukan hanya waktu pembuatan image.
 > identik. Pastikan Dockerfile di branch rilis production sudah menyertakan baris:
 > `COPY server/marison-rejection-diagnosis.mjs ./server/marison-rejection-diagnosis.mjs`
 
-## 3. Kondisi GitHub
+## 3. Kondisi GitHub Historis (Snapshot 2026-08-04)
 
 | Komponen | Status saat audit | Tindakan yang diperlukan |
 | --- | --- | --- |
@@ -309,8 +375,8 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | AGD-02 | Filter agenda berdasar hirarki organisasi | Production + Staging | Agenda filter service | offices, profiles | Bergantung pada master organisasi |
 | CAL-01 | Kalender agenda dan navigasi tanggal | Production + Staging | Calendar page/components | Agenda | Aman ditarik sebagai UI bila agenda tetap ada |
 | CAL-02 | Export kalender | Production + Staging | Export service | Agenda/calendar | Aman ditarik terpisah |
-| CAL-04 | Export PDF Kalender Kerja, durasi dari riwayat status server (jeda istirahat/jam kantor, terhambat, selesai), edit judul dan alignment ikon, carry-forward tanpa mengganti tanggal asal, terlambat hanya tenggat eksplisit | Issue #466; staging PR #467 deployed `99e5a3d`, acceptance PASS; production initialization and activation explicitly approved 2026-10-06, rollout pending | `src/features/work-calendar/**`, test kalender, migrations `20261006080000_work_calendar_carryover_deadlines.sql`, `20261006110000_work_calendar_bootstrap.sql`, `20261006120000_work_calendar_notification_scope.sql`, production Calendar build flag | CAL-03 F1-F7, server event history, settings KPI dan holidays; jsPDF existing | Satu task tetap satu ID. Event/availability tidak carry-forward. Jam historis tanpa evidence tidak direka. Production catalog has no CAL-03 objects despite legacy source-release claims: apply bootstrap, exact carryover, then active-hierarchy/scoped-notification overlay; preserve shared notifications and do not repair unrelated migration aliases. |
-| CAL-03 | Unified Work Calendar — route cutover /calendar, team members RPC, profile repository (F3); F4A: ketepatan filter Tim, keterbacaan dark mode, label aksi tambah kontekstual; F4A Director Scale: Team Overview server-side (pagination + agregat); F4B: detail entri responsif (side sheet 480–560px desktop/tablet, dialog layar penuh mobile) di Hari/Minggu/Bulan/Tim + Quick Add dari area tanggal kosong Minggu/Bulan; F5: siklus hidup pekerjaan (satu pekerjaan = satu baris, aksi "Lanjutkan hari ini"/"Ubah jadwal"/"Terhambat"/"Selesai" hanya PATCH baris yang sama), histori peristiwa server-side, tenggat `due_date`, warna penanda statis aksesibel, dan timeline peristiwa di panel detail; F6: hari & jam kerja diturunkan dari konfigurasi KPI existing (read-only, default Senin-Jumat 08:00-17:00), tabel `holidays` (libur nasional/cuti bersama) dengan impor terkurasi, dan pembeda visual nonkerja/libur berlabel di tampilan Hari/Minggu/Bulan; F7: ringkasan pekerjaan hari ini & tertunda di dashboard (`get_work_calendar_dashboard_entries`), notifikasi lonceng berbasis tabel `notifications` bersama (badge angka + ikon kategori, generator on-demand idempotent `generate_work_calendar_notifications` untuk tenggat terlewati/pengingat tindak lanjut/eskalasi atasan dengan dedupe unik + debounce 6 jam serta eskalasi berbasis hari kerja) dan integrasi `work_calendar_events` ke modul Aktivitas Terbaru (`get_my_recent_work_calendar_events`); F8: penutupan produk — manual Kalender Kerja `docs/CAL-03_WORK_CALENDAR.md`, changelog gabungan staging, audit aksesibilitas ringan termasuk Dark Mode (tanpa fitur/kolom database baru) | Production deployed 2026-09-23 (PR #333, SHA 0acbdf1; F1-F8, tanpa fixture/config staging-only) | `src/pages/work-calendar/WorkCalendarPage.tsx`, `src/features/work-calendar/**` (termasuk `lib/work-calendar-add-action.ts`, `lib/work-day-config.ts`, `lib/work-team-overview.ts`, `data/supabase-work-team-overview-repository.ts`, `data/supabase-work-calendar-settings-repository.ts`, `data/work-calendar-holiday-mapper.ts`, `components/WorkCalendarDayBadge.tsx`, `hooks/use-work-team-overview.ts`, `components/TeamOverviewView.tsx`, `components/TeamOverviewFilters.tsx`), `supabase/migrations/20260915093000_work_calendar_team_members.sql`, `supabase/migrations/20260916170000_work_calendar_team_overview.sql`, `supabase/migrations/20260916171000_work_calendar_team_overview_scale.sql`, `supabase/migrations/20260917120000_work_calendar_lifecycle.sql`, `supabase/migrations/20260918090000_work_calendar_holidays.sql`, `supabase/migrations/20260918120000_work_calendar_notifications.sql`, `supabase/tests/work_calendar_team_members.integration.sql`, `supabase/tests/work_calendar_team_overview.integration.sql`, `supabase/tests/work_calendar_team_overview_scale.integration.sql`, `supabase/tests/work_calendar_lifecycle.integration.sql`, `supabase/tests/work_calendar_holidays.integration.sql`, `supabase/tests/work_calendar_notifications.integration.sql`, `scripts/test-work-calendar-sql.mjs`, `scripts/import-holidays.mjs`, `supabase/data/holidays.example.csv`, `src/index.css` (blok `.work-calendar-scope`), `src/App.tsx`, `src/components/layout/Sidebar.tsx`, `src/components/layout/Header.tsx` (badge angka + ikon notifikasi kalender), `src/components/dashboard/Dashboard.tsx` (widget ringkasan), `src/components/dashboard/RecentActivity.tsx`, `src/services/dashboard.service.ts`, `src/services/notification.service.ts`, `src/test/work-calendar-*.test.*` | `profiles` (hierarchy parent_id), `master_offices`, `master_departments`, `department_kpi_configs` (dibaca, tidak diubah); audit logs; tabel `agendas` dan modul legacy dipertahankan di database | Route `/calendar` aktif sebagai kanonikal, route `/agenda` dilepas; migration team members siap diuji di staging. F4A F3 tidak menambah migration/schema: kelompok, metrik, dan rasio Tim kini dibangun dari `visibleEntries` sehingga satu anggota terpilih hanya menampilkan pekerjaannya, override kontras/hierarki gelap dibatasi pada `.work-calendar-scope` (light `--primary` 30%, `--destructive` 45%, dark `--primary` 62%), dan aksi tambah memakai label kontekstual per tampilan tanpa duplikasi di Hari. F4A Director Scale menambah migration `20260916170000_work_calendar_team_overview.sql` berisi RPC `list_work_calendar_team_overview` (scope `auth.uid()` recursive descendants, page 25 + `total_count` + agregat seluruh filtered result), `list_work_calendar_team_overview_options` (opsi Kantor/Departemen/Anggota terotorisasi), dan `list_work_calendar_member_entries` (lazy-load per anggota/tanggal, menolak self/anon). Semua `security invoker`, `search_path = ''`, revoke anon + grant authenticated. Filter runtime (Kantor → Departemen → Anggota) hanya mempersempit; Entitas belum diimplementasikan karena tidak dapat diturunkan per-anggota dari relasi kanonikal. Migration telah diterapkan ke production pada 2026-09-23. Koreksi final F4A Director Scale (`20260916171000_work_calendar_team_overview_scale.sql`, diterapkan ke production 2026-09-23) menyambungkan `createSupabaseWorkTeamOverviewRepository` dari `WorkCalendarPage` ke `WorkCalendarWorkspace` pada route `/calendar` nyata, menghapus eager `listTeamMembers()` (bootstrap hanya profil sendiri + probe boolean `has_work_calendar_team_members()`), memakai satu `calendar.anchorDate` untuk heading/query/agregat/lazy detail, memindahkan state filter/page ke React Router (Back/Forward/refresh/deep link), membatalkan request basi dan menutup detail saat konteks berubah, serta menambah pencarian Anggota terbatas server (`search_work_calendar_team_members`, hard cap 50) yang lazy. RPC baru 171000: `has_work_calendar_team_members()`, `search_work_calendar_team_members(text, integer, integer, uuid, uuid)`, `get_work_calendar_team_member(uuid)`; `list_work_calendar_team_overview_options()` dan `list_work_calendar_team_overview(...)` di-`create or replace` dengan offset di-clamp lewat `ranked` CTE (`row_number()` + `WHERE`) agar halaman di luar rentang tidak menyimpulkan `total_count = 0`. F4B tidak menambah migration/schema maupun kontrak repository: satu pola detail entri dipakai di keempat tampilan (side sheet dari kanan 480–560px pada desktop/tablet, dialog layar penuh pada mobile) dengan focus trap, fokus awal ke heading, Escape/tombol tutup/overlay menutup, fokus kembali ke pemicu, dan seleksi `entry` disimpan di query param sehingga Browser Back menutup detail serta id tidak valid/tidak terotorisasi dibuang setelah data selesai dimuat. Edit dilakukan di dalam sheet yang sama (crossfade detail↔editor, tanpa modal bertumpuk); entri bawahan tetap read-only. Quick Add dari area tanggal kosong Minggu/Bulan menampilkan tanggal target, memfokuskan input judul, Enter menyimpan/Escape membatalkan, anti double-submit, error tetap di panel, dan aksi "Tambah detail" menuju editor lengkap tanpa entry ganda; `+N lainnya` serta klik pekerjaan existing tetap membuka Hari/detail. Motion memakai Framer Motion terbatas (overlay 160ms, sheet 240ms, crossfade 120ms, reduced 80ms) dengan `useReducedMotion`. Audit visual menemukan dan memperbaiki dua regresi: permukaan `fixed` (overlay/sheet) semula menjadi anak `.sigap-page` sehingga `space-y-5` menambahkan `margin-top: 20px` dan membuat sheet terpotong 20px serta overlay menyisakan celah; permukaan itu kini dipindahkan ke `document.body` lewat portal. Anak `AnimatePresence` pada Quick Add mobile juga diberi kunci eksplisit agar tidak ada peringatan React duplicate key. |
+| CAL-04 | Export PDF Kalender Kerja, durasi dari riwayat status server (jeda istirahat/jam kantor, terhambat, selesai), edit judul dan alignment ikon, carry-forward tanpa mengganti tanggal asal, terlambat hanya tenggat eksplisit | Production + Staging; rilis sebelumnya terverifikasi sebelum #509 (handoff 2026-10-09); riwayat staging PR #467 `99e5a3d` | `src/features/work-calendar/**`, test kalender, migrations `20261006080000_work_calendar_carryover_deadlines.sql`, `20261006110000_work_calendar_bootstrap.sql`, `20261006120000_work_calendar_notification_scope.sql`, production Calendar build flag | CAL-03 F1-F7, server event history, settings KPI dan holidays; jsPDF existing | Satu task tetap satu ID. Event/availability tidak carry-forward. Jam historis tanpa evidence tidak direka. Audit historis 2026-10-06 menemukan catalog production belum memiliki CAL-03 meskipun ada klaim rilis source. Baseline 2026-10-09 sudah terverifikasi; pertahankan shared notifications dan jangan repair alias migration lain. |
+| CAL-03 | Unified Work Calendar — route cutover /calendar, team members RPC, profile repository (F3); F4A: ketepatan filter Tim, keterbacaan dark mode, label aksi tambah kontekstual; F4A Director Scale: Team Overview server-side (pagination + agregat); F4B: detail entri responsif (side sheet 480–560px desktop/tablet, dialog layar penuh mobile) di Hari/Minggu/Bulan/Tim + Quick Add dari area tanggal kosong Minggu/Bulan; F5: siklus hidup pekerjaan (satu pekerjaan = satu baris, aksi "Lanjutkan hari ini"/"Ubah jadwal"/"Terhambat"/"Selesai" hanya PATCH baris yang sama), histori peristiwa server-side, tenggat `due_date`, warna penanda statis aksesibel, dan timeline peristiwa di panel detail; F6: hari & jam kerja diturunkan dari konfigurasi KPI existing (read-only, default Senin-Jumat 08:00-17:00), tabel `holidays` (libur nasional/cuti bersama) dengan impor terkurasi, dan pembeda visual nonkerja/libur berlabel di tampilan Hari/Minggu/Bulan; F7: ringkasan pekerjaan hari ini & tertunda di dashboard (`get_work_calendar_dashboard_entries`), notifikasi lonceng berbasis tabel `notifications` bersama (badge angka + ikon kategori, generator on-demand idempotent `generate_work_calendar_notifications` untuk tenggat terlewati/pengingat tindak lanjut/eskalasi atasan dengan dedupe unik + debounce 6 jam serta eskalasi berbasis hari kerja) dan integrasi `work_calendar_events` ke modul Aktivitas Terbaru (`get_my_recent_work_calendar_events`); F8: penutupan produk — manual Kalender Kerja `docs/CAL-03_WORK_CALENDAR.md`, changelog gabungan staging, audit aksesibilitas ringan termasuk Dark Mode (tanpa fitur/kolom database baru) | Production + Staging; baseline Kalender Kerja terverifikasi sebelum #509 (handoff 2026-10-09); klaim source 2026-09-23 adalah riwayat, bukan bukti catalog live saat itu | `src/pages/work-calendar/WorkCalendarPage.tsx`, `src/features/work-calendar/**` (termasuk `lib/work-calendar-add-action.ts`, `lib/work-day-config.ts`, `lib/work-team-overview.ts`, `data/supabase-work-team-overview-repository.ts`, `data/supabase-work-calendar-settings-repository.ts`, `data/work-calendar-holiday-mapper.ts`, `components/WorkCalendarDayBadge.tsx`, `hooks/use-work-team-overview.ts`, `components/TeamOverviewView.tsx`, `components/TeamOverviewFilters.tsx`), `supabase/migrations/20260915093000_work_calendar_team_members.sql`, `supabase/migrations/20260916170000_work_calendar_team_overview.sql`, `supabase/migrations/20260916171000_work_calendar_team_overview_scale.sql`, `supabase/migrations/20260917120000_work_calendar_lifecycle.sql`, `supabase/migrations/20260918090000_work_calendar_holidays.sql`, `supabase/migrations/20260918120000_work_calendar_notifications.sql`, `supabase/tests/work_calendar_team_members.integration.sql`, `supabase/tests/work_calendar_team_overview.integration.sql`, `supabase/tests/work_calendar_team_overview_scale.integration.sql`, `supabase/tests/work_calendar_lifecycle.integration.sql`, `supabase/tests/work_calendar_holidays.integration.sql`, `supabase/tests/work_calendar_notifications.integration.sql`, `scripts/test-work-calendar-sql.mjs`, `scripts/import-holidays.mjs`, `supabase/data/holidays.example.csv`, `src/index.css` (blok `.work-calendar-scope`), `src/App.tsx`, `src/components/layout/Sidebar.tsx`, `src/components/layout/Header.tsx` (badge angka + ikon notifikasi kalender), `src/components/dashboard/Dashboard.tsx` (widget ringkasan), `src/components/dashboard/RecentActivity.tsx`, `src/services/dashboard.service.ts`, `src/services/notification.service.ts`, `src/test/work-calendar-*.test.*` | `profiles` (hierarchy parent_id), `master_offices`, `master_departments`, `department_kpi_configs` (dibaca, tidak diubah); audit logs; tabel `agendas` dan modul legacy dipertahankan di database | Route `/calendar` aktif sebagai kanonikal, route `/agenda` dilepas; catatan implementasi berikut adalah riwayat source September 2026, bukan audit live baru. F4A F3 tidak menambah migration/schema: kelompok, metrik, dan rasio Tim kini dibangun dari `visibleEntries` sehingga satu anggota terpilih hanya menampilkan pekerjaannya, override kontras/hierarki gelap dibatasi pada `.work-calendar-scope` (light `--primary` 30%, `--destructive` 45%, dark `--primary` 62%), dan aksi tambah memakai label kontekstual per tampilan tanpa duplikasi di Hari. F4A Director Scale menambah migration `20260916170000_work_calendar_team_overview.sql` berisi RPC `list_work_calendar_team_overview` (scope `auth.uid()` recursive descendants, page 25 + `total_count` + agregat seluruh filtered result), `list_work_calendar_team_overview_options` (opsi Kantor/Departemen/Anggota terotorisasi), dan `list_work_calendar_member_entries` (lazy-load per anggota/tanggal, menolak self/anon). Semua `security invoker`, `search_path = ''`, revoke anon + grant authenticated. Filter runtime (Kantor → Departemen → Anggota) hanya mempersempit; Entitas belum diimplementasikan karena tidak dapat diturunkan per-anggota dari relasi kanonikal. Catatan source lama mengklaim penerapan 2026-09-23; audit 2026-10-06 membedakan source dari catalog production. Koreksi final F4A Director Scale (`20260916171000_work_calendar_team_overview_scale.sql`, klaim source lama 2026-09-23, bukan bukti penerapan live) menyambungkan `createSupabaseWorkTeamOverviewRepository` dari `WorkCalendarPage` ke `WorkCalendarWorkspace` pada route `/calendar` nyata, menghapus eager `listTeamMembers()` (bootstrap hanya profil sendiri + probe boolean `has_work_calendar_team_members()`), memakai satu `calendar.anchorDate` untuk heading/query/agregat/lazy detail, memindahkan state filter/page ke React Router (Back/Forward/refresh/deep link), membatalkan request basi dan menutup detail saat konteks berubah, serta menambah pencarian Anggota terbatas server (`search_work_calendar_team_members`, hard cap 50) yang lazy. RPC baru 171000: `has_work_calendar_team_members()`, `search_work_calendar_team_members(text, integer, integer, uuid, uuid)`, `get_work_calendar_team_member(uuid)`; `list_work_calendar_team_overview_options()` dan `list_work_calendar_team_overview(...)` di-`create or replace` dengan offset di-clamp lewat `ranked` CTE (`row_number()` + `WHERE`) agar halaman di luar rentang tidak menyimpulkan `total_count = 0`. F4B tidak menambah migration/schema maupun kontrak repository: satu pola detail entri dipakai di keempat tampilan (side sheet dari kanan 480–560px pada desktop/tablet, dialog layar penuh pada mobile) dengan focus trap, fokus awal ke heading, Escape/tombol tutup/overlay menutup, fokus kembali ke pemicu, dan seleksi `entry` disimpan di query param sehingga Browser Back menutup detail serta id tidak valid/tidak terotorisasi dibuang setelah data selesai dimuat. Edit dilakukan di dalam sheet yang sama (crossfade detail↔editor, tanpa modal bertumpuk); entri bawahan tetap read-only. Quick Add dari area tanggal kosong Minggu/Bulan menampilkan tanggal target, memfokuskan input judul, Enter menyimpan/Escape membatalkan, anti double-submit, error tetap di panel, dan aksi "Tambah detail" menuju editor lengkap tanpa entry ganda; `+N lainnya` serta klik pekerjaan existing tetap membuka Hari/detail. Motion memakai Framer Motion terbatas (overlay 160ms, sheet 240ms, crossfade 120ms, reduced 80ms) dengan `useReducedMotion`. Audit visual menemukan dan memperbaiki dua regresi: permukaan `fixed` (overlay/sheet) semula menjadi anak `.sigap-page` sehingga `space-y-5` menambahkan `margin-top: 20px` dan membuat sheet terpotong 20px serta overlay menyisakan celah; permukaan itu kini dipindahkan ke `document.body` lewat portal. Anak `AnimatePresence` pada Quick Add mobile juga diberi kunci eksplisit agar tidak ada peringatan React duplicate key. |
 
 ### 4.3 Persuratan Inti
 
@@ -322,7 +388,7 @@ Aturan operasional lengkap berada di root `AGENTS.md`.
 | MAR-10 | Form KEU 1 dan hierarki proyek Non Unit; status PGD dan tim pemeriksa per manajer | Production + Staging; promosi presentasi KEU 1 dan guard BM dalam review (Issue #452) | Editor/PDF/seed KEU 1, pilihan proyek KCP di bawah KC, status item PGD 1-4, judul pengajuan, migrasi `20260929070000`-`20260930140000`; kandidat `20261001130000` | SUR-01, SUR-17, master kantor/proyek/departemen, renderer PDF | KEU 1 tanpa proyek; Free Cash, ringkasan/ekspor/outbound mengikuti Kebutuhan Dana. Step BM memakai mode eksplisit `related_branch_manager`, bukan fallback semua staf; fixture tester tetap configured. Rollout renderer memerlukan app + PDF worker terkoordinasi; PDF tersimpan tidak otomatis dirender ulang. Pertahankan migrasi, data, dan identitas signer historis saat menarik UI/renderer. |
 | SUR-02 | Draft registrasi, reservasi nomor, dan sinkronisasi matrix aktif | Production + Staging; rekonsiliasi matrix kandidat diperkuat di staging | Draft/reservation RPC, tables, signer reconciliation | SUR-01, numbering, DOC-02 | Draft aktif selalu mengikuti kandidat dan tahap terbaru saat dibuka maupun sebelum submit; surat yang sudah terdaftar tetap memakai snapshot lama untuk audit |
 | SUR-03 | Nomor surat atomik dan konfigurasi counter | Production + Staging; KEU 1 Cabang proyek opsional kandidat staging | Numbering admin, RPC, migration 20261005090000 | Letter type, office/entity | Nomor baru Kas Kecil Cabang dengan proyek memakai kode proyek; tanpa proyek tidak memakai -000. Scope counter tanpa proyek tetap terisolasi; nomor historis tidak diubah |
-| SUR-03B | Jendela pemakaian ulang nomor draft dibatalkan (admin-configurable) | Staging candidate; migration `20260930150000_letter_number_reuse_policy.sql` menunggu review; BELUM diterapkan ke DB staging | `letter_number_reuse_policies`, kolom audit `surat_reservations.voided_at/voided_by/reuse_until/reused_count/last_reused_at`, event log `letter_number_reservation_events` (tiap batal & tiap reclaim), `claim_reusable_letter_number` (internal, server-time, service_role only), guard `create_surat_registration_draft` anti-resurrect VOID, void + 3 generator, halaman admin numbering (2 bagian), teks pembatalan draft | SUR-03, SUR-13, MRN-22 | Nomor VOID hanya dapat dipakai ulang dalam jendela (jam/hari) yang diatur admin; lewat batas => VOID permanen; USED tidak pernah dipakai ulang; VOID historis tidak dihidupkan ulang; reclaim detach draft batal lama agar pemilik baru draft fresh; helper internal tidak bisa dilewati timestamp klien; audit per siklus di event log + audit kolom; reuse atomik per scope (advisory lock + row lock), diuji dua koneksi paralel |
+| SUR-03B | Jendela pemakaian ulang nomor draft dibatalkan (admin-configurable) | Production + Staging; baseline kebijakan nomor sudah terverifikasi sebelum #509 (handoff 2026-10-09) | `letter_number_reuse_policies`, kolom audit `surat_reservations.voided_at/voided_by/reuse_until/reused_count/last_reused_at`, event log `letter_number_reservation_events` (tiap batal & tiap reclaim), `claim_reusable_letter_number` (internal, server-time, service_role only), guard `create_surat_registration_draft` anti-resurrect VOID, void + 3 generator, halaman admin numbering (2 bagian), teks pembatalan draft | SUR-03, SUR-13, MRN-22 | Nomor VOID hanya dapat dipakai ulang dalam jendela (jam/hari) yang diatur admin; lewat batas => VOID permanen; USED tidak pernah dipakai ulang; VOID historis tidak dihidupkan ulang; reclaim detach draft batal lama agar pemilik baru draft fresh; helper internal tidak bisa dilewati timestamp klien; audit per siklus di event log + audit kolom; reuse atomik per scope (advisory lock + row lock), diuji dua koneksi paralel |
 | SUR-04 | Lampiran awal dan lampiran approval | Production + Staging; lampiran tambahan opsional pemohon/pemeriksa kandidat production setelah acceptance staging (Issue #389) | Storage upload, attachment tables | Private storage, file authorization | Pertahankan file dan metadata saat UI ditarik; submit harus membaca ulang file draft dari database. Kandidat #389 wajib diuji pada kegunaan riil staging sebelum promosi production; fixture UJI STAGING tidak ikut production. |
 | SUR-05 | Preview detail dan file viewer bertoken | Production + Staging | Preview modal, file token BFF | Storage, surat authorization | Jangan membuka public URL sebagai pengganti |
 | SUR-06 | Inbox persetujuan | Production + Staging; pipeline dokumen native kandidat staging | Inbox page, signatures, snapshot database, upload lampiran | Workflow approval, attention, storage | Approval hanya mengubah data dan versi logis dokumen dalam transaksi; tidak mengunduh, mengubah, atau mengunggah XLSX. PDF final dibuat asinkron setelah status selesai sehingga tindakan approval tidak menunggu renderer |

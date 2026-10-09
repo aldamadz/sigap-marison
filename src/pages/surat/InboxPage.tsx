@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewStage } from "@/lib/fund-rab";
 import { ApprovalAttachmentPicker } from "@/features/surat/inbox/components/ApprovalAttachmentPicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
@@ -52,7 +53,6 @@ import {
 } from "@/features/surat/inbox/lib/inbox-task-state";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase, onRealtimeReconnect } from "@/lib/supabase";
-import { createRealtimeFlush, type FlushController } from "@/lib/realtime-flush";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -168,7 +168,6 @@ export default function InboxPage() {
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const selectedItemRef = useRef<any>(null);
-  const inboxFlushRef = useRef<FlushController | null>(null);
   const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -355,22 +354,9 @@ export default function InboxPage() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const flush = createRealtimeFlush({ queryClient, debounceMs: 150, maxFlushDelayMs: 700 });
-    inboxFlushRef.current = flush;
-
     const scheduleInboxRefresh = () => {
-      // Union of trigger tables fires one bounded flush. Filters/pagination are
-      // preserved because refetch reuses the stored query options; the list is
-      // reset to first page so newly available items are not hidden by cursor
-      // position.
+      // RealtimeSync owns query refresh; this listener only manages cursor/toasts.
       resetInboxPagination();
-      flush.add(
-        "surat-inbox-compact",
-        "surat-inbox-kpi",
-        "surat-linked-documents",
-        "surat-inbox-detail",
-        "surat-revision-history",
-      );
     };
 
     const showRealtimeToast = (key: string, title: string, description?: string) => {
@@ -426,6 +412,8 @@ export default function InboxPage() {
         }
         scheduleInboxRefresh();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_revision_events" }, scheduleInboxRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "surat_recommendation_tasks" }, scheduleInboxRefresh)
       .subscribe();
 
     // Events missed while offline can change the open document; revalidate.
@@ -433,8 +421,6 @@ export default function InboxPage() {
 
     return () => {
       reconnectSubscription.unsubscribe();
-      flush.cancel();
-      inboxFlushRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id, queryClient, resetInboxPagination]);
@@ -460,11 +446,12 @@ export default function InboxPage() {
       (item?.verification_required !== true && !hasStoredUnitAllocation(item) && shouldSignerInputStageData(item))
     );
 
-  // Dead-end recovery: lookup unit gagal/kosong/proyek hilang sehingga alokasi
-  // mustahil. Tim pemeriksa tidak diberi hak tolak permanen di sini.
+  // Requester correction never grants the checker a permanent rejection action.
   const canReturnToRequester = (item: any) =>
     isVerificationTask(item) &&
-    (item.input_schema_snapshot?.review_mode === "fund_item_checklist" || (isUnitAllocationRequired(item) && (
+    (isFundRabReviewStage(item.surat_registrasi?.location_snapshot?.form || item.surat_registrasi?.data_snapshot?.form,
+      item.surat_registrasi?.form_input_data?.request_category, item.role_name, item.label_jabatan)
+      || item.input_schema_snapshot?.review_mode === "fund_item_checklist" || (isUnitAllocationRequired(item) && (
       !getAllocationProject(item)?.code ||
       Boolean(allocationErrors[item.id]) ||
       (!allocationLoading[item.id] && (allocationUnits[item.id] || []).length === 0)
@@ -520,10 +507,14 @@ export default function InboxPage() {
     };
   };
 
-  const getApprovalAttachmentRequirements = (item: any) =>
-    Array.isArray(item.attachment_requirements_snapshot)
+  const getApprovalAttachmentRequirements = (item: any) => {
+    const surat = item.surat_registrasi || {};
+    const input = surat.form_input_data || {};
+    const form = surat.location_snapshot?.form || surat.data_snapshot?.form;
+    return effectiveFundRabRequirements(Array.isArray(item.attachment_requirements_snapshot)
       ? item.attachment_requirements_snapshot
-      : [];
+      : [], isFundRabReviewStage(form, input.request_category, item.role_name, item.label_jabatan));
+  };
 
   const getSelectedApprovalFiles = (item: any) =>
     withOptionalVerifierAttachmentRequirement(getApprovalAttachmentRequirements(item), isVerificationTask(item)).flatMap((requirement: any) =>
@@ -834,7 +825,7 @@ const handleApprove = async (item: any) => {
     const reason = await appDialog.prompt({
       title: "Minta perbaikan pemohon?",
       description: `Pengajuan "${item.surat_registrasi.judul_surat}" perlu diperbaiki pemohon. Tuliskan item yang perlu diperbaiki beserta alasannya.`,
-      label: "Alasan pengembalian",
+      label: "Catatan perbaikan",
       placeholder: "Tuliskan alasan yang jelas, minimal 5 karakter...",
       confirmText: "Minta perbaikan",
       cancelText: "Batal",
@@ -863,7 +854,7 @@ const handleApprove = async (item: any) => {
           requester_edit_required: true,
           requires_resign: true,
           restart_step: Number(item.step_order || 1),
-          unit_availability_dead_end: true,
+          ...(isUnitAllocationRequired(item) ? { unit_availability_dead_end: true } : {}),
         },
       });
       toast.success("Dikembalikan ke Pemohon", {
@@ -1583,7 +1574,7 @@ const handleApprove = async (item: any) => {
         )}
         {(extraFields.length > 0 || input.catatan) && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {extraFields.map(([key, value]) => <div key={key} className="rounded-lg border border-border bg-muted/10 p-3"><p className="text-xs font-medium text-muted-foreground">{key === "fund_type" ? "Jenis Pengajuan Dana" : humanizeInputKey(key)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{key === "fund_type" ? getFundSubmissionTypeLabel(value) : formatSummaryValue(value)}</p></div>)}
+            {extraFields.map(([key, value]) => <div key={key} className="rounded-lg border border-border bg-muted/10 p-3"><p className="text-xs font-medium text-muted-foreground">{key === "rab_not_required" ? "Kebutuhan RAB" : key === "requester_has_rab" ? "Penanda RAB pemohon (data lama)" : key === "fund_type" ? "Jenis Pengajuan Dana" : humanizeInputKey(key)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{key === "rab_not_required" ? value === true ? "Tidak memerlukan RAB" : "RAB dapat dilampirkan (opsional)" : key === "requester_has_rab" ? value === true ? "Ya" : "Tidak" : key === "fund_type" ? getFundSubmissionTypeLabel(value) : formatSummaryValue(value)}</p></div>)}
             {input.catatan && <div className="rounded-lg border border-border bg-muted/10 p-3 sm:col-span-2"><p className="text-xs font-medium text-muted-foreground">Catatan pemohon</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{formatSummaryValue(input.catatan)}</p></div>}
           </div>
         )}
@@ -2013,6 +2004,10 @@ const handleApprove = async (item: any) => {
       <section className={cn("sigap-panel", missing.length ? "border-amber-500/30" : "border-emerald-500/30")}>
         <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><FileUp className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(item) ? "Lampiran pemeriksaan" : "Lampiran approval"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(item) ? "Tambahkan bukti pemeriksaan bila diperlukan." : "Persyaratan khusus tahap tanda tangan ini."}</p></div></div>{isUploading && <Badge><Loader2 className="mr-1 h-3 w-3 animate-spin" />Mengunggah</Badge>}</div>
         <div className="space-y-2">
+          {getApprovalAttachmentRequirements(item).some((rule: { requirement_key: string }) => rule.requirement_key === "rab")
+            && hasRequesterRab(item.surat_registrasi?.surat_attachments || []) && (
+            <p className="text-sm text-muted-foreground">RAB sudah dilampirkan pemohon. Tidak perlu mengunggah RAB lagi.</p>
+          )}
           {requirements.map((requirement: any) => {
             const key = requirement.requirement_key;
             const files = approvalFiles[item.id]?.[key] || [];

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useMasterRealtimeReload } from "@/hooks/use-master-realtime-reload";
 import { supabase } from "@/lib/supabase";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -51,9 +52,9 @@ export default function MasterProjectManagementPage() {
     marison_project_code: "",
   });
 
-  const loadData = async () => {
+  const fetchData = async (background: boolean) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const [offRes, entRes] = await Promise.all([
         supabase.from("master_offices").select("id, name, kedudukan").order("name"),
         supabase.from("master_entities").select("id, name").order("name")
@@ -82,11 +83,11 @@ export default function MasterProjectManagementPage() {
     } catch (error: any) {
       toast({ variant: "destructive", title: "Gagal Memuat", description: error.message });
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  const loadData = useMasterRealtimeReload("master-projects-live", ["master_projects", "master_offices", "marison_sync_issues"], fetchData);
 
   const handleOpenModal = (item: any = null) => {
     if (item) {

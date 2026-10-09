@@ -49,6 +49,7 @@ import {
   MARISON_ASSET_CONTRACT_VERSION,
   MARISON_OUTBOUND_CONTRACT_VERSION,
   normalizeMarisonSubmissionApprovals,
+  resolveMarisonApprovalRoleLabel,
 } from "../../server/marison-outbound-contract.mjs";
 import { mapKeu1ItemsForFund, mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
@@ -2638,7 +2639,7 @@ const assertUnitRequestAvailability = async (formInput: unknown) => {
   }
 
   const requestedCount = Number(input.requested_unit_count || 0);
-  if (!Number.isFinite(requestedCount) || requestedCount < 1) {
+  if (!Number.isSafeInteger(requestedCount) || requestedCount < 1) {
     throw unitRequestValidationError("Jumlah unit wajib diisi. Jumlah unit minimal 1.");
   }
 
@@ -2661,6 +2662,49 @@ const assertUnitRequestAvailability = async (formInput: unknown) => {
     throw unitRequestValidationError(`Jumlah unit melebihi ketersediaan proyek (${availableCount} unit).`);
   }
   return { valid: true, availableCount };
+};
+
+const issueUnitRevisionAvailabilityReceipt = async (actorId, payload, input, availableCount) => {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const eventId = payload.revision_event_id;
+  const draftId = payload.draft_id;
+  if (!uuid.test(String(eventId || "")) || !uuid.test(String(draftId || ""))) {
+    throw unitRequestValidationError("Konteks revisi unit tidak valid.");
+  }
+  const { data: event, error: eventError } = await supabase.from("surat_revision_events")
+    .select("id, surat_id, status, target_type, changes").eq("id", eventId).maybeSingle();
+  if (eventError) throw unitRequestValidationError("Revisi belum dapat diverifikasi. Coba kembali.", 503);
+  if (!event || event.status !== "open" || event.target_type !== "requester"
+    || (event.changes?.external_submission_revision !== true && event.changes?.requester_edit_required !== true)) {
+    throw unitRequestValidationError("Revisi pemohon tidak lagi aktif.", 409);
+  }
+  const { data: surat, error: suratError } = await supabase.from("surat_registrasi")
+    .select("created_by, status, form_input_data").eq("id", event.surat_id).maybeSingle();
+  const { data: draft, error: draftError } = await supabase.from("surat_registration_drafts")
+    .select("created_by, status, revision_event_id, expires_at").eq("id", draftId).maybeSingle();
+  if (suratError || draftError) throw unitRequestValidationError("Draft revisi belum dapat diverifikasi. Coba kembali.", 503);
+  if (!surat || !draft || surat.created_by !== actorId || draft.created_by !== actorId) {
+    throw unitRequestValidationError("Draft perbaikan bukan milik pemohon.", 403);
+  }
+  if (surat.status !== "MENUNGGU_PERBAIKAN" || draft.status !== "DRAFT"
+    || draft.revision_event_id !== eventId || !Number.isFinite(Date.parse(draft.expires_at)) || Date.parse(draft.expires_at) <= Date.now()
+    || (surat.form_input_data?.request_category || surat.form_input_data?.request_mode) !== "unit") {
+    throw unitRequestValidationError("Draft revisi unit tidak lagi aktif.", 409);
+  }
+  if (event.changes?.external_submission_revision !== true) return null;
+  const project = asPlainRecord(input.requested_project);
+  if (!Number.isSafeInteger(Number(project.id)) || Number(project.id) < 1 || !String(project.code || "").trim()) {
+    throw unitRequestValidationError("Proyek revisi unit tidak valid.");
+  }
+  const receiptId = randomUUID();
+  const { error } = await supabase.from("unit_revision_availability_receipts").upsert({
+    id: receiptId, actor_id: actorId, revision_event_id: eventId, draft_id: draftId,
+    project_id: Number(project.id), project_code: String(project.code),
+    requested_count: Number(input.requested_unit_count), available_count: availableCount,
+    expires_at: new Date(Date.now() + 120_000).toISOString(), consumed_at: null,
+  }, { onConflict: "revision_event_id,draft_id,actor_id" });
+  if (error) throw unitRequestValidationError("Bukti validasi revisi belum dapat disimpan. Coba kembali.", 503);
+  return receiptId;
 };
 
 const getMarisonEnvironmentStatus = async (req) => {
@@ -3260,7 +3304,7 @@ const loadMarisonProfileIdentityResolver = async (profileIds) => {
   };
 };
 
-const buildMarisonApprovals = async (surat, resolveIdentity) => {
+const buildMarisonApprovals = async (surat, resolveIdentity, kind) => {
   const sources = {};
   const approvals = await Promise.all(asArrayValue(surat?.surat_signatures)
     .filter((signature) => signature?.is_signed && signature?.signed_at)
@@ -3275,7 +3319,14 @@ const buildMarisonApprovals = async (surat, resolveIdentity) => {
       );
       sources[buildApprovalResolutionKey(signature.step_order, firstString(signature.user_id, profile.id), index)] = signer.source;
       return {
-        role: firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
+        role: kind === "fund"
+          ? resolveMarisonApprovalRoleLabel({
+            label: signature.label_jabatan,
+            workflowRole: signature.role_name,
+            jobTitle: profile.job_title,
+            snapshotJobTitle: signerSnapshot.job_title,
+          })
+          : firstString(signature.label_jabatan, signature.role_name, profile.job_title, signerSnapshot.job_title, "signer"),
         nik: signer.nik,
         action: "approved",
         actioned_at: new Date(signature.signed_at).toISOString(),
@@ -3291,7 +3342,7 @@ const buildMarisonApprovals = async (surat, resolveIdentity) => {
   return { approvals, sources };
 };
 
-const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true } = {}) => {
+const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true, kind } = {}) => {
   const requesterProfileId = getCanonicalRequesterProfileId(surat);
   const signatures = asArrayValue(surat?.surat_signatures)
     .filter((signature) => signature?.is_signed && signature?.signed_at);
@@ -3304,7 +3355,7 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true }
     firstString(surat?.requester_snapshot?.nik, surat?.data_snapshot?.requester?.nik),
     "Pemohon",
   ) : null;
-  const approvalResult = await buildMarisonApprovals(surat, resolveIdentity);
+  const approvalResult = await buildMarisonApprovals(surat, resolveIdentity, kind);
   return {
     requester,
     approvals: approvalResult.approvals,
@@ -3639,7 +3690,7 @@ const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
   const input = getMarisonDispatchInput(surat);
   const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
   const isFund = category === "non_asset" || category === "nonasset";
-  const identity = await resolveMarisonOutboundIdentity(surat);
+  const identity = await resolveMarisonOutboundIdentity(surat, { kind: isFund ? "fund" : category });
   const resolvedOverrides = {
     ...overrides,
     ...(identity.requester ? { nik: identity.requester.nik } : {}),
@@ -3958,7 +4009,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
   try {
-    const identity = await resolveMarisonOutboundIdentity(surat);
+    const identity = await resolveMarisonOutboundIdentity(surat, { kind: job.kind });
     const mappings = await getMarisonOutboundMappings(surat, job.kind);
     const sources = { ...mappings.sources, ...identity.sources };
     if (job.kind === "fund" && mappings.projectId == null) {
@@ -4155,7 +4206,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
           id, no_surat, judul_surat, status, current_step, created_at, created_by, file_path, pdf_path,
           office_id, project_id, dept_id, form_input_data, requester_snapshot, location_snapshot, data_snapshot,
           surat_signatures (
-            id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
+            id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot, pdf_path_snap,
             profiles:user_id ( id, full_name, nik, job_title, is_active, deleted_at, marison_employee_id, marison_synced_at )
           ),
           surat_attachments ( id, file_url, file_name, file_type, file_size, stage, requirement_key, requirement_label, signature_id )
@@ -4184,7 +4235,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
 
       if (!localValidationIssues) {
         try {
-          const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund" });
+          const identity = await resolveMarisonOutboundIdentity(surat, { requireRequester: job.kind !== "fund", kind: job.kind });
           const mappings = await getMarisonOutboundMappings(surat, job.kind);
           const overrides = {
             ...mappings,
@@ -5037,9 +5088,14 @@ export const handleRequest = async (req, res) => {
 
       if (req.method === "POST" && url.pathname === "/api/surat/unit-availability/validate") {
         const token = getBearerToken(req);
-        await requireSupabaseUser(token);
+        const user = await requireSupabaseUser(token);
         const payload = await readJsonBody(req);
-        const result = await assertUnitRequestAvailability(payload?.form_input_data || payload?.payload || {});
+        const input = asPlainRecord(payload?.form_input_data || payload?.payload || {});
+        const result = await assertUnitRequestAvailability(input);
+        if (result.availableCount !== null && (payload?.revision_event_id || payload?.draft_id)) {
+          const receiptId = await issueUnitRevisionAvailabilityReceipt(user.id, payload, input, result.availableCount);
+          return sendJson(res, 200, { ...result, receiptId });
+        }
         return sendJson(res, 200, result);
       }
 

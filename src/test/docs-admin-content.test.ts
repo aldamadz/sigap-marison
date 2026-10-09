@@ -92,9 +92,9 @@ describe("docs-admin-content D2B", () => {
     expect(Object.keys(ADMIN_DETAIL_SECTIONS_BY_ID)).toHaveLength(15);
   });
 
-  it("matches exact-base runtime", () => {
+  it("matches documentation content after issue 509 updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "edb6c8e4a595a355455ce7a621ebd3f72c04210dd6fc438afaefbb917c595d7a",
+      "ccd6ab224d16bce8e5035b15e5760cb04ef082c0dc56b6325da991705355b222",
     );
   });
 

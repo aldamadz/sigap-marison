@@ -56,6 +56,7 @@ import { supabase } from "@/lib/supabase";
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
+import { withRequesterRabRequirement } from "@/lib/fund-rab";
 import { selectUsage } from "@/features/surat/registration/usages";
 import type {
   ExternalRevisionContext,
@@ -299,12 +300,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
   const canCurrentDepartmentRequestUnit = (item: UsageDetailRecord) =>
-    canDepartmentRequestUnit(item, requesterDepartmentId);
+    canDepartmentRequestUnit(item,
+      externalRevision?.eventId && activeDraftId ? formData.dept_id : requesterDepartmentId);
 
 
   const getInitialAttachmentRequirements = (): AttachmentRequirement[] => {
     const configured = selectedUsage?.form_usage_attachment_requirements?.filter(rule => rule.stage_order === 0) || [];
-    return withOptionalRequesterAttachmentRequirement(configured);
+    return withOptionalRequesterAttachmentRequirement(withRequesterRabRequirement(configured, selectedUsage, formData.form_input_data));
   };
 
   const getMissingInitialAttachmentLabels = () =>
@@ -1252,6 +1254,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     draftToRestore,
     selectedUsage,
     linkedDocumentContext,
+    externalRevision,
     effectiveFormData,
     selectedFormId,
     signers,
@@ -2026,6 +2029,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const handleResetNumber = async () => {
     if (isResettingNumber) return;
     if (!generatedNoSurat) return;
+    if (externalRevision?.eventId) return;
     const confirmed = await appDialog.confirm({
       title: "Batalkan Nomor Surat?",
       description: "Nomor ini akan dikosongkan dari antrean dan dapat dipakai ulang oleh pengajuan lain selama masa berlaku yang diatur admin. Setelah itu nomor hangus. Surat yang sudah terdaftar tidak terpengaruh.",

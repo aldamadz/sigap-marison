@@ -107,9 +107,9 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches exact-base normalized runtime characterization", () => {
+  it("matches documentation content after issue 509 updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("8651d81e46f61963a3045278a387ff7919668cd38cfc82975c9283ed8904c707");
+      .toBe("46642dd9d94a3c4d5fda01d1439c120e961099ce4986d3dd20ad8fb681da27e1");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

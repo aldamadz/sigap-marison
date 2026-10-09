@@ -44,6 +44,7 @@ export const documentsAttachmentsDetailSections: DocsSection[] = [
         ["Lampiran pemohon", "File yang diunggah saat registrasi.", "Dibuka dari panel lampiran."],
         ["Lampiran tim pemeriksa/approval", "File pemeriksaan atau pendukung dari tahap approval.", "Dibuka dari detail persetujuan atau monitoring."],
         ["Lampiran otomatis Unit", "Kode produksi dan rekap adendum hasil input sistem.", "Dibuat otomatis dari data alokasi unit."],
+        ["PDF penolakan permanen", "Dokumen berstatus ditolak dengan penanda penolakan dan alasan keputusan.", "Buka PDF terbaru dari detail surat; penolakan permanen bukan permintaan perbaikan."],
       ],
     },
     {
@@ -54,6 +55,7 @@ export const documentsAttachmentsDetailSections: DocsSection[] = [
         ["Bukan public storage URL", "User tidak diarahkan langsung ke URL storage publik."],
         ["Token per request", "URL file dapat berubah setiap klik karena akses dibuat sementara."],
         ["PDF tidak selalu dibuat ulang", "Token yang berubah bukan berarti file digenerate ulang."],
+        ["Penolakan permanen", "PDF lama diinvalidasi; hasil terbaru memuat penolakan. Histori keputusan dan tanda tangan sebelumnya tetap tersimpan."],
         ["Hak akses dicek server", "File hanya dibuka jika user berhak atas surat/lampiran tersebut."],
       ],
     },

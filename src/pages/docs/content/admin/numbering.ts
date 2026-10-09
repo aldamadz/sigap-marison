@@ -28,7 +28,7 @@ export const adminNumberingDocs: DocsEntry = {
     ],
     troubleshooting: [
       "Jika ada risiko nomor duplikat, hentikan registrasi pada scope tersebut dan cek counter.",
-      "Jika nomor sudah dipesan di draft, nomor tidak dipakai ulang meski draft dibatalkan.",
+      "Nomor draft dibatalkan hanya dapat dipakai ulang dalam jendela jam/hari yang diatur admin; lewat batas menjadi VOID permanen. Nomor USED tidak pernah dipakai ulang dan histori pembatalan tetap tersimpan.",
     ],
   };
 
