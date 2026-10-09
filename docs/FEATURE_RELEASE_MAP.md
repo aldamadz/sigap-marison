@@ -1,5 +1,24 @@
 # SIGAP Feature and Release Map
 
+## MRN-13 External-only Active Projects (2026-10-09, Issue #521)
+
+- `fix/external-project-source-only-01` from main; staging first, selective production.
+- Active registration/admin/counter catalogs contain only API-synced external projects,
+  fully paginated and never enriched from a local-only source record.
+- Local-only projects are retired, not physically deleted: production has a historical
+  letter FK whose ON DELETE SET NULL would destroy its reference. Documents, reservations,
+  counters and snapshots retain their old IDs. New number/registration/counter selections
+  reject retired projects in PostgreSQL, including direct browser bypass and reuse claims.
+- Manual identity creation/deletion/editing is prohibited, including authenticated admins.
+  Only SIGAP accounting entity assignment remains editable under existing admin RLS.
+- API synchronization matches by external ID only, not legacy name/code. Existing project
+  identity/collision handling and external full-collection pagination remain canonical.
+- Migration `20261009160000` requires coordinated deployment. Verify the HTTP sync
+  scheduler targets the updated application (production primary: Proxmox LXC104),
+  rather than the old Ubuntu rollback app; its scheduler code itself is unchanged.
+  Office ownership is NOT widened: an external project under KC Solo is not silently moved
+  to KCP Karanganyar. No guessed mapping, vendor submission or historical renumbering.
+
 ## MRN-21 / SUR-03 Dana Umum Cabang (2026-10-09, Issue #517)
 
 - Correction for branch/KCP PGD Fund: `Tanpa Proyek (Dana Umum)` is an explicit

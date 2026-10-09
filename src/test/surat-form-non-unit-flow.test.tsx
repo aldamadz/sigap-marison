@@ -60,7 +60,7 @@ describe("Flow 4: Non Unit KC tanpa proyek ditolak (MRN-22 hanya untuk Aset)", (
 
     // The Marison-not-ready banner should be visible instead.
     expect(await screen.findByText("Belum ada proyek yang siap digunakan")).toBeInTheDocument();
-    expect(screen.getByText("Belum ada proyek untuk kantor ini di sistem perencanaan. Silakan hubungi tim perencanaan untuk menyiapkan proyeknya.")).toBeInTheDocument();
+    expect(screen.getByText("Belum ada proyek dari API external untuk kantor ini. Hubungi tim perencanaan untuk memeriksa proyek dan kantor pengelolanya.")).toBeInTheDocument();
     expect(screen.queryByText("Proyek belum terhubung ke Marison")).not.toBeInTheDocument();
     expect(screen.queryByText("Pekerjaan Non Unit")).not.toBeInTheDocument();
 

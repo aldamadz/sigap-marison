@@ -73,6 +73,9 @@ beforeEach(() => {
     // resolves to the table data. `.limit(1).maybeSingle()` handles the policy.
     const chain = {
       eq: () => chain,
+      gt: () => chain,
+      not: () => chain,
+      is: () => chain,
       order: () => chain,
       in: () => chain,
       limit: () => chain,

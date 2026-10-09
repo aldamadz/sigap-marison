@@ -138,6 +138,20 @@ describe("Marison employee sync", () => {
     }));
   });
 
+  it("creates API identities without overwriting similarly named local project history", async () => {
+    const office = { id: "office", code: "KC", name: "Solo", kedudukan: "KC", marison_branch_id: 1 };
+    const local = { id: "legacy", office_id: office.id, code: "JST", name: "Jeruk Sawit", marison_project_id: null };
+    const client = { from: (table: string) => ({ select: async () => ({ data: table === "master_offices" ? [office] : [local], error: null }) }) };
+    const result = await previewMarisonProjectSync({ supabase: client, branches: [{ id: 1, code: "KC", name: "Solo" }],
+      projects: [{ id: 77, code: "JST", name: "Jeruk Sawit", branch: { id: 1 } }], environment: "production" });
+    expect(result).toMatchObject({ matched: 0, toCreate: 1, blocked: 0 });
+    expect(local.marison_project_id).toBeNull();
+    const invalid = await previewMarisonProjectSync({ supabase: client, branches: [],
+      projects: [{ id: 0, code: "ZERO", name: "Invalid" }], environment: "production" });
+    expect(invalid.blocked).toBe(1);
+    expect(invalid.toCreate).toBe(0);
+  });
+
   it("resolves a conflicting staging row only when one name matches an existing profile", () => {
     const result = deduplicateMarisonEmployees([
       { id: 1, nik: "T 020", name: "Tengku Syaharani Nabila" },
@@ -242,7 +256,7 @@ describe("Marison employee sync", () => {
     expect(preview).toContain('getAllMarisonCollection(deps.deploymentEnvironment, "/branches")');
     expect(page).toContain("Sinkronkan External");
     expect(page).toContain("Tambah Kantor");
-    expect(page).toContain('.from("master_offices").insert');
+    expect(page).toContain('supabase.rpc("save_master_office"');
     expect(migration).toContain("create policy master_offices_admin_insert");
     expect(migration).toContain("create policy master_offices_admin_update");
     expect(migration).not.toContain("create policy master_offices_admin_delete");
