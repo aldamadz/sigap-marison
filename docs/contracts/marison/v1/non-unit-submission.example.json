@@ -22,7 +22,13 @@
   ],
   "approvals": [
     {
-      "role": "Mgr. Perencanaan",
+      "role": "marketing",
+      "nik": "EMP-BM-001",
+      "action": "approved",
+      "actioned_at": "2026-07-21T10:30:00+07:00"
+    },
+    {
+      "role": "planning",
       "nik": "EMP-PRC-001",
       "action": "approved",
       "actioned_at": "2026-07-21T11:05:45+07:00",

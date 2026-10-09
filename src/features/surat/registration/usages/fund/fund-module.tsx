@@ -3,6 +3,8 @@ import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import { Keu1SubmissionEditor } from "@/components/surat/Keu1SubmissionEditor";
 import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RAB_NOT_REQUIRED_KEY, REQUESTER_HAS_RAB_KEY, usesRequesterRabChoice } from "@/lib/fund-rab";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   getFundSubmissionAmount,
@@ -113,14 +115,30 @@ export const fundModule: UsageModule = {
       );
     }
     return (
-      <FundSubmissionEditor
-        value={ctx.input.items}
-        onChange={(items) => ctx.setInputValue("items", items)}
-      />
+      <>
+        {usesRequesterRabChoice(ctx.usage, ctx.category) && (
+          <div className="mb-4 space-y-1">
+            <div className="flex min-h-11 items-center gap-3">
+              <Checkbox id="rab-not-required" checked={ctx.input[RAB_NOT_REQUIRED_KEY] === true}
+                onCheckedChange={checked => ctx.setInputValue(RAB_NOT_REQUIRED_KEY, checked === true)} />
+              <Label htmlFor="rab-not-required" className="flex min-h-11 items-center">Tidak memerlukan RAB</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {ctx.input[RAB_NOT_REQUIRED_KEY] === true
+                ? "Untuk kebutuhan seperti servis kendaraan atau AC. Lampiran yang sudah ada tetap tersimpan."
+                : "RAB opsional. Perencanaan dapat melengkapi; HRD dapat meminta perbaikan kepada pemohon."}
+            </p>
+          </div>
+        )}
+        <FundSubmissionEditor
+          value={ctx.input.items}
+          onChange={(items) => ctx.setInputValue("items", items)}
+        />
+      </>
     );
   },
   hiddenFieldKeys(ctx) {
-    return ["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu",
+    return ["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu", REQUESTER_HAS_RAB_KEY, RAB_NOT_REQUIRED_KEY,
       ...(isKeu10Form(ctx.usage.master_forms) ? ["total", "grand_total", "keu10_grand_total", "keu1_grand_total", "keu10_purpose_code"] : []),
     ];
   },
@@ -185,6 +203,9 @@ export const fundModule: UsageModule = {
       ];
     }
     return [
+      ...(usesRequesterRabChoice(ctx.usage, ctx.category) ? [{
+        key: RAB_NOT_REQUIRED_KEY, label: "Kebutuhan RAB", value: ctx.input[RAB_NOT_REQUIRED_KEY] === true ? "Tidak memerlukan RAB" : "RAB dapat dilampirkan (opsional)",
+      }] : []),
       ...(usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? [{
         key: "fund_type",
         label: "Jenis Pengajuan Dana",
@@ -198,6 +219,13 @@ export const fundModule: UsageModule = {
     ];
   },
   reconcileInputForContext(input: FormInputData, ctx): FormInputData {
+    if (!usesRequesterRabChoice(ctx.usage, ctx.category)
+      && (REQUESTER_HAS_RAB_KEY in input || RAB_NOT_REQUIRED_KEY in input)) {
+      const next = { ...input };
+      delete next[REQUESTER_HAS_RAB_KEY];
+      delete next[RAB_NOT_REQUIRED_KEY];
+      input = next;
+    }
     if (isKeu10Form(ctx.usage.master_forms)) {
       const next: FormInputData = { ...input, fund_without_project: false, fund_type: "operational" };
       delete next.free_cash_sisa_bulan_lalu;
@@ -233,7 +261,7 @@ export const fundModule: UsageModule = {
   },
   cleanup(ctx): CleanupResult {
     return {
-      inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project", "free_cash_sisa_bulan_lalu",
+      inputKeysToDelete: ["fund_type", "fund_amount", "fund_without_project", "free_cash_sisa_bulan_lalu", REQUESTER_HAS_RAB_KEY, RAB_NOT_REQUIRED_KEY,
         ...(isKeu10Form(ctx.usage.master_forms) ? ["total", "grand_total", "keu10_grand_total", "keu10_purpose_code"] : []),
       ],
       resetSelection: ["fundWithoutProject"],
@@ -241,6 +269,10 @@ export const fundModule: UsageModule = {
   },
   normalizeInput(input, ctx) {
     const next = { ...input };
+    if (!usesRequesterRabChoice(ctx.usage, ctx.category)) {
+      delete next[REQUESTER_HAS_RAB_KEY];
+      delete next[RAB_NOT_REQUIRED_KEY];
+    } else next[RAB_NOT_REQUIRED_KEY] = input[RAB_NOT_REQUIRED_KEY] === true;
     next.request_category = "non_asset";
     next.request_mode = "barang";
     delete next.is_aset;

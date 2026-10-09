@@ -35,6 +35,19 @@ export const adminHierarchyDocs: DocsEntry = {
 export const adminHierarchyDetailSections: DocsSection[] = [
     {
       type: "table",
+      title: "Atasan cabang dinamis",
+      columns: ["Kondisi", "Aturan"],
+      rows: [
+        ["KCP", "Cari BM KC terkait terlebih dahulu melalui relasi kantor yang valid; fallback mengikuti pejabat aktif yang memenuhi konteks."],
+        ["Prioritas cabang", "BM > Assistant Branch Manager (ABM) > SPV. Pejabat setingkat tidak saling menjadi atasan; kecocokan departemen diperiksa bila kandidat lebih dari satu."],
+        ["Mutasi / nonaktif / pergantian pejabat", "Relasi atasan otomatis dihitung ulang. Sinkronisasi tidak mengembalikan ID atasan lama yang sudah tidak sesuai."],
+        ["Pejabat tidak ditemukan / ambigu", "Relasi dikosongkan, bukan memilih orang secara acak. Periksa kantor induk, jabatan, departemen, dan status aktif."],
+        ["Pindah ke Kantor Pusat tanpa atasan", "Atasan cabang lama dibersihkan; tidak membuat parent otomatis bila HQ tidak memiliki atasan terkonfigurasi. Relasi HQ yang memang dikonfigurasi tetap dipertahankan."],
+        ["Histori", "Perubahan atasan tidak menulis ulang identitas atau tanda tangan surat lama."],
+      ],
+    },
+    {
+      type: "table",
       title: "Level jabatan hirarki",
       columns: ["Level", "Jabatan", "Catatan"],
       rows: [

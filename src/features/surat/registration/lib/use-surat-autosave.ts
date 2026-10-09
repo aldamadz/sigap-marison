@@ -14,6 +14,7 @@ export type UseSuratAutosaveParams = {
   selectedUsage: { id?: string | null } | null | undefined;
   /** Linked recommendation / revision context for the draft. */
   linkedDocumentContext: unknown;
+  externalRevision?: { eventId: string } | null;
   /** The live form payload to persist. */
   effectiveFormData: Record<string, any>;
   /** Active form id. */
@@ -53,6 +54,7 @@ export const useSuratAutosave = (
     draftToRestore,
     selectedUsage,
     linkedDocumentContext,
+    externalRevision,
     effectiveFormData,
     selectedFormId,
     signers,
@@ -75,6 +77,7 @@ export const useSuratAutosave = (
             selectedFormId,
             selectedUsageId: selectedUsage?.id || "",
             linkedDocumentContext,
+            externalRevision,
           },
           signers,
           currentSection,
@@ -92,6 +95,7 @@ export const useSuratAutosave = (
     signers,
     draftToRestore,
     linkedDocumentContext,
+    externalRevision,
     currentSection,
     debounceMs,
   ]);

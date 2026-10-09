@@ -30,6 +30,7 @@ export const adminUsersDocs: DocsEntry = {
       "Jika karyawan tidak ada dalam import aktif, akun dianggap tidak aktif.",
     ],
     troubleshooting: [
+      "Reset password akun memakai operasi admin yang terautentikasi. Reset pemetaan payload external hanya mengubah identitas outbound; keduanya bukan aksi yang sama.",
       "Jika import gagal karena akses ditolak, pastikan akun yang melakukan import adalah admin aktif.",
       "Jika kantor belum termapping, tambahkan mapping kantor sebelum import ulang.",
       "Jika badge sidebar belum berkurang, pastikan seluruh alasan pada kolom Keterangan sudah diselesaikan lalu segarkan data.",
@@ -55,7 +56,7 @@ export const adminUsersDetailSections: DocsSection[] = [
       columns: ["Data berubah", "Dampak"],
       rows: [
         ["Departemen", "Mengubah izin membuat surat, kandidat workflow, SLA, dan filter data."],
-        ["Kantor", "Mengubah kandidat cabang dan akses data cabang."],
+        ["Kantor", "Mengubah kandidat/akses cabang dan menghitung ulang atasan dinamis. KCP memakai KC terkait; pindah ke HQ tanpa atasan tidak membawa parent cabang lama."],
         ["Jabatan", "Mengubah label tanda tangan dan hirarki."],
         ["Status aktif", "User nonaktif tidak bisa memakai sistem."],
       ],

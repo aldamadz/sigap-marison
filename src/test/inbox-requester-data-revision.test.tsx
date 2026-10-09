@@ -6,6 +6,7 @@ import InboxPage from "@/pages/surat/InboxPage";
 type FixtureItem = { nama_barang?: string; id?: string; keterangan?: string; jumlah: string | number; satuan?: string; estimasi_harga_satuan?: number };
 type Fixture = {
   id: string; surat_id: string; task_type: string; step_order: number; role_name: string; is_signed: boolean;
+  label_jabatan?: string;
   verifier_snapshot?: { user_id: string; full_name: string }[]; requires_unit_allocation?: boolean;
   surat_registrasi: {
     id: string; no_surat: string; judul_surat: string; status: string; created_at: string; request_date: string; request_place: string;
@@ -101,6 +102,20 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  it.each(["Mgr. HRD & GA", "Mgr. Perencanaan"])("allows %s checkers to request missing RAB/redaction without reducing items", async label => {
+    mocks.fixture.task_type = "verification";
+    mocks.fixture.role_name = "memeriksa";
+    mocks.fixture.label_jabatan = label;
+    mocks.fixture.surat_registrasi.form_input_data.request_category = "non_asset";
+    renderInbox();
+    fireEvent.click(screen.getByRole("button", { name: "Minta perbaikan" }));
+    await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
+    expect(mocks.requestRevision.mock.calls[0][0]).toMatchObject({ targetType: "requester", reason,
+      changes: { requester_edit_required: true, restart_step: 3 } });
+    expect(mocks.requestRevision.mock.calls[0][0].changes).not.toHaveProperty("item_revisions");
+    expect(mocks.requestRevision.mock.calls[0][0].changes).not.toHaveProperty("unit_availability_dead_end");
+    expect(mocks.fixture.surat_registrasi.form_input_data.items).toEqual([{ nama_barang: "Laptop", jumlah: "3" }]);
+  });
   it.each([true, false])("defaults to general return with structured items=%s", async (hasItems) => {
     if (!hasItems) mocks.fixture.surat_registrasi.form_input_data.items = [];
     renderInbox();

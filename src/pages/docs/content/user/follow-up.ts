@@ -19,9 +19,10 @@ export const followUpDocs: DocsEntry = {
     steps: [
       "Buka Tindak Lanjut saat badge muncul di Layanan Surat.",
       "Pilih pengajuan dari antrean keputusan.",
-      "Baca tabel perubahan dan ringkasan dokumen.",
+      "Baca jenis perbaikan, catatan peminta, tabel perubahan bila ada, dan ringkasan dokumen.",
+      "Untuk Minta Perbaikan Pemohon, buka draft lengkap lalu perbaiki rincian/spesifikasi atau lampiran. Untuk Revisi oleh Penandatangan, tinjau nilai diajukan, nilai usulan, dan alasannya.",
       "Pilih Lanjutkan jika perubahan disetujui, atau Batalkan jika pengajuan tidak dilanjutkan.",
-      "Jika dilanjutkan, persetujuan dimulai ulang dari tahap pertama agar seluruh pihak menandatangani data terbaru.",
+      "Revisi internal dilanjutkan dengan nomor surat yang sama dari tahap yang meminta perbaikan. Tahap setelahnya diperiksa/ditandatangani ulang; persetujuan sebelum tahap peminta tetap tersimpan.",
     ],
     examples: [
       "Pengajuan 10 unit hanya disetujui 8 unit. Pemohon membuka Tindak Lanjut, membaca alasan, lalu memilih Lanjutkan atau Batalkan.",
@@ -49,8 +50,20 @@ export const followUpDocs: DocsEntry = {
         title: "Dampak keputusan",
         columns: ["Keputusan", "Yang terjadi", "Catatan"],
         rows: [
-          ["Lanjutkan", "Data revisi diterapkan dan tanda tangan dimulai ulang dari tahap 1.", "PDF lama dibersihkan agar preview berikutnya memakai data terbaru."],
+          ["Lanjutkan revisi internal", "Koreksi/usulan yang dikonfirmasi diterapkan; proses kembali ke tahap peminta, bukan selalu tahap 1.", "Nomor surat tetap sama; histori sebelum/sesudah dan persetujuan sebelumnya tetap tersimpan. PDF terbaru mengikuti data revisi."],
           ["Batalkan", "Pengajuan berhenti dan nomor surat ditandai hangus.", "Alasan pembatalan tersimpan pada riwayat."],
+        ],
+      },
+      {
+        type: "table",
+        title: "Revisi Unit eksternal (kandidat #509)",
+        columns: ["Batas", "Aturan"],
+        rows: [
+          ["Pemilik dan event", "Hanya pemilik revisi Unit eksternal yang masih terbuka dapat mengubah proyek/jumlah dari draft Tindak Lanjut."],
+          ["Identitas surat", "Nomor dan identitas surat lama tidak diganti meskipun proyek revisi berubah."],
+          ["Kapasitas dan alokasi", "Pilihan proyek memuat ulang kapasitas terbaru; alokasi lama dikosongkan dan harus diisi/diperiksa ulang untuk proyek revisi."],
+          ["Validasi server", "Kapasitas diperiksa server, bukan dipercaya dari browser. Receipt kapasitas hanya berlaku sekali untuk pemilik, revisi terbuka, draft aktif, proyek dan jumlah yang cocok; receipt kedaluwarsa atau sudah dipakai tidak dapat dikirim ulang."],
+          ["Alur eksternal", "Ikuti tahap ulang yang dikonfigurasi untuk keputusan eksternal; aturan tahap peminta revisi internal tidak menggantikan alur ini."],
         ],
       },
       {

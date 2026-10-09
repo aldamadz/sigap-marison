@@ -6,17 +6,13 @@ import { createRealtimeFlush, type FlushController } from "@/lib/realtime-flush"
 const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
 const suratKeys = [
   "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
+  "surat-inbox-compact", "surat-inbox-kpi", "surat-inbox-detail",
   "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",
   "surat-riwayat-keterlibatan", "surat-revision-history", "surat-linked-documents",
   "recommendation-tasks", "surat-follow-up-requester",
 ];
 const userKeys = ["users", "activity-logs", "recent-logs"];
-const focusKeys = [
-  "agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs",
-  "surat-list", "surat-inbox", "surat-detail", "users",
-  "recommendation-tasks", "surat-follow-up-requester", "surat-linked-documents",
-  "surat-monitoring-list", "admin-monitoring-list",
-];
+const focusKeys = [...agendaKeys, ...suratKeys, ...userKeys];
 
 export const RealtimeSync = () => {
   const queryClient = useQueryClient();
