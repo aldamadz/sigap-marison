@@ -7,10 +7,13 @@ const mocks = vi.hoisted(() => ({
   events: new Map<string, () => void>(), reconnect: null as (() => void) | null,
   query: vi.fn(), rows: {} as Record<string, unknown[]>,
   pause: null as Promise<void> | null,
+  update: vi.fn(),
 }));
 vi.mock("@/lib/supabase", () => ({ supabase: {
   from: (table: string) => {
     const query = { select: () => query, eq: () => query, order: () => query,
+      gt: () => query, not: () => query, is: () => query, range: () => query,
+      update: (values: unknown) => { mocks.update(table, values); return query; },
       then: async (done: (value: unknown) => void) => {
         mocks.query(table); if (mocks.pause) await mocks.pause;
         return done({ data: mocks.rows[table] || [], error: null, count: 0 });
@@ -64,5 +67,16 @@ describe("actual master page consumers", () => {
     await act(async () => { mocks.pause = null; finish(); });
     expect(mocks.query.mock.calls.filter(([name]) => name === table)).toHaveLength(1);
     expect(screen.getByText(label)).toBeVisible();
+  });
+  it("project identity has no manual CRUD and entity assignment writes only entity_id", async () => {
+    render(<ProjectManagementPage />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /Tambah|Hapus/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Sinkronkan" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Atur entitas Project Visible" }));
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.queryByLabelText(/Nama Proyek|Kode Proyek|Kantor/)).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Simpan" })); });
+    expect(mocks.update).toHaveBeenCalledExactlyOnceWith("master_projects", { entity_id: null });
   });
 });

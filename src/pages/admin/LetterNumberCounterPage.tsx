@@ -69,6 +69,7 @@ export default function LetterNumberCounterPage() {
         supabase
           .from("master_projects")
           .select("id, code, name, office_id, entity_id, master_offices(name, code)")
+          .gt("marison_project_id", 0).not("marison_synced_at", "is", null).is("local_retired_at", null)
           .order("name", { ascending: true }),
         supabase.from("master_offices").select("id, code, name, kedudukan").order("code", { ascending: true }),
         supabase

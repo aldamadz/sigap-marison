@@ -417,34 +417,13 @@ export const executeMarisonBranchSync = async ({ supabase, branches, environment
   };
 };
 
-const findProjectForExternal = (project, office, projects) => {
+const findProjectForExternal = (project, projects) => {
   const externalId = Number(project?.id);
   const byExternalId = projects.find((row) => Number(row.marison_project_id) === externalId);
   if (byExternalId) return { project: byExternalId, match: "external_id" };
 
-  const externalCode = normalizeProjectCode(project?.code);
-  if (externalCode) {
-    const codeMatches = projects.filter((row) => (
-      normalizeProjectCode(row.code) === externalCode
-      && !(Number.isSafeInteger(Number(row.marison_project_id)) && Number(row.marison_project_id) > 0)
-    ));
-    if (codeMatches.length === 1) return { project: codeMatches[0], match: "code" };
-    if (codeMatches.length > 1) {
-      return { project: null, match: "conflict", reason: "Kode proyek cocok dengan lebih dari satu proyek SIGAP" };
-    }
-  }
-
-  const projectName = normalizeMarisonName(project?.name);
-  if (projectName && office?.id) {
-    const nameMatches = projects.filter((row) => (
-      row.office_id === office.id && normalizeMarisonName(row.name) === projectName
-    ));
-    if (nameMatches.length === 1) return { project: nameMatches[0], match: "name_office" };
-    if (nameMatches.length > 1) {
-      return { project: null, match: "conflict", reason: "Nama proyek pada kantor yang sama cocok dengan lebih dari satu proyek SIGAP" };
-    }
-  }
-
+  // Local names/codes are not authoritative identities. Never repurpose their
+  // historical FK targets when a similarly named project arrives from the API.
   return { project: null, match: "new" };
 };
 
@@ -489,7 +468,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
     const externalId = Number(rawProject?.id);
     const externalName = String(rawProject?.name || "").trim();
     const branchId = Number(rawProject?.branch?.id ?? rawProject?.branch_id);
-    if (!Number.isSafeInteger(externalId)) {
+    if (!Number.isSafeInteger(externalId) || externalId <= 0) {
       result.errors.push({ entityType: "project", externalId: rawProject?.id ?? null, name: externalName || "-", reason: "ID proyek tidak valid" });
       continue;
     }
@@ -512,7 +491,7 @@ const syncProjects = async (supabase, { projects, branches }, dryRun) => {
       });
       continue;
     }
-    const resolved = findProjectForExternal(rawProject, office, localProjects);
+    const resolved = findProjectForExternal(rawProject, localProjects);
     if (resolved.match === "conflict") {
       result.errors.push({ entityType: "project", externalId, name: externalName, reason: resolved.reason });
       continue;
