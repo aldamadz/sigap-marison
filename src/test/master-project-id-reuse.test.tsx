@@ -11,7 +11,17 @@ const mocks = vi.hoisted(() => ({
   updated: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock("@/lib/supabase", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/lib/supabase", () => ({
+  supabase: {
+    from: mocks.from,
+    channel: vi.fn(() => {
+      const channel = { on: vi.fn().mockReturnThis(), subscribe: vi.fn().mockReturnThis() };
+      return channel;
+    }),
+    removeChannel: vi.fn(),
+  },
+  onRealtimeReconnect: vi.fn(() => ({ unsubscribe: vi.fn() })),
+}));
 vi.mock("@/services/marison-payload-mapping.service", () => ({
   marisonPayloadMappingService: {
     list: vi.fn().mockResolvedValue([]),
