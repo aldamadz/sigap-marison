@@ -1,17 +1,31 @@
 # SIGAP Feature and Release Map
 
-## SUR-24 / SUR-17 / MRN-12 / NTF-02 Kandidat Issue #509 (2026-10-09)
+## SUR-24 / SUR-17 / MRN-12 / NTF-02 Released Issue #509 (2026-10-09)
+
+- Runtime aplikasi terverifikasi setelah PR #511: production `080b02f721`, staging
+  `b0994ef9`. Production berjalan di Proxmox LXC 104; worker PDF/sync/outbound
+  tetap Ubuntu tanpa restart. Main menjadi ancestor source dan runtime staging.
+- Migration `20261009090000`, `20261009093000`, `20261009113000` diterapkan dan
+  diverifikasi di kedua environment; publication 12 tabel public tanpa `profiles`.
+  Fingerprint 13 tabel bisnis tetap; tidak ada surat/approval/vendor POST production
+  yang dibuat untuk acceptance. Bukti lengkap: Issue #509 dan PR #511.
+- CI pada feature head `f24fd62` dan merge main `080b02f721` SUCCESS; changed tests,
+  lint/typecheck/build serta integration PostgreSQL lulus. Browser staging membuktikan
+  RAB opsional dan checkbox tidak menyembunyikan upload; draft uji dibatalkan.
+  Production dashboard/monitoring dan bundle baru terverifikasi read-only.
+- Batas acceptance: uji dua akun/burst live belum dijalankan. Jangan menganggap
+  regression test sebagai bukti approval dua sesi atau pengiriman vendor live.
+  Probe Ubuntu mengalami koneksi Cloudflare lambat; probe Windows root/ready
+  sekitar 0,45 detik. Dana Cabang tanpa proyek masih punya guard penomoran lama.
 
 Acceptance browser menemukan label dinamis `Manager Terkait` pada Dana. Label
 ini memakai RAB opsional yang sama tanpa mengasumsikan HRD atau Perencanaan;
 migration forward-only `20261009113000_fund_rab_generic_manager.sql` melengkapi
-dua migration kandidat awal, tidak mengubah file yang sudah applied ke staging.
+  dua migration awal, tidak mengubah file yang sudah applied ke staging.
 
 - Branch `fix/fund-review-realtime-release-01`, basis production `main` `019d243`.
-  Pengguna memilih rilis production setelah pengujian staging. Perubahan BARU
-  tetap kandidat: subtask ini hanya dokumentasi, tanpa deploy, E2E, atau write DB.
-  Parent wajib mencatat hasil staging, SHA runtime live, migration dan worker
-  terkait sebelum status diubah menjadi released; keberadaan source bukan bukti live.
+  Pengguna memilih rilis production setelah pengujian staging. Source dirilis
+  selektif melalui PR #511; seluruh staging tidak dibawa ke production.
 - SUR-24 (ID baru, revisi kebutuhan 2026-10-09): lampiran RAB opsional pada Dana
   HRD dan Perencanaan; tidak ada kewajiban upload atau guard waiver checkbox.
   Tim Perencanaan boleh melampirkan RAB jika pemohon belum melampirkannya.
@@ -26,22 +40,20 @@ dua migration kandidat awal, tidak mengubah file yang sudah applied ke staging.
 - MRN-12: revisi Unit eksternal membuka proyek hanya untuk pemilik revisi yang
   masih terbuka; identitas/nomor surat tidak berubah. Pilihan proyek memuat ulang
   kapasitas terbaru dan mengosongkan alokasi lama agar diperiksa ulang.
-- MRN-12: kandidat tabel privat baru `unit_revision_availability_receipts`
+- MRN-12: tabel privat baru `unit_revision_availability_receipts`
   menyimpan receipt kapasitas berumur pendek dari lookup external terbaru oleh
   backend; bukan kapasitas dari browser. Server memeriksa pemilik, revisi eksternal
   terbuka, draft aktif, proyek/kode dan jumlah yang cocok, kapasitas cukup, masa
   berlaku serta receipt belum dipakai. Receipt dikonsumsi sekali dalam transaksi
   pengiriman revisi; receipt basi, tidak cocok atau replay ditolak. Akses tabel
-  langsung browser ditutup. Migration dan acceptance live tetap kandidat parent.
-- AUTH-01: placeholder login generik tanpa identitas/contoh akun pribadi adalah
-  kandidat #509. Parent memiliki `LoginPage` dan tesnya; subtask ini hanya mencatat
-  cakupan, tanpa mengubah autentikasi atau mengklaim UI login sudah live.
+  langsung browser ditutup. Receipt diuji melalui PostgreSQL nyata; submit revisi
+  dokumen production tidak dilakukan untuk acceptance.
+- AUTH-01: placeholder login generik `nama@perusahaan.com` dan
+  `Masukkan password Anda`; autentikasi dan kredensial tidak diubah.
 - NTF-02: `RealtimeSync` menangani refresh query termasuk `surat-inbox-compact`,
   `surat-inbox-kpi` dan `surat-inbox-detail`. Listener Inbox hanya mengatur cursor
   dan toast, tanpa refetch duplikat; event revisi/rekomendasi juga mereset cursor.
-  Tiga regresi event-only lulus menurut laporan parent 2026-10-09; ini bukan
-  acceptance E2E atau bukti deploy. Acceptance staging serta bukti live tetap
-  menjadi tanggung jawab parent.
+  Regresi event-only lulus; uji dua sesi lintas akun live tetap belum dibuktikan.
 - ORG-01, SUR-22/SUR-23/ADM-01, kebijakan penomoran SUR-03B dan Kalender Kerja
   adalah baseline rilis sebelumnya, bukan fitur baru kandidat #509.
 

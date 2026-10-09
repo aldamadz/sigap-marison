@@ -26,7 +26,7 @@ describe("issue 509 documentation contracts", () => {
   it("documents optional RAB for both departments and a non-destructive exemption intent", () => {
     for (const id of ["surat-registration", "approval-inbox", "admin-form-usages"]) {
       const text = content(id);
-      expect(text).toContain("kandidat #509");
+      expect(text.toLowerCase()).not.toContain("kandidat #509");
       expect(text).toContain("Dana Perencanaan");
       expect(text).toContain("Dana HRD");
       expect(text.match(/Lampiran RAB opsional/g)?.length).toBeGreaterThanOrEqual(2);
@@ -73,10 +73,12 @@ describe("issue 509 documentation contracts", () => {
     expect(text).toContain("Relasi HQ yang memang dikonfigurasi tetap dipertahankan");
   });
 
-  it("separates selected candidates from supplied released evidence and primary runtime", () => {
+  it("records verified release evidence separately from historical snapshots", () => {
     const map = readFileSync("docs/FEATURE_RELEASE_MAP.md", "utf8");
-    expect(map).toMatch(/Perubahan BARU\r?\n {2}tetap kandidat/);
-    expect(map).toContain("tanpa deploy, E2E, atau write DB");
+    expect(map).toContain("Released Issue #509");
+    expect(map).toContain("production `080b02f721`");
+    expect(map).toContain("`b0994ef9`");
+    expect(map).toContain("uji dua akun/burst live belum dijalankan");
     expect(map).toContain("`main` `019d243`");
     expect(map).toContain("`staging` `075fb545`");
     expect(map).toContain("PR #497 dan #507");
@@ -93,7 +95,7 @@ describe("issue 509 documentation contracts", () => {
     expect(deploy).toContain("hanya target rollback");
   });
 
-  it("records optional RAB, private single-use server receipts and parent-owned login as candidates", () => {
+  it("records optional RAB, private receipts and generic login without claiming live two-session testing", () => {
     const map = readFileSync("docs/FEATURE_RELEASE_MAP.md", "utf8");
     const candidate = map.split("## Snapshot Rilis Terverifikasi")[0];
     expect(candidate).toContain("lampiran RAB opsional pada Dana");
@@ -102,19 +104,19 @@ describe("issue 509 documentation contracts", () => {
     expect(candidate).toContain("rab_not_required");
     expect(candidate).not.toContain("Ada RAB");
     expect(candidate).not.toContain("RAB pemeriksa wajib");
-    expect(candidate).toContain("kandidat tabel privat baru `unit_revision_availability_receipts`");
+    expect(candidate).toContain("tabel privat baru `unit_revision_availability_receipts`");
     expect(candidate).toContain("Receipt dikonsumsi sekali dalam transaksi");
     expect(candidate).toContain("receipt basi, tidak cocok atau replay ditolak");
     expect(candidate).toContain("langsung browser ditutup");
     expect(candidate).toContain("placeholder login generik");
-    expect(candidate).toContain("Parent memiliki `LoginPage` dan tesnya");
+    expect(candidate).toContain("nama@perusahaan.com");
+    expect(candidate).toContain("Masukkan password Anda");
     expect(candidate).toContain("`RealtimeSync`");
     for (const key of ["surat-inbox-compact", "surat-inbox-kpi", "surat-inbox-detail"]) {
       expect(candidate).toContain(key);
     }
     expect(candidate).toContain("tanpa refetch duplikat");
     expect(candidate).toContain("event revisi/rekomendasi juga mereset cursor");
-    expect(candidate).toContain("ini bukan");
-    expect(candidate).toContain("acceptance E2E atau bukti deploy");
+    expect(candidate).toContain("uji dua sesi lintas akun live tetap belum dibuktikan");
   });
 });

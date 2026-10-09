@@ -31,7 +31,7 @@ export const requestCategoriesDocs: DocsEntry = {
     troubleshooting: [
       "Jika form atau kegunaan tidak muncul, pastikan kategori yang dipilih sesuai dan minta admin memeriksa konfigurasi departemen.",
       "Jika pilihan Unit tidak tersedia, departemen Anda belum diizinkan mengajukan Unit.",
-      "Kategori dan identitas surat tetap terkunci. Kandidat #509: proyek Unit hanya dapat dikoreksi oleh pemilik revisi eksternal yang masih terbuka melalui Tindak Lanjut; di luar itu ikuti prosedur pembatalan/pengajuan baru.",
+      "Kategori dan identitas surat tetap terkunci. Proyek Unit hanya dapat dikoreksi oleh pemilik revisi eksternal yang masih terbuka melalui Tindak Lanjut; di luar itu ikuti prosedur pembatalan/pengajuan baru.",
     ],
     related: ["Registrasi Surat", "Persetujuan", "Rekomendasi"],
     sections: [
@@ -147,7 +147,7 @@ export const requestCategoriesDocs: DocsEntry = {
           {
             type: "callout",
             title: "Batas perubahan proyek Unit",
-            description: "Pada approval biasa, proyek dikunci dan tim pemeriksa hanya mengalokasikan kavling di proyek tersebut. Kandidat #509 membuka proyek bagi pemilik revisi Unit eksternal yang masih terbuka; nomor/identitas surat tetap, kapasitas dimuat ulang, dan alokasi lama dikosongkan untuk pemeriksaan ulang.",
+            description: "Pada approval biasa, proyek dikunci dan tim pemeriksa hanya mengalokasikan kavling di proyek tersebut. Pemilik revisi Unit eksternal yang masih terbuka dapat mengganti proyek; nomor/identitas surat tetap, kapasitas dimuat ulang, dan alokasi lama dikosongkan untuk pemeriksaan ulang.",
             tone: "warning",
           },
         ],

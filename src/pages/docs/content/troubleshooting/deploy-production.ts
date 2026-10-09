@@ -28,7 +28,7 @@ export const deployProductionDocs: DocsEntry = {
     examples: [
       "Perubahan dokumentasi `/docs` cukup deploy app utama, tidak perlu deploy PDF worker.",
       "Domain testing memakai `docker-compose.staging.yml`; environment Marison terkunci ke staging.",
-      "Snapshot rilis sebelum kandidat #509: production main 019d243, staging 075fb545 (handoff 9 Oktober 2026); tidak membuktikan kandidat #509 sudah live.",
+      "Rilis #509 telah diverifikasi 9 Oktober 2026: aplikasi production 080b02f721 dan staging b0994ef9. Bukti runtime dan migration tersedia pada Issue #509; verifikasi kembali health/version untuk status terkini.",
       "Production utama Proxmox LXC 104; aplikasi Ubuntu lama hanya rollback. Worker PDF, sync, dan outbound tetap Ubuntu.",
       "Production dibuka melalui `https://sigap.marisoncloud.com`, sedangkan staging melalui `https://sigap.marison-testing.biz.id`.",
       "Staging memiliki project Supabase dan worker PDF sendiri, tetapi memakai storage self-hosted yang sama melalui namespace staging/.",
