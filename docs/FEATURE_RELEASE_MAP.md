@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## MRN-22 / MRN-18 / MAR-10 Projectless Branch Number Format (2026-10-09, Issue #526)
+
+- Candidate `fix/projectless-numbering-documentation-01` from main; staging first.
+- New eligible KC/KCP projectless numbers share the visible `-000` segment:
+  Asset fallback, PGD Dana Umum, and KEU 1 Kas Kecil. Existing reservations,
+  letters, historical numbers, counter scopes and allocation RPCs are unchanged.
+- Non Unit requires an external project and its external work catalog; Unit
+  requires its external capacity. Neither can substitute a virtual project.
+- Correct overview/detail numbering tables, category docs and FITUR to remove
+  the obsolete Non Unit fallback claim. No fake master project or vendor ID 000.
+- No migration or master/letter/outbound mutation. Focused service and docs
+  regressions cover KC/KCP, headquarters, selected projects and canonical gates.
+- Production source/runtime unchanged until an explicitly authorized release.
+
 ## MRN-13 External-only Active Projects (2026-10-09, Issue #521)
 
 - `fix/external-project-source-only-01` from main; staging first, selective production.

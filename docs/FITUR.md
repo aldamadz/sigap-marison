@@ -238,8 +238,10 @@ dashboard, serta notifikasi lonceng. Manual lengkap CAL-03 F1–F7 ada di
 
 - User memilih entitas, kantor/cabang, departemen, jenis surat, lalu klasifikasi `Aset`, `Unit`, `Non Aset`, atau `Non Unit`.
 - Sistem menyaring matrix alur berdasarkan klasifikasi, scope kantor, dan departemen.
-- KC/KCP yang belum memiliki proyek tetap dapat membuat pengajuan non-unit. Sistem tidak menampilkan dropdown proyek kosong dan memakai kode proyek virtual `000` pada nomor surat serta snapshot input.
-- KC/KCP yang sudah memiliki proyek tetap wajib memilih proyek cabang sebelum nomor surat diterbitkan.
+- KC/KCP yang memilih `Tanpa Proyek` pada kegunaan yang mendukungnya memakai segmen `-000` pada nomor baru: Aset yang memenuhi fallback, Dana Umum PGD, dan Kas Kecil KEU 1. Ini penanda nomor, bukan master proyek atau ID external baru.
+- Fallback Aset hanya tersedia jika kantor tidak mempunyai proyek external terdaftar. Dana Umum dan Kas Kecil dapat memilih `Tanpa Proyek`; jika memilih proyek, nomor mengikuti kode proyek external tersebut.
+- Pengajuan Non Unit wajib memilih proyek external sebelum mengambil nomor, lalu memilih jenis pekerjaan proyek dari API external; tidak mempunyai fallback `000`.
+- Nomor surat atau draft yang sudah dipesan tidak diubah retroaktif saat format baru diterapkan.
 - Pengajuan Unit selalu wajib memilih proyek Unit karena kapasitas unit dan alokasi kavling bergantung pada proyek yang dipilih.
 - User mendapatkan nomor surat.
 - Setelah nomor dipesan, sistem membuat draft registrasi dan menyimpan perubahan form otomatis ke database.
@@ -275,7 +277,7 @@ dashboard, serta notifikasi lonceng. Manual lengkap CAL-03 F1–F7 ada di
 - Nilai seluruh item Non Unit dijumlahkan otomatis pada form, ringkasan konfirmasi, dan detail pengajuan.
 - Data proyek eksternal disimpan sebagai snapshot bersama surat. ID proyek tidak diambil dari UUID internal, dan ID cabang selalu mengikuti kantor proyek tujuan, bukan kantor pemohon.
 - Proyek yang belum mempunyai mapping proyek atau kantor external tidak dapat dipilih untuk Non Unit dan tetap masuk antrean review Master Proyek.
-- Cabang tanpa proyek tetap dapat memakai alur PGD lokal dengan kode proyek virtual `000`; alur ini tidak memaksakan jenis pekerjaan dari proyek eksternal.
+- Cabang tanpa proyek external tidak dapat mengajukan Non Unit dengan proyek virtual atau pekerjaan lokal. Pastikan proyek dan jenis pekerjaannya tersedia pada sistem perencanaan external.
 - `Non Aset` dan `Non Unit` tidak dianggap istilah yang sama: Non Aset menjelaskan klasifikasi kebutuhan, sedangkan Non Unit menjelaskan tidak adanya proses alokasi kavling.
 - Panduan menampilkan kegunaan, contoh, data yang diminta, alur, perbandingan kategori, dan solusi ketika form/kegunaan tidak muncul.
 
