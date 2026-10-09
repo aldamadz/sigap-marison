@@ -107,9 +107,9 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches documentation content after issue 509 updates", () => {
+  it("matches documentation content after issue 526 projectless-numbering correction", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("5b2108f9a8fb9cea1e82dc1a631ec28456be413bf63816d8bd871b3549559a78");
+      .toBe("dbadd0057945fb01447bbd8dc488878e86e87cb8093a2297aa85e2bd9e9eb14d");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

@@ -10,12 +10,14 @@ const payload = { office_id: id(1), dept_id: id(2), entity_id: id(3), letter_typ
 let formCode: string;
 let category: string;
 let officeKind: string;
+let projectCount: number;
 
 beforeEach(() => {
   vi.restoreAllMocks();
   formCode = "FM-UAI.PGD-01-00";
   category = "non_asset";
   officeKind = "KCP";
+  projectCount = 1;
   mocks.rpc.mockReset().mockResolvedValue({ data: 2, error: null });
   mocks.from.mockImplementation((table: string) => {
     const records: Record<string, object> = {
@@ -23,7 +25,7 @@ beforeEach(() => {
       master_departments: { code: "KEU", dept_index: 1 }, master_entities: { code: "UAI" },
       master_dept_letter_types: { sort_index: 1 }, master_projects: { code: "KWS1" },
     };
-    const result = { data: records[table], count: 1, error: null };
+    const result = { data: records[table], count: projectCount, error: null };
     const query = { select: () => query, eq: () => query, gt: () => query, not: () => query, is: () => query, single: async () => result,
       then: (resolve: (value: typeof result) => unknown) => resolve(result) };
     return query;
@@ -39,16 +41,43 @@ describe("branch PGD Fund numbering", () => {
     officeKind = kind;
     const result = await suratService.generateNoSurat(payload);
     expect(result.noUrut).toBe(2);
-    expect(result.fullNumber).not.toContain("-000");
+    expect(result.fullNumber).toMatch(kind === "KC"
+      ? /^002\/UAI\/02-000\.1\.1\/[IVX]+\/\d{4}$/
+      : /^002\/UAI\/02\.02-000\.1\.1\/[IVX]+\/\d{4}$/);
     expect(mocks.rpc).toHaveBeenCalledWith("generate_fund_branch_letter_number", {
       p_entity_id: id(3), p_type_id: id(4), p_office_id: id(1), p_user_id: id(6),
       p_dept_id: id(2), p_form_usage_id: id(5),
     });
   });
   it("keeps the project allocator when a project is selected", async () => {
-    await suratService.generateNoSurat({ ...payload, project_id: id(7),
+    const result = await suratService.generateNoSurat({ ...payload, project_id: id(7),
       form_input_data: { request_category: "non_asset", fund_without_project: false } });
+    expect(result.fullNumber).toMatch(/^002\/UAI\/02\.02-KWS1\.1\.1\/[IVX]+\/\d{4}$/);
     expect(mocks.rpc).toHaveBeenCalledWith("generate_new_letter_number", expect.objectContaining({ p_project_id: id(7) }));
+  });
+  it("keeps virtual 000 for an eligible Asset branch with no projects", async () => {
+    category = "asset";
+    projectCount = 0;
+    const result = await suratService.generateNoSurat({ ...payload, form_input_data: {
+      request_category: "asset", project_is_default: true, project_code: "000", project_name: "Tanpa proyek",
+    } });
+    expect(result.fullNumber).toMatch(/^002\/UAI\/02\.02-000\.1\.1\/[IVX]+\/\d{4}$/);
+    expect(mocks.rpc).toHaveBeenCalledWith("generate_new_letter_number", expect.objectContaining({
+      p_project_id: null, p_form_usage_id: id(5),
+    }));
+  });
+  it("does not add a virtual branch code to headquarters", async () => {
+    officeKind = "Pusat";
+    const result = await suratService.generateNoSurat(payload);
+    expect(result.fullNumber).toMatch(/^002\/UAI\/KEU\.1\/[IVX]+\/\d{4}$/);
+    expect(mocks.rpc).toHaveBeenCalledWith("generate_new_letter_number", expect.objectContaining({ p_project_id: null }));
+  });
+  it("does not trust a browser project code for a no-project Fund request", async () => {
+    const result = await suratService.generateNoSurat({ ...payload, form_input_data: {
+      ...payload.form_input_data, project_code: "FORGED",
+    } });
+    expect(result.fullNumber).toContain("-000.");
+    expect(result.fullNumber).not.toContain("FORGED");
   });
   it.each(["FM-UAI.KEU-10-00", "unknown"])("does not exempt %s", async (code) => {
     formCode = code;
