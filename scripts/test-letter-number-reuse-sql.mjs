@@ -511,21 +511,22 @@ ${assertions}
 ${branchFundSql}
 `;
 
-const run = (args, input = "") => {
+const run = (args, input = "", includeStderr = true) => {
   const result = spawnSync("docker", args, { input, encoding: "utf8", timeout: 240_000 });
   if (result.status !== 0) {
     throw new Error(
       `docker ${args.join(" ")} exited ${result.status}\n${result.stderr || ""}\n${result.stdout || ""}`,
     );
   }
-  return `${result.stdout || ""}\n${result.stderr || ""}`;
+  return includeStderr ? `${result.stdout || ""}\n${result.stderr || ""}` : result.stdout;
 };
 
 const id = run([
   "run", "-d",
   "-e", "POSTGRES_PASSWORD=test",
   "postgres:17-alpine",
-]).trim();
+], "", false).trim();
+if (!/^[0-9a-f]{64}$/u.test(id)) throw new Error("Docker returned an invalid disposable container ID.");
 try {
   let ready = false;
   for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {
