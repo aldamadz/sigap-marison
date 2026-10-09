@@ -26,12 +26,16 @@ beforeEach(() => {
       select: vi.fn().mockReturnThis(),
       eq: (key: string, value: unknown) => { call.filters.push([key, value]); return query; },
       is: (key: string, value: unknown) => { call.filters.push([key, value]); return query; },
+      gt: (key: string, value: unknown) => { call.filters.push([`${key}:gt`, value]); return query; },
+      not: (key: string, _operator: string, value: unknown) => { call.filters.push([`${key}:not`, value]); return query; },
       order: (key: string) => { call.orders.push(key); return query; },
       range: (from: number, to: number) => { call.range = [from, to]; return query; },
       then: (resolve: (result: { data: Row[] | null; error: typeof pageError }) => unknown) => {
         if (pageError && table === "profiles" && call.range?.[0] === 500) return resolve({ data: null, error: pageError });
         if (endless && table === "profiles") return resolve({ data: Array.from({ length: 500 }, (_, i) => ({ id: `user-${i}` })), error: null });
-        const eligible = (rows[table] || []).filter(row => call.filters.every(([key, value]) => row[key] === value));
+        const eligible = (rows[table] || []).filter(row => call.filters.every(([key, value]) =>
+          key.endsWith(":gt") ? Number(row[key.slice(0, -3)]) > Number(value)
+            : key.endsWith(":not") ? row[key.slice(0, -4)] != null : row[key] === value));
         const data = call.range ? eligible.slice(call.range[0], call.range[1] + 1) : eligible;
         return resolve({ data, error: null });
       },
@@ -41,6 +45,15 @@ beforeEach(() => {
 });
 
 describe("complete RLS office hierarchy and active BM candidates", () => {
+  it("loads all API projects but excludes local, unsynced and retired identities", async () => {
+    const real = Array.from({ length: 1001 }, (_, n) => ({ id: `api-${n}`, marison_project_id: n + 1, marison_synced_at: "today", local_retired_at: null }));
+    rows.master_projects = [...real, { id: "local", marison_project_id: null, local_retired_at: "today" },
+      { id: "manual-id", marison_project_id: 888, marison_synced_at: null, local_retired_at: null },
+      { id: "retired", marison_project_id: 999, marison_synced_at: "today", local_retired_at: "today" }];
+    const result = await loadSuratMasterData("fixture-token");
+    expect(result.projects).toEqual(real);
+    expect(calls.filter(call => call.table === "master_projects").map(call => call.range)).toEqual([[0, 499], [500, 999], [1000, 1499]]);
+  });
   it("finds the parent KC BM beyond the first page without widening to another office", async () => {
     const child = { id: "kcp", kedudukan: "KCP", parent_id: "kc" };
     const branch = { id: "kc", kedudukan: "KC", parent_id: "hq" };

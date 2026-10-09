@@ -10,7 +10,8 @@ const assertions = readFileSync(
   "utf8",
 );
 
-const testBranchFund = process.argv.includes("--branch-fund");
+const testExternalProjects = process.argv.includes("--external-projects");
+const testBranchFund = process.argv.includes("--branch-fund") || testExternalProjects;
 const branchFundSql = testBranchFund ? (() => {
   const read = (name) => readFileSync(`supabase/migrations/${name}.sql`, "utf8");
   const guards = read("20260930140000_mar10_kc_descendant_number_scope");
@@ -26,8 +27,8 @@ const branchFundSql = testBranchFund ? (() => {
   return `
     create function public.resolve_form_usage_category(p_id uuid) returns text language sql
       as $$ select request_category from public.form_usages where id=p_id $$;
-    create function public.branch_has_registered_projects(p_id uuid) returns boolean language sql
-      as $$ select exists(select 1 from public.master_projects where office_id=p_id) $$;
+    create function public.branch_has_registered_projects(p_office_id uuid) returns boolean language sql
+      as $$ select exists(select 1 from public.master_projects where office_id=p_office_id) $$;
     create function public.get_office_descendant_ids(p_id uuid) returns setof uuid language sql
       as $$ select id from public.master_offices where false $$;
     ${guard("enforce_surat_reservation_number_scope")}
@@ -43,6 +44,25 @@ const branchFundSql = testBranchFund ? (() => {
     ${readFileSync("supabase/tests/branch_fund_numbering.integration.sql", "utf8")}
   `;
 })() : "";
+
+const externalProjectSql = testExternalProjects ? `
+  alter table public.master_projects add column if not exists name text;
+  alter table public.master_projects add column if not exists entity_id uuid;
+  alter table public.master_projects add column if not exists marison_project_id bigint;
+  alter table public.master_projects add column if not exists marison_project_code text;
+  alter table public.master_projects add column if not exists marison_synced_at timestamptz;
+  alter table public.master_projects add column if not exists updated_at timestamptz;
+  alter table public.master_projects add column if not exists marison_review_required boolean;
+  alter table public.master_projects add column if not exists marison_review_reasons text[];
+  insert into public.master_projects(id,name,office_id,marison_project_id,marison_synced_at) values
+    ('10000000-0000-4000-8000-000000000001','Local history',(select id from public.master_offices limit 1),null,null),
+    ('10000000-0000-4000-8000-000000000002','API project',(select id from public.master_offices limit 1),999,now());
+  grant select,insert,update,delete on public.master_projects to authenticated;
+  grant usage on schema auth to authenticated;
+  ${readFileSync("supabase/migrations/20261009160000_external_only_master_projects.sql", "utf8")}
+  ${readFileSync("supabase/migrations/20261009160000_external_only_master_projects.sql", "utf8")}
+  ${readFileSync("supabase/tests/external_only_projects.integration.sql", "utf8")}
+` : "";
 
 // Minimal canonical schema: only the tables/columns/constraints the reuse
 // migration and the assertion block touch. Mirrors the disposable-PostgreSQL
@@ -509,6 +529,7 @@ ${migration}
 ${assertions}
 
 ${branchFundSql}
+${externalProjectSql}
 `;
 
 const run = (args, input = "", includeStderr = true) => {
@@ -548,6 +569,9 @@ try {
   ], sql);
   if (!output.includes("Letter number reuse: all assertions passed")) {
     throw new Error("SQL runner did not see the success marker.\n" + output);
+  }
+  if (testExternalProjects && !output.includes("External-only projects: all assertions passed")) {
+    throw new Error("External project SQL assertions did not finish.");
   }
   process.stdout.write(output);
 

@@ -3908,8 +3908,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                         <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
                         <div className="mt-1 text-xs">
                           {hasRegisteredProjectCandidates
-                            ? "Proyek untuk kantor ini belum siap digunakan dari sistem perencanaan. Silakan hubungi tim perencanaan untuk memastikan datanya tersedia."
-                            : "Belum ada proyek untuk kantor ini di sistem perencanaan. Silakan hubungi tim perencanaan untuk menyiapkan proyeknya."}
+                            ? "Proyek dari API external sudah tersedia, tetapi relasi kantornya belum siap digunakan. Hubungi admin untuk memeriksa hasil sinkronisasi."
+                            : "Belum ada proyek dari API external untuk kantor ini. Hubungi tim perencanaan untuk memeriksa proyek dan kantor pengelolanya."}
                         </div>
                       </div>
                     ) : (

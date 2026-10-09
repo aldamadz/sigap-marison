@@ -187,7 +187,10 @@ export const loadSuratMasterData = async (accessToken: string) => {
     loadAllCandidateRows("pengguna", (from, to) =>
       client.from("profiles").select("id, full_name, job_title, department_id, office_id, is_active, deleted_at")
         .eq("is_active", true).is("deleted_at", null).order("full_name").order("id").range(from, to)),
-    client.from("master_projects").select("*").order("name"),
+    loadAllCandidateRows("proyek", (from, to) =>
+      client.from("master_projects").select("*").gt("marison_project_id", 0)
+        .not("marison_synced_at", "is", null).is("local_retired_at", null)
+        .order("name").order("id").range(from, to)),
     client.from("master_penggunaan_detail").select("*").order("created_at", { ascending: false }),
   ]);
 
