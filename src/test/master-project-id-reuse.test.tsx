@@ -3,150 +3,65 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import MasterProjectManagementPage from "@/pages/admin/ProjectManagementPage";
 
 const mocks = vi.hoisted(() => ({
-  from: vi.fn(),
-  catalog: vi.fn(),
-  saveMapping: vi.fn(),
-  toast: vi.fn(),
-  inserted: [] as Array<Record<string, unknown>>,
-  updated: [] as Array<Record<string, unknown>>,
+  filters: vi.fn(), update: vi.fn(), insert: vi.fn(), toast: vi.fn(),
+  sync: vi.fn(), error: null as Error | null,
 }));
-
-vi.mock("@/lib/supabase", () => ({
-  supabase: {
-    from: mocks.from,
-    channel: vi.fn(() => {
-      const channel = { on: vi.fn().mockReturnThis(), subscribe: vi.fn().mockReturnThis() };
-      return channel;
-    }),
-    removeChannel: vi.fn(),
+vi.mock("@/lib/supabase", () => ({ supabase: {
+  from: (table: string) => {
+    const query = {
+      select: () => query, order: () => query, eq: () => query, range: () => query,
+      gt: (...args: unknown[]) => { mocks.filters("gt", ...args); return query; },
+      not: (...args: unknown[]) => { mocks.filters("not", ...args); return query; },
+      is: (...args: unknown[]) => { mocks.filters("is", ...args); return query; },
+      update: (payload: unknown) => { mocks.update(payload); return query; },
+      insert: mocks.insert,
+      then: (done: (result: unknown) => void) => Promise.resolve(done({
+        error: mocks.error, data: table === "master_projects" ? [{
+          id: "external", name: "External Project", marison_project_id: 19,
+          marison_project_code: "SRG", entity_id: null, marison_review_reasons: [],
+        }] : [],
+      })),
+    };
+    return query;
   },
-  onRealtimeReconnect: vi.fn(() => ({ unsubscribe: vi.fn() })),
-}));
-vi.mock("@/services/marison-payload-mapping.service", () => ({
-  marisonPayloadMappingService: {
-    list: vi.fn().mockResolvedValue([]),
-    catalog: mocks.catalog,
-    save: mocks.saveMapping,
-  },
-}));
+  channel: () => {
+    const channel = { on: () => channel, subscribe: () => channel };
+    return channel;
+  }, removeChannel: vi.fn(),
+}, onRealtimeReconnect: () => ({ unsubscribe: vi.fn() }) }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
-vi.mock("@/components/app/AppDialogProvider", () => ({
-  useAppDialog: () => ({ confirm: vi.fn().mockResolvedValue(true) }),
-}));
+vi.mock("@/components/app/AppDialogProvider", () => ({ useAppDialog: () => ({ confirm: async () => true }) }));
+vi.mock("@/services/marison-integration.service", () => ({ marisonIntegrationService: { syncProjects: mocks.sync } }));
 
-const existing = {
-  id: "source-project",
-  name: "Sragen Test",
-  code: "SRG",
-  marison_project_code: "SRG",
-  marison_synced_at: "2026-09-16T00:00:00Z",
-  marison_review_required: false,
-  master_offices: {
-    marison_branch_id: 7,
-    marison_synced_at: "2026-09-16T00:00:00Z",
-    marison_review_required: false,
-  },
-};
+beforeEach(() => { vi.clearAllMocks(); mocks.error = null; });
 
-beforeEach(() => {
-  mocks.inserted.length = 0;
-  mocks.updated.length = 0;
-  mocks.from.mockReset();
-  mocks.catalog.mockReset().mockResolvedValue([{
-    id: existing.id,
-    name: existing.name,
-    external_id: 19,
-    valid: true,
-  }]);
-  mocks.saveMapping.mockReset().mockResolvedValue({ mapping: { target_record_id: existing.id } });
-  mocks.toast.mockReset();
-
-  mocks.from.mockImplementation((table: string) => {
-    if (table === "master_offices") return {
-      select: () => ({ order: async () => ({ data: [{
-        id: "office-a", name: "Sragen", kedudukan: "KCP",
-        marison_branch_id: 8, marison_synced_at: "2026-09-16T00:00:00Z", marison_review_required: false,
-      }], error: null }) }),
-    };
-    if (table === "master_entities") return {
-      select: () => ({ order: async () => ({ data: [], error: null }) }),
-    };
-    if (table !== "master_projects") throw new Error(`Unexpected table ${table}`);
-    return {
-      select: () => ({
-        order: async () => ({ data: [], error: null }),
-        eq: () => ({
-          maybeSingle: async () => ({ data: existing, error: null }),
-          neq: () => ({ maybeSingle: async () => ({ data: existing, error: null }) }),
-        }),
-      }),
-      insert: (rows: Array<Record<string, unknown>>) => {
-        mocks.inserted.push(rows[0]);
-        return { select: () => ({ single: async () => ({ data: { id: `local-${mocks.inserted.length}` }, error: null }) }) };
-      },
-      update: (payload: Record<string, unknown>) => {
-        mocks.updated.push(payload);
-        return { eq: () => ({ select: () => ({ single: async () => ({ data: { id: "local-1" }, error: null }) }) }) };
-      },
-    };
-  });
-});
-
-async function addProject(name: string) {
-  fireEvent.click(await screen.findByRole("button", { name: /Tambah manual/i }));
-  fireEvent.change(screen.getByPlaceholderText("Masukkan nama proyek"), { target: { value: name } });
-  fireEvent.change(screen.getByLabelText("ID Proyek Marison"), { target: { value: "19" } });
-  fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
-}
-
-describe("Master Proyek reused Marison ID", () => {
-  it("does not write a local project when the staging mapping catalog rejects the target", async () => {
-    mocks.catalog.mockResolvedValueOnce([]);
+describe("Master Proyek external-only (replaces local ID-reuse UI)", () => {
+  it("requires synced external identity and never offers manual creation", async () => {
     render(<MasterProjectManagementPage />);
-    await addProject("Proyek Lokal A");
-    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
-      variant: "destructive",
-      description: "ID ini belum tersedia sebagai proyek Marison tersinkronisasi pada mapping payload staging.",
-    })));
-    expect(mocks.inserted).toHaveLength(0);
-    expect(mocks.saveMapping).not.toHaveBeenCalled();
+    await screen.findByText("External Project");
+    expect(mocks.filters).toHaveBeenCalledWith("gt", "marison_project_id", 0);
+    expect(mocks.filters).toHaveBeenCalledWith("not", "marison_synced_at", "is", null);
+    expect(mocks.filters).toHaveBeenCalledWith("is", "local_retired_at", null);
+    expect(screen.queryByRole("button", { name: /Tambah manual|Hapus/ })).toBeNull();
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
-
-  it("maps multiple local projects to one validated external ID without duplicating the canonical ID", async () => {
+  it("entity assignment cannot overwrite external project identity", async () => {
     render(<MasterProjectManagementPage />);
-    await addProject("Proyek Lokal A");
-    await waitFor(() => expect(mocks.saveMapping).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    await addProject("Proyek Lokal B");
-    await waitFor(() => expect(mocks.saveMapping).toHaveBeenCalledTimes(2));
-
-    expect(mocks.inserted).toEqual([
-      expect.objectContaining({ name: "Proyek Lokal A", marison_project_id: null, marison_project_code: null }),
-      expect.objectContaining({ name: "Proyek Lokal B", marison_project_id: null, marison_project_code: null }),
-    ]);
-    expect(mocks.saveMapping).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      entityType: "project", recordId: "local-1", targetRecordId: "source-project",
-    }));
-    expect(mocks.saveMapping).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      entityType: "project", recordId: "local-2", targetRecordId: "source-project",
-    }));
-    expect(mocks.catalog).toHaveBeenCalledWith("project", "SRG", null);
-  });
-
-  it("keeps a partially saved project editable if mapping fails", async () => {
-    mocks.saveMapping.mockRejectedValueOnce(new Error("Mapping berubah"));
-    render(<MasterProjectManagementPage />);
-    await addProject("Proyek Lokal A");
-    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
-      variant: "destructive",
-      description: expect.stringContaining("Proyek tersimpan, tetapi pemetaan ID Marison gagal"),
-    })));
-    expect(mocks.inserted).toHaveLength(1);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
+    fireEvent.click(await screen.findByRole("button", { name: "Atur entitas External Project" }));
+    expect(screen.queryByLabelText("ID Proyek Marison")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
-    await waitFor(() => expect(mocks.saveMapping).toHaveBeenCalledTimes(2));
-    expect(mocks.inserted).toHaveLength(1);
-    expect(mocks.updated).toHaveLength(1);
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledExactlyOnceWith({ entity_id: null }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+  it("entity write failure keeps the dialog open for retry without creating a local project", async () => {
+    render(<MasterProjectManagementPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Atur entitas External Project" }));
+    mocks.error = new Error("Entity denied");
+    fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      variant: "destructive", description: "Entity denied",
+    })));
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
 });
