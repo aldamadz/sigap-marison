@@ -10,6 +10,40 @@ const assertions = readFileSync(
   "utf8",
 );
 
+const testBranchFund = process.argv.includes("--branch-fund");
+const branchFundSql = testBranchFund ? (() => {
+  const read = (name) => readFileSync(`supabase/migrations/${name}.sql`, "utf8");
+  const guards = read("20260930140000_mar10_kc_descendant_number_scope");
+  const guard = (name) => {
+    const match = guards.match(new RegExp(`create or replace function public\\.${name}\\(\\)[\\s\\S]*?\\$\\$;`));
+    if (!match) throw new Error(`Canonical guard ${name} missing`);
+    return match[0];
+  };
+  const firstSigner = read("20261001060000_keu1_submit_and_first_signer");
+  const firstPatch = firstSigner.match(/do \$patch\$[\s\S]*?\$patch\$;/)?.[0];
+  if (!firstPatch) throw new Error("Canonical no_urut correction missing");
+  const fundMigration = read("20261009140000_branch_fund_without_project_numbering");
+  return `
+    create function public.resolve_form_usage_category(p_id uuid) returns text language sql
+      as $$ select request_category from public.form_usages where id=p_id $$;
+    create function public.branch_has_registered_projects(p_id uuid) returns boolean language sql
+      as $$ select exists(select 1 from public.master_projects where office_id=p_id) $$;
+    create function public.get_office_descendant_ids(p_id uuid) returns setof uuid language sql
+      as $$ select id from public.master_offices where false $$;
+    ${guard("enforce_surat_reservation_number_scope")}
+    ${guard("enforce_surat_registration_branch_project")}
+    ${firstPatch}
+    ${read("20261005090000_keu1_optional_branch_project")}
+    ${fundMigration}
+    ${fundMigration}
+    create trigger test_scope before insert or update on public.surat_reservations
+      for each row execute function public.enforce_surat_reservation_number_scope();
+    create trigger test_registration before insert or update on public.surat_registrasi
+      for each row execute function public.enforce_surat_registration_branch_project();
+    ${readFileSync("supabase/tests/branch_fund_numbering.integration.sql", "utf8")}
+  `;
+})() : "";
+
 // Minimal canonical schema: only the tables/columns/constraints the reuse
 // migration and the assertion block touch. Mirrors the disposable-PostgreSQL
 // pattern used by test-branch-asset-without-project-sql.mjs.
@@ -473,6 +507,8 @@ insert into public.form_usage_departments (usage_id, department_id) values
 ${migration}
 
 ${assertions}
+
+${branchFundSql}
 `;
 
 const run = (args, input = "") => {
@@ -513,6 +549,27 @@ try {
     throw new Error("SQL runner did not see the success marker.\n" + output);
   }
   process.stdout.write(output);
+
+  if (testBranchFund) {
+    const allocate = () => new Promise((resolve) => {
+      const child = spawn("docker", ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-Atq", "-v", "ON_ERROR_STOP=1", "-U", "postgres"]);
+      let out = "";
+      child.stdout.on("data", (data) => { out += data; });
+      child.stderr.on("data", (data) => { out += data; });
+      child.on("close", (code) => resolve({ code, out }));
+      child.stdin.end(`set "request.jwt.claim.sub"='20000000-0000-4000-8000-000000000002';
+        select public.generate_fund_branch_letter_number('a0000000-0000-4000-8000-000000000010',
+          'a0000000-0000-4000-8000-000000000050','a0000000-0000-4000-8000-000000000031',
+          '20000000-0000-4000-8000-000000000002','a0000000-0000-4000-8000-000000000020',
+          'a0000000-0000-4000-8000-000000000064');`);
+    });
+    const results = await Promise.all([allocate(), allocate()]);
+    if (results.some((result) => result.code !== 0)
+      || results.map((result) => result.out.trim()).sort().join(",") !== "4,5") {
+      throw new Error(`Concurrent Fund allocations failed: ${JSON.stringify(results)}`);
+    }
+    process.stdout.write("Concurrency: two Fund allocations -> unique numbers 4 and 5.\n");
+  }
 
   // ── Concurrency: two parallel connections race for the same in-window VOID
   // ── number. The advisory lock must let exactly one win.
