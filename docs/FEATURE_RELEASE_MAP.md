@@ -759,3 +759,23 @@ Sebelum fitur baru pertama dimulai, siapkan:
 Setelah baseline tersedia, update kolom status pada dokumen ini melalui PR fitur.
 Jangan menandai fitur sebagai production hanya karena source sudah ada di `main`;
 verifikasi juga runtime, database, worker, dan smoke test.
+
+## REC-03 / SUR-22 Recommendation Requester Revision Photos (2026-10-12, Issue #542)
+
+- `fix/recommendation-revision-photos-01` from main; staging first, selective production.
+- Canonical revision drafts retain the recommendation task/parent context and editable
+  requester-owned per-item photos. Photo references are rebound to the new draft;
+  files themselves are not copied/deleted. Existing broken drafts are prepared once
+  on open without discarding saved edits or restoring deliberate subsequent removals.
+- Recommendation submission validates its own canonical item model and draft-owned
+  photo identities instead of requiring unrelated PGD `items`. Examiner attachments
+  remain protected; original number, return step and immutable before/after history
+  continue through the existing requester revision RPCs.
+- Forward migrations `20261012160000` and `20261012163000` change private helpers/canonical RPC bodies only.
+  Parent summary access for submitted tasks requires the authenticated owner and an
+  active linked requester revision/draft; unrelated users and closed revisions stay denied.
+  No new endpoint, publication or worker source. App-only rollout; migration history
+  and function-shape guards must pass separately in each environment.
+- Affected tests and disposable PostgreSQL cover photo retention/removal, redaction-only
+  save, forged identity/file rejection, reopening, audit and duplicate submission.
+  Source tests are not a claim that a production document was resubmitted.

@@ -394,7 +394,7 @@ export const suratService = {
       .gt("expires_at", new Date().toISOString())
       .single();
     if (error) throw error;
-    const draft = data as SuratRegistrationDraft;
+    let draft = data as SuratRegistrationDraft;
     if (draft.revision_event_id) {
       const { data: event, error: eventError } = await supabase
         .from("surat_revision_events")
@@ -406,6 +406,20 @@ export const suratService = {
         || (event.changes?.external_submission_revision !== true
           && event.changes?.requester_edit_required !== true)) {
         throw new Error("Permintaan perbaikan pengajuan tidak tersedia.");
+      }
+      const input = draft.payload?.formData?.form_input_data;
+      if (event.changes?.requester_edit_required === true
+        && input?.linked_document_type === "recommendation"
+        && draft.payload?.recommendation_revision_photos_version !== 1) {
+        const { data: prepared, error: prepareError } = await supabase.rpc("create_external_submission_revision_draft", {
+          p_revision_event_id: event.id,
+        });
+        if (prepareError) throw prepareError;
+        if (!prepared || prepared.id !== draft.id) throw new Error("Draft perbaikan rekomendasi tidak cocok.");
+        const { data: files, error: filesError } = await supabase.from("surat_registration_draft_files")
+          .select("*").eq("draft_id", draft.id);
+        if (filesError) throw filesError;
+        draft = { ...prepared, surat_registration_draft_files: files || [] } as SuratRegistrationDraft;
       }
       draft.revision_context = {
         eventId: event.id,
