@@ -134,7 +134,8 @@ test("worker renders every document natively and keeps immutable RPC publication
   assert.match(worker, /supabase\.rpc\("complete_document_pdf_job"/);
   assert.match(worker, /p_lease_token: job\.lease_token/);
   assert.match(worker, /supabase\.rpc\("fail_document_pdf_job"/);
-  assert.match(worker, /recommendationFromSnapshot/);
+  assert.match(worker, /resolveRecommendationPdfJob/);
+  assert.match(worker, /isCanonicalRecommendationPdfJob/);
   assert.doesNotMatch(worker, /parent_snapshot_input/);
   assert.doesNotMatch(worker, /workbook_source\?\.path \|\| job\.source_file_path/);
   assert.doesNotMatch(worker, /loadRecommendationContext/);

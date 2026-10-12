@@ -7,7 +7,6 @@ import { isKeu10Document, normalizeKeu10DocumentData, renderKeu10Pdf, resolveKeu
 import {
   parseStorageRef,
   recommendationVersionPath,
-  resolveRecommendationSource,
 } from "./recommendation-pdf.mjs";
 import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "./recommendation-native-pdf.mjs";
 import {
@@ -15,7 +14,7 @@ import {
   isStoragePathWithinPrefix,
   normalizeStoragePathPrefix,
 } from "./storage-path-policy.mjs";
-import { createKeu1JobHandler, createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler } from "./server/pdf-worker-job.mjs";
+import { createKeu1JobHandler, createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob } from "./server/pdf-worker-job.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -83,15 +82,6 @@ const downloadStorageFile = async (filePath, label, expectedBucket) => {
   return Buffer.from(await data.arrayBuffer());
 };
 
-const recommendationFromSnapshot = (job) => job.render_payload && job.render_payload.kind !== "keu10" ? ({
-  finalized: true,
-  items: resolveRecommendationSource(
-    job.render_payload.child_input,
-    job.render_payload.parent_input,
-    job.render_payload.child_snapshot_input,
-  ),
-}) : null;
-
 const claimJobs = async () => {
   const { data, error } = await supabase.rpc("claim_document_pdf_jobs", {
     p_worker_id: workerId,
@@ -149,7 +139,7 @@ const renderDirectKeu10Job = createKeu10JobHandler({
 });
 
 const processJob = async (job) => {
-  const recommendation = recommendationFromSnapshot(job);
+  let recommendation = job.render_payload ? await resolveRecommendationPdfJob(supabase, job) : null;
   let pdfBuffer = null;
   if (recommendation) {
     pdfBuffer = await renderDirectRecommendationJob(job, recommendation);
@@ -159,11 +149,15 @@ const processJob = async (job) => {
     if (!pdfBuffer) {
       pdfBuffer = await renderDirectPgdJob(job);
     }
+    if (!pdfBuffer) {
+      recommendation = await resolveRecommendationPdfJob(supabase, job);
+      if (recommendation) pdfBuffer = await renderDirectRecommendationJob(job, recommendation);
+    }
   }
   if (!pdfBuffer) {
     throw new Error("Renderer PDF-native tidak tersedia untuk dokumen ini.");
   }
-  const isCanonicalRecommendation = Boolean(recommendation && !job.signature_id);
+  const isCanonicalRecommendation = isCanonicalRecommendationPdfJob(job, recommendation);
   const defaultPdfPath = applyStoragePathPrefix(`pdf/${job.surat_id}_${Date.now()}.pdf`, storagePathPrefix);
   const unprefixedPdfPath = isCanonicalRecommendation
     ? recommendationVersionPath(job.surat_id, `${job.id}-${randomUUID()}`)

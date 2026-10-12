@@ -1,4 +1,31 @@
 import { isDeepStrictEqual } from "node:util";
+import { resolveRecommendationSource } from "../recommendation-pdf.mjs";
+
+export const resolveRecommendationPdfJob = async (supabase, job) => {
+  if (job.render_payload?.kind === "keu10") return null;
+  let payload = job.render_payload;
+  const finalized = Boolean(job.recommendation_content_fingerprint);
+  if (!payload) {
+    if (finalized) throw new Error("Snapshot PDF rekomendasi final belum tersedia.");
+    // In-progress previews use the same source-bound snapshot, without final publication.
+    const { data, error } = await supabase.rpc("recommendation_pdf_render_payload", {
+      p_surat_id: job.surat_id,
+      p_source_file_path: job.source_file_path,
+    });
+    if (error) throw error;
+    payload = data;
+  }
+  if (!payload?.child_input) return null;
+  return {
+    finalized,
+    items: resolveRecommendationSource(
+      payload.child_input, payload.parent_input, payload.child_snapshot_input,
+    ),
+  };
+};
+
+export const isCanonicalRecommendationPdfJob = (job, recommendation) =>
+  Boolean(recommendation?.finalized && !job.signature_id);
 
 const decisionStatus = (value) => String(value || "").trim().toUpperCase();
 const hasDecision = (signature) => ["APPROVED", "REJECTED"].includes(decisionStatus(signature.status));
