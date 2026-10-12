@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## REC-03 / DOC-05 In-Progress Recommendation PDF (2026-10-12, Issue #534)
+
+- `hotfix/recommendation-preview-pdf-01` from main; staging before production.
+- Generic recommendation preview jobs resolve the existing source-bound canonical
+  snapshot when PGD/KEU renderers do not match; no guessed template or content.
+- Only fingerprinted final recommendation jobs use canonical publication.
+  Preview completion does not advance approval, finalize the recommendation or
+  satisfy outbound readiness. Missing/stale source remains fail-closed.
+- No migration or endpoint change. App image and PDF worker require a coordinated
+  rollout; never restart a worker with a live PDF lease or restart sync/outbound.
+
 ## MRN-13 External-only Active Projects (2026-10-09, Issue #521)
 
 - `fix/external-project-source-only-01` from main; staging first, selective production.

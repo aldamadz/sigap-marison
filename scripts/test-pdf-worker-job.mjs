@@ -9,7 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler } from "../server/pdf-worker-job.mjs";
+import { createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob } from "../server/pdf-worker-job.mjs";
 import {
   isPgdDocument,
   resolvePgdMasterForm,
@@ -19,6 +19,78 @@ import {
 // ─── stub helpers ────────────────────────────────────────────────────────────
 
 const FAKE_PDF = Buffer.from("%PDF-fake");
+
+const RECOMMENDATION_PAYLOAD = {
+  child_input: { recommendation_items: [{ nama_barang: "Laptop", jumlah: 1 }] },
+  parent_input: {},
+  child_snapshot_input: {},
+};
+const PREVIEW_JOB = { surat_id: "recommendation", source_file_path: "native://document/recommendation/v1", signature_id: null };
+
+test("PROSES recommendation preview resolves a canonical source and is never final publication", async () => {
+  const calls = [];
+  const supabase = { rpc: async (...args) => {
+    calls.push(args);
+    return { data: RECOMMENDATION_PAYLOAD, error: null };
+  } };
+  const result = await resolveRecommendationPdfJob(supabase, PREVIEW_JOB);
+  assert.equal(result.finalized, false);
+  assert.equal(result.items[0].applicantName, "Laptop");
+  assert.equal(isCanonicalRecommendationPdfJob(PREVIEW_JOB, result), false);
+  assert.deepEqual(calls, [["recommendation_pdf_render_payload", {
+    p_surat_id: PREVIEW_JOB.surat_id, p_source_file_path: PREVIEW_JOB.source_file_path,
+  }]]);
+});
+
+test("preview can be rendered by the recommendation handler without altering the job", async () => {
+  const job = structuredClone(PREVIEW_JOB);
+  const source = await resolveRecommendationPdfJob({ rpc: async () => ({ data: RECOMMENDATION_PAYLOAD, error: null }) }, job);
+  const handler = createRecommendationJobHandler({
+    supabase: makeSupabase({ surat_registrasi: { data: { id: job.surat_id }, error: null } }),
+    normalizeRecommendationDocumentData: (_surat, options) => options,
+    renderRecommendationPdf: async data => {
+      assert.equal(data.items[0].applicantName, "Laptop");
+      return FAKE_PDF;
+    },
+    downloadStorageFile: async () => { throw new Error("Unexpected download"); },
+  });
+  assert.deepEqual(await handler(job, source), FAKE_PDF);
+  assert.deepEqual(job, PREVIEW_JOB);
+});
+
+test("final canonical recommendation keeps its immutable snapshot and publication path", async () => {
+  const job = { ...PREVIEW_JOB, render_payload: RECOMMENDATION_PAYLOAD, recommendation_content_fingerprint: "frozen-fingerprint" };
+  const source = await resolveRecommendationPdfJob({ rpc: () => { throw new Error("Must not read live data"); } }, job);
+  assert.equal(source.finalized, true);
+  assert.equal(isCanonicalRecommendationPdfJob(job, source), true);
+  assert.equal(isCanonicalRecommendationPdfJob({ ...job, signature_id: "signature" }, source), false);
+});
+
+test("missing final snapshot cannot fall back to a live preview", async () => {
+  await assert.rejects(resolveRecommendationPdfJob({ rpc: () => { throw new Error("Must not read live data"); } },
+    { ...PREVIEW_JOB, recommendation_content_fingerprint: "frozen" }), /Snapshot PDF rekomendasi final/);
+});
+
+test("stale source or inactive recommendation link does not render guessed content", async () => {
+  assert.equal(await resolveRecommendationPdfJob({ rpc: async () => ({ data: null, error: null }) }, PREVIEW_JOB), null);
+  assert.equal(isCanonicalRecommendationPdfJob(PREVIEW_JOB, null), false);
+});
+
+test("canonical source lookup errors remain fail-closed", async () => {
+  const error = new Error("Source lookup failed");
+  await assert.rejects(resolveRecommendationPdfJob({ rpc: async () => ({ data: null, error }) }, PREVIEW_JOB), error);
+});
+
+test("KEU10 payload never becomes a recommendation", async () => {
+  assert.equal(await resolveRecommendationPdfJob({ rpc: () => { throw new Error("Unexpected lookup"); } },
+    { ...PREVIEW_JOB, render_payload: { kind: "keu10", child_input: {} } }), null);
+});
+
+test("worker uses source fallback and the tested canonical publication decision", () => {
+  const worker = readFileSync(new URL("../pdf-worker.mjs", import.meta.url), "utf8");
+  assert.match(worker, /recommendation = await resolveRecommendationPdfJob\(supabase, job\)/);
+  assert.match(worker, /isCanonicalRecommendationPdfJob\(job, recommendation\)/);
+});
 
 // Builds a supabase stub. tableMap keys: table name → { data, error }
 // The builder chain is thenable (for direct-await callers) and exposes maybeSingle.
