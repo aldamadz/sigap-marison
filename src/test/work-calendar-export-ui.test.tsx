@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkCalendarWorkspace } from "@/features/work-calendar/components/WorkCalendarWorkspace";
 import { WorkCalendarToolbar } from "@/features/work-calendar/components/WorkCalendarToolbar";
@@ -15,6 +15,8 @@ import type { WorkCalendarSettingsRepository, WorkCalendarViewMode } from "@/fea
 const mocks = vi.hoisted(() => ({ exportPdf: vi.fn(), save: vi.fn() }));
 vi.mock("@/features/work-calendar/lib/work-calendar-pdf", () => ({ exportWorkCalendarPdf: mocks.exportPdf }));
 
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+
 function renderCalendar(settingsRepository?: WorkCalendarSettingsRepository) {
   const repository = createFixtureWorkEntryRepository([
     createFixtureWorkEntry({ id: "export-own", title: "Pekerjaan sendiri" }),
@@ -23,6 +25,16 @@ function renderCalendar(settingsRepository?: WorkCalendarSettingsRepository) {
   return render(<WorkCalendarWorkspace currentUser={WORK_CALENDAR_FIXTURE_CURRENT_USER}
     repository={repository} settingsRepository={settingsRepository}
     initialAnchorDate={WORK_CALENDAR_FIXTURE_TODAY} now={workCalendarFixtureNow} />);
+}
+
+async function chooseStatusFilter(label: string) {
+  const trigger = screen.getByTestId("work-calendar-status-filter-trigger");
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  const option = within(await screen.findByRole("listbox")).getByRole("option", { name: label });
+  option.focus();
+  fireEvent.keyDown(option, { key: "Enter" });
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
 }
 
 describe("Work Calendar PDF command", () => {
@@ -55,6 +67,29 @@ describe("Work Calendar PDF command", () => {
     fireEvent.click(button);
     expect(await screen.findByRole("alert")).toHaveTextContent("Pengaturan jam kerja");
     expect(mocks.exportPdf).not.toHaveBeenCalled();
+  });
+  it("passes canonical entries and the filter separately, even when the latest status filter is empty", async () => {
+    renderCalendar();
+    await screen.findByRole("button", { name: "Buka detail pekerjaan: Pekerjaan sendiri" });
+    await chooseStatusFilter("Selesai");
+    fireEvent.click(screen.getByRole("button", { name: "Export kalender ke PDF" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+    expect(mocks.exportPdf).toHaveBeenCalledWith(expect.objectContaining({
+      entries: [expect.objectContaining({ id: "export-own", status: "planned" })], statusFilter: "completed",
+    }));
+  });
+  it("aborts export when the selected status filter changes", async () => {
+    let resolvePdf: ((value: { save: typeof mocks.save }) => void) | undefined;
+    mocks.exportPdf.mockImplementation(() => new Promise(resolve => { resolvePdf = resolve; }));
+    renderCalendar();
+    await screen.findByRole("button", { name: "Buka detail pekerjaan: Pekerjaan sendiri" });
+    fireEvent.click(screen.getByRole("button", { name: "Export kalender ke PDF" }));
+    await waitFor(() => expect(mocks.exportPdf).toHaveBeenCalledOnce());
+    const signal: AbortSignal = mocks.exportPdf.mock.calls[0][0].signal;
+    await chooseStatusFilter("Selesai");
+    expect(signal.aborted).toBe(true);
+    await act(async () => { resolvePdf?.({ save: mocks.save }); });
+    expect(mocks.save).not.toHaveBeenCalled();
   });
 
   it("does not save a partial PDF after history loading fails", async () => {

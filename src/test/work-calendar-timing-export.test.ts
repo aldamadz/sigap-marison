@@ -259,16 +259,17 @@ describe("canonical work entry timing", () => {
 describe("work calendar PDF and history collection", () => {
   it("writes real PDF bytes with title, date, status, result and timing columns", () => {
     const entry = makeEntry({ title: "Audit operasional", realization: "Laporan terkirim", startsAt: at("09:00"), endsAt: at("10:00") });
-    const doc = buildWorkCalendarPdf({ rows: [{ entry, timing: timing(entry, []) }], owner, fromDate: "2026-03-10", toDate: "2026-03-10", now: new Date(at("18:00")) });
+    const doc = buildWorkCalendarPdf({ rows: [{ entry, timing: timing(entry, []), reportDate: "2026-03-10", statusKnown: true }], owner, fromDate: "2026-03-10", toDate: "2026-03-10", now: new Date(at("18:00")) });
     const { bytes, text } = pdfStrings(doc);
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
     expect(bytes.toString("latin1")).toContain("%%EOF");
-    for (const value of ["No", "Mulai", "Selesai", "Durasi", "Pekerjaan", "Tanggal", "Status", "Hasil", "Audit operasional", "Laporan terkirim", "09:00 WIB", "10:00 WIB", "1 j 0 m", "Asia/Jakarta", "istirahat kantor", "waktu/riwayat belum memadai"]) expect(text).toContain(value);
+    for (const value of ["No", "Mulai", "Selesai", "Durasi", "Pekerjaan", "Tanggal", "Status", "Hasil", "Audit operasional", "Laporan terkirim", "09:00", "10:00", "1 j 0 m", "Selasa, 10 Maret 2026", "istirahat kantor", "waktu/riwayat belum memadai", owner.jobTitle]) expect(text).toContain(value);
+    expect(text).not.toContain("Asia/Jakarta");
   });
 
   it("preserves every row across pages and wraps/splits a title and result longer than a page", () => {
     const entries = Array.from({ length: 65 }, (_, index) => makeEntry({ id: `row-${index}`, title: `ROW${index}BEGIN ${"Long title text ".repeat(index === 0 ? 600 : 12)} ROW${index}END`, realization: `RESULT${index}BEGIN ${"Result text ".repeat(index === 0 ? 600 : 1)} RESULT${index}END` }));
-    const doc = buildWorkCalendarPdf({ rows: entries.map(entry => ({ entry, timing: timing(entry, []) })), owner, fromDate: "2026-03-10", toDate: "2026-03-10", now: new Date(at("18:00")) });
+    const doc = buildWorkCalendarPdf({ rows: entries.map(entry => ({ entry, timing: timing(entry, []), reportDate: "2026-03-10", statusKnown: true })), owner, fromDate: "2026-03-10", toDate: "2026-03-10", now: new Date(at("18:00")) });
     expect(doc.getNumberOfPages()).toBeGreaterThan(2);
     const { text } = pdfStrings(doc);
     for (let index = 0; index < entries.length; index++) {
@@ -314,7 +315,7 @@ describe("work calendar PDF and history collection", () => {
     const input = exportInput([makeEntry(), makeEntry({ id: "foreign", ownerId: "subordinate", deletedAt: at("10:00") })]);
     await expect(collectWorkCalendarPdfRows(input)).rejects.toThrow("Pemilik");
     expect(input.repository.listEntryEvents).not.toHaveBeenCalled();
-    expect(() => buildWorkCalendarPdf({ rows: [{ entry: makeEntry({ ownerId: "subordinate" }), timing: timing(makeEntry(), []) }], owner, fromDate: input.fromDate, toDate: input.toDate, now: input.now })).toThrow("Pemilik");
+    expect(() => buildWorkCalendarPdf({ rows: [{ entry: makeEntry({ ownerId: "subordinate" }), timing: timing(makeEntry(), []), reportDate: input.fromDate, statusKnown: true }], owner, fromDate: input.fromDate, toDate: input.toDate, now: input.now })).toThrow("Pemilik");
   });
 
   it("rejects pre-abort with no reads or saves", async () => {
