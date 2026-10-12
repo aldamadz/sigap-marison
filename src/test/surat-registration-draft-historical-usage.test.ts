@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const supabaseMock = vi.hoisted(() => ({
   from: vi.fn(),
+  rpc: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase", () => ({ supabase: supabaseMock }));
@@ -79,9 +80,45 @@ function createRevisionQuery(result: { data: {
 
 beforeEach(() => {
   supabaseMock.from.mockReset();
+  supabaseMock.rpc.mockReset();
 });
 
 describe("registration draft historical usage", () => {
+  it("prepares existing recommendation repair drafts and reloads their rebound photos", async () => {
+    const legacy = { ...draft, payload: { formData: { form_usage_id: archivedUsage.id,
+      form_input_data: { linked_document_type: "recommendation", recommendation_items: [{ notes: "Saved edit" }] } } } };
+    const photo = { id: "new-photo-id", draft_id: draft.id, file_url: "private://original.png" };
+    const prepared = { ...legacy, payload: { ...legacy.payload, recommendation_revision_photos_version: 1,
+      linkedDocumentContext: { type: "recommendation", taskId: "task-id", parentSuratId: "parent-id" } } };
+    supabaseMock.rpc.mockResolvedValue({ data: prepared, error: null });
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "surat_registration_drafts") return { ...createDraftQuery(), single: vi.fn().mockResolvedValue({ data: legacy, error: null }) };
+      if (table === "surat_revision_events") return createRevisionQuery({ data: { id: draft.revision_event_id,
+        status: "open", target_type: "requester", reason: "Lengkapi spesifikasi.", changes: { requester_edit_required: true } }, error: null });
+      if (table === "surat_registration_draft_files") return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ data: [photo], error: null }) };
+      if (table === "form_usages") return createUsageQuery();
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    const result = await suratService.getRegistrationDraft(draft.id);
+    expect(supabaseMock.rpc).toHaveBeenCalledWith("create_external_submission_revision_draft", { p_revision_event_id: draft.revision_event_id });
+    expect(result.payload).toEqual(prepared.payload);
+    expect(result.surat_registration_draft_files).toEqual([photo]);
+    expect(result.revision_context?.requesterEditRequired).toBe(true);
+  });
+
+  it("does not reseed a prepared recommendation draft after intentional photo removal", async () => {
+    const prepared = { ...draft, payload: { recommendation_revision_photos_version: 1, formData: {
+      form_input_data: { linked_document_type: "recommendation" } } }, surat_registration_draft_files: [] };
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "surat_registration_drafts") return { ...createDraftQuery(), single: vi.fn().mockResolvedValue({ data: prepared, error: null }) };
+      if (table === "surat_revision_events") return createRevisionQuery({ data: { id: draft.revision_event_id,
+        status: "open", target_type: "requester", reason: "Lengkapi spesifikasi.", changes: { requester_edit_required: true } }, error: null });
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    const result = await suratService.getRegistrationDraft(draft.id);
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
+    expect(result.surat_registration_draft_files).toEqual([]);
+  });
   it.each([
     { requester_edit_required: true },
     { external_submission_revision: true, revision_generation: 2 },
