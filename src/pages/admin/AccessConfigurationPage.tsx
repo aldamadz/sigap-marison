@@ -23,6 +23,8 @@ export default function AccessConfigurationPage() {
   const [error, setError] = useState('');
   const [catalogReady, setCatalogReady] = useState(false);
   const [catalogError, setCatalogError] = useState('');
+  const [userError, setUserError] = useState('');
+  const [usersLoading, setUsersLoading] = useState(true);
   const generation = useRef(0);
   const saveLock = useRef(false);
 
@@ -35,15 +37,18 @@ export default function AccessConfigurationPage() {
   }, []);
   useEffect(() => {
     let cancelled = false;
+    setUsersLoading(true);
+    setUserError('');
     const timer = setTimeout(async () => {
       const query = supabase.from('profiles').select('id, full_name, email, office_id')
-        .eq('is_active', true).is('deleted_at', null).not('role', 'in', '(admin,super_admin)')
+        .eq('is_active', true).is('deleted_at', null).eq('role', 'user')
         .order('full_name').limit(50);
       if (search.trim()) query.ilike('full_name', `%${search.trim()}%`);
       const result = await query;
       if (!cancelled) {
-        if (result.error) setError('Gagal memuat pengguna.');
+        if (result.error) { setUsers([]); setUserError('Gagal memuat pengguna. Coba pencarian kembali.'); }
         else setUsers(result.data || []);
+        setUsersLoading(false);
       }
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
@@ -93,6 +98,7 @@ export default function AccessConfigurationPage() {
         <label htmlFor="access-user-search" className="text-sm font-semibold">Pengguna</label>
         <Input id="access-user-search" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Cari nama pengguna" disabled={saving} />
+        {userError && <p role="alert" className="text-sm text-destructive">{userError}</p>}
         <div className="max-h-[480px] overflow-y-auto divide-y border-y">
           {users.map(user => <button key={user.id} type="button" disabled={saving}
             aria-pressed={selectedUser?.id === user.id}
@@ -101,7 +107,8 @@ export default function AccessConfigurationPage() {
             <span className="block text-sm font-medium break-words">{user.full_name}</span>
             <span className="block text-xs text-muted-foreground break-all">{user.email}</span>
           </button>)}
-          {users.length === 0 && <p className="py-4 text-sm text-muted-foreground">Pengguna tidak ditemukan.</p>}
+          {usersLoading ? <p role="status" className="py-4 text-sm text-muted-foreground">Memuat pengguna...</p> :
+            users.length === 0 && !userError && <p className="py-4 text-sm text-muted-foreground">Pengguna tidak ditemukan.</p>}
         </div>
       </section>
       <section className="min-w-0 space-y-4">

@@ -7,11 +7,12 @@ const users = [
   { id: 'carissa', full_name: 'Carissa', email: 'carissa@example.test', office_id: 'karanganyar' },
   { id: 'other', full_name: 'Other', email: 'other@example.test', office_id: 'solo' },
 ];
+const queryMock = vi.hoisted(() => ({ eq: vi.fn(), error: null as Error | null }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/lib/supabase', () => ({ supabase: { from: () => {
-  const query = { select: () => query, eq: () => query, is: () => query, not: () => query,
+  const query = { select: () => query, eq: (...args: unknown[]) => { queryMock.eq(...args); return query; }, is: () => query,
     order: () => query, ilike: () => query, limit: () => query,
-    then: (resolve: (v: unknown) => void) => resolve({ data: users, error: null }) };
+    then: (resolve: (v: unknown) => void) => resolve({ data: users, error: queryMock.error }) };
   return query;
 } } }));
 vi.mock('@/services/access.service', () => ({ accessService: {
@@ -20,6 +21,7 @@ vi.mock('@/services/access.service', () => ({ accessService: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryMock.error = null;
   vi.mocked(accessService.getUserOfficeGrants).mockResolvedValue([]);
   vi.mocked(accessService.setUserOfficeGrants).mockResolvedValue();
   vi.mocked(accessService.getOfficeCatalog).mockResolvedValue([
@@ -32,6 +34,7 @@ describe('admin office access editor', () => {
   it('starts with no additional offices, protects own office and saves only explicit grants', async () => {
     render(<AccessConfigurationPage />);
     fireEvent.click(await screen.findByRole('button', { name: /Carissa carissa/ }));
+    expect(queryMock.eq).toHaveBeenCalledWith('role', 'user');
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'KCP Karanganyar' })).toBeDisabled());
     expect(screen.getByRole('checkbox', { name: 'KC Solo' })).not.toBeChecked();
     fireEvent.click(screen.getByRole('checkbox', { name: 'KC Solo' }));
@@ -63,5 +66,11 @@ describe('admin office access editor', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Gagal memuat daftar kantor');
     expect(screen.getByRole('button', { name: 'Simpan Hak Akses' })).toBeDisabled();
     expect(accessService.setUserOfficeGrants).not.toHaveBeenCalled();
+  });
+  it('shows search failures even before a user is selected', async () => {
+    queryMock.error = new Error('query failed');
+    render(<AccessConfigurationPage />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gagal memuat pengguna');
+    expect(screen.queryByText('Pengguna tidak ditemukan.')).not.toBeInTheDocument();
   });
 });
