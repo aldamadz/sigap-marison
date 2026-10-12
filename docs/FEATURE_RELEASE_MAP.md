@@ -33,6 +33,24 @@
   Office ownership is NOT widened: an external project under KC Solo is not silently moved
   to KCP Karanganyar. No guessed mapping, vendor submission or historical renumbering.
 
+## CAL-04 Historical Daily PDF (2026-10-12, Issue #528)
+
+- Candidate `fix/work-calendar-daily-pdf-01` from main; initial release to staging.
+- Each date gets a canonical lifecycle projection through that day's exclusive
+  midnight cutoff (or download time for today). Later completion, reopening and
+  results never replace the historical day's state. Week/month exports repeat
+  the same task per visible report date without duplicating stored tasks.
+- Start, finish and duration belong only to the report day; completion stays
+  blank unless actually completed that day. Office hours, holidays, lunch and
+  blocked/planned pauses retain the existing timing contract.
+- Missing or incomplete history is explicitly unknown, not the latest status.
+  Status filters run after daily projection; history reads remain own/RLS-bound,
+  fully paginated, bounded to four concurrent reads and cancellable.
+- PDF has a separated title/owner/job header, zero-padded Indonesian dates,
+  lighter table and per-page footer; no visible Asia/Jakarta label.
+- No migration, new endpoint, worker change or business mutation. Production
+  unchanged until an explicitly authorized selective release.
+
 ## MRN-21 / SUR-03 Dana Umum Cabang (2026-10-09, Issue #517)
 
 - Correction for branch/KCP PGD Fund: `Tanpa Proyek (Dana Umum)` is an explicit

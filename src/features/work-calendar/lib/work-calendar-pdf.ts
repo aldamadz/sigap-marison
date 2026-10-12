@@ -8,10 +8,11 @@ import type {
   WorkEntryOwner,
   WorkEntryRepository,
 } from "../types/work-calendar";
-import { formatWorkDateKey, formatWorkTimeLabel, workDateToUtcRange } from "./work-calendar-date";
+import { formatWorkDateKey, formatWorkDateFull, formatWorkTimeLabel, workDateToUtcRange } from "./work-calendar-date";
+import { buildWorkEntryDailyReports } from "./work-entry-daily-report";
+import { matchesWorkCalendarStatusFilter, type WorkCalendarStatusFilter } from "./work-calendar-status-filter";
 import { getWorkEntryStatusLabel } from "./work-entry-status";
 import {
-  calculateWorkEntryTiming,
   formatWorkEntryDuration,
   validateWorkEntryTimingScope,
   type WorkEntryTiming,
@@ -20,6 +21,8 @@ import {
 export interface WorkCalendarPdfRow {
   entry: WorkEntry;
   timing: WorkEntryTiming;
+  reportDate: WorkDate;
+  statusKnown: boolean;
 }
 
 export interface WorkCalendarPdfInput {
@@ -31,7 +34,7 @@ export interface WorkCalendarPdfInput {
 }
 
 export interface ExportWorkCalendarPdfInput {
-  /** Already selected entries, including carryovers. Every nondeleted entry becomes a row. */
+  /** Date-scoped canonical entries, before status filtering; includes carryovers. */
   entries: readonly WorkEntry[];
   repository: Pick<WorkEntryRepository, "listEntryEvents">;
   settings: WorkCalendarWorkSettings;
@@ -41,6 +44,7 @@ export interface ExportWorkCalendarPdfInput {
   now: Date;
   owner: WorkEntryOwner;
   signal?: AbortSignal;
+  statusFilter?: WorkCalendarStatusFilter;
 }
 
 function pdfText(value: string): string {
@@ -54,7 +58,12 @@ function timestampLabel(value: string | null): string {
   if (value === null) return "-";
   const at = new Date(value);
   if (!Number.isFinite(at.getTime())) return "-";
-  return `${formatWorkDateKey(at)}\n${formatWorkTimeLabel(at)} WIB`;
+  return formatWorkTimeLabel(at) ?? "-";
+}
+
+export function formatWorkCalendarReportDate(date: WorkDate): string {
+  workDateToUtcRange(date);
+  return formatWorkDateFull(date).replace(/, (\d) /, ", 0$1 ");
 }
 
 /** Returns a real, unsaved PDF. Wrapping and row splitting preserve long titles/results. */
@@ -68,36 +77,70 @@ export function buildWorkCalendarPdf(input: WorkCalendarPdfInput): jsPDF {
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
   const margin = 12;
-  const ownerLines: string[] = doc.splitTextToSize(pdfText(input.owner.name), width - margin * 2);
-  const headerHeight = 26 + ownerLines.length * 4;
+  const identityWidth = 105;
+  const ownerLines: string[] = doc.splitTextToSize(pdfText(input.owner.name), identityWidth);
+  const jobLines: string[] = input.owner.jobTitle ? doc.splitTextToSize(pdfText(input.owner.jobTitle), identityWidth) : [];
+  const period = input.fromDate === input.toDate ? formatWorkCalendarReportDate(input.fromDate)
+    : `${formatWorkCalendarReportDate(input.fromDate)} - ${formatWorkCalendarReportDate(input.toDate)}`;
+  const periodLines: string[] = doc.splitTextToSize(period, width - margin * 2);
+  const identityHeight = 18 + (ownerLines.length + jobLines.length) * 4;
+  const periodY = Math.max(30, identityHeight + 5);
+  const headerHeight = periodY + periodLines.length * 4 + 9;
   autoTable(doc, {
     head: [["No", "Tanggal", "Pekerjaan", "Status", "Mulai", "Selesai", "Durasi", "Hasil"]],
-    body: input.rows.map(({ entry, timing }, index) => [
-      String(index + 1), entry.workDate, pdfText(entry.title), getWorkEntryStatusLabel(entry.status),
+    body: input.rows.map(({ entry, timing, reportDate, statusKnown }, index) => [
+      String(index + 1), formatWorkCalendarReportDate(reportDate), pdfText(entry.title),
+      statusKnown ? getWorkEntryStatusLabel(entry.status) : "Riwayat belum tersedia",
       timestampLabel(timing.startsAt), timestampLabel(timing.endsAt),
       formatWorkEntryDuration(timing.durationMs), pdfText(entry.realization ?? "-"),
     ]),
-    theme: "grid",
-    margin: { left: margin, right: margin, top: headerHeight, bottom: 22 },
+    theme: "striped",
+    margin: { left: margin, right: margin, top: headerHeight, bottom: 26 },
     startY: headerHeight,
     showHead: "everyPage",
     pageBreak: "auto",
     rowPageBreak: "auto",
-    styles: { font: "helvetica", fontSize: 8, cellPadding: 2, overflow: "linebreak", valign: "top", textColor: [25, 25, 25], lineColor: [210, 215, 215], lineWidth: 0.15 },
-    headStyles: { fillColor: [35, 70, 65], textColor: [255, 255, 255], fontStyle: "bold" },
+    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 3, overflow: "linebreak", valign: "top", textColor: [35, 42, 45], lineColor: [225, 231, 228], lineWidth: { bottom: 0.15 } },
+    alternateRowStyles: { fillColor: [246, 249, 247] },
+    headStyles: { fillColor: [34, 86, 64], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
     columnStyles: {
-      0: { cellWidth: 10 }, 1: { cellWidth: 24 }, 2: { cellWidth: 62 }, 3: { cellWidth: 29 },
-      4: { cellWidth: 29 }, 5: { cellWidth: 29 }, 6: { cellWidth: 26 },
-      7: { cellWidth: width - margin * 2 - 209 },
+      0: { cellWidth: 10, halign: "center" }, 1: { cellWidth: 35 }, 2: { cellWidth: 67 }, 3: { cellWidth: 30 },
+      4: { cellWidth: 18, halign: "center" }, 5: { cellWidth: 18, halign: "center" }, 6: { cellWidth: 23, halign: "center" },
+      7: { cellWidth: width - margin * 2 - 201 },
+    },
+    didParseCell: ({ section, column, row, cell }) => {
+      if (section !== "body" || column.index !== 3) return;
+      const report = input.rows[row.index];
+      if (!report?.statusKnown) return;
+      cell.styles.fontStyle = "bold";
+      const colors: Record<WorkEntry["status"], [number, number, number]> = {
+        planned: [90, 100, 110], in_progress: [30, 104, 147], completed: [34, 110, 70], blocked: [163, 89, 18],
+      };
+      cell.styles.textColor = colors[report.entry.status];
     },
     willDrawPage: () => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text("Kalender Kerja", margin, 14);
+      doc.setFillColor(34, 86, 64);
+      doc.rect(margin, 11, 1.2, 13, "F");
+      doc.setTextColor(90, 104, 98);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(ownerLines, margin, 20);
-      doc.text(`${input.fromDate} s.d. ${input.toDate} | Asia/Jakarta`, margin, headerHeight - 3);
+      doc.setFontSize(8);
+      doc.text("SIGAP / LAPORAN AKTIVITAS", margin + 5, 14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(31, 49, 40);
+      doc.setFontSize(19);
+      doc.text("Kalender Kerja", margin + 5, 23);
+      doc.setFontSize(11);
+      doc.text(ownerLines, width - margin, 14, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(90, 104, 98);
+      if (jobLines.length) doc.text(jobLines, width - margin, 14 + ownerLines.length * 4 + 2, { align: "right" });
+      doc.setFontSize(10);
+      doc.setTextColor(45, 58, 51);
+      doc.text(periodLines, margin, periodY);
+      doc.setDrawColor(213, 224, 218);
+      doc.setLineWidth(0.3);
+      doc.line(margin, headerHeight - 5, width - margin, headerHeight - 5);
     },
   });
   const pages = doc.getNumberOfPages();
@@ -106,11 +149,12 @@ export function buildWorkCalendarPdf(input: WorkCalendarPdfInput): jsPDF {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     const durationNotes: string[] = doc.splitTextToSize(
-      "Durasi dalam rentang: otomatis = aktif pada hari/jam kerja, tanpa libur; manual = waktu eksplisit dikurangi jeda status. Keduanya dikurangi istirahat kantor. Tidak diketahui = waktu/riwayat belum memadai.",
+      "Status dan hasil mengikuti akhir hari laporan, bukan status terbaru. Durasi harian dikurangi istirahat kantor dan jeda pekerjaan. Tidak diketahui = waktu/riwayat belum memadai.",
       width - margin * 2,
     );
-    doc.text(durationNotes, margin, height - 18);
-    doc.text(`Snapshot ${timestampLabel(input.now.toISOString()).replace("\n", " ")}`, margin, height - 7);
+    doc.setTextColor(95, 108, 101);
+    doc.text(durationNotes, margin, height - 19);
+    doc.text(`Diunduh ${formatWorkCalendarReportDate(formatWorkDateKey(input.now))}, ${timestampLabel(input.now.toISOString())}`, margin, height - 7);
     doc.text(`Halaman ${page} / ${pages}`, width - margin, height - 7, { align: "right" });
   }
   return doc;
@@ -167,7 +211,7 @@ export async function collectWorkCalendarPdfRows(input: ExportWorkCalendarPdfInp
   if (input.signal?.aborted) cancel();
   let cursor = 0;
   let failure: { error: unknown } | undefined;
-  const rows: WorkCalendarPdfRow[] = new Array(entries.length);
+  const rows: WorkCalendarPdfRow[][] = new Array(entries.length);
   const worker = async () => {
     try {
       while (cursor < entries.length) {
@@ -176,7 +220,10 @@ export async function collectWorkCalendarPdfRows(input: ExportWorkCalendarPdfInp
         const entry = entries[index];
         const events = await abortable(snapshot.repository.listEntryEvents({ entryId: entry.id, signal }), signal);
         checkAbort(signal);
-        rows[index] = { entry, timing: calculateWorkEntryTiming({ ...snapshot, entry, events }) };
+        rows[index] = buildWorkEntryDailyReports({ ...snapshot, entry, events }).filter(row =>
+          !snapshot.statusFilter || snapshot.statusFilter === "all" || (row.statusKnown
+            && matchesWorkCalendarStatusFilter(row.entry, snapshot.statusFilter, row.reportDate)),
+        );
       }
     } catch (error) {
       failure ??= { error };
@@ -188,7 +235,7 @@ export async function collectWorkCalendarPdfRows(input: ExportWorkCalendarPdfInp
     await Promise.all(Array.from({ length: Math.min(4, entries.length) }, worker));
     if (failure) throw failure.error;
     checkAbort(signal);
-    return rows;
+    return rows.flat().sort((a, b) => a.reportDate.localeCompare(b.reportDate));
   } finally {
     input.signal?.removeEventListener("abort", cancel);
   }

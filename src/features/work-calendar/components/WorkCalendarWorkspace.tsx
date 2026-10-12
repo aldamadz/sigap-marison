@@ -311,6 +311,7 @@ export function WorkCalendarWorkspace({  currentUser,
   const [statusFilter, setStatusFilter] = useState<WorkCalendarStatusFilter>(
     DEFAULT_WORK_CALENDAR_STATUS_FILTER,
   );
+  useEffect(() => () => exportControllerRef.current?.abort(), [statusFilter]);
   /**
    * Quick Add kontekstual (CAL-03 F4B): tanggal target + area pemicu. `anchor`
    * adalah elemen tanggal yang diklik (dipakai popover desktop); `rect`
@@ -1067,7 +1068,7 @@ export function WorkCalendarWorkspace({  currentUser,
     setIsExporting(true);
     setExportError(null);
     const range = { ...metaRange };
-    const exportEntries = filterEntries(calendar.ownEntries).filter((entry) =>
+    const exportEntries = calendar.ownEntries.filter((entry) =>
       isWorkEntryVisibleInRange(entry, range.fromDate, range.toDate, calendar.today),
     );
     const snapshotNow = now ? now() : new Date();
@@ -1084,6 +1085,7 @@ export function WorkCalendarWorkspace({  currentUser,
         toDate: range.toDate,
         now: snapshotNow,
         signal: controller.signal,
+        statusFilter,
       });
       if (!controller.signal.aborted) pdf.save(`kalender-kerja-${range.fromDate}-${range.toDate}.pdf`);
     } catch {
@@ -1116,7 +1118,7 @@ export function WorkCalendarWorkspace({  currentUser,
         onSelectOwner={(ownerId) => calendar.setOwnerFilterId(ownerId)}
         onAdd={handleAdd}
         onExportPdf={() => { void handleExportPdf(); }}
-        exportDisabled={calendar.isLoading || calendar.error !== null || filterEntries(calendar.ownEntries).length === 0 || exportSettingsStatus === "loading"}
+        exportDisabled={calendar.isLoading || calendar.error !== null || calendar.ownEntries.length === 0 || exportSettingsStatus === "loading"}
         isExporting={isExporting}
       >
         {calendar.view === "day" ? (
