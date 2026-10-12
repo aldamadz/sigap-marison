@@ -41,6 +41,13 @@ describe("historical daily calendar PDF", () => {
     expect(row).toMatchObject({ reportDate: "2026-10-09", entry: { status: "completed", realization: "Hasil Jumat" },
       timing: { startsAt: new Date(at("2026-10-09", "08:00")).toISOString(), endsAt: new Date(at("2026-10-09", "11:00")).toISOString(), durationMinutes: 180 } });
   });
+  it("preserves the first day's actual early start while applying office hours to duration", async () => {
+    const entry = makeEntry({ createdAt: at("2026-10-08", "06:00") });
+    const events = [event(entry, "created", "2026-10-08", "06:00", null, "planned"),
+      event(entry, "start", "2026-10-08", "07:00", "planned", "in_progress"), history(entry)[2]];
+    const [row] = await collectWorkCalendarPdfRows(input(entry, events));
+    expect(row.timing).toMatchObject({ startsAt: new Date(at("2026-10-08", "07:00")).toISOString(), durationMinutes: 480, endsAt: null });
+  });
   it("splits week/month into daily rows and stops carrying after completion", async () => {
     const entry = makeEntry();
     const value = input(entry, history(entry), { toDate: "2026-10-12" });

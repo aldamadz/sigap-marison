@@ -29,7 +29,8 @@ export function buildWorkEntryDailyReports(input: WorkEntryTimingInput) {
       statusKnown: history.status !== null,
       timing: {
         ...timing,
-        startsAt: timing.segments[0]?.startsAt ?? null,
+        startsAt: timing.startsAt !== null && formatWorkDateKey(new Date(timing.startsAt)) === date
+          && Date.parse(timing.startsAt) <= cutoff.getTime() ? timing.startsAt : timing.segments[0]?.startsAt ?? null,
         endsAt: history.status === "completed" && timing.endsAt !== null
           && formatWorkDateKey(new Date(timing.endsAt)) === date && Date.parse(timing.endsAt) <= cutoff.getTime()
           ? timing.endsAt : null,
