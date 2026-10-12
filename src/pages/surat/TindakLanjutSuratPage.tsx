@@ -106,7 +106,11 @@ export default function TindakLanjutSuratPage() {
 
   const openRevisionMutation = useMutation({
     mutationFn: async (eventId: string) => suratService.createExternalSubmissionRevisionDraft(eventId),
-    onSuccess: (draft) => navigate(`/surat/registrasi?draft=${encodeURIComponent(draft.id)}&revision=${encodeURIComponent(draft.revision_event_id || "")}`),
+    onSuccess: (draft) => {
+      const path = draft.payload?.linkedDocumentContext?.type === "recommendation"
+        ? "/surat/rekomendasi/registrasi" : "/surat/registrasi";
+      navigate(`${path}?draft=${encodeURIComponent(draft.id)}&revision=${encodeURIComponent(draft.revision_event_id || "")}`);
+    },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Draft perbaikan gagal dibuka."),
   });
 

@@ -137,7 +137,7 @@ try {
         'Original config RPC remains private');`);
     process.stdout.write("Related branch officers: canonical KEU10 wrapper preserved; private configuration guard updated.\n");
   }
-  if (process.argv.includes("--requester-edit") || fundRabParity) {
+  if (process.argv.includes("--requester-edit") || process.argv.includes("--recommendation-revision") || fundRabParity) {
     if (fundRabParity) {
       run(psqlArgs, `create publication supabase_realtime;
         create table public.activity_logs(id uuid primary key);
@@ -212,6 +212,20 @@ try {
     const revisionOutput = run(psqlArgs, read("supabase/tests/requester_data_attachment_revision.integration.sql"));
     if (!revisionOutput.includes("Requester corrections: all assertions passed")) throw new Error("Missing requester correction marker");
     process.stdout.write(revisionOutput);
+    if (process.argv.includes("--recommendation-revision")) {
+      run(psqlArgs, canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "validate_recommendation_items"));
+      run(psqlArgs, `alter table public.surat_attachments add column if not exists created_by uuid;
+        alter table public.surat_recommendation_tasks add column if not exists submitted_surat_id uuid,
+        add column if not exists form_id uuid,add column if not exists usage_id uuid,
+        add column if not exists department_id uuid,add column if not exists letter_type_id uuid;
+        alter table public.surat_linked_documents add column if not exists required_before_step integer;`);
+      const photosMigration = read(migrationRoot + "20261012160000_recommendation_requester_revision_photos.sql");
+      run(psqlArgs, photosMigration);
+      run(psqlArgs, photosMigration);
+      const photoOutput = run(psqlArgs, read("supabase/tests/recommendation_requester_revision_photos.integration.sql"));
+      if (!photoOutput.includes("Recommendation revision photos: all assertions passed")) throw new Error("Missing recommendation photo marker");
+      process.stdout.write(photoOutput);
+    }
     const submit = () => new Promise((resolve,reject) => {
       const child=spawn("docker",psqlArgs);
       let stderr="";

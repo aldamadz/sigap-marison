@@ -1,5 +1,23 @@
 # SIGAP Feature and Release Map
 
+## REC-03 / SUR-22 Recommendation Requester Revision Photos (2026-10-12, Issue #542)
+
+- `fix/recommendation-revision-photos-01` from main; staging first, selective production.
+- Canonical revision drafts retain the recommendation task/parent context and editable
+  requester-owned per-item photos. Photo references are rebound to the new draft;
+  files themselves are not copied/deleted. Existing broken drafts are prepared once
+  on open without discarding saved edits or restoring deliberate subsequent removals.
+- Recommendation submission validates its own canonical item model and draft-owned
+  photo identities instead of requiring unrelated PGD `items`. Examiner attachments
+  remain protected; original number, return step and immutable before/after history
+  continue through the existing requester revision RPCs.
+- Forward migration `20261012160000` changes private helpers/canonical RPC bodies only.
+  No new endpoint, publication or worker source. App-only rollout; migration history
+  and function-shape guards must pass separately in each environment.
+- Affected tests and disposable PostgreSQL cover photo retention/removal, redaction-only
+  save, forged identity/file rejection, reopening, audit and duplicate submission.
+  Source tests are not a claim that a production document was resubmitted.
+
 ## MRN-13 External-only Active Projects (2026-10-09, Issue #521)
 
 - `fix/external-project-source-only-01` from main; staging first, selective production.
