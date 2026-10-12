@@ -19,6 +19,17 @@
   Office ownership is NOT widened: an external project under KC Solo is not silently moved
   to KCP Karanganyar. No guessed mapping, vendor submission or historical renumbering.
 
+## REC-03 / DOC-05 In-Progress Recommendation PDF (2026-10-12, Issue #534)
+
+- `hotfix/recommendation-preview-pdf-01` from main; staging before production.
+- Generic recommendation preview jobs resolve the existing source-bound canonical
+  snapshot when PGD/KEU renderers do not match; no guessed template or content.
+- Only fingerprinted final recommendation jobs use canonical publication.
+  Preview completion does not advance approval, finalize the recommendation or
+  satisfy outbound readiness. Missing/stale source remains fail-closed.
+- No migration or endpoint change. App image and PDF worker require a coordinated
+  rollout; never restart a worker with a live PDF lease or restart sync/outbound.
+
 ## CAL-04 Historical Daily PDF (2026-10-12, Issue #528)
 
 - Candidate `fix/work-calendar-daily-pdf-01` from main; initial release to staging.
