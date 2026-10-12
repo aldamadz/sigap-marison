@@ -99,7 +99,7 @@ export function buildWorkCalendarPdf(input: WorkCalendarPdfInput): jsPDF {
     startY: headerHeight,
     showHead: "everyPage",
     pageBreak: "auto",
-    rowPageBreak: "auto",
+    rowPageBreak: "avoid",
     styles: { font: "helvetica", fontSize: 8.5, cellPadding: 3, overflow: "linebreak", valign: "top", textColor: [35, 42, 45], lineColor: [225, 231, 228], lineWidth: { bottom: 0.15 } },
     alternateRowStyles: { fillColor: [246, 249, 247] },
     headStyles: { fillColor: [34, 86, 64], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
