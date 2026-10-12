@@ -2,15 +2,34 @@
 
 Manual singkat fitur **Kalender Kerja** SIGAP. Dokumen ini adalah rujukan
 pengguna, admin, dan operator untuk fitur CAL-03 fase **F1–F7** yang saat ini
-berstatus **kandidat staging**.
+telah dirilis di production dan staging. Revisi PDF harian pada Issue #528
+merupakan kandidat staging terpisah.
 
 - Route aplikasi: `/calendar`
 - Modul frontend: `src/features/work-calendar/**`
 - Halaman: `src/pages/work-calendar/WorkCalendarPage.tsx`
 
-> Catatan rilis: fitur ini belum dirilis ke production. Promosi ke `main`
-> menunggu instruksi rilis eksplisit. Lihat
+> Catatan rilis: perubahan baru mengikuti promosi selektif ke `main`, bukan
+> membawa seluruh staging. Lihat
 > [`FEATURE_RELEASE_MAP.md`](./FEATURE_RELEASE_MAP.md).
+
+---
+
+## Ekspor PDF Harian (CAL-04, Kandidat #528)
+
+- Judul Kalender Kerja dipisahkan dari nama dan jabatan pemilik laporan.
+- Tanggal memakai format **Jumat, 09 Oktober 2026**, tanpa tulisan Asia/Jakarta.
+  Perhitungan tetap memakai tanggal dan jam kantor yang sama.
+- Status dan hasil mengikuti riwayat sampai akhir hari yang dilaporkan. Untuk
+  hari ini, batasnya adalah waktu unduh; perubahan setelah batas tidak ditampilkan.
+- Contoh: pekerjaan dibuat Kamis dan selesai Jumat. PDF Kamis tetap menampilkan
+  status Kamis, tanpa hasil atau waktu selesai Jumat. PDF Jumat menampilkan selesai.
+- Mulai, selesai dan durasi hanya milik tanggal baris. Pekerjaan yang berlanjut
+  mengambil awal aktivitas hari tersebut; kolom selesai kosong bila belum selesai.
+- Ekspor Minggu/Bulan menampilkan baris per hari, tanpa membuat pekerjaan baru.
+  Filter status memakai status historis masing-masing hari, bukan status terbaru.
+- Riwayat yang belum memadai ditandai **Riwayat belum tersedia**; sistem tidak
+  mengarang status atau durasi. Istirahat kantor dan jeda terhambat tetap dipotong.
 
 ---
 

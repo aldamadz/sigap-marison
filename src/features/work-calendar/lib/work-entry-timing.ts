@@ -45,6 +45,9 @@ interface History {
   active: Interval[];
   pauses: Interval[];
   reason: WorkEntryTiming["reason"];
+  status: WorkEntryStatus | null;
+  realization: string | null;
+  blockedReason: string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -82,8 +85,8 @@ export function validateWorkEntryTimingScope(input: Pick<WorkEntryTimingInput,
   }
 }
 
-function readHistory(entry: WorkEntry, events: readonly WorkEntryEvent[], now: number): History {
-  const history: History = { start: null, end: null, active: [], pauses: [], reason: null };
+function readHistory(entry: WorkEntry, events: readonly WorkEntryEvent[], now: number, checkSnapshot = true): History {
+  const history: History = { start: null, end: null, active: [], pauses: [], reason: null, status: null, realization: null, blockedReason: null };
   const transitions: Transition[] = [];
   for (const event of events) {
     if (event.entryId !== entry.id || event.ownerId !== entry.ownerId
@@ -144,13 +147,28 @@ function readHistory(entry: WorkEntry, events: readonly WorkEntryEvent[], now: n
       // Deduct closed completion gaps; a final explicit endsAt remains authoritative.
       if (nextState === "completed" && completedStart === null) completedStart = at;
       history.end = nextState === "completed" ? at : null;
+      if (nextState === "completed") history.realization = event.detail;
+      history.blockedReason = nextState === "blocked" ? event.detail : null;
       state = nextState;
     }
   }
-  if (state !== entry.status) history.reason ??= "snapshot_mismatch";
+  history.status = state;
+  if (checkSnapshot && state !== entry.status) history.reason ??= "snapshot_mismatch";
   if (activeStart !== null) history.active.push({ start: activeStart, end: now });
   if (pauseStart !== null) history.pauses.push({ start: pauseStart, end: now });
   return history;
+}
+
+/** Canonical state at a cutoff, never the current row's later status or result. */
+export function getWorkEntryHistorySnapshot(entry: WorkEntry, events: readonly WorkEntryEvent[], cutoff: Date) {
+  if (!Number.isFinite(cutoff.getTime())) throw new RangeError("Waktu laporan tidak valid.");
+  const history = readHistory(entry, events, cutoff.getTime(), false);
+  return {
+    status: history.reason === null ? history.status : null,
+    completedAt: history.end === null ? null : new Date(history.end).toISOString(),
+    realization: history.status === "completed" && history.reason === null ? history.realization : null,
+    blockedReason: history.blockedReason,
+  };
 }
 
 function subtractPauses(interval: Interval, pauses: readonly Interval[]): Interval[] {
