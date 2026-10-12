@@ -216,12 +216,20 @@ try {
       run(psqlArgs, canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "validate_recommendation_items"));
       run(psqlArgs, `alter table public.surat_attachments add column if not exists created_by uuid;
         alter table public.surat_recommendation_tasks add column if not exists submitted_surat_id uuid,
+        add column if not exists status text default 'submitted',
         add column if not exists form_id uuid,add column if not exists usage_id uuid,
         add column if not exists department_id uuid,add column if not exists letter_type_id uuid;
         alter table public.surat_linked_documents add column if not exists required_before_step integer;`);
       const photosMigration = read(migrationRoot + "20261012160000_recommendation_requester_revision_photos.sql");
       run(psqlArgs, photosMigration);
       run(psqlArgs, photosMigration);
+      run(psqlArgs, canonical("20260626190000_recommendation_tasks_shared_lock.sql", "is_recommendation_task_candidate"));
+      run(psqlArgs, canonical("20260629143000_recommendation_parent_summary.sql", "get_recommendation_parent_summary"));
+      run(psqlArgs, `revoke all on function public.get_recommendation_parent_summary(uuid) from public,anon;
+        grant execute on function public.get_recommendation_parent_summary(uuid) to authenticated,service_role;`);
+      const parentSummaryMigration = read(migrationRoot + "20261012163000_recommendation_revision_parent_summary.sql");
+      run(psqlArgs, parentSummaryMigration);
+      run(psqlArgs, parentSummaryMigration);
       const photoOutput = run(psqlArgs, read("supabase/tests/recommendation_requester_revision_photos.integration.sql"));
       if (!photoOutput.includes("Recommendation revision photos: all assertions passed")) throw new Error("Missing recommendation photo marker");
       process.stdout.write(photoOutput);

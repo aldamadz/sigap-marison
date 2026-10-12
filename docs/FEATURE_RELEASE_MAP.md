@@ -708,7 +708,9 @@ verifikasi juga runtime, database, worker, dan smoke test.
   photo identities instead of requiring unrelated PGD `items`. Examiner attachments
   remain protected; original number, return step and immutable before/after history
   continue through the existing requester revision RPCs.
-- Forward migration `20261012160000` changes private helpers/canonical RPC bodies only.
+- Forward migrations `20261012160000` and `20261012163000` change private helpers/canonical RPC bodies only.
+  Parent summary access for submitted tasks requires the authenticated owner and an
+  active linked requester revision/draft; unrelated users and closed revisions stay denied.
   No new endpoint, publication or worker source. App-only rollout; migration history
   and function-shape guards must pass separately in each environment.
 - Affected tests and disposable PostgreSQL cover photo retention/removal, redaction-only

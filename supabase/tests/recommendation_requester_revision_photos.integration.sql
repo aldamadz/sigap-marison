@@ -45,6 +45,10 @@ begin
   d:=public.create_external_submission_revision_draft(d.revision_event_id);
   perform keu10_test.assert(d.payload#>>'{formData,form_input_data,recommendation_multi_detail,items,0,details,0,description}'='Saved specifications from legacy editor','Existing broken draft rescued without discarding saved specifications');
   perform keu10_test.assert(d.payload#>>'{linkedDocumentContext,taskId}'=keu10_test.id(9503)::text,'Canonical recommendation context restored');
+  perform keu10_test.assert(public.get_recommendation_parent_summary(keu10_test.id(9503))->>'parent_surat_id'=keu10_test.id(9500)::text,'Active revision owner can read parent summary even after initial task submission');
+  perform set_config('request.jwt.claim.sub',keu10_test.id(8)::text,false);
+  perform keu10_test.expect_error('P0001',format('select public.get_recommendation_parent_summary(%L)',keu10_test.id(9503)));
+  perform set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
   perform keu10_test.assert((select count(*)=2 from public.surat_registration_draft_files where draft_id=d.id),'Original photos cloned by reference');
   perform keu10_test.assert(jsonb_array_length(d.payload#>'{externalRevision,protectedAttachments}')=1,'Examiner file alone protected');
   photo:=(d.payload#>>'{formData,form_input_data,recommendation_multi_detail,items,0,details,0,attachments,0,metadata,draft_file_id}')::uuid;
@@ -76,7 +80,11 @@ begin
   perform keu10_test.assert(exists(select 1 from public.surat_requester_revision_history where revision_event_id=d.revision_event_id
     and jsonb_array_length(before_snapshot->'attachments')=3 and jsonb_array_length(after_snapshot->'attachments')=2),'Photo removal audited in immutable history');
   perform keu10_test.expect_error('40001',format('select public.submit_external_submission_revision(%L,%L,%L,null)',d.revision_event_id,d.id,data));
+  perform keu10_test.expect_error('P0001',format('select public.get_recommendation_parent_summary(%L)',keu10_test.id(9503)));
 end $$;
+select set_config('request.jwt.claim.sub',keu10_test.id(8)::text,false);
+select keu10_test.expect_error('P0001',format('select public.get_recommendation_parent_summary(%L)',keu10_test.id(9503)));
 reset role;
 select keu10_test.assert(not has_function_privilege('authenticated','requester_revision_internal.prepare_recommendation_draft(uuid)','execute'), 'Prepare helper private');
+select keu10_test.assert(not has_function_privilege('anon','public.get_recommendation_parent_summary(uuid)','execute'),'Anonymous parent summary forbidden');
 select 'Recommendation revision photos: all assertions passed';
