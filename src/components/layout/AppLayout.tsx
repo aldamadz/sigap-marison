@@ -22,6 +22,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/admin/kpi-departments': { title: 'SLA Departemen', subtitle: 'Evaluasi approval berdasarkan jam kerja efektif' },
   '/admin/configuration/integration': { title: 'Integrasi Marison', subtitle: 'Periksa koneksi dan sinkronisasi master data Marison' },
   '/admin/configuration/kpi': { title: 'SLA Departemen', subtitle: 'Konfigurasi waktu kerja efektif departemen' },
+  '/admin/configuration/access': { title: 'Hak Akses', subtitle: 'Kelola kantor pengajuan pengguna' },
 }
 
 export function AppLayout() {

@@ -10,6 +10,7 @@ const queries: Array<{ table: string; eq: ReturnType<typeof vi.fn> }> = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.rpc.mockResolvedValue({ data: false, error: null });
   actor = { ...profile };
   queries.length = 0;
   mocks.getUser.mockResolvedValue({ data: { user: { id: profile.id } } });
@@ -23,8 +24,8 @@ beforeEach(() => {
 });
 
 describe("requester office service authority", () => {
-  it("uses the current profile office, not a stale payload or requester name", async () => {
-    const context = await suratService.getRegistrationContext({ office_id: "bandung", dept_id: "foreign" });
+  it("uses the current profile office when none was selected", async () => {
+    const context = await suratService.getRegistrationContext({});
     expect(context.payload).toMatchObject({ office_id: "magelang", dept_id: "tech" });
     expect(queries.find(q => q.table === "master_offices")?.eq).toHaveBeenCalledWith("id", "magelang");
   });
@@ -38,14 +39,15 @@ describe("requester office service authority", () => {
 
   it.each(["no_surat", "draft_id", "reservation_id"])("does not relabel a stale reserved identity with %s", async key => {
     await expect(suratService.getRegistrationContext({ office_id: "bandung", dept_id: "tech", [key]: "existing" }))
-      .rejects.toThrow("buat nomor surat baru");
+      .rejects.toThrow("Kantor penerbit tidak diizinkan");
     expect(queries.map(q => q.table)).toEqual(["profiles"]);
   });
 
-  it("rejects stale location before any counter RPC, including head-office and project requests", async () => {
+  it("rejects an unauthorized office before any counter RPC", async () => {
     await expect(suratService.generateNoSurat({ office_id: "bandung", dept_id: "tech", project_id: "project" }))
-      .rejects.toThrow("Muat ulang sebelum mengambil nomor surat");
-    expect(mocks.rpc).not.toHaveBeenCalled();
+      .rejects.toThrow("Kantor penerbit tidak diizinkan");
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith('can_issue_for_office', { p_office_id: 'bandung' });
   });
 
   it("preserves explicit administrator office selection", async () => {
@@ -59,7 +61,7 @@ describe("requester office service authority", () => {
   it("does not infer a different office from a name when the stored profile is Bandung", async () => {
     actor.office_id = "bandung";
     actor.full_name = "Same Name As Another Requester";
-    const context = await suratService.getRegistrationContext({ office_id: "magelang", dept_id: "tech" });
-    expect(context.payload.office_id).toBe("bandung");
+    await expect(suratService.getRegistrationContext({ office_id: "magelang", dept_id: "tech" }))
+      .rejects.toThrow("Kantor penerbit tidak diizinkan");
   });
 });

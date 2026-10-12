@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server } from "lucide-react";
+import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -10,6 +10,12 @@ import {
 } from "@/components/ui/select";
 
 const configurationOptions = [
+  {
+    value: "/admin/configuration/access",
+    label: "Hak Akses",
+    description: "Kantor pengajuan yang diizinkan untuk setiap pengguna.",
+    icon: ShieldCheck,
+  },
   {
     value: "/admin/configuration/integration",
     label: "Integration",

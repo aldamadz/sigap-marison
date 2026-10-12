@@ -11,7 +11,8 @@ const assertions = readFileSync(
 );
 
 const testExternalProjects = process.argv.includes("--external-projects");
-const testBranchFund = process.argv.includes("--branch-fund") || testExternalProjects;
+const testDelegatedOffices = process.argv.includes("--delegated-offices");
+const testBranchFund = process.argv.includes("--branch-fund") || testExternalProjects || testDelegatedOffices;
 const branchFundSql = testBranchFund ? (() => {
   const read = (name) => readFileSync(`supabase/migrations/${name}.sql`, "utf8");
   const guards = read("20260930140000_mar10_kc_descendant_number_scope");
@@ -29,7 +30,7 @@ const branchFundSql = testBranchFund ? (() => {
       as $$ select request_category from public.form_usages where id=p_id $$;
     create function public.branch_has_registered_projects(p_office_id uuid) returns boolean language sql
       as $$ select exists(select 1 from public.master_projects where office_id=p_office_id) $$;
-    create function public.get_office_descendant_ids(p_id uuid) returns setof uuid language sql
+    create function public.get_office_descendant_ids(p_root_id uuid) returns setof uuid language sql
       as $$ select id from public.master_offices where false $$;
     ${guard("enforce_surat_reservation_number_scope")}
     ${guard("enforce_surat_registration_branch_project")}
@@ -630,6 +631,26 @@ try {
     throw new Error(`Concurrency race: expected exactly one winner, got ${winners}\nr1=${JSON.stringify(r1)}\nr2=${JSON.stringify(r2)}`);
   }
   process.stdout.write(`Concurrency: 2 parallel connections -> exactly 1 winner for number 10.\n`);
+  if (testDelegatedOffices) {
+    const read = (name) => readFileSync(`supabase/migrations/${name}.sql`, 'utf8');
+    const guards = read('20260930140000_mar10_kc_descendant_number_scope');
+    const assetGuard = guards.match(/create or replace function public\.assert_branch_asset_fallback_eligible\([\s\S]*?\$\$;/)?.[0];
+    if (!assetGuard) throw new Error('Canonical asset office guard missing.');
+    const delegation = read('20261012140000_delegated_issuing_office');
+    const output = run(['exec', '-i', id, 'psql', '-h', '127.0.0.1', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres'], `
+      alter table public.master_offices add column parent_id uuid;
+      create or replace function public.is_current_user_admin() returns boolean language sql security definer as $$
+        select exists(select 1 from public.profiles where id=auth.uid() and role::text='admin'
+          and is_active is true and deleted_at is null) $$;
+      ${read('20260929070000_mar10_non_unit_project_branch_validation')}
+      ${assetGuard}
+      ${delegation}
+      ${delegation}
+      ${readFileSync('supabase/tests/delegated_issuing_office.integration.sql', 'utf8')}
+    `);
+    if (!output.includes('Delegated issuing office: all assertions passed')) throw new Error(output);
+    process.stdout.write(output);
+  }
 } finally {
   spawnSync("docker", ["rm", "-f", id], { encoding: "utf8" });
 }

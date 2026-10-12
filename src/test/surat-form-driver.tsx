@@ -110,7 +110,7 @@ export async function mountForm() {
 // ─── Select helpers ─────────────────────────────────────────────
 
 export async function selectForm(formName?: RegExp | string) {
-  const trigger = findSelectTrigger(/Form/i);
+  const trigger = findSelectTrigger(/^Pilih Formulir$/i);
   await act(async () => { fireEvent.click(trigger); });
   const listbox = await screen.findByRole("listbox");
   const options = within(listbox).getAllByText(formName || /FORM PERMOHONAN/i);
