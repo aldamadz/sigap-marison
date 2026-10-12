@@ -212,7 +212,7 @@ try {
     const revisionOutput = run(psqlArgs, read("supabase/tests/requester_data_attachment_revision.integration.sql"));
     if (!revisionOutput.includes("Requester corrections: all assertions passed")) throw new Error("Missing requester correction marker");
     process.stdout.write(revisionOutput);
-    if (process.argv.includes("--recommendation-revision")) {
+    if (process.argv.includes("--recommendation-revision") || process.argv.includes("--requester-edit")) {
       run(psqlArgs, canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "validate_recommendation_items"));
       run(psqlArgs, `alter table public.surat_attachments add column if not exists created_by uuid;
         alter table public.surat_recommendation_tasks add column if not exists submitted_surat_id uuid,
