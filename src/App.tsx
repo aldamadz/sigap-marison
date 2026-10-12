@@ -51,6 +51,7 @@ const JobTitleDisplayOverridesPage = lazy(() => import("./pages/admin/JobTitleDi
 const EmailNotificationSettingsPage = lazy(() => import("./pages/admin/EmailNotificationSettingsPage"));
 const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrationPage"));
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
+const AccessConfigurationPage = lazy(() => import("./pages/admin/AccessConfigurationPage"));
 
 // Konfigurasi Query Client
 const queryClient = new QueryClient({
@@ -229,6 +230,7 @@ const App = () => {
   <Route path="numbering" element={<LetterNumberCounterPage />} />
   <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
   <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
+  <Route path="access" element={<AccessConfigurationPage />} />
 </Route>
         </Route>
 

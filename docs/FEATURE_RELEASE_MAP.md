@@ -1,5 +1,27 @@
 # SIGAP Feature and Release Map
 
+## AUTH-08 / SUR-25 Delegated Issuing Office (2026-10-12, Issue #539)
+
+- Candidate `feature/delegated-submission-office-01` from main `594c81f`;
+  target staging only. No production grant or rollout authorized for this feature.
+- Admin-only `/admin/configuration/access` manages explicit per-user office grants
+  for `submission.issue_for_office`. No admin role, signing authority, general
+  configuration access or office-wide document visibility is granted implicitly.
+- Employee primary office and department remain unchanged. The selected issuing
+  office drives projects, numbering, office snapshots and canonical signer candidates.
+  KC sees its descendant external projects; KCP sees only its own. A KC grant does
+  not permit issuing as descendant KCPs; those require their own explicit grants.
+- Selection precedes form/project/number; changing office clears dependent input.
+  After reservation the office is immutable. Draft RPC lookup includes office,
+  project and supplied entity/type to avoid cross-office numeric-counter ambiguity.
+- Forward migration `20261012140000`: RLS-protected grants, append-only grant/revoke
+  audit, canonical allocator/core guards and draft/document/reservation validation.
+  Revocation blocks new allocation/draft save/submission, not historical approval
+  or PDF background updates. No change to employee profiles or old document numbers.
+- Source verification includes disposable PostgreSQL authorization, scope,
+  revocation, immutable office, equal counter numbers across offices and audit/RLS;
+  UI/service tests cover grant races and context. Live evidence belongs to Issue #539.
+
 ## MRN-13 External-only Active Projects (2026-10-09, Issue #521)
 
 - `fix/external-project-source-only-01` from main; staging first, selective production.

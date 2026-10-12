@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { accessService } from './access.service';
 import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
 import { validateInitialRegistrationAttachments } from "@/lib/registration-attachment-validation";
@@ -295,9 +296,12 @@ export const suratService = {
     if (!isAdmin && (!profile?.office_id || !profile?.department_id)) {
       throw new Error("Kantor dan departemen profil akun belum lengkap. Hubungi administrator.");
     }
-    if (!isAdmin && (payload.no_surat || payload.draft_id || payload.reservation_id)
-      && (payload.office_id !== profile.office_id || payload.dept_id !== profile.department_id)) {
-      throw new Error("Kantor atau departemen pengajuan tidak sesuai profil akun. Batalkan draft lama dan buat nomor surat baru.");
+    const issuingOfficeId = payload.office_id || profile.office_id;
+    if (!isAdmin && payload.dept_id && payload.dept_id !== profile.department_id) {
+      throw new Error("Departemen pengajuan tidak sesuai profil akun.");
+    }
+    if (!isAdmin && issuingOfficeId !== profile.office_id && !await accessService.canIssueForOffice(issuingOfficeId)) {
+      throw new Error("Kantor penerbit tidak diizinkan. Hubungi administrator.");
     }
     const requesterProfile = isAdmin && payload?._requester_profile_override
       ? { ...profile, ...payload._requester_profile_override }
@@ -306,7 +310,7 @@ export const suratService = {
       ? payload
       : {
           ...payload,
-          office_id: profile.office_id,
+          office_id: issuingOfficeId,
           dept_id: profile.department_id,
         };
 

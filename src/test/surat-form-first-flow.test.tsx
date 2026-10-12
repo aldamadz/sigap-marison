@@ -69,18 +69,19 @@ afterEach(() => {
 });
 
 describe("SUR-01 form-first acceptance", () => {
-  it("1-3. initial hanya Form; Kegunaan muncul setelah Form; lokasi setelah Kegunaan", async () => {
+  it("1-3. kantor sebelum Form; Kegunaan setelah Form; departemen setelah Kegunaan", async () => {
     await mountForm();
     expect(screen.getByText("Pilih Formulir")).toBeInTheDocument();
     expect(screen.queryByText("Kegunaan")).not.toBeInTheDocument();
     expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Kantor Pengajuan')).toBeInTheDocument();
 
     await selectForm();
     expect(screen.getByText("Kegunaan")).toBeInTheDocument();
     expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
 
     await selectUsage();
-    expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Departemen/i)).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 
@@ -149,14 +150,14 @@ describe("SUR-01 form-first acceptance", () => {
     await selectFormAndUsage(/Permohonan Aset/i);
     await selectLetterType();
     await selectEntity();
-    expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kantor Pengajuan/i)).toBeInTheDocument();
 
     await selectForm(/PERUBAHAN/i);
 
     // Kegunaan + lokasi + signer konteks lama bersih; nomor terkunci.
     const usageTrigger = findSelectTrigger(/Kegunaan/i);
     expect(usageTrigger).toHaveTextContent(/Pilih kegunaan dan alur approval/i);
-    expect(screen.queryByText(/Kantor Penerbit/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Kantor Pengajuan/i)).toBeInTheDocument();
     const numberBtn = screen.getByRole("button", { name: /Dapatkan Nomor Surat/i });
     expect(numberBtn).toBeDisabled();
     expect(serviceMock.generateNoSurat).not.toHaveBeenCalled();
@@ -177,7 +178,7 @@ describe("SUR-01 form-first acceptance", () => {
     expect(screen.getByRole("button", { name: /Tidak perlu rekomendasi/i })).toHaveAttribute("aria-pressed", "true");
     const usageTrigger = findSelectTrigger(/Kegunaan/i);
     expect(usageTrigger).toHaveTextContent(/Permohonan Aset Dua/i);
-    expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kantor Pengajuan/i)).toBeInTheDocument();
   });
 
   it("12. lokasi profil terkunci tampil read-only", async () => {
@@ -185,7 +186,7 @@ describe("SUR-01 form-first acceptance", () => {
     await selectFormAndUsage();
     // Profil default role=user (non-admin): Kantor & Departemen terkunci
     // tapi tetap tampil sebagai informasi, bukan disembunyikan.
-    const officeTrigger = findSelectTrigger(/Kantor Penerbit/i);
+    const officeTrigger = findSelectTrigger(/Kantor Pengajuan/i);
     expect(officeTrigger).toHaveTextContent(/Kantor Pusat/i);
     expect(officeTrigger).toBeDisabled();
     const deptTrigger = findSelectTrigger(/Departemen/i);

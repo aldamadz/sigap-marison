@@ -30,6 +30,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/configuration': 'Configuration',
   '/admin/configuration/integration': 'Integrasi Marison',
   '/admin/configuration/kpi': 'SLA Departemen',
+  '/admin/configuration/access': 'Hak Akses',
   '/admin/settings': 'Pengaturan',
   '/audit-logs': 'Audit Log',
   '/settings': 'Pengaturan',
