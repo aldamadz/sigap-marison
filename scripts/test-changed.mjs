@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
   if (/external_only.*projects.*\.sql$/u.test(file)) gates.add("external-project-source-sql");
   if (/branch_fund.*\.sql$|test-letter-number-reuse-sql\.mjs$/u.test(file)) gates.add("branch-fund-numbering-sql");
   if (/fund_rab_and_unit_revision_parity.*\.sql$|test-fund-rab-and-unit-revision-parity-sql\.mjs$/u.test(file)) gates.add("fund-rab-unit-revision-parity-sql");
@@ -128,7 +129,8 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
-  if (gate === "external-project-source-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--external-projects"]);
+  if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
+  else if (gate === "external-project-source-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--external-projects"]);
   else if (gate === "branch-fund-numbering-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--branch-fund"]);
   else if (gate === "fund-rab-unit-revision-parity-sql") run("node", ["scripts/test-fund-rab-and-unit-revision-parity-sql.mjs"]);
   else if (gate === "dynamic-branch-reporting-sql") run("node", ["scripts/test-dynamic-branch-reporting-sql.mjs"]);

@@ -151,12 +151,13 @@ export function isProfileLocationReady(
   profile: { office_id?: string | null; department_id?: string | null } | null | undefined,
   form: { office_id?: string | null; dept_id?: string | null },
   isAdmin: boolean,
+  allowedOfficeIds: readonly string[] = [],
 ): boolean {
   return Boolean(profile) && (
     isAdmin || (
       Boolean(profile?.office_id) &&
       Boolean(profile?.department_id) &&
-      form.office_id === profile?.office_id &&
+      (form.office_id === profile?.office_id || allowedOfficeIds.includes(form.office_id || '')) &&
       form.dept_id === profile?.department_id
     )
   );

@@ -86,7 +86,7 @@ describe("Flow 1: Aset Tanpa Rekomendasi", () => {
     await selectFormAndUsage();
     expect(screen.getByText("Pilih Formulir")).toBeInTheDocument();
     expect(screen.getByText("Kegunaan")).toBeInTheDocument();
-    expect(screen.getByText(/Kantor Penerbit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kantor Pengajuan/i)).toBeInTheDocument();
     assertStrictServiceCalls();
   });
 

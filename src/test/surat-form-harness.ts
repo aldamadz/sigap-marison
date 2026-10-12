@@ -19,6 +19,9 @@ import { vi, type Mock } from "vitest";
 
 vi.mock("@/services/surat.service", () => ({ suratService: serviceMock }));
 vi.mock("@/lib/supabase", () => ({ supabase: supabaseMock }));
+vi.mock('@/services/access.service', () => ({ accessService: {
+  getIssuingOfficeIds: async () => [],
+} }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
 vi.mock("@/components/app/AppDialogProvider", () => ({
   useAppDialog: () => ({ confirm: confirmMock }),
