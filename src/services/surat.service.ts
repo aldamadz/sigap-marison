@@ -877,7 +877,7 @@ export const suratService = {
         middleCode = `${deptCode}.${tIndex}`;
       } else {
         const projCode = projectRes.data?.code || defaultProjectCode || "000";
-        const projectSegment = isBranchKeu1WithoutProject || isBranchFundWithoutProject ? "" : `-${projCode}`;
+        const projectSegment = `-${projectIdClean ? projCode : "000"}`;
         if (office?.kedudukan === "KC") {
           middleCode = `${office.code}${projectSegment}.${dIndex}.${tIndex}`;
         } else {

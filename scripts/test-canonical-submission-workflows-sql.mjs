@@ -31,11 +31,15 @@ const officerHelpers = branchReportingFallback.slice(branchReportingFallback.ind
 const officerMigration = readFileSync("supabase/migrations/20261008170000_related_branch_review_signer_candidates.sql", "utf8").replace(/\r\n/g, "\n");
 const officerAssertions = readFileSync("supabase/tests/related_branch_review_signer_candidates.integration.sql", "utf8");
 const fundChecklist = process.argv.includes("--fund-checklist");
-const fundChecklistSql = fundChecklist
+const requesterRab = process.argv.includes("--requester-rab");
+const fundChecklistSql = fundChecklist || requesterRab
   ? readFileSync("supabase/tests/fund_item_checklist.setup.sql", "utf8")
     + readFileSync("supabase/migrations/20261007090000_fund_item_verification_and_realtime.sql", "utf8")
     + readFileSync("supabase/migrations/20261007090000_fund_item_verification_and_realtime.sql", "utf8")
     + readFileSync("supabase/tests/fund_item_checklist.integration.sql", "utf8")
+    + (requesterRab ? readFileSync("supabase/migrations/20261007110000_fund_requester_rab_choice.sql", "utf8")
+      + readFileSync("supabase/migrations/20261007110000_fund_requester_rab_choice.sql", "utf8")
+      + readFileSync("supabase/tests/fund_requester_rab.integration.sql", "utf8") : "")
   : "";
 
 const sql = `
@@ -368,13 +372,14 @@ try {
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready.");
-  const executedSql = fundChecklist ? sql.slice(0, sql.indexOf(nonPlanningMigration)) + fundChecklistSql : sql;
+  const executedSql = fundChecklist || requesterRab ? sql.slice(0, sql.indexOf(nonPlanningMigration)) + fundChecklistSql : sql;
   const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres"], executedSql);
   if (!output.includes("SUR-17 canonical submission workflows: all assertions passed")) {
     throw new Error(`SQL success marker missing.\n${output}`);
   }
-  if (fundChecklist) {
+  if (fundChecklist || requesterRab) {
     if (!output.includes("Fund item checklist: all assertions passed")) throw new Error("Fund checklist regression marker missing.");
+    if (requesterRab && !output.includes("Requester RAB: all assertions passed")) throw new Error("Requester RAB regression marker missing.");
     process.stdout.write(output);
   } else {
   if (!output.includes("Non-Planning checker defaults: all assertions passed")) {
