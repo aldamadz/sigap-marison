@@ -310,6 +310,18 @@ describe("work calendar PDF and history collection", () => {
     expect(rows[0].entry.title).not.toBe("Changed after click");
     expect(rows.every(row => row.timing.durationMinutes === 180)).toBe(true);
   });
+  it("keeps ordinary multiline rows together across page boundaries", () => {
+    const entries = Array.from({ length: 40 }, (_, index) => makeEntry({
+      id: `normal-${index}`, title: `TASK${index}START ${"normal task description ".repeat(8)} TASK${index}END`,
+    }));
+    const doc = buildWorkCalendarPdf({ rows: entries.map(entry => ({ entry, timing: timing(entry, []), reportDate: "2026-03-10", statusKnown: true })),
+      owner, fromDate: "2026-03-10", toDate: "2026-03-10", now: new Date(at("18:00")) });
+    const source = Buffer.from(doc.output("arraybuffer")).toString("latin1");
+    const pages = [...source.matchAll(/stream\r?\n([\s\S]*?)endstream/g)].map(match => match[1]);
+    for (let index = 0; index < entries.length; index++) {
+      expect(pages.some(page => page.includes(`TASK${index}START`) && page.includes(`TASK${index}END`))).toBe(true);
+    }
+  });
 
   it("rejects mixed subordinate ownership before reads, even deleted foreign entries", async () => {
     const input = exportInput([makeEntry(), makeEntry({ id: "foreign", ownerId: "subordinate", deletedAt: at("10:00") })]);
