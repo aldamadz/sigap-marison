@@ -1,6 +1,6 @@
 # Hak Akses Kantor Pengajuan
 
-Feature: AUTH-08 / SUR-25. Issue: #539. Target awal: staging.
+Feature: AUTH-08 / SUR-25. Issue: #539; promosi selektif dan koreksi draft #546.
 
 Admin membuka `/admin/configuration/access`, mencari pengguna aktif non-admin,
 lalu memilih kantor tambahan dan menyimpan hak akses. Kantor profil selalu
@@ -35,6 +35,11 @@ Migration `20261012140000_delegated_issuing_office.sql` harus diterapkan sebelum
 aplikasi baru. Migration menambah tabel/RPC/guard; tidak memindahkan karyawan
 atau mengubah surat lama. Patch fungsi lama memeriksa anchor dan berhenti jika
 implementasi remote tidak dikenali. Jangan menjalankan repair/include-all.
+Migration korektif `20261013090000_delegated_draft_payload_context.sql` diperlukan
+sesudahnya: UI menyimpan identitas di `payload.formData`, sedangkan caller lama
+menggunakan payload datar. Kedua format divalidasi tanpa mengganti format simpan;
+konteks yang bertentangan ditolak. Pengambilan nomor, simpan dan autosave diuji
+melalui RPC asli, termasuk Dana Marketing Pusat dan izin kantor cabang.
 
 Acceptance SQL disposable menggunakan:
 

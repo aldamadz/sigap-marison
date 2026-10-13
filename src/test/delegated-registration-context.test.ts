@@ -34,4 +34,12 @@ describe('delegated registration service context', () => {
       .rejects.toThrow('Departemen pengajuan tidak sesuai');
     expect(mock.rpc).not.toHaveBeenCalled();
   });
+  it('retains the wizard wrapper and surfaces a real draft RPC error', async () => {
+    const payload = { formData: { office_id: 'solo', form_input_data: { fund_type: 'marketing_cost' } }, selectedUsageId: 'marketing' };
+    await suratService.createRegistrationDraft({ noUrut: 1, noSurat: '001/UAI/PBO.1/X/2026', payload, signerAssignments: [] });
+    expect(mock.rpc).toHaveBeenCalledWith('create_surat_registration_draft', expect.objectContaining({ p_payload: payload }));
+    mock.rpc.mockResolvedValue({ data: null, error: { message: 'Kantor draft tidak sesuai reservasi nomor.' } });
+    await expect(suratService.createRegistrationDraft({ noUrut: 1, noSurat: '001/UAI/PBO.1/X/2026', payload, signerAssignments: [] }))
+      .rejects.toThrow('Kantor draft tidak sesuai reservasi nomor.');
+  });
 });
