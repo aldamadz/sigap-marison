@@ -74,7 +74,7 @@ const buildHeader = (data, logoDataUrl, totalPages) => ({
           body: [
             [{ text: "No form", bold: true }, { text: data.formNumber, bold: true, alignment: "center" }],
             [{ text: "Berlaku tanggal", bold: true }, { text: "01 Januari 2024", alignment: "center" }],
-            [{ text: "Halaman", bold: true }, { text: `1 dari ${totalPages}`, alignment: "center" }],
+            [{ text: "Halaman", bold: true }, { text: data.revisionHistory?.length ? "1 (lihat footer)" : `1 dari ${totalPages}`, alignment: "center" }],
           ],
         },
         layout: borderLayout,
@@ -231,6 +231,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
   pageOrientation: "landscape",
   pageMargins: [18, 14, 18, 14],
   defaultStyle: { font: "Roboto", fontSize: 8, color: BORDER },
+  footer: (page, total) => ({ text: `Halaman ${page} dari ${total}`, fontSize: 7, alignment: "right", margin: [18, 0, 18, 0] }),
   content: [
     ...buildMainPage(data, logoDataUrl, 1 + pages.length),
     ...pages.flatMap((page) => {
