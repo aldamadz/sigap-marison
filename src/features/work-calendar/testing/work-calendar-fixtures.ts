@@ -354,7 +354,6 @@ export function createFixtureWorkEntryRepository(
         next.completedAt = current.status === "completed" ? current.completedAt : now;
       } else {
         next.completedAt = null;
-        next.realization = null;
       }
       if (next.status !== "blocked") next.blockedReason = null;
       store.set(entryId, next);

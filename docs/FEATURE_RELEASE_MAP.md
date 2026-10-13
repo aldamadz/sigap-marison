@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## CAL-03 Provisional Result Persistence (2026-10-13, Issue #559)
+
+- Preserve `realization` for planned, in-progress, blocked and reopened tasks;
+  explicit empty input still clears it. Completion still requires a result.
+- Forward-only migration `20261013130000_work_calendar_preserve_partial_results`
+  replaces only the before-change trigger. No stored-row rewrite, event type,
+  RLS/ACL, timing, owner, lifecycle or notification change.
+- Detail saves/refreshes retain provisional results. Historical PDF continues
+  to use recorded completion results, never the later current-row result;
+  provisional per-day result history is not invented or backfilled.
+- PostgreSQL owner/foreign/anon, optimistic concurrency, normalization, length,
+  completion/reopen, immutable fields, delete and migration replay tests.
+  Staging then selective production authorized; live evidence belongs to #559.
+
 ## ADM-01 / ADM-02 Organization Reference Contract (2026-10-13, Issue #555)
 
 - Native admin-user validation selects only canonical master columns:
