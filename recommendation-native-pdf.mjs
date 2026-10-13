@@ -3,6 +3,7 @@ import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import sharp from "sharp";
 import { buildRecommendationPagePlan } from "./recommendation-pdf.mjs";
 import { buildNativeSignatureBlock, loadLogoDataUrl, normalizeNativeSignatures } from "./pgd-pdf-renderer.mjs";
+import { revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -73,7 +74,7 @@ const buildHeader = (data, logoDataUrl, totalPages) => ({
           body: [
             [{ text: "No form", bold: true }, { text: data.formNumber, bold: true, alignment: "center" }],
             [{ text: "Berlaku tanggal", bold: true }, { text: "01 Januari 2024", alignment: "center" }],
-            [{ text: "Halaman", bold: true }, { text: `1 dari ${totalPages}`, alignment: "center" }],
+            [{ text: "Halaman", bold: true }, { text: data.revisionHistory?.length ? "1 (lihat footer)" : `1 dari ${totalPages}`, alignment: "center" }],
           ],
         },
         layout: borderLayout,
@@ -217,6 +218,7 @@ export const normalizeRecommendationDocumentData = (source = {}, options = {}) =
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.HRD-30-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/REKOMENDASI"),
+    revisionHistory: revisionHistoryEntries(source),
     placeDate: [text(source.request_place, ""), formatDateId(source.request_date)].filter(Boolean).join(", ") || "-",
     notes: text(input.catatan || source.notes, ""),
     items: Array.isArray(options.items) ? options.items : [],
@@ -229,6 +231,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
   pageOrientation: "landscape",
   pageMargins: [18, 14, 18, 14],
   defaultStyle: { font: "Roboto", fontSize: 8, color: BORDER },
+  footer: (page, total) => ({ text: `Halaman ${page} dari ${total}`, fontSize: 7, alignment: "right", margin: [18, 0, 18, 0] }),
   content: [
     ...buildMainPage(data, logoDataUrl, 1 + pages.length),
     ...pages.flatMap((page) => {
@@ -258,6 +261,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
         ],
       }];
     }),
+    ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
   ],
 });
 

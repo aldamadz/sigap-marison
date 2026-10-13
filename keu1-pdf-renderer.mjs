@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { signerRevisionNotes, revisionNotesBlock } from "./document-revision-notes.mjs";
+import { signerRevisionNotes, revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import {
@@ -122,6 +122,7 @@ export const normalizeKeu1DocumentData = (source = {}, options = {}) => {
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.KEU-01-00"),
     revisionNotes: signerRevisionNotes(source),
+    revisionHistory: revisionHistoryEntries(source),
     isRejected: isNativeDocumentRejected(source, signatures, targetStep),
     noSurat: text(source.no_surat, "DRAFT/UAI/KEU/VI/2026"),
     branch: officeName,
@@ -340,7 +341,6 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
         margin: [0, 3, 0, 3],
       },
       ...nativeDocumentRejectionBlock(data.isRejected),
-      ...revisionNotesBlock(data.revisionNotes),
       {
         columns: [
           { width: "55%", text: "" },
@@ -359,6 +359,7 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
           },
         ],
       },
+      ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
     ],
   };
 };

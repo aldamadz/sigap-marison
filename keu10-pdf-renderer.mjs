@@ -1,5 +1,5 @@
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
-import { signerRevisionNotes, revisionNotesBlock } from "./document-revision-notes.mjs";
+import { signerRevisionNotes, revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import { normalizeKeu1DocumentData } from "./keu1-pdf-renderer.mjs";
 import {
@@ -123,6 +123,7 @@ export const normalizeKeu10DocumentData = (source = {}, options = {}) => {
   return {
     formNumber: formNumber(identity),
     revisionNotes: signerRevisionNotes(source),
+    revisionHistory: revisionHistoryEntries(source),
     isRejected: isNativeDocumentRejected(source, signatures, targetStep),
     noSurat: text(source.no_surat, "DRAFT"),
     branch: text(location.office?.name || source.office_name, "-"),
@@ -285,10 +286,10 @@ export const buildKeu10DocumentDefinition = (data, logoDataUrl = null) => {
             layout: borderLayout,
           },
           ...nativeDocumentRejectionBlock(data.isRejected),
-          ...revisionNotesBlock(data.revisionNotes),
           { ...buildSignatureBlock(data.signatures), margin: [82, 4, 0, 0] },
         ],
       },
+      ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
     ],
   };
 };

@@ -1,5 +1,28 @@
 # SIGAP Feature and Release Map
 
+## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
+
+- Candidate `fix/revision-appendix-external-20261013` from production main,
+  selected for staging then production. Depends on DOC-10 readiness and queue
+  correction (#563), including already verified migration `20261013150000`.
+- PGD, KEU 1, KEU 10 and recommendation renderers append revision evidence on
+  separate pages after the original form. Canonical requester snapshots show
+  before/after values, additions/removals and attachment metadata. Legacy reasons
+  remain visible without inventing missing historical values or exposing file links.
+- PDF worker reads revision history only for the matching document/signature
+  source; frozen KEU 10 decisions and previous signer cutoff remain authoritative.
+- Fund approval maps Supervisor/SPV to the existing vendor staff role while
+  retaining manager/director priority and fail-closed unknown role handling.
+- Production outbound worker still targets the old Ubuntu application. The
+  coordinated operator rollout must persist its internal URL to Proxmox primary,
+  pin its existing image, preserve credentials and keep a single worker instance.
+- User authorized recovery of exactly three terminal jobs proven never POSTed.
+  Canonical reconciliation and its audit trail must be used after release. The
+  already POSTed SPK Unit HTTP 422 job is excluded: its frozen type 3052 differs
+  from the current external reference type 30; no replacement/resend is implied.
+- No new migration, public endpoint, schema/RLS or approval mutation. Changed
+  tests, native PDF visual verification and exact runtime ancestry are release gates.
+
 ## REC-03 / DOC-05 / SUR-05 Approval Document Consistency (2026-10-13, Issue #563)
 
 - Forward-only `20261013150000` excludes only `parent_workbook_source` from

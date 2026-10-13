@@ -48,3 +48,108 @@ export function signerRevisionNotes(source = {}) {
 export function revisionNotesBlock(notes = []) {
   return notes.length ? [{ margin: [0, 6, 0, 6], stack: notes.map((text, index) => ({ text, fontSize: 8, bold: index === 0, margin: [0, 0, 0, 3] })) }] : [];
 }
+
+const labels = {
+  nama_barang: "Nama barang / pekerjaan", keterangan: "Keterangan", jumlah: "Jumlah",
+  satuan: "Satuan", sat: "Satuan", nominal: "Nominal", estimasi_harga_satuan: "Harga satuan",
+  catatan: "Catatan", status: "Status", fund_amount: "Total dana", free_cash: "Free Cash",
+  keu1_free_cash: "Free Cash", rab_not_required: "Tidak memerlukan RAB", request_date: "Tanggal",
+  request_place: "Tempat", judul_surat: "Judul pengajuan", fund_type: "Jenis dana",
+};
+const ignored = /(^id$|_id$|file_url|storage_|file_path|pdf_path|token|secret|password|revision|generation|^linked_|^request_category$)/i;
+const label = key => labels[key] || key.replaceAll("_", " ");
+const plain = value => {
+  if (value == null || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Ya" : "Tidak";
+  if (Array.isArray(value)) return value.map(plain).join("; ") || "-";
+  if (typeof value === "object") return Object.entries(value).filter(([key]) => !ignored.test(key))
+    .map(([key,entry]) => `${label(key)}: ${plain(entry)}`).join("; ") || "-";
+  // A file-view bearer is not revision evidence and must not leak into a report.
+  return String(value).replace(/https?:\/\/\S*\/api\/files\/view\/\S+/g, "[Tautan file privat]");
+};
+const equivalent = (a,b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const inputOf = snapshot => object(object(snapshot).document).form_input_data || object(snapshot).form_input_data || {};
+const describeFile = file => [file.file_name || file.name || "Lampiran",file.file_type || "",
+  Number.isFinite(Number(file.file_size)) ? `${Math.round(Number(file.file_size)/1024)} KB` : "",
+  file.requirement_label || file.stage || ""].filter(Boolean).join(" | ");
+const diffRecord = (before,after,prefix,result) => {
+  for (const key of new Set([...Object.keys(before),...Object.keys(after)])) {
+    if (ignored.test(key) || key === "items" || equivalent(before[key],after[key])) continue;
+    result.push({ field: `${prefix}${label(key)}`, before: plain(before[key]), after: plain(after[key]),
+      action: before[key] == null ? "Ditambahkan" : after[key] == null ? "Dihapus" : "Diubah" });
+  }
+};
+
+export function revisionHistoryEntries(source = {}) {
+  const history = rows(source.revision_history).filter(entry => entry.before_snapshot && entry.after_snapshot);
+  const current = object(object(source.data_snapshot).revision);
+  const applied = Object.keys(current).length ? current : object(object(source.data_snapshot).applied_revision);
+  const baseline = object(object(applied.changes).requester_revision_base);
+  const eventId = applied.event_id || applied.revision_event_id || applied.id;
+  if (!history.some(entry => entry.revision_event_id && entry.revision_event_id === eventId)
+      && Object.keys(baseline).length) {
+    history.push({ revision_event_id: eventId, reason: applied.reason,
+      before_snapshot: baseline, after_snapshot: {document:source,
+        ...(Array.isArray(source.revision_attachments) ? {attachments:source.revision_attachments} : {})} });
+  }
+  const entries = history.map((entry,index) => {
+    const before = object(inputOf(entry.before_snapshot));
+    const after = object(inputOf(entry.after_snapshot));
+    const changes = [];
+    diffRecord(before,after,"",changes);
+    const beforeItems = rows(before.items), afterItems = rows(after.items);
+    const matched = new Set();
+    beforeItems.forEach((item,itemIndex) => {
+      const nextIndex = item.id ? afterItems.findIndex(next => next.id === item.id)
+        : afterItems[itemIndex] && !afterItems[itemIndex].id ? itemIndex : -1;
+      const next = nextIndex >= 0 ? afterItems[nextIndex] : null;
+      if (!next) changes.push({field:`Item ${itemIndex+1}`,before:plain(item),after:"-",action:"Dihapus"});
+      else { matched.add(nextIndex);diffRecord(item,next,`Item ${itemIndex+1} (${item.nama_barang || item.keterangan || next.nama_barang || next.keterangan || "Rincian"}) - `,changes); }
+    });
+    afterItems.forEach((item,itemIndex) => {
+      if (!matched.has(itemIndex)) changes.push({field:`Item ${itemIndex+1}`,before:"-",after:plain(item),action:"Ditambahkan"});
+    });
+    const oldFiles = rows(object(entry.before_snapshot).attachments);
+    const newFiles = rows(object(entry.after_snapshot).attachments);
+    const fileKey = file => `${file.file_url || file.storage_path || file.id}|${file.requirement_key || ""}`;
+    const completeFiles = Array.isArray(object(entry.before_snapshot).attachments) && Array.isArray(object(entry.after_snapshot).attachments);
+    for (const file of completeFiles ? oldFiles : []) if (!newFiles.some(next => fileKey(next) === fileKey(file)))
+      changes.push({field:"Lampiran",before:describeFile(file),after:"-",action:"Dihapus"});
+    for (const file of completeFiles ? newFiles : []) {
+      const previous = oldFiles.find(old => fileKey(old) === fileKey(file));
+      if (!previous) changes.push({field:"Lampiran",before:"-",after:describeFile(file),action:"Ditambahkan"});
+      else if (describeFile(previous)!==describeFile(file)) changes.push({field:"Lampiran",before:describeFile(previous),after:describeFile(file),action:"Diubah"});
+    }
+    // Form labels/date/title can change independently of form_input_data.
+    const documentBefore = object(object(entry.before_snapshot).document);
+    const documentAfter = object(object(entry.after_snapshot).document);
+    for (const key of ["judul_surat","request_date","request_place"]) if (key in documentBefore && !equivalent(documentBefore[key],documentAfter[key]))
+      changes.push({field:label(key),before:plain(documentBefore[key]),after:plain(documentAfter[key]),action:"Diubah"});
+    return { title:`Perbaikan ${index+1}`,reason:plain(entry.reason),note:plain(entry.requester_note),
+      at:entry.submitted_at || "",actor:entry.submitted_by_name || "",changes };
+  });
+  if (!entries.length) {
+    const notes = signerRevisionNotes(source);
+    if (notes.length) entries.push({title:notes[0],reason:notes[1] || "-",note:"-",at:"",actor:"",changes:[],legacyNotes:notes.slice(2)});
+  }
+  return entries;
+}
+
+export function revisionAppendixBlock(entries = [], noSurat = "") {
+  if (!entries.length) return [];
+  const cell = text => ({text,fontSize:8,margin:[0,3,0,3]});
+  return [
+    {text:"RIWAYAT PERBAIKAN PENGAJUAN",pageBreak:"before",bold:true,fontSize:14,margin:[0,0,0,4]},
+    {text:noSurat,fontSize:9,margin:[0,0,0,12]},
+    ...entries.flatMap(entry => [
+      {text:[entry.title,entry.actor,entry.at ? new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"}) : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
+      {text:`Alasan: ${entry.reason}`,fontSize:8,margin:[0,0,0,4]},
+      ...(entry.note && entry.note!=="-" ? [{text:`Catatan pemohon: ${entry.note}`,fontSize:8,margin:[0,0,0,4]}] : []),
+      ...(entry.changes.length ? [{table:{headerRows:1,widths:["24%","12%","32%","32%"],body:[
+        ["Data / Lampiran","Perubahan","Sebelum","Sesudah"].map(text=>({...cell(text),bold:true,fillColor:"#e2f0d9"})),
+        ...entry.changes.map(change=>[change.field,change.action,change.before,change.after].map(cell)),
+      ]},layout:{hLineWidth:()=>0.4,vLineWidth:()=>0.4,hLineColor:()=>"#94a3b8",vLineColor:()=>"#94a3b8"},margin:[0,2,0,10]}]
+        : (entry.legacyNotes || ["Rincian sebelum/sesudah tidak tersedia pada riwayat lama."]).map(text=>({text,fontSize:8,margin:[0,0,0,4]}))),
+    ]),
+  ];
+}

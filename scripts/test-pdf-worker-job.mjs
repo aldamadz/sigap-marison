@@ -9,7 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob } from "../server/pdf-worker-job.mjs";
+import { createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob, loadRequesterRevisionHistory } from "../server/pdf-worker-job.mjs";
 import {
   isPgdDocument,
   resolvePgdMasterForm,
@@ -100,6 +100,7 @@ const makeChain = (result) => {
     select: () => chain,
     eq: () => chain,
     order: () => chain,
+    range: () => chain,
     in: () => chain,
     maybeSingle: () => p,
     then: (res, rej) => p.then(res, rej),
@@ -110,6 +111,19 @@ const makeChain = (result) => {
 
 const makeSupabase = (tableMap) => ({
   from: (table) => makeChain(tableMap[table] || { data: null, error: null }),
+});
+
+test("revision history is source/time-bound and excludes later edits from signature PDFs", async () => {
+  const past={submitted_at:"2026-10-01T01:00:00Z",before_snapshot:{},after_snapshot:{}};
+  const future={submitted_at:"2099-10-03T01:00:00Z",before_snapshot:{},after_snapshot:{}};
+  const client=makeSupabase({surat_requester_revision_history:{data:[past,future],error:null}});
+  const job={surat_id:"document",source_file_path:"source",created_at:"2026-10-02T01:00:00Z"};
+  assert.deepEqual(await loadRequesterRevisionHistory(client,job,{file_path:"source"}),[past]);
+  assert.deepEqual(await loadRequesterRevisionHistory(client,job,{file_path:"other"}),[]);
+  assert.deepEqual(await loadRequesterRevisionHistory(client,{...job,created_at:"2026-09-30T01:00:00Z"},{file_path:"source"}),[past]);
+  assert.deepEqual(await loadRequesterRevisionHistory(client,job,{file_path:"other"},{file_path_snap:"source",signed_at:"2026-10-02T01:00:00Z"}),[past]);
+  assert.deepEqual(await loadRequesterRevisionHistory(client,job,{file_path:"source"},{file_path_snap:"source",signed_at:null}),[]);
+  await assert.rejects(loadRequesterRevisionHistory(makeSupabase({surat_requester_revision_history:{error:new Error("history unavailable")}}),job,{file_path:"source"}),/history unavailable/);
 });
 
 // Distinct nomor_form: must differ from the normalizer default "FM-UAI.PGD-01-00"
