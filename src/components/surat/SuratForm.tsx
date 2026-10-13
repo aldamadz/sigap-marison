@@ -53,6 +53,7 @@ import { buildInitialAttachmentMeta, buildRegistrationSubmitPayload } from "@/fe
 import { executeExternalRevisionSubmit, getExternalRevisionSuccessDescription } from "@/features/surat/registration/services/external-revision-submit";
 import { executeRecommendationPostSubmit } from "@/features/surat/recommendation/services/recommendation-post-submit";
 import { supabase } from "@/lib/supabase";
+import { accessService } from '@/services/access.service';
 import { reconcileSignerAssignments } from "@/lib/signer-assignment-reconciliation";
 import { selectInitialRegistrationDraftAttachments } from "@/lib/registration-draft-attachment-classification";
 import { REQUESTER_ADDITIONAL_ATTACHMENT_KEY, validateOptionalAttachmentFiles, withOptionalRequesterAttachmentRequirement } from "@/lib/optional-surat-attachments";
@@ -88,7 +89,7 @@ import { NominalInput } from "@/components/surat/NominalInput";
 import {
   resolveNonUnitProjectMapping,
 } from "@/components/surat/non-unit-request";
-import { getDescendantOfficeIds } from "@/lib/office-hierarchy";
+import { projectsForIssuingOffice } from '@/features/surat/registration/lib/issuing-office-context';
 import {
   canDepartmentRequestUnit,
   getExternalInputFields,
@@ -215,6 +216,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const [externalLoading, setExternalLoading]     = useState<Record<string, boolean>>({});
   const [externalErrors, setExternalErrors]       = useState<Record<string, string | null>>({});
   const [currentProfile, setCurrentProfile]       = useState<CurrentProfile | null>(null);
+  const [allowedIssuingOfficeIds, setAllowedIssuingOfficeIds] = useState<string[]>([]);
+  const [officeAccessReady, setOfficeAccessReady] = useState(false);
   const [activeRecommendationItem, setActiveRecommendationItem] = useState(0);
   const [requesterDepartmentId, setRequesterDepartmentId] = useState("");
   const [formData, setFormData] = useState({
@@ -842,7 +845,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   const lockProfileLocation = Boolean(currentProfile) && !isCurrentUserAdmin;
   const profileOfficeId = currentProfile?.office_id || "";
   const profileDepartmentId = currentProfile?.department_id || requesterDepartmentId;
-  const profileLocationReady = isProfileLocationReady(currentProfile, formData, isCurrentUserAdmin);
+  const profileLocationReady = officeAccessReady && isProfileLocationReady(currentProfile, formData, isCurrentUserAdmin, allowedIssuingOfficeIds);
+  const issuingOfficeOptions = useMemo(() => master.offices.filter(office =>
+    isCurrentUserAdmin || office.id === profileOfficeId || allowedIssuingOfficeIds.includes(office.id)),
+  [master.offices, isCurrentUserAdmin, profileOfficeId, allowedIssuingOfficeIds]);
 
   const filteredUsage = useMemo(() => {
     return usageDetails.filter((item) => {
@@ -897,8 +903,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const filteredProjects = useMemo(() => {
     if (isPusatSelected || !master.projects) return [];
-    return master.projects.filter((p: MasterRecord) => p.office_id === formData.office_id);
-  }, [master.projects, formData.office_id, isPusatSelected]);
+    return projectsForIssuingOffice(master.projects, master.offices, formData.office_id);
+  }, [master.projects, master.offices, formData.office_id, isPusatSelected]);
 
   const selectedProject = useMemo(
     () => master.projects?.find((p: MasterRecord) => p.id === formData.project_id) ?? null,
@@ -1057,18 +1063,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   );
   const nonUnitProjectCandidates = useMemo(() => {
     if (isPusatSelected) return master.projects || [];
-    if (!formData.office_id || !master.projects) return [];
-
-    const selectedOffice = master.offices?.find((o) => o.id === formData.office_id);
-    const isKantorCabang = selectedOffice?.kedudukan === "KC";
-
-    if (isKantorCabang) {
-      const allowedOfficeIds = getDescendantOfficeIds(master.offices || [], formData.office_id);
-      return master.projects.filter((p: MasterRecord) => allowedOfficeIds.has(String(p.office_id)));
-    }
-
     return filteredProjects;
-  }, [filteredProjects, isPusatSelected, master.projects, master.offices, formData.office_id]);
+  }, [filteredProjects, isPusatSelected, master.projects]);
   const readyNonUnitProjects = useMemo(
     () => nonUnitProjectCandidates.filter((project) =>
       resolveNonUnitProjectMapping(project, master.offices).ready
@@ -1456,21 +1452,25 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
           .eq("id", user.id)
           .single();
         if (error) throw error;
+        const issuingOfficeIds = await accessService.getIssuingOfficeIds();
         if (!cancelled) {
           const departmentId = data?.department_id || "";
           const officeId = data?.office_id || "";
           const isAdmin = ["admin", "super_admin"].includes(String(data?.role || "").toLowerCase());
           setCurrentProfile(data as CurrentProfile);
+          setAllowedIssuingOfficeIds(issuingOfficeIds);
+          setOfficeAccessReady(true);
           setRequesterDepartmentId(departmentId);
           setFormData(prev => ({
             ...prev,
-            office_id: isAdmin ? prev.office_id : officeId,
+            office_id: isAdmin || issuingOfficeIds.includes(prev.office_id) ? prev.office_id : officeId,
             dept_id: isAdmin ? (prev.dept_id || departmentId) : departmentId,
           }));
         }
       })
       .catch(() => {
         if (!cancelled) {
+          setOfficeAccessReady(false);
           toast({
             variant: "destructive",
             title: "Profil Tidak Lengkap",
@@ -1480,6 +1480,20 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
       });
     return () => { cancelled = true; };
   }, [toast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshOfficeAccess = async () => {
+      try {
+        const ids = await accessService.getIssuingOfficeIds();
+        if (!cancelled) { setAllowedIssuingOfficeIds(ids); setOfficeAccessReady(true); }
+      } catch {
+        if (!cancelled) setOfficeAccessReady(false);
+      }
+    };
+    window.addEventListener('focus', refreshOfficeAccess);
+    return () => { cancelled = true; window.removeEventListener('focus', refreshOfficeAccess); };
+  }, []);
 
   useEffect(() => {
     if (externalRevision || !formData.office_id || signers.length === 0 || master.users.length === 0) return;
@@ -1767,6 +1781,18 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   }, [selectedUsage, externalVariables, isUnitMode]);
 
   // ── HANDLERS ───────────────────────────────────────────────────────────────
+  const handleIssuingOfficeChange = (officeId: string) => {
+    if (generatedNoSurat || !issuingOfficeOptions.some(o => o.id === officeId)) return;
+    setSelectedUsage(null);
+    setSelectedFormId('');
+    setSigners([]);
+    setExternalOptions({});
+    setManualTitleOverride(false);
+    setManualPlaceOverride(false);
+    setFormData(prev => ({ ...prev, office_id: officeId, project_id: '', entity_id: '',
+      dept_id: lockProfileLocation ? profileDepartmentId : '', form_usage_id: '', penggunaan_id: '',
+      judul_surat: '', request_place: '', form_input_data: {} }));
+  };
   const handleProjectChange = (projectId: string) => {
     const proj = master.projects?.find((p: MasterRecord) => p.id === projectId);
     setFormData(prev => ({
@@ -3740,6 +3766,19 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
             <h2 className="text-base font-semibold text-foreground">Form & Lokasi</h2>
           </div>
 
+          <div className="max-w-lg space-y-2">
+            <Label htmlFor="issuing-office">Kantor Pengajuan</Label>
+            <Select disabled={!!generatedNoSurat || draftLoading || !officeAccessReady || issuingOfficeOptions.length < 2}
+              value={formData.office_id} onValueChange={handleIssuingOfficeChange}>
+              <SelectTrigger id="issuing-office" className="h-11"><SelectValue placeholder="Pilih kantor" /></SelectTrigger>
+              <SelectContent>
+                {issuingOfficeOptions.map(office => <SelectItem key={office.id} value={office.id}>
+                  {office.kedudukan === 'Pusat' ? 'Kantor Pusat' : `${office.kedudukan}. ${office.name}`}
+                </SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Form & Kegunaan */}
           {!generatedNoSurat && !draftLoading && (
             <div className="grid gap-4 rounded-2xl border border-border bg-muted/10 p-4 md:grid-cols-2">
@@ -3839,24 +3878,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 ? activeUsageData.module.renderContextPanel(moduleCtx) : null}
 
               <div className="grid grid-cols-1 gap-5 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-2 md:p-5 mt-4">
-                {/* Kantor */}
-                <div className="space-y-2">
-                  <Label className="ml-1 text-xs font-semibold text-muted-foreground">Kantor Penerbit</Label>
-                  <Select disabled={!!generatedNoSurat || lockProfileLocation} value={formData.office_id}
-                    onValueChange={v => setFormData({ ...formData, office_id: v, project_id: "", dept_id: "", entity_id: "" })}>
-                    <SelectTrigger className="h-11">
-                      <SelectValue placeholder="Pilih Kantor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {master.offices?.map((o: MasterRecord) => (
-                        <SelectItem key={o.id} value={o.id}>
-                          {o.kedudukan === "Pusat" ? "🏢 Kantor Pusat" : `🏗️ ${o.kedudukan}. ${o.name}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Entitas */}
                 <div className="space-y-2">
                   <Label className="ml-1 text-xs font-semibold text-muted-foreground">Entitas (PT)</Label>

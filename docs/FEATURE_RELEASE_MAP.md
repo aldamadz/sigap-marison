@@ -1,5 +1,27 @@
 # SIGAP Feature and Release Map
 
+## AUTH-08 / SUR-25 Delegated Issuing Office (2026-10-12, Issue #539)
+
+- Candidate `feature/delegated-submission-office-01` from main `594c81f`;
+  target staging only. No production grant or rollout authorized for this feature.
+- Admin-only `/admin/configuration/access` manages explicit per-user office grants
+  for `submission.issue_for_office`. No admin role, signing authority, general
+  configuration access or office-wide document visibility is granted implicitly.
+- Employee primary office and department remain unchanged. The selected issuing
+  office drives projects, numbering, office snapshots and canonical signer candidates.
+  KC sees its descendant external projects; KCP sees only its own. A KC grant does
+  not permit issuing as descendant KCPs; those require their own explicit grants.
+- Selection precedes form/project/number; changing office clears dependent input.
+  After reservation the office is immutable. Draft RPC lookup includes office,
+  project and supplied entity/type to avoid cross-office numeric-counter ambiguity.
+- Forward migration `20261012140000`: RLS-protected grants, append-only grant/revoke
+  audit, canonical allocator/core guards and draft/document/reservation validation.
+  Revocation blocks new allocation/draft save/submission, not historical approval
+  or PDF background updates. No change to employee profiles or old document numbers.
+- Source verification includes disposable PostgreSQL authorization, scope,
+  revocation, immutable office, equal counter numbers across offices and audit/RLS;
+  UI/service tests cover grant races and context. Live evidence belongs to Issue #539.
+
 ## MRN-13 External-only Active Projects (2026-10-09, Issue #521)
 
 - `fix/external-project-source-only-01` from main; staging first, selective production.
@@ -716,3 +738,17 @@ verifikasi juga runtime, database, worker, dan smoke test.
 - Affected tests and disposable PostgreSQL cover photo retention/removal, redaction-only
   save, forged identity/file rejection, reopening, audit and duplicate submission.
   Source tests are not a claim that a production document was resubmitted.
+
+## AUTH-08 / SUR-25 Selected Promotion and Draft Context (2026-10-13, Issue #546)
+
+- Selectively promote original issuing-office access commits #539, excluding their
+  staging merge ancestry. The only permission is `submission.issue_for_office`;
+  employee profile, department, approval rights and admin role are not replaced.
+- Forward correction `20261013090000` after `20261012140000` reads the wizard's
+  nested `formData` context as well as legacy flat payloads, rejecting conflicting
+  identities. The original draft payload and saved selections are preserved.
+- This fixes a staging number-success/draft-save failure affecting HQ Marketing
+  Fund creation, without bypassing office authorization or reservation ownership.
+- Disposable PostgreSQL tests cover wrapped create/autosave, flat compatibility,
+  conflicting context, immutable office, revocation, HQ Marketing and KC/KCP scope.
+  Live acceptance and release identities belong to Issue #546, not inferred here.
