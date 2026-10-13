@@ -18,7 +18,7 @@ export async function getUsers(): Promise<User[]> {
         office_id, department_id, parent_id,
         marison_employee_id, marison_synced_at, marison_review_required, marison_review_reasons,
         master_departments ( name ),
-        master_offices ( name )
+        master_offices!profiles_office_id_new_fkey ( name )
       `)
       .is('deleted_at', null)
       .order('full_name', { ascending: true });
@@ -47,7 +47,7 @@ export async function getUsers(): Promise<User[]> {
     });
   } catch (error) {
     console.error('Error fetching users:', error);
-    return [];
+    throw new Error('Gagal memuat data karyawan. Coba lagi.');
   }
 }
 
@@ -117,7 +117,7 @@ export async function getSubordinates(parentId: string): Promise<User[]> {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*, master_departments(name), master_offices(name)')
+      .select('*, master_departments(name), master_offices!profiles_office_id_new_fkey(name)')
       .eq('parent_id', parentId);
 
     if (error) throw error;

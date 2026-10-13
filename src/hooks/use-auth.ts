@@ -25,7 +25,7 @@ export const useAuth = () => {
         .from('profiles')
         .select(`
           *,
-          master_offices (name)
+          master_offices!profiles_office_id_new_fkey (name)
         `)
         .eq('id', sessionUser.id)
         .single();
