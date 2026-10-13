@@ -22,6 +22,9 @@ if (canonicalDraftBinding.test(completionWithoutDraftBinding)) {
 }
 const pdfCacheMigration = readFileSync("supabase/migrations/20260818173000_rec03_reuse_current_recommendation_pdf.sql", "utf8");
 const parentApprovalGateMigration = readFileSync("supabase/migrations/20260819090000_fix_recommendation_parent_approval_gate.sql", "utf8");
+const transportReadiness = readFileSync("supabase/migrations/20261013150000_recommendation_parent_transport_readiness.sql", "utf8");
+const transportTest = readFileSync("supabase/tests/recommendation_parent_transport.integration.sql", "utf8");
+const transportOnly = process.argv.includes("--transport");
 const assertions = readFileSync("supabase/tests/recommendation_multi_detail.integration.sql", "utf8");
 const canonicalFixture = readFileSync("fixtures/recommendation-multi-detail-v1.json", "utf8").replaceAll("'", "''");
 const fixture = `
@@ -106,5 +109,9 @@ const id=run(["run","-d","-e","POSTGRES_PASSWORD=test","postgres:17-alpine"]).tr
 try{
  let ready=false;for(let attempt=0;attempt<30&&!ready;attempt+=1){ready=spawnSync("docker",["exec",id,"pg_isready","-h","127.0.0.1","-U","postgres","-d","postgres"],{encoding:"utf8"}).status===0;if(!ready)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw new Error("Disposable PostgreSQL did not become ready");
- process.stdout.write(run(["exec","-i",id,"psql","-h","127.0.0.1","-U","postgres","-d","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+partialRecoveryMigration+registrationWithoutRecovery+completionWithoutDraftBinding+restoredRecoveryMigration+restoredRecoveryMigration+pdfCacheMigration+parentApprovalGateMigration+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture)));
+ const baseline = fixture+migration+beforeNoDispatchMigration+noDispatchMigration+fileLinkMigration+partialRecoveryMigration+registrationWithoutRecovery+completionWithoutDraftBinding+restoredRecoveryMigration+restoredRecoveryMigration+pdfCacheMigration;
+ const input = transportOnly
+   ? baseline+transportTest.replace("-- APPLY TRANSPORT FIX",() => transportReadiness+transportReadiness)
+   : baseline+parentApprovalGateMigration+transportReadiness+transportReadiness+assertions.replace("__CANONICAL_FIXTURE__",canonicalFixture);
+ process.stdout.write(run(["exec","-i",id,"psql","-h","127.0.0.1","-U","postgres","-d","postgres","-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose"],input));
 }finally{run(["rm","-f",id]);}

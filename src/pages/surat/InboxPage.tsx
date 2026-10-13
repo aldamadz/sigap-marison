@@ -2652,21 +2652,22 @@ const handleApprove = async (item: any) => {
   };
 
   const renderQueueItem = (item: any) => {
-    const surat = item.surat_registrasi || {};
+    const surat = getInboxSurat(item) || {};
     const requester = surat.requester_snapshot || surat.data_snapshot?.requester || {};
-    const department = surat.location_snapshot?.department?.name || surat.data_snapshot?.location?.department?.name || "Departemen tidak tersedia";
-    const category = formatRequestCategory(surat.form_input_data?.request_category || surat.data_snapshot?.request_category);
+    const department = item.requester_department || surat.location_snapshot?.department?.name || surat.data_snapshot?.location?.department?.name || "Departemen tidak tersedia";
+    const category = formatRequestCategory(item.request_category || surat.form_input_data?.request_category || surat.data_snapshot?.request_category);
     const kpi = getKpiPresentation(item);
     const taskKey = getInboxTaskKey(item);
     const active = selectedTaskKey === taskKey;
     const requirementCount = getApprovalAttachmentRequirements(item).length;
+    const hasRequirements = requirementCount > 0 || item.has_attachment_requirements === true;
     const verificationTask = isVerificationTask(item);
     return (
       <button type="button" key={taskKey || item.id} onClick={() => taskKey && selectTask(taskKey)} className={cn("w-full rounded-md border px-3 py-3 text-left transition-colors", active ? "border-primary bg-primary/[0.08]" : "border-border hover:bg-muted/40")} data-testid={"inbox-task-" + (taskKey || item.id)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-mono text-[11px] font-semibold text-primary">{surat.no_surat || "Nomor diproses"}</p>
-            <h3 className="mt-1 truncate text-sm font-semibold leading-snug">{surat.judul_surat}</h3>
+            <p className="truncate font-mono text-[11px] font-semibold text-primary">{item.no_surat || surat.no_surat || "Nomor diproses"}</p>
+            <h3 className="mt-1 truncate text-sm font-semibold leading-snug">{item.judul_surat || surat.judul_surat || "Pengajuan tanpa judul"}</h3>
           </div>
           <Badge
             variant="outline"
@@ -2680,13 +2681,13 @@ const handleApprove = async (item: any) => {
             {kpi.label}
           </Badge>
         </div>
-        <p className="mt-1 truncate text-xs text-muted-foreground">{requester.full_name || "Pengaju tidak tersedia"} · {department}</p>
+        <p className="mt-1 truncate text-xs text-muted-foreground">{item.requester_name || requester.full_name || "Pengaju tidak tersedia"} · {department}</p>
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{category}</Badge>
             {verificationTask && <Badge variant="outline" className="h-5 border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] text-sky-700 dark:text-sky-300">Pemeriksaan</Badge>}
             {item.requires_unit_allocation && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">Unit</Badge>}
-            {requirementCount > 0 && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{requirementCount} lampiran</Badge>}
+            {hasRequirements && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{requirementCount > 0 ? `${requirementCount} lampiran` : "Lampiran"}</Badge>}
           </div>
           <span className="shrink-0 text-[11px] text-muted-foreground">{kpi.detail}</span>
         </div>
