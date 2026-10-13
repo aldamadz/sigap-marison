@@ -41,7 +41,6 @@ const profile = (overrides: Partial<AdminUserProfileRow> = {}): AdminUserProfile
 const department = (overrides: Partial<AdminUserDepartmentRow> = {}): AdminUserDepartmentRow => ({
   id: DEPARTMENT_ID,
   name: "Marketing",
-  is_active: true,
   ...overrides,
 });
 
@@ -49,7 +48,6 @@ const office = (overrides: Partial<AdminUserOfficeRow> = {}): AdminUserOfficeRow
   id: OFFICE_ID,
   name: "Kantor Pusat",
   kedudukan: "Pusat",
-  is_active: true,
   ...overrides,
 });
 
@@ -193,6 +191,16 @@ const validPayload = {
 };
 
 describe("admin-user validation", () => {
+  it("updates a Pusat supervisor with canonical department and office rows", async () => {
+    const { runtime, ports } = createRuntime({ readJsonBody: async () => validPayload }, {
+      profiles: [profile(), profile({ id: PARENT_ID, email: "manager@example.test", nik: "MANAGER" })],
+    });
+    const write = vi.spyOn(ports.repository, "updateProfile");
+    const result = await runtime.updateUser({}, NEW_USER_ID);
+    expect(write).toHaveBeenCalledWith(NEW_USER_ID, expect.objectContaining({ parent_id: PARENT_ID }));
+    expect(result.user.parent_id).toBe(PARENT_ID);
+  });
+
   it("preserves the configured supervisor for Kost instead of applying BM rules", async () => {
     const { runtime, ports } = createRuntime({ readJsonBody: async () => validPayload }, {
       profiles: [profile({ id: PARENT_ID, email: "kost.supervisor@example.test", nik: "KOST-SPV" })],
