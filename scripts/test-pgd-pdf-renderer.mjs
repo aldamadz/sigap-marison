@@ -185,6 +185,7 @@ test("keeps revised signature groups together and never drops items after row 15
   assert.equal((await renderPgdPdf(data)).subarray(0,5).toString(),"%PDF-");
   data.items = Array.from({length:19},(_,index) => ({no:index+1,name:`Item ${index+1}`}));
   const longDefinition = buildPgdDocumentDefinition(data);
+  assert.equal(longDefinition.content[3].table.dontBreakRows,true);
   assert.equal(longDefinition.content[3].table.body.length,20);
   assert.match(JSON.stringify(longDefinition),/Item 19/);
 });
