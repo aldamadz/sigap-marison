@@ -17,6 +17,12 @@ merupakan kandidat staging terpisah.
 
 ## Ekspor PDF Harian (CAL-04, Kandidat #528)
 
+Hasil pekerjaan dapat disimpan sementara melalui detail saat pekerjaan masih
+direncanakan, dikerjakan, atau terhambat. Status tidak otomatis menjadi selesai.
+Mengosongkan hasil secara sengaja menghapus isinya; status Selesai tetap
+memerlukan hasil. PDF historis memakai hasil penyelesaian yang tercatat pada
+hari terkait, bukan hasil sementara terbaru dari baris pekerjaan.
+
 - Judul Kalender Kerja dipisahkan dari nama dan jabatan pemilik laporan.
 - Tanggal memakai format **Jumat, 09 Oktober 2026**, tanpa tulisan Asia/Jakarta.
   Perhitungan tetap memakai tanggal dan jam kantor yang sama.

@@ -103,7 +103,7 @@ describe("work calendar carry-forward", () => {
     expect(completed.workDate).toBe(dates[0]);
     const reopened = await repository.updateEntry({ entryId: entry.id, expectedUpdatedAt: completed.updatedAt, patch: { status: "planned" } });
     expect(reopened.completedAt).toBeNull();
-    expect(reopened.realization).toBeNull();
+    expect(reopened.realization).toBe("Done");
     expect((await repository.listEntryEvents({ entryId: entry.id })).map((event) => event.type))
       .toEqual(["created", "status_changed", "status_changed"]);
   });
