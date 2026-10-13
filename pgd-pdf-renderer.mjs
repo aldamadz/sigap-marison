@@ -458,6 +458,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
       {
         table: {
           headerRows: 1,
+          dontBreakRows: true,
           widths: ["3%", "8%", "57%", "5%", "7%", "7%", "13%"],
           heights: (row) => row === 0 ? 12 : 9,
           body: [
