@@ -5,14 +5,16 @@ import { join } from "node:path";
 const migrationsDir = "supabase/migrations";
 const carryoverMigration = "20261006080000_work_calendar_carryover_deadlines.sql";
 const carryoverTest = "work_calendar_carryover_deadlines.integration.sql";
+const resultsMigration = "20261013130000_work_calendar_preserve_partial_results.sql";
+const resultsTest = "work_calendar_partial_results.integration.sql";
 const mode = process.argv[2] ?? "--all";
-if (!["--all", "--baseline", "--carryover"].includes(mode) || process.argv.length > 3) {
-  throw new Error("Usage: node scripts/test-work-calendar-sql.mjs [--all|--baseline|--carryover]");
+if (!["--all", "--baseline", "--carryover", "--results"].includes(mode) || process.argv.length > 3) {
+  throw new Error("Usage: node scripts/test-work-calendar-sql.mjs [--all|--baseline|--carryover|--results]");
 }
 
 // Historic assertions and the new contract need separate disposable databases.
 if (mode === "--all") {
-  for (const suite of ["--baseline", "--carryover"]) {
+  for (const suite of ["--baseline", "--carryover", "--results"]) {
     const result = spawnSync(process.execPath, [process.argv[1], suite], { stdio: "inherit" });
     if (result.error) throw result.error;
     if (result.status !== 0) process.exit(result.status ?? 1);
@@ -24,6 +26,7 @@ const migrationFiles = readdirSync(migrationsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
   .filter((name) => !name.endsWith("_work_calendar_bootstrap.sql"))
   .filter((name) => !name.endsWith("_work_calendar_notification_scope.sql"))
+  .filter((name) => name !== resultsMigration)
   .filter((name) => mode !== "--baseline" || name !== carryoverMigration)
   .sort();
 
@@ -41,7 +44,8 @@ const testFiles = readdirSync(testsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
   .filter((name) => name !== "work_calendar_bootstrap.integration.sql")
   .filter((name) => name !== "work_calendar_notification_scope.integration.sql")
-  .filter((name) => mode === "--carryover" ? name === carryoverTest : mode !== "--baseline" || name !== carryoverTest)
+  .filter((name) => mode === "--results" ? name === resultsTest : name !== resultsTest)
+  .filter((name) => mode === "--results" || (mode === "--carryover" ? name === carryoverTest : mode !== "--baseline" || name !== carryoverTest))
   .sort();
 
 const assertions = testFiles
@@ -281,6 +285,38 @@ ${migrations}
 
 ${replacementContractSql}
 
+${mode === "--results" ? `
+-- Prove the old trigger discards an otherwise valid user result.
+insert into public.profiles(id,full_name) values ('55999999-0000-4000-8000-000000000001','Pre-fix preservation');
+insert into public.work_calendar_entries(id,owner_id,work_date,title,status,realization) values
+  ('55999999-0000-4000-8000-000000000002','55999999-0000-4000-8000-000000000001','2026-10-13','Pre-fix','in_progress','Valid partial result');
+do $$ begin
+  if (select realization from public.work_calendar_entries where id='55999999-0000-4000-8000-000000000002') is not null then
+    raise exception 'Expected old trigger regression was not reproduced';
+  end if;
+end $$;
+create temp table results_rows_before as select to_jsonb(e) row from public.work_calendar_entries e;
+create temp table results_policies_before as select * from pg_policy;
+create temp table results_function_before as select oid,proacl,proowner,prosecdef,proconfig from pg_proc
+  where oid='public.work_calendar_entries_before_change()'::regprocedure;
+${readFileSync(join(migrationsDir, resultsMigration), "utf8")}
+${readFileSync(join(migrationsDir, resultsMigration), "utf8")}
+do $$ begin
+  if exists((select to_jsonb(e) from public.work_calendar_entries e except select row from results_rows_before)
+    union all (select row from results_rows_before except select to_jsonb(e) from public.work_calendar_entries e)) then
+    raise exception 'Migration rewrote stored tasks';
+  end if;
+  if exists((select * from pg_policy except select * from results_policies_before)
+    union all (select * from results_policies_before except select * from pg_policy)) then
+    raise exception 'Migration changed RLS';
+  end if;
+  if exists(select 1 from results_function_before b join pg_proc a on a.oid=b.oid
+    where row(a.proacl,a.proowner,a.prosecdef,a.proconfig) is distinct from row(b.proacl,b.proowner,b.prosecdef,b.proconfig)) then
+    raise exception 'Migration changed trigger privilege contract';
+  end if;
+end $$;
+` : ""}
+
 -- Run integration tests
 ${assertions}
 `;
@@ -323,7 +359,7 @@ try {
     "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
   ], baseSchemaSql);
 
-  if (mode !== "--carryover" && (
+  if (mode === "--baseline" && (
     !output.includes("CAL-03 work calendar integration: all assertions passed") ||
     !output.includes("CAL-03 work calendar lifecycle integration: all assertions passed") ||
     !output.includes("CAL-03 work calendar holidays integration: all assertions passed") ||
@@ -334,9 +370,12 @@ try {
   )) {
     throw new Error("SQL runner did not see all success markers.\n" + output);
   }
-  if (mode !== "--baseline" &&
+  if (mode === "--carryover" &&
       !output.includes("CAL-03 carryover deadlines integration: all assertions passed")) {
     throw new Error("SQL runner did not see the carryover success marker.\n" + output);
+  }
+  if (mode === "--results" && !output.includes("CAL-03 partial results integration: all assertions passed")) {
+    throw new Error("SQL runner did not see the partial results success marker.\n" + output);
   }
   process.stdout.write(output);
 } finally {

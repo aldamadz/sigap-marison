@@ -64,6 +64,26 @@ async function openDetail(entryId: string): Promise<HTMLElement> {
 }
 
 describe("WorkCalendarWorkspace — CAL-03 F5 siklus hidup", () => {
+  it.each(["planned", "in_progress", "blocked"] as const)("preserves a result through detail save and reopen while %s", async (status) => {
+    const id = `partial-${status}`;
+    const { repository } = renderWorkspace([createFixtureWorkEntry({
+      id, status, blockedReason: status === "blocked" ? "Waiting for input" : null,
+    })]);
+    await openDetail(id);
+    fireEvent.click(screen.getByTestId(`work-entry-detail-edit-${id}`));
+    fireEvent.change(await screen.findByLabelText("Hasil pekerjaan"), { target: { value: "  Hasil sementara  " } });
+    fireEvent.click(screen.getByRole("button", { name: /Simpan detail/i }));
+    await waitFor(async () => {
+      const entry = await repository.getEntryById({ entryId: id });
+      expect(entry?.realization).toBe("Hasil sementara");
+      expect(entry?.status).toBe(status);
+      expect(entry?.completedAt).toBeNull();
+    });
+    fireEvent.click(screen.getByTestId(`work-entry-detail-close-${id}`));
+    const detail = await openDetail(id);
+    expect(within(detail).getByText("Hasil sementara", { exact: true })).toBeInTheDocument();
+  });
+
   it("shows no deadline when absent in detail and editor", async () => {
     renderWorkspace([createFixtureWorkEntry({ id: "no-deadline", dueDate: null })]);
     const detail = await openDetail("no-deadline");
