@@ -3,6 +3,7 @@ import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import sharp from "sharp";
 import { buildRecommendationPagePlan } from "./recommendation-pdf.mjs";
 import { buildNativeSignatureBlock, loadLogoDataUrl, normalizeNativeSignatures } from "./pgd-pdf-renderer.mjs";
+import { revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -217,6 +218,7 @@ export const normalizeRecommendationDocumentData = (source = {}, options = {}) =
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.HRD-30-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/REKOMENDASI"),
+    revisionHistory: revisionHistoryEntries(source),
     placeDate: [text(source.request_place, ""), formatDateId(source.request_date)].filter(Boolean).join(", ") || "-",
     notes: text(input.catatan || source.notes, ""),
     items: Array.isArray(options.items) ? options.items : [],
@@ -258,6 +260,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
         ],
       }];
     }),
+    ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
   ],
 });
 

@@ -107,6 +107,7 @@ for (const file of allChangedFiles) {
   if (/related_branch_review_signer_candidates.*\.sql$|test-keu10-workflow-sql\.mjs$/u.test(file)) gates.add("branch-officers-keu10-sql");
   if (/requester.*(revision|correction|follow_up_sla).*\.sql$|test-requester-revision|pdf_approval_decision_status.*\.sql$/u.test(file)) gates.add("test:requester-revision-sql");
   if (/document-revision-notes\.mjs$|test-requester-revision-pdf\.mjs$|signer-revision-preview/u.test(file)) gates.add("test:requester-revision-pdf");
+  if (/document-revision-notes\.mjs$|test-revision-appendix\.mjs$/u.test(file)) gates.add("revision-appendix-pdf");
   if (/test-pdf-rejection\.mjs$|pdf_approval_decision_status\.sql$/.test(file)) gates.add("test:pdf-rejection");
   if (/keu10.*pdf.*\.mjs$/u.test(file)) gates.add("test:keu10-pdf");
   if (/keu10.*\.sql$|test-keu10-workflow-sql\.mjs$/u.test(file)) gates.add("test:keu10-workflow-sql");
@@ -131,6 +132,7 @@ for (const file of allChangedFiles) {
 
 for (const gate of gates) {
   if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
+  else if (gate === 'revision-appendix-pdf') run('node', ['--test','scripts/test-revision-appendix.mjs']);
   else if (gate === 'recommendation-transport-sql') run('node', ['scripts/test-rec03-sql.mjs', '--transport']);
   else if (gate === "external-project-source-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--external-projects"]);
   else if (gate === "branch-fund-numbering-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--branch-fund"]);

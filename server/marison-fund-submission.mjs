@@ -48,6 +48,8 @@ export const normalizeMarisonFundApprovalRole = (value) => {
   if (role === "pemohon") return "staff";
   if (/\b(direktur|director|direksi|dirut)\b/u.test(role)) return "director";
   if (/\b(manager|manajer|kepala|head|pimpinan|mgr)\b/u.test(role)) return "manager";
+  // Vendor has only staff/manager/director; supervisors are non-manager makers.
+  if (/\b(supervisor|superviser|spv)\b/u.test(role)) return "staff";
   if (/\b(staff|staf|officer|specialist|admin|pelaksana)\b/u.test(role)) return "staff";
 
   const error = new Error("Role approval Fund Submission tidak dikenali.");

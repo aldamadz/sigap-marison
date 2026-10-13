@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import { buildPgdSignatureSlotPlan, buildSignatureLayoutPlan } from "./document-layout-rules.mjs";
-import { signerRevisionNotes, revisionNotesBlock } from "./document-revision-notes.mjs";
+import { signerRevisionNotes, revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -54,26 +54,6 @@ const normalizeRole = (value) => {
 
 const asObject = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
-const parseRevisionItemChanges = (source = {}) => {
-  const snapshot = asObject(source?.data_snapshot);
-  const revision = asObject(snapshot.revision);
-  const appliedRevision = asObject(snapshot.applied_revision);
-  const effectiveRevision = Object.keys(revision).length > 0 ? revision : appliedRevision;
-  const changes = asObject(effectiveRevision.changes);
-  const rows = Array.isArray(changes.item_revisions) ? changes.item_revisions : [];
-  return rows
-    .filter((row) => row && typeof row === "object" && !Array.isArray(row))
-    .map((row) => ({
-      index: Number(row.index),
-      action: String(row.action || "keep").trim(),
-      valueType: String(row.value_type || row.revision_value_type || ""),
-      nilaiDiajukan: row.nilai_diajukan ?? "",
-      nilaiDisetujui: row.nilai_disetujui ?? "",
-      alasan: String(row.alasan || row.reason || "").trim(),
-    }))
-    .filter((row) => Number.isFinite(row.index) && row.index >= 0);
-};
-
 const parseRecommendationItemDecisions = (source = {}) => {
   const snapshot = asObject(source?.data_snapshot);
   const direct = Array.isArray(snapshot.recommendation_decisions) ? snapshot.recommendation_decisions : [];
@@ -100,30 +80,6 @@ const formatMoneyId = (value) => {
   const amount = Number(normalized);
   if (!Number.isFinite(amount)) return raw;
   return `Rp ${amount.toLocaleString("id-ID")}`;
-};
-
-const formatRevisionValue = (value, item = {}) => {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  if (/^rp\b/i.test(raw)) return raw;
-  const unit = String(item.sat || item.unit || item.satuan || "").trim();
-  if (/^unit$/i.test(unit) && /^\d+([.,]\d+)?$/.test(raw)) return `${raw} unit`;
-  return formatMoneyId(raw);
-};
-
-const buildRevisionNote = (change, item = {}) => {
-  if (!change) return "";
-  const parts = [];
-  if (change.action === "reject") parts.push("Tidak disetujui");
-  if (change.action === "adjust") {
-    const format = value => change.valueType === "quantity" || change.valueType === "text" || change.valueType === "recommendation"
-      ? String(value ?? "").trim() : change.valueType === "unit_count" ? `${value} unit` : formatRevisionValue(value,item);
-    const approved = format(change.nilaiDisetujui);
-    const requested = format(change.nilaiDiajukan);
-    parts.push(`Nilai disetujui: ${approved || "-"}${requested ? ` dari ${requested}` : ""}`);
-  }
-  if (change.alasan) parts.push(change.alasan);
-  return parts.join(" - ");
 };
 
 export const isPgdDocument = (source = {}) => {
@@ -194,7 +150,6 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const input = source.form_input_data || source?.data_snapshot?.input || {};
   const location = source.location_snapshot || {};
   const items = Array.isArray(input.items) ? input.items : [];
-  const revisionChanges = parseRevisionItemChanges(source);
   const recommendationDecisions = parseRecommendationItemDecisions(source);
   const isFund = input.request_category === "non_asset";
   const targetStep = Number(options.targetStep || 0);
@@ -202,14 +157,14 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.PGD-01-00"),
     revisionNotes: signerRevisionNotes(source),
+    revisionHistory: revisionHistoryEntries(source),
     isRejected: isNativeDocumentRejected(source, signatures, targetStep),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
     isAsset: source.is_aset === true || input.request_category === "asset",
     department: text(location?.department?.name || source.department_name, "-"),
     project: text(input?.requested_project?.name || location?.project?.name || source.project_name, "-"),
     placeDate: [text(source.request_place, ""), formatDateId(source.request_date)].filter(Boolean).join(", ") || "Magelang, 1 Juli 2026",
-    items: items.slice(0, 15).map((item, index) => {
-      const change = revisionChanges.find((entry) => entry.index === index);
+    items: items.map((item, index) => {
       const itemName = String(item.nama_barang || item.name || "").trim().toLowerCase();
       const recommendationDecision = recommendationDecisions.find((entry) =>
         entry.index === index || (entry.parentName && entry.parentName === itemName)
@@ -217,7 +172,6 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
       const recommendationNote = recommendationDecision && !recommendationDecision.isRecommended
         ? `Tidak direkomendasikan: ${recommendationDecision.reason || "Tidak direkomendasikan oleh tim rekomendasi."}`
         : "";
-      const revisionNote = buildRevisionNote(change, item);
       const baseNote = text(item.keterangan || item.note, "");
       const nominalNote = isFund && item.nominal != null
         ? `Nominal: ${formatMoneyId(item.nominal)}`
@@ -229,8 +183,8 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
         unit: text(item.sat || item.unit || item.satuan, ""),
         quantity: text(item.jumlah || item.quantity, ""),
         status: text(item.status, ""),
-        note: [baseNote, nominalNote, recommendationNote, revisionNote].filter(Boolean).join("\n"),
-        revisionAction: recommendationNote ? "reject" : change?.action || "",
+        note: [baseNote, nominalNote, recommendationNote].filter(Boolean).join("\n"),
+        revisionAction: recommendationNote ? "reject" : "",
       };
     }),
     notes: [
@@ -372,9 +326,7 @@ const selectionMarker = (checked) => ({
 });
 
 export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
-  // Revision evidence needs room; never remove populated items to fit a page.
-  const minimumRows = data.revisionNotes?.length ? 10 : 15;
-  const items = Array.from({ length: Math.max(minimumRows, data.items.length) }, (_item, index) => ({
+  const items = Array.from({ length: Math.max(15, data.items.length) }, (_item, index) => ({
     no: index + 1,
     code: "",
     name: "",
@@ -485,7 +437,6 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
         margin: [0, 3, 0, 3],
       },
       ...nativeDocumentRejectionBlock(data.isRejected),
-      ...revisionNotesBlock(data.revisionNotes),
       {
         columns: [
           { width: "60%", text: "" },
@@ -502,6 +453,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
           },
         ],
       },
+      ...revisionAppendixBlock(data.revisionHistory || (data.revisionNotes?.length ? [{title:data.revisionNotes[0],reason:data.revisionNotes[1],changes:[],legacyNotes:data.revisionNotes.slice(2)}] : []),data.noSurat),
     ],
   };
 };

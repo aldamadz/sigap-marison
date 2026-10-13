@@ -30,6 +30,28 @@ export const isCanonicalRecommendationPdfJob = (job, recommendation) =>
 const decisionStatus = (value) => String(value || "").trim().toUpperCase();
 const hasDecision = (signature) => ["APPROVED", "REJECTED"].includes(decisionStatus(signature.status));
 
+export const loadRequesterRevisionHistory = async (supabase, job, surat, targetSignature = null) => {
+  // Never append future/live revisions to an old signature/source snapshot.
+  const source = targetSignature?.file_path_snap || surat.file_path;
+  if (!source || source !== job.source_file_path) return [];
+  // Revision history is inserted after enqueue in the same submit transaction.
+  // A main job's created_at is therefore not the version's history cutoff.
+  const cutoff = targetSignature ? Date.parse(targetSignature.signed_at || "") : Date.now();
+  if (!Number.isFinite(cutoff)) return [];
+  const history = [];
+  for (let page=0;page<20;page+=1) {
+    const {data,error} = await supabase.from("surat_requester_revision_history")
+      .select("revision_event_id,reason,requester_note,submitted_at,submitted_by,before_snapshot,after_snapshot")
+      .eq("surat_id",job.surat_id).order("submitted_at",{ascending:true}).order("id",{ascending:true})
+      .range(page*100,page*100+99);
+    if (error) throw error;
+    const batch = data || [];
+    history.push(...batch.filter(row => Number.isFinite(Date.parse(row.submitted_at)) && Date.parse(row.submitted_at)<=cutoff));
+    if (batch.length<100) return history;
+  }
+  throw new Error("Riwayat revisi terlalu besar untuk dimuat secara lengkap.");
+};
+
 const hydrateLegacyKeu10Payload = async (supabase, job, target) => {
   const payload = job.render_payload;
   const matchesVersion = (document) => document?.id === job.surat_id
@@ -91,7 +113,7 @@ export const createPgdJobHandler = ({
 }) => async (job) => {
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, status, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
+    .select("id, no_surat, status, file_path, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
     .eq("id", job.surat_id)
     .maybeSingle();
   if (suratError) throw suratError;
@@ -110,7 +132,7 @@ export const createPgdJobHandler = ({
 
   const { data: signatures, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot")
+    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot, file_path_snap")
     .eq("surat_id", job.surat_id)
     .order("step_order", { ascending: true });
   if (signatureError) throw signatureError;
@@ -132,7 +154,8 @@ export const createPgdJobHandler = ({
   const targetSignature = job.signature_id
     ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
     : null;
-  const documentData = normalizePgdDocumentData(detectionSource, {
+  const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
+  const documentData = normalizePgdDocumentData({...detectionSource,revision_history:revisionHistory}, {
     signatures: enrichedSignatures,
     targetStep: targetSignature?.step_order || null,
   });
@@ -149,7 +172,7 @@ export const createKeu1JobHandler = ({
 }) => async (job) => {
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, status, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
+    .select("id, no_surat, status, file_path, is_aset, request_place, request_date, form_input_data, data_snapshot, location_snapshot, form_usage_id")
     .eq("id", job.surat_id)
     .maybeSingle();
   if (suratError) throw suratError;
@@ -164,7 +187,7 @@ export const createKeu1JobHandler = ({
 
   const { data: signatures, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot")
+    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot, file_path_snap")
     .eq("surat_id", job.surat_id)
     .order("step_order", { ascending: true });
   if (signatureError) throw signatureError;
@@ -186,7 +209,8 @@ export const createKeu1JobHandler = ({
   const targetSignature = job.signature_id
     ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
     : null;
-  const documentData = normalizeKeu1DocumentData(detectionSource, {
+  const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
+  const documentData = normalizeKeu1DocumentData({...detectionSource,revision_history:revisionHistory}, {
     signatures: enrichedSignatures,
     targetStep: targetSignature?.step_order || null,
   });
@@ -236,7 +260,7 @@ export const createRecommendationJobHandler = ({
 }) => async (job, recommendation) => {
   const { data: surat, error: suratError } = await supabase
     .from("surat_registrasi")
-    .select("id, no_surat, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
+    .select("id, no_surat, file_path, request_place, request_date, form_input_data, data_snapshot, location_snapshot")
     .eq("id", job.surat_id)
     .maybeSingle();
   if (suratError) throw suratError;
@@ -244,7 +268,7 @@ export const createRecommendationJobHandler = ({
 
   const { data: signatures, error: signatureError } = await supabase
     .from("surat_signatures")
-    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot")
+    .select("id, user_id, step_order, role_name, label_jabatan, status, is_signed, signed_at, signer_snapshot, file_path_snap")
     .eq("surat_id", job.surat_id)
     .order("step_order", { ascending: true });
   if (signatureError) throw signatureError;
@@ -252,7 +276,8 @@ export const createRecommendationJobHandler = ({
   const targetSignature = job.signature_id
     ? (signatures || []).find((signature) => signature.id === job.signature_id)
     : null;
-  const data = normalizeRecommendationDocumentData(surat, {
+  const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
+  const data = normalizeRecommendationDocumentData({...surat,revision_history:revisionHistory}, {
     items: recommendation.items,
     signatures: signatures || [],
     targetStep: targetSignature?.step_order || 0,
