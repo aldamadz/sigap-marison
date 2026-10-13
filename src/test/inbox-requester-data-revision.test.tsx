@@ -18,6 +18,7 @@ type Fixture = {
 
 const mocks = vi.hoisted(() => ({
   fixture: {} as Fixture,
+  compact: null as Record<string, unknown> | null,
   noop: vi.fn(),
   requestRevision: vi.fn(),
   prompt: vi.fn(),
@@ -34,7 +35,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 vi.mock("@/features/surat/inbox/lib/use-inbox-pagination", () => ({
   useInboxPagination: () => ({
-    items: [mocks.fixture], total: 1, remaining: 0, hasMore: false, loading: false, error: null, isFetching: false,
+    items: [mocks.compact || mocks.fixture], total: 1, remaining: 0, hasMore: false, loading: false, error: null, isFetching: false,
     detailCache: {}, setDetailCache: mocks.noop, loadMore: mocks.noop, refetch: mocks.noop, refetchFull: mocks.noop,
     finishTaskLocally: mocks.noop, refreshAfterAction: mocks.noop, resetPagination: mocks.noop,
   }),
@@ -72,6 +73,7 @@ const useKeu10 = (role = "verifikator") => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.compact = null;
   mocks.requestRevision.mockResolvedValue({ id: "revision" });
   mocks.prompt.mockResolvedValue(reason);
   Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
@@ -102,6 +104,21 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  it("shows queue identity from flat compact rows without loading every detail", async () => {
+    mocks.compact = { id: "signature", surat_id: "surat", task_type: "approval", step_order: 3,
+      no_surat: "009/UAI/TEST/X/2026", judul_surat: "Pengajuan Dana Operasional: Perawatan",
+      requester_name: "Pemohon Antrean", requester_department: "Umum & Keuangan",
+      request_category: "non_asset", has_attachment_requirements: true };
+    renderInbox();
+    fireEvent.click(screen.getByRole("button", { name: /Antrean/ }));
+    const card = screen.getByTestId("inbox-task-approval:signature");
+    expect(within(card).getByText("009/UAI/TEST/X/2026")).toBeInTheDocument();
+    expect(within(card).getByText("Pengajuan Dana Operasional: Perawatan")).toBeInTheDocument();
+    expect(within(card).getByText("Pemohon Antrean · Umum & Keuangan")).toBeInTheDocument();
+    expect(within(card).getByText("Pengajuan Dana")).toBeInTheDocument();
+    expect(within(card).getByText("Lampiran")).toBeInTheDocument();
+    expect(within(card).queryByText("Nomor diproses")).not.toBeInTheDocument();
+  });
   it.each(["Mgr. HRD & GA", "Mgr. Perencanaan"])("allows %s checkers to request missing RAB/redaction without reducing items", async label => {
     mocks.fixture.task_type = "verification";
     mocks.fixture.role_name = "memeriksa";
