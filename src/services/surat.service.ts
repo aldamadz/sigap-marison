@@ -504,7 +504,7 @@ export const suratService = {
       p_payload: args.payload,
       p_signer_assignments: args.signerAssignments,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message || "Gagal menyimpan draft pengajuan.");
     return data as SuratRegistrationDraft;
   },
 

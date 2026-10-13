@@ -637,6 +637,7 @@ try {
     const assetGuard = guards.match(/create or replace function public\.assert_branch_asset_fallback_eligible\([\s\S]*?\$\$;/)?.[0];
     if (!assetGuard) throw new Error('Canonical asset office guard missing.');
     const delegation = read('20261012140000_delegated_issuing_office');
+    const draftContext = read('20261013090000_delegated_draft_payload_context');
     const output = run(['exec', '-i', id, 'psql', '-h', '127.0.0.1', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres'], `
       alter table public.master_offices add column parent_id uuid;
       create or replace function public.is_current_user_admin() returns boolean language sql security definer as $$
@@ -646,6 +647,8 @@ try {
       ${assetGuard}
       ${delegation}
       ${delegation}
+      ${draftContext}
+      ${draftContext}
       ${readFileSync('supabase/tests/delegated_issuing_office.integration.sql', 'utf8')}
     `);
     if (!output.includes('Delegated issuing office: all assertions passed')) throw new Error(output);

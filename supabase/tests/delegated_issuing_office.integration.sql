@@ -44,8 +44,21 @@ begin
   data := jsonb_build_object('entity_id',entity,'office_id',solo,'project_id',project,'dept_id',dept,
     'letter_type_id',lt,'form_usage_id',usage,'no_surat',lpad(n::text,3,'0')||'/UAI/SOLO/X/2026',
     'form_input_data',jsonb_build_object('request_category','non_asset'));
-  draft := public.create_surat_registration_draft(n,data->>'no_surat',data);
+  draft := public.create_surat_registration_draft(n,data->>'no_surat',jsonb_build_object('formData',data,'selectedUsageId',usage));
   res := draft.reservation_id;
+  if draft.payload#>>'{formData,office_id}' is distinct from solo::text
+    or draft.payload->>'selectedUsageId' is distinct from usage::text then
+    raise exception 'Wizard wrapper and saved metadata must remain intact'; end if;
+  update public.surat_registration_drafts set payload=jsonb_set(payload,'{formData,judul_surat}',to_jsonb('Redaksi baru'::text)) where id=draft.id;
+  denied:=false;
+  begin update public.surat_registration_drafts set payload=jsonb_set(payload,'{formData,office_id}',to_jsonb(karanganyar)) where id=draft.id;
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Nested draft office swapped without reservation'; end if;
+  denied:=false;
+  begin perform public.create_surat_registration_draft(n,data->>'no_surat',
+    jsonb_build_object('formData',data,'office_id',outside));
+  exception when invalid_parameter_value then denied:=true; end;
+  if not denied then raise exception 'Conflicting flat/wrapped context accepted'; end if;
   if (select office_id from public.surat_reservations where id=res)<>solo then
     raise exception 'Draft is not bound to the selected issuing office'; end if;
   registration := public.create_surat_registrasi_core(data||jsonb_build_object('reservation_id',res),actor);
@@ -99,6 +112,18 @@ begin
   if public.can_issue_for_office(solo) then raise exception 'Other user inherited a grant'; end if;
   perform set_config('request.jwt.claim.sub','',true);
   if public.can_issue_for_office(solo) then raise exception 'Anonymous issuer accepted'; end if;
+  -- Same wrapped save path used by HQ PGD Marketing, with no role elevation.
+  update public.profiles set office_id='a0000000-0000-4000-8000-000000000030' where id=actor;
+  perform set_config('request.jwt.claim.sub',actor::text,true);
+  n := public.generate_new_letter_number(entity,lt,'a0000000-0000-4000-8000-000000000030',null,actor,dept);
+  data := jsonb_build_object('office_id','a0000000-0000-4000-8000-000000000030',
+    'entity_id',entity,'dept_id',dept,'letter_type_id',lt,'form_usage_id',usage,
+    'form_input_data',jsonb_build_object('request_category','non_asset','fund_type','marketing_cost'));
+  draft := public.create_surat_registration_draft(n,'UJI-PGD-MARKETING',jsonb_build_object('formData',data,'selectedUsageId',usage));
+  update public.surat_registration_drafts set payload=jsonb_set(payload,'{formData,judul_surat}',to_jsonb('Dana Marketing'::text)) where id=draft.id;
+  if (select payload#>>'{formData,form_input_data,fund_type}' from public.surat_registration_drafts where id=draft.id)<>'marketing_cost'
+    or (select role::text from public.profiles where id=actor)<>'user' then
+    raise exception 'Marketing wizard draft lost its data or widened role'; end if;
   raise notice 'Delegated issuing office: all assertions passed';
 end;
 $$;

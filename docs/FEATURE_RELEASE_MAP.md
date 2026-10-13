@@ -738,3 +738,17 @@ verifikasi juga runtime, database, worker, dan smoke test.
 - Affected tests and disposable PostgreSQL cover photo retention/removal, redaction-only
   save, forged identity/file rejection, reopening, audit and duplicate submission.
   Source tests are not a claim that a production document was resubmitted.
+
+## AUTH-08 / SUR-25 Selected Promotion and Draft Context (2026-10-13, Issue #546)
+
+- Selectively promote original issuing-office access commits #539, excluding their
+  staging merge ancestry. The only permission is `submission.issue_for_office`;
+  employee profile, department, approval rights and admin role are not replaced.
+- Forward correction `20261013090000` after `20261012140000` reads the wizard's
+  nested `formData` context as well as legacy flat payloads, rejecting conflicting
+  identities. The original draft payload and saved selections are preserved.
+- This fixes a staging number-success/draft-save failure affecting HQ Marketing
+  Fund creation, without bypassing office authorization or reservation ownership.
+- Disposable PostgreSQL tests cover wrapped create/autosave, flat compatibility,
+  conflicting context, immutable office, revocation, HQ Marketing and KC/KCP scope.
+  Live acceptance and release identities belong to Issue #546, not inferred here.
