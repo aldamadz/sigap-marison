@@ -120,6 +120,7 @@ for (const file of allChangedFiles) {
   if (/mrn16.*\.sql$|test-mrn16-sql\.mjs$/u.test(file)) gates.add("test:mrn16-sql");
   if (/mrn17.*\.sql$|test-mrn17-resolution-source-sql\.mjs$/u.test(file)) gates.add("test:mrn17-sql");
   if (/rec03.*\.sql$|test-rec03-sql\.mjs$/u.test(file)) gates.add("test:rec03-sql");
+  if (/recommendation_parent_transport.*\.sql$/u.test(file)) gates.add("recommendation-transport-sql");
   if (/rec03.*file.*link.*\.sql$|test-rec03-file-link-sql\.mjs$/u.test(file)) gates.add("test:rec03-file-link-sql");
   if (/outbound.*replacement.*\.sql$|test-outbound-replacement-sql\.mjs$/u.test(file)) gates.add("test:outbound-replacement-sql");
   if (/external.*submission.*decision.*\.sql$|validated_unit_project_revision\.sql$|test-external-submission-decisions-sql\.mjs$/u.test(file)) gates.add("test:external-submission-decisions-sql");
@@ -130,6 +131,7 @@ for (const file of allChangedFiles) {
 
 for (const gate of gates) {
   if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
+  else if (gate === 'recommendation-transport-sql') run('node', ['scripts/test-rec03-sql.mjs', '--transport']);
   else if (gate === "external-project-source-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--external-projects"]);
   else if (gate === "branch-fund-numbering-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--branch-fund"]);
   else if (gate === "fund-rab-unit-revision-parity-sql") run("node", ["scripts/test-fund-rab-and-unit-revision-parity-sql.mjs"]);

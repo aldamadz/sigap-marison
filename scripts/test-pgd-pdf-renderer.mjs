@@ -170,3 +170,21 @@ test("builds and renders every supported dynamic signature formation", async () 
     assert.ok(pdf.length > 10_000, `PDF ${count} signer terlalu kecil`);
   }
 });
+
+test("keeps revised signature groups together and never drops items after row 15", async () => {
+  const data = createPgdPreviewData({ signature_count: 5 });
+  data.revisionNotes = ["Revisi oleh Penandatangan", "Perbaiki nomor polisi kendaraan."];
+  const definition = buildPgdDocumentDefinition(data);
+  const signatureContainer = definition.content.at(-1).columns[1];
+  assert.equal(signatureContainer.unbreakable, true);
+  const signatures = signatureContainer.stack.at(-1);
+  assert.equal(signatures.unbreakable, true);
+  for (const group of signatures.stack) assert.equal(group.stack[0].table.dontBreakRows, true);
+  assert.equal(definition.content[3].table.body.length, 11);
+  assert.match(definition.footer(2,3).text,/Halaman 2 dari 3/);
+  assert.equal((await renderPgdPdf(data)).subarray(0,5).toString(),"%PDF-");
+  data.items = Array.from({length:19},(_,index) => ({no:index+1,name:`Item ${index+1}`}));
+  const longDefinition = buildPgdDocumentDefinition(data);
+  assert.equal(longDefinition.content[3].table.body.length,20);
+  assert.match(JSON.stringify(longDefinition),/Item 19/);
+});

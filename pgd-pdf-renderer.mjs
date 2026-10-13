@@ -315,6 +315,7 @@ const signatureRow = (signers, topCount) => {
   ];
   return {
     table: {
+      dontBreakRows: true,
       widths: Array.from({ length: topCount }, () => "*"),
       heights: [12, 42, 11, 11],
       body: [
@@ -354,6 +355,7 @@ export const buildNativeSignatureBlock = (signatures) => {
     return group;
   });
   return {
+    unbreakable: true,
     stack: [
       ...groups.map((group, index) => ({
         stack: [signatureRow(group, groups[0].length)],
@@ -370,7 +372,9 @@ const selectionMarker = (checked) => ({
 });
 
 export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
-  const items = Array.from({ length: 15 }, (_item, index) => ({
+  // Revision evidence needs room; never remove populated items to fit a page.
+  const minimumRows = data.revisionNotes?.length ? 10 : 15;
+  const items = Array.from({ length: Math.max(minimumRows, data.items.length) }, (_item, index) => ({
     no: index + 1,
     code: "",
     name: "",
@@ -388,6 +392,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
     pageOrientation: "landscape",
     pageMargins: [16, 12, 16, 12],
     defaultStyle: { font: "Roboto", fontSize: 8, color: BORDER },
+    footer: (page, total) => ({ text: `${data.noSurat} | Halaman ${page} dari ${total}`, fontSize: 7, color: MUTED, alignment: "right", margin: [16, 0, 16, 0] }),
     content: [
       {
         table: {
@@ -400,7 +405,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
                 widths: ["48%", "52%"],
                 body: [
                   [{ text: "No. Formulir", bold: true, fillColor: HEADER_TINT }, { text: data.formNumber, bold: true, alignment: "center", fillColor: HEADER_TINT }],
-                  [{ text: "Halaman", bold: true, fillColor: HEADER_TINT }, { text: "1 Dari 1", bold: true, alignment: "center", fillColor: HEADER_TINT }],
+                  [{ text: "Halaman", bold: true, fillColor: HEADER_TINT }, { text: "Lihat footer", alignment: "center", fillColor: HEADER_TINT }],
                   [{ text: "Berlaku Efektif", bold: true, fillColor: HEADER_TINT }, { text: "1 Januari 2024", bold: true, alignment: "center", fillColor: HEADER_TINT }],
                 ],
               },
@@ -485,6 +490,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
           { width: "60%", text: "" },
           {
             width: "40%",
+            unbreakable: true,
             stack: [
               {
                 table: { widths: ["*"], body: [[{ text: data.placeDate, alignment: "center" }]] },

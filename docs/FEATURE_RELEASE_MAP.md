@@ -1,5 +1,25 @@
 # SIGAP Feature and Release Map
 
+## REC-03 / DOC-05 / SUR-05 Approval Document Consistency (2026-10-13, Issue #563)
+
+- Forward-only `20261013150000` excludes only `parent_workbook_source` from
+  recommendation readiness/publication comparison. Finished canonical PDFs remain
+  ready after parent signatures rotate that pointer, without viewer-triggered jobs.
+- Child source, child/parent input, attachment references present in the existing
+  payload, stored fingerprint, storage coordinates and publication lease remain
+  guarded. Keep environment-specific render payloads and publisher behavior;
+  do not replay missing historical migrations or rewrite recommendations.
+- Compact approval cards read flat number/title/requester/department/category
+  fields, with legacy detail fallback; no per-card detail fan-out or ACL change.
+- PGD revision PDFs reserve room for notes, retain every populated item (including
+  rows beyond 15), and keep the complete dated signature block together. Pending
+  signers stay blank; rejection/approval history is not changed. Actual page counts
+  appear in the footer. App and PDF worker require coordinated staging-first rollout.
+- PostgreSQL reproduces production drift, verifies pointer-only changes, parent
+  gate/publication, real content rejection, privileges and migration replay. UI and
+  native renderer regressions precede live evidence on Issue #563. Production
+  approvals/content are not modified for acceptance.
+
 ## CAL-03 Provisional Result Persistence (2026-10-13, Issue #559)
 
 - Preserve `realization` for planned, in-progress, blocked and reopened tasks;
