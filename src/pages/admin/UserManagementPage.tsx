@@ -16,7 +16,7 @@ import {
   Building2, Briefcase, Loader2, Download, Upload, ToggleLeft,
   ToggleRight, Phone, CheckCircle2, XCircle, AlertCircle, Calendar,
   Clock, FileSpreadsheet, LogOut, KeyRound, Mail, Hash, Info,
-  ChevronLeft, ChevronRight, X, List, Network, SlidersHorizontal,
+  ChevronLeft, ChevronRight, X, List, Network, SlidersHorizontal, RefreshCw,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
@@ -377,6 +377,9 @@ export default function UserManagementPage() {
   const appDialog = useAppDialog();
   const [users, setUsers]               = useState<User[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [hasLoadedUsers, setHasLoadedUsers] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
   const [searchQuery, setSearchQuery]   = useState('');
   const [officeFilter, setOfficeFilter] = useState('all');
   const [deptFilter, setDeptFilter]     = useState('all');
@@ -401,21 +404,32 @@ export default function UserManagementPage() {
 
   const loadUsers = async (background: boolean) => {
     if (!background) setLoading(true);
+    setReloading(true);
     try {
-      const [nextUsers, issueResult] = await Promise.all([
+      const [nextUsers, issueResult, nextOverrides] = await Promise.all([
         getUsers(),
         supabase
           .from('marison_sync_issues')
           .select('id', { count: 'exact', head: true })
           .eq('entity_type', 'employee')
           .eq('status', 'open'),
+        marisonPayloadMappingService.list('profile'),
       ]);
+      if (issueResult.error) throw issueResult.error;
       setUsers(nextUsers);
-      setOverrides(await marisonPayloadMappingService.list('profile'));
+      setOverrides(nextOverrides);
       setSyncIssueCount(issueResult.count || 0);
+      setHasLoadedUsers(true);
+      setLoadError(null);
     }
-    catch (e) { console.error(e); }
-    finally { if (!background) setLoading(false); }
+    catch (e) {
+      console.error(e);
+      setLoadError('Gagal memuat data karyawan. Coba lagi.');
+    }
+    finally {
+      setReloading(false);
+      if (!background) setLoading(false);
+    }
   };
 
   const fetchUsers = useMasterRealtimeReload('master-directory-live', ['master_offices', 'marison_sync_issues'], loadUsers);
@@ -864,7 +878,7 @@ export default function UserManagementPage() {
           ? 100
           : 0;
 
-  const StatPill = ({ icon, label, value, cls }: { icon: React.ReactNode; label: string; value: number; cls: string }) => (
+  const StatPill = ({ icon, label, value, cls }: { icon: React.ReactNode; label: string; value: number | string; cls: string }) => (
     <div className={cn("hidden items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-medium sm:flex", cls)}>
       {icon}<span>{value} {label}</span>
     </div>
@@ -880,20 +894,20 @@ export default function UserManagementPage() {
           <p className="text-muted-foreground text-sm">Kelola hak akses, jabatan, kontak, dan riwayat masa kerja karyawan.</p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
-          <StatPill icon={<Users className="w-4 h-4" />}        label="Total"    value={users.length}  cls="bg-primary/10 text-primary border-primary/20" />
-          <StatPill icon={<CheckCircle2 className="w-4 h-4" />} label="Aktif"    value={activeCount}   cls="bg-emerald-500/10 text-emerald-500 border-emerald-500/20" />
+          <StatPill icon={<Users className="w-4 h-4" />}        label="Total"    value={hasLoadedUsers ? users.length : '-'}  cls="bg-primary/10 text-primary border-primary/20" />
+          <StatPill icon={<CheckCircle2 className="w-4 h-4" />} label="Aktif"    value={hasLoadedUsers ? activeCount : '-'}   cls="bg-emerald-500/10 text-emerald-500 border-emerald-500/20" />
           {inactiveCount > 0 && <StatPill icon={<XCircle className="w-4 h-4" />} label="Nonaktif" value={inactiveCount} cls="bg-red-500/10 text-red-500 border-red-500/20" />}
           <Button variant="outline" onClick={handleDownloadTemplate}
             className="h-10 gap-2 text-xs font-medium border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10">
             <FileSpreadsheet className="w-4 h-4" /> Template
           </Button>
-          <Button variant="outline" onClick={() => importRef.current?.click()} disabled={isImporting}
+          <Button variant="outline" onClick={() => importRef.current?.click()} disabled={isImporting || !hasLoadedUsers}
             className="h-10 gap-2 text-xs font-medium">
             {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
             {isImporting ? 'Mengimpor...' : 'Impor'}
           </Button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
-          <Button variant="outline" onClick={handleExport}
+          <Button variant="outline" onClick={handleExport} disabled={!hasLoadedUsers}
             className="h-10 gap-2 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10">
             <Download className="w-4 h-4" /> Ekspor XLSX
           </Button>
@@ -908,6 +922,22 @@ export default function UserManagementPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+            <div>
+              <p className="text-sm font-medium">{loadError}</p>
+              {hasLoadedUsers && <p className="mt-1 text-sm text-muted-foreground">Data yang ditampilkan adalah data terakhir yang berhasil dimuat.</p>}
+            </div>
+          </div>
+          <Button variant="outline" disabled={reloading} onClick={() => { void fetchUsers(); }}>
+            <RefreshCw className={cn('mr-2 h-4 w-4', reloading && 'animate-spin')} />
+            Coba lagi
+          </Button>
+        </div>
+      )}
 
       {importProgress && (
         <div className={cn(
@@ -1092,6 +1122,10 @@ export default function UserManagementPage() {
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                   <p className="text-muted-foreground font-medium animate-pulse text-sm">Memuat data karyawan...</p>
                 </div>
+              </TableCell></TableRow>
+            ) : loadError && !hasLoadedUsers ? (
+              <TableRow><TableCell colSpan={9} className="py-32 text-center text-muted-foreground">
+                Daftar karyawan belum dapat dimuat.
               </TableCell></TableRow>
             ) : filteredUsers.length === 0 ? (
               <TableRow><TableCell colSpan={9} className="py-32 text-center">

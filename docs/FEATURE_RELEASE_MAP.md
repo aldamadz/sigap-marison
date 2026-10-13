@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## ADM-01 / AUTH-08 Profile Office Embedding Correction (2026-10-13, Issue #551)
+
+- Pin profile-office embeddings to `profiles_office_id_new_fkey`, the employee's
+  primary office, rather than the implicit many-to-many delegated-office relation.
+  Directory, subordinate, admin and profile readers retain the same response key.
+- Directory read failures reject instead of becoming successful empty lists.
+  Admin shows a retryable error, unknown initial counters and retained last-good
+  rows on background failure. Actual empty collections remain a separate state.
+- App-only correction; no migration, RLS, grant, profile or worker mutation.
+  Staging-first, selective production authorized; live evidence belongs to #551.
+
 ## AUTH-08 / SUR-25 Delegated Issuing Office (2026-10-12, Issue #539)
 
 - Candidate `feature/delegated-submission-office-01` from main `594c81f`;

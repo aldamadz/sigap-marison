@@ -12,7 +12,7 @@ export const adminService = {
       .from('profiles')
       .select(`
         *,
-        master_offices ( id, name, kedudukan ),
+        master_offices!profiles_office_id_new_fkey ( id, name, kedudukan ),
         master_departments ( id, name )
       `)
       .is('deleted_at', null)
