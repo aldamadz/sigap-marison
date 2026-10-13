@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## ADM-01 / ADM-02 Organization Reference Contract (2026-10-13, Issue #555)
+
+- Native admin-user validation selects only canonical master columns:
+  departments `id,name`; offices `id,name,kedudukan`. Neither master has an
+  `is_active` column in staging or production; no activity field is invented.
+- User/parent active and deletion checks, admin/same-origin authorization,
+  organization pairing and automatic branch reporting remain unchanged.
+- App-only correction with real Supabase adapter contract regression tests;
+  no migration, permissions or employee supervisor changes. Staging then
+  selective production authorized; deployment evidence belongs to #555.
+
 ## ADM-01 / AUTH-08 Profile Office Embedding Correction (2026-10-13, Issue #551)
 
 - Pin profile-office embeddings to `profiles_office_id_new_fkey`, the employee's

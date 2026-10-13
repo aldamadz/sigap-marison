@@ -76,14 +76,12 @@ export type AdminUserAuthAdminPort = {
 export type AdminUserDepartmentRow = {
   id: string;
   name: string;
-  is_active: boolean | null;
 };
 
 export type AdminUserOfficeRow = {
   id: string;
   name: string;
   kedudukan: string | null;
-  is_active: boolean | null;
 };
 
 export type AdminUserProfileRow = {
@@ -361,12 +359,10 @@ export function createAdminUserRuntime(deps: AdminUserDependencies) {
     if (input.department_id) {
       department = await repository.findDepartmentById(input.department_id);
       if (!department) throw errorWithStatus("Departemen tidak ditemukan.", 400);
-      if (department.is_active === false) throw errorWithStatus("Departemen tidak aktif.", 400);
     }
     if (input.office_id) {
       office = await repository.findOfficeById(input.office_id);
       if (!office) throw errorWithStatus("Kantor tidak ditemukan.", 400);
-      if (office.is_active === false) throw errorWithStatus("Kantor tidak aktif.", 400);
     }
     assertOrganizationPairing(department, office);
 
@@ -845,7 +841,7 @@ export const createSupabaseProfileRepositoryPort = (client: SupabaseClient): Adm
   findDepartmentById: async (id) => {
     const { data, error } = await client
       .from("master_departments")
-      .select("id,name,is_active")
+      .select("id,name")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
@@ -854,7 +850,7 @@ export const createSupabaseProfileRepositoryPort = (client: SupabaseClient): Adm
   findOfficeById: async (id) => {
     const { data, error } = await client
       .from("master_offices")
-      .select("id,name,kedudukan,is_active")
+      .select("id,name,kedudukan")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
