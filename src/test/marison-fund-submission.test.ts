@@ -107,6 +107,9 @@ describe("Marison Fund Submission mapper", () => {
 
   it.each([
     ["Staff IT", "staff"],
+    ["Supervisor Marketing", "staff"],
+    ["SPV. Teknik", "staff"],
+    ["Assistant Branch Manager", "manager"],
     ["Staff Departemen", "staff"],
     ["Pemohon", "staff"],
     ["  PEMOHON  ", "staff"],
