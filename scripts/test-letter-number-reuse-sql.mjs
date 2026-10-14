@@ -11,6 +11,7 @@ const assertions = readFileSync(
 );
 
 const testExternalProjects = process.argv.includes("--external-projects");
+const testDraftLifecycle = process.argv.includes("--draft-lifecycle");
 const testDelegatedOffices = process.argv.includes("--delegated-offices");
 const testBranchFund = process.argv.includes("--branch-fund") || testExternalProjects || testDelegatedOffices;
 const branchFundSql = testBranchFund ? (() => {
@@ -64,6 +65,23 @@ const externalProjectSql = testExternalProjects ? `
   ${readFileSync("supabase/migrations/20261009160000_external_only_master_projects.sql", "utf8")}
   ${readFileSync("supabase/tests/external_only_projects.integration.sql", "utf8")}
 ` : "";
+
+const draftLifecycleSql = testDraftLifecycle ? (() => {
+  const lifecycle = readFileSync('supabase/migrations/20261014180000_registration_draft_reservation_lifecycle.sql', 'utf8');
+  return `
+    alter table public.surat_registration_drafts add column revision_event_id uuid;
+    insert into public.surat_reservations(id,entity_id,type_id,office_id,dept_id,year,no_urut,status,number_scope_type,reserved_by,expires_at)
+    values ('59600000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000010',
+      'a0000000-0000-4000-8000-000000000050','a0000000-0000-4000-8000-000000000030',
+      'a0000000-0000-4000-8000-000000000020',2026,596,'CANCELLED','pusat','10000000-0000-4000-8000-000000000001',now()-interval '1 day');
+    insert into public.surat_registration_drafts(id,reservation_id,created_by,no_surat,payload)
+    values ('59600000-0000-4000-8000-000000000002','59600000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000001','596/UAI/2026','{"preserved":"legacy data"}');
+    ${lifecycle}
+    ${lifecycle}
+    ${readFileSync('supabase/tests/registration_draft_reservation_lifecycle.integration.sql', 'utf8')}
+  `;
+})() : '';
 
 // Minimal canonical schema: only the tables/columns/constraints the reuse
 // migration and the assertion block touch. Mirrors the disposable-PostgreSQL
@@ -528,6 +546,7 @@ insert into public.form_usage_departments (usage_id, department_id) values
 ${migration}
 
 ${assertions}
+${draftLifecycleSql}
 
 ${branchFundSql}
 ${externalProjectSql}
@@ -631,6 +650,41 @@ try {
     throw new Error(`Concurrency race: expected exactly one winner, got ${winners}\nr1=${JSON.stringify(r1)}\nr2=${JSON.stringify(r2)}`);
   }
   process.stdout.write(`Concurrency: 2 parallel connections -> exactly 1 winner for number 10.\n`);
+  if (testDraftLifecycle) {
+    run(['exec','-i',id,'psql','-U','postgres','-v','ON_ERROR_STOP=1'], `
+      insert into public.surat_reservations(id,entity_id,type_id,office_id,dept_id,year,no_urut,status,number_scope_type,reserved_by)
+      values ('59600000-0000-4000-8000-000000000010','a0000000-0000-4000-8000-000000000010',
+        'a0000000-0000-4000-8000-000000000050','a0000000-0000-4000-8000-000000000030',
+        'a0000000-0000-4000-8000-000000000020',2026,599,'PENDING','pusat','10000000-0000-4000-8000-000000000001');
+      set "request.jwt.claim.sub"='10000000-0000-4000-8000-000000000001';
+      select public.create_surat_registration_draft(599,'599/UAI/2026','{}','[]');
+      alter table public.surat_registration_drafts disable trigger registration_draft_lease_guard;
+      alter table public.surat_registration_drafts disable trigger registration_draft_lease_renewal;
+      update public.surat_registration_drafts set expires_at=now()-interval '1 day'
+        where reservation_id='59600000-0000-4000-8000-000000000010';
+      alter table public.surat_registration_drafts enable trigger registration_draft_lease_guard;
+      alter table public.surat_registration_drafts enable trigger registration_draft_lease_renewal;
+      update public.surat_reservations set expires_at=now()-interval '1 day' where id='59600000-0000-4000-8000-000000000010';
+    `);
+    const connection = (sql) => new Promise(resolve => {
+      const child = spawn('docker',['exec','-i',id,'psql','-U','postgres','-v','ON_ERROR_STOP=1']);
+      let output=''; child.stdout.on('data',data=>{output+=data;}); child.stderr.on('data',data=>{output+=data;});
+      child.on('close',code=>resolve({code,output})); child.stdin.end(sql);
+    });
+    const owner = connection(`begin; set local statement_timeout='5s'; set local "request.jwt.claim.sub"='10000000-0000-4000-8000-000000000001';
+      select id from public.surat_registration_drafts where reservation_id='59600000-0000-4000-8000-000000000010' for update;
+      select pg_sleep(0.4); select public.void_surat_registration_draft(id) from public.surat_registration_drafts
+        where reservation_id='59600000-0000-4000-8000-000000000010'; commit;`);
+    await new Promise(resolve=>setTimeout(resolve,150));
+    const cron = connection(`begin; set local statement_timeout='5s'; update public.surat_reservations set status='CANCELLED'
+      where id='59600000-0000-4000-8000-000000000010' and status='PENDING' and expires_at<now(); commit;`);
+    const results = await Promise.all([owner,cron]);
+    if (results.some(result=>result.code!==0)) throw new Error('Concurrent expiry/cancel failed: '+JSON.stringify(results));
+    const result=run(['exec','-i',id,'psql','-U','postgres','-Atq'], `select d.status||'/'||r.status from public.surat_registration_drafts d
+      join public.surat_reservations r on r.id=d.reservation_id where r.id='59600000-0000-4000-8000-000000000010';`).trim();
+    if (result!=='VOID/CANCELLED') throw new Error('Concurrent cancellation result: '+result);
+    console.log('Concurrency: expiry and owner cancellation complete without deadlock; VOID/CANCELLED.');
+  }
   if (testDelegatedOffices) {
     const read = (name) => readFileSync(`supabase/migrations/${name}.sql`, 'utf8');
     const guards = read('20260930140000_mar10_kc_descendant_number_scope');

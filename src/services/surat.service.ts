@@ -393,7 +393,12 @@ export const suratService = {
       .eq("status", "DRAFT")
       .gt("expires_at", new Date().toISOString())
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "PGRST116") {
+        throw new Error("Draft tidak ditemukan atau nomor sudah tidak aktif. Mulai pengajuan baru.");
+      }
+      throw error;
+    }
     let draft = data as SuratRegistrationDraft;
     if (draft.revision_event_id) {
       const { data: event, error: eventError } = await supabase
