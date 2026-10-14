@@ -47,3 +47,7 @@ test("lookup errors cannot manufacture an attribution",async()=>{
 test("the worker's attribution helper is packaged in the runtime image",()=>{
   assert.match(readFileSync(new URL("../dockerfile",import.meta.url),"utf8"),/COPY server\/revision-actor-evidence\.mjs \.\/server\/revision-actor-evidence\.mjs/);
 });
+test("shared image and revision helpers require coordinated worker rollout",()=>{
+  const deploy=readFileSync(new URL("../scripts/deploy-app.sh",import.meta.url),"utf8");
+  assert.match(deploy,/worker_changes=[\s\S]*dockerfile document-revision-notes\.mjs server\/revision-actor-evidence\.mjs/);
+});
