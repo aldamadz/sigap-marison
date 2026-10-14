@@ -5,8 +5,6 @@ Date: 2026-10-14. Scope: production guest LAN addresses and production/staging
 monitoring diagnosis. No application code, business data, database schema,
 credentials, public DNS or vendor submission was changed.
 
-## Public Access Restoration
-
 ## Final Storage and Database/Auth LAN Change
 
 Explicit user request resumed the remaining LAN operation on 2026-10-14.
@@ -50,6 +48,8 @@ test was performed. Upstream Cloudflare path failures remain a separate risk.
 
 The following restoration/preflight sections are historical evidence and do
 not supersede the final address table above.
+
+## Public Access Restoration
 
 After the initial preflight below, CT 104 was observed with an externally updated
 configuration: `net0` on `vmbr1`, `192.168.0.251/24`, gateway `192.168.0.1`.
