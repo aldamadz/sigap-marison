@@ -166,7 +166,7 @@ function itemChanges(before: unknown[], after: unknown[]): RequesterRevisionItem
   after.forEach((row, afterIndex) => {
     const beforeIndex = pairs.get(afterIndex);
     if (beforeIndex !== undefined && equal(before[beforeIndex], row)) return;
-    const fields = beforeIndex === undefined ? [] : changedFields(record(before[beforeIndex]), record(row));
+    const fields = changedFields(beforeIndex === undefined ? {} : record(before[beforeIndex]), record(row), ["id"]);
     changes.push({
       action: beforeIndex === undefined ? "added" : "changed", beforeIndex, afterIndex,
       name: itemName(row, afterIndex), fields: fields.slice(0, REQUESTER_REVISION_SUMMARY_LIMITS.fieldsPerItem),
@@ -174,7 +174,12 @@ function itemChanges(before: unknown[], after: unknown[]): RequesterRevisionItem
     });
   });
   before.forEach((row, beforeIndex) => {
-    if (!used.has(beforeIndex)) changes.push({ action: "deleted", beforeIndex, name: itemName(row, beforeIndex), fields: [], omittedFields: 0 });
+    if (!used.has(beforeIndex)) {
+      const fields = changedFields(record(row), {}, ["id"]);
+      changes.push({ action: "deleted", beforeIndex, name: itemName(row, beforeIndex),
+        fields: fields.slice(0, REQUESTER_REVISION_SUMMARY_LIMITS.fieldsPerItem),
+        omittedFields: Math.max(0, fields.length - REQUESTER_REVISION_SUMMARY_LIMITS.fieldsPerItem) });
+    }
   });
   return changes;
 }

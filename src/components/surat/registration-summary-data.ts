@@ -167,6 +167,7 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
   const snapshotSurat = asRecord(snapshot.surat);
 
   return {
+    suratId: typeof surat?.id === "string" ? surat.id : undefined,
     noSurat: String(surat?.no_surat || ""),
     title: String(surat?.judul_surat || ""),
     category: mergedInput.request_category || snapshotSurat.request_category || "-",

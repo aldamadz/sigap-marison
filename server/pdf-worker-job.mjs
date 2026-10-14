@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { resolveRecommendationSource } from "../recommendation-pdf.mjs";
+import { enrichRevisionActors } from "./revision-actor-evidence.mjs";
 
 export const resolveRecommendationPdfJob = async (supabase, job) => {
   if (job.render_payload?.kind === "keu10") return null;
@@ -41,7 +42,7 @@ export const loadRequesterRevisionHistory = async (supabase, job, surat, targetS
   const history = [];
   for (let page=0;page<20;page+=1) {
     const {data,error} = await supabase.from("surat_requester_revision_history")
-      .select("revision_event_id,reason,requester_note,submitted_at,submitted_by,before_snapshot,after_snapshot")
+      .select("revision_event_id,reason,requester_note,submitted_at,requested_by,submitted_by,before_snapshot,after_snapshot")
       .eq("surat_id",job.surat_id).order("submitted_at",{ascending:true}).order("id",{ascending:true})
       .range(page*100,page*100+99);
     if (error) throw error;
@@ -155,7 +156,7 @@ export const createPgdJobHandler = ({
     ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
     : null;
   const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
-  const documentData = normalizePgdDocumentData({...detectionSource,revision_history:revisionHistory}, {
+  const documentData = normalizePgdDocumentData(await enrichRevisionActors(supabase,detectionSource,revisionHistory), {
     signatures: enrichedSignatures,
     targetStep: targetSignature?.step_order || null,
   });
@@ -210,7 +211,7 @@ export const createKeu1JobHandler = ({
     ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
     : null;
   const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
-  const documentData = normalizeKeu1DocumentData({...detectionSource,revision_history:revisionHistory}, {
+  const documentData = normalizeKeu1DocumentData(await enrichRevisionActors(supabase,detectionSource,revisionHistory), {
     signatures: enrichedSignatures,
     targetStep: targetSignature?.step_order || null,
   });
@@ -236,7 +237,7 @@ export const createKeu10JobHandler = ({
     if ((!target && !payload.document.status) || payload.signatures.some((signature) => signature.is_signed && !hasDecision(signature))) {
       payload = await hydrateLegacyKeu10Payload(supabase, job, target);
     }
-    return renderKeu10Pdf(normalizeKeu10DocumentData(payload.document, {
+    return renderKeu10Pdf(normalizeKeu10DocumentData(await enrichRevisionActors(supabase,payload.document), {
       signatures: payload.signatures,
       targetStep: target?.step_order || null,
     }), { logoPath });
@@ -277,7 +278,7 @@ export const createRecommendationJobHandler = ({
     ? (signatures || []).find((signature) => signature.id === job.signature_id)
     : null;
   const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
-  const data = normalizeRecommendationDocumentData({...surat,revision_history:revisionHistory}, {
+  const data = normalizeRecommendationDocumentData(await enrichRevisionActors(supabase,surat,revisionHistory), {
     items: recommendation.items,
     signatures: signatures || [],
     targetStep: targetSignature?.step_order || 0,
