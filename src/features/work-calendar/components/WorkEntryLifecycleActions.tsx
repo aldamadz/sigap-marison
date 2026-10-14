@@ -53,7 +53,7 @@ export function WorkEntryLifecycleActions({
   const requestStatus = (status: WorkEntryStatus) => {
     if (status === entry.status) return;
     if (status === "completed") {
-      setText("");
+      setText(entry.realization ?? "");
       setPrompt("completed");
       return;
     }
