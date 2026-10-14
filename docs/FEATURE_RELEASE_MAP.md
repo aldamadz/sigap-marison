@@ -1,5 +1,26 @@
 # SIGAP Feature and Release Map
 
+## OPS-13 LAN Addressing and Availability Audit (2026-10-14, Issue #583)
+
+- Requested LAN targets: CT 104 application `192.168.0.251`, VM 100 storage
+  `192.168.0.252`, CT 110 Database/Auth `192.168.0.253`. User confirmed `/24`,
+  gateway `192.168.0.1`, bridge `vmbr0`; private service addresses remain unchanged.
+- LAN rollout is blocked by connectivity preflight, not completed: temporary
+  application address could ARP the gateway but could not ping it, reach HTTPS,
+  or be reached from monitoring. Temporary address was removed; original guest
+  configuration, proxy, workers and monitoring remain unchanged.
+- Production public-probe failure was reproduced as a TCP connection timeout
+  to Cloudflare `172.67.187.163`, while `104.21.92.69` and direct application
+  readiness returned HTTP 200. The affected edge address succeeded from CT 104
+  but failed from CT 102 and the operator computer: a vantage-dependent network
+  failure, not proof that the application container stopped.
+- Staging historical probes include HTTP-status-zero timeouts; no corresponding
+  application outage was proven. Previous production 503 samples include the
+  authorized migration maintenance interval and are not ongoing app failures.
+- See `docs/OPS_583_NETWORK_MONITORING_AUDIT.md` for evidence, unchanged live
+  addresses and safe resumption gates. Do not hide public failures by pinning
+  a currently working Cloudflare IP or replacing public probes with local ones.
+
 ## OPS-12 Full Proxmox Production Migration (2026-10-14, Issue #573)
 
 - User selected total production migration, including self-hosted Database/Auth
