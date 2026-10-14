@@ -98,7 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
-  if (/registration_draft_reservation_lifecycle.*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
+  if (/registration_draft_(reservation_lifecycle|recommendation_scope).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
   if (/external_only.*projects.*\.sql$/u.test(file)) gates.add("external-project-source-sql");
   if (/branch_fund.*\.sql$|test-letter-number-reuse-sql\.mjs$/u.test(file)) gates.add("branch-fund-numbering-sql");
