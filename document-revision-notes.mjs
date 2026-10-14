@@ -34,7 +34,9 @@ export function signerRevisionNotes(source = {}) {
     });
   }
   if (!reason && !items.length) return [];
-  return [items.length ? "Revisi oleh Penandatangan" : "Permintaan perbaikan", reason,
+  const actor = String(revision.actor_name || "").trim();
+  const heading = items.length ? "Revisi" : "Permintaan perbaikan";
+  return [actor ? `${heading} oleh ${actor}` : heading, reason,
     ...items.map(item => {
       const type = item.value_type || item.revision_value_type;
       const requested = item.unit_diajukan ?? item.jumlah_diajukan ?? item.nominal_diajukan ?? item.nilai_diajukan;
@@ -71,7 +73,7 @@ const equivalent = (a,b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? nu
 const inputOf = snapshot => object(object(snapshot).document).form_input_data || object(snapshot).form_input_data || {};
 const describeFile = file => [file.file_name || file.name || "Lampiran",file.file_type || "",
   Number.isFinite(Number(file.file_size)) ? `${Math.round(Number(file.file_size)/1024)} KB` : "",
-  file.requirement_label || file.stage || ""].filter(Boolean).join(" | ");
+  file.requirement_label || file.requirement_key || file.stage || ""].filter(Boolean).join(" | ");
 const diffRecord = (before,after,prefix,result) => {
   for (const key of new Set([...Object.keys(before),...Object.keys(after)])) {
     if (ignored.test(key) || key === "items" || equivalent(before[key],after[key])) continue;
@@ -126,7 +128,7 @@ export function revisionHistoryEntries(source = {}) {
     for (const key of ["judul_surat","request_date","request_place"]) if (key in documentBefore && !equivalent(documentBefore[key],documentAfter[key]))
       changes.push({field:label(key),before:plain(documentBefore[key]),after:plain(documentAfter[key]),action:"Diubah"});
     return { title:`Perbaikan ${index+1}`,reason:plain(entry.reason),note:plain(entry.requester_note),
-      at:entry.submitted_at || "",actor:entry.submitted_by_name || "",changes };
+      at:entry.submitted_at || "",actor:entry.submitted_by_name || "",requestedBy:entry.requested_by_name || "",changes };
   });
   if (!entries.length) {
     const notes = signerRevisionNotes(source);
@@ -143,6 +145,7 @@ export function revisionAppendixBlock(entries = [], noSurat = "") {
     {text:noSurat,fontSize:9,margin:[0,0,0,12]},
     ...entries.flatMap(entry => [
       {text:[entry.title,entry.actor,entry.at ? new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"}) : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
+      ...(entry.requestedBy ? [{text:`Diminta oleh: ${entry.requestedBy}`,fontSize:8,margin:[0,0,0,4]}] : []),
       {text:`Alasan: ${entry.reason}`,fontSize:8,margin:[0,0,0,4]},
       ...(entry.note && entry.note!=="-" ? [{text:`Catatan pemohon: ${entry.note}`,fontSize:8,margin:[0,0,0,4]}] : []),
       ...(entry.changes.length ? [{table:{headerRows:1,widths:["24%","12%","32%","32%"],body:[

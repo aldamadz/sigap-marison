@@ -1,5 +1,37 @@
 # SIGAP Feature and Release Map
 
+## DOC-13 Named and Detailed Revision Evidence (2026-10-14, Issue #585)
+
+- Display actual requesting actor from the document-scoped revision event,
+  separate from the requester who submitted corrections. Prefer recorded
+  participant names for PDFs; missing legacy names are not guessed from a step.
+- Detail/confirmation shows before/after names, quantity, status, financial and
+  other persisted form fields, plus added/deleted item values and attachments.
+  Requester revision histories are read through existing participant RLS;
+  no endpoint, grant, schema or write authority is added.
+- PDF evidence stays in the separate revision appendix. Enrichment is in-memory,
+  historical source/time cutoffs remain, and document/signature snapshots are not
+  rewritten. Old files remain valid; stored PDF bytes are not silently replaced.
+- Selected release is staging first then production, as explicitly approved.
+  Worker rollout is coordinated with app rollout; do not requeue every old job
+  or trigger a vendor POST to test the presentation change.
+
+## DOC-12 Interactive PDF Queue Latency (2026-10-14, Issue #584)
+
+- Production first-open jobs spent 4.803-14.912 seconds waiting for a worker,
+  while actual render/upload took 0.481-0.814 seconds in four measured jobs.
+  Existing ready PDFs use the cached path. No current queue backlog or fresh
+  worker failure was found; old failed jobs are not blindly requeued.
+- Default idle poll cap becomes 5000 ms in the worker and standalone compose,
+  matching the already running staging configuration. Base remains 2000 ms,
+  bounded idle backoff and operator overrides remain intact.
+- No new schema, RPC, approval, document content or vendor request. Runtime
+  configuration must be checked separately: an explicit old 30000 ms setting
+  overrides the corrected default. Only the PDF worker is reconfigured after
+  its active jobs drain; other services and images are preserved.
+- This bounds the idle detection delay, not total PDF time under arbitrary
+  load. Existing prepared files, historical approvals and snapshots remain intact.
+
 ## OPS-12 Full Proxmox Production Migration (2026-10-14, Issue #573)
 
 - User selected total production migration, including self-hosted Database/Auth

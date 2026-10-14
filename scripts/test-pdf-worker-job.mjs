@@ -7,7 +7,9 @@
  * ./server/pdf-worker-job.mjs (checked at bottom).
  */
 import test from "node:test";
+import "./test-pdf-idle-polling.mjs";
 import assert from "node:assert/strict";
+import "../server/revision-actor-evidence.test.mjs";
 import { readFileSync } from "node:fs";
 import { createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob, loadRequesterRevisionHistory } from "../server/pdf-worker-job.mjs";
 import {

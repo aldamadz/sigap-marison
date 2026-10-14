@@ -55,6 +55,7 @@ export type RegistrationSummarySigner = {
 };
 
 export type RegistrationSummaryData = {
+  suratId?: string;
   noSurat: string;
   title: string;
   category: unknown;
@@ -437,7 +438,7 @@ export function RegistrationSummaryDocument({
           </dl>
         </section>
 
-        <SignerRevisionSummary revision={data.revision || null} />
+        <SignerRevisionSummary revision={data.revision || null} suratId={data.suratId} />
 
         {(detailFields.length > 0 || isUnitCategory || keu1 || keu10) && (
           <section className="space-y-4">
@@ -596,7 +597,7 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
                 </dl>
               </section>
 
-              <SignerRevisionSummary revision={data.revision || null} />
+              <SignerRevisionSummary revision={data.revision || null} suratId={data.suratId} />
 
               {(detailFields.length > 0 || isUnitCategory || keu1 || keu10) && (
                 <section className="space-y-4">
