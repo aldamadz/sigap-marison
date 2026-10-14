@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { migratedStorageDisplayUrl } from "@/lib/storage-display-url";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
@@ -2833,7 +2834,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                           <div className="space-y-3">
                             <div className="overflow-hidden rounded-md border border-border bg-background">
                               <img
-                                src={attachment.file_url}
+                                src={migratedStorageDisplayUrl(attachment.file_url)}
                                 alt={`Lampiran gambar rekomendasi item ${rowIndex + 1}`}
                                 loading="lazy"
                                 decoding="async"

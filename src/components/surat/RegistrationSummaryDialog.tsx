@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { migratedStorageDisplayUrl } from "@/lib/storage-display-url";
 import { ExternalLink, FileCheck2, FileText, Image as ImageIcon, Loader2, Paperclip, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -170,7 +171,7 @@ const AttachmentPreview = ({ row, index }: { row: Record<string, unknown>; index
         <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md border border-border bg-muted/20">
           {imageUrl ? (
             <img
-              src={imageUrl}
+              src={migratedStorageDisplayUrl(imageUrl)}
               alt={`Lampiran item rekomendasi ${index + 1}`}
               className="h-full w-full object-contain"
               loading="lazy"

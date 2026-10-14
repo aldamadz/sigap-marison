@@ -12,7 +12,6 @@ case "$environment" in
     image=agenda-flow:staging
     container=agenda-flow-staging
     domain=https://sigap.marison-testing.biz.id
-    supabase_ref=wrufczusfopgvwvxsmjk
     ;;
   production)
     service=agenda-flow
@@ -20,7 +19,6 @@ case "$environment" in
     image=agenda-flow:production
     container=agenda-flow-prod
     domain=https://sigap.marisoncloud.com
-    supabase_ref=xuhyodtmgwteyslhrkfx
     ;;
   *) echo 'Usage: deploy-app.sh staging|production <git-sha>' >&2; exit 2 ;;
 esac
@@ -29,6 +27,12 @@ esac
 [[ "$(git rev-parse HEAD)" == "$target_sha" ]] || { echo 'Checkout does not match target SHA.' >&2; exit 1; }
 
 env_file="/home/marison/sigap-deploy/$environment/.env.$environment"
+if [[ "$environment" == production ]]; then
+  [[ "$(hostname)" == sigap-app-prod-01 && "$(cat /run/systemd/container 2>/dev/null)" == lxc ]] || {
+    echo 'Production deployment requires the designated Proxmox application guest.' >&2; exit 1;
+  }
+  env_file=/opt/sigap/secrets/.env.production
+fi
 env_link=".env.$environment"
 compose_file="docker-compose.$([[ "$environment" == production ]] && echo prod || echo staging).yml"
 [[ -f "$env_file" ]] || { echo "Missing host $environment environment file." >&2; exit 1; }
@@ -79,25 +83,7 @@ cleanup() {
 trap cleanup EXIT
 
 "${compose[@]}" config --quiet
-"${compose[@]}" config --format json | node -e '
-  let body = "";
-  process.stdin.on("data", chunk => { body += chunk; });
-  process.stdin.on("end", () => {
-    const config = JSON.parse(body);
-    const service = config.services[process.argv[1]];
-    const expectedHost = `${process.argv[2]}.supabase.co`;
-    const expectedEnvironment = process.argv[3];
-    const expectedUrl = process.argv[4];
-    const env = service?.environment;
-    if (!env || new URL(env.SUPABASE_URL).hostname !== expectedHost ||
-        new URL(env.VITE_SUPABASE_URL).hostname !== expectedHost ||
-        env.MARISON_DEPLOYMENT_ENVIRONMENT !== expectedEnvironment ||
-        env.APP_PUBLIC_URL !== expectedUrl) {
-      console.error("Deployment environment identity mismatch.");
-      process.exitCode = 1;
-    }
-  });
-' "$service" "$supabase_ref" "$environment" "$domain"
+"${compose[@]}" config --format json | node scripts/deploy-environment-identity.mjs "$service" "$environment"
 
 if [[ "$mode" == --check-only ]]; then
   echo "$environment deployment preflight passed; no container was changed."
