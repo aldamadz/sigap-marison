@@ -1,5 +1,23 @@
 # SIGAP Feature and Release Map
 
+## MRN-18 Complete Attachment Arrays (2026-10-14, Issue #572)
+
+- Fresh outbound Asset jobs retain main/requester/examiner documents alongside
+  the canonical recommendation PDF. Vendor Asset schema uses `items[].attachments`
+  with name/link objects, not an invented top-level attachments field.
+- Unit, Non Unit and Fund contracts already use top-level attachment object
+  arrays. File access links and deep-frozen dispatch history remain unchanged.
+- Mapper and runtime regressions verify recommended asset requests no longer
+  discard request attachments. Old frozen jobs are not rewritten or resent.
+- Forward migration `20261014100000` adds a service-only verified Unit replacement
+  RPC and permits production entries in the existing replacement audit. Production
+  requires explicit confirmation, active admin, final signatures, frozen hash,
+  fresh matching unit identities/type and explicit unsubmitted vendor flags.
+- Worker preparation rechecks production replacement references. Other production
+  categories remain blocked; historical payloads are not modified or requeued.
+  Native PostgreSQL and targeted UI/helper tests precede staging-first rollout.
+  Panusupan's actual new generation/vendor response is still an operational gate.
+
 ## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
 
 - Candidate `fix/revision-appendix-external-20261013` from production main,
