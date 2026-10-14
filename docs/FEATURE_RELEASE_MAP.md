@@ -2,6 +2,14 @@
 
 ## OPS-13 LAN Addressing and Availability Audit (2026-10-14, Issue #583)
 
+- Final explicitly requested LAN rollout completed: app `.251`, storage `.252`,
+  Database/Auth `.253`, `/24`, gateway `.1`, all on verified fibre `vmbr1`.
+  Private `.2/.5/.3` service addresses and private net1 remain unchanged.
+  Old DHCP/default routes removed; Proxmox/networkd/netplan persisted and checked
+  without a reboot. MinIO console rebound; DB/storage API containers unchanged.
+  Brief private DB address loss during network file permission cleanup was
+  recovered and documented; final public API/SSE and monitoring checks pass.
+
 - Requested LAN targets: CT 104 application `192.168.0.251`, VM 100 storage
   `192.168.0.252`, CT 110 Database/Auth `192.168.0.253`. User confirmed `/24`,
   gateway `192.168.0.1`, bridge `vmbr0`; private service addresses remain unchanged.

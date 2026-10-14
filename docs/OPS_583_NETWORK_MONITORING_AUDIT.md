@@ -7,6 +7,50 @@ credentials, public DNS or vendor submission was changed.
 
 ## Public Access Restoration
 
+## Final Storage and Database/Auth LAN Change
+
+Explicit user request resumed the remaining LAN operation on 2026-10-14.
+All three production guests now use the working `vmbr1` fibre path, not the
+earlier failing `vmbr0` candidate. `/24` and gateway `192.168.0.1` are retained.
+
+| Component | Final LAN | Unchanged private service address |
+| --- | --- | --- |
+| CT 104 application | 192.168.0.251/24 | 172.20.100.2/24 |
+| VM 100 storage | 192.168.0.252/24 | 172.20.100.5/24 |
+| CT 110 Database/Auth | 192.168.0.253/24 | 172.20.100.3/24 |
+
+Gateway ARP and three bounded duplicate-address probes passed. A temporary
+DB guest LAN interface verified gateway/SSH access before the persistent change;
+it was removed. Proxmox net0 configuration and DB networkd configuration are
+static; storage netplan is static, with its existing cloud-init network-disable
+setting preserved. Old LAN addresses and old default routes are absent. MACs,
+private net1 configurations, storage private netplan and data mount are retained.
+
+During DB DHCP cleanup, restrictive operator umask propagated to PVE-generated
+network files. Reloading networkd made its private interface unmanaged and
+temporarily removed `.3`. The private address was restored immediately when
+detected; non-secret network files were returned to mode 0644, and networkd
+now reports both interfaces configured/routable. The operator helper was corrected
+to use normal child-process umask for PVE operations while keeping protected
+backups private. No database container or database data was reset or replaced.
+The first storage attempt rolled back because that DB health check failed;
+the corrected retry passed all private health gates.
+
+MinIO console moved from the old LAN listener to `.252:9001`, requiring one
+MinIO restart. Storage API/DB Docker container IDs remain unchanged. MinIO data
+API remains loopback; Storage API/gateway and PostgreSQL/Auth remain bound to
+private addresses, not the new LAN. Storage disk is mounted and MinIO active;
+DNS resolves on both guests, public session/inbox/attention/monitoring/calendar
+and allowed SSE checks pass. Disallowed profiles SSE still returns 400.
+Grafana's final application/public/component probes all reported success.
+
+Final proof is retained in `/root/sigap-rollouts/issue583/final-lan` on the
+authorized operator host. Configuration persistence was inspected; no reboot
+test was performed. Upstream Cloudflare path failures remain a separate risk.
+
+The following restoration/preflight sections are historical evidence and do
+not supersede the final address table above.
+
 After the initial preflight below, CT 104 was observed with an externally updated
 configuration: `net0` on `vmbr1`, `192.168.0.251/24`, gateway `192.168.0.1`.
 The physical `ens4` fibre port reports 1000 Mb/s, full duplex, link detected.
