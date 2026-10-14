@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -113,8 +113,25 @@ describe("Marison outbound recovery dialog", () => {
 describe("Marison outbound replacement preflight", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    environment.current = "staging";
     vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "staging", page: 1, pageSize: 20, total: 1, items: [row422] });
     vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
+  });
+
+  it("requires explicit production confirmation before a Unit replacement", async () => {
+    environment.current = "production";
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "production", page: 1, pageSize: 20, total: 1, items: [{ ...row422, environment: "production" }] });
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue(eligiblePreflight);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.change(await dialog.findByLabelText("Alasan dan perbaikan yang dilakukan"), { target: { value: "Tipe sesuai API terbaru" } });
+    const submit = dialog.getByRole("button", { name: "Buat pengiriman pengganti" });
+    expect(submit).toBeDisabled();
+    fireEvent.click(dialog.getByRole("checkbox", { name: /mengonfirmasi pengiriman pengganti SPK Unit nyata/i }));
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(marisonIntegrationService.createReplacement).toHaveBeenCalledWith("job-422", "Tipe sesuai API terbaru", true));
   });
 
   it("shows NIK diagnosis with area specificity and roles from safe context", async () => {

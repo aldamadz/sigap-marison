@@ -206,6 +206,7 @@ export function MarisonOutboundQueuePanel() {
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
   const [replacement, setReplacement] = useState<MarisonDispatchRow | null>(null);
   const [replacementReason, setReplacementReason] = useState("");
+  const [productionReplacementConfirmed, setProductionReplacementConfirmed] = useState(false);
   const [replacementPreflightState, setReplacementPreflightState] = useState<ReplacementPreflightState>("idle");
   const [replacementPreflightData, setReplacementPreflightData] = useState<ReplacementPreflight | null>(null);
   const [marisonFixConfirmed, setMarisonFixConfirmed] = useState(false);
@@ -244,11 +245,14 @@ export function MarisonOutboundQueuePanel() {
   const replacementMutation = useMutation({
     mutationFn: async () => {
       if (!replacement || !replacementReason.trim()) throw new Error("Alasan pengiriman pengganti wajib diisi.");
-      return marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
+      return replacement.environment === "production"
+        ? marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim(), productionReplacementConfirmed)
+        : marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
     },
     onSuccess: async () => {
       setReplacement(null);
       setReplacementReason("");
+      setProductionReplacementConfirmed(false);
       setReplacementPreflightState("idle");
       setReplacementPreflightData(null);
       setMarisonFixConfirmed(false);
@@ -303,6 +307,7 @@ export function MarisonOutboundQueuePanel() {
   const openReplacement = async (row: MarisonDispatchRow) => {
     replacementMutation.reset();
     setReplacement(row);
+    setProductionReplacementConfirmed(false);
     setReplacementReason("");
     setMarisonFixConfirmed(false);
     setReplacementPreflightState("checking");
@@ -345,7 +350,8 @@ export function MarisonOutboundQueuePanel() {
   const activeRecoveryGuidance = preflightReasonCode ? recoveryGuidance[preflightReasonCode] : null;
   const canSubmitReplacement = replacementPreflightState === "ready"
     && replacementPreflightData?.eligible === true
-    && replacementReason.trim().length > 0
+    && replacementReason.trim().length >= (replacement?.environment === "production" ? 5 : 1)
+    && (replacement?.environment !== "production" || productionReplacementConfirmed)
     && !replacementMutation.isPending
     && (replacementPreflightData.sigapChanged || marisonFixConfirmed);
 
@@ -691,6 +697,12 @@ export function MarisonOutboundQueuePanel() {
                 <p role="alert" className="text-sm text-destructive">
                   {replacementMutation.error instanceof Error ? replacementMutation.error.message : "Pengiriman pengganti gagal dibuat."}
                 </p>
+              )}
+              {replacement.environment === "production" && (
+                <label className="flex items-start gap-3 rounded-md border border-border p-3 text-sm leading-5">
+                  <Checkbox checked={productionReplacementConfirmed} onCheckedChange={(checked) => setProductionReplacementConfirmed(checked === true)} />
+                  <span>Saya mengonfirmasi pengiriman pengganti SPK Unit nyata ke Marison production. Pengiriman lama tetap tersimpan.</span>
+                </label>
               )}
             </div>
           )}

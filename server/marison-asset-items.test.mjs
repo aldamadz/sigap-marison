@@ -14,6 +14,31 @@ const parents = [
   { id: "item-b", nama_barang: "Printer", jumlah: 2 },
 ];
 
+test("recommended assets retain main PDF, requester/checker files and recommendation PDF without duplicates", () => {
+  const attachments = [
+    { name: "Dokumen Pengajuan Final", link: "https://sigap.test/main.pdf" },
+    { name: "RAB pemohon", link: "https://sigap.test/rab.pdf" },
+    { name: "Lampiran pemeriksa", link: "https://sigap.test/checker.pdf" },
+  ];
+  const payload = mapMarisonAssetRequest({
+    request: { request_number: "UJI-ATTACHMENTS" }, applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", details: [{ detail_name: "RAM", quantity: 1 }] }],
+    recommendationPdf: pdf, applicantAttachments: [...attachments, attachments[0]],
+  });
+  assert.deepEqual(payload.items[0].attachments, [...attachments, pdf]);
+  assert.ok(Object.isFrozen(payload.items[0].attachments));
+  assert.equal(attachments.length, 3);
+});
+
+test("recommended assets retain logical canonical PDF references for transport materialization", () => {
+  const reference = { type: "sigap_recommendation_pdf", surat_id: "child", name: "Rekomendasi" };
+  const items = mapMarisonAssetItems({ applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", details: [{ detail_name: "RAM", quantity: 1 }] }],
+    recommendationPdf: reference, applicantAttachments: [{ name: "Dokumen utama", link: "https://sigap.test/main.pdf" }],
+  });
+  assert.deepEqual(items[0].attachments[1], reference);
+});
+
 test("maps canonical v1 fixture accepted by shared and PDF layers", async () => {
   const fixture = JSON.parse(await readFile(new URL("../fixtures/recommendation-multi-detail-v1.json", import.meta.url), "utf8"));
   const items = mapMarisonAssetItems({ applicantItems: parents, recommendationRows: fixture, recommendationPdf: pdf });
