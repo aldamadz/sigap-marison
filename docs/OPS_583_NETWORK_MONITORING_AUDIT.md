@@ -5,7 +5,44 @@ Date: 2026-10-14. Scope: production guest LAN addresses and production/staging
 monitoring diagnosis. No application code, business data, database schema,
 credentials, public DNS or vendor submission was changed.
 
-## Requested and Live Addresses
+## Public Access Restoration
+
+After the initial preflight below, CT 104 was observed with an externally updated
+configuration: `net0` on `vmbr1`, `192.168.0.251/24`, gateway `192.168.0.1`.
+The physical `ens4` fibre port reports 1000 Mb/s, full duplex, link detected.
+The new gateway and CT 103/CT 102 connections to application port 3010 succeeded.
+This existing configuration was preserved; no guest networking was rewritten.
+
+Public SIGAP returned HTTP 502 because its proxy still addressed `10.10.10.241`.
+Only the SIGAP application route (3010) and its two file/Auth-link relay routes
+(3082) were switched to `192.168.0.251`. Current Caddy config was backed up,
+the candidate validated and gracefully reloaded. The persistent bind-mounted
+file was written in place; unrelated routes remained unchanged.
+
+Exporter and independent maintenance service bindings were updated to `.251`,
+and the existing singleton Prometheus component target became `.251:9105`.
+Promtool validation passed before reload; other monitoring targets were retained.
+No app/worker container restart, image deploy, business write or schema change.
+
+Post-restoration acceptance:
+
+- Operator computer public root/readiness: HTTP 200.
+- Public authenticated session, inbox, attention and outbound list: HTTP 200.
+- Read-only monitoring and calendar RPCs: HTTP 200, no RPC error.
+- SSE emitted `event: ready`; disallowed profiles subscription still HTTP 400.
+- Previously issued public PDF link: HTTP 200, valid PDF bytes, 98,021 bytes.
+- External API health: HTTP 200; no vendor business request was made.
+- Prometheus component target `.251:9105`: UP after reload.
+- Independent maintenance listeners return their expected HTTP 503 on `.251`;
+  maintenance is not enabled on the public application route.
+
+Application SHA remains `8975d1fee6758d58adace26cfed4a6d159d56c37`. The gateway
+recovery does not claim the earlier vantage-dependent Cloudflare TCP failure
+has been fixed, nor that CT 110 and VM 100 LAN readdressing has been completed.
+Authenticated acceptance used a short-lived operator identity, not an actual
+password login or a two-user mutation test.
+
+## Initial Preflight Snapshot
 
 | Component | Requested LAN | Live LAN after preflight | Private service IP |
 | --- | --- | --- | --- |

@@ -5,10 +5,16 @@
 - Requested LAN targets: CT 104 application `192.168.0.251`, VM 100 storage
   `192.168.0.252`, CT 110 Database/Auth `192.168.0.253`. User confirmed `/24`,
   gateway `192.168.0.1`, bridge `vmbr0`; private service addresses remain unchanged.
-- LAN rollout is blocked by connectivity preflight, not completed: temporary
-  application address could ARP the gateway but could not ping it, reach HTTPS,
-  or be reached from monitoring. Temporary address was removed; original guest
-  configuration, proxy, workers and monitoring remain unchanged.
+- Initial vmbr0 LAN preflight failed and temporary address was removed. CT 104
+  was subsequently observed on `vmbr1` (fibre interface `ens4`, link up at 1 Gbps)
+  with `192.168.0.251/24` and gateway `192.168.0.1`; proxy and gateway tests passed.
+  The observed bridge change was preserved, not overwritten by the older plan.
+- Public access restored after replacing stale application/file proxy destinations
+  `10.10.10.241` with `.251`. Root, readiness, session, inbox, attention, monitoring,
+  calendar, SSE ready and an existing public PDF passed read-only acceptance.
+  Maintenance/exporter bindings and the component scrape target now use `.251`.
+  Production image/SHA, private Database/Auth/Storage network and business data
+  remain unchanged. CT 110/VM 100 LAN changes are not claimed by this restoration.
 - Production public-probe failure was reproduced as a TCP connection timeout
   to Cloudflare `172.67.187.163`, while `104.21.92.69` and direct application
   readiness returned HTTP 200. The affected edge address succeeded from CT 104
