@@ -1,7 +1,7 @@
 # Production Proxmox Total Migration
 
 Owner: Codex; tracking: Issue #573. Production migration explicitly requested.
-Status on 2026-10-14: isolated Database/Auth rehearsal passed; no cutover.
+Status on 2026-10-14: final cutover completed; public maintenance removed.
 
 ## Boundary
 
@@ -13,8 +13,9 @@ Status on 2026-10-14: isolated Database/Auth rehearsal passed; no cutover.
   to the private address, not the LAN/public interface.
 - Production storage must use VM 100 `sigap-storage-prod-01` (10.10.10.240),
   existing MinIO and its XFS storage at `/srv/minio`. Do not format it.
-- PDF, directory-sync, outbound, external API and the production tunnel still
-  have Ubuntu instances. They are migration targets, not already migrated.
+- PDF, directory-sync, outbound, external API and the production tunnel now run
+  on CT 104. The old Ubuntu instances and the older CT 103 app replica are stopped
+  with restart disabled. Retained source artifacts are rollback material only.
 - Staging and other Ubuntu services are excluded. In particular, the existing
   Supabase Storage service/domain is shared with staging and cannot be moved or
   redirected wholesale as a production migration shortcut.
@@ -134,7 +135,61 @@ own instance, not behind the application process being shut down. Bundle the
 existing local PNG logo with the same relative layout. Public API maintenance
 and public web maintenance must cover all production writers during cutover.
 
-## Remaining Acceptance Gates
+## Cutover Evidence
+
+Production app/PDF/sync/outbound use image
+`sha256:17a839cc702c1f179aded2cd165ef1983dc5f0acc3301dd2a9da073636ee2424`,
+release SHA `91e6c3be05664f63c8481aa7b9d9c6166542f5f0`. The existing external
+API and tunnel images were transferred intact; no new API credential was needed.
+Live staging `da990cae26f8f6b051eb18e664bf04bafba75503` contains that release.
+
+The write-frozen final snapshot was restored transactionally into the audited
+schema. All 99 imported Auth/application/history tables matched their dump counts;
+376 account hashes and 226 migration rows matched source fingerprints. The six
+managed Storage tables belong to destination Storage API metadata, not Cloud's
+unused storage. A scoped data refresh used replica mode without TRUNCATE CASCADE,
+so it did not erase copied Storage metadata through Auth dependencies.
+
+All 173 available referenced objects, totaling 51,452,583 bytes, matched after
+download from destination. A post-freeze reread verified none had changed since
+initial copy. All 35 current attachments and six canonical PDFs were present.
+562 historical references were already missing at source. They remain in history;
+their original binary content has not been reconstructed or silently replaced.
+
+Both source-local database schedules were copied and activated on destination;
+Cloud schedules remain disabled. Source workers/connectors are stopped and have
+restart disabled. Destination app/workers/API/tunnel reported zero restart and
+no recent authentication/connection errors. Subsequent legitimate PDF jobs can
+increase destination object counts; that is not a source-copy mismatch.
+
+Outbound retains its HTTPS requirement using
+`https://sigap-db-auth.internal:8443`, resolved only inside its container to
+172.20.100.3. An isolated Caddy TLS gateway uses a persistent internal CA; the
+worker mounts the public CA certificate and sets NODE_EXTRA_CA_CERTS. Certificate
+validation is enabled. Preserve this protected worker compose configuration for
+future coordinated rollout; do not start a worker from an HTTP-only app config.
+
+Read-only destination acceptance passed health/version/root, authorized session,
+inbox, attention, dispatch list, monitoring and calendar RPCs; SSE reached ready
+and profiles subscriptions were rejected. A previously issued Panusupan PDF link
+still returned the original readable PDF from migrated storage. Existing external
+client credentials generated a token; invalid credentials returned 401. No real
+approval or submission-decision POST was used as acceptance. Actual password
+login in a browser and a two-user mutation/reconnect test were not performed.
+
+Public root/readiness/external API documentation return 200. Public REST/admin
+and Storage bucket/upload paths are not exposed (404); only public object reads
+and Auth verification/callback links are relayed. A verification request without
+a token returns 400. The Realtime gateway rewrites directly to /socket/websocket;
+combining ordered strip/rewrite directives previously produced an invalid path.
+
+New production migrations/queries must target CT 110 through the authorized
+Proxmox operator, with exact ledger/SQL/ACL checks. Legacy Cloud Management
+helpers and the Cloud production MCP project are not the live database. Do not
+use them for production business changes. Operator credentials, dumps, object
+manifests, target compose, CA material and logs remain private, not Git artifacts.
+
+## Execution Checklist
 
 1. Preserve production Auth settings/SMTP/provider/redirect configuration;
    provision a stable TLS gateway and private service routing. New JWT keys
