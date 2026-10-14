@@ -31,7 +31,7 @@ const workerId = process.env.PDF_WORKER_ID || `pdf-worker-${randomUUID()}`;
 const concurrency = Math.max(Number(process.env.PDF_WORKER_CONCURRENCY || 3), 1);
 const pollIntervalMs = Math.max(Number(process.env.PDF_WORKER_POLL_INTERVAL_MS || 2000), 500);
 const maxIdlePollIntervalMs = Math.max(
-  Number(process.env.PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS || 30000),
+  Number(process.env.PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS || 5000),
   pollIntervalMs,
 );
 const maxAttempts = Math.max(Number(process.env.PDF_WORKER_MAX_ATTEMPTS || 3), 1);
