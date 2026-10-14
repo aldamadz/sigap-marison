@@ -84,6 +84,11 @@ all non-liveness routes return JSON 503, including paths outside `/api`.
 
 Local preview (not a production activation):
 
+The user-provided SVG animation is bundled locally, with a static illustration
+selected by `prefers-reduced-motion`. The original SVG was checked for executable
+elements/event attributes/external references; no remote assets/scripts are used.
+Desktop/mobile screenshots verify asset loading and no horizontal overflow.
+
 ```sh
 node --test ops/maintenance/server.test.mjs
 node ops/maintenance/server.mjs

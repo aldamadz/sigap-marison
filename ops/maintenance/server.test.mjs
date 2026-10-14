@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { createMaintenanceServer, renderMaintenancePage } from "./server.mjs";
 
 test("maintenance content escapes operator text and does not invent an ETA", () => {
@@ -58,4 +59,29 @@ test("external API surface returns JSON even for routes outside /api", async (co
     assert.equal((await response.json()).error, "maintenance");
   }
   assert.throws(() => createMaintenanceServer({ apiOnly: "api" }));
+});
+
+test("local illustration preserves animations and provides a static reduced-motion image", async (context) => {
+  const animation = readFileSync(new URL("../../public/maintenance-animation.svg", import.meta.url));
+  const staticIllustration = readFileSync(new URL("../../public/maintenance-illustration-static.svg", import.meta.url));
+  assert.match(animation.toString(), /<animateTransform/);
+  assert.doesNotMatch(staticIllustration.toString(), /<animate(?:Transform|Motion)?\b/);
+  for (const svg of [animation, staticIllustration]) {
+    assert.doesNotMatch(svg.toString(), /<(?:script|foreignObject|iframe)\b|\bon\w+\s*=|(?:href|src)\s*=\s*["'](?:https?:|javascript:|data:)/i);
+  }
+  assert.match(renderMaintenancePage(), /prefers-reduced-motion: reduce/);
+  const server = createMaintenanceServer({ animation, staticIllustration });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  context.after(() => new Promise((done) => server.close(done)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  for (const [path, expected] of [["/maintenance-animation.svg", animation], ["/maintenance-illustration-static.svg", staticIllustration]]) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/svg+xml");
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected);
+    const head = await fetch(base + path, { method: "HEAD" });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), "");
+  }
+  assert.equal((await fetch(base + "/public/maintenance-animation.svg")).status, 503);
 });
