@@ -31,14 +31,26 @@ export const normalizeLegacyStorageCoordinate = (value) => {
   return raw;
 };
 
-export const parseStorageCoordinate = (value, { origins, defaultOrigin = "primary" } = {}) => {
+export const configuredStorageOriginAliases = (value) => String(value || "").split(",").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+  const url = new URL(entry);
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("Legacy storage origins must be bare HTTPS origins.");
+  }
+  return url.origin;
+});
+
+export const parseStorageCoordinate = (value, { origins, aliases = {}, defaultOrigin = "primary" } = {}) => {
   const raw = String(value || "").trim();
   if (!raw) throw new Error("Storage coordinate is required.");
   const knownOrigins = Object.fromEntries(Object.entries(origins || {}).map(([name, origin]) => [name, new URL(origin).origin]));
+  const originEntries = Object.entries(knownOrigins).flatMap(([name, origin]) => [
+    [name, origin], ...(aliases[name] || []).map((alias) => [name, new URL(alias).origin]),
+  ]);
 
   if (/^https?:\/\//i.test(raw)) {
     const url = new URL(raw);
-    const origin = Object.entries(knownOrigins).find(([, known]) => known === url.origin)?.[0];
+    if (url.username || url.password) throw new Error("Storage URL credentials are not allowed.");
+    const origin = originEntries.find(([, known]) => known === url.origin)?.[0];
     if (!origin) throw new Error("Storage URL origin is not recognized.");
     const match = url.pathname.match(STORAGE_ROUTE);
     if (!match) throw new Error("Storage URL path is invalid.");

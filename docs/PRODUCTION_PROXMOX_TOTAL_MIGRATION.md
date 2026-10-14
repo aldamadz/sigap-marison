@@ -9,7 +9,8 @@ Status on 2026-10-14: isolated Database/Auth rehearsal passed; no cutover.
 - New unprivileged CT 110 `sigap-db-auth-prod-01` is Database/Auth only.
   Its private address is 172.20.100.3, reachable from app 172.20.100.2.
   Internet/bootstrap NIC currently uses DHCP; do not depend on that lease for
-  permanent service routing. No PostgreSQL or Auth port has been published.
+  permanent service routing. PostgreSQL 5432 and the API gateway 8000 bind only
+  to the private address, not the LAN/public interface.
 - Production storage must use VM 100 `sigap-storage-prod-01` (10.10.10.240),
   existing MinIO and its XFS storage at `/srv/minio`. Do not format it.
 - PDF, directory-sync, outbound, external API and the production tunnel still
@@ -88,6 +89,32 @@ The user-provided SVG animation is bundled locally, with a static illustration
 selected by `prefers-reduced-motion`. The original SVG was checked for executable
 elements/event attributes/external references; no remote assets/scripts are used.
 Desktop/mobile screenshots verify asset loading and no horizontal overflow.
+
+## Private API and File Compatibility
+
+Auth 2.197.0, PostgREST 14.17, Realtime 2.134.10 and a Caddy 2.11.7 gateway
+are running privately in CT 110. Realtime includes its required metrics JWT
+configuration. This is rehearsal readiness, not proof of public cutover or
+two-user authorization acceptance. SMTP/provider settings have been captured
+privately; exact runtime comparison remains a cutover gate.
+
+VM 100 has a separate private NIC for 172.20.100.5. Its existing MinIO service,
+disk and public/LAN NIC are retained. Storage API provisioning and object-byte
+verification are separate from the already verified database import.
+
+Legacy file references are preserved in saved documents/revision snapshots.
+`STORAGE_LEGACY_PRIMARY_ORIGINS` and `STORAGE_LEGACY_EXTERNAL_ORIGINS` accept
+explicit bare HTTPS origins only; backend downloads resolve their canonical
+coordinates through the destination storage client, not the historical host.
+`VITE_LEGACY_STORAGE_ORIGINS` maps only allowlisted public image references to
+the application's same-origin Storage gateway at display time. Signed/private
+URLs and unrelated origins are not rewritten. A matching public gateway route
+and copied objects are required before enabling these settings in production.
+
+On 2026-10-14, Issue #572 was released separately: production runtime
+`5828a40b1c07e3b01915e2a61aa2d3e860d5d498`, live staging
+`fffa555912a1c5eddeb762db0d5bfc7196a9caae`; migration `20261014100000`
+verified in both environments. This does not claim total migration completion.
 
 ```sh
 node --test ops/maintenance/server.test.mjs

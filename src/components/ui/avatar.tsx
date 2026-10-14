@@ -3,6 +3,7 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { migratedStorageDisplayUrl } from "@/lib/storage-display-url";
 
 const Avatar = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Root>,
@@ -21,12 +22,12 @@ const AvatarImage = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
 >(({ className, src, ...props }, ref) => {
   const [resolvedSrc, setResolvedSrc] = React.useState<string | undefined>(
-    src?.startsWith("/api/profile/avatar/file") ? undefined : src,
+    src?.startsWith("/api/profile/avatar/file") ? undefined : migratedStorageDisplayUrl(src),
   );
 
   React.useEffect(() => {
     if (!src || !src.startsWith("/api/profile/avatar/file")) {
-      setResolvedSrc(src);
+      setResolvedSrc(migratedStorageDisplayUrl(src));
       return undefined;
     }
 

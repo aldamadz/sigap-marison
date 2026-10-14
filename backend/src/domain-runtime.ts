@@ -61,7 +61,7 @@ import {
   recommendationFileReference,
   recommendationTokenRequestedBy,
 } from "../../server/file-view-token.mjs";
-import { normalizeLegacyStorageCoordinate, parseStorageCoordinate } from "../../server/storage-coordinate.mjs";
+import { configuredStorageOriginAliases, normalizeLegacyStorageCoordinate, parseStorageCoordinate } from "../../server/storage-coordinate.mjs";
 import { activeRecommendationParentIds, hasDirectSuratAccess } from "../../server/surat-linked-access.mjs";
 import { resolveMarisonOutboundNik } from "../../server/marison-outbound-identity.mjs";
 import {
@@ -132,6 +132,13 @@ const storagePublicBaseUrl = String(
   (storageSupabaseUrl ? `${storageSupabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public` : "")
 ).replace(/\/+$/, "");
 const storagePathPrefix = normalizeStoragePathPrefix(process.env.STORAGE_PATH_PREFIX || "");
+const storageOriginAliases = {
+  primary: configuredStorageOriginAliases(process.env.STORAGE_LEGACY_PRIMARY_ORIGINS),
+  external: [
+    ...(storagePublicBaseUrl ? [new URL(storagePublicBaseUrl).origin] : []),
+    ...configuredStorageOriginAliases(process.env.STORAGE_LEGACY_EXTERNAL_ORIGINS),
+  ],
+};
 
 let storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
   ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
@@ -1193,6 +1200,7 @@ const parseStorageRef = (value) => {
     const canonicalInput = normalizeLegacyStorageCoordinate(value);
     const coordinate = parseStorageCoordinate(canonicalInput, {
       origins: { primary: supabaseUrl, external: storageSupabaseUrl },
+      aliases: storageOriginAliases,
       defaultOrigin: "primary",
     });
     return { bucket: coordinate.bucket, path: coordinate.objectPath, origin: coordinate.origin };

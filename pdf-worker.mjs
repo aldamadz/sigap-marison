@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { configuredStorageOriginAliases } from "./server/storage-coordinate.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { isPgdDocument, normalizePgdDocumentData, renderPgdPdf, resolvePgdMasterForm } from "./pgd-pdf-renderer.mjs";
 import { isKeu1Document, normalizeKeu1DocumentData, renderKeu1Pdf, resolveKeu1MasterForm } from "./keu1-pdf-renderer.mjs";
@@ -68,7 +69,8 @@ const downloadStorageFile = async (filePath, label, expectedBucket) => {
   const sourceRef = parseStorageRef(filePath, {
     defaultBucket: expectedBucket,
     defaultOrigin: useExternalStorage() ? "external" : "primary",
-    externalBases: [storageSupabaseUrl, storagePublicBaseUrl],
+    externalBases: [storageSupabaseUrl, storagePublicBaseUrl,
+      ...configuredStorageOriginAliases(process.env.STORAGE_LEGACY_EXTERNAL_ORIGINS)],
   });
   if (!sourceRef?.bucket || !sourceRef.path) throw new Error(`${label} belum tersedia.`);
   if (sourceRef.bucket !== expectedBucket) throw new Error(`${label} wajib berada di bucket ${expectedBucket}.`);
