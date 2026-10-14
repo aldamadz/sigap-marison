@@ -71,6 +71,36 @@ needs an authorized network operator before this rollout can proceed.
 
 ## Monitoring Evidence
 
+### Applied Availability Dashboard Correction
+
+After the network diagnosis, the authorized monitoring change was applied to
+CT 102. The existing public DNS/TLS probes remain enabled without IP pinning,
+relaxed TLS or synthetic success values. Independent origin probes now test
+production `.251:3010/health/ready` and staging `.246:3011/health/ready` with
+HTTP 200 plus the explicit ready response body.
+
+Dashboard UID `sigap-availability`, version 4, now has 22 panels. Its first four
+panels distinguish production/staging application readiness from their public
+access paths. A failed public probe is labeled `Jalur bermasalah`, while a failed
+origin probe is `Tidak siap`. Missing series are `Tidak ada data`, never healthy.
+Component queries use `deployment_host="sigap-app-prod-01"` rather than the
+removed `.241` IP; public HTTP codes and separate path latency are visible.
+
+Prometheus and blackbox configuration validation passed before reload. All
+stat/table query targets produced current data during verification. Grafana
+13 file provisioning was verified through its dashboard resource database:
+the live resource contained all 22 panels, not merely the mounted candidate.
+Four focused Node tests cover the pure dashboard transformation, immutable
+input, stable selectors, missing-data behavior and unique panel identities.
+
+This corrects outage attribution, not the upstream route itself. An intermittent
+Cloudflare timeout remains a real public-path failure when it occurs. No global
+alerts or other applications' probes were silenced. Protected before/candidate
+configuration and verification are retained under the Issue #583 operator audit.
+
+The timestamps and application SHA below describe the earlier diagnostic
+snapshot, not the subsequent PDF code release tracked by Issues #584/#585.
+
 Actual Prometheus configuration is bind-mounted from
 `/home/tactical/monitoring-stack/prometheus.yml` on CT 102, not the unrelated
 `/etc/prometheus/prometheus.yml` visible in the host filesystem. Public SIGAP

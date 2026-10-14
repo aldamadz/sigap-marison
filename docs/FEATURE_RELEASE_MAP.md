@@ -23,6 +23,11 @@
 - Staging historical probes include HTTP-status-zero timeouts; no corresponding
   application outage was proven. Previous production 503 samples include the
   authorized migration maintenance interval and are not ongoing app failures.
+- Authorized live monitoring correction adds independent origin readiness while
+  preserving public DNS/TLS probes. Dashboard version 4 has 22 panels, separate
+  application/public-path states and HTTP codes. Component queries use stable
+  deployment-host labels; missing data is never mapped to healthy. Config checks,
+  four transformation tests and Grafana resource provisioning verification pass.
 - See `docs/OPS_583_NETWORK_MONITORING_AUDIT.md` for evidence, unchanged live
   addresses and safe resumption gates. Do not hide public failures by pinning
   a currently working Cloudflare IP or replacing public probes with local ones.
