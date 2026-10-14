@@ -37,6 +37,11 @@ describe("automatic deployment boundaries", () => {
     expect(staging).not.toContain("secrets.");
     expect(production).not.toContain("secrets.");
     expect(deploy).toContain('env_file="/home/marison/sigap-deploy/$environment/.env.$environment"');
+    expect(deploy).toContain('env_file=/opt/sigap/secrets/.env.production');
+    expect(deploy).toContain('$(hostname)" == sigap-app-prod-01');
+    expect(production).toContain('sigap-deploy-production]');
+    expect(staging).not.toContain('sigap-deploy-production');
+    expect(deploy).toContain('scripts/deploy-environment-identity.mjs');
     expect(deploy).toContain('up -d --no-deps --no-build "$service"');
     expect(deploy).toContain("scripts/deploy-migration-gate.mjs");
     expect(migrationGate).toContain("supabase/migrations");

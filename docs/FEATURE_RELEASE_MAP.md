@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## OPS-12 Full Proxmox Production Migration (2026-10-14, Issue #573)
+
+- User selected total production migration, including self-hosted Database/Auth
+  on new CT 110 and existing MinIO storage VM 100. Staging/shared Ubuntu services
+  are excluded. Production connection-password rotation was explicitly authorized;
+  application user passwords remain unchanged.
+- Initial isolated PostgreSQL restore verified 105 table counts, 376 accounts and
+  password hashes, 225 migration rows, publication, 150 policies, 263 functions,
+  78 object ACLs and two Auth triggers. Extra bootstrap grants were removed to
+  match source. This is rehearsal evidence, not live cutover or storage migration.
+- Independent maintenance surface returns HTML/JSON 503 with no-store,
+  Retry-After and security headers. Local desktop/mobile preview and targeted
+  HTTP tests only; production maintenance has not been enabled.
+- Full sequence, unfinished gates and write-safe rollback are in
+  `docs/PRODUCTION_PROXMOX_TOTAL_MIGRATION.md`. Current production remains on
+  its existing Cloud/Ubuntu dependencies until final snapshot and acceptance.
+
 ## MRN-18 Complete Attachment Arrays (2026-10-14, Issue #572)
 
 - Fresh outbound Asset jobs retain main/requester/examiner documents alongside
@@ -16,7 +33,10 @@
 - Worker preparation rechecks production replacement references. Other production
   categories remain blocked; historical payloads are not modified or requeued.
   Native PostgreSQL and targeted UI/helper tests precede staging-first rollout.
-  Panusupan's actual new generation/vendor response is still an operational gate.
+  Production runtime `5828a40b1c07e3b01915e2a61aa2d3e860d5d498` and staging
+  `fffa555912a1c5eddeb762db0d5bfc7196a9caae` verified on 2026-10-14;
+  migration applied in both. Panusupan replacement succeeded on one attempt
+  with API type 30, preserving the old rejected generation unchanged.
 
 ## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
 
