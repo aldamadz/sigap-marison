@@ -49,6 +49,16 @@ describe("REC-03 Marison asset runtime integration", () => {
     expect(requirementDecision).toBeGreaterThan(documentLookup);
   });
 
+  it("retains main and examination attachments even when an asset recommendation is required", () => {
+    const start = runtime.indexOf("const buildMarisonAssetPayload");
+    const end = runtime.indexOf("const buildMarisonFundPayload", start);
+    const builder = runtime.slice(start, end);
+
+    expect(builder).toMatch(/const applicantAttachments = await buildMarisonAttachmentLinks\(surat, actorId\)/);
+    expect(builder).not.toMatch(/recommendationRequired\s*\?\s*\[\]/);
+    expect(builder).toContain("applicantAttachments,");
+  });
+
   it("maps typed mapper errors to safe HTTP 422 responses", () => {
     expect(runtime).toContain("error instanceof MarisonAssetItemsError ? 422");
     expect(runtime).toContain('sendJson(res, status, { error: error.message || "Internal server error", requestId })');

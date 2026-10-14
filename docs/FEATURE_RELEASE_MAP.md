@@ -17,6 +17,27 @@
   `docs/PRODUCTION_PROXMOX_TOTAL_MIGRATION.md`. Current production remains on
   its existing Cloud/Ubuntu dependencies until final snapshot and acceptance.
 
+## MRN-18 Complete Attachment Arrays (2026-10-14, Issue #572)
+
+- Fresh outbound Asset jobs retain main/requester/examiner documents alongside
+  the canonical recommendation PDF. Vendor Asset schema uses `items[].attachments`
+  with name/link objects, not an invented top-level attachments field.
+- Unit, Non Unit and Fund contracts already use top-level attachment object
+  arrays. File access links and deep-frozen dispatch history remain unchanged.
+- Mapper and runtime regressions verify recommended asset requests no longer
+  discard request attachments. Old frozen jobs are not rewritten or resent.
+- Forward migration `20261014100000` adds a service-only verified Unit replacement
+  RPC and permits production entries in the existing replacement audit. Production
+  requires explicit confirmation, active admin, final signatures, frozen hash,
+  fresh matching unit identities/type and explicit unsubmitted vendor flags.
+- Worker preparation rechecks production replacement references. Other production
+  categories remain blocked; historical payloads are not modified or requeued.
+  Native PostgreSQL and targeted UI/helper tests precede staging-first rollout.
+  Production runtime `5828a40b1c07e3b01915e2a61aa2d3e860d5d498` and staging
+  `fffa555912a1c5eddeb762db0d5bfc7196a9caae` verified on 2026-10-14;
+  migration applied in both. Panusupan replacement succeeded on one attempt
+  with API type 30, preserving the old rejected generation unchanged.
+
 ## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
 
 - Candidate `fix/revision-appendix-external-20261013` from production main,

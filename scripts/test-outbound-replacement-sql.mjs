@@ -4,9 +4,12 @@ import { spawnSync } from "node:child_process";
 const baseMigration = readFileSync("supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql", "utf8");
 const replacementMigration = readFileSync("supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql", "utf8");
 const recoveryGuardMigration = readFileSync("supabase/migrations/20260924170000_guard_pre_post_outbound_recovery.sql", "utf8");
+const verifiedUnitMigration = readFileSync("supabase/migrations/20261014100000_verified_unit_outbound_replacement.sql", "utf8");
+const verifiedUnitAssertions = readFileSync("supabase/tests/verified_unit_replacement.integration.sql", "utf8");
 
 const fixtureSql = `
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 do $$ begin create role anon; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role; exception when duplicate_object then null; end $$;
@@ -194,7 +197,7 @@ try {
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   process.stdout.write(run(
     ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
-    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + assertionsSql
+    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + verifiedUnitMigration + assertionsSql + verifiedUnitAssertions
   ));
 } finally {
   run(["rm", "-f", id]);
