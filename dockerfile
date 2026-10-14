@@ -59,6 +59,7 @@ COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY pdf-worker.mjs ./pdf-worker.mjs
 COPY server/pdf-worker-job.mjs ./server/pdf-worker-job.mjs
+COPY server/revision-actor-evidence.mjs ./server/revision-actor-evidence.mjs
 COPY document-layout-rules.mjs ./document-layout-rules.mjs
 COPY document-revision-notes.mjs ./document-revision-notes.mjs
 COPY pgd-pdf-renderer.mjs ./pgd-pdf-renderer.mjs
