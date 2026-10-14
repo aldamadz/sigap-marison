@@ -79,6 +79,12 @@ const draftLifecycleSql = testDraftLifecycle ? (() => {
       '10000000-0000-4000-8000-000000000001','596/UAI/2026','{"preserved":"legacy data"}');
     ${lifecycle}
     ${lifecycle}
+    create table public.surat_recommendation_tasks(id uuid primary key,parent_surat_id uuid,reservation_id uuid,
+      no_surat text,status text,claimed_by uuid);
+    create function public.is_recommendation_task_candidate(p_task_id uuid,p_actor uuid) returns boolean language sql
+      as $$ select exists(select 1 from public.surat_recommendation_tasks where id=p_task_id and claimed_by=p_actor) $$;
+    ${readFileSync('supabase/migrations/20261014181000_registration_draft_recommendation_scope.sql','utf8')}
+    ${readFileSync('supabase/migrations/20261014181000_registration_draft_recommendation_scope.sql','utf8')}
     ${readFileSync('supabase/tests/registration_draft_reservation_lifecycle.integration.sql', 'utf8')}
   `;
 })() : '';
