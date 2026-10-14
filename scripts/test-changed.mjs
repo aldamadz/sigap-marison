@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/registration_draft_reservation_lifecycle.*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
   if (/external_only.*projects.*\.sql$/u.test(file)) gates.add("external-project-source-sql");
   if (/branch_fund.*\.sql$|test-letter-number-reuse-sql\.mjs$/u.test(file)) gates.add("branch-fund-numbering-sql");
@@ -131,7 +132,8 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
-  if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
+  if (gate === 'draft-reservation-lifecycle-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--draft-lifecycle']);
+  else if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
   else if (gate === 'revision-appendix-pdf') run('node', ['--test','scripts/test-revision-appendix.mjs']);
   else if (gate === 'recommendation-transport-sql') run('node', ['scripts/test-rec03-sql.mjs', '--transport']);
   else if (gate === "external-project-source-sql") run("node", ["scripts/test-letter-number-reuse-sql.mjs", "--external-projects"]);

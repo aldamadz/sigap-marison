@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SUR-29 Draft and Number Reservation Lifecycle (2026-10-14, Issue #596)
+
+- Production expiry cron cancelled numbers while autosave extended only the draft.
+  Forward migration `20261014180000` shares a server-controlled seven-day lease
+  on ordinary draft saves and protects valid drafts from that existing cron.
+- Truly expired ordinary drafts become EXPIRED when their reservation is cancelled;
+  legacy DRAFT/CANCELLED rows are closed without deleting payloads or attachments.
+  Used numbers, revision drafts and submitted documents remain unchanged.
+- Owner/admin cancellation can clear stale DRAFT/EXPIRED records without reviving
+  a number or resetting its reuse window. Pending-number cancellation retains the
+  configured reuse policy and audit. No new public RPC/HTTP endpoint or grant.
+- Disposable PostgreSQL and focused draft UI tests precede staging acceptance
+  and explicitly requested selective production release.
+
 ## CAL-08 Completion Uses Saved Results (2026-10-14, Issue #592)
 
 - Detail quick actions and list status prompts default completion text to the
