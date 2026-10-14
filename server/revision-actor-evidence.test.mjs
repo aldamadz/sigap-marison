@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { enrichRevisionActors } from "./revision-actor-evidence.mjs";
 import { revisionHistoryEntries, signerRevisionNotes, revisionAppendixBlock } from "../document-revision-notes.mjs";
+import { readFileSync } from "node:fs";
 
 const eventId = "00000000-0000-4000-8000-000000000001";
 const actorId = "00000000-0000-4000-8000-000000000002";
@@ -42,4 +43,11 @@ test("unrevised immutable snapshot is returned unchanged without new lookups",as
 });
 test("lookup errors cannot manufacture an attribution",async()=>{
   await assert.rejects(enrichRevisionActors(client([],[],new Error("Metadata unavailable")),source()),/Metadata unavailable/);
+});
+test("the worker's attribution helper is packaged in the runtime image",()=>{
+  assert.match(readFileSync(new URL("../dockerfile",import.meta.url),"utf8"),/COPY server\/revision-actor-evidence\.mjs \.\/server\/revision-actor-evidence\.mjs/);
+});
+test("shared image and revision helpers require coordinated worker rollout",()=>{
+  const deploy=readFileSync(new URL("../scripts/deploy-app.sh",import.meta.url),"utf8");
+  assert.match(deploy,/worker_changes=[\s\S]*dockerfile document-revision-notes\.mjs server\/revision-actor-evidence\.mjs/);
 });
