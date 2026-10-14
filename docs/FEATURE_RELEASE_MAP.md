@@ -6,16 +6,32 @@
   on new CT 110 and existing MinIO storage VM 100. Staging/shared Ubuntu services
   are excluded. Production connection-password rotation was explicitly authorized;
   application user passwords remain unchanged.
-- Initial isolated PostgreSQL restore verified 105 table counts, 376 accounts and
-  password hashes, 225 migration rows, publication, 150 policies, 263 functions,
-  78 object ACLs and two Auth triggers. Extra bootstrap grants were removed to
-  match source. This is rehearsal evidence, not live cutover or storage migration.
+- Final cutover completed on 2026-10-14: app/PDF/sync/outbound/external API/tunnel
+  on CT 104; Database/Auth/REST/Realtime on CT 110; Storage API and existing MinIO
+  on VM 100. Ubuntu production replicas/workers/connectors are stopped with
+  restart disabled. Cloud production data is retained for rollback, not live.
+- Final restore verified 99 Cloud Auth/application/history table counts, 376
+  account password hashes, 226 migration rows, publication, 150 policies, 264
+  functions, 78 relation ACLs, schema/default/column ACLs and both Auth triggers.
+  Six managed Storage tables are destination-owned; copied metadata is retained.
+- All 173 source-available referenced files (51,452,583 bytes) were copied and
+  downloaded again with matching hashes. Final frozen-source reread changed zero
+  files. All 35 current attachments and six canonical PDFs were available. The
+  562 missing historical references already lacked files at source; this migration
+  does not claim to reconstruct them. Saved URLs/snapshots are not rewritten.
 - Independent maintenance surface returns HTML/JSON 503 with no-store,
   Retry-After and security headers. Local desktop/mobile preview and targeted
-  HTTP tests only; production maintenance has not been enabled.
-- Full sequence, unfinished gates and write-safe rollback are in
-  `docs/PRODUCTION_PROXMOX_TOTAL_MIGRATION.md`. Current production remains on
-  its existing Cloud/Ubuntu dependencies until final snapshot and acceptance.
+  HTTP tests; animated production maintenance was enabled during cutover and
+  removed after read-only acceptance. Production root/health/external return 200.
+- Runtime release SHA `91e6c3be05664f63c8481aa7b9d9c6166542f5f0`; live staging
+  `da990cae26f8f6b051eb18e664bf04bafba75503`. Inbox, attention, monitoring,
+  calendar, SSE ready/profiles denial, existing PDF link and external client
+  credentials passed. Actual password login/two-user mutation E2E was not run.
+- Production DB operations now use the authorized Proxmox operator and CT 110,
+  not legacy Cloud Management helpers/MCP project `xuhyodtmgwteyslhrkfx`.
+  Deployment uses the dedicated Proxmox runner; worker configuration preserves
+  verified private TLS for outbound. Details and rollback constraints are in
+  `docs/PRODUCTION_PROXMOX_TOTAL_MIGRATION.md`.
 
 ## MRN-18 Complete Attachment Arrays (2026-10-14, Issue #572)
 
