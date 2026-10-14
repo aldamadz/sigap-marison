@@ -289,6 +289,7 @@ export function WorkEntryRow({
   const [titleDraft, setTitleDraft] = useState(entry.title);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const followUpRef = useRef<HTMLTextAreaElement>(null);
+  const activePromptRef = useRef<{ entryId: string; type: WorkEntryStatusFollowUp } | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   /** Menandai bahwa menu ditutup karena ingin memulai edit judul. */
   const isStartingTitleEditRef = useRef(false);
@@ -302,11 +303,14 @@ export function WorkEntryRow({
   }, [isEditingTitle]);
 
   useEffect(() => {
-    if (promptType) {
-      setFollowUpDraft("");
+    if (!promptType) {
+      activePromptRef.current = null;
+    } else if (activePromptRef.current?.entryId !== entry.id || activePromptRef.current.type !== promptType) {
+      activePromptRef.current = { entryId: entry.id, type: promptType };
+      setFollowUpDraft(promptType === "realization" ? entry.realization ?? "" : entry.blockedReason ?? "");
       followUpRef.current?.focus();
     }
-  }, [promptType]);
+  }, [entry.id, entry.realization, entry.blockedReason, promptType]);
 
   const overdue = isWorkEntryOverdue(entry, today);
   const completedLate = isWorkEntryCompletedLate(entry);

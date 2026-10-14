@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## CAL-08 Completion Uses Saved Results (2026-10-14, Issue #592)
+
+- Detail quick actions and list status prompts default completion text to the
+  existing saved realization. Users may retain or edit it; absent/blank results
+  still require input. Cancellation never saves a discarded edit.
+- Row prompts initialize once per entry/prompt opening so realtime refetches
+  cannot replace unsaved typing. Reopening reads the latest persisted result.
+- No schema, authorization, worker or business data rewrite. Focused UI tests,
+  lint, typecheck and build precede staging-first selective release.
+
 ## DOC-13 Named and Detailed Revision Evidence (2026-10-14, Issue #585)
 
 - Display actual requesting actor from the document-scoped revision event,
