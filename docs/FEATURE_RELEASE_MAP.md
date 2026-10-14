@@ -9,10 +9,14 @@
   arrays. File access links and deep-frozen dispatch history remain unchanged.
 - Mapper and runtime regressions verify recommended asset requests no longer
   discard request attachments. Old frozen jobs are not rewritten or resent.
-- Panusupan recovery is a separate unfinished release gate on this issue:
-  verify fresh vendor unit IDs/type/submission flags, then create an audited
-  new generation for the already-POSTed rejection, not pre-POST reconciliation.
-  No Panusupan replacement or production vendor POST has been performed yet.
+- Forward migration `20261014100000` adds a service-only verified Unit replacement
+  RPC and permits production entries in the existing replacement audit. Production
+  requires explicit confirmation, active admin, final signatures, frozen hash,
+  fresh matching unit identities/type and explicit unsubmitted vendor flags.
+- Worker preparation rechecks production replacement references. Other production
+  categories remain blocked; historical payloads are not modified or requeued.
+  Native PostgreSQL and targeted UI/helper tests precede staging-first rollout.
+  Panusupan's actual new generation/vendor response is still an operational gate.
 
 ## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
 

@@ -28,6 +28,7 @@ import {
   withSecurityHeaders,
 } from "./lib/http.js";
 import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
+import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
 import {
   mapSuratRejectionRpcError,
   normalizeSuratRejectionRequest,
@@ -3420,6 +3421,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
    const branchId = requireExternalInteger(overrides.branchId ?? externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
   const referenceResult = await queryExternalDataSource(MARISON_UNITS_SOURCE_KEY, { project_id: projectId });
   const references = new Map(referenceResult.options.map(option => [externalIdFrom(option), option]));
+  const verifiedReferences = [];
   const units = getMarisonAllocatedUnits(surat, input).map((unit, index) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
@@ -3430,6 +3432,8 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
       throw error;
     }
     const detail = applyExternalUnitReference(reference, asPlainRecord(record.allocation_detail));
+    verifiedReferences.push({ id: requireExternalInteger(externalIdFrom(record), "Unit ID"),
+      type: getExternalUnitReference(reference).type, hasSubmitted: getExternalRaw(reference).has_submitted });
     const productionSerial = firstString(detail.production_serial, detail.kode_produksi_nomor).padStart(3, "0");
     const productionBlock = firstString(detail.production_block, detail.kode_produksi_blok);
     const productionDate = normalizeExternalDate(firstString(detail.production_date, detail.kode_produksi_tanggal));
@@ -3457,6 +3461,8 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     err.status = 422;
     throw err;
   }
+  const verifiedUnitReceipt = overrides.requireUnsubmittedUnitReferences
+    ? verifiedUnitReplacementReceipt(projectId, verifiedReferences) : null;
   const payload = {
     submission_number: surat.no_surat,
     project_id: projectId,
@@ -3476,6 +3482,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     kind: "unit",
     contractVersion: MARISON_OUTBOUND_CONTRACT_VERSION,
     payload: assertMarisonOutboundContract("unit", payload),
+    ...(verifiedUnitReceipt ? { verifiedUnitReceipt } : {}),
   };
 };
 
@@ -3798,7 +3805,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
 
   const { data: job, error: jobError } = await supabase
     .from("marison_outbound_dispatches")
-    .select("id, surat_id, environment, kind, endpoint, contract_version, payload, payload_body, payload_hash, status, lease_token, lease_expires_at, post_started_at")
+    .select("id, surat_id, environment, kind, endpoint, contract_version, payload, payload_body, payload_hash, status, lease_token, lease_expires_at, post_started_at, replacement_of_dispatch_id")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -3908,6 +3915,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
   }
 
    const overrides = await getMarisonOutboundMappings(surat, job.kind);
+   overrides.requireUnsubmittedUnitReferences = job.environment === "production" && job.kind === "unit" && Boolean(job.replacement_of_dispatch_id);
    const dispatch = await buildMarisonDispatchPayload(surat, null, overrides);
   if (dispatch.kind !== job.kind || dispatch.endpoint !== job.endpoint) {
     const err = new Error("Kategori surat berubah setelah job outbound dibuat.");
@@ -4090,11 +4098,6 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
 const createMarisonOutboundReplacement = async (req, dispatchId) => {
   assertSameOrigin(req);
   const actor = await requireAdminUser(getBearerToken(req));
-  if (marisonDeploymentEnvironment !== "staging") {
-    const err = new Error("Replacement outbound hanya tersedia di staging.");
-    err.status = 404;
-    throw err;
-  }
   const payload = await readJsonBody(req, 4096);
   const reason = String(payload?.reason || "").trim();
   if (!reason) {
@@ -4102,16 +4105,22 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
     err.status = 400;
     throw err;
   }
-  const preflight = await preflightMarisonOutboundReplacement(req, dispatchId);
+  const production = marisonDeploymentEnvironment === "production";
+  if (production && (payload?.confirmProductionSend !== true || reason.length < 5)) {
+    throw Object.assign(new Error("Konfirmasi pengiriman production dan alasan yang jelas wajib diisi."), { status: 403 });
+  }
+  const preflight = await preflightMarisonOutboundReplacement(req, dispatchId, { includeVerifiedUnitReceipt: production });
   if (!preflight.eligible) {
     const err = new Error(preflight.localValidationIssues || "Job tidak memenuhi syarat pengiriman pengganti.");
     err.status = 409;
     throw err;
   }
-  const { data, error } = await supabase.rpc("create_marison_outbound_replacement", {
+  const { data, error } = await supabase.rpc(production ? "create_verified_unit_outbound_replacement" : "create_marison_outbound_replacement", {
     p_dispatch_id: dispatchId,
     p_actor_id: actor.id,
     p_reason: reason,
+    ...(production ? { p_expected_payload_hash: preflight.failedPayloadHash,
+      p_reference_receipt: preflight.verifiedUnitReceipt, p_confirm_production: true } : {}),
   });
   if (error) {
     const mapped = new Error(
@@ -4121,11 +4130,13 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
           ? "Job outbound tidak ditemukan."
           : error.code === "55000"
             ? "Job ini tidak memenuhi syarat pengiriman pengganti HTTP 422."
+            : error.code === "22023"
+              ? "Referensi external berubah atau kedaluwarsa. Jalankan pemeriksaan ulang sebelum mengirim."
             : "Pengiriman pengganti gagal dibuat."
     );
     mapped.status = error.code === "P0002" ? 404
       : error.code === "42501" ? 403
-        : ["40001", "23505", "55000"].includes(error.code) ? 409
+        : ["40001", "23505", "55000", "22023"].includes(error.code) ? 409
           : 500;
     throw mapped;
   }
@@ -4134,14 +4145,9 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
     : { replacementId: data?.dispatch_id || null, skipped: false, code: null };
 };
 
-const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
+const preflightMarisonOutboundReplacement = async (req, dispatchId, { includeVerifiedUnitReceipt = false } = {}) => {
   assertSameOrigin(req);
   await requireAdminUser(getBearerToken(req));
-  if (marisonDeploymentEnvironment !== "staging") {
-    const err = new Error("Replacement preflight hanya tersedia di staging.");
-    err.status = 404;
-    throw err;
-  }
   const { data: job, error: jobError } = await supabase
     .from("marison_outbound_dispatches")
     .select("id, surat_id, environment, status, kind, error_code, error_message, response, payload, payload_body, payload_hash, post_started_at, external_reference")
@@ -4153,7 +4159,8 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
     err.status = 404;
     throw err;
   }
-  if (job.environment !== "staging" || job.status !== "failed_terminal" || !job.error_code?.startsWith("marison_http_422")) {
+  if (job.environment !== marisonDeploymentEnvironment || job.status !== "failed_terminal" || !job.error_code?.startsWith("marison_http_422")
+    || (marisonDeploymentEnvironment === "production" && (job.kind !== "unit" || !job.post_started_at || !job.response || job.external_reference))) {
     const err = new Error("Job tidak memenuhi syarat preflight replacement HTTP 422.");
     err.status = 409;
     throw err;
@@ -4167,7 +4174,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
 
   let payloadBodyInvariantViolated = false;
   let failedPayload = null;
-  if (job.post_started_at && !job.payload_body) {
+  if (job.post_started_at && (!job.payload_body || !job.payload_hash)) {
     payloadBodyInvariantViolated = true;
   } else if (job.payload_body) {
     try {
@@ -4192,6 +4199,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
   let changedAreas = null;
   let sigapChanged = false;
   let reasonCode = null;
+  let verifiedUnitReceipt = null;
 
   if (payloadBodyInvariantViolated) {
     reasonCode = "PAYLOAD_BODY_INVARIANT_VIOLATED";
@@ -4240,8 +4248,10 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
             ...(identity.requester ? { nik: identity.requester.nik } : {}),
             approvals: identity.approvals,
             sources: mergePayloadResolutionSources(mappings.sources, identity.sources),
+            requireUnsubmittedUnitReferences: marisonDeploymentEnvironment === "production" && job.kind === "unit",
           };
           const dispatch = await buildMarisonDispatchPayload(surat, null, overrides);
+          verifiedUnitReceipt = dispatch.verifiedUnitReceipt || null;
           localValidationIssues = null;
           if (failedPayload) {
             changedAreas = comparePayloads(failedPayload, dispatch.payload, job.kind);
@@ -4269,6 +4279,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId) => {
     localValidationIssues,
     changedAreas,
     sigapChanged,
+    ...(includeVerifiedUnitReceipt ? { verifiedUnitReceipt, failedPayloadHash: job.payload_hash } : {}),
   };
 
   if (!sigapChanged && !payloadBodyInvariantViolated && eligible) {
