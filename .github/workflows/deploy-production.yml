@@ -71,4 +71,3 @@ jobs:
         run: |
           bash scripts/check-staging-parity.sh --require-ready
           bash scripts/deploy-app.sh production "$(git rev-parse HEAD)" "$MIGRATION_VERSIONS"
-

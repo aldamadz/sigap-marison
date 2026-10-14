@@ -183,4 +183,3 @@ source backups, image digests, Caddy backup and object manifests privately.
 - [Supabase platform-to-self-hosted restore](https://github.com/supabase/supabase/blob/master/apps/docs/content/guides/self-hosting/restore-from-platform.mdx)
 - [Supabase Auth 2.197.0](https://github.com/supabase/auth/releases/tag/v2.197.0)
 - [Supabase self-hosted S3 backend](https://github.com/supabase/supabase/blob/master/apps/docs/content/guides/self-hosting/self-hosted-s3.mdx)
-

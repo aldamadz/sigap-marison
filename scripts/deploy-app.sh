@@ -126,4 +126,3 @@ curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /d
 curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/health/ready"
 curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/"
 echo "$environment app deployed at $target_sha; workers were not restarted."
-

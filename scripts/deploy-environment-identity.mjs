@@ -34,4 +34,3 @@ if (process.argv[1]?.replaceAll("\\", "/").endsWith("/deploy-environment-identit
     }
   });
 }
-

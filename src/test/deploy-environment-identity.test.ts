@@ -26,4 +26,3 @@ describe("deployment infrastructure identity", () => {
     expect(validateDeploymentIdentity(config("production", "http://172.20.100.3:8000", "https://sigap.marisoncloud.com/supabase"), "app", "production")).toBe(false);
   });
 });
-
