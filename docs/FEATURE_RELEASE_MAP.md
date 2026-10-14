@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## MRN-18 Complete Attachment Arrays (2026-10-14, Issue #572)
+
+- Fresh outbound Asset jobs retain main/requester/examiner documents alongside
+  the canonical recommendation PDF. Vendor Asset schema uses `items[].attachments`
+  with name/link objects, not an invented top-level attachments field.
+- Unit, Non Unit and Fund contracts already use top-level attachment object
+  arrays. File access links and deep-frozen dispatch history remain unchanged.
+- Mapper and runtime regressions verify recommended asset requests no longer
+  discard request attachments. Old frozen jobs are not rewritten or resent.
+- Panusupan recovery is a separate unfinished release gate on this issue:
+  verify fresh vendor unit IDs/type/submission flags, then create an audited
+  new generation for the already-POSTed rejection, not pre-POST reconciliation.
+  No Panusupan replacement or production vendor POST has been performed yet.
+
 ## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
 
 - Candidate `fix/revision-appendix-external-20261013` from production main,

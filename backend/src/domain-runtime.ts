@@ -3612,9 +3612,7 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
   const recommendationDocumentLink = recommendationDocument
     ? recommendationFileReference(recommendationDocument.id)
     : null;
-  const applicantAttachments = recommendationRequired
-    ? []
-    : await buildMarisonAttachmentLinks(surat, actorId);
+  const applicantAttachments = await buildMarisonAttachmentLinks(surat, actorId);
   const payload = mapMarisonAssetRequest({
     request: {
       request_number: surat.no_surat,

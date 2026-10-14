@@ -108,7 +108,7 @@ export class MarisonAssetItemsError extends Error {
   }
 }
 
-export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recommendationPdf }) => {
+export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recommendationPdf, applicantAttachments = [] }) => {
   const items = asArray(applicantItems).map(asRecord);
   const canonical = !Array.isArray(recommendationRows) && Array.isArray(asRecord(recommendationRows).items);
   const recommendations = Array.isArray(recommendationRows)
@@ -149,7 +149,9 @@ export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recom
         asset_name: assetName,
         quantity,
         ...(description ? { description } : {}),
-        attachments: [sharedPdf],
+        attachments: [...externalAttachments(applicantAttachments), sharedPdf].filter((attachment, index, all) =>
+          all.findIndex(other => attachment.link ? other.link === attachment.link
+            : other.type === attachment.type && other.surat_id === attachment.surat_id) === index),
       }];
     });
   });
@@ -190,6 +192,6 @@ export const mapMarisonAssetRequest = ({
 }) => deepFreeze({
   ...structuredClone(asRecord(request)),
   items: recommendationRequired
-    ? mapMarisonAssetItems({ applicantItems, recommendationRows, recommendationPdf })
+    ? mapMarisonAssetItems({ applicantItems, recommendationRows, recommendationPdf, applicantAttachments })
     : mapMarisonApplicantAssetItems({ applicantItems, attachments: applicantAttachments }),
 });
