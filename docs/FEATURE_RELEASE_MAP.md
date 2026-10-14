@@ -1,5 +1,21 @@
 # SIGAP Feature and Release Map
 
+## DOC-13 Named and Detailed Revision Evidence (2026-10-14, Issue #585)
+
+- Display actual requesting actor from the document-scoped revision event,
+  separate from the requester who submitted corrections. Prefer recorded
+  participant names for PDFs; missing legacy names are not guessed from a step.
+- Detail/confirmation shows before/after names, quantity, status, financial and
+  other persisted form fields, plus added/deleted item values and attachments.
+  Requester revision histories are read through existing participant RLS;
+  no endpoint, grant, schema or write authority is added.
+- PDF evidence stays in the separate revision appendix. Enrichment is in-memory,
+  historical source/time cutoffs remain, and document/signature snapshots are not
+  rewritten. Old files remain valid; stored PDF bytes are not silently replaced.
+- Selected release is staging first then production, as explicitly approved.
+  Worker rollout is coordinated with app rollout; do not requeue every old job
+  or trigger a vendor POST to test the presentation change.
+
 ## DOC-12 Interactive PDF Queue Latency (2026-10-14, Issue #584)
 
 - Production first-open jobs spent 4.803-14.912 seconds waiting for a worker,
