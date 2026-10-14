@@ -102,6 +102,14 @@ VM 100 has a separate private NIC for 172.20.100.5. Its existing MinIO service,
 disk and public/LAN NIC are retained. Storage API provisioning and object-byte
 verification are separate from the already verified database import.
 
+Production deployment uses the dedicated `sigap-deploy-production` runner on
+CT 104 and `/opt/sigap/secrets/.env.production`; staging retains `sigap-deploy`
+on Ubuntu. `deploy-app.sh` rejects production execution outside the designated
+guest. Exact paired Cloud or self-hosted identities are checked; self-hosted
+production requires the private Database/Auth and Storage gateways plus the
+production public URL. This runner was registered and reported online; this
+does not replace migration, worker coordination or runtime acceptance gates.
+
 Legacy file references are preserved in saved documents/revision snapshots.
 `STORAGE_LEGACY_PRIMARY_ORIGINS` and `STORAGE_LEGACY_EXTERNAL_ORIGINS` accept
 explicit bare HTTPS origins only; backend downloads resolve their canonical
@@ -175,3 +183,4 @@ source backups, image digests, Caddy backup and object manifests privately.
 - [Supabase platform-to-self-hosted restore](https://github.com/supabase/supabase/blob/master/apps/docs/content/guides/self-hosting/restore-from-platform.mdx)
 - [Supabase Auth 2.197.0](https://github.com/supabase/auth/releases/tag/v2.197.0)
 - [Supabase self-hosted S3 backend](https://github.com/supabase/supabase/blob/master/apps/docs/content/guides/self-hosting/self-hosted-s3.mdx)
+
