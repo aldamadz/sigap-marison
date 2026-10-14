@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## OPS-12 Full Proxmox Production Migration (2026-10-14, Issue #573)
+
+- User selected total production migration, including self-hosted Database/Auth
+  on new CT 110 and existing MinIO storage VM 100. Staging/shared Ubuntu services
+  are excluded. Production connection-password rotation was explicitly authorized;
+  application user passwords remain unchanged.
+- Initial isolated PostgreSQL restore verified 105 table counts, 376 accounts and
+  password hashes, 225 migration rows, publication, 150 policies, 263 functions,
+  78 object ACLs and two Auth triggers. Extra bootstrap grants were removed to
+  match source. This is rehearsal evidence, not live cutover or storage migration.
+- Independent maintenance surface returns HTML/JSON 503 with no-store,
+  Retry-After and security headers. Local desktop/mobile preview and targeted
+  HTTP tests only; production maintenance has not been enabled.
+- Full sequence, unfinished gates and write-safe rollback are in
+  `docs/PRODUCTION_PROXMOX_TOTAL_MIGRATION.md`. Current production remains on
+  its existing Cloud/Ubuntu dependencies until final snapshot and acceptance.
+
 ## DOC-11 Revision Appendix / MRN-17 Pre-POST Recovery (2026-10-13, Issue #568)
 
 - Candidate `fix/revision-appendix-external-20261013` from production main,
