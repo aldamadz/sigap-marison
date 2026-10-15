@@ -19,6 +19,16 @@ was installed or tested there. Exercise the identical cron UPDATE in fixtures.
 ## Compatibility and Release Gates
 
 Apply only `20261014180000_registration_draft_reservation_lifecycle.sql`.
+Follow with `20261014181000_registration_draft_recommendation_scope.sql` before
+production activation: canonical claimed recommendation tasks may reopen a USED
+document number. Verify task/parent/actor/reservation/number/candidate together;
+do not trust a client label. The first migration was already applied in staging,
+so this compatibility correction is forward-only, not an edit to applied SQL.
+`20261014182000` also preserves the task-authorized USED recommendation number in
+the pre-existing issuing-office trigger. Actual staging canonical claim exposed
+that older guard's PENDING-only check; retain the office match and authenticate
+the candidate instead of bypassing the guard. Install all three versions before
+production activation.
 The ordinary draft seven-day lease is server-controlled and renews its number.
 Valid ordinary drafts protect their number from the existing expiry UPDATE.
 Expired drafts close when their number expires; saved fields/files remain.

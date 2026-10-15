@@ -68,6 +68,10 @@ const externalProjectSql = testExternalProjects ? `
 
 const draftLifecycleSql = testDraftLifecycle ? (() => {
   const lifecycle = readFileSync('supabase/migrations/20261014180000_registration_draft_reservation_lifecycle.sql', 'utf8');
+  const officeSource = readFileSync('supabase/migrations/20261013090000_delegated_draft_payload_context.sql', 'utf8');
+  const officeContext = officeSource.match(/create or replace function issuing_office_internal\.draft_context\(p_payload jsonb\)[\s\S]*?\$\$;/)?.[0];
+  const officeGuard = officeSource.match(/create or replace function public\.guard_draft_issuing_office\(\)[\s\S]*?\$\$;/)?.[0];
+  if (!officeContext || !officeGuard) throw new Error('Canonical issuing-office guard missing');
   return `
     alter table public.surat_registration_drafts add column revision_event_id uuid;
     insert into public.surat_reservations(id,entity_id,type_id,office_id,dept_id,year,no_urut,status,number_scope_type,reserved_by,expires_at)
@@ -79,6 +83,18 @@ const draftLifecycleSql = testDraftLifecycle ? (() => {
       '10000000-0000-4000-8000-000000000001','596/UAI/2026','{"preserved":"legacy data"}');
     ${lifecycle}
     ${lifecycle}
+    create table public.surat_recommendation_tasks(id uuid primary key,parent_surat_id uuid,reservation_id uuid,
+      no_surat text,status text,claimed_by uuid);
+    create function public.is_recommendation_task_candidate(p_task_id uuid,p_actor uuid) returns boolean language sql
+      as $$ select exists(select 1 from public.surat_recommendation_tasks where id=p_task_id and claimed_by=p_actor) $$;
+    ${readFileSync('supabase/migrations/20261014181000_registration_draft_recommendation_scope.sql','utf8')}
+    ${readFileSync('supabase/migrations/20261014181000_registration_draft_recommendation_scope.sql','utf8')}
+    create schema issuing_office_internal;
+    ${officeContext}
+    create function public.can_issue_for_office(p_office_id uuid) returns boolean language sql as $$ select false $$;
+    ${officeGuard}
+    ${readFileSync('supabase/migrations/20261014182000_registration_draft_recommendation_office_guard.sql','utf8')}
+    ${readFileSync('supabase/migrations/20261014182000_registration_draft_recommendation_office_guard.sql','utf8')}
     ${readFileSync('supabase/tests/registration_draft_reservation_lifecycle.integration.sql', 'utf8')}
   `;
 })() : '';

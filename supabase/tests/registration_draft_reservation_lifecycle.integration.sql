@@ -97,6 +97,32 @@ begin
     'form_input_data',jsonb_build_object('request_category','non_asset')));
   if (select status from public.surat_reservations where id=v_res) <> 'USED' then
     raise exception 'Canonical submission after reclaim failed'; end if;
+  perform set_config('request.jwt.claim.sub',v_foreign::text,true);
+  insert into public.surat_recommendation_tasks(id,parent_surat_id,reservation_id,no_surat,status,claimed_by)
+    values ('59600000-0000-4000-8000-000000000030','59600000-0000-4000-8000-000000000031',v_res,'600/UAI/2026','claimed',v_foreign);
+  create trigger test_recommendation_office_guard before insert or update on public.surat_registration_drafts
+    for each row execute function public.guard_draft_issuing_office();
+  update public.surat_registration_drafts set status='DRAFT',payload=jsonb_build_object(
+    'formData',jsonb_build_object('office_id','a0000000-0000-4000-8000-000000000030'), 'linkedDocumentContext',
+    jsonb_build_object('type','recommendation','taskId','59600000-0000-4000-8000-000000000030',
+      'parentSuratId','59600000-0000-4000-8000-000000000031')) where id=v_draft.id;
+  update public.surat_registration_drafts set payload=payload||'{"saved_recommendation":"edit"}'::jsonb where id=v_draft.id;
+  if (select status from public.surat_reservations where id=v_res)<>'USED' then
+    raise exception 'Recommendation draft changed a USED number'; end if;
+  begin
+    update public.surat_registration_drafts set payload=jsonb_set(payload,'{formData,office_id}',to_jsonb(gen_random_uuid()::text)) where id=v_draft.id;
+    raise exception 'Recommendation bypassed issuing office';
+  exception when insufficient_privilege then null; end;
+  perform set_config('request.jwt.claim.sub',v_owner::text,true);
+  begin
+    update public.surat_registration_drafts set payload=payload||'{"forged_actor":true}'::jsonb where id=v_draft.id;
+    raise exception 'Foreign actor bypassed recommendation office guard';
+  exception when insufficient_privilege then null; end;
+  perform set_config('request.jwt.claim.sub',v_foreign::text,true);
+  begin
+    update public.surat_registration_drafts set payload=jsonb_set(payload,'{linkedDocumentContext,taskId}',to_jsonb(gen_random_uuid()::text)) where id=v_draft.id;
+    raise exception 'Unverified recommendation bypassed lifecycle';
+  exception when object_not_in_prerequisite_state then null; end;
   perform set_config('request.jwt.claim.sub',v_owner::text,true);
   insert into public.surat_registration_drafts(created_by,revision_event_id,no_surat,expires_at,payload)
     values (v_owner,gen_random_uuid(),'existing/revision',now()+interval '2 days','{"revision":"preserved"}') returning * into v_draft;
@@ -108,5 +134,6 @@ begin
   if has_function_privilege('authenticated','registration_draft_lifecycle_internal.guard_draft()','execute')
     or has_function_privilege('anon','public.void_surat_registration_draft(uuid)','execute') then
     raise exception 'Internal helper or cancellation anonymously accessible'; end if;
+  drop trigger test_recommendation_office_guard on public.surat_registration_drafts;
   raise notice 'Draft reservation lifecycle: all assertions passed';
 end $$;
