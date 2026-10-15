@@ -112,27 +112,27 @@ describe("CAL-03 tahap 2 — kepadatan Minggu", () => {
     vi.resetAllMocks();
   });
 
-  it("membatasi empat preview pada desktop dan menyisakan +N", async () => {
+  it("membatasi dua preview pada desktop dan menyisakan +N", async () => {
     renderWorkspace({ view: "week", entries: denseWeekEntries(6) });
 
     const column = await screen.findByTestId(`work-week-column-${TODAY}`);
-    expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(4);
+    expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(2);
     expect(within(column).getByTestId(`work-week-more-${TODAY}`)).toHaveTextContent(
-      "+2 pekerjaan lainnya",
+      "+4 pekerjaan lainnya",
     );
   });
 
-  it("membatasi tiga preview pada mobile", async () => {
+  it("membatasi dua preview pada mobile", async () => {
     const restore = useCompactViewport();
     try {
       renderWorkspace({ view: "week", entries: denseWeekEntries(6) });
 
       const column = await screen.findByTestId(`work-week-column-${TODAY}`);
       await waitFor(() =>
-        expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(3),
+        expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(2),
       );
       expect(within(column).getByTestId(`work-week-more-${TODAY}`)).toHaveTextContent(
-        "+3 pekerjaan lainnya",
+        "+4 pekerjaan lainnya",
       );
     } finally {
       restore();
@@ -217,14 +217,11 @@ describe("CAL-03 tahap 2 — Bulan mobile", () => {
     });
 
     const compact = await screen.findByTestId(`work-month-compact-${TODAY}`);
-    // Entry terhambat dipilih sebagai preview tunggal (prioritas tertinggi).
-    expect(within(compact).getByTestId("work-month-mobile-preview-mrisk")).toBeInTheDocument();
-    expect(compact).toHaveTextContent("Selesaikan berkas tertunda");
-    // Ringkasan jumlah per status tetap ada.
-    expect(within(compact).getAllByText("1")).toHaveLength(2);
+    // Ringkasan status ikon saja tetap ada.
+    expect(within(compact).getAllByTestId(/^work-entry-status-glyph-/)).toHaveLength(2);
   });
 
-  it("preview judul mobile membuka detail, tombol tanggal membuka panel hari", async () => {
+  it("preview judul desktop membuka detail, tombol tanggal membuka panel hari", async () => {
     renderWorkspace({
       view: "month",
       entries: [
@@ -236,7 +233,7 @@ describe("CAL-03 tahap 2 — Bulan mobile", () => {
       ],
     });
 
-    fireEvent.click(await screen.findByTestId(`work-month-mobile-preview-mdetail`));
+    fireEvent.click(await screen.findByTestId(`work-month-preview-mdetail`));
     expect(await screen.findByTestId("work-entry-detail-mdetail")).toBeInTheDocument();
 
     fireEvent.click(await screen.findByTestId(`work-month-open-${TODAY}`));

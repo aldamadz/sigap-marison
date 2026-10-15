@@ -314,7 +314,7 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
     const iconControls: ReadonlyArray<readonly [string, string]> = [
       ["components/WorkCalendarToolbar.tsx", 'className="h-11 w-11 shrink-0 rounded-sm"'],
       ["components/WorkEntryRow.tsx", 'className="w-11 shrink-0 rounded-sm"'],
-      ["components/WorkEntryRow.tsx", '"h-11 min-w-touch gap-1.5 rounded-sm px-2 font-medium"'],
+      ["components/WorkEntryRow.tsx", '"h-11 w-11 shrink-0 justify-center rounded-sm px-0 font-medium"'],
     ];
     for (const [file, marker] of iconControls) {
       const source = readFileSync(join(featureDir, file), "utf8");
@@ -433,8 +433,8 @@ describe("Work Calendar — batas CAL-03 F4A", () => {
     expect(week).not.toMatch(/overflow-(auto|scroll|y-auto)/);
 
     const progress = readFileSync(join(featureDir, "lib", "work-progress.ts"), "utf8");
-    expect(progress).toContain("WORK_WEEK_PREVIEW_LIMIT_DESKTOP = 4");
-    expect(progress).toContain("WORK_WEEK_PREVIEW_LIMIT_MOBILE = 3");
+    expect(progress).toContain("WORK_WEEK_PREVIEW_LIMIT_DESKTOP = 2");
+    expect(progress).toContain("WORK_WEEK_PREVIEW_LIMIT_MOBILE = 2");
     expect(progress).toContain("export function getWorkWeekDayPreview");
     expect(progress).toContain("export function getWorkWeekEntryPriority");
   });

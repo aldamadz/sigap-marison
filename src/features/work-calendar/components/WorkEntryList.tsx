@@ -59,9 +59,9 @@ export function WorkEntryList({
     return (
       <p
         data-testid="work-entry-empty"
-        className="rounded-sm border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground"
+        className="rounded-sm border border-dashed border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground"
       >
-        <Inbox className="mx-auto mb-1.5 h-4 w-4" aria-hidden="true" />
+        <Inbox className="mx-auto mb-2 h-5 w-5 text-muted-foreground/70" aria-hidden="true" />
         {emptyLabel}
       </p>
     );
@@ -74,7 +74,7 @@ export function WorkEntryList({
       data-variant={variant}
       className={cn(
         variant === "full"
-          ? "divide-y divide-border overflow-hidden rounded-sm border border-border bg-card"
+          ? "flex flex-col gap-0" // The WorkEntryRow itself handles mb-3 and borders now
           : "divide-y divide-border/60",
       )}
     >

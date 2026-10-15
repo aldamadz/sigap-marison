@@ -997,19 +997,19 @@ describe("WorkCalendarWorkspace — CAL-03 F4A koreksi batas preview Minggu", ()
       }),
     );
 
-  it("membatasi empat preview dan menghitung +N pada desktop", async () => {
+  it("membatasi dua preview dan menghitung +N pada desktop", async () => {
     renderWorkspace({ view: "week", entries: weekEntries(6) });
 
     const column = await screen.findByTestId(`work-week-column-${WORK_CALENDAR_FIXTURE_TODAY}`);
-    expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(4);
+    expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(2);
     expect(within(column).getByTestId(`work-week-more-${WORK_CALENDAR_FIXTURE_TODAY}`)).toHaveTextContent(
-      "+2 pekerjaan lainnya",
+      "+4 pekerjaan lainnya",
     );
     // Progres tetap dihitung dari seluruh entry, bukan hanya preview.
     expect(within(column).getByText(/selesai/)).toHaveTextContent("0/6 selesai");
   });
 
-  it("membatasi tiga preview pada mobile", async () => {
+  it("membatasi dua preview pada mobile", async () => {
     // Override matchMedia seperti pada setup test, tetapi mengembalikan
     // `matches: true` untuk query mobile. Nilai asli dikembalikan setelah test
     // supaya test berikutnya tetap desktop.
@@ -1033,11 +1033,11 @@ describe("WorkCalendarWorkspace — CAL-03 F4A koreksi batas preview Minggu", ()
 
       const column = await screen.findByTestId(`work-week-column-${WORK_CALENDAR_FIXTURE_TODAY}`);
       await waitFor(() =>
-        expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(3),
+        expect(within(column).getAllByTestId(/^work-entry-row-/)).toHaveLength(2),
       );
       expect(
         within(column).getByTestId(`work-week-more-${WORK_CALENDAR_FIXTURE_TODAY}`),
-      ).toHaveTextContent("+3 pekerjaan lainnya");
+      ).toHaveTextContent("+4 pekerjaan lainnya");
     } finally {
       Object.defineProperty(window, "matchMedia", {
         writable: true,
@@ -1259,7 +1259,7 @@ describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
     expect(screen.getByTestId(`work-month-more-${WORK_CALENDAR_FIXTURE_TODAY}`)).toHaveTextContent("+1 lainnya");
   });
 
-  it("menyediakan satu preview judul prioritas tertinggi pada sel mobile", async () => {
+  it("menyediakan ringkasan status pada sel mobile tanpa judul teks", async () => {
     renderWorkspace({
       view: "month",
       entries: [
@@ -1269,13 +1269,13 @@ describe("WorkCalendarWorkspace — mode Minggu dan Bulan", () => {
     });
 
     const compact = await screen.findByTestId(`work-month-compact-${WORK_CALENDAR_FIXTURE_TODAY}`);
-    // Preview tunggal memuat judul dengan prioritas tertinggi (terhambat)
-    // sehingga risiko paling mudah terbaca; judul entry selesai tidak ikut.
-    expect(within(compact).getByTestId("work-month-mobile-preview-mc2")).toBeInTheDocument();
-    expect(compact).toHaveTextContent("Dua");
+    
+    // Teks judul sudah disembunyikan di mobile
+    expect(compact).not.toHaveTextContent("Dua");
     expect(compact).not.toHaveTextContent("Satu");
-    // Ringkasan jumlah per status tetap ada: satu selesai dan satu terhambat.
-    expect(within(compact).getAllByText("1")).toHaveLength(2);
+    
+    // Ringkasan status ikon tetap ada: satu selesai dan satu terhambat.
+    expect(within(compact).getAllByTestId(/^work-entry-status-glyph-/)).toHaveLength(2);
   });
 
   it("membuka panel hari saat +N lainnya diklik", async () => {
