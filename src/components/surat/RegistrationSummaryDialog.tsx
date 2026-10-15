@@ -28,6 +28,7 @@ import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { Keu10SubmissionSummary } from "@/components/surat/Keu10SubmissionSummary";
 import { RequesterRevisionSummary } from "@/components/surat/RequesterRevisionSummary";
 import { SignerRevisionSummary } from "@/components/surat/SignerRevisionSummary";
+import { UnitAllocationHistory } from "@/components/surat/UnitAllocationHistory";
 import type { ActiveRevision } from "@/components/surat/revision-utils";
 import type { RequesterRevisionSnapshot } from "@/lib/requester-revision-summary";
 
@@ -439,6 +440,7 @@ export function RegistrationSummaryDocument({
         </section>
 
         <SignerRevisionSummary revision={data.revision || null} suratId={data.suratId} />
+        {isUnitCategory && <UnitAllocationHistory suratId={data.suratId} />}
 
         {(detailFields.length > 0 || isUnitCategory || keu1 || keu10) && (
           <section className="space-y-4">
@@ -598,6 +600,7 @@ export function RegistrationSummaryDialog({ open, data, submitting, onOpenChange
               </section>
 
               <SignerRevisionSummary revision={data.revision || null} suratId={data.suratId} />
+              {isUnitCategory && <UnitAllocationHistory suratId={data.suratId} />}
 
               {(detailFields.length > 0 || isUnitCategory || keu1 || keu10) && (
                 <section className="space-y-4">

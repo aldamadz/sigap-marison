@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
     if (/registration_draft_(reservation_lifecycle|recommendation_scope|recommendation_office_guard|helper_execution).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
   if (/external_only.*projects.*\.sql$/u.test(file)) gates.add("external-project-source-sql");
@@ -133,6 +134,10 @@ for (const file of allChangedFiles) {
 
 for (const gate of gates) {
   if (gate === 'draft-reservation-lifecycle-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--draft-lifecycle']);
+  if (gate === 'unit-partial-readiness-sql') {
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--partial']);
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--partial', '--production-shape']);
+  }
   else if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
   else if (gate === 'revision-appendix-pdf') run('node', ['--test','scripts/test-revision-appendix.mjs']);
   else if (gate === 'recommendation-transport-sql') run('node', ['scripts/test-rec03-sql.mjs', '--transport']);

@@ -53,6 +53,27 @@ export const loadRequesterRevisionHistory = async (supabase, job, surat, targetS
   throw new Error("Riwayat revisi terlalu besar untuk dimuat secara lengkap.");
 };
 
+export const loadUnitAllocationHistory = async (supabase, job, surat, targetSignature = null) => {
+  const input = surat.form_input_data || surat.data_snapshot?.input || {};
+  if ((input.request_mode || input.request_category) !== "unit") return [];
+  const source = targetSignature?.file_path_snap || surat.file_path;
+  if (!source || source !== job.source_file_path) return [];
+  const cutoff = targetSignature ? Date.parse(targetSignature.signed_at || "") : Date.now();
+  if (!Number.isFinite(cutoff)) return [];
+  const history = [];
+  for (let page = 0; page < 20; page += 1) {
+    const { data, error } = await supabase.from("surat_unit_allocation_history")
+      .select("id,actor_name,created_at,requested_count,allocated_count,remaining_count,note")
+      .eq("surat_id", job.surat_id).order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(page * 100, page * 100 + 99);
+    if (error) throw error;
+    const batch = data || [];
+    history.push(...batch.filter(row => Number.isFinite(Date.parse(row.created_at)) && Date.parse(row.created_at) <= cutoff));
+    if (batch.length < 100) return history;
+  }
+  throw new Error("Riwayat pemeriksaan unit terlalu besar untuk dimuat lengkap.");
+};
+
 const hydrateLegacyKeu10Payload = async (supabase, job, target) => {
   const payload = job.render_payload;
   const matchesVersion = (document) => document?.id === job.surat_id
@@ -156,6 +177,8 @@ export const createPgdJobHandler = ({
     ? enrichedSignatures.find((signature) => signature.id === job.signature_id)
     : null;
   const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
+  const unitAllocationHistory = await loadUnitAllocationHistory(supabase,job,surat,targetSignature);
+  detectionSource = { ...detectionSource, unit_allocation_history: unitAllocationHistory };
   const documentData = normalizePgdDocumentData(await enrichRevisionActors(supabase,detectionSource,revisionHistory), {
     signatures: enrichedSignatures,
     targetStep: targetSignature?.step_order || null,

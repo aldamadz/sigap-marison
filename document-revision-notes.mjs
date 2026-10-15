@@ -134,6 +134,13 @@ export function revisionHistoryEntries(source = {}) {
     const notes = signerRevisionNotes(source);
     if (notes.length) entries.push({title:notes[0],reason:notes[1] || "-",note:"-",at:"",actor:"",changes:[],legacyNotes:notes.slice(2)});
   }
+  for (const review of rows(source.unit_allocation_history)) {
+    entries.push({title:"Pemeriksaan kesiapan unit",actor:plain(review.actor_name),at:review.created_at || "",
+      reason:plain(review.note || "Seluruh unit yang diminta siap bangun."),note:"-",changes:[
+        {field:"Unit siap bangun / diteruskan",action:"Diperiksa",before:`${review.requested_count} unit diajukan`,after:`${review.allocated_count} unit siap bangun`},
+        {field:"Belum dipenuhi",action:"Dicatat",before:"-",after:`${review.remaining_count} unit`},
+      ]});
+  }
   return entries;
 }
 
@@ -141,7 +148,7 @@ export function revisionAppendixBlock(entries = [], noSurat = "") {
   if (!entries.length) return [];
   const cell = text => ({text,fontSize:8,margin:[0,3,0,3]});
   return [
-    {text:"RIWAYAT PERBAIKAN PENGAJUAN",pageBreak:"before",bold:true,fontSize:14,margin:[0,0,0,4]},
+    {text:entries.some(entry=>entry.title==="Pemeriksaan kesiapan unit") ? "RIWAYAT PERBAIKAN DAN PEMERIKSAAN" : "RIWAYAT PERBAIKAN PENGAJUAN",pageBreak:"before",bold:true,fontSize:14,margin:[0,0,0,4]},
     {text:noSurat,fontSize:9,margin:[0,0,0,12]},
     ...entries.flatMap(entry => [
       {text:[entry.title,entry.actor,entry.at ? new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"}) : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
