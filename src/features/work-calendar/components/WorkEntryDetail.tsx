@@ -64,6 +64,7 @@ import { WorkEntryStatusGlyph } from "./WorkEntryStatusGlyph";
 import { WorkEntryEditor } from "./WorkEntryEditor";
 import { WorkEntryLifecycleActions } from "./WorkEntryLifecycleActions";
 import { WorkEntryTimeline } from "./WorkEntryTimeline";
+import { WorkEntryResult } from "./WorkEntryResult";
 
 export interface WorkEntryDetailProps {
   entry: WorkEntry;
@@ -427,15 +428,15 @@ export function WorkEntryDetail({
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-1.5 sm:col-span-2">
+                  <div className="flex min-w-0 items-start gap-1.5 sm:col-span-2">
                     <StickyNote
                       className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
                       aria-hidden="true"
                     />
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <dt className="text-muted-foreground">Hasil</dt>
                       <dd className="text-foreground">
-                        {entry.realization ?? "Belum diisi"}
+                        <WorkEntryResult value={entry.realization ?? "Belum diisi"} />
                       </dd>
                     </div>
                   </div>
