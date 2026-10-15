@@ -1,6 +1,8 @@
 # SIGAP Feature and Release Map
 
-## MRN-23 Asset Replacement Diagnosis (2026-10-15, Issue #604)
+## MRN-23 Separate Main Document (2026-10-15, Issue #604)
+
+### Asset Replacement Diagnosis Follow-Up
 
 - Read-only admin preflight now returns a sanitized vendor diagnosis for terminal
   HTTP 422 Asset/Fund/Non Unit jobs in production. It explicitly reports that
@@ -16,8 +18,6 @@
   Vendor-side schema readiness and an explicitly approved duplicate-safe recovery
   path remain separate work. Stage-first selective production promotion follows
   focused handler/UI tests, lint, typecheck and builds.
-
-## MRN-23 Separate Main Document (2026-10-15, Issue #604)
 
 - Vendor docs now publish optional top-level `main_document` as a URI string on
   Asset, Unit, Non Unit and Fund. Fresh SIGAP payloads include the canonical final
