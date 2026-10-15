@@ -4160,7 +4160,7 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId, { includeVer
     throw err;
   }
   if (job.environment !== marisonDeploymentEnvironment || job.status !== "failed_terminal" || !job.error_code?.startsWith("marison_http_422")
-    || (marisonDeploymentEnvironment === "production" && (job.kind !== "unit" || !job.post_started_at || !job.response || job.external_reference))) {
+    || (marisonDeploymentEnvironment === "production" && job.kind === "unit" && (!job.post_started_at || !job.response || job.external_reference))) {
     const err = new Error("Job tidak memenuhi syarat preflight replacement HTTP 422.");
     err.status = 409;
     throw err;
@@ -4171,6 +4171,20 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId, { includeVer
     vendorResponse = typeof job.response === "string" ? JSON.parse(job.response) : job.response;
   } catch { vendorResponse = null; }
   const diagnosis = diagnoseVendorRejection(vendorResponse);
+
+  // Diagnosis is read-only; it must not imply that a production replay is supported.
+  if (marisonDeploymentEnvironment === "production" && job.kind !== "unit") {
+    return {
+      eligible: false,
+      reasonCode: "PRODUCTION_REPLACEMENT_UNSUPPORTED",
+      vendorDiagnosis: diagnosis,
+      payloadBodyInvariantViolated: false,
+      safeContext: null,
+      localValidationIssues: "Pengiriman pengganti production untuk jenis pengajuan ini belum didukung. Diagnosis vendor tetap dapat diperiksa. Hubungi operator untuk memeriksa status penerimaan di Marison; jangan mengirim ulang sebelum risiko duplikasi dipastikan.",
+      changedAreas: null,
+      sigapChanged: false,
+    };
+  }
 
   let payloadBodyInvariantViolated = false;
   let failedPayload = null;

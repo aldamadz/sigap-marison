@@ -38,6 +38,16 @@ export const diagnoseVendorRejection = (response) => {
     return { detailsAvailable: false, specificity: "generic", summary: "Vendor tidak memberikan detail penolakan.", issues: [] };
   }
 
+  // Database exceptions can embed connection details, SQL and private payloads.
+  if (/SQLSTATE\[|PDOException|\(Connection:|\bSQL:\s/iu.test(JSON.stringify(response))) {
+    return {
+      detailsAvailable: true,
+      specificity: "generic",
+      summary: "Kendala database pada sistem Marison.",
+      issues: [{ path: "", label: "", specificity: "generic", message: "Sistem Marison mengalami kendala database. Minta tim Marison memeriksa struktur data sebelum mencoba kembali." }],
+    };
+  }
+
   const issues = [];
 
   if (Array.isArray(response.detail) && response.detail.length > 0) {

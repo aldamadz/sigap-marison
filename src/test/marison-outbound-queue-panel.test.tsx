@@ -118,6 +118,26 @@ describe("Marison outbound replacement preflight", () => {
     vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
   });
 
+  it("shows production Asset diagnosis without offering an unsupported resend", async () => {
+    environment.current = "production";
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "production", page: 1, pageSize: 20, total: 1, items: [{ ...row422, kind: "asset", environment: "production" }] });
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({
+      ...eligiblePreflight,
+      eligible: false,
+      reasonCode: "PRODUCTION_REPLACEMENT_UNSUPPORTED",
+      localValidationIssues: "Pengiriman pengganti production untuk jenis pengajuan ini belum didukung.",
+      vendorDiagnosis: { detailsAvailable: true, specificity: "generic", summary: "Kendala pada sistem vendor", issues: [{ path: "", label: "", message: "Kendala pada sistem vendor", specificity: "generic" }] },
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(await dialog.findByText("Pengiriman pengganti belum tersedia")).toBeInTheDocument();
+    expect(dialog.getByText("Kendala pada sistem vendor")).toBeInTheDocument();
+    expect(dialog.queryByText(/akan digantikan oleh generasi baru/i)).not.toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: "Buat pengiriman pengganti" })).not.toBeInTheDocument();
+    expect(marisonIntegrationService.createReplacement).not.toHaveBeenCalled();
+  });
+
   it("requires explicit production confirmation before a Unit replacement", async () => {
     environment.current = "production";
     vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "production", page: 1, pageSize: 20, total: 1, items: [{ ...row422, environment: "production" }] });

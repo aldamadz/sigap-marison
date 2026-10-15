@@ -199,7 +199,8 @@ describe("durable Marison outbound dispatch", () => {
     expect(migration).toContain("pg_advisory_xact_lock");
     expect(migration).not.toContain("gen_random_uuid()), 'pending'");
     expect(server).toContain("createMarisonOutboundReplacement");
-    expect(server).toContain("Replacement outbound hanya tersedia di staging.");
+    expect(server).toContain('"create_verified_unit_outbound_replacement"');
+    expect(server).toContain('"PRODUCTION_REPLACEMENT_UNSUPPORTED"');
     expect(server).toContain('.order("generation", { ascending: false })');
     expect(routes).toContain('GET", url: "/api/integrations/marison/dispatches/:dispatchId/replacement-preflight');
     expect(routes).toContain('POST", url: "/api/integrations/marison/dispatches/:dispatchId/replacement');
