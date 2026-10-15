@@ -1,5 +1,31 @@
 # SIGAP Feature and Release Map
 
+## SUR-30 Partial Unit Readiness (2026-10-15, Issue #612)
+
+- Marketing's original requested count remains unchanged. Planning may select
+  between one and the requested number of ready units; partial readiness requires
+  a meaningful examiner note. Only selected units continue through approval and
+  outbound; outstanding units do not generate another submission automatically.
+- Forward migration `20261015130000` adds participant-RLS protected immutable
+  examiner history: original count/project, selected units, outstanding count,
+  actual actor ID/name snapshot, server timestamp and reason. Every examination
+  round is retained. Existing drafts, approvals and frozen outbound jobs are not
+  backfilled or rewritten. Legacy completed allocations remain compatible.
+- The canonical verification RPC still owns authorization and atomic writes.
+  New trigger guards capture its result, reject zero/excess/duplicate units and
+  missing partial reasons, and require a matching review receipt at completion.
+  Optional legacy reallocation equality gates are patched only where present;
+  production does not have the same legacy wrapper/trigger shape as staging.
+- Detail/confirmation and approval inbox show named examination evidence; PDF
+  places it on separate appendix pages. Historical signer/source cutoffs remain
+  enforced. Existing signature events drive the history query invalidation, without
+  a new realtime publication, public RPC, endpoint or expanded signing authority.
+- App and PDF worker rollout must be coordinated after selected migration apply.
+  Focused UI/service/native PDF and both real PostgreSQL schema shapes precede
+  staging acceptance and explicitly approved selective production release.
+  Asset replacement preflight screenshot is a separate Issue #604 follow-up;
+  no real production retry/replacement is authorized by the Unit feature.
+
 ## MRN-23 Separate Main Document (2026-10-15, Issue #604)
 
 - Vendor docs now publish optional top-level `main_document` as a URI string on
