@@ -56,12 +56,13 @@ describe("native document pipeline", () => {
 
   it("never exposes a native source marker as an outbound attachment", () => {
     const attachmentBody = runtime.slice(
-      runtime.indexOf("const buildMarisonAttachmentLinks"),
+      runtime.indexOf("const buildMarisonDocumentLinks"),
       runtime.indexOf("const buildMarisonUnitPayload"),
     );
     expect(attachmentBody).toContain('startsWith("native://document/")');
     expect(attachmentBody).toContain("PDF final sedang disiapkan");
-    expect(attachmentBody).toContain("file_url: finalPdfPath");
+    expect(attachmentBody).toContain("finalPdfPath,");
+    expect(attachmentBody).toContain("buildMarisonDocumentBundle");
     expect(attachmentBody).not.toContain("surat.pdf_path || surat.file_path");
   });
 
