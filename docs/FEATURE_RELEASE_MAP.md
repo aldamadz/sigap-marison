@@ -28,6 +28,23 @@
 
 ## MRN-23 Separate Main Document (2026-10-15, Issue #604)
 
+### Asset Replacement Diagnosis Follow-Up
+
+- Read-only admin preflight now returns a sanitized vendor diagnosis for terminal
+  HTTP 422 Asset/Fund/Non Unit jobs in production. It explicitly reports that
+  replacement for those kinds is unsupported, rather than throwing a generic
+  preflight error that hides the cause.
+- This does not enable replay: production replacement creation remains limited
+  to the existing verified Unit path. Environment/admin/terminal-state gates,
+  Unit receipts and database protections remain unchanged. No vendor POST, old
+  payload rewrite, new generation or infrastructure change is part of diagnosis.
+- Queue UI explains the block and does not imply that a new generation exists.
+  SQL exception details are replaced with a safe database-error explanation;
+  connection names, raw SQL and embedded private values are never diagnosis text.
+  Vendor-side schema readiness and an explicitly approved duplicate-safe recovery
+  path remain separate work. Stage-first selective production promotion follows
+  focused handler/UI tests, lint, typecheck and builds.
+
 - Vendor docs now publish optional top-level `main_document` as a URI string on
   Asset, Unit, Non Unit and Fund. Fresh SIGAP payloads include the canonical final
   parent PDF there; missing final PDF/link fails closed before vendor POST.
