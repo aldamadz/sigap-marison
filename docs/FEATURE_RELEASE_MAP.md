@@ -12,6 +12,9 @@
   drafts that intentionally use existing USED numbers. Task, parent, owner,
   reservation, number, claimed state and candidate access must all match;
   a client label cannot create an exception. No USED number is changed.
+- `20261014182000` aligns the existing issuing-office trigger with that canonical
+  task authorization. Office identity and authenticated candidate must still match.
+  Actual staging claim/save and forged-context checks run in a full rollback.
 - Owner/admin cancellation can clear stale DRAFT/EXPIRED records without reviving
   a number or resetting its reuse window. Pending-number cancellation retains the
   configured reuse policy and audit. No new public RPC/HTTP endpoint or grant.
