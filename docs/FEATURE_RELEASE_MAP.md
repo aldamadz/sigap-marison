@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## CAL-09 Multiline Result Preview (2026-10-15, Issue #618)
+
+- Calendar result presentation preserves line breaks, spacing, numbered lists
+  and dash bullets. Plain-text values remain unchanged in storage and editing;
+  React escapes content, with no HTML/Markdown execution or new dependency.
+- Shared day/week/search rows limit the result preview to three lines with a CSS
+  ellipsis and safe long-word wrapping. Clicking the preview opens the same full
+  detail as the title, including read-only team entries; full detail is not clamped.
+- Presentation only: no database, status, API, PDF worker or authorization change.
+  Focused row/detail/editor tests and desktop/mobile visual checks precede staging
+  deployment. Production is unchanged unless explicitly requested for this fix.
+
 ## SUR-30 Partial Unit Readiness (2026-10-15, Issue #612)
 
 - Marketing's original requested count remains unchanged. Planning may select
