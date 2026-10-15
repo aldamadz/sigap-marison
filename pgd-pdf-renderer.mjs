@@ -152,12 +152,24 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
   const items = Array.isArray(input.items) ? input.items : [];
   const recommendationDecisions = parseRecommendationItemDecisions(source);
   const isFund = input.request_category === "non_asset";
+  const isUnit = (input.request_mode || input.request_category) === "unit";
+  const unitExaminations = (isUnit && Array.isArray(source.unit_allocation_history) ? source.unit_allocation_history : [])
+    .map((review) => ({
+      name: text(review.actor_name, "Nama pemeriksa tidak tersedia"),
+      date: formatDateTimeId(review.created_at),
+      requested: Number(review.requested_count),
+      approved: Number(review.allocated_count),
+      remaining: Number(review.remaining_count),
+      note: text(review.note, "Seluruh unit yang diminta siap bangun."),
+    }));
+  const latestExamination = unitExaminations.at(-1);
   const targetStep = Number(options.targetStep || 0);
   const signatures = normalizeNativeSignatures(options.signatures, targetStep);
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form || source?.resolved_master_form?.nomor_form, "FM-UAI.PGD-01-00"),
     revisionNotes: signerRevisionNotes(source),
-    revisionHistory: revisionHistoryEntries(source),
+    revisionHistory: revisionHistoryEntries(isUnit ? { ...source, unit_allocation_history: [] } : source),
+    unitExaminations,
     isRejected: isNativeDocumentRejected(source, signatures, targetStep),
     noSurat: text(source.no_surat, "DRAFT/UAI/PGD/VI/2026"),
     isAsset: source.is_aset === true || input.request_category === "asset",
@@ -182,6 +194,12 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
         name: text(item.nama_barang || item.name, ""),
         unit: text(item.sat || item.unit || item.satuan, ""),
         quantity: text(item.jumlah || item.quantity, ""),
+        ...(items.length === 1 && latestExamination
+          && latestExamination.requested === Number(input.requested_unit_count)
+          && latestExamination.requested === Number(item.jumlah || item.quantity)
+          && Number.isSafeInteger(latestExamination.approved) && latestExamination.approved > 0
+          && latestExamination.approved < latestExamination.requested
+          ? { approvedQuantity: String(latestExamination.approved) } : {}),
         status: text(item.status, ""),
         note: [baseNote, nominalNote, recommendationNote].filter(Boolean).join("\n"),
         revisionAction: recommendationNote ? "reject" : "",
@@ -357,7 +375,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
                 widths: ["48%", "52%"],
                 body: [
                   [{ text: "No. Formulir", bold: true, fillColor: HEADER_TINT }, { text: data.formNumber, bold: true, alignment: "center", fillColor: HEADER_TINT }],
-                  [{ text: "Halaman", bold: true, fillColor: HEADER_TINT }, { text: "Lihat footer", alignment: "center", fillColor: HEADER_TINT }],
+                  [{ text: "Halaman", bold: true, fillColor: HEADER_TINT }, { text: [{ text: "1 dari " }, { pageReference: "pgd-document-end" }], alignment: "center", fillColor: HEADER_TINT }],
                   [{ text: "Berlaku Efektif", bold: true, fillColor: HEADER_TINT }, { text: "1 Januari 2024", bold: true, alignment: "center", fillColor: HEADER_TINT }],
                 ],
               },
@@ -417,7 +435,11 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
             ["No", "KODE", "NAMA BARANG", "SAT", "JUMLAH", "STATUS", "KETERANGAN"].map(headerCell),
             ...items.map((item) => [
               itemCell(item.no), itemCell(item.code), itemCell(item.name, "left", item.revisionAction === "reject" ? { decoration: "lineThrough", color: MUTED } : {}), itemCell(item.unit),
-              itemCell(item.quantity), itemCell(item.status), itemCell(item.note, "left"),
+              item.approvedQuantity ? { text: [
+                { text: String(item.quantity), decoration: "lineThrough", color: MUTED },
+                { text: `  ${item.approvedQuantity}`, bold: true },
+              ], alignment: "center", fontSize: 7.5 } : itemCell(item.quantity),
+              itemCell(item.status), itemCell(item.note, "left"),
             ]),
           ],
         },
@@ -438,8 +460,27 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
       },
       ...nativeDocumentRejectionBlock(data.isRejected),
       {
+        columnGap: data.unitExaminations?.length ? 16 : 0,
         columns: [
-          { width: "60%", text: "" },
+          data.unitExaminations?.length ? {
+            width: "*",
+            table: {
+              headerRows: 1,
+              widths: ["*"],
+              body: [
+                [{ text: "Catatan Tim Pemeriksa", bold: true, fillColor: HEADER_TINT }],
+                ...data.unitExaminations.map((review) => [{
+                  stack: [
+                    { text: [ { text: review.name, bold: true }, { text: review.date ? ` - ${review.date} WIB` : "" } ] },
+                    { text: `Diajukan: ${review.requested} unit; siap bangun: ${review.approved} unit; belum dipenuhi: ${review.remaining} unit.`, margin: [0, 3, 0, 3] },
+                    { text: review.note },
+                  ],
+                  margin: [3, 3, 3, 3],
+                }]),
+              ],
+            },
+            layout: borderLayout,
+          } : { width: "60%", text: "" },
           {
             width: "40%",
             unbreakable: true,
@@ -454,6 +495,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
         ],
       },
       ...revisionAppendixBlock(data.revisionHistory || (data.revisionNotes?.length ? [{title:data.revisionNotes[0],reason:data.revisionNotes[1],changes:[],legacyNotes:data.revisionNotes.slice(2)}] : []),data.noSurat),
+      { text: "", id: "pgd-document-end", fontSize: 0.01, lineHeight: 0 },
     ],
   };
 };

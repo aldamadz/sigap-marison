@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## SUR-32 Compact Unit Examination PDF (2026-10-15, Issue #626)
+
+- Supersedes SUR-30's dedicated Unit examination appendix presentation only.
+  The main quantity shows original requested count struck through beside the
+  latest matching ready count; equal or unexamined requests are not crossed out.
+- Named, dated examiner notes and requested/ready/outstanding counts occupy a
+  separate box left of the signatures, never the requester's Catatan. Long notes
+  flow onto following pages without clipping or splitting the signature block.
+- The form header references the real final PDF page count, not "Lihat footer".
+  Other requester/signer revision appendices remain; immutable examination audit,
+  stored request, historical source/signer cutoffs and outbound are unchanged.
+- App/PDF worker rollout is coordinated staging first, then selective production
+  after native renderer, historical snapshot, overflow and visual acceptance.
+  Existing published files require controlled regeneration, not approval/replay.
+
 ## SUR-31 Unit Allocation XLSX Text (2026-10-15, Issue #622)
 
 - Tipe Unit and Desain are literal string cells, not `{text: ...}` objects
