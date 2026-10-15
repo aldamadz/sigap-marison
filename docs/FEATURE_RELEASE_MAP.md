@@ -5,6 +5,9 @@
 - Supersedes SUR-30's dedicated Unit examination appendix presentation only.
   The main quantity shows original requested count struck through beside the
   latest matching ready count; equal or unexamined requests are not crossed out.
+- A unique explicit matching quantity in the item name (e.g. "Rumah 30 Unit")
+  also shows the old number struck beside the ready count. Do not rewrite saved
+  names, kavling codes, type dimensions, ambiguous phrases or unrelated numbers.
 - Named, dated examiner notes and requested/ready/outstanding counts occupy a
   separate box left of the signatures, never the requester's Catatan. Long notes
   flow onto following pages without clipping or splitting the signature block.
