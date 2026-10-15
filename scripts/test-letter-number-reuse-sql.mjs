@@ -581,6 +581,8 @@ const run = (args, input = "", includeStderr = true) => {
 const id = run([
   "run", "-d",
   "-e", "POSTGRES_PASSWORD=test",
+  "-e", "POSTGRES_USER=sigap_fixture_root",
+  "-e", "POSTGRES_DB=postgres",
   "postgres:17-alpine",
 ], "", false).trim();
 if (!/^[0-9a-f]{64}$/u.test(id)) throw new Error("Docker returned an invalid disposable container ID.");
@@ -589,7 +591,7 @@ try {
   for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {
     const probe = spawnSync(
       "docker",
-      ["exec", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-Atqc", "select 1"],
+      ["exec", id, "psql", "-h", "127.0.0.1", "-U", "sigap_fixture_root", "-d", "postgres", "-Atqc", "select 1"],
       { encoding: "utf8" },
     );
     ready = probe.status === 0 && probe.stdout.trim() === "1";
@@ -599,6 +601,10 @@ try {
     }
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready.");
+  // PostgreSQL's bootstrap role cannot be demoted. Keep a separate fixture root
+  // so the application definer can be tested without superuser privileges.
+  run(['exec','-i',id,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+    'create role postgres login superuser;');
   const output = run([
     "exec", "-i", id,
     "psql", "-h", "127.0.0.1", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
@@ -722,6 +728,43 @@ try {
       ${readFileSync('supabase/tests/delegated_issuing_office.integration.sql', 'utf8')}
     `);
     if (!output.includes('Delegated issuing office: all assertions passed')) throw new Error(output);
+    process.stdout.write(output);
+  }
+  if (testDraftLifecycle) {
+    const output = run(['exec','-i',id,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'], `
+      alter function registration_draft_lifecycle_internal.is_recommendation_task_draft(uuid,uuid,text,jsonb) owner to sigap_fixture_root;
+      alter function registration_draft_lifecycle_internal.guard_draft() owner to sigap_fixture_root;
+      alter function registration_draft_lifecycle_internal.renew_reservation() owner to sigap_fixture_root;
+      alter role postgres nosuperuser;
+      grant usage on schema auth to authenticated;
+      grant select,update on public.surat_registration_drafts to authenticated;
+      create or replace function public.can_issue_for_office(p_office_id uuid) returns boolean language sql as $$
+        select auth.uid()='10000000-0000-4000-8000-000000000001'::uuid
+          and p_office_id='a0000000-0000-4000-8000-000000000030'::uuid $$;
+      create trigger test_mixed_owner_office before insert or update on public.surat_registration_drafts
+        for each row execute function public.guard_draft_issuing_office();
+      insert into public.surat_reservations(entity_id,type_id,office_id,dept_id,year,no_urut,status,number_scope_type,reserved_by)
+      values ('a0000000-0000-4000-8000-000000000010','a0000000-0000-4000-8000-000000000050',
+        'a0000000-0000-4000-8000-000000000030','a0000000-0000-4000-8000-000000000020',
+        extract(year from now())::integer,608,'PENDING','pusat','10000000-0000-4000-8000-000000000001');
+      set role authenticated;
+      set "request.jwt.claim.sub"='10000000-0000-4000-8000-000000000001';
+      do $$ begin
+        begin
+          perform public.create_surat_registration_draft(608,'608/UAI/2026',
+            '{"formData":{"office_id":"a0000000-0000-4000-8000-000000000030"}}','[]');
+          raise exception 'Missing EXECUTE fixture did not reproduce';
+        exception when insufficient_privilege then
+          if sqlerrm <> 'permission denied for function is_recommendation_task_draft' then raise; end if;
+          raise notice 'Baseline reproduced: permission denied for function is_recommendation_task_draft';
+        end;
+      end $$;
+      reset role;
+      ${process.argv.includes('--draft-helper-baseline') ? '' : readFileSync('supabase/migrations/20261015110000_registration_draft_helper_execution.sql','utf8')}
+      ${process.argv.includes('--draft-helper-baseline') ? '' : readFileSync('supabase/migrations/20261015110000_registration_draft_helper_execution.sql','utf8')}
+      ${readFileSync('supabase/tests/registration_draft_helper_execution.integration.sql','utf8')}
+    `);
+    if (!output.includes('Draft helper mixed ownership: all assertions passed')) throw new Error(output);
     process.stdout.write(output);
   }
 } finally {
