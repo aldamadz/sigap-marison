@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SUR-31 Unit Allocation XLSX Text (2026-10-15, Issue #622)
+
+- Tipe Unit and Desain are literal string cells, not `{text: ...}` objects
+  serialized as JSON. Preserve external type punctuation (`30/53`, `60/72`)
+  and leading zeros, and explicitly format both columns as text (`@`).
+- Keep nine-column layout, filter, validations, amounts, dates and production
+  serial behavior unchanged. Formula-looking external values remain strings,
+  not executable spreadsheet formulas. Existing files are not rewritten and
+  external unit references remain authoritative during approval/outbound.
+- Real XLSX write/reopen and importer round-trip regressions precede staging
+  acceptance and explicitly approved selective production release. No schema,
+  API, worker, outbound replay or saved allocation change. Excel's mismatched
+  paste-selection error is separate from this exported-cell defect.
+
 ## CAL-09 Multiline Result Preview (2026-10-15, Issue #618)
 
 - Calendar result presentation preserves line breaks, spacing, numbered lists
