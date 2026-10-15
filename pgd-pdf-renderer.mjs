@@ -357,6 +357,22 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
   }));
   const headerCell = (value) => ({ text: value, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 2, 0, 2] });
   const itemCell = (value, alignment = "center", extra = {}) => ({ text: text(value, ""), alignment, fontSize: 7.5, margin: [0, 0, 0, 0], ...extra });
+  const itemNameCell = (item) => {
+    if (item.revisionAction === "reject") return itemCell(item.name, "left", { decoration: "lineThrough", color: MUTED });
+    const name = text(item.name, "");
+    const matches = item.approvedQuantity
+      ? [...name.matchAll(/(^|[\s(])(\d+)(\s+unit\b)/gi)].filter(match => Number(match[2]) === Number(item.quantity))
+      : [];
+    if (matches.length !== 1) return itemCell(name, "left");
+    const match = matches[0];
+    const start = match.index + match[1].length;
+    return { ...itemCell("", "left"), text: [
+      { text: name.slice(0, start) },
+      { text: match[2], decoration: "lineThrough", color: MUTED },
+      { text: ` ${item.approvedQuantity}`, bold: true },
+      { text: name.slice(start + match[2].length) },
+    ] };
+  };
   return {
     pageSize: "A4",
     pageOrientation: "landscape",
@@ -434,7 +450,7 @@ export const buildPgdDocumentDefinition = (data, logoDataUrl = null) => {
           body: [
             ["No", "KODE", "NAMA BARANG", "SAT", "JUMLAH", "STATUS", "KETERANGAN"].map(headerCell),
             ...items.map((item) => [
-              itemCell(item.no), itemCell(item.code), itemCell(item.name, "left", item.revisionAction === "reject" ? { decoration: "lineThrough", color: MUTED } : {}), itemCell(item.unit),
+              itemCell(item.no), itemCell(item.code), itemNameCell(item), itemCell(item.unit),
               item.approvedQuantity ? { text: [
                 { text: String(item.quantity), decoration: "lineThrough", color: MUTED },
                 { text: `  ${item.approvedQuantity}`, bold: true },

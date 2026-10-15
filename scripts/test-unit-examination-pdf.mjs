@@ -39,6 +39,36 @@ test("Equal counts are not crossed out, unchecked Unit and non-Unit forms remain
   }
 });
 
+test("Only the unique explicit requested Unit count in the item name is crossed out", () => {
+  const input = source();
+  input.form_input_data.items[0].nama_barang = "SPK B30 tipe 30/60: Pembangunan Rumah 30 Unit tahap 2";
+  const original = structuredClone(input);
+  const data = normalizePgdDocumentData(input);
+  const definition = buildPgdDocumentDefinition(data);
+  const nameCell = definition.content.find(node => node.table?.headerRows === 1).table.body[1][2];
+  assert.deepEqual(nameCell.text, [
+    { text: "SPK B30 tipe 30/60: Pembangunan Rumah " },
+    { text: "30", decoration: "lineThrough", color: "#475569" },
+    { text: " 3", bold: true },
+    { text: " Unit tahap 2" },
+  ]);
+  assert.equal(data.items[0].name, original.form_input_data.items[0].nama_barang);
+  assert.deepEqual(input, original);
+});
+
+test("Unrelated numbers, ambiguous quantities and item rejection formatting are preserved", () => {
+  for (const name of ["SPK B30 tipe 30/60", "SPK 130 Unit", "SPK 30.30 Unit", "SPK 30/30 Unit", "SPK B30 Unit", "30 Unit dan 30 Unit"]) {
+    const input = source(); input.form_input_data.items[0].nama_barang = name;
+    const definition = buildPgdDocumentDefinition(normalizePgdDocumentData(input));
+    const cell = definition.content.find(node => node.table?.headerRows === 1).table.body[1][2];
+    assert.equal(cell.text, name);
+  }
+  const data = normalizePgdDocumentData(source()); data.items[0].revisionAction = "reject";
+  const cell = buildPgdDocumentDefinition(data).content.find(node => node.table?.headerRows === 1).table.body[1][2];
+  assert.equal(cell.decoration, "lineThrough");
+  assert.equal(cell.text, "Permohonan SPK 30 Unit");
+});
+
 test("Latest matching examination owns the quantity, older dated notes remain attributable", () => {
   const input = source();
   input.unit_allocation_history.push({ ...review, id: "later", actor_name: "Rotsa", created_at: "2026-10-15T04:00:00Z", allocated_count: 5 });
