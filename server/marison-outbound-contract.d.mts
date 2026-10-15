@@ -1,8 +1,8 @@
 import type { ZodType } from "zod";
 
-export const MARISON_OUTBOUND_CONTRACT_VERSION: "vendor-openapi-1.0.0";
-export const MARISON_ASSET_CONTRACT_VERSION: "vendor-openapi-asset-2026-08-11-no-estimated-price";
-export const MARISON_FUND_CONTRACT_VERSION: "vendor-openapi-fund-2026-10-06-marketing-cost";
+export const MARISON_OUTBOUND_CONTRACT_VERSION: "vendor-openapi-2026-10-15-main-document";
+export const MARISON_ASSET_CONTRACT_VERSION: "vendor-openapi-asset-2026-10-15-main-document";
+export const MARISON_FUND_CONTRACT_VERSION: "vendor-openapi-fund-2026-10-15-main-document";
 export const marisonUnitSubmissionSchema: ZodType<Record<string, unknown>>;
 export const marisonNonUnitSubmissionSchema: ZodType<Record<string, unknown>>;
 export const marisonAssetPurchaseRequestSchema: ZodType<Record<string, unknown>>;

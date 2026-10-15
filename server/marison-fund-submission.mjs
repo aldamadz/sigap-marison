@@ -97,10 +97,11 @@ export const resolveMarisonFundBranch = ({ employees, requesterNik }) => {
   return rawBranchId;
 };
 
-export const mapMarisonFundSubmission = ({ request, projectId, branchId, division, attachments, approvals }) => {
+export const mapMarisonFundSubmission = ({ request, projectId, branchId, division, mainDocument, attachments, approvals }) => {
   const items = normalizeFundItems(request?.items);
   const payload = {
     submission_number: text(request?.submissionNumber),
+    ...(mainDocument !== undefined ? { main_document: mainDocument } : {}),
     type: text(request?.type),
     branch_id: Number(branchId),
     division: text(division),

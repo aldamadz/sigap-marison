@@ -1,14 +1,15 @@
 import { z } from "zod";
 
-export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-1.0.0";
-export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-08-11-no-estimated-price";
-export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-10-06-marketing-cost";
+export const MARISON_OUTBOUND_CONTRACT_VERSION = "vendor-openapi-2026-10-15-main-document";
+export const MARISON_ASSET_CONTRACT_VERSION = "vendor-openapi-asset-2026-10-15-main-document";
+export const MARISON_FUND_CONTRACT_VERSION = "vendor-openapi-fund-2026-10-15-main-document";
 
 const requiredText = z.string();
 const nonEmptyText = z.string().trim().min(1);
 const positiveInteger = z.number().int().positive();
 const nonNegativeInteger = z.number().int().nonnegative();
 const dateTime = z.string().datetime({ offset: true });
+const mainDocument = z.string().url().refine((url) => /^https?:\/\//iu.test(url)).optional();
 
 const externalLink = z.object({
   name: nonEmptyText,
@@ -52,6 +53,7 @@ export const normalizeMarisonSubmissionApprovals = (kind, approvals) =>
   }));
 
 export const marisonUnitSubmissionSchema = z.object({
+  main_document: mainDocument,
   submission_number: nonEmptyText,
   project_id: positiveInteger,
   branch_id: positiveInteger,
@@ -73,6 +75,7 @@ export const marisonUnitSubmissionSchema = z.object({
 }).strict();
 
 export const marisonNonUnitSubmissionSchema = z.object({
+  main_document: mainDocument,
   submission_number: nonEmptyText,
   project_id: positiveInteger,
   branch_id: positiveInteger,
@@ -99,6 +102,7 @@ export const marisonNonUnitSubmissionSchema = z.object({
 });
 
 export const marisonAssetPurchaseRequestSchema = z.object({
+  main_document: mainDocument,
   request_number: nonEmptyText,
   branch_id: positiveInteger,
   submitted_by: nonEmptyText.optional(),
@@ -114,6 +118,7 @@ export const marisonAssetPurchaseRequestSchema = z.object({
 }).strict();
 
 export const marisonFundSubmissionSchema = z.object({
+  main_document: mainDocument,
   submission_number: nonEmptyText,
   type: z.enum(["production_cost", "operational", "marketing_cost"]),
   // Kontrak vendor 26 Agustus 2026 mewajibkan branch_id untuk seluruh Fund.

@@ -28,6 +28,7 @@ import {
   withSecurityHeaders,
 } from "./lib/http.js";
 import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
+import { buildMarisonDocumentBundle } from "./lib/marison-document-links.js";
 import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
 import {
   mapSuratRejectionRpcError,
@@ -3372,7 +3373,7 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true, 
   };
 };
 
-const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
+const buildMarisonDocumentLinks = async (surat, actorId = null) => {
   const finalPdfPath = resolveFinalMarisonPdfPath(surat);
   if (!finalPdfPath && String(surat?.file_path || "").startsWith("native://document/")) {
     const { data: existingJob, error: existingJobError } = await supabase
@@ -3398,29 +3399,12 @@ const buildMarisonAttachmentLinks = async (surat, actorId = null) => {
     err.code = "final_pdf_pending";
     throw err;
   }
-  const rows = [
-    ...(finalPdfPath
-      ? [{ file_url: finalPdfPath, file_name: "Dokumen pengajuan", requirement_label: "Dokumen Pengajuan Final" }]
-      : []),
-    ...asArrayValue(surat?.surat_attachments),
-  ];
-  const links = [];
-  const seen = new Set();
-  for (const [index, attachment] of rows.entries()) {
-    if (!attachment?.file_url) continue;
-    const ref = parseStorageRef(attachment.file_url);
-    const key = storageRefKey(ref);
-    if (!ref || seen.has(key)) continue;
-    seen.add(key);
-    const link = await buildPersistentMarisonFileLink(surat, attachment.file_url, actorId);
-    if (link) {
-      links.push({
-        name: firstString(attachment.requirement_label, attachment.file_name, `Lampiran ${index + 1}`),
-        link,
-      });
-    }
-  }
-  return links;
+  return buildMarisonDocumentBundle({
+    finalPdfPath,
+    attachments: asArrayValue(surat?.surat_attachments),
+    parseRef: parseStorageRef,
+    mintLink: (rawPath) => buildPersistentMarisonFileLink(surat, rawPath, actorId),
+  });
 };
 
 const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) => {
@@ -3471,6 +3455,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
   }
   const verifiedUnitReceipt = overrides.requireUnsubmittedUnitReferences
     ? verifiedUnitReplacementReceipt(projectId, verifiedReferences) : null;
+  const documents = await buildMarisonDocumentLinks(surat, actorId);
   const payload = {
     submission_number: surat.no_surat,
     project_id: projectId,
@@ -3482,7 +3467,8 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
      submitted_by: overrides.nik,
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     units,
-    attachments: await buildMarisonAttachmentLinks(surat, actorId),
+    main_document: documents.mainDocument,
+    attachments: documents.attachments,
      approvals: normalizeMarisonSubmissionApprovals("unit", overrides.approvals),
   };
   return {
@@ -3588,6 +3574,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
     err.status = 422;
     throw err;
   }
+  const documents = await buildMarisonDocumentLinks(surat, actorId);
   return {
     endpoint: "/non-unit-submissions",
     kind: "non_unit",
@@ -3601,7 +3588,8 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       notes: firstString(input.catatan, surat.judul_surat),
       items,
-      attachments: await buildMarisonAttachmentLinks(surat, actorId),
+      main_document: documents.mainDocument,
+      attachments: documents.attachments,
      approvals: normalizeMarisonSubmissionApprovals("non_unit", overrides.approvals),
     }),
   };
@@ -3627,7 +3615,8 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
   const recommendationDocumentLink = recommendationDocument
     ? recommendationFileReference(recommendationDocument.id)
     : null;
-  const applicantAttachments = await buildMarisonAttachmentLinks(surat, actorId);
+  const documents = await buildMarisonDocumentLinks(surat, actorId);
+  const applicantAttachments = documents.attachments;
   const payload = mapMarisonAssetRequest({
     request: {
       request_number: surat.no_surat,
@@ -3635,6 +3624,7 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
       submitted_by: overrides.nik,
       submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
       description: firstString(input.catatan, surat.judul_surat),
+      main_document: documents.mainDocument,
       approvals: overrides.approvals,
     },
     applicantItems: items,
@@ -3676,6 +3666,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
   const branchId = projectId == null
     ? resolveMarisonFundBranch({ employees, requesterNik: overrides.nik })
     : requireExternalInteger(overrides.branchId, "Branch ID proyek");
+  const documents = await buildMarisonDocumentLinks(surat, actorId);
 
   return {
     ...mapMarisonFundSubmission({
@@ -3690,7 +3681,8 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
       projectId,
       branchId,
       division,
-      attachments: await buildMarisonAttachmentLinks(surat, actorId),
+      mainDocument: documents.mainDocument,
+      attachments: documents.attachments,
       approvals: overrides.approvals,
     }),
     sourceOverrides: {
