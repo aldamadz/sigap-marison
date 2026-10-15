@@ -21,7 +21,7 @@ test('revision quantity/reason/attachment changes never resize the main form',as
  const def=buildPgdDocumentDefinition(data),plain=buildPgdDocumentDefinition(normalizePgdDocumentData({...source,revision_history:[]}));
  const index=def.content.findIndex(node=>node.pageBreak==='before');
  assert.ok(index>def.content.findIndex(node=>node.columns));
- assert.equal(JSON.stringify(def.content.slice(0,index)),JSON.stringify(plain.content));
+ assert.equal(JSON.stringify(def.content.slice(0,index)),JSON.stringify(plain.content.filter(node=>node.id!=='pgd-document-end')));
  assert.equal(def.content[index].text,'RIWAYAT PERBAIKAN PENGAJUAN');
  assert.equal((await renderPgdPdf(data)).subarray(0,5).toString(),'%PDF-');
 });

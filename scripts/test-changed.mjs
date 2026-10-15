@@ -114,7 +114,7 @@ for (const file of allChangedFiles) {
   if (/keu10.*pdf.*\.mjs$/u.test(file)) gates.add("test:keu10-pdf");
   if (/keu10.*\.sql$|test-keu10-workflow-sql\.mjs$/u.test(file)) gates.add("test:keu10-workflow-sql");
   if (/^(server|scripts|src)\/.*(document|docx|layout)/u.test(file)) gates.add("test:document-layout");
-  if (/^(server|scripts|src)\/.*pgd.*pdf/u.test(file)) gates.add("test:pgd-pdf");
+  if (/^pgd-pdf-renderer\.mjs$|^scripts\/test-unit-examination-pdf\.mjs$|^(server|scripts|src)\/.*pgd.*pdf/u.test(file)) gates.add("test:pgd-pdf");
   if (/^(pdf-worker\.mjs|server\/pdf-worker-job\.mjs|server\/revision-actor-evidence(?:\.test)?\.mjs|scripts\/test-pdf-worker-job\.mjs)$/u.test(file)) gates.add("test:worker-job");
   if (/^(server|scripts|src)\/.*recommendation.*pdf/u.test(file)) gates.add("test:recommendation-pdf");
   if (/^(server|scripts|src|supabase)\/.*storage/u.test(file)) gates.add("test:storage-policy");

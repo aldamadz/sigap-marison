@@ -1,4 +1,5 @@
 import test from "node:test";
+import "./test-unit-examination-pdf.mjs";
 import assert from "node:assert/strict";
 import {
   buildPgdDocumentDefinition,
