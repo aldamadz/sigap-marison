@@ -112,23 +112,15 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   ];
 
   rows.forEach((row) => {
-    const excelRow = worksheet.addRow({
+    worksheet.addRow({
       ...row,
-      "Tipe Unit": String(row["Tipe Unit"] || "").replace(/\D/g, ""),
+      "Tipe Unit": String(row["Tipe Unit"] ?? ""),
       "Struktur Atas": parseTemplateNumber(row["Struktur Atas"]),
       "Struktur Bawah": parseTemplateNumber(row["Struktur Bawah"]),
       "Nomor Kode Produksi": parseTemplateSerial(row["Nomor Kode Produksi"]),
-      "Blok": String(row["Blok"] || ""),
+      "Blok": String(row["Blok"] ?? ""),
       "Tanggal Produksi": parseTemplateDate(row["Tanggal Produksi"]),
     });
-    const tipeCell = excelRow.getCell(4);
-    if (tipeCell.value !== null && tipeCell.value !== undefined && tipeCell.value !== "") {
-      tipeCell.value = { text: String(tipeCell.value) } as any;
-    }
-    const blokCell = excelRow.getCell(8);
-    if (blokCell.value !== null && blokCell.value !== undefined && blokCell.value !== "") {
-      blokCell.value = { text: String(blokCell.value) } as any;
-    }
   });
 
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
@@ -149,9 +141,11 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   for (let rowNumber = 2; rowNumber <= Math.max(rows.length + 1, 20); rowNumber += 1) {
     const row = worksheet.getRow(rowNumber);
     row.height = 22;
+    row.getCell(4).numFmt = "@";
     row.getCell(5).numFmt = "#,##0";
     row.getCell(6).numFmt = "#,##0";
     row.getCell(7).numFmt = "000";
+    row.getCell(8).numFmt = "@";
     row.getCell(9).numFmt = "dd/mm/yyyy";
     row.getCell(4).dataValidation = {
       type: "textLength",
@@ -236,9 +230,11 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
   }
 
   worksheet.getColumn(2).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+  worksheet.getColumn(4).numFmt = "@";
   worksheet.getColumn(5).numFmt = "#,##0";
   worksheet.getColumn(6).numFmt = "#,##0";
   worksheet.getColumn(7).numFmt = "000";
+  worksheet.getColumn(8).numFmt = "@";
   worksheet.getColumn(9).numFmt = "dd/mm/yyyy";
 
   return workbook;
