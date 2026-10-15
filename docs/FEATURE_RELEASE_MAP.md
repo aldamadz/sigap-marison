@@ -21,6 +21,16 @@
 
 ## SUR-29 Draft and Number Reservation Lifecycle (2026-10-14, Issue #596)
 
+- Issue #608 corrects mixed-owner self-hosted execution: existing office guard
+  runs as non-superuser `postgres`, but the private recommendation helper was
+  created by `supabase_admin`. Migration `20261015110000` grants only the trusted
+  `postgres` definer EXECUTE on that helper; API roles remain denied. No function
+  body, office/task validation, RLS, document, reservation or owner is rewritten.
+  The PostgreSQL regression first reproduces the exact permission error, then
+  creates/saves an ordinary draft as authenticated with a non-superuser definer,
+  tests legitimate USED-number recommendations and rejects forged office/task/
+  actor contexts. Staging-first promotion includes rollback-only live draft tests;
+  production acceptance is read-only, without allocating or submitting a number.
 - Production expiry cron cancelled numbers while autosave extended only the draft.
   Forward migration `20261014180000` shares a server-controlled seven-day lease
   on ordinary draft saves and protects valid drafts from that existing cron.
