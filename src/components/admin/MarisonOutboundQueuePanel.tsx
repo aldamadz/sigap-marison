@@ -616,7 +616,7 @@ export function MarisonOutboundQueuePanel() {
           {replacement && (
             <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
               <p className="font-medium text-foreground">{replacement.noSurat}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Generasi {replacement.generation} akan digantikan oleh generasi baru.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Pemeriksaan pengganti untuk generasi {replacement.generation}. Belum ada pengiriman baru.</p>
             </div>
           )}
           {replacementPreflightState === "checking" && (
@@ -641,7 +641,7 @@ export function MarisonOutboundQueuePanel() {
               )}
               {!replacementPreflightData.payloadBodyInvariantViolated && replacementPreflightData.localValidationIssues && (
                 <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-                  <p className="font-medium text-foreground">Validasi lokal gagal</p>
+                  <p className="font-medium text-foreground">{replacementPreflightData.reasonCode === "PRODUCTION_REPLACEMENT_UNSUPPORTED" ? "Pengiriman pengganti belum tersedia" : "Validasi lokal gagal"}</p>
                   <p className="mt-1 text-muted-foreground">{replacementPreflightData.localValidationIssues}</p>
                 </div>
               )}
