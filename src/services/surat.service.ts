@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { unitReadinessIssue } from "@/lib/unit-readiness";
 import { accessService } from './access.service';
 import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
 import { canAutoApproveRequesterFirstStep } from "@/lib/surat-requester-auto-approval";
@@ -1649,6 +1650,11 @@ export const suratService = {
     let formInputData = suratFresh.form_input_data ?? {};
     const persistedVerificationDraft =
       (suratFresh.data_snapshot as any)?.verification_drafts?.[signatureId]?.input || {};
+    if (sigInfo.requires_unit_allocation || sigInfo.action_type === "unit_allocation") {
+      const units = options.unitAllocation ? options.unitAllocation.units : persistedVerificationDraft.allocated_units || [];
+      const issue = unitReadinessIssue(Number(formInputData.requested_unit_count || 0), units.length, note);
+      if (issue) throw new Error(issue);
+    }
     const incomingCheckerInput = options.checkerInput ?? persistedVerificationDraft?.checker_input ?? {};
     const checkerInput = sigInfo.action_type === "configured_input"
       ? (() => {
@@ -1710,7 +1716,7 @@ export const suratService = {
 
     if (sigInfo.requires_unit_allocation || sigInfo.action_type === "unit_allocation") {
       const incomingUnits = options.unitAllocation?.units ?? [];
-      const units = incomingUnits.length > 0
+      const units = options.unitAllocation
         ? incomingUnits
         : Array.isArray(persistedVerificationDraft?.allocated_units)
           ? persistedVerificationDraft.allocated_units

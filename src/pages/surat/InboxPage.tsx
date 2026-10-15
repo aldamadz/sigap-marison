@@ -84,6 +84,8 @@ import { validateKeu10SubmissionItems, type Keu10SubmissionItem } from "@/featur
 import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
 import { getFundSubmissionTypeLabel, usesFundSubmissionType } from "@/features/surat/registration/usages/fund/fund-types";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
+import { UnitAllocationHistory } from "@/components/surat/UnitAllocationHistory";
+import { unitReadinessIssue } from "@/lib/unit-readiness";
 import { approvalBadgeClass } from "@/components/surat/approval-status-style";
 import { NominalInput } from "@/components/surat/NominalInput";
 import { formatCurrencyInput, parseCurrencyInput, formatRupiah as formatRupiahCanonical, normalizeRupiahDigits } from "@/lib/rupiah";
@@ -877,6 +879,10 @@ const handleApprove = async (item: any) => {
     try {
       const selectedUnits = getSelectedAllocationUnits(item);
       const selectedProject = getAllocationProject(item);
+      if (isUnitAllocationRequired(item)) {
+        const issue = unitReadinessIssue(getRequestedUnitCount(item), selectedUnits.length, notes[item.id] || "");
+        if (issue) throw new Error(issue);
+      }
       if (isUnitAllocationRequired(item) && !selectedProject?.code) {
         throw new Error("Project unit wajib dipilih.");
       }
@@ -2304,7 +2310,8 @@ const handleApprove = async (item: any) => {
     if (shouldInputUnitAllocation(item)) {
       const selected = getSelectedAllocationUnits(item);
       if (!getAllocationProject(item)?.code) blockers.push("Pilih proyek unit");
-      if (selected.length < 1) blockers.push("Pilih minimal 1 unit");
+      const issue = unitReadinessIssue(getRequestedUnitCount(item), selected.length, notes[item.id] || "");
+      if (issue) blockers.push(issue);
       const incomplete = getIncompleteAllocationUnits(item);
       if (incomplete.length) blockers.push("Lengkapi tipe dan kode produksi " + incomplete.length + " unit");
     }
@@ -2706,6 +2713,9 @@ const handleApprove = async (item: any) => {
   const activeSurat = getInboxSurat(selectedItem);
   const activeKpi = selectedItem ? getKpiPresentation(selectedItem) : null;
   const activeBlockers = selectedItem && activeSurat ? getApprovalBlockers(selectedItem) : [];
+  const partialAllocationNeedsNote = selectedItem && shouldInputUnitAllocation(selectedItem)
+    && getSelectedAllocationUnits(selectedItem).length > 0
+    && getSelectedAllocationUnits(selectedItem).length < getRequestedUnitCount(selectedItem);
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
@@ -2825,7 +2835,30 @@ const handleApprove = async (item: any) => {
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>
-             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"><div className="w-full space-y-4 p-4 pb-8 sm:p-6">{renderRequestSummary(selectedItem)}{renderRevisionHistory()}{renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}{renderConfiguredInputPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}{renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}<section className="sigap-panel"><div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p><p className="text-xs text-muted-foreground">{isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p></div></div><Textarea ref={(element) => { noteRefs.current[selectedItem.id] = element; }} placeholder={isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"} value={notes[selectedItem.id] || ""} onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))} className="min-h-24 resize-y text-sm" /></section></div></div>
+             <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+               <div className="w-full space-y-4 p-4 pb-8 sm:p-6">
+                 {renderRequestSummary(selectedItem)}{renderRevisionHistory()}
+                 {getRequestedUnitCount(selectedItem) > 0 && <UnitAllocationHistory suratId={selectedSuratId} />}
+                 {renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}
+                 {renderConfiguredInputPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}
+                 {renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}
+                 <section className="sigap-panel">
+                   <div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div>
+                     <p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p>
+                     <p className="text-xs text-muted-foreground">{partialAllocationNeedsNote
+                       ? "Wajib diisi: jelaskan alasan hanya sebagian unit yang siap bangun."
+                       : isVerificationTask(selectedItem) ? "Opsional. Catatan akan tersimpan pada status pemeriksaan." : "Opsional. Alasan penolakan akan diminta saat menolak."}</p>
+                   </div></div>
+                   <Textarea ref={(element) => { noteRefs.current[selectedItem.id] = element; }}
+                     aria-required={Boolean(partialAllocationNeedsNote)} maxLength={2000}
+                     placeholder={partialAllocationNeedsNote ? "Contoh: baru 3 unit siap bangun; 27 unit lainnya belum siap."
+                       : isVerificationTask(selectedItem) ? "Tambahkan catatan pemeriksaan bila diperlukan" : "Tambahkan catatan untuk tahap berikutnya"}
+                     value={notes[selectedItem.id] || ""}
+                     onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))}
+                     className="min-h-24 resize-y text-sm" />
+                 </section>
+               </div>
+             </div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
