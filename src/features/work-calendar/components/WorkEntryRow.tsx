@@ -62,6 +62,7 @@ import {
 } from "../lib/work-calendar-date";
 import { normalizeWorkEntryTitle } from "../lib/work-entry-validation";
 import { WorkEntryStatusGlyph } from "./WorkEntryStatusGlyph";
+import { WorkEntryResult } from "./WorkEntryResult";
 
 export interface WorkEntryRowProps {
   entry: WorkEntry;
@@ -484,10 +485,16 @@ export function WorkEntryRow({
           </div>
 
           {entry.realization && (
-            <p data-testid={`work-entry-realization-${entry.id}`} className="text-xs text-muted-foreground">
+            <button
+              type="button"
+              data-testid={`work-entry-realization-${entry.id}`}
+              aria-label={`Buka hasil pekerjaan: ${entry.title}`}
+              onClick={onOpenDetail}
+              className="block min-h-touch w-full min-w-0 rounded-sm text-left text-xs leading-relaxed text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <span className="font-medium text-foreground">Hasil: </span>
-              {entry.realization}
-            </p>
+              <WorkEntryResult value={entry.realization} preview />
+            </button>
           )}
 
           {entry.status === "blocked" && entry.blockedReason && (
