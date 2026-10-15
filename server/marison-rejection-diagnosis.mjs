@@ -5,7 +5,7 @@ const SENSITIVE_VALUE_PATTERNS = [
 
 const maskSensitiveValues = (text) => {
   if (typeof text !== "string") return String(text ?? "");
-  let result = text;
+  let result = text.replace(/https?:\/\/[^\s"<>]+/giu, "[tautan disembunyikan]");
   for (const { re, mask } of SENSITIVE_VALUE_PATTERNS) {
     re.lastIndex = 0;
     result = result.replace(re, mask);
@@ -21,6 +21,7 @@ const PATH_LABELS = {
   units: "Unit",
   items: "Item",
   attachments: "Lampiran",
+  main_document: "Dokumen utama",
 };
 
 const getPathLabel = (path) => {
@@ -101,6 +102,7 @@ export const diagnoseVendorRejection = (response) => {
 export const collectSensitiveValues = (payload) => {
   const values = new Set();
   if (!payload || typeof payload !== "object") return values;
+  if (typeof payload.main_document === "string") values.add(payload.main_document);
   if (typeof payload.submitted_by === "string" && payload.submitted_by.trim()) values.add(payload.submitted_by.trim());
   if (Array.isArray(payload.approvals)) {
     for (const approval of payload.approvals) {
@@ -139,6 +141,7 @@ export const buildSafeContext = (payload, kind, sensitiveValues) => {
   if (payload.project_id != null) context.hasProjectId = true;
   if (payload.branch_id != null) context.hasBranchId = true;
   if (Array.isArray(payload.attachments)) context.attachmentCount = payload.attachments.length;
+  if (payload.main_document) context.hasMainDocument = true;
 
   return Object.keys(context).length > 0 ? context : null;
 };
@@ -146,6 +149,7 @@ export const buildSafeContext = (payload, kind, sensitiveValues) => {
 export const sanitizePayloadForComparison = (payload) => {
   if (!payload || typeof payload !== "object") return null;
   const sanitized = { ...payload };
+  if (sanitized.main_document) sanitized.main_document = "[tautan disembunyikan]";
   delete sanitized.submitted_by;
   if (Array.isArray(sanitized.approvals)) {
     sanitized.approvals = sanitized.approvals.map((a) => {
@@ -166,6 +170,9 @@ export const comparePayloads = (oldPayload, newPayload, kind) => {
   if (!oldPayload || !newPayload) return [];
 
   const changes = [];
+  if (Boolean(oldPayload.main_document) !== Boolean(newPayload.main_document)) {
+    changes.push(newPayload.main_document ? "Dokumen utama ditambahkan." : "Dokumen utama tidak tersedia.");
+  }
 
   if (oldPayload.submitted_by !== newPayload.submitted_by) {
     changes.push("Mapping pemohon berubah.");

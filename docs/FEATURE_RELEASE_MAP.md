@@ -1,5 +1,24 @@
 # SIGAP Feature and Release Map
 
+## MRN-23 Separate Main Document (2026-10-15, Issue #604)
+
+- Vendor docs now publish optional top-level `main_document` as a URI string on
+  Asset, Unit, Non Unit and Fund. Fresh SIGAP payloads include the canonical final
+  parent PDF there; missing final PDF/link fails closed before vendor POST.
+- Supplemental requester/examiner attachments remain name/link objects; Asset
+  keeps them at item level alongside its recommendation PDF. PGD Dana, KEU 1
+  and KEU 10 retain Fund types, totals, approvals and project/office resolution.
+- Deduplicate by storage origin/bucket/path; do not duplicate the main PDF in
+  attachment arrays or substitute the first attachment. Redact document bearer
+  links in diagnostics. Existing file-view authorization remains unchanged.
+- Contract versions advance for fresh payloads; old frozen jobs/hashes retain
+  their original optional-field compatibility. No replay, new public endpoint,
+  schema/RLS or worker source change. Vendor schema readiness is a separate gate.
+- Focused contract, document-bundle, mapper and native PDF readiness tests precede
+  staging acceptance and explicitly authorized selective production promotion.
+- Evidence: `docs/contracts/marison/main-document-20261015.md`. Issue #604's
+  already-POSTed Asset generation is not automatically replaced or retried.
+
 ## SUR-29 Draft and Number Reservation Lifecycle (2026-10-14, Issue #596)
 
 - Production expiry cron cancelled numbers while autosave extended only the draft.

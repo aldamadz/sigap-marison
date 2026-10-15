@@ -48,13 +48,13 @@ describe("Marison outbound contract v1", () => {
   });
 
   it("pins the active Asset OpenAPI revision independently", () => {
-    expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-08-11-no-estimated-price");
+    expect(MARISON_ASSET_CONTRACT_VERSION).toBe("vendor-openapi-asset-2026-10-15-main-document");
   });
 
   it("accepts the active Fund Submission contract and applicant-selected type", () => {
     const fixture = readFixture("fund-submission.example.json");
 
-    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-10-06-marketing-cost");
+    expect(MARISON_FUND_CONTRACT_VERSION).toBe("vendor-openapi-fund-2026-10-15-main-document");
     expect(marisonFundSubmissionSchema.parse(fixture)).toEqual(fixture);
     expect(assertMarisonOutboundContract("fund", fixture)).toEqual(fixture);
   });

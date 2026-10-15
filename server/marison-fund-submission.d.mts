@@ -10,6 +10,7 @@ export interface MarisonFundSubmissionInput {
   projectId?: unknown;
   branchId?: unknown;
   division?: unknown;
+  mainDocument?: string;
   attachments?: unknown[];
   approvals?: unknown[];
 }
@@ -17,7 +18,7 @@ export interface MarisonFundSubmissionInput {
 export function mapMarisonFundSubmission(input: MarisonFundSubmissionInput): {
   endpoint: "/fund-submissions";
   kind: "fund";
-  contractVersion: "vendor-openapi-fund-2026-10-06-marketing-cost";
+  contractVersion: "vendor-openapi-fund-2026-10-15-main-document";
   payload: Record<string, unknown>;
 };
 
