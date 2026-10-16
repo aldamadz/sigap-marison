@@ -8,6 +8,7 @@ const factory = read(process.argv.includes('--production-shape')
 const delegation = read('supabase/migrations/20261012140000_delegated_issuing_office.sql');
 const triggerSource = read('supabase/migrations/20260626190000_recommendation_tasks_shared_lock.sql');
 const migration = read('supabase/migrations/20261016090000_recommendation_internal_office_reservation.sql');
+const activeActorMigration = read('supabase/migrations/20261016091000_recommendation_internal_active_actor.sql');
 function routine(source, name) {
   const start = source.indexOf(`create or replace function public.${name}(`);
   const end = source.indexOf('$$;', start);
@@ -109,6 +110,19 @@ do $$declare n integer;begin for n in 1..4 loop
 end loop;end$$;
 reset role;
 delete from recommendation_numbering_internal.reservation_authorizations;
+select set_config('request.jwt.claim.sub',test_id(10)::text,true);
+insert into surat_registrasi(id,office_id) values(test_id(105),test_id(2));
+update surat_registrasi set form_input_data='{"requires_recommendation":true}',policy_snapshot=test_config() where id=test_id(105);
+update profiles set is_active=false where id=test_id(10);
+set local role authenticated;
+select test_denied('select create_recommendation_task_for_parent(test_id(105))');
+reset role;
+update profiles set is_active=true,deleted_at=now() where id=test_id(10);
+set local role authenticated;
+select test_denied('select create_recommendation_task_for_parent(test_id(105))');
+reset role;
+update profiles set deleted_at=null where id=test_id(10);
+select test_assert(not exists(select 1 from surat_recommendation_tasks where parent_surat_id=test_id(105)),'inactive/deleted cannot allocate');
 set local role service_role;
 select test_denied('select * from recommendation_numbering_internal.reservation_authorizations');
 reset role;
@@ -157,7 +171,7 @@ try {
   }
   if (!ready) throw new Error('Disposable Postgres not ready');
   run(psql, fixture);
-  if (!process.argv.includes('--baseline')) run(psql, migration + migration);
+  if (!process.argv.includes('--baseline')) run(psql, migration + migration + activeActorMigration + activeActorMigration);
   run(psql, assertions);
   // Separate connections contend on the real factory's department advisory lock.
   const submit = (n) => new Promise((resolve,reject) => {
