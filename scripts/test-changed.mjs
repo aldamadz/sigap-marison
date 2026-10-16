@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
   if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
     if (/registration_draft_(reservation_lifecycle|recommendation_scope|recommendation_office_guard|helper_execution).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
@@ -133,6 +134,11 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'recommendation-office-reservation-sql') {
+    run('node', ['scripts/test-recommendation-office-reservation-sql.mjs']);
+    run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--production-shape']);
+    continue;
+  }
   if (gate === 'draft-reservation-lifecycle-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--draft-lifecycle']);
   if (gate === 'unit-partial-readiness-sql') {
     run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--partial']);
