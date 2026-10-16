@@ -144,7 +144,7 @@ commit;
 const run = (args, input = '') => {
   const result = spawnSync('docker', args, { input, encoding: 'utf8', timeout: 120000 });
   if (result.status !== 0) throw new Error((result.stderr || '') + (result.stdout || ''));
-  return result.stdout + result.stderr;
+  return result.stdout;
 };
 const id = run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root',
   '--health-cmd','pg_isready -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
