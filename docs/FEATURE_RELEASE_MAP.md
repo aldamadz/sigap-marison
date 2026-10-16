@@ -10,6 +10,10 @@
   row ID and exact number context. The existing issuing-office trigger consumes
   it; ordinary inserts, locked-office updates and requester ownership remain
   guarded. No public endpoint, role/grant expansion or hierarchy rewrite.
+- Follow-up `20261016091000` requires an active, non-deleted actor when consuming
+  the capability, including direct RPC attempts with an old authenticated session.
+  Both migrations are required for release; the first was already applied to
+  staging before this additional abuse-case test, so it is not edited in place.
 - Nullable represented-by-admin ownership checks fail closed. Existing task
   idempotency and advisory-lock numbering remain canonical; a later failure
   rolls back parent, reservation, task and temporary capability together.
