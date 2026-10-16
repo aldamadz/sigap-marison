@@ -1,5 +1,31 @@
 # SIGAP Feature and Release Map
 
+## SUR-33 Internal Recommendation Number Office (2026-10-16, Issue #633)
+
+- Asset requests from KC/KCP retain their issuing office, number and signers.
+  Automatic recommendation tasks may reserve their configured Pusat number
+  without granting the requester Pusat or another office's submission access.
+- Forward migration `20261016090000` gives the validated canonical factory a
+  private one-use reservation capability bound to transaction, connection, actor,
+  row ID and exact number context. The existing issuing-office trigger consumes
+  it; ordinary inserts, locked-office updates and requester ownership remain
+  guarded. No public endpoint, role/grant expansion or hierarchy rewrite.
+- Nullable represented-by-admin ownership checks fail closed. Existing task
+  idempotency and advisory-lock numbering remain canonical; a later failure
+  rolls back parent, reservation, task and temporary capability together.
+- Production's live factory exactly matches `20260721183000`, while staging
+  matches `20260812135500`; do not assume environment parity from repository SQL.
+  The new migration recognizes only those audited body hashes and normalizes
+  the July allocation forward. Never repair the ledger or replay old migrations.
+- Focused real PostgreSQL tests reproduce the original failure, then exercise
+  non-superuser routine ownership, mixed migration ownership, unauthorized
+  direct inserts, private ACLs, replay, rollback and concurrent allocation.
+- Release staging first, then explicitly authorized selective production with
+  exact migration ledger/function checks. Production acceptance is read-only:
+  do not submit the user's preserved draft or trigger approval/outbound.
+- KCP Pati currently belongs to KC Jepara, confirmed by the user on 2026-10-16;
+  this supersedes the earlier KC Batang instruction. No office data is changed.
+
 ## SUR-32 Compact Unit Examination PDF (2026-10-15, Issue #626)
 
 - Supersedes SUR-30's dedicated Unit examination appendix presentation only.
