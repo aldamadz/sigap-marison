@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SUR-34 Unit Examiner External Land Area (2026-10-19, Issue #656)
+
+- Staging-only candidate: add a disabled LT (Luas Tanah), in square metres, beside
+  Tipe Unit in the selected-unit examiner table. Read only the external raw unit,
+  never imported/manual allocation details. Missing/invalid data stays empty;
+  it does not block verification or alter allocation totals, XLSX, PDF or outbound.
+- Supports numeric `land_area`, `luas_tanah` and `lt` references without changing
+  the external contract. A read-only staging GET `/unit` sample on 2026-10-19
+  returned only `id`, `code`, `production_code`, `type`, `has_submitted`: none
+  supplied LT. Digivasi must supply the area before those rows can display it;
+  alias support is not evidence that the current API already exposes these keys.
+- No database migration, worker rollout, extra external lookup, business mutation
+  or production authorization. Feature branch remains available for selective release.
+
 ## OPS-10 Scheduled Maintenance and Cloudflare Fallback (2026-10-19, Issue #642)
 
 - Admin-only schedule: activity, message, start WIB and estimated duration;
