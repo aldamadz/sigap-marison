@@ -5,6 +5,7 @@ import { createRealtimeFlush, type FlushController } from "@/lib/realtime-flush"
 
 const agendaKeys = ["agendas", "kpi", "status-dist", "dept-activity", "recent-logs", "activity-logs"];
 const suratKeys = [
+  "actionable-dashboard",
   "recent-logs", "activity-logs", "surat-list", "surat-inbox", "surat-detail",
   "surat-inbox-compact", "surat-inbox-kpi", "surat-inbox-detail",
   "surat-stats-dashboard", "surat-monitoring-list", "admin-monitoring-list",

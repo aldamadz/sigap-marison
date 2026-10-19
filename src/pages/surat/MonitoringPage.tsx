@@ -153,6 +153,14 @@ const MonitoringPage = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSurat, setSelectedSurat] = useState<any>(null);
   const [selectedSuratId, setSelectedSuratId] = useState("");
+  const requestedDocumentId = searchParams.get('document');
+  useEffect(() => {
+    if (requestedDocumentId && /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestedDocumentId)) {
+      setSelectedSurat(null);
+      setSelectedSuratId(requestedDocumentId);
+      setIsDetailOpen(true);
+    }
+  }, [requestedDocumentId]);
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(search);
   const [rebuildingPdfId, setRebuildingPdfId] = useState<string | null>(null);
