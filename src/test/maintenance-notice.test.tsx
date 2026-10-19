@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MaintenanceNotice } from '@/components/app/MaintenanceNotice';
 import MaintenanceConfigurationPage from '@/pages/admin/MaintenanceConfigurationPage';
 import { maintenanceDay, noticeDismissalKey, type MaintenanceState } from '@/services/maintenance.service';
-const mocks=vi.hoisted(()=>({status:vi.fn(),admin:vi.fn(),update:vi.fn()}));
+const mocks=vi.hoisted(()=>({status:vi.fn(),admin:vi.fn(),update:vi.fn(),openPage:vi.fn()}));
 vi.mock('@/services/maintenance.service',async original=>({...await original<typeof import('@/services/maintenance.service')>(),maintenanceService:mocks}));
 vi.mock('sonner',()=>({toast:{success:vi.fn()}}));
 const state:MaintenanceState={revision:1,phase:'announced',serverNow:new Date().toISOString(),schedule:{id:'s1',category:'update',impact:'disruption',message:'Pembaruan SIGAP; akses mungkin terganggu.',startsAt:new Date(Date.now()+3600000).toISOString(),endsAt:new Date(Date.now()+7200000).toISOString(),duration:1,unit:'hours',status:'published'}};
-const mount=(userId='actor-1')=>render(<MemoryRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}})}><MaintenanceNotice userId={userId} /></QueryClientProvider></MemoryRouter>);
+const mount=(userId='actor-1',path='/dashboard')=>render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}})}><MaintenanceNotice userId={userId} /></QueryClientProvider></MemoryRouter>);
 beforeEach(()=>{mocks.status.mockResolvedValue(state);localStorage.clear();});
 afterEach(()=>{cleanup();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('maintenance advance notice',()=>{
@@ -36,10 +36,29 @@ describe('maintenance advance notice',()=>{
       mocks.status.mockResolvedValue({...state,schedule:{...state.schedule,...change}});const view=mount();await waitFor(()=>expect(mocks.status).toHaveBeenCalled());expect(screen.queryByRole('dialog')).not.toBeInTheDocument();view.unmount();
     }
   });
-  it('daily suppression cannot bypass active full maintenance; ordinary users see blocking notice',async()=>{
+  it('daily suppression cannot bypass full maintenance; open dashboards navigate to the edge page without checking origin access',async()=>{
     const full={...state,phase:'maintenance',schedule:{...state.schedule!,impact:'full',startsAt:new Date(Date.now()-1000).toISOString()}};
     localStorage.setItem(noticeDismissalKey('actor-1',full as MaintenanceState,Date.now()),'1');mocks.status.mockResolvedValue(full);
-    vi.stubGlobal('fetch',vi.fn().mockResolvedValue({status:403}));mount();expect(await screen.findByRole('alert')).toHaveTextContent('SIGAP sedang dalam pemeliharaan');
+    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);mount();
+    await waitFor(()=>expect(mocks.openPage).toHaveBeenCalledTimes(1));
+    expect(fetch).not.toHaveBeenCalled();expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Membuka halaman pemeliharaan');
+  });
+  it.each(['/maintenance-admin','/admin/configuration/maintenance'])('retains the explicit administrator recovery route %s',async path=>{
+    mocks.status.mockResolvedValue({...state,schedule:{...state.schedule!,impact:'full',startsAt:new Date(Date.now()-1000).toISOString()}});
+    mount('admin-actor',path);await screen.findByRole('status');expect(mocks.openPage).not.toHaveBeenCalled();
+  });
+  it('does not navigate for a future full schedule or an active disruption',async()=>{
+    for(const schedule of [{...state.schedule!,impact:'full' as const},{...state.schedule!,startsAt:new Date(Date.now()-1000).toISOString()}]) {
+      mocks.status.mockResolvedValue({...state,schedule});const view=mount();await screen.findByRole('dialog');expect(mocks.openPage).not.toHaveBeenCalled();view.unmount();
+    }
+  });
+  it('transitions an already mounted dashboard at the scheduled second without a new origin request',async()=>{
+    const start=Date.now()+2000,serverNow=new Date().toISOString();
+    mocks.status.mockResolvedValue({...state,serverNow,schedule:{...state.schedule!,impact:'full',startsAt:new Date(start).toISOString()}});
+    mount();await screen.findByRole('dialog');expect(mocks.openPage).not.toHaveBeenCalled();
+    await waitFor(()=>expect(mocks.openPage).toHaveBeenCalledTimes(1),{timeout:4000});
+    expect(mocks.status).toHaveBeenCalledTimes(1);
   });
   it('admin settings require explicit confirmation before scheduling and keep failed save in dialog',async()=>{
     mocks.admin.mockResolvedValue({revision:3,schedule:null,history:[]});mocks.update.mockRejectedValue(new Error('Jadwal telah diubah admin lain.'));

@@ -66,6 +66,17 @@ promotion. No paid plan change is implied by this release.
   full maintenance. The edge verifies admin access with the origin.
 - `/maintenance-admin` is the recovery login. After login it redirects to the
   configuration page; all control routes still require administrator authority.
+- When full maintenance starts, an already open dashboard navigates to
+  `/.sigap-maintenance/page`. This is the same edge-rendered page as a fresh
+  navigation/refresh, including for dashboard admins. It requires no origin
+  request, so a planned restart does not change its layout or remove its ETA.
+  The recovery login and exact maintenance configuration path remain available;
+  authenticated API access is still checked at the origin, not a URL/cookie flag.
+- The canonical edge page exits to `/` after completion/cancellation; it cannot
+  keep a completed schedule active or redirect to a user-supplied destination.
+  Disruption-only schedules do not redirect. An already loaded schedule uses the
+  server-adjusted start time; previously open tabs discover newly published or
+  changed schedules on the status poll/focus, not through a server push.
 - If the entire origin is offline, the web admin cannot log in. An already
   authorized operator may sign the same control command using the protected
   operator key, or recover the origin first. Do not grant new access or distribute

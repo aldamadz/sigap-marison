@@ -15,6 +15,7 @@ const request = async (path:string, body?:unknown):Promise<MaintenanceState> => 
   const result=await response.json();if(!response.ok)throw Error(result.error || 'Pengaturan maintenance belum dapat dimuat.');return result;
 };
 export const maintenanceService = {
+  openPage:()=>window.location.replace('/.sigap-maintenance/page'),
   status:()=>request('/api/maintenance/status'),
   admin:()=>request('/api/maintenance/admin'),
   update:(body:{action:'publish'|'complete'|'cancel';expectedRevision:number;schedule?:MaintenanceSchedule})=>request('/api/maintenance/admin',body),
