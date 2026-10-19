@@ -2,6 +2,19 @@ import { describe, expect, it } from "vitest";
 import { diagnoseVendorRejection, buildSafeContext, comparePayloads, collectSensitiveValues } from "../../server/marison-rejection-diagnosis.mjs";
 
 describe("diagnoseVendorRejection", () => {
+  it.each(["unit_submissions", "fund_submissions", "asset_purchase_requests"])("identifies missing main_document on %s without exposing SQL/private details", table => {
+    const result = diagnoseVendorRejection(JSON.stringify({message:"Pengajuan gagal.",error:`SQLSTATE[42703]: Undefined column: column "main_document" of relation "${table}" does not exist (Connection: secret-db-host, SQL: insert into ${table}; nik=1234567890123456; https://private.example/file/TOKEN)`}));
+    expect(result.reasonCode).toBe("VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING");
+    expect(result.summary).toContain("main_document");
+    expect(result.specificity).toBe("generic");
+    expect(JSON.stringify(result)).not.toMatch(/secret-db-host|1234567890123456|SQLSTATE|insert into|private.example|unit_submissions|fund_submissions|asset_purchase_requests/);
+  });
+
+  it("does not mistake a different missing column or input validation for the vendor schema defect", () => {
+    expect(diagnoseVendorRejection({message:'SQLSTATE[42703]: column "other_field" does not exist; SQL: insert into table (main_document)'}).reasonCode).toBeUndefined();
+    expect(diagnoseVendorRejection({message:'main_document is required',errors:{main_document:['required']}}).reasonCode).toBeUndefined();
+    expect(diagnoseVendorRejection('not JSON; private details').detailsAvailable).toBe(false);
+  });
   it("returns generic when response is null", () => {
     const result = diagnoseVendorRejection(null);
     expect(result.detailsAvailable).toBe(false);
