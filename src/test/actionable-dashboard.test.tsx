@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { ActionableDashboard, DashboardSla } from '@/components/dashboard/ActionableDashboard';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { dashboardRowLink, type ActionableDashboardData, type DashboardRow } from '@/services/actionable-dashboard.service';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), remind: vi.fn() }));
@@ -12,6 +13,8 @@ vi.mock('@/services/actionable-dashboard.service', async importOriginal => ({
   getActionableDashboard: mocks.get, remindDashboardRequest: mocks.remind,
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@/components/layout/Sidebar', () => ({ Sidebar: () => null }));
+vi.mock('@/components/layout/Header', () => ({ Header: () => null }));
 const row: DashboardRow = {
   id: 'doc-1', no_surat: '001/UAI/PO/X/2026', title: 'Servis kendaraan operasional',
   requester_name: 'Pemohon A', office_name: 'KC Solo', department_name: 'Marketing', bucket: 'ready',
@@ -27,8 +30,15 @@ const renderDashboard = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(<MemoryRouter><QueryClientProvider client={client}><ActionableDashboard userId="actor-1" /></QueryClientProvider></MemoryRouter>);
 };
-afterEach(() => vi.clearAllMocks());
+afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe('actionable dashboard', () => {
+  it('keeps a single dashboard title inside the mobile application layout', async () => {
+    vi.stubGlobal('innerWidth',390);mocks.get.mockResolvedValue(bundle());
+    const client=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}});
+    render(<MemoryRouter initialEntries={['/dashboard']}><QueryClientProvider client={client}><Routes><Route element={<AppLayout />}><Route path="/dashboard" element={<ActionableDashboard userId="actor-1" />} /></Route></Routes></QueryClientProvider></MemoryRouter>);
+    await screen.findByText(row.title);
+    expect(screen.getAllByRole('heading',{level:1,name:'Dashboard'})).toHaveLength(1);
+  });
   it('removes legacy Agenda, shows distinct requester queue, SLA and responsible person with exact document drilldown', async () => {
     mocks.get.mockResolvedValue(bundle());renderDashboard();
     expect(await screen.findByText(row.title)).toHaveAttribute('href','/surat/monitoring?document=doc-1');

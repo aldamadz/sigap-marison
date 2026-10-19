@@ -87,7 +87,7 @@ export function AppLayout() {
           </div>
 
           {/* Mobile Breadcrumb/Title when sidebar collapsed */}
-          {isMobile && title && (
+          {isMobile && title && location.pathname !== '/dashboard' && (
             <div className="mb-4 rounded-lg border border-border bg-card p-3 shadow-[var(--shadow-card)] lg:hidden">
               <h1 className="text-base font-semibold text-foreground sm:text-lg">{title}</h1>
               {subtitle && (
