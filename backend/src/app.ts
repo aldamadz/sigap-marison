@@ -15,6 +15,7 @@ import { registerBffRoutes } from "./routes/bff.routes.js";
 import { registerDomainRoutes } from "./routes/domain.routes.js";
 import { registerHealthRoutes } from "./routes/health.routes.js";
 import { registerSuratRoutes } from "./routes/surat.routes.js";
+import { registerMaintenanceRoutes } from "./routes/maintenance.routes.js";
 
 const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
@@ -63,6 +64,7 @@ export const buildApp = async () => {
   registerErrorHandler(app);
   await registerHealthRoutes(app);
   await registerAuthRoutes(app);
+  await registerMaintenanceRoutes(app);
   await registerBffRoutes(app);
   await registerSuratRoutes(app);
   await registerDomainRoutes(app);
