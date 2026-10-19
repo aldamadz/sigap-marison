@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
+import { MaintenanceNotice } from "@/components/app/MaintenanceNotice";
 
 import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
@@ -52,6 +53,7 @@ const EmailNotificationSettingsPage = lazy(() => import("./pages/admin/EmailNoti
 const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrationPage"));
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 const AccessConfigurationPage = lazy(() => import("./pages/admin/AccessConfigurationPage"));
+const MaintenanceConfigurationPage = lazy(() => import("./pages/admin/MaintenanceConfigurationPage"));
 
 // Konfigurasi Query Client
 const queryClient = new QueryClient({
@@ -174,6 +176,7 @@ const App = () => {
 
       <Toaster />
       <Sonner position="top-right" closeButton />
+      {isAuth && <MaintenanceNotice key={session.user.id} userId={session.user.id} />}
 
       <Suspense fallback={<PageLoader />}>
         <Routes location={location}>
@@ -183,6 +186,7 @@ const App = () => {
           element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />}
         />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/maintenance-admin" element={isAuth ? <Navigate to="/admin/configuration/maintenance" replace /> : <LoginPage />} />
         <Route path="/docs" element={<PublicDocsPage />} />
         <Route path="/docs/:topicSlug" element={<PublicDocsPage />} />
         <Route path="/docs/:topicSlug/:sectionSlug" element={<PublicDocsPage />} />
@@ -231,6 +235,7 @@ const App = () => {
   <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
   <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
   <Route path="access" element={<AccessConfigurationPage />} />
+  <Route path="maintenance" element={<MaintenanceConfigurationPage />} />
 </Route>
         </Route>
 

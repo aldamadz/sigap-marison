@@ -108,7 +108,7 @@ export default function LoginPage() {
           throw new Error('Akun deaktif');
         }
         toast.success('Login Berhasil!');
-        navigate('/dashboard');
+        navigate(window.location.pathname === '/maintenance-admin' ? '/admin/configuration/maintenance' : '/dashboard');
       }
     } catch (error: any) {
       const message = String(error.message || '');

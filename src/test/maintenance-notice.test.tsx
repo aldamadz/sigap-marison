@@ -1,0 +1,52 @@
+import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MaintenanceNotice } from '@/components/app/MaintenanceNotice';
+import MaintenanceConfigurationPage from '@/pages/admin/MaintenanceConfigurationPage';
+import { maintenanceDay, noticeDismissalKey, type MaintenanceState } from '@/services/maintenance.service';
+const mocks=vi.hoisted(()=>({status:vi.fn(),admin:vi.fn(),update:vi.fn()}));
+vi.mock('@/services/maintenance.service',async original=>({...await original<typeof import('@/services/maintenance.service')>(),maintenanceService:mocks}));
+vi.mock('sonner',()=>({toast:{success:vi.fn()}}));
+const state:MaintenanceState={revision:1,phase:'announced',serverNow:new Date().toISOString(),schedule:{id:'s1',category:'update',impact:'disruption',message:'Pembaruan SIGAP; akses mungkin terganggu.',startsAt:new Date(Date.now()+3600000).toISOString(),endsAt:new Date(Date.now()+7200000).toISOString(),duration:1,unit:'hours',status:'published'}};
+const mount=(userId='actor-1')=>render(<MemoryRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}})}><MaintenanceNotice userId={userId} /></QueryClientProvider></MemoryRouter>);
+beforeEach(()=>{mocks.status.mockResolvedValue(state);localStorage.clear();});
+afterEach(()=>{cleanup();vi.clearAllMocks();vi.unstubAllGlobals();});
+describe('maintenance advance notice',()=>{
+  it('shows start/end in WIB and preserves access for disruption, closing is not persisted without checkbox',async()=>{
+    const view=mount();await screen.findByRole('dialog');expect(screen.getByText(/SIGAP tetap dapat digunakan/)).toBeInTheDocument();
+    expect(screen.getByText('Mulai')).toBeInTheDocument();expect(screen.getByText('Perkiraan selesai')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();expect(screen.getByRole('status')).toHaveTextContent('Potensi gangguan');
+    expect(localStorage.length).toBe(0);view.unmount();mount();expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+  it('remembers opt-out for user/schedule/revision/WIB day; another user or revised schedule is reminded',async()=>{
+    const view=mount();await screen.findByRole('dialog');fireEvent.click(screen.getByRole('checkbox'));fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));
+    expect(localStorage.getItem(noticeDismissalKey('actor-1',state,Date.now()))).toBe('1');view.unmount();
+    const repeat=mount();await waitFor(()=>expect(mocks.status).toHaveBeenCalled());expect(screen.queryByRole('dialog')).not.toBeInTheDocument();repeat.unmount();
+    const other=mount('actor-2');expect(await screen.findByRole('dialog')).toBeInTheDocument();other.unmount();
+    mocks.status.mockResolvedValue({...state,revision:2});mount();expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+  it('daily opt-out ends exactly at midnight WIB, independent of browser timezone',()=>{
+    const before=Date.parse('2026-10-19T16:59:59Z'),after=Date.parse('2026-10-19T17:00:00Z');
+    expect(maintenanceDay(before)).toBe('2026-10-19');expect(maintenanceDay(after)).toBe('2026-10-20');
+    expect(noticeDismissalKey('actor-1',state,before)).not.toBe(noticeDismissalKey('actor-1',state,after));
+  });
+  it('does not show cancelled, distant or expired disruption notices',async()=>{
+    for(const change of [{status:'cancelled' as const},{startsAt:new Date(Date.now()+4*86400000).toISOString()},{endsAt:new Date(Date.now()-1000).toISOString()}]){
+      mocks.status.mockResolvedValue({...state,schedule:{...state.schedule,...change}});const view=mount();await waitFor(()=>expect(mocks.status).toHaveBeenCalled());expect(screen.queryByRole('dialog')).not.toBeInTheDocument();view.unmount();
+    }
+  });
+  it('daily suppression cannot bypass active full maintenance; ordinary users see blocking notice',async()=>{
+    const full={...state,phase:'maintenance',schedule:{...state.schedule!,impact:'full',startsAt:new Date(Date.now()-1000).toISOString()}};
+    localStorage.setItem(noticeDismissalKey('actor-1',full as MaintenanceState,Date.now()),'1');mocks.status.mockResolvedValue(full);
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue({status:403}));mount();expect(await screen.findByRole('alert')).toHaveTextContent('SIGAP sedang dalam pemeliharaan');
+  });
+  it('admin settings require explicit confirmation before scheduling and keep failed save in dialog',async()=>{
+    mocks.admin.mockResolvedValue({revision:3,schedule:null,history:[]});mocks.update.mockRejectedValue(new Error('Jadwal telah diubah admin lain.'));
+    render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MaintenanceConfigurationPage /></QueryClientProvider>);
+    await screen.findByText('Tidak ada maintenance terjadwal');fireEvent.click(screen.getByRole('button',{name:'Terbitkan jadwal'}));expect(mocks.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Terbitkan'}));await screen.findByRole('alert');
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({action:'publish',expectedRevision:3,schedule:expect.objectContaining({impact:'disruption'})}));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});

@@ -33,6 +33,22 @@
   labels/search; the first browser acceptance exposed collision with PostgreSQL's
   CURRENT_ROLE keyword. The already-applied initial migration is not edited.
 
+## OPS-10 Scheduled Maintenance and Cloudflare Fallback (2026-10-19, Issue #642)
+
+- Admin-only schedule: activity, message, start WIB and estimated duration;
+  disruption-only mode stays usable, full mode closes automatically at its start.
+- Announcement/reminder begins at the preceding calendar day 00:00 WIB. Daily
+  suppression is per account/browser/revision; the banner remains. Full mode
+  requires explicit admin completion, never an automatic reopen at its estimate.
+- Cloudflare Worker and SQLite Durable Object retain announcement/state/audit and
+  branded animated fallback independently of the origin. APIs return JSON 503;
+  no POST replay or invented outage ETA. Control uses a backend-only Ed25519 key,
+  live admin authorization, same-origin checks and optimistic revision guards.
+- Staging-only implementation/acceptance; production remains unchanged pending
+  user acceptance and selective release alongside DASH-03. No database migration
+  or worker stop/rollout. Maintenance is not a database migration write freeze.
+- Runbook: [OPS_10_SCHEDULED_MAINTENANCE.md](OPS_10_SCHEDULED_MAINTENANCE.md).
+
 ## SUR-33 Internal Recommendation Number Office (2026-10-16, Issue #633)
 
 - Asset requests from KC/KCP retain their issuing office, number and signers.
