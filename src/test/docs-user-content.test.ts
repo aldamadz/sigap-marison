@@ -107,9 +107,9 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches documentation content after issue 509 updates", () => {
+  it("matches documentation content after DASH-03 dashboard updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("5b2108f9a8fb9cea1e82dc1a631ec28456be413bf63816d8bd871b3549559a78");
+      .toBe("ebd8c4570019afe5ae16c467c8735f7734c9b1198ad18b4078bd395f01acad20");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

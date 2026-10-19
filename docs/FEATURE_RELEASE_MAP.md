@@ -24,6 +24,43 @@
   transition/restart acceptance, together with DASH-03. Provision independent
   production key, hostname and state; do not activate a test production schedule.
 
+## DASH-03 Actionable Role Dashboard (2026-10-19, Issue #638)
+
+- Staging candidate from main; production is not authorized for this new feature.
+  Removes legacy Agenda counters/charts/filter from the dashboard only; preserves
+  old Agenda data/API and the separate current Work Calendar summary/clock.
+- Requester, assigned signer and organization tabs use one bounded server-side
+  summary/page RPC, not full client-side document or profile downloads. Real
+  signer assignments default to the signer tab; requester auto-signature is not
+  counted as signer work. Active queues are all-time; terminal history uses the
+  selected completion/decision month, with explicit WIB boundaries.
+- Ready, prerequisite-blocked and upcoming assignments are distinct. Upcoming
+  stages have no SLA clock. The canonical business-minutes calculator and the
+  responsible department configuration measure current/finished stages; requester
+  revision pauses approval SLA. Percentages include the measured denominator.
+- All members monitor their own Pusat department or exact KCP office. KC members
+  additionally monitor descendant KCP offices from the current master hierarchy;
+  cycle-safe traversal and reparenting apply dynamically. Detail/attachment read
+  uses the same predicate without recursive RLS. Approval/write permissions,
+  selected issuing-office grants, parent numbers and signers are not changed.
+- Explicit reminders resolve active recipient/context server-side and create
+  existing SIGAP notifications, serialized/debounced for six hours across team
+  members. No arbitrary recipient, self-reminder, terminal/prerequisite-blocked
+  reminder, approval or external dispatch. Production reminders are not tested.
+- Existing realtime flush invalidates the new actor-bound query on document,
+  signature, attachment, recommendation and revision events. Background refresh
+  preserves data; failed loads show an error rather than misleading zero counts.
+- Forward migration `20261019090000`; focused real PostgreSQL scope/RLS/clock/
+  queue/notification tests plus UI/service/navigation and responsive visual tests
+  precede stage-only apply/deploy. No worker, external or production rollout.
+- Follow-up `20261019091000` qualifies the SQL `current_role` column for stage
+  labels/search; the first browser acceptance exposed collision with PostgreSQL's
+  CURRENT_ROLE keyword. The already-applied initial migration is not edited.
+
+- Production promotion explicitly authorized on 2026-10-19 after staging
+  acceptance, together with OPS-10. Apply only the two named migrations after
+  catalog/ledger preflight; production acceptance does not send test reminders.
+
 ## MRN-24 Vendor Main Document Schema Diagnosis (2026-10-19, Issue #648)
 
 - Read-only production evidence identifies missing `main_document` columns in

@@ -99,6 +99,7 @@ if (changesGlobalTestInfrastructure) {
 const gates = new Set();
 for (const file of allChangedFiles) {
   if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
+  if (/actionable_role_dashboard.*\.sql$|test-actionable-dashboard-sql\.mjs$/u.test(file)) gates.add('actionable-dashboard-sql');
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
   if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
     if (/registration_draft_(reservation_lifecycle|recommendation_scope|recommendation_office_guard|helper_execution).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
@@ -138,6 +139,10 @@ for (const gate of gates) {
   if (gate === 'maintenance-edge') {
     run('node', ['--test', 'ops/maintenance/edge-worker.test.mjs', 'ops/maintenance/server.test.mjs']);
     run('node', ['scripts/build-maintenance-edge.mjs']);
+    continue;
+  }
+  if (gate === 'actionable-dashboard-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
     continue;
   }
   if (gate === 'recommendation-office-reservation-sql') {
