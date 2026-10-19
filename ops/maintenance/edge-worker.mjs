@@ -90,7 +90,7 @@ export const createEdgeHandler = (originFetch = fetch, assets = {}) => ({
     // Control/login must stay reachable, but every control operation still requires
     // the origin's live admin authentication; there is no URL/cookie bypass.
     const controlPaths=['/api/maintenance/admin','/api/maintenance/access','/api/auth/login','/api/auth/session','/api/auth/logout','/maintenance-admin','/admin/configuration/maintenance'];
-    const staticAsset=url.pathname.startsWith('/assets/');
+    const staticAsset=url.pathname.startsWith('/assets/') || ['/marison-sigap-logo-v2.png','/favicon.ico'].includes(url.pathname);
     if(state.phase==='maintenance' && !staticAsset && !controlPaths.includes(url.pathname)) {
       try {
         const check=await originFetch(new Request(new URL('/api/maintenance/access',url),{headers:{cookie:request.headers.get('cookie')||''},redirect:'manual',signal:AbortSignal.timeout(8000)}));
