@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## MRN-24 Vendor Main Document Schema Diagnosis (2026-10-19, Issue #648)
+
+- Read-only production evidence identifies missing `main_document` columns in
+  Marison's Fund, Unit and Asset tables (`SQLSTATE[42703]`). Its published API
+  still accepts this URI field. Removing it is not a fix: the older Asset job
+  lacks the field but receives the same vendor database error.
+- Admin outbox lists expose only a constant, sanitized diagnosis from the last
+  failed response, never raw SQL, connection details, payloads or document URLs.
+  "Periksa penolakan" performs existing read-only preflight; it does not resend.
+- Historical failure is not evidence of current vendor readiness. Digivasi must
+  confirm the schema correction and receipt status before separately authorized
+  recovery. Immutable payload/hash, receipt and replacement gates stay intact.
+- App-only staging then selective production release is approved. No migration,
+  worker rollout, business POST, replacement generation or job mutation is in
+  scope. DASH-03 and OPS-10 remain staging-only pending user acceptance.
+- Vendor handoff: `docs/contracts/marison/vendor-main-document-schema-20261019.md`.
+
 ## SUR-33 Internal Recommendation Number Office (2026-10-16, Issue #633)
 
 - Asset requests from KC/KCP retain their issuing office, number and signers.

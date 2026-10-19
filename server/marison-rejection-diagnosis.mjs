@@ -34,12 +34,33 @@ const getPathLabel = (path) => {
 };
 
 export const diagnoseVendorRejection = (response) => {
+  if (typeof response === "string") {
+    try { response = JSON.parse(response); } catch { response = null; }
+  }
   if (!response || typeof response !== "object") {
     return { detailsAvailable: false, specificity: "generic", summary: "Vendor tidak memberikan detail penolakan.", issues: [] };
   }
 
   // Database exceptions can embed connection details, SQL and private payloads.
   if (/SQLSTATE\[|PDOException|\(Connection:|\bSQL:\s/iu.test(JSON.stringify(response))) {
+    const strings = [];
+    const collect = (value, depth = 0) => {
+      if (typeof value === "string") strings.push(value.slice(0, 20000));
+      else if (value && typeof value === "object" && depth < 5) {
+        for (const child of Object.values(value).slice(0, 50)) collect(child, depth + 1);
+      }
+    };
+    collect(response);
+    const missingMainDocument = strings.some(text => /column\s+["'`]?main_document["'`]?(?:\s+of\s+relation\s+["'`][\w.]+["'`])?\s+does not exist|unknown column\s+["'`](?:\w+\.)?main_document["'`]/iu.test(text));
+    if (missingMainDocument) {
+      return {
+        detailsAvailable: true,
+        specificity: "generic",
+        reasonCode: "VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING",
+        summary: "Database Marison belum mendukung dokumen utama (main_document).",
+        issues: [{ path: "", label: "Sistem Marison", specificity: "generic", message: "Respons pengiriman terakhir menunjukkan kolom main_document belum tersedia di database Marison. Minta Digivasi memeriksa migrasi database sebelum pengiriman pengganti." }],
+      };
+    }
     return {
       detailsAvailable: true,
       specificity: "generic",

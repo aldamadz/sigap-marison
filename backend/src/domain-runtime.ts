@@ -3968,7 +3968,7 @@ const listMarisonOutboundDispatches = async (req, url) => {
     .from("marison_outbound_dispatches")
     .select(`
       id, surat_id, environment, generation, replacement_of_dispatch_id, kind, status, attempt_count, next_attempt_at, last_attempt_at,
-      post_started_at, completed_at, external_reference, error_code, error_message, skipped_reason,
+      post_started_at, completed_at, external_reference, error_code, error_message, skipped_reason, response,
       reconciliation_count, created_at, updated_at,
       surat_registrasi!inner(no_surat, judul_surat)
     `, { count: "exact" })
@@ -3985,28 +3985,34 @@ const listMarisonOutboundDispatches = async (req, url) => {
     page,
     pageSize,
     total: count || 0,
-    items: (data || []).map((row) => ({
-      id: row.id,
-      suratId: row.surat_id,
-      noSurat: row.surat_registrasi?.no_surat || "-",
-      title: row.surat_registrasi?.judul_surat || "-",
-      environment: row.environment,
-      generation: row.generation,
-      replacementOfDispatchId: row.replacement_of_dispatch_id,
-      kind: row.kind,
-      status: row.status,
-      attemptCount: row.attempt_count,
-      nextAttemptAt: row.next_attempt_at,
-      lastAttemptAt: row.last_attempt_at,
-      postStartedAt: row.post_started_at,
-      completedAt: row.completed_at,
-      externalReference: row.external_reference,
-      errorCode: row.error_code,
-      failureReason: row.error_message || row.skipped_reason || null,
-      reconciliationCount: row.reconciliation_count,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    })),
+    items: (data || []).map((row) => {
+      const diagnosis = row.status === "failed_terminal" && row.error_code?.startsWith("marison_http_422")
+        ? diagnoseVendorRejection(row.response) : null;
+      const lastVendorDiagnosis = diagnosis?.reasonCode === "VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING" ? diagnosis : null;
+      return {
+        id: row.id,
+        suratId: row.surat_id,
+        noSurat: row.surat_registrasi?.no_surat || "-",
+        title: row.surat_registrasi?.judul_surat || "-",
+        environment: row.environment,
+        generation: row.generation,
+        replacementOfDispatchId: row.replacement_of_dispatch_id,
+        kind: row.kind,
+        status: row.status,
+        attemptCount: row.attempt_count,
+        nextAttemptAt: row.next_attempt_at,
+        lastAttemptAt: row.last_attempt_at,
+        postStartedAt: row.post_started_at,
+        completedAt: row.completed_at,
+        externalReference: row.external_reference,
+        errorCode: row.error_code,
+        failureReason: lastVendorDiagnosis?.summary || row.error_message || row.skipped_reason || null,
+        lastVendorDiagnosis,
+        reconciliationCount: row.reconciliation_count,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    }),
   };
 };
 
