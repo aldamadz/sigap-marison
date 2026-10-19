@@ -72,6 +72,8 @@ test('full maintenance blocks ordinary traffic but permits authenticated adminis
   assert.equal((await handler.fetch(request('/',{headers:{cookie:'admin-session'}}),env)).status,200);
   assert.equal((await handler.fetch(request('/.sigap-maintenance/static.svg'),env)).status,200);
   assert.equal((await handler.fetch(request('/api/auth/session'),env)).status,200);
+  assert.equal((await handler.fetch(request('/marison-sigap-logo-v2.png'),env)).status,200,'Public login logo must remain available before admin authentication');
+  assert.equal((await handler.fetch(request('/favicon.ico'),env)).status,200);
   assert.equal((await handler.fetch(request('/health/ready'),env)).status,503,'Monitoring must not report origin as healthy');
 });
 test('origin failures/tunnel 530 are branded 503, APIs JSON, no replay; security and business errors are not masked',async()=>{
