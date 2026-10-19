@@ -60,8 +60,8 @@ export const renderEdgePage = (state, outage = false) => {
   const known=!outage && s;
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${outage?'Gangguan layanan':'Pemeliharaan'} SIGAP</title><style>*{box-sizing:border-box}body{margin:0;background:#fff;color:#222a2b;font:16px/1.6 Arial,sans-serif;letter-spacing:0}.shell{max-width:1000px;margin:auto;padding:24px}header{border-bottom:1px solid #dfe6e3}header img{width:150px;height:64px;object-fit:contain}main{min-height:75vh}picture,img.illustration{display:block;width:100%;max-width:420px}h1{font-size:32px;line-height:1.25;max-width:700px}.message{white-space:pre-wrap;overflow-wrap:anywhere;max-width:700px;color:#59635f}dl{display:grid;gap:16px;padding:24px 0;border-block:1px solid #dfe6e3}dt{font-size:13px;color:#59635f}dd{margin:0;font-weight:600}a{display:inline-block;background:#27873c;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;margin:12px 0}a:focus-visible{outline:3px solid #c89128;outline-offset:3px}.label{color:#966215;font-size:13px;font-weight:700}footer{background:#f4f7f5;border-top:1px solid #dfe6e3;font-size:13px;color:#59635f}@media(max-width:600px){h1{font-size:26px}}</style></head><body><header><div class="shell"><img src="/.sigap-maintenance/logo.png" alt="Marison Regency Group"></div></header><main class="shell"><picture><source media="(prefers-reduced-motion: reduce)" srcset="/.sigap-maintenance/static.svg"><img class="illustration" src="/.sigap-maintenance/animation.svg" width="420" height="236" alt=""></picture><p class="label">${known?escape(categoryLabel[s.category]):'Gangguan layanan'}</p><h1>${outage?'SIGAP sementara tidak dapat diakses':'SIGAP sedang dalam pemeliharaan'}</h1><p class="message">${known?escape(s.message):'Koneksi ke layanan SIGAP sedang terganggu. Tim kami akan memulihkan layanan secepatnya.'}</p><dl>${known?`<div><dt>Mulai pemeliharaan</dt><dd>${escape(date(s.startsAt))}</dd></div><div><dt>Perkiraan selesai</dt><dd>${escape(date(s.endsAt))}</dd></div>`:''}<div><dt>Status layanan</dt><dd>${known && Date.now()>Date.parse(s.endsAt)?'Pemeliharaan masih berlangsung. Estimasi sedang diperbarui.':'Sementara tidak tersedia'}</dd></div></dl><p>Dokumen dan riwayat yang sudah tersimpan tetap dipertahankan. Pengiriman baru belum dapat dilakukan.</p><a href="/">Periksa kembali</a></main><footer><div class="shell">Marison Regency Group · SIGAP</div></footer></body></html>`;
 };
-const unavailable = (request,state,outage=false) => {
-  const html=['GET','HEAD'].includes(request.method) && (request.headers.get('accept') || '').includes('text/html') && !new URL(request.url).pathname.startsWith('/api/');
+const unavailable = (request,state,outage=false,forceHtml=false) => {
+  const html=['GET','HEAD'].includes(request.method) && (forceHtml || (request.headers.get('accept') || '').includes('text/html')) && !new URL(request.url).pathname.startsWith('/api/');
   const response=new Response(request.method==='HEAD'?null:html?renderEdgePage(state,outage):JSON.stringify({error:outage?'service_unavailable':'maintenance',message:outage?'SIGAP sementara tidak dapat diakses. Jangan kirim ulang pengajuan sebelum memeriksa statusnya.':'SIGAP sedang dalam pemeliharaan.',maintenance:state}),{status:503,headers:{...headers,'Content-Type':html?'text/html; charset=utf-8':'application/json','Retry-After':'120',...(html?{'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'"}:{})}});
   return response;
 };
@@ -87,11 +87,19 @@ export const createEdgeHandler = (originFetch = fetch, assets = {}) => ({
     try {const stored=await control.fetch('https://control/');if(!stored.ok)throw Error();state=publicState(await stored.json());}
     catch {return unavailable(request,null,true);}
     if(url.pathname==='/api/maintenance/status')return json(state);
+    if(url.pathname==='/.sigap-maintenance/page') {
+      if(!['GET','HEAD'].includes(request.method))return json({error:'Method not allowed'},405);
+      if(state.phase==='maintenance')return unavailable(request,state,false,true);
+      return new Response(null,{status:303,headers:{...headers,Location:'/'}});
+    }
     // Control/login must stay reachable, but every control operation still requires
     // the origin's live admin authentication; there is no URL/cookie bypass.
     const controlPaths=['/api/maintenance/admin','/api/maintenance/access','/api/auth/login','/api/auth/session','/api/auth/logout','/maintenance-admin','/admin/configuration/maintenance'];
     const staticAsset=url.pathname.startsWith('/assets/') || ['/marison-sigap-logo-v2.png','/favicon.ico'].includes(url.pathname);
     if(state.phase==='maintenance' && !staticAsset && !controlPaths.includes(url.pathname)) {
+      // Scheduled HTML is edge-owned even for admins: no origin dependency while
+      // the app restarts. Explicit authenticated recovery/control paths stay open.
+      if(['GET','HEAD'].includes(request.method) && (request.headers.get('accept') || '').includes('text/html'))return unavailable(request,state);
       try {
         const check=await originFetch(new Request(new URL('/api/maintenance/access',url),{headers:{cookie:request.headers.get('cookie')||''},redirect:'manual',signal:AbortSignal.timeout(8000)}));
         if(check.status!==200)return unavailable(request,state);
