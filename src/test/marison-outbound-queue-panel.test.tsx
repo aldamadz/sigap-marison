@@ -118,6 +118,21 @@ describe("Marison outbound replacement preflight", () => {
     vi.mocked(marisonIntegrationService.createReplacement).mockResolvedValue({ replacementId: "job-2" });
   });
 
+  it("shows the historical vendor schema failure immediately and opens read-only diagnosis without resending", async () => {
+    const diagnosis={reasonCode:"VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING" as const,detailsAvailable:true,specificity:"generic" as const,summary:"Database Marison belum mendukung dokumen utama (main_document).",issues:[]};
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({environment:"production",page:1,pageSize:20,total:1,items:[{...row422,environment:"production",kind:"asset",lastVendorDiagnosis:diagnosis}]});
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue({...eligiblePreflight,eligible:false,reasonCode:"PRODUCTION_REPLACEMENT_UNSUPPORTED",vendorDiagnosis:diagnosis,localValidationIssues:"Pengiriman pengganti production untuk Aset belum didukung."});
+    renderPanel();await screen.findByText('Respons terakhir Marison');
+    expect(screen.getByText(diagnosis.summary)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Periksa penolakan'}));
+    const dialog=within(await screen.findByRole('dialog'));
+    expect(await dialog.findByText('Kendala database Marison')).toBeInTheDocument();
+    expect(dialog.getByText(/bukan pemeriksaan kondisi Marison saat ini/)).toBeInTheDocument();
+    expect(dialog.queryByRole('link',{name:/master proyek|user organization/i})).not.toBeInTheDocument();
+    expect(marisonIntegrationService.createReplacement).not.toHaveBeenCalled();
+    expect(marisonIntegrationService.reconcileDispatch).not.toHaveBeenCalled();
+  });
+
   it("shows production Asset diagnosis without offering an unsupported resend", async () => {
     environment.current = "production";
     vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "production", page: 1, pageSize: 20, total: 1, items: [{ ...row422, kind: "asset", environment: "production" }] });
