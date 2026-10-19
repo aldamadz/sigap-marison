@@ -69,12 +69,33 @@ test('full maintenance blocks ordinary traffic but permits authenticated adminis
   const handler=createEdgeHandler(async r=>{if(new URL(r.url).pathname==='/api/maintenance/access')return new Response(null,{status:r.headers.get('cookie')==='admin-session'?200:403});posts++;return new Response('origin');},{'/.sigap-maintenance/static.svg':{body:'svg',type:'image/svg+xml'}});
   const page=await handler.fetch(request(),env);assert.equal(page.status,503);assert.match(await page.text(),/SIGAP sedang dalam pemeliharaan/);
   assert.equal((await handler.fetch(request('/api/submit',{method:'POST',body:'do-not-send'}),env)).status,503);assert.equal(posts,0);
-  assert.equal((await handler.fetch(request('/',{headers:{cookie:'admin-session'}}),env)).status,200);
+  assert.equal((await handler.fetch(request('/',{headers:{cookie:'admin-session',accept:'text/html'}}),env)).status,503,'Dashboard admins use the same edge page');
+  assert.equal((await handler.fetch(request('/admin/configuration/maintenance',{headers:{cookie:'admin-session',accept:'text/html'}}),env)).status,200);
+  assert.equal((await handler.fetch(request('/maintenance-admin'),env)).status,200);
   assert.equal((await handler.fetch(request('/.sigap-maintenance/static.svg'),env)).status,200);
   assert.equal((await handler.fetch(request('/api/auth/session'),env)).status,200);
   assert.equal((await handler.fetch(request('/marison-sigap-logo-v2.png'),env)).status,200,'Public login logo must remain available before admin authentication');
   assert.equal((await handler.fetch(request('/favicon.ico'),env)).status,200);
   assert.equal((await handler.fetch(request('/health/ready'),env)).status,503,'Monitoring must not report origin as healthy');
+});
+
+test('canonical scheduled page is independent of origin and admin cookies, refresh stays identical, and completion exits without looping',async()=>{
+  const state={revision:2,schedule:{...schedule,startsAt:new Date(now-1000).toISOString()}};
+  const {env,map}=stored(state);let calls=0;
+  const handler=createEdgeHandler(async()=>{calls++;throw Error('origin offline');});
+  const direct=await handler.fetch(request('/dashboard'),env);assert.equal(direct.status,503);
+  const canonical=await handler.fetch(request('/.sigap-maintenance/page',{headers:{cookie:'admin-session'}}),env);
+  assert.equal(canonical.status,503);assert.match(canonical.headers.get('content-type'),/text\/html/);
+  assert.equal(await canonical.text(),await direct.text());assert.equal(calls,0,'Scheduled page must not wait for the restarting origin');
+  const refresh=await handler.fetch(request('/.sigap-maintenance/page'),env);assert.equal(refresh.status,503);
+  assert.equal((await handler.fetch(request('/.sigap-maintenance/page',{method:'HEAD'}),env)).status,503);
+  assert.equal(await (await handler.fetch(request('/.sigap-maintenance/page',{method:'HEAD'}),env)).text(),'');
+  assert.equal((await handler.fetch(request('/.sigap-maintenance/page',{method:'POST',body:'never forward'}),env)).status,405);assert.equal(calls,0);
+  for(const patch of [{status:'completed'},{status:'cancelled'},{startsAt:new Date(now+3600000).toISOString()},{impact:'disruption'}]) {
+    map.set('state',{...state,schedule:{...state.schedule,...patch}});
+    const exit=await handler.fetch(request('/.sigap-maintenance/page'),env);
+    assert.equal(exit.status,303);assert.equal(exit.headers.get('location'),'/');assert.equal(exit.headers.get('cache-control'),'no-store');
+  }
 });
 test('origin failures/tunnel 530 are branded 503, APIs JSON, no replay; security and business errors are not masked',async()=>{
   const {env}=stored();
