@@ -20,6 +20,7 @@ vi.mock("@/components/dashboard/StatusChart", () => ({ StatusChart: () => null }
 vi.mock("@/components/dashboard/DepartmentChart", () => ({ DepartmentChart: () => null }));
 vi.mock("@/components/dashboard/RecentActivity", () => ({ RecentActivity: () => null }));
 vi.mock("@/components/dashboard/SuratSummaryCards", () => ({ SuratSummaryCards: () => null }));
+vi.mock("@/components/dashboard/ActionableDashboard", () => ({ ActionableDashboard: () => null }));
 vi.mock("@/components/agenda/AgendaParentFilter", () => ({ AgendaParentFilter: () => null }));
 vi.mock("@/components/ui/Breadcrumbs", () => ({ PageHeader: () => null }));
 vi.mock("@/features/work-calendar", async () => {
