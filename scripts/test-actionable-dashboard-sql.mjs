@@ -5,6 +5,7 @@ const source = read('supabase/migrations/20260604090000_department_kpi_sla.sql')
 const start = source.indexOf('create or replace function public.calculate_business_minutes(');
 const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
+const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
 const fixture = `
 create role postgres nologin nosuperuser;create role authenticated;create role anon;create role service_role;
 create schema auth;grant usage on schema auth to postgres,authenticated,anon;
@@ -62,6 +63,7 @@ select set_config('request.jwt.claim.sub',tid(2)::text,true);set local role auth
 select check_ok((get_actionable_dashboard('signer','all',now()-interval '1 day',now()+interval '1 day')->'summary') @>
  '{"ready":2,"upcoming":1,"blocked":2,"returned":1,"completed":1,"rejected":1,"active":6}'::jsonb,'signer buckets; old pending survives history range');
 select check_ok((get_actionable_dashboard('signer','ready')->>'count')::int=2,'ready drilldown');
+select check_ok((get_actionable_dashboard('signer','ready')->'rows'->0->>'current_role')='Manager','stage label is the assigned role, not database CURRENT_ROLE');
 select check_ok((get_actionable_dashboard('signer','upcoming')->'rows'->0->>'elapsed_minutes') is null,'upcoming not measured');
 select check_ok((get_actionable_dashboard('signer','returned')->'rows'->0->>'elapsed_minutes') is null,'requester revision paused');
 select check_ok((get_actionable_dashboard('signer','completed')->'summary'->>'completed_measured')::int=1,'completed has measured SLA');
@@ -116,7 +118,7 @@ const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-
 try {
  let ready=false;for(let i=0;i<80;i++){if(run(['inspect','--format','{{.State.Health.Status}}',container]).trim()==='healthy'){ready=true;break;}Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw Error('Disposable PostgreSQL not ready');
- run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],fixture+migration+migration+assertions);
+ run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],fixture+migration+migration+labels+labels+assertions);
  const parallelReminder = () => new Promise((resolve,reject) => {
   const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});
   let output='',error='';child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});

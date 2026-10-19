@@ -29,6 +29,9 @@
 - Forward migration `20261019090000`; focused real PostgreSQL scope/RLS/clock/
   queue/notification tests plus UI/service/navigation and responsive visual tests
   precede stage-only apply/deploy. No worker, external or production rollout.
+- Follow-up `20261019091000` qualifies the SQL `current_role` column for stage
+  labels/search; the first browser acceptance exposed collision with PostgreSQL's
+  CURRENT_ROLE keyword. The already-applied initial migration is not edited.
 
 ## SUR-33 Internal Recommendation Number Office (2026-10-16, Issue #633)
 
