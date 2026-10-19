@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, RotateCcw, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -136,6 +136,13 @@ function getDiagnosisArea(issue: VendorDiagnosisIssue): string {
 }
 
 function DiagnosisBlock({ diagnosis, safeContext }: { diagnosis: VendorDiagnosis; safeContext: ReplacementPreflight["safeContext"] }) {
+  if (diagnosis.reasonCode === "VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING") {
+    return <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+      <p className="font-medium">Kendala database Marison</p>
+      <p className="mt-1">{diagnosis.summary}</p>
+      <p className="mt-2">Ini respons pengiriman terakhir, bukan pemeriksaan kondisi Marison saat ini. Minta Digivasi mengonfirmasi migrasi database dan status penerimaan surat sebelum mengirim pengganti.</p>
+    </div>;
+  }
   if (!diagnosis.detailsAvailable) {
     return (
       <div className="rounded-md border border-border bg-muted/60 px-3 py-3 text-sm">
@@ -458,6 +465,12 @@ export function MarisonOutboundQueuePanel() {
                             <p className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
                               <CheckCircle2 className="h-4 w-4" /> {row.externalReference}
                             </p>
+                          ) : row.lastVendorDiagnosis?.reasonCode === "VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING" ? (
+                            <div className="space-y-1 text-xs leading-5">
+                              <p className="font-medium text-amber-700 dark:text-amber-300">Respons terakhir Marison</p>
+                              <p className="text-muted-foreground">{row.lastVendorDiagnosis.summary}</p>
+                              <p className="text-muted-foreground">Perlu konfirmasi perbaikan database dari Digivasi sebelum pengiriman pengganti.</p>
+                            </div>
                           ) : row.failureReason ? (
                             <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {row.failureReason === "Resolution sources are required"
@@ -482,10 +495,10 @@ export function MarisonOutboundQueuePanel() {
                            {row.status === "failed_terminal" && row.errorCode?.startsWith("marison_http_422") && (
                              <Button
                                size="sm"
-                               variant="destructive"
+                               variant={row.lastVendorDiagnosis ? "outline" : "destructive"}
                                onClick={() => void openReplacement(row)}
                              >
-                               Buat pengiriman pengganti
+                               {row.lastVendorDiagnosis ? <><Search className="mr-1.5 h-3.5 w-3.5" />Periksa penolakan</> : "Buat pengiriman pengganti"}
                              </Button>
                            )}
                            {row.status === "failed_terminal" && !row.postStartedAt && !row.errorCode?.startsWith("marison_http_422") && (
@@ -608,7 +621,7 @@ export function MarisonOutboundQueuePanel() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Buat pengiriman pengganti</DialogTitle>
+            <DialogTitle>{replacement?.lastVendorDiagnosis ? "Diagnosis penolakan Marison" : "Buat pengiriman pengganti"}</DialogTitle>
             <DialogDescription>
               Vendor menolak payload sebelumnya. Periksa diagnosis di bawah sebelum membuat generasi pengiriman baru.
             </DialogDescription>
