@@ -1,5 +1,29 @@
 # SIGAP Feature and Release Map
 
+## OPS-10 Scheduled Maintenance and Cloudflare Fallback (2026-10-19, Issue #642)
+
+- Admin-only schedule: activity, message, start WIB and estimated duration;
+  disruption-only mode stays usable, full mode closes automatically at its start.
+- Announcement/reminder begins at the preceding calendar day 00:00 WIB. Daily
+  suppression is per account/browser/revision; the banner remains. Full mode
+  requires explicit admin completion, never an automatic reopen at its estimate.
+- Cloudflare Worker and SQLite Durable Object retain announcement/state/audit and
+  branded animated fallback independently of the origin. APIs return JSON 503;
+  no POST replay or invented outage ETA. Control uses a backend-only Ed25519 key,
+  live admin authorization, same-origin checks and optimistic revision guards.
+- Staging-only implementation/acceptance; production remains unchanged pending
+  user acceptance and selective release alongside DASH-03. No database migration
+  or worker stop/rollout. Maintenance is not a database migration write freeze.
+- Runbook: [OPS_10_SCHEDULED_MAINTENANCE.md](OPS_10_SCHEDULED_MAINTENANCE.md).
+- Acceptance follow-up: full schedules navigate open dashboards (also admin)
+  to the canonical edge page, identical to refresh and independent of origin
+  restarts. Exact recovery/configuration routes remain reachable; completed
+  schedules exit safely. Disruption schedules never force navigation.
+
+- Production promotion explicitly authorized on 2026-10-19 after staging
+  transition/restart acceptance, together with DASH-03. Provision independent
+  production key, hostname and state; do not activate a test production schedule.
+
 ## DASH-03 Actionable Role Dashboard (2026-10-19, Issue #638)
 
 - Staging candidate from main; production is not authorized for this new feature.

@@ -25,6 +25,8 @@ services:
       PORT: "80"
       TRUST_PROXY: "${TRUST_PROXY:-true}"
       APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
+      MAINTENANCE_EDGE_ORIGIN: "${MAINTENANCE_EDGE_ORIGIN:-}"
+      MAINTENANCE_SIGNING_KEY_PKCS8: "${MAINTENANCE_SIGNING_KEY_PKCS8:-}"
       VITE_APP_PUBLIC_URL: "https://sigap.marisoncloud.com"
       SUPABASE_URL: "${SUPABASE_URL:?Set SUPABASE_URL in .env.production}"
       VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in .env.production}"

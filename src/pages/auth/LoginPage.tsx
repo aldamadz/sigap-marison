@@ -76,6 +76,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const destination = window.location.pathname === '/maintenance-admin' ? '/admin/configuration/maintenance' : '/dashboard';
     setIsLoading(true);
 
     try {
@@ -108,7 +109,7 @@ export default function LoginPage() {
           throw new Error('Akun deaktif');
         }
         toast.success('Login Berhasil!');
-        navigate('/dashboard');
+        navigate(destination);
       }
     } catch (error: any) {
       const message = String(error.message || '');
