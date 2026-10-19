@@ -49,4 +49,14 @@ describe('maintenance advance notice',()=>{
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({action:'publish',expectedRevision:3,schedule:expect.objectContaining({impact:'disruption'})}));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
+  it('retains loaded non-default category and duration after native form synchronization',async()=>{
+    mocks.admin.mockResolvedValue({revision:3,schedule:{...state.schedule,category:'repair',duration:10,unit:'minutes'},history:[]});
+    render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MaintenanceConfigurationPage /></QueryClientProvider>);
+    await screen.findByText('Jadwal diterbitkan');
+    const unit=screen.getByRole('combobox',{name:'Satuan durasi'}),category=screen.getByRole('combobox',{name:'Jenis kegiatan'});
+    for(const select of document.querySelectorAll('form select'))fireEvent.change(select,{target:{value:''}});
+    await waitFor(()=>expect(unit).toHaveTextContent('Menit'));
+    expect(category).toHaveTextContent('Perbaikan');
+    expect(screen.getByLabelText('Estimasi durasi')).toHaveValue(10);
+  });
 });
