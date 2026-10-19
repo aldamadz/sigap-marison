@@ -134,6 +134,7 @@ export type VendorDiagnosisIssue = {
 };
 
 export type VendorDiagnosis = {
+  reasonCode?: "VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING";
   detailsAvailable: boolean;
   specificity: VendorDiagnosisSpecificity;
   summary: string;
@@ -187,6 +188,7 @@ export type MarisonDispatchRow = {
   externalReference: string | null;
   errorCode: string | null;
   failureReason: string | null;
+  lastVendorDiagnosis?: VendorDiagnosis | null;
   reconciliationCount: number;
   createdAt: string;
   updatedAt: string;
