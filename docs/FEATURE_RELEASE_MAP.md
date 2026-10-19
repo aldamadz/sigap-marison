@@ -33,6 +33,10 @@
   labels/search; the first browser acceptance exposed collision with PostgreSQL's
   CURRENT_ROLE keyword. The already-applied initial migration is not edited.
 
+- Production promotion explicitly authorized on 2026-10-19 after staging
+  acceptance, together with OPS-10. Apply only the two named migrations after
+  catalog/ledger preflight; production acceptance does not send test reminders.
+
 ## OPS-10 Scheduled Maintenance and Cloudflare Fallback (2026-10-19, Issue #642)
 
 - Admin-only schedule: activity, message, start WIB and estimated duration;
@@ -52,6 +56,9 @@
   to the canonical edge page, identical to refresh and independent of origin
   restarts. Exact recovery/configuration routes remain reachable; completed
   schedules exit safely. Disruption schedules never force navigation.
+- Production promotion explicitly authorized on 2026-10-19 after staging
+  transition/restart acceptance, together with DASH-03. Provision independent
+  production key, hostname and state; do not activate a test production schedule.
 
 ## MRN-24 Vendor Main Document Schema Diagnosis (2026-10-19, Issue #648)
 
