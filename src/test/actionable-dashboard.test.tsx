@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -100,22 +100,24 @@ describe('actionable dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Antrean dalam SLA/ }));
     await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'within_sla', page: 1 })));
   });
-  it('outlines the scope control as one dashed group and preserves accessible keyboard selection', async () => {
+  it('outlines the scope control as one strong solid group and preserves accessible keyboard selection', async () => {
     mocks.get.mockResolvedValue(bundle());renderDashboard();await screen.findByText(row.title);
     const group = screen.getByRole('tablist', { name: 'Lingkup pengajuan' });
-    expect(group).toHaveClass('border', 'border-dashed', 'border-input');
+    expect(group).toHaveClass('border-2', 'border-solid', 'border-primary');
+    expect(group).not.toHaveClass('border-dashed');
     const scopes = within(group);
     for (const tab of scopes.getAllByRole('tab')) expect(tab).not.toHaveClass('border');
     const mine = scopes.getByRole('tab', { name: 'Pengajuan saya' });
     expect(mine).toHaveAttribute('aria-selected', 'true');
-    mine.focus();await userEvent.keyboard('{ArrowRight}');
+    act(() => mine.focus());await userEvent.keyboard('{ArrowRight}');
     await waitFor(() => expect(scopes.getByRole('tab', { name: 'Tanda tangan saya' })).toHaveAttribute('aria-selected', 'true'));
     expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ scope: 'signer', bucket: 'ready' }));
   });
-  it('outlines the queue control as one dashed group without bordering individual choices', async () => {
+  it('outlines the queue control as one strong solid group without bordering individual choices', async () => {
     mocks.get.mockResolvedValue(bundle());renderDashboard();await screen.findByText(row.title);
     const group = screen.getByRole('group', { name: 'Kategori antrean' });
-    expect(group).toHaveClass('border', 'border-dashed', 'border-input');
+    expect(group).toHaveClass('border-2', 'border-solid', 'border-primary');
+    expect(group).not.toHaveClass('border-dashed');
     const categories = within(group);
     const active = categories.getByRole('button', { name: 'Antrean aktif' });
     const returned = categories.getByRole('button', { name: 'Perlu perbaikan' });
@@ -134,6 +136,27 @@ describe('actionable dashboard', () => {
     mocks.get.mockResolvedValue(data);renderDashboard();await screen.findByText(row.title);
     expect(screen.queryByRole('meter')).not.toBeInTheDocument();
     expect(screen.getByText('Belum ada pengajuan terukur')).toBeInTheDocument();
+  });
+  it('keeps KPI and SLA card borders neutral even when selected without changing their filters', async () => {
+    mocks.get.mockResolvedValue(bundle());renderDashboard();await screen.findByText(row.title);
+    const summary = screen.getByLabelText('Ringkasan pengajuan');
+    const cards = within(summary).getAllByRole('button');
+    const assertNeutralBorders = () => {
+      for (const card of [...cards, ...within(screen.getByLabelText('SLA pengajuan')).getAllByRole('button')]) {
+        expect(card).toHaveClass('border-border');
+        expect(card).not.toHaveClass('ring-1');
+        expect(card).not.toHaveClass('border-primary');
+        expect(card).not.toHaveClass('border-emerald-600');
+        expect(card).not.toHaveClass('border-red-600');
+      }
+    };
+    expect(cards[0]).toHaveAttribute('aria-pressed', 'true');assertNeutralBorders();
+    await userEvent.click(within(summary).getByRole('button', { name: /Selesai/ }));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'completed' })));
+    assertNeutralBorders();
+    await userEvent.click(screen.getByRole('button', { name: /Antrean dalam SLA/ }));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'within_sla' })));
+    assertNeutralBorders();
   });
   it('preserves SLA boundaries while displaying hours and minutes without assuming a workday length', () => {
     const { rerender } = render(<DashboardSla row={{ ...row, elapsed_minutes: 2417 }} />);
