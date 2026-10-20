@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RecommendationMultiDetail } from "@sigap/shared";
 import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
 
@@ -40,17 +40,19 @@ const model: RecommendationMultiDetail = {
 };
 
 function Harness({
+  initialModel = model,
   onUpload = vi.fn<React.ComponentProps<typeof RecommendationMultiDetailEditor>["onUpload"]>(),
   users = [],
   offices = [],
   departments = [],
 }: {
+  initialModel?: RecommendationMultiDetail;
   onUpload?: React.ComponentProps<typeof RecommendationMultiDetailEditor>["onUpload"];
   users?: Array<{ id: string; full_name: string; office_id: string; department_id: string }>;
   offices?: Array<{ id: string; name: string; kedudukan: string }>;
   departments?: Array<{ id: string; name: string }>;
 }) {
-  const [value, setValue] = useState(model);
+  const [value, setValue] = useState(initialModel);
   return (
     <RecommendationMultiDetailEditor
       model={value}
@@ -98,7 +100,33 @@ function TwoItemHarness() {
   );
 }
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("RecommendationMultiDetailEditor", () => {
+  it("uses the configured same-origin storage gateway for saved pasted-image previews without changing the model", () => {
+    vi.stubEnv("VITE_LEGACY_STORAGE_ORIGINS", "https://old-storage.test");
+    const saved = structuredClone(model);
+    saved.items[0].details[0].attachments = [{ id: "image-paste", order: 0, source: "paste", storage_path: "https://old-storage.test/storage/v1/object/public/lampiran_surat/drafts/photo.png" }];
+    const before = structuredClone(saved);
+    render(<Harness initialModel={saved} />);
+    expect(screen.getByAltText("Lampiran gambar rekomendasi item 1")).toHaveAttribute("src", "/storage/v1/object/public/lampiran_surat/drafts/photo.png");
+    expect(saved).toEqual(before);
+  });
+
+  it("accepts clipboard item files when the browser leaves clipboard files empty and does not duplicate them", () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<Harness onUpload={onUpload} />);
+    const zone = container.querySelector('input[type="file"]')!.parentElement!;
+    expect(zone).toHaveAttribute("tabindex", "0");
+    const image = new File(["image"], "clipboard.png", { type: "image/png" });
+    const items = [{ kind: "file", type: "image/png", getAsFile: () => image }];
+    fireEvent.paste(zone, { clipboardData: { files: [], items } });
+    expect(onUpload).toHaveBeenCalledExactlyOnceWith("parent-computer", "detail-cpu", [image], "paste");
+    onUpload.mockClear();
+    fireEvent.paste(zone, { clipboardData: { files: [image], items } });
+    expect(onUpload).toHaveBeenCalledExactlyOnceWith("parent-computer", "detail-cpu", [image], "paste");
+  });
+
   it("orders the responsible person before location and uses accessible section headings", () => {
     render(<Harness />);
     const pic = screen.getByText("PIC *");

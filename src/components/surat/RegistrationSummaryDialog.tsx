@@ -149,7 +149,16 @@ const AttachmentPreview = ({ row, index }: { row: Record<string, unknown>; index
   const attachment = row.recommendation_attachment && typeof row.recommendation_attachment === "object"
     ? row.recommendation_attachment as Record<string, unknown>
     : null;
-  const imageUrl = String(attachment?.file_url || row.recommendation_attachment_url || "").trim();
+  const detailAttachments = asRows(row.attachments);
+  const nestedAttachments = asRows(attachment?.attachments);
+  const images = (Array.isArray(row.attachments) ? detailAttachments
+    : Array.isArray(attachment?.attachments) ? nestedAttachments
+    : [{ ...attachment, file_url: attachment?.file_url || row.recommendation_attachment_url }])
+    .map((image) => ({
+      url: String(image.storage_path || image.file_url || "").trim(),
+      caption: String(image.caption || image.file_name || "").trim(),
+    }))
+    .filter((image) => image.url);
   const referenceUrl = getSafeExternalUrl(row.reference_link);
   const action = String(row.recommendation_action || "").trim();
   const notRecommended = action === "tidak_direkomendasikan" || row.is_recommended === false;
@@ -170,15 +179,19 @@ const AttachmentPreview = ({ row, index }: { row: Record<string, unknown>; index
       notRecommended ? "border-amber-500/35 bg-amber-500/[0.03]" : "border-border"
     )}>
       <div className="grid gap-4 p-4 md:grid-cols-[160px_1fr]">
-        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md border border-border bg-muted/20">
-          {imageUrl ? (
-            <img
-              src={migratedStorageDisplayUrl(imageUrl)}
-              alt={`Lampiran item rekomendasi ${index + 1}`}
-              className="h-full w-full object-contain"
-              loading="lazy"
-            />
-          ) : <ImageIcon className="h-7 w-7 text-muted-foreground" />}
+        <div className="min-w-0 space-y-2">
+          {images.length > 0 ? images.map((image, imageIndex) => (
+            <figure key={`${imageIndex}-${image.url}`} className="overflow-hidden rounded-md border border-border bg-muted/20">
+              <img
+                src={migratedStorageDisplayUrl(image.url)}
+                alt={`Lampiran item rekomendasi ${index + 1}${images.length > 1 ? ` gambar ${imageIndex + 1}` : ""}`}
+                className="aspect-[4/3] w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
+              {image.caption && <figcaption className="break-words border-t border-border px-2 py-1 text-xs text-muted-foreground">{image.caption}</figcaption>}
+            </figure>
+          )) : <div className="flex aspect-[4/3] items-center justify-center rounded-md border border-border bg-muted/20"><ImageIcon className="h-7 w-7 text-muted-foreground" /></div>}
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

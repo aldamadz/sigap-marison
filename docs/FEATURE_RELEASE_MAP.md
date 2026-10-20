@@ -1141,6 +1141,17 @@ verifikasi juga runtime, database, worker, dan smoke test.
 
 ## REC-03 / SUR-22 Recommendation Requester Revision Photos (2026-10-12, Issue #542)
 
+### 2026-10-20 REC-03 Image Preview Follow-up (Issue #665)
+
+- Restore editor previews through the existing allowlisted legacy-storage display
+  gateway; saved upload URLs and immutable draft/revision references are unchanged.
+- Confirmation and detail previews render every canonical multi-detail attachment,
+  while retaining old single-image and nested-attachment compatibility.
+- Clipboard accepts browser item files when the files collection is empty, without
+  duplicate uploads; the image drop zone is keyboard focusable. No changes to file
+  authorization, storage ACL, PDF workers, approval or outbound. Target staging then
+  selective production as explicitly requested, including DASH-04 border follow-up.
+
 - `fix/recommendation-revision-photos-01` from main; staging first, selective production.
 - Canonical revision drafts retain the recommendation task/parent context and editable
   requester-owned per-item photos. Photo references are rebound to the new draft;
