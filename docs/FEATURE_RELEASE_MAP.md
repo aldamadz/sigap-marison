@@ -1226,3 +1226,19 @@ verifikasi juga runtime, database, worker, dan smoke test.
 - Disposable PostgreSQL tests cover wrapped create/autosave, flat compatibility,
   conflicting context, immutable office, revocation, HQ Marketing and KC/KCP scope.
   Live acceptance and release identities belong to Issue #546, not inferred here.
+
+## DASH-04 Dashboard Visual Hierarchy (2026-10-20, Issue #659)
+
+- Staging-only visual follow-up to DASH-03: differentiated KPI icons, stronger
+  selected filters, SLA status badges, measured on-time meter and clearer document
+  identity, requester and current-position layout. Missing measurements stay
+  unmeasured, never a fabricated zero-percent performance result.
+- Working-minute durations render as hours and minutes; no assumption about
+  workday length, SLA threshold or business-clock calculation is introduced.
+- Compact scope controls and stacked queue rows below desktop width keep all
+  requester, position, SLA and action information visible without sideways scrolling.
+  Light/dark, keyboard focus, loading, empty and error paths remain supported.
+- Existing RPC, organization visibility, data counts, reminder recipient/cooldown
+  rules and exact document links are unchanged. No database migration, new endpoint,
+  worker rollout or production authorization. Keep the main-based feature branch
+  for a later explicitly requested selective production release.

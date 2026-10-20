@@ -45,7 +45,7 @@ describe('actionable dashboard', () => {
     expect(screen.queryByText('Agenda')).not.toBeInTheDocument();
     expect(screen.getByText('Manager A')).toBeInTheDocument();
     expect(screen.getByText('75%')).toBeInTheDocument();
-    expect(screen.getByText('Sisa 90 menit kerja')).toBeInTheDocument();
+    expect(screen.getByText('Sisa 1 jam 30 menit kerja')).toBeInTheDocument();
     expect(mocks.get).toHaveBeenCalledWith(expect.objectContaining({ scope: 'mine', bucket: 'active', page: 1, signal: expect.any(AbortSignal) }));
   });
   it('selects signer view automatically only for actual approval assignments and separates upcoming work', async () => {
@@ -91,5 +91,32 @@ describe('actionable dashboard', () => {
   it('routes returned requester to follow up; never opens a future assignment as an actionable approval', () => {
     expect(dashboardRowLink({...row,bucket:'returned'},'mine')).toBe('/surat/tindak-lanjut');
     expect(dashboardRowLink({...row,bucket:'upcoming'},'signer')).toBe('/surat/monitoring?document=doc-1');
+  });
+  it('makes SLA performance measurable and preserves category counts and filters', async () => {
+    mocks.get.mockResolvedValue(bundle());renderDashboard();await screen.findByText(row.title);
+    expect(screen.getByRole('meter', { name: 'Selesai tepat waktu' })).toHaveAttribute('aria-valuenow', '75');
+    expect(screen.getByText('3 dari 4 pengajuan terukur')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Kategori antrean' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Antrean dalam SLA/ }));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'within_sla', page: 1 })));
+  });
+  it('does not invent a performance percentage without measured completions', async () => {
+    const data = bundle();data.summary.completed_measured = 0;data.summary.completed_on_time = 0;
+    mocks.get.mockResolvedValue(data);renderDashboard();await screen.findByText(row.title);
+    expect(screen.queryByRole('meter')).not.toBeInTheDocument();
+    expect(screen.getByText('Belum ada pengajuan terukur')).toBeInTheDocument();
+  });
+  it('preserves SLA boundaries while displaying hours and minutes without assuming a workday length', () => {
+    const { rerender } = render(<DashboardSla row={{ ...row, elapsed_minutes: 2417 }} />);
+    expect(screen.getByText('Lewat 38 jam 17 menit kerja')).toBeInTheDocument();
+    expect(screen.getByText('Melewati SLA')).toBeInTheDocument();
+    rerender(<DashboardSla row={{ ...row, elapsed_minutes: 120 }} />);
+    expect(screen.getByText('Sisa 0 menit kerja')).toBeInTheDocument();
+    expect(screen.getByText('Dalam SLA')).toBeInTheDocument();
+    rerender(<DashboardSla row={{ ...row, bucket: 'completed', elapsed_minutes: 125 }} />);
+    expect(screen.getByText('2 jam 5 menit kerja')).toBeInTheDocument();
+    rerender(<DashboardSla row={{ ...row, bucket: 'returned', elapsed_minutes: 2417 }} />);
+    expect(screen.getByText('Dijeda untuk perbaikan')).toBeInTheDocument();
+    expect(screen.queryByText('Melewati SLA')).not.toBeInTheDocument();
   });
 });
