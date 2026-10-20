@@ -1242,3 +1242,15 @@ verifikasi juga runtime, database, worker, dan smoke test.
   rules and exact document links are unchanged. No database migration, new endpoint,
   worker rollout or production authorization. Keep the main-based feature branch
   for a later explicitly requested selective production release.
+
+### 2026-10-20 DASH-04 Release and Selector Border Follow-up
+
+- The original DASH-04 visual hierarchy is live in production at
+  `637cc5a3ff1327a049d168c685af37914d08b58c` (PR #661), after staging
+  verification and ancestry sync #662. This supersedes the initial staging-only
+  status above. Full release evidence is recorded in Issue #659.
+- New follow-up, clarified by user: one dashed outline around each complete
+  dashboard scope and queue-category control, not around individual tabs.
+  Active choices use a distinct background and primary text without a tab border.
+  The shared Tabs component, filtering, keyboard behavior and permissions are
+  unchanged. This additional styling targets staging; it is not yet production.
