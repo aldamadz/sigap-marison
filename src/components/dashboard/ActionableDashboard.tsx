@@ -93,9 +93,9 @@ export function ActionableDashboard({ userId }: { userId: string }) {
     </PageHeader>
     <Tabs value={scope} onValueChange={value => changeScope(value as DashboardScope)} aria-label="Pemantauan pengajuan" className="space-y-5">
       <div className="flex items-start justify-between gap-2 border-b border-border pb-3 sm:items-center sm:gap-4">
-        <TabsList className="grid h-auto min-w-0 flex-1 grid-cols-3 sm:flex sm:flex-none sm:flex-wrap sm:justify-start" aria-label="Lingkup pengajuan">
+        <TabsList className="grid h-auto min-w-0 flex-1 grid-cols-3 gap-1 rounded-lg border border-dashed border-input bg-muted/30 p-1 sm:flex sm:flex-none sm:flex-wrap sm:justify-start" aria-label="Lingkup pengajuan">
           {([{ value: 'mine', label: 'Pengajuan saya', icon: FilePenLine }, { value: 'signer', label: 'Tanda tangan saya', icon: Inbox }, { value: 'team', label: 'Departemen / kantor', icon: Users }] as const).map(tab =>
-            <TabsTrigger key={tab.value} value={tab.value} className="min-h-16 min-w-0 flex-col gap-1 whitespace-normal px-2 text-center text-xs sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-left sm:text-sm">
+            <TabsTrigger key={tab.value} value={tab.value} className="min-h-16 min-w-0 flex-col gap-1 whitespace-normal px-2 text-center text-xs data-[state=active]:text-primary sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-left sm:text-sm">
               <tab.icon className="h-4 w-4 shrink-0" />{tab.label}</TabsTrigger>)}
         </TabsList>
         <Button variant="ghost" size="icon" title="Muat ulang ringkasan" aria-label="Muat ulang ringkasan" disabled={query.isFetching} onClick={() => { void query.refetch(); }}>
@@ -142,9 +142,9 @@ export function ActionableDashboard({ userId }: { userId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div role="group" aria-label="Kategori antrean" className="flex max-w-full flex-wrap gap-1 rounded-lg bg-muted/70 p-1">
+          <div role="group" aria-label="Kategori antrean" className="flex max-w-full flex-wrap gap-1 rounded-lg border border-dashed border-input bg-muted/30 p-1">
             {(['active', ...(scope === 'signer' ? ['ready','blocked','upcoming'] : ['returned']), 'completed','rejected'] as DashboardBucket[]).map(value =>
-              <Button key={value} variant="ghost" size="sm" aria-pressed={bucket === value} className={cn('h-auto min-h-9 whitespace-normal rounded-md text-left', bucket === value ? 'bg-card font-semibold text-foreground shadow-sm hover:bg-card' : 'text-muted-foreground hover:text-foreground')} onClick={() => selectBucket(value)}>{DASHBOARD_BUCKET_LABELS[value]}</Button>)}
+              <Button key={value} variant="ghost" size="sm" aria-pressed={bucket === value} className={cn('h-auto min-h-9 whitespace-normal rounded-md text-left font-medium', bucket === value ? 'bg-card text-primary shadow-sm hover:bg-card hover:text-primary' : 'text-muted-foreground hover:text-foreground')} onClick={() => selectBucket(value)}>{DASHBOARD_BUCKET_LABELS[value]}</Button>)}
           </div>
           <div className="relative w-full sm:w-72"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input aria-label="Cari pengajuan" placeholder="Nomor, judul, nama, atau kantor" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9" /></div>
