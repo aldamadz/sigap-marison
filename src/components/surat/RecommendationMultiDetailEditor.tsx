@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { migratedStorageDisplayUrl } from "@/lib/storage-display-url";
 import {
   createRecommendationDetail,
   createRecommendationClientId,
@@ -515,18 +516,27 @@ function RecommendationMultiDetailEditorContent({
                       <Label className="text-xs font-semibold">Lampiran gambar *</Label>
                       <div
                         onPaste={(event) => {
-                          const files = Array.from(event.clipboardData.files || []);
-                          if (files.some((file) => file.type.startsWith("image/"))) {
+                          let files = Array.from(event.clipboardData.files || []).filter((file) => file.type.startsWith("image/"));
+                          if (files.length === 0) {
+                            files = Array.from(event.clipboardData.items || [])
+                              .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+                              .map((item) => item.getAsFile())
+                              .filter((file): file is File => file !== null);
+                          }
+                          if (files.length > 0) {
                             event.preventDefault();
                             handleFiles(detail.id, files, "paste");
                           }
                         }}
+                        tabIndex={0}
+                        role="group"
+                        aria-label={`Lampiran gambar item ${activeParent.order + 1} detail ${detailIndex + 1}`}
                         onDragOver={(event) => event.preventDefault()}
                         onDrop={(event) => {
                           event.preventDefault();
                           handleFiles(detail.id, event.dataTransfer.files, "drop");
                         }}
-                        className="rounded-md border border-dashed border-border bg-muted/20 p-3"
+                        className="rounded-md border border-dashed border-border bg-muted/20 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {detail.attachments.length > 0 ? (
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -534,7 +544,7 @@ function RecommendationMultiDetailEditorContent({
                               <div key={attachment.id} className="group relative overflow-hidden rounded-md border border-border bg-background">
                                 {attachment.storage_path ? (
                                   <img
-                                    src={attachment.storage_path}
+                                    src={migratedStorageDisplayUrl(attachment.storage_path)}
                                     alt={`Lampiran gambar rekomendasi item ${activeParent.order + 1}`}
                                     className="aspect-square w-full object-contain"
                                     loading="lazy"
