@@ -93,7 +93,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
     </PageHeader>
     <Tabs value={scope} onValueChange={value => changeScope(value as DashboardScope)} aria-label="Pemantauan pengajuan" className="space-y-5">
       <div className="flex items-start justify-between gap-2 border-b border-border pb-3 sm:items-center sm:gap-4">
-        <TabsList className="grid h-auto min-w-0 flex-1 grid-cols-3 gap-1 rounded-lg border border-dashed border-input bg-muted/30 p-1 sm:flex sm:flex-none sm:flex-wrap sm:justify-start" aria-label="Lingkup pengajuan">
+        <TabsList className="grid h-auto min-w-0 flex-1 grid-cols-3 gap-1 rounded-lg border-2 border-solid border-primary bg-muted/30 p-1 sm:flex sm:flex-none sm:flex-wrap sm:justify-start" aria-label="Lingkup pengajuan">
           {([{ value: 'mine', label: 'Pengajuan saya', icon: FilePenLine }, { value: 'signer', label: 'Tanda tangan saya', icon: Inbox }, { value: 'team', label: 'Departemen / kantor', icon: Users }] as const).map(tab =>
             <TabsTrigger key={tab.value} value={tab.value} className="min-h-16 min-w-0 flex-col gap-1 whitespace-normal px-2 text-center text-xs data-[state=active]:text-primary sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-left sm:text-sm">
               <tab.icon className="h-4 w-4 shrink-0" />{tab.label}</TabsTrigger>)}
@@ -108,7 +108,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
       </div> : <>
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Ringkasan pengajuan">
           {summaryCards(scope).map(card => <button key={card.key} onClick={() => selectBucket(card.key as DashboardBucket)}
-            aria-pressed={bucket === card.key} className={cn('group min-h-28 min-w-0 rounded-lg border bg-card p-4 text-left shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-32 sm:p-5', bucket === card.key ? 'border-primary ring-1 ring-primary/30' : 'border-border hover:border-primary/50')}>
+            aria-pressed={bucket === card.key} className="group min-h-28 min-w-0 rounded-lg border border-border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-32 sm:p-5">
             <div className="mb-3 flex items-start justify-between gap-2 sm:mb-4"><span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', metricIcons[card.key])}><card.icon className="h-4 w-4" /></span>
               <ArrowRight aria-hidden="true" className={cn('h-4 w-4 shrink-0 transition-colors', bucket === card.key ? 'text-primary' : 'text-muted-foreground/50 group-hover:text-primary')} /></div>
             <div className="mb-1 text-2xl font-semibold tabular-nums sm:text-3xl">{query.isPending ? <span className="block h-9 w-16 animate-pulse rounded bg-muted" /> : data?.summary[card.key as keyof typeof data.summary] ?? 0}</div>
@@ -116,11 +116,11 @@ export function ActionableDashboard({ userId }: { userId: string }) {
           </button>)}
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3" aria-label="SLA pengajuan">
-          <button onClick={() => selectBucket('within_sla')} aria-pressed={bucket === 'within_sla'} className={cn('group flex min-w-0 items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-4 sm:p-4', bucket === 'within_sla' ? 'border-emerald-600 ring-1 ring-emerald-600/30' : 'border-border')}>
+          <button onClick={() => selectBucket('within_sla')} aria-pressed={bucket === 'within_sla'} className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-4 sm:p-4">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 sm:h-10 sm:w-10"><Timer className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1"><div className="mb-1 text-xs text-muted-foreground sm:text-sm">Antrean dalam SLA</div><strong className="text-2xl font-semibold tabular-nums">{data?.summary.within_sla ?? '—'}</strong></div>
             <ArrowRight aria-hidden="true" className="hidden h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-emerald-700 sm:block dark:group-hover:text-emerald-300" /></button>
-          <button onClick={() => selectBucket('overdue')} aria-pressed={bucket === 'overdue'} className={cn('group flex min-w-0 items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-4 sm:p-4', bucket === 'overdue' ? 'border-red-600 ring-1 ring-red-600/30' : 'border-border')}>
+          <button onClick={() => selectBucket('overdue')} aria-pressed={bucket === 'overdue'} className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-4 sm:p-4">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300 sm:h-10 sm:w-10"><TriangleAlert className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1"><div className="mb-1 text-xs text-muted-foreground sm:text-sm">Antrean melewati SLA</div><strong className={cn('text-2xl font-semibold tabular-nums', !!data?.summary.overdue && 'text-red-700 dark:text-red-300')}>{data?.summary.overdue ?? '—'}</strong></div>
             <ArrowRight aria-hidden="true" className="hidden h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-red-700 sm:block dark:group-hover:text-red-300" /></button>
@@ -142,7 +142,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div role="group" aria-label="Kategori antrean" className="flex max-w-full flex-wrap gap-1 rounded-lg border border-dashed border-input bg-muted/30 p-1">
+          <div role="group" aria-label="Kategori antrean" className="flex max-w-full flex-wrap gap-1 rounded-lg border-2 border-solid border-primary bg-muted/30 p-1">
             {(['active', ...(scope === 'signer' ? ['ready','blocked','upcoming'] : ['returned']), 'completed','rejected'] as DashboardBucket[]).map(value =>
               <Button key={value} variant="ghost" size="sm" aria-pressed={bucket === value} className={cn('h-auto min-h-9 whitespace-normal rounded-md text-left font-medium', bucket === value ? 'bg-card text-primary shadow-sm hover:bg-card hover:text-primary' : 'text-muted-foreground hover:text-foreground')} onClick={() => selectBucket(value)}>{DASHBOARD_BUCKET_LABELS[value]}</Button>)}
           </div>

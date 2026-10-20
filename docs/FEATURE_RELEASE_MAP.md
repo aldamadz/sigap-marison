@@ -1200,3 +1200,13 @@ verifikasi juga runtime, database, worker, dan smoke test.
   Active choices use a distinct background and primary text without a tab border.
   The shared Tabs component, filtering, keyboard behavior and permissions are
   unchanged. This additional styling targets staging; it is not yet production.
+
+### 2026-10-20 DASH-04 Strong Solid Tab Groups
+
+- Latest user direction supersedes the dashed outline above: both complete scope
+  and queue-category controls have a solid two-pixel primary border; individual
+  tab choices remain borderless, with distinct active backgrounds and text.
+- Summary and SLA cards retain the same neutral border whether selected or not.
+  No selected ring or colored border competes with the tab controls. Keyboard
+  focus indicators, aria-pressed state, filters, counts and reminder rules remain.
+- This follow-up targets staging only; the production dashboard is unchanged.
