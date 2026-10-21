@@ -3,6 +3,7 @@ import type {
   RecommendationMultiDetail,
   RecommendationParentItem,
 } from "@sigap/shared";
+import { flattenRecommendationItems, readLegacyRecommendationItems } from "@sigap/shared";
 import {
   buildRecommendationMultiDetail,
   createRecommendationClientId,
@@ -440,5 +441,37 @@ describe("buildRecommendationMultiDetail pure unit tests", () => {
     const id = createRecommendationClientId();
     expect(typeof id).toBe("string");
     expect(id.length).toBeGreaterThan(5);
+  });
+
+  it("allows a parent overview without a photo but still requires every component photo", () => {
+    const parent: RecommendationParentItem = {
+      id: "pc", order: 0, status: "recommended", rejection_reason: "",
+      applicant_original: { name: "Komputer", quantity: 1, notes: "" }, location: "Pusat", pic: "Petugas",
+      details: [],
+    };
+    const overview = { ...createRecommendationDetail(parent), id: "overview", name: " komputer ", notes: "Dirakit dari komponen berikut." };
+    const component = { ...overview, id: "cpu", order: 1, name: "Processor", notes: "Sesuai spesifikasi", attachments: [{ id: "photo", order: 0, storage_path: "drafts/cpu.png" }] };
+    parent.details = [overview, component];
+    const before = structuredClone(parent);
+    expect(recommendationMultiDetailErrors({ version: 1, items: [parent] })).toEqual([]);
+    expect(parent).toEqual(before);
+    const roundTrip = readLegacyRecommendationItems(flattenRecommendationItems({ version: 1, items: [parent] }));
+    expect(recommendationMultiDetailErrors(roundTrip)).toEqual([]);
+    expect(roundTrip.items[0].details[0].attachments).toEqual([]);
+    expect(roundTrip.items[0].details[1].attachments[0].storage_path).toBe("drafts/cpu.png");
+    parent.details[1] = { ...component, attachments: [] };
+    expect(recommendationMultiDetailErrors({ version: 1, items: [parent] }))
+      .toEqual(["Item 1.2: lampiran gambar wajib ditambahkan."]);
+    parent.details = [component, overview];
+    expect(recommendationMultiDetailErrors({ version: 1, items: [parent] })).toEqual([]);
+    parent.details = [overview];
+    expect(recommendationMultiDetailErrors({ version: 1, items: [parent] }))
+      .toEqual(["Item 1.1: lampiran gambar wajib ditambahkan."]);
+    parent.details = [{ ...overview, name: "Monitor" }, component];
+    expect(recommendationMultiDetailErrors({ version: 1, items: [parent] }))
+      .toEqual(["Item 1.1: lampiran gambar wajib ditambahkan."]);
+    parent.details = [overview, { ...component, name: "Komputer", attachments: [] }];
+    expect(recommendationMultiDetailErrors({ version: 1, items: [parent] }))
+      .toEqual(["Item 1.1: lampiran gambar wajib ditambahkan.", "Item 1.2: lampiran gambar wajib ditambahkan."]);
   });
 });

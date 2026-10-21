@@ -1246,3 +1246,14 @@ verifikasi juga runtime, database, worker, dan smoke test.
   requested total. Empty notes remain optional; KEU 1/10 are unchanged.
 - Candidate staging then selective production release, explicitly authorized.
   Roll out app and PDF worker together; stored PDFs are not rewritten automatically.
+
+## REC-03 Parent Overview Photo (2026-10-21, Issue #680)
+
+- A unique detail whose normalized name matches the original applicant item is
+  its overview when another named component exists. Its photo is optional;
+  every component photo remains required, even after reordering. Removing all
+  components restores the photo requirement. Ambiguous duplicate names stay required.
+- UI labels and submission validation share the same predicate. No extra model
+  fields, schema changes, attachment removal or relaxed attachment authorization.
+- Staging first, then selective production as continuation of the requested release.
+  App-only rollout; PDF worker/data/history/outbound remain unchanged.

@@ -185,6 +185,15 @@ export function syncRecommendationMultiDetailInput(
   }
 }
 
+export function isRecommendationParentOverview(parent: RecommendationParentItem, detail: RecommendationDetail): boolean {
+  const normalizedName = (value: string) => text(value).replace(/\s+/g, " ").toLowerCase();
+  const parentName = normalizedName(parent.applicant_original.name);
+  if (!parentName || normalizedName(detail.name) !== parentName) return false;
+  // Match the original item, not its position: users may reorder component rows.
+  return parent.details.filter((row) => normalizedName(row.name) === parentName).length === 1
+    && parent.details.some((row) => text(row.name) && normalizedName(row.name) !== parentName);
+}
+
 export function recommendationMultiDetailErrors(model: RecommendationMultiDetail): string[] {
   const errors: string[] = [];
   model.items.forEach((parent, parentIndex) => {
@@ -202,7 +211,9 @@ export function recommendationMultiDetailErrors(model: RecommendationMultiDetail
       if (!Number.isInteger(detail.quantity) || detail.quantity < 1) errors.push(`${label}: jumlah minimal 1.`);
       if (!text(detail.description)) errors.push(`${label}: uraian wajib diisi.`);
       if (!text(detail.notes)) errors.push(`${label}: keterangan wajib diisi.`);
-      if (detail.attachments.length === 0) errors.push(`${label}: lampiran gambar wajib ditambahkan.`);
+      if (detail.attachments.length === 0 && !isRecommendationParentOverview(parent, detail)) {
+        errors.push(`${label}: lampiran gambar wajib ditambahkan.`);
+      }
       detail.reference_links.forEach((link, linkIndex) => {
         try {
           const url = new URL(link.url);
