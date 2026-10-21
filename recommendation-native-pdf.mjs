@@ -280,7 +280,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
   footer: (page, total) => ({ text: `Halaman ${page} dari ${total}`, fontSize: 7, alignment: "right", margin: [18, 0, 18, 0] }),
   content: [
     ...buildMainPage(data, logoDataUrl, totalPages),
-    ...(data.notes?.length > 160 ? [{ pageBreak: "before", stack: [
+    ...(data.notes?.length > 160 || String(data.notes || "").split(/\r?\n/).length > 4 ? [{ pageBreak: "before", stack: [
       { text: "CATATAN PENGAJUAN", bold: true, fontSize: 14, margin: [0, 0, 0, 8] },
       { text: data.notes, fontSize: 9 },
     ] }] : []),
