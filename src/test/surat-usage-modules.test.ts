@@ -1,5 +1,7 @@
 /** G: behavioral test per modul — validate/cleanup/normalization + render slot. */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { buildRegistrationSummaryData } from "@/components/surat/registration-summary-data";
 import type {
   UsageModuleContext,
   UsageModuleKey,
@@ -59,6 +61,48 @@ function ctxForUnitAvailability(availability: UnitAvailabilityState, input: Reco
 }
 
 describe("fund module", () => {
+  it("edits existing multiline requester notes through the canonical draft input", () => {
+    const catatan = "Perpanjangan STNK\nMohon diproses sebelum jatuh tempo.";
+    const ctx = ctxFor("non_asset", { catatan });
+    ctx.setInputValue = vi.fn();
+    const view = render(fundModule.renderDetailsPanel!(ctx));
+    const notes = screen.getByRole("textbox", { name: "Catatan pemohon (opsional)" });
+    expect(notes).toHaveValue(catatan);
+    expect(notes).not.toBeRequired();
+    fireEvent.change(notes, { target: { value: `${catatan}\nLampiran tersedia.` } });
+    expect(ctx.setInputValue).toHaveBeenCalledWith("catatan", `${catatan}\nLampiran tersedia.`);
+    fireEvent.change(notes, { target: { value: "" } });
+    expect(ctx.setInputValue).toHaveBeenLastCalledWith("catatan", "");
+    expect(fundModule.normalizeInput({ catatan } as never, ctx).catatan).toBe(catatan);
+    view.unmount();
+  });
+
+  it("shows notes once before type and total in confirmation and persisted detail", () => {
+    const input = { request_category: "non_asset", fund_type: "operational", fund_amount: 349000, catatan: "Catatan pertama\nCatatan kedua" };
+    const ctx = ctxFor("non_asset", input);
+    const rows = fundModule.buildSummaryFields!(ctx);
+    expect(rows.map(row => row.key)).toEqual(["catatan", "fund_type", "fund_amount"]);
+    expect(rows[0]).toMatchObject({ label: "Catatan pemohon", value: input.catatan });
+    expect(fundModule.hiddenFieldKeys!(ctx)).toContain("catatan");
+    const summary = buildRegistrationSummaryData({
+      form_input_data: input,
+      data_snapshot: { input: { catatan: "Catatan lama" }, form: { nomor_form: "FM-UAI.PGD-01-00" } },
+    });
+    expect(summary.fields.map(row => row.key)).toEqual(["catatan", "fund_type", "fund_amount"]);
+    expect(summary.fields[0]).toMatchObject({ label: "Catatan pemohon", value: input.catatan });
+    expect(fundModule.buildSummaryFields!(ctxFor("non_asset", { ...input, catatan: "  " })).map(row => row.key))
+      .toEqual(["fund_type", "fund_amount"]);
+  });
+
+  it.each(["FM-UAI.KEU-01-00", "FM-UAI.KEU-10-00"])("does not add the PGD notes control to %s", (nomor_form) => {
+    const ctx = ctxFor("non_asset", { catatan: "Catatan KEU" });
+    ctx.usage = { id: "keu", master_forms: { nomor_form } } as never;
+    const view = render(fundModule.renderDetailsPanel!(ctx));
+    expect(screen.queryByRole("textbox", { name: "Catatan pemohon (opsional)" })).not.toBeInTheDocument();
+    expect(fundModule.hiddenFieldKeys!(ctx)).not.toContain("catatan");
+    view.unmount();
+  });
+
   it("KEU 1 does not inherit PGD fund project/type requirements", () => {
     const ctx = ctxFor("non_asset", { items: [] });
     ctx.usage = { id: "keu1", master_forms: { nomor_form: "FM-UAI.KEU-01-00" } } as never;

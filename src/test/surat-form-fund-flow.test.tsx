@@ -91,6 +91,7 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
   });
 
   it("reserves number for dana umum without a Marison project", async () => {
+    allowServiceCalls("saveRegistrationDraft");
     await mountFormWithUsage(FUND_FORM_USAGE_RAW, CURRENT_PROFILE_KC);
     await selectFormAndUsage(/Dana/i);
     await selectLetterType();
@@ -133,6 +134,21 @@ describe("Flow MRN-21: Non Aset dana umum tanpa proyek", () => {
     fireEvent.change(nominal, { target: { value: "1500000" } });
     fireEvent.blur(nominal);
     expect(await screen.findByText("Rp 1.500.000")).toBeInTheDocument();
+
+    const catatan = "Sewa untuk kunjungan proyek\nMohon dijadwalkan bulan ini.";
+    expect(screen.getAllByRole("textbox", { name: "Catatan pemohon (opsional)" })).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Catatan pemohon (opsional)"), { target: { value: catatan } });
+    await waitFor(() => expect(serviceMock.saveRegistrationDraft).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({
+        formData: expect.objectContaining({ form_input_data: expect.objectContaining({ catatan }) }),
+      }), expect.any(Array), "details",
+    ), { timeout: 3000 });
+    await selectOptionByLabel(/^Status$/i, /^2/);
+    fireEvent.click(screen.getByRole("button", { name: "Selanjutnya" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Konfirmasi Pendaftaran" }));
+    const summary = await screen.findByRole("dialog", { name: /Periksa sebelum didaftarkan/i });
+    expect(within(summary).getByText("Catatan pemohon")).toBeInTheDocument();
+    expect(within(summary).getByText(/Sewa untuk kunjungan proyek/)).toBeInTheDocument();
 
     assertStrictServiceCalls();
   });

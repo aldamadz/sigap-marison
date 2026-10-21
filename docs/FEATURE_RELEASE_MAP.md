@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## SUR-35 PGD Fund Requester Notes (2026-10-21, Issue #676)
+
+- Optional multiline requester notes use the existing `form_input_data.catatan`;
+  draft, revision and submission keep the canonical input without a schema change.
+- Confirmation, saved detail and native PGD PDF place notes before fund type and
+  requested total. Empty notes remain optional; KEU 1/10 are unchanged.
+- Candidate staging then selective production release, explicitly authorized.
+  Roll out app and PDF worker together; stored PDFs are not rewritten automatically.
+
 ## OPS-10 Scheduled Maintenance and Cloudflare Fallback (2026-10-19, Issue #642)
 
 - Admin-only schedule: activity, message, start WIB and estimated duration;
