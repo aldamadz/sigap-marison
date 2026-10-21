@@ -243,6 +243,69 @@ test("keeps the FM-UAI.HRD-30-00 first-page table, reserved rows, notes, and low
   assert.doesNotMatch(serialized, /Dinamis/);
 });
 
+const complexComputer = () => ({
+  id: "computer", applicantName: "Komputer", applicantNotes: "Perangkat lambat dan perlu diganti.",
+  location: "Cabang", pic: "PIC", registrationNumber: "", status: "recommended",
+  details: Array.from({ length: 11 }, (_, index) => ({
+    id: `component-${index}`, heading: `Komponen ${index + 1}`, action: "purchase_new",
+    description: `Spesifikasi komponen ${index + 1}`, notes: `Catatan komponen ${index + 1}`, attachments: [],
+  })),
+});
+
+test("keeps a complex computer compact on the form and preserves every component and note in a separate detail section", () => {
+  const item = complexComputer();
+  const data = normalizeRecommendationDocumentData({ no_surat: "TEST/REK" }, { items: [item] });
+  const before = JSON.stringify(data);
+  const definition = buildRecommendationDocumentDefinition(data, [], null);
+  const table = definition.content[3].table;
+  assert.equal(table.body.length, 3, "no blank filler rows after a complex item");
+  assert.match(table.body[2][7].text, /11 rincian/);
+  assert.ok(table.body[2][7].text.length < 160);
+  assert.equal(definition.content[4].table.dontBreakRows, true);
+  const serialized = JSON.stringify(definition);
+  assert.match(serialized, /RINCIAN REKOMENDASI/);
+  for (const detail of item.details) {
+    assert.ok(serialized.includes(detail.heading));
+    assert.ok(serialized.includes(detail.description));
+    assert.ok(serialized.includes(detail.notes));
+  }
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("keeps the attachment detail heading visible and accepts actual rendered page totals including revision pages", () => {
+  const items = canonicalMultiDetail();
+  const data = normalizeRecommendationDocumentData({}, { items });
+  const definition = buildRecommendationDocumentDefinition(data, buildRecommendationPagePlan(items), null, 19);
+  assert.match(JSON.stringify(definition.content[0]), /1 dari 19/);
+  const visibleHeadings = JSON.stringify(definition.content).match(/"color":"white"/g) || [];
+  assert.equal(visibleHeadings.length, 0, "text-only fillColor is not a visible background");
+});
+
+test("moves oversized parent metadata and general notes into complete flowing detail sections without losing text", () => {
+  const item = complexComputer();
+  item.applicantNotes = "Kerusakan awal lengkap. ".repeat(80);
+  item.details = [{ ...item.details[0], description: "Spesifikasi lengkap. ".repeat(80) }];
+  const notes = "Catatan pengajuan lengkap. ".repeat(80);
+  const data = normalizeRecommendationDocumentData({ notes }, { items: [item] });
+  const definition = buildRecommendationDocumentDefinition(data, [], null);
+  const serialized = JSON.stringify(definition);
+  assert.ok(serialized.includes(item.applicantNotes.trim()));
+  assert.ok(serialized.includes(item.details[0].description.trim()));
+  assert.ok(serialized.includes(notes.trim()));
+  assert.ok(definition.content[3].table.body[2][4].text.length < 240);
+});
+
+test("many short newline-separated notes cannot make an unbreakable main row taller than the page", () => {
+  const item = complexComputer();
+  item.applicantNotes = Array.from({ length: 40 }, () => "x").join("\n");
+  item.details = [{ ...item.details[0], notes: item.applicantNotes }];
+  const data = normalizeRecommendationDocumentData({}, { items: [item] });
+  const definition = buildRecommendationDocumentDefinition(data, [], null);
+  assert.equal(definition.content[3].table.body[2][4].text.includes("\n"), false);
+  assert.equal(definition.content[3].table.body[2][8].text.includes("\n"), false);
+  assert.ok(JSON.stringify(definition).includes(JSON.stringify(item.applicantNotes).slice(1, -1)));
+});
+
 test("preserves actual legacy two-signer identities instead of rendering placeholders", () => {
   const signatures = [
     { role: "Membuat", name: "Signer Legacy 1", job: "Staff", signed: true },
