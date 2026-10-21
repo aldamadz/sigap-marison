@@ -241,22 +241,77 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
   ];
 };
 
-const buildImageGrid = (images) => {
-  if (!images.length) return { text: "Tidak ada lampiran gambar.", italics: true, color: MUTED, alignment: "center", margin: [0, 30] };
-  const rows = [];
-  for (let index = 0; index < images.length; index += 2) {
-    const pair = images.slice(index, index + 2).map((image) => ({
-      stack: [
-        { image: image.dataUrl, fit: [350, 180], alignment: "center" },
-        { text: text(image.name, "Lampiran"), fontSize: 8, alignment: "center", margin: [0, 4, 0, 0] },
-      ],
-      margin: [4, 4, 4, 4],
-    }));
-    if (pair.length === 1) pair.push({ text: "" });
-    rows.push(pair);
-  }
-  return { table: { widths: ["50%", "50%"], dontBreakRows: true, body: rows }, layout: borderLayout };
-};
+const attachmentField = (label, value) => ({
+  stack: [
+    { text: label, color: MUTED, fontSize: 8, margin: [0, 0, 0, 2] },
+    { text: text(value), fontSize: 9 },
+  ],
+  margin: [0, 0, 0, 8],
+});
+
+const buildAttachmentCards = (data, pages) => pages.flatMap((page) => {
+  const item = data.items.find((entry) => entry.id === page.itemId);
+  const detail = item?.details.find((entry) => entry.id === page.detailId);
+  const pairs = page.images.length
+    ? Array.from({ length: Math.ceil(page.images.length / 2) }, (_, index) => page.images.slice(index * 2, index * 2 + 2))
+    : [[]];
+  return pairs.map((images, pairIndex) => {
+    const continuation = page.continuation || pairIndex > 0;
+    const label = page.showDetailNumber ? `${page.itemNumber}.${page.detailNumber}` : String(page.itemNumber);
+    const notes = detail?.notes || page.detailRejectionReason;
+    const parentValue = (value, limit) => item && needsItemDetails(item)
+      && (text(value, "").length > limit || text(value, "").split(/\r?\n/).length > 4)
+      ? `${compactText(value, limit).replace(/\.\.\. \(lihat rincian\)$/, "...")} (Rincian Rekomendasi, item ${page.itemNumber})` : text(value);
+    const location = [parentValue(page.detailLocation || page.location, 80), parentValue(page.detailPic || page.pic, 80)].join(" / ");
+    const applicantName = parentValue(page.applicantName, 100);
+    const registrationNumber = parentValue(item?.registrationNumber, 60);
+    const applicantNotes = parentValue(item?.applicantNotes, 160);
+    const action = isRejected(page.status || page.detailStatus) ? "Tidak direkomendasikan" : actionLabel(page.detailAction);
+    const values = [applicantName, page.detailHeading, location, registrationNumber,
+      applicantNotes, page.description, notes, ...page.documents.map(entry => entry.name), ...images.map(entry => entry.name)];
+    // Oversized narrative must flow; an unbreakable row taller than a page loses text.
+    const compact = values.join(" ").length < 1600 && values.join("\n").split(/\r?\n/).length < 24;
+    return {
+      id: `recommendation-attachment-${page.itemNumber}-${page.detailNumber}-${page.continuationIndex}-${pairIndex}`,
+      unbreakable: compact,
+      margin: [0, 0, 0, 10],
+      table: {
+        widths: [126, "*"],
+        dontBreakRows: compact,
+        body: [[
+          {
+            stack: images.length ? images.map(image => ({
+              unbreakable: text(image.name, "").length < 200,
+              stack: [
+                ...(image.dataUrl ? [{ image: image.dataUrl, fit: [114, 100], alignment: "center" }] : []),
+                { text: text(image.name, "Lampiran"), fontSize: 7, color: MUTED, margin: [0, 4, 0, 0] },
+              ],
+              margin: [0, 0, 0, 8],
+            })) : [{ text: "Lampiran dokumen", fontSize: 8, color: MUTED }],
+          },
+          { stack: [
+            { text: `Item ${label}  |  ${action}${continuation ? "  |  LANJUTAN" : ""}`, color: MUTED, fontSize: 8, margin: [0, 0, 0, 6] },
+            { text: applicantName, bold: true, fontSize: 10, margin: [0, 0, 0, 4] },
+            { text: text(page.detailHeading), bold: true, fontSize: 11, margin: [0, 0, 0, 10] },
+            { columns: [attachmentField("Lokasi / PIC", location), attachmentField("No. registrasi", registrationNumber)], columnGap: 18 },
+            { columns: [attachmentField("Kerusakan / catatan pemohon", applicantNotes), attachmentField("Rekomendasi", action)], columnGap: 18 },
+            { columns: [attachmentField("Uraian", page.description), attachmentField("Keterangan", notes)], columnGap: 18 },
+            ...(page.documents.length && !continuation ? [attachmentField("Dokumen pendukung", page.documents.map(entry => text(entry.name, "Lampiran")).join("\n"))] : []),
+          ] },
+        ]],
+      },
+      layout: {
+        ...borderLayout,
+        hLineColor: () => "#cbd5e1",
+        vLineWidth: (index) => index === 1 ? 0 : 0.6,
+        vLineColor: () => "#cbd5e1",
+        fillColor: () => "#f8fafc",
+        paddingLeft: () => 10, paddingRight: () => 10,
+        paddingTop: () => 10, paddingBottom: () => 10,
+      },
+    };
+  });
+});
 
 export const normalizeRecommendationDocumentData = (source = {}, options = {}) => {
   const location = source.location_snapshot || {};
@@ -285,33 +340,14 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
       { text: data.notes, fontSize: 9 },
     ] }] : []),
     ...expandedItemBlocks(data),
-    ...pages.flatMap((page) => {
-      const rejected = isRejected(page.status || page.detailStatus);
-      const detailLabel = page.showDetailNumber
-        ? `${page.itemNumber}.${page.detailNumber} ${page.detailHeading}`
-        : page.detailHeading;
-      return [{
-        pageBreak: "before",
-        stack: [
-          { text: `ITEM ${page.itemNumber} - ${page.applicantName}`, bold: true, fontSize: 15, color: "#17324d" },
-          { text: `${detailLabel}${page.continuation ? " (LANJUTAN)" : ""}`, bold: true, fontSize: 12, color: "#17324d", margin: [0, 5, 0, 5] },
-          {
-            text: [
-              `Status: ${rejected ? "Tidak direkomendasikan" : "Direkomendasikan"}`,
-              rejected ? "" : `Tindakan: ${actionLabel(page.detailAction)}`,
-              `Lokasi: ${text(page.detailLocation || page.location)}`,
-              `PIC: ${text(page.detailPic || page.pic)}`,
-            ].filter(Boolean).join(" | "),
-            margin: [0, 0, 0, 4],
-          },
-          page.description ? { text: page.description, margin: [0, 0, 0, 4] } : { text: "" },
-          page.documents.length
-            ? { text: `Dokumen: ${page.documents.map((entry) => entry.name || "Lampiran").join(", ")}`, margin: [0, 0, 0, 5] }
-            : { text: "" },
-          buildImageGrid(page.images),
-        ],
-      }];
-    }),
+    ...(pages.length ? [{
+      id: "recommendation-attachments", pageBreak: "before",
+      stack: [
+        { text: "LAMPIRAN REKOMENDASI", bold: true, fontSize: 13, margin: [0, 0, 0, 4] },
+        { text: data.noSurat, fontSize: 8, color: MUTED, margin: [0, 0, 0, 12] },
+        ...buildAttachmentCards(data, pages),
+      ],
+    }] : []),
     ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
   ],
 });
