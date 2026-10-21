@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, RotateCcw, Search, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Code2, Loader2, RefreshCw, RotateCcw, Search, Send } from "lucide-react";
+import { MarisonPayloadDialog } from "@/components/admin/MarisonPayloadDialog";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -202,6 +203,7 @@ export function MarisonOutboundQueuePanel() {
   const [statusFilter, setStatusFilter] = useState<MarisonDispatchFilter>("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<MarisonDispatchRow | null>(null);
+  const [payloadRow, setPayloadRow] = useState<MarisonDispatchRow | null>(null);
   const [action, setAction] = useState<ReconciliationAction>("mark_succeeded");
   const [reason, setReason] = useState("");
   const [externalReference, setExternalReference] = useState("");
@@ -484,6 +486,9 @@ export function MarisonOutboundQueuePanel() {
                           )}
                         </TableCell>
                         <TableCell className="min-w-44 align-top text-right">
+                          <div className="mb-2 flex justify-end">
+                            <Button size="sm" variant="outline" onClick={() => setPayloadRow(row)}><Code2 className="mr-1.5 h-3.5 w-3.5" />Lihat payload</Button>
+                          </div>
                           {row.status === "outcome_unknown" && (
                             <div className="flex justify-end gap-2">
                               <Button size="sm" variant="outline" onClick={() => openReconciliation(row, "mark_succeeded")}>Diterima</Button>
@@ -525,6 +530,7 @@ export function MarisonOutboundQueuePanel() {
         </CardContent>
       </Card>
 
+      {payloadRow && <MarisonPayloadDialog key={payloadRow.id} row={payloadRow} onClose={() => setPayloadRow(null)} />}
       <Dialog open={selected !== null} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
           <DialogHeader>

@@ -43,6 +43,7 @@ export const adminIntegrationDetailSections: DocsSection[] = [
       columns: ["Kontrol", "Fungsi"],
       rows: [
         ["Status environment", "Menunjukkan koneksi staging atau production yang dikunci saat deployment."],
+        ["Lihat payload", "Membuka JSON tersimpan per generasi di Antrean Outbound, beserta endpoint dan hash. Salin JSON tidak mengirim ulang. Snapshot yang belum dibekukan bukan bukti payload terkirim; credential API tidak ditampilkan."],
         ["Cek koneksi", "Memeriksa akses SIGAP ke endpoint Projects, Unit, dan Non Unit tanpa mengubah master data."],
         ["Periksa karyawan", "Menampilkan jumlah data karyawan dan kantor yang akan dibuat, diperbarui, dilewati, atau perlu ditinjau."],
         ["Sinkron karyawan", "Memperbarui master kantor dan karyawan SIGAP setelah admin menyetujui hasil pemeriksaan."],

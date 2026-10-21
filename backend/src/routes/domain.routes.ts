@@ -24,6 +24,7 @@ const routes: DomainRoute[] = [
   { method: "POST", url: "/api/integrations/marison/employees/sync" },
   { method: "POST", url: "/api/internal/marison/directory-sync" },
   { method: "GET", url: "/api/integrations/marison/dispatches" },
+  { method: "GET", url: "/api/integrations/marison/dispatches/:dispatchId/payload" },
   { method: "GET", url: "/api/integrations/marison/dispatches/:dispatchId/preflight" },
   { method: "POST", url: "/api/integrations/marison/dispatches/:dispatchId/reconcile" },
   { method: "GET", url: "/api/integrations/marison/dispatches/:dispatchId/replacement-preflight" },
