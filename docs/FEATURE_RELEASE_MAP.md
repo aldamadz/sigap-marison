@@ -1311,3 +1311,15 @@ verifikasi juga runtime, database, worker, dan smoke test.
   fields, schema changes, attachment removal or relaxed attachment authorization.
 - Staging first, then selective production as continuation of the requested release.
   App-only rollout; PDF worker/data/history/outbound remain unchanged.
+
+## REC-03 Attachment PDF Layout (2026-10-21, Issue #684)
+
+- Attachment appendix follows the approved preview reference: bounded image
+  column on the left and item identity/action/location/PIC/description/notes on
+  the right. Several short component blocks can share a page, without forced
+  per-component blank space. Extra photos continue under the same item identity.
+- Main worksheet/signatures, metadata, ordering, image ownership and original
+  files remain unchanged. Long text flows instead of clipping; actual page totals
+  are reconciled after layout. No schema or business workflow changes.
+- Explicit staging then selective production release requires coordinated app
+  and PDF worker rollout. Existing stored PDFs are not bulk rewritten.

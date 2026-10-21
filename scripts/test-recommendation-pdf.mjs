@@ -281,6 +281,64 @@ test("keeps the attachment detail heading visible and accepts actual rendered pa
   assert.equal(visibleHeadings.length, 0, "text-only fillColor is not a visible background");
 });
 
+test("flows attachment cards with photos on the left and complete item metadata on the right", () => {
+  const items = canonicalMultiDetail();
+  items[0].registrationNumber = "INV-2026-01";
+  items[0].applicantNotes = "Komputer lambat";
+  items[0].details[0].notes = "Pilih sesuai kebutuhan pekerjaan";
+  const data = normalizeRecommendationDocumentData({ no_surat: "UJI/REK" }, { items });
+  const before = JSON.stringify(data);
+  const definition = buildRecommendationDocumentDefinition(data, buildRecommendationPagePlan(items));
+  const appendix = definition.content.find(node => node.id === "recommendation-attachments");
+  assert.ok(appendix, "one flowing attachment section is required");
+  assert.equal(appendix.pageBreak, "before");
+  const cards = appendix.stack.filter(node => node.id?.startsWith("recommendation-attachment-"));
+  assert.equal(cards.length, 2);
+  for (const card of cards) {
+    assert.equal(card.pageBreak, undefined, "do not force one page per component");
+    assert.deepEqual(card.table.widths, [126, "*"]);
+    assert.equal(card.table.body[0].length, 2);
+    assert.ok(card.table.body[0][0].stack.length > 0);
+    const details = JSON.stringify(card.table.body[0][1]);
+    assert.match(details, /Komputer SPV/);
+    assert.match(details, /No\. registrasi/);
+    assert.match(details, /INV-2026-01/);
+    assert.match(details, /Kerusakan/);
+    assert.match(details, /Komputer lambat/);
+    assert.match(details, /Lokasi \/ PIC/);
+    assert.match(details, /Rekomendasi/);
+    assert.match(details, /Uraian/);
+    assert.match(details, /Keterangan/);
+  }
+  assert.match(JSON.stringify(cards[0]), /Pilih sesuai kebutuhan pekerjaan/);
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("keeps large attachment sets bounded and oversized detail text breakable", () => {
+  const items = canonical(8);
+  items[1].details[0].notes = "Catatan lengkap. ".repeat(220) + "AKHIR CATATAN";
+  const data = normalizeRecommendationDocumentData({}, { items });
+  const definition = buildRecommendationDocumentDefinition(data, buildRecommendationPagePlan(items));
+  const section = definition.content.find(node => node.id === "recommendation-attachments");
+  const cards = section.stack.filter(node => node.id?.startsWith("recommendation-attachment-"));
+  assert.equal(cards.length, 5, "two photos maximum per left column; all ten photos survive");
+  assert.match(JSON.stringify(section), /AKHIR CATATAN/);
+  assert.match(JSON.stringify(section), /LANJUTAN/);
+  assert.ok(cards.some(card => card.unbreakable === false));
+});
+
+test("renders document-only attachments without inventing an image or dropping their filename", async () => {
+  const items = canonicalMultiDetail();
+  items[0].details = [{ ...items[0].details[0], attachments: [{ id: "specification", name: "Spesifikasi lengkap.pdf", url: "fixtures/spec.pdf", isImage: false }] }];
+  const data = normalizeRecommendationDocumentData({}, { items });
+  const definition = buildRecommendationDocumentDefinition(data, buildRecommendationPagePlan(items));
+  const section = definition.content.find(node => node.id === "recommendation-attachments");
+  assert.match(JSON.stringify(section), /Dokumen pendukung/);
+  assert.match(JSON.stringify(section), /Spesifikasi lengkap.pdf/);
+  const buffer = await renderRecommendationPdf(data, { downloadImage: () => { throw new Error("No image expected"); } });
+  assert.equal(buffer.subarray(0, 5).toString(), "%PDF-");
+});
+
 test("moves oversized parent metadata and general notes into complete flowing detail sections without losing text", () => {
   const item = complexComputer();
   item.applicantNotes = "Kerusakan awal lengkap. ".repeat(80);
