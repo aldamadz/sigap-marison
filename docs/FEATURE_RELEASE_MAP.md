@@ -1,5 +1,21 @@
 # SIGAP Feature and Release Map
 
+## MRN-26 Verified Fund Replacement and Manual Receipt (2026-10-21, Issue #648)
+
+- Fund HTTP422 replacements use an explicit admin command with separate vendor-fix,
+  nonreceipt (including Postman), and production-send confirmations. No agent replay.
+- Verified candidate uses existing active file links, current final PDF, main_document
+  and supplemental attachments; only document placement changes, not business fields.
+- New generation freezes its validated body/hash at creation. Original job is intact.
+  Advisory/row locks, one child, final signatures, document timestamp and acceptance/
+  unknown-outcome gates protect against stale submits, double clicks and duplicates.
+- Internal manual-receipt RPC matches vendor number/type/amount/items against frozen
+  payload and audits the old422 plus human-provided receipt; it does not send.
+- User supplied successful Postman receipt for007 (vendor8) and explicitly approved
+  recording acceptance, not resending007. Other Fund replacements remain user actions.
+- New forward-only migration20261021100000; staging then selective production under
+  the ongoing production recovery request. Unit/Asset/NonUnit policy is unchanged.
+
 ## MRN-25 Fund Postman Preview Extension (2026-10-21, Issue #648)
 
 - Separate on-demand Postman tab for Fund: main_document contains the verified
