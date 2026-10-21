@@ -107,7 +107,7 @@ describe("Unit allocation import money", () => {
 
   it.runIf(Boolean(process.env.SIGAP_UNIT_IMPORT_WORKBOOK))("verifies the supplied workbook through the real importer and PDF table", async () => {
     const bytes = readFileSync(process.env.SIGAP_UNIT_IMPORT_WORKBOOK!);
-    const rows = await readSpreadsheetRows({ name: "supplied.xlsx", arrayBuffer: async () => bytes } as File, { currencyHeaders });
+    const rows = await readSpreadsheetRows({ name: "supplied.xlsx", arrayBuffer: async () => Uint8Array.from(bytes).buffer } as File, { currencyHeaders });
     const units = rows.slice(1).filter(row => row[2]).map(row => ({
       value: row[2], label: row[2], unit_type: "3053",
       allocation_detail: { struktur_atas: row[4], struktur_bawah: row[5] },
