@@ -171,6 +171,20 @@ beforeEach(() => {
 afterEach(() => teardownTestHarness());
 
 describe("recommendation registration validation feedback", () => {
+  it("opens confirmation for a saved parent without photo when its component has a photo", async () => {
+    const saved = structuredClone(draft);
+    const parent = saved.payload.formData.form_input_data.recommendation_multi_detail.items[1];
+    parent.details.push({ ...parent.details[0], id: "detail-processor", order: 1, name: "Processor",
+      attachments: [{ id: "photo-processor", order: 0, storage_path: "drafts/processor.png" }] } as never);
+    serviceMock.getRegistrationDraft.mockResolvedValue(saved);
+    await mountFormWithUsageAndSearchParams(recommendationUsage, { draft: saved.id });
+    await screen.findByText(saved.no_surat);
+    const submitButton = await screen.findByRole("button", { name: "Konfirmasi Pendaftaran" }, { timeout: 5000 });
+    await act(async () => fireEvent.click(submitButton));
+    expect(await screen.findByRole("dialog", { name: /Periksa sebelum didaftarkan/i })).toBeInTheDocument();
+    expect(screen.getByText("Processor")).toBeInTheDocument();
+  }, 15000);
+
   it("identifies the incomplete recommended item and detail", async () => {
     await mountFormWithUsageAndSearchParams(recommendationUsage, { draft: draft.id });
     await screen.findByText(draft.no_surat);

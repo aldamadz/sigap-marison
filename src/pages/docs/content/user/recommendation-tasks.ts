@@ -62,7 +62,7 @@ export const recommendationTasksDocs: DocsEntry = {
           ["Lokasi/PIC", "Diambil dari pilihan user agar barang mudah ditelusuri."],
           ["Kerusakan", "Opsional, dipakai untuk menjelaskan masalah awal barang."],
           ["Hasil rekomendasi", "Pilih Service, Ganti Komponen, Beli Baru, atau Tidak Direkomendasikan sesuai hasil pemeriksaan per item."],
-          ["Lampiran gambar", "Wajib untuk Service, Ganti Komponen, dan Beli Baru. Untuk Tidak Direkomendasikan, alasan wajib dan gambar opsional."],
+          ["Lampiran gambar", "Foto setiap komponen wajib. Foto baris induk yang namanya sama dengan item permohonan opsional jika ada rincian komponen lain. Tanpa komponen, foto tetap wajib. Untuk Tidak Direkomendasikan, alasan wajib dan gambar opsional."],
           ["Link referensi", "Opsional dan tampil di UI/email sebagai pendukung keputusan."],
         ],
       },
