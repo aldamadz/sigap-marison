@@ -219,6 +219,7 @@ export function MarisonOutboundQueuePanel() {
   const [replacementPreflightState, setReplacementPreflightState] = useState<ReplacementPreflightState>("idle");
   const [replacementPreflightData, setReplacementPreflightData] = useState<ReplacementPreflight | null>(null);
   const [marisonFixConfirmed, setMarisonFixConfirmed] = useState(false);
+  const [fundNotReceived, setFundNotReceived] = useState(false);
   const replacementPreflightSeq = useRef(0);
 
   const dispatches = useQuery({
@@ -254,6 +255,9 @@ export function MarisonOutboundQueuePanel() {
   const replacementMutation = useMutation({
     mutationFn: async () => {
       if (!replacement || !replacementReason.trim()) throw new Error("Alasan pengiriman pengganti wajib diisi.");
+      if (replacement.kind === "fund") return marisonIntegrationService.createReplacement(replacement.id,
+        replacementReason.trim(), replacement.environment === "production" && productionReplacementConfirmed,
+        { confirmNotReceived: fundNotReceived, confirmVendorFixed: marisonFixConfirmed });
       return replacement.environment === "production"
         ? marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim(), productionReplacementConfirmed)
         : marisonIntegrationService.createReplacement(replacement.id, replacementReason.trim());
@@ -319,6 +323,7 @@ export function MarisonOutboundQueuePanel() {
     setProductionReplacementConfirmed(false);
     setReplacementReason("");
     setMarisonFixConfirmed(false);
+    setFundNotReceived(false);
     setReplacementPreflightState("checking");
     setReplacementPreflightData(null);
     const seq = ++replacementPreflightSeq.current;
@@ -361,6 +366,7 @@ export function MarisonOutboundQueuePanel() {
     && replacementPreflightData?.eligible === true
     && replacementReason.trim().length >= (replacement?.environment === "production" ? 5 : 1)
     && (replacement?.environment !== "production" || productionReplacementConfirmed)
+    && (replacement?.kind !== "fund" || (fundNotReceived && marisonFixConfirmed))
     && !replacementMutation.isPending
     && (replacementPreflightData.sigapChanged || marisonFixConfirmed);
 
@@ -706,10 +712,14 @@ export function MarisonOutboundQueuePanel() {
                 maxLength={2000}
                 disabled={replacementMutation.isPending}
               />
-              {replacementPreflightState === "ready" && replacementPreflightData && !replacementPreflightData.sigapChanged && (
+              {replacement?.kind === "fund" && <label className="flex items-start gap-3 rounded-md border border-border p-3 text-sm leading-5">
+                <Checkbox checked={fundNotReceived} onCheckedChange={checked => setFundNotReceived(checked === true)} />
+                <span>Saya sudah memastikan pengajuan ini belum diterima di Marison, termasuk melalui Postman atau pengiriman manual.</span>
+              </label>}
+              {replacementPreflightState === "ready" && replacementPreflightData && (!replacementPreflightData.sigapChanged || replacement?.kind === "fund") && (
                 <label className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm leading-5">
                   <Checkbox checked={marisonFixConfirmed} onCheckedChange={(checked) => setMarisonFixConfirmed(checked === true)} />
-                  <span>Saya sudah memperbaiki data referensi di sistem Marison dan siap membuat pengiriman pengganti.</span>
+                  <span>{replacement?.kind === "fund" ? "Digivasi sudah mengonfirmasi perbaikan kendala sebelumnya; payload Dana siap dikirim kembali." : "Saya sudah memperbaiki data referensi di sistem Marison dan siap membuat pengiriman pengganti."}</span>
                 </label>
               )}
               {replacementMutation.isError && (
@@ -720,7 +730,7 @@ export function MarisonOutboundQueuePanel() {
               {replacement.environment === "production" && (
                 <label className="flex items-start gap-3 rounded-md border border-border p-3 text-sm leading-5">
                   <Checkbox checked={productionReplacementConfirmed} onCheckedChange={(checked) => setProductionReplacementConfirmed(checked === true)} />
-                  <span>Saya mengonfirmasi pengiriman pengganti SPK Unit nyata ke Marison production. Pengiriman lama tetap tersimpan.</span>
+                  <span>Saya mengonfirmasi pengiriman pengganti {replacement.kind === "fund" ? "Dana" : "SPK Unit"} nyata ke Marison production. Pengiriman lama tetap tersimpan.</span>
                 </label>
               )}
             </div>

@@ -4040,10 +4040,13 @@ const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored"
     throw Object.assign(new Error("Payload untuk Postman hanya tersedia untuk Dana dengan payload beku yang lengkap."), { status: 409 });
   }
   const { data: surat, error: suratError } = await supabase.from("surat_registrasi")
-    .select("id, status, pdf_path, surat_signatures(step_order,is_signed,signed_at,pdf_path_snap), surat_attachments(file_url)")
+    .select("id, status, updated_at, pdf_path, surat_signatures(step_order,is_signed,signed_at,pdf_path_snap), surat_attachments(file_url)")
     .eq("id", job.surat_id).maybeSingle();
   if (suratError || !surat || !["DONE", "SELESAI", "COMPLETED"].includes(String(surat.status || "").toUpperCase())) {
     throw Object.assign(new Error("Dokumen Dana final tidak tersedia untuk preview Postman."), { status: 409 });
+  }
+  if (!surat.surat_signatures?.length || surat.surat_signatures.some(value => value.is_signed !== true || !value.signed_at)) {
+    throw Object.assign(new Error("Seluruh penandatangan Dana belum selesai."), { status: 409 });
   }
   const links = fundPostmanLinks(stored.payload, process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "");
   const { data: capabilities, error: tokenError } = await supabase.from("file_view_tokens")
@@ -4053,7 +4056,7 @@ const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored"
   const candidate = previewFundForPostman({ payload: stored.payload, suratId: surat.id,
     finalPdf: resolveFinalMarisonPdfPath(surat), currentAttachments: surat.surat_attachments || [],
     links, capabilities: capabilities || [], parseRef: parseStorageRef });
-  return { ...stored, ...candidate, source: "postman", sourcePayloadHash: stored.payloadHash };
+  return { ...stored, ...candidate, source: "postman", sourcePayloadHash: stored.payloadHash, sourceSuratUpdatedAt: surat.updated_at };
 };
 
 const preflightMarisonOutboundRecovery = async (job, surat) => {
@@ -4155,17 +4158,24 @@ const createMarisonOutboundReplacement = async (req, dispatchId) => {
   if (production && (payload?.confirmProductionSend !== true || reason.length < 5)) {
     throw Object.assign(new Error("Konfirmasi pengiriman production dan alasan yang jelas wajib diisi."), { status: 403 });
   }
-  const preflight = await preflightMarisonOutboundReplacement(req, dispatchId, { includeVerifiedUnitReceipt: production });
+  const preflight = await preflightMarisonOutboundReplacement(req, dispatchId, { includeVerifiedUnitReceipt: true });
   if (!preflight.eligible) {
     const err = new Error(preflight.localValidationIssues || "Job tidak memenuhi syarat pengiriman pengganti.");
     err.status = 409;
     throw err;
   }
-  const { data, error } = await supabase.rpc(production ? "create_verified_unit_outbound_replacement" : "create_marison_outbound_replacement", {
+  if (preflight.verifiedFundCandidateBody && (payload?.confirmNotReceived !== true || payload?.confirmVendorFixed !== true)) {
+    throw Object.assign(new Error("Pastikan surat belum diterima Marison, termasuk melalui Postman, dan perbaikan vendor sudah dikonfirmasi."), { status: 400 });
+  }
+  const { data, error } = await supabase.rpc(preflight.verifiedFundCandidateBody ? "create_verified_fund_outbound_replacement" : production ? "create_verified_unit_outbound_replacement" : "create_marison_outbound_replacement", {
     p_dispatch_id: dispatchId,
     p_actor_id: actor.id,
     p_reason: reason,
-    ...(production ? { p_expected_payload_hash: preflight.failedPayloadHash,
+    ...(preflight.verifiedFundCandidateBody ? {
+      p_expected_payload_hash: preflight.failedPayloadHash, p_candidate_body: preflight.verifiedFundCandidateBody,
+      p_surat_updated_at: preflight.suratUpdatedAt, p_confirm_not_received: true,
+      p_confirm_vendor_fixed: true, p_confirm_production: production && payload?.confirmProductionSend === true,
+    } : production ? { p_expected_payload_hash: preflight.failedPayloadHash,
       p_reference_receipt: preflight.verifiedUnitReceipt, p_confirm_production: true } : {}),
   });
   if (error) {
@@ -4219,6 +4229,35 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId, { includeVer
   const diagnosis = diagnoseVendorRejection(vendorResponse);
 
   // Diagnosis is read-only; it must not imply that a production replay is supported.
+  if (job.kind === "fund") {
+    const base = { vendorDiagnosis: diagnosis, payloadBodyInvariantViolated: false, safeContext: null,
+      changedAreas: null, sigapChanged: false };
+    const { data: history, error: historyError } = await supabase.from("marison_outbound_dispatches")
+      .select("id,status,external_reference,generation,replacement_of_dispatch_id")
+      .eq("surat_id", job.surat_id).eq("environment", marisonDeploymentEnvironment);
+    if (historyError) throw Object.assign(new Error("Riwayat pengiriman Dana gagal diperiksa."), { status: 500 });
+    if (!history?.length || history.some(value => value.status === "succeeded" || value.status === "outcome_unknown" || value.external_reference)) {
+      return { ...base, eligible: false, reasonCode: "FUND_RECEIPT_OR_UNKNOWN",
+        localValidationIssues: "Surat sudah tercatat diterima atau hasil pengirimannya belum pasti. Jangan kirim ulang, termasuk jika sudah diterima melalui Postman." };
+    }
+    const current = history.find(value => value.id === job.id);
+    if (!current || history.some(value => value.id !== job.id && (value.generation > current.generation || ["pending", "processing", "failed_retryable"].includes(value.status)))) {
+      return { ...base, eligible: false, reasonCode: "FUND_NEWER_OR_ACTIVE",
+        localValidationIssues: "Sudah ada generasi baru atau pengiriman aktif. Muat ulang antrean." };
+    }
+    try {
+      if (!job.post_started_at || !job.response || job.error_code !== "marison_http_422") throw new Error("Bukti penolakan HTTP 422 tidak lengkap.");
+      const candidate = await getMarisonOutboundPayloadPreview(req, dispatchId, "postman");
+      return { ...base, eligible: true, reasonCode: null, localValidationIssues: null,
+        changedAreas: candidate.changes, sigapChanged: true,
+        noSigapChangesNote: "Payload Dana memakai main_document dan lampiran pendukung terpisah. Sebelum mengirim generasi baru, pastikan Marison belum menerima surat ini, termasuk melalui Postman.",
+        ...(includeVerifiedUnitReceipt ? { verifiedFundCandidateBody: JSON.stringify(candidate.payload),
+          failedPayloadHash: candidate.sourcePayloadHash, suratUpdatedAt: candidate.sourceSuratUpdatedAt } : {}) };
+    } catch (error) {
+      return { ...base, eligible: false, reasonCode: "FUND_PAYLOAD_NOT_READY",
+        localValidationIssues: error instanceof Error ? error.message : "Payload Dana belum siap." };
+    }
+  }
   if (marisonDeploymentEnvironment === "production" && job.kind !== "unit") {
     return {
       eligible: false,

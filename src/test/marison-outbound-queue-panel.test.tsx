@@ -111,6 +111,22 @@ describe("Marison outbound recovery dialog", () => {
 });
 
 describe("Marison outbound replacement preflight", () => {
+  it("requires explicit Fund nonreceipt, vendor fix and production confirmation before generation2", async () => {
+    environment.current = "production";
+    vi.mocked(marisonIntegrationService.listDispatches).mockResolvedValue({ environment: "production", page: 1, pageSize: 20, total: 1, items: [{ ...row422, kind: "fund", environment: "production" }] });
+    vi.mocked(marisonIntegrationService.preflightReplacement).mockResolvedValue(eligiblePreflight);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /buat pengiriman pengganti/i }));
+    const dialog=within(await screen.findByRole("dialog"));
+    fireEvent.change(await dialog.findByLabelText("Alasan dan perbaikan yang dilakukan"), {target:{value:"Vendor sudah memperbaiki marketing_cost"}});
+    const submit=dialog.getByRole("button",{name:"Buat pengiriman pengganti"});
+    expect(submit).toBeDisabled();
+    fireEvent.click(dialog.getByRole("checkbox",{name:/belum diterima di Marison, termasuk melalui Postman/i}));expect(submit).toBeDisabled();
+    fireEvent.click(dialog.getByRole("checkbox",{name:/Digivasi sudah mengonfirmasi perbaikan/i}));expect(submit).toBeDisabled();
+    fireEvent.click(dialog.getByRole("checkbox",{name:/pengiriman pengganti Dana nyata/i}));expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(()=>expect(marisonIntegrationService.createReplacement).toHaveBeenCalledWith("job-422","Vendor sudah memperbaiki marketing_cost",true,{confirmNotReceived:true,confirmVendorFixed:true}));
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     environment.current = "staging";

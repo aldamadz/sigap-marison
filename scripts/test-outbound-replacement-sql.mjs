@@ -6,6 +6,16 @@ const replacementMigration = readFileSync("supabase/migrations/20260803120000_ma
 const recoveryGuardMigration = readFileSync("supabase/migrations/20260924170000_guard_pre_post_outbound_recovery.sql", "utf8");
 const verifiedUnitMigration = readFileSync("supabase/migrations/20261014100000_verified_unit_outbound_replacement.sql", "utf8");
 const verifiedUnitAssertions = readFileSync("supabase/tests/verified_unit_replacement.integration.sql", "utf8");
+const fund = process.argv.includes("--fund");
+const fundSetup = fund ? `
+alter table public.surat_registrasi add column updated_at timestamptz default clock_timestamp();
+alter table public.marison_outbound_dispatches add column payload_resolution_sources jsonb default '{}';
+alter table public.marison_outbound_dispatches drop constraint marison_outbound_dispatches_kind_check;
+alter table public.marison_outbound_dispatches add constraint marison_outbound_dispatches_kind_check check(kind in ('unit','non_unit','asset','fund'));
+alter table public.marison_outbound_dispatches drop constraint marison_outbound_dispatch_endpoint_kind;
+alter table public.marison_outbound_dispatches add constraint marison_outbound_dispatch_endpoint_kind check(endpoint is null or (kind='fund' and endpoint='/fund-submissions') or (kind='unit' and endpoint='/unit-submissions'));
+` + readFileSync("supabase/migrations/20261021100000_verified_fund_outbound_replacement.sql", "utf8")
+  + readFileSync("supabase/tests/verified_fund_replacement.integration.sql", "utf8") : "";
 
 const fixtureSql = `
 create schema if not exists extensions;
@@ -197,7 +207,7 @@ try {
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   process.stdout.write(run(
     ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
-    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + verifiedUnitMigration + assertionsSql + verifiedUnitAssertions
+    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + verifiedUnitMigration + assertionsSql + verifiedUnitAssertions + fundSetup
   ));
 } finally {
   run(["rm", "-f", id]);
