@@ -1221,3 +1221,19 @@ verifikasi juga runtime, database, worker, dan smoke test.
   No selected ring or colored border competes with the tab controls. Keyboard
   focus indicators, aria-pressed state, filters, counts and reminder rules remain.
 - This follow-up targets staging only; the production dashboard is unchanged.
+
+## REC-03 Complex Recommendation PDF Layout (2026-10-21, Issue #670)
+
+- User authorized staging then selective production. Compact main-form cells
+  reference complete flowing item details when text is long; no component,
+  applicant note, examiner note or attachment is removed from the document.
+- Complex items do not add empty filler rows. Bounded main rows, note/signature
+  blocks and image rows stay together; oversized narrative flows separately.
+  Detail headings use visible dark text instead of white text without a backdrop.
+- Header totals are reconciled with actual PDF layout, including text overflow
+  and revision appendices. Simple forms retain their existing worksheet layout.
+- App and PDF worker must use the same selected image. Drain PDF jobs, preserve
+  rollback images/configuration and verify public SHA plus rendered PDFs before
+  promotion. No migration, permission, workflow, signature or outbound changes.
+- After release regenerate only the current main PDF of
+  `013/UAI/PBO.4/X/2026`; retain historical signer PDFs and immutable source data.
