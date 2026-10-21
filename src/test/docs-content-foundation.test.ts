@@ -45,8 +45,8 @@ import {
 
 describe("docs-content-foundation – compatibility facade exports", () => {
   it("exports DOCS_VERSION and DOCS_UPDATED_AT with correct values", () => {
-    expect(DOCS_VERSION).toBe("v1.26.0");
-    expect(DOCS_UPDATED_AT).toBe("8 September 2026");
+    expect(DOCS_VERSION).toBe("v1.27.0");
+    expect(DOCS_UPDATED_AT).toBe("21 Oktober 2026");
   });
 
   it("exports DOCS_OVERVIEW_SLUG as 'overview'", () => {
@@ -93,18 +93,16 @@ describe("docs-content-foundation – compatibility facade exports", () => {
 });
 
 describe("docs-content-foundation – DOCS_VERSION matches latest changelog", () => {
-  it("latest changelog is combined D1-D2 closure", () => {
+  it("latest changelog covers the outbound payload viewer and preserves previous entries", () => {
     expect(DOCS_CHANGELOG[0]).toStrictEqual({
-      version: "v1.26.0",
-      date: "8 September 2026",
+      version: "v1.27.0",
+      date: "21 Oktober 2026",
       changes: [
-        "Menata dokumentasi Pengguna, Admin, dan Bantuan menjadi modul per topik agar pembaruan tidak lagi bergantung pada satu file besar.",
-        "Memisahkan registry topik dan penyusun bagian dokumentasi agar navigasi, pencarian, serta pengembangan dokumentasi lebih mudah dipelihara.",
-        "Mempertahankan URL, urutan topik, ikon, isi, dan perilaku pencarian dokumentasi selama penataan struktur.",
+        "Menambahkan panduan Lihat payload pada Antrean Outbound: JSON tersimpan per generasi, endpoint, hash, dan salin JSON tanpa mengirim ulang.",
       ],
     });
-    expect(DOCS_CHANGELOG[1].version).toBe("v1.25.0");
-    expect(DOCS_CHANGELOG[1].date).toBe("18 Agustus 2026");
+    expect(DOCS_CHANGELOG[1].version).toBe("v1.26.0");
+    expect(DOCS_CHANGELOG[1].date).toBe("8 September 2026");
   });
 
   it("no duplicate changelog versions", () => {
@@ -178,8 +176,8 @@ describe("docs-content-foundation – boundary: five content modules exist", () 
   });
 
   it("metadata module: DOCS_VERSION and DOCS_UPDATED_AT from content module", () => {
-    expect(CONTENT_DOCS_VERSION).toBe("v1.26.0");
-    expect(CONTENT_DOCS_UPDATED_AT).toBe("8 September 2026");
+    expect(CONTENT_DOCS_VERSION).toBe("v1.27.0");
+    expect(CONTENT_DOCS_UPDATED_AT).toBe("21 Oktober 2026");
   });
 
   it("navigation module: getDocsVersionPath from content module", () => {

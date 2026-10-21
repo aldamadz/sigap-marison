@@ -19,7 +19,7 @@ export function MarisonPayloadDialog({ row, onClose }: { row: MarisonDispatchRow
     catch { toast.error("Gagal menyalin payload. Pilih teks JSON untuk menyalinnya."); }
   };
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogContent className="max-w-4xl min-w-0">
+    <DialogContent className="flex max-w-4xl min-w-0 flex-col overflow-hidden">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2"><Code2 className="h-5 w-5 shrink-0" />Payload pengiriman</DialogTitle>
         <DialogDescription className="break-words">{row.noSurat} · Generasi {row.generation}</DialogDescription>
@@ -36,10 +36,10 @@ export function MarisonPayloadDialog({ row, onClose }: { row: MarisonDispatchRow
           : <>
             <p className="text-sm text-muted-foreground">{data?.source === "frozen" ? (data.postStartedAt ? "Payload tersimpan saat percobaan pengiriman. Tidak menandakan pengajuan diterima Marison." : "Payload tersimpan; POST ke Marison belum dimulai.") : "Snapshot tersimpan, bukan bukti payload yang pernah dikirim."} Referensi file internal dapat berbeda dari tautan yang dibentuk saat pengiriman.</p>
             {data?.redacted && <p className="text-sm text-amber-700 dark:text-amber-300">Field credential disembunyikan. Salinan ini bukan payload lengkap.</p>}
-            <pre tabIndex={0} aria-label="JSON payload" className="max-h-[50dvh] min-h-40 min-w-0 overflow-auto rounded-md border border-border bg-muted/40 p-4 font-mono text-xs leading-5">{json}</pre>
+            <pre tabIndex={0} aria-label="JSON payload" className="max-h-[50dvh] min-h-0 min-w-0 shrink overflow-auto rounded-md border border-border bg-muted/40 p-4 font-mono text-xs leading-5">{json}</pre>
             {data?.payloadHash && <p className="break-all font-mono text-xs text-muted-foreground">SHA-256 tersimpan: {data.payloadHash}</p>}
           </>}
-      <DialogFooter>
+      <DialogFooter className="shrink-0">
         <Button variant="outline" onClick={onClose}>Tutup</Button>
         <Button disabled={!json || query.isError || query.isFetching} onClick={() => void copy()}><Copy className="mr-2 h-4 w-4" />Salin JSON</Button>
       </DialogFooter>
