@@ -1398,7 +1398,9 @@ const handleApprove = async (item: any) => {
       return;
     }
     try {
-      const rows = await readSpreadsheetRows(file);
+      const rows = await readSpreadsheetRows(file, {
+        currencyHeaders: ["Struktur Atas", "Atas", "Struktur Bawah", "Bawah"],
+      });
       const headerIndex = rows.findIndex((row) => row.some((cell) => normalizeImportHeader(cell) === "kavling"));
       if (headerIndex < 0) throw new Error("Header Kavling tidak ditemukan.");
 

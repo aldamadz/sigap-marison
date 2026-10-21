@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SUR-36 Unit Addendum Import Amounts (2026-10-21, Issue #700)
+
+- Candidate `codex/unit-addendum-import-20261021` from main, target staging.
+- Unit XLSX import rounds numeric values and cached numeric formula results only
+  in the Struktur Atas/Bawah columns to whole rupiah before strict parsing.
+  Excel's hidden fractions must not silently clear an otherwise visible amount.
+- Reject invalid nonempty money and formulas without cached results with a cell
+  address before committing any imported allocation state. Keep blanks and zero
+  distinct. Other columns, the default employee reader, and the shared strict
+  currency parser retain their previous behavior.
+- Write/reopen/import/PDF-table regressions cover all six reported amounts and
+  totals. No schema, production data, historical attachment, approval or vendor
+  outbound change; production release requires explicit authorization.
+
 ## MRN-26 Verified Fund Replacement and Manual Receipt (2026-10-21, Issue #648)
 
 - Fund HTTP422 replacements use an explicit admin command with separate vendor-fix,
