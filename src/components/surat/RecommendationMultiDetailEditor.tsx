@@ -31,6 +31,7 @@ import {
   createRecommendationClientId,
   recommendationActionDescription,
   recommendationMultiDetailErrors,
+  isRecommendationParentOverview,
 } from "@/components/surat/recommendation-multi-detail";
 
 type DirectoryRecord = {
@@ -513,7 +514,9 @@ function RecommendationMultiDetailEditorContent({
                     </div>
 
                     <div className="space-y-3">
-                      <Label className="text-xs font-semibold">Lampiran gambar *</Label>
+                      <Label className="text-xs font-semibold">
+                        {isRecommendationParentOverview(activeParent, detail) ? "Lampiran gambar induk (opsional)" : "Lampiran gambar *"}
+                      </Label>
                       <div
                         onPaste={(event) => {
                           let files = Array.from(event.clipboardData.files || []).filter((file) => file.type.startsWith("image/"));

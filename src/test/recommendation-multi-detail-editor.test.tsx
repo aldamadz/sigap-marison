@@ -103,6 +103,18 @@ function TwoItemHarness() {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("RecommendationMultiDetailEditor", () => {
+  it("marks only the parent overview photo optional while component photos stay required", () => {
+    const saved = structuredClone(model);
+    saved.items[0].details.push({ ...saved.items[0].details[0], id: "component", order: 1, name: "Processor" });
+    const view = render(<Harness initialModel={saved} />);
+    expect(screen.getByText("Lampiran gambar induk (opsional)")).toBeInTheDocument();
+    expect(screen.getAllByText("Lampiran gambar *")).toHaveLength(1);
+    view.unmount();
+    render(<Harness />);
+    expect(screen.queryByText("Lampiran gambar induk (opsional)")).not.toBeInTheDocument();
+    expect(screen.getByText("Lampiran gambar *")).toBeInTheDocument();
+  });
+
   it("uses the configured same-origin storage gateway for saved pasted-image previews without changing the model", () => {
     vi.stubEnv("VITE_LEGACY_STORAGE_ORIGINS", "https://old-storage.test");
     const saved = structuredClone(model);
