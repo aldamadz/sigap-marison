@@ -1,5 +1,14 @@
 # Fitur SIGAP
 
+## Pembaruan 21 Oktober 2026: MRN-25
+
+Admin dapat membuka Lihat payload pada setiap generasi Antrean Outbound di
+Integration. Modal memuat JSON tersimpan, endpoint, environment, dan hash serta
+Salin JSON tanpa mengirim ulang. Payload beku dipisahkan dari snapshot yang belum
+menjadi bukti pengiriman. Payload yang belum tersedia tidak dibangun otomatis.
+Endpoint hanya untuk admin aktif pada environment yang sama, tanpa cache,
+credential API, pembuatan tautan, perubahan job atau business POST.
+
 Tanggal pembaruan: 2026-07-21
 Status dokumen: living document untuk fitur fungsional dan non-fungsional.
 

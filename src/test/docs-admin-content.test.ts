@@ -92,9 +92,9 @@ describe("docs-admin-content D2B", () => {
     expect(Object.keys(ADMIN_DETAIL_SECTIONS_BY_ID)).toHaveLength(15);
   });
 
-  it("matches documentation content after issue 509 updates", () => {
+  it("matches documentation content after MRN-25 payload viewer updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "d326fe6679074675d1aa8b4386d7c1f3297542290ba59e38e48647081c230f71",
+      "e0dcf437f552db02aafb218de9f89d1d71b4f0595cc759eb3661118085f1e854",
     );
   });
 

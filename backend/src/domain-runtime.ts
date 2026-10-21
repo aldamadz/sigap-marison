@@ -30,6 +30,7 @@ import {
 import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
 import { buildMarisonDocumentBundle } from "./lib/marison-document-links.js";
 import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
+import { previewStoredMarisonPayload } from "./lib/marison-payload-preview.js";
 import {
   mapSuratRejectionRpcError,
   normalizeSuratRejectionRequest,
@@ -4016,6 +4017,22 @@ const listMarisonOutboundDispatches = async (req, url) => {
   };
 };
 
+const getMarisonOutboundPayloadPreview = async (req, dispatchId) => {
+  assertSameOrigin(req);
+  await requireAdminUser(getBearerToken(req));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dispatchId)) {
+    throw Object.assign(new Error("ID pengiriman tidak valid."), { status: 400 });
+  }
+  const { data: job, error } = await supabase.from("marison_outbound_dispatches")
+    .select("id, environment, generation, kind, endpoint, payload, payload_body, payload_hash, post_started_at")
+    .eq("id", dispatchId).eq("environment", marisonDeploymentEnvironment).maybeSingle();
+  if (error) throw Object.assign(new Error("Payload pengiriman gagal dimuat."), { status: 500 });
+  if (!job || job.environment !== marisonDeploymentEnvironment) {
+    throw Object.assign(new Error("Pengiriman tidak ditemukan pada environment ini."), { status: 404 });
+  }
+  return previewStoredMarisonPayload(job);
+};
+
 const preflightMarisonOutboundRecovery = async (job, surat) => {
   if (!isPrePostRecoveryEligible(job, marisonDeploymentEnvironment) || !surat || !["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
@@ -4912,6 +4929,11 @@ export const handleRequest = async (req, res) => {
       }
 
       const marisonReconcileMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/reconcile$/i);
+      const marisonPayloadMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/payload$/i);
+      if (req.method === "GET" && marisonPayloadMatch) {
+        res.setHeader("Cache-Control", "private, no-store");
+        return sendJson(res, 200, await getMarisonOutboundPayloadPreview(req, marisonPayloadMatch[1]));
+      }
       if (req.method === "POST" && marisonReconcileMatch) {
         const result = await reconcileMarisonOutboundDispatch(req, marisonReconcileMatch[1]);
         return sendJson(res, 200, result);

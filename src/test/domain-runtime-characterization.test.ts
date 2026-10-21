@@ -27,6 +27,7 @@ describe("domain-runtime protected route registration (no session)", () => {
     { name: "marison project preview", method: "GET", url: "/api/integrations/marison/projects/preview", expected: 401 },
     { name: "marison project sync", method: "POST", url: "/api/integrations/marison/projects/sync", expected: 401 },
     { name: "marison dispatches", method: "GET", url: "/api/integrations/marison/dispatches", expected: 401 },
+    { name: "marison payload preview", method: "GET", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/payload", expected: 401 },
     { name: "marison preflight", method: "GET", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/preflight", expected: 401 },
     { name: "marison replacement-preflight", method: "GET", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/replacement-preflight", expected: 401 },
     { name: "marison reconcile", method: "POST", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/reconcile", expected: 401 },
@@ -56,6 +57,7 @@ describe("domain-runtime wrong method rejection", () => {
   // Fastify only registers the exact methods in the route table; a wrong
   // method on a known path falls through to the notFound handler -> 404.
   const wrongMethodRoutes = [
+    { method: "POST", url: "/api/integrations/marison/dispatches/123e4567-e89b-12d3-a456-426614174000/payload", expected: 404 },
     { method: "DELETE", url: "/api/surat/inbox", expected: 404 },
     { method: "PATCH", url: "/api/integrations/marison/status", expected: 404 },
     { method: "PUT", url: "/api/attention/state", expected: 404 },
