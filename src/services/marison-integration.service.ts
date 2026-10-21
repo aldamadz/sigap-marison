@@ -294,8 +294,8 @@ export const marisonIntegrationService = {
   preflightReplacement: (dispatchId: string) => request<ReplacementPreflight>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
   getPayload: (dispatchId: string) => request<MarisonPayloadPreview>(`/api/integrations/marison/dispatches/${encodeURIComponent(dispatchId)}/payload`, { cache: "no-store" }),
   getPostmanPayload: (dispatchId: string) => request<MarisonPayloadPreview>(`/api/integrations/marison/dispatches/${encodeURIComponent(dispatchId)}/payload?view=postman`, { cache: "no-store" }),
-  createReplacement: (dispatchId: string, reason: string, confirmProductionSend = false) => request<{ replacementId: string | null; skipped?: boolean; code?: string | null }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
+  createReplacement: (dispatchId: string, reason: string, confirmProductionSend = false, fundConfirmation?: { confirmNotReceived: boolean; confirmVendorFixed: boolean }) => request<{ replacementId: string | null; skipped?: boolean; code?: string | null }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
     method: "POST",
-    body: JSON.stringify({ reason, ...(confirmProductionSend ? { confirmProductionSend: true } : {}) }),
+    body: JSON.stringify({ reason, ...(confirmProductionSend ? { confirmProductionSend: true } : {}), ...fundConfirmation }),
   }),
 };

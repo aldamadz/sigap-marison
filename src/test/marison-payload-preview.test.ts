@@ -42,7 +42,7 @@ const handler = source.slice(source.indexOf("const getMarisonOutboundPayloadPrev
 function harness(options: { denied?: boolean; originDenied?: boolean; stored?: unknown; error?: unknown; letter?: unknown; tokenError?: unknown } = {}) {
   const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.stored === undefined ? job : options.stored, error: options.error })) };
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query);
-  const letterQuery = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.letter === undefined ? { id: "letter-a", status: "DONE", pdf_path: "main.pdf" } : options.letter, error: null })) };
+  const letterQuery = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.letter === undefined ? { id: "letter-a", status: "DONE", pdf_path: "main.pdf", surat_signatures: [{ is_signed: true, signed_at: "2026-10-21T00:00:00Z" }] } : options.letter, error: null })) };
   letterQuery.select.mockReturnValue(letterQuery); letterQuery.eq.mockReturnValue(letterQuery);
   const tokens = { select: vi.fn(), in: vi.fn(async () => ({ data: [], error: options.tokenError })) };
   tokens.select.mockReturnValue(tokens);
