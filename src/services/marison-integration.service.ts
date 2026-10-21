@@ -194,6 +194,19 @@ export type MarisonDispatchRow = {
   updatedAt: string;
 };
 
+export type MarisonPayloadPreview = {
+  dispatchId: string;
+  environment: MarisonEnvironment;
+  generation: number;
+  method: "POST";
+  endpoint: string | null;
+  postStartedAt: string | null;
+  payloadHash: string | null;
+  source: "frozen" | "snapshot" | "unavailable";
+  payload: Record<string, unknown> | null;
+  redacted: boolean;
+};
+
 export type MarisonDispatchPage = {
   environment: MarisonEnvironment;
   page: number;
@@ -277,6 +290,7 @@ export const marisonIntegrationService = {
     `/api/integrations/marison/dispatches/${dispatchId}/preflight`
   ),
   preflightReplacement: (dispatchId: string) => request<ReplacementPreflight>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
+  getPayload: (dispatchId: string) => request<MarisonPayloadPreview>(`/api/integrations/marison/dispatches/${encodeURIComponent(dispatchId)}/payload`, { cache: "no-store" }),
   createReplacement: (dispatchId: string, reason: string, confirmProductionSend = false) => request<{ replacementId: string | null; skipped?: boolean; code?: string | null }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
     method: "POST",
     body: JSON.stringify({ reason, ...(confirmProductionSend ? { confirmProductionSend: true } : {}) }),

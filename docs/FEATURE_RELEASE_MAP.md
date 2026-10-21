@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## MRN-25 Outbound Payload Viewer (2026-10-21, Issue #688)
+
+- Admin-only, on-demand stored JSON viewer per dispatch/generation in Integration.
+- Separate from replacement/recovery: reading/copying never sends or rebuilds a
+  payload, issues a file token, changes a job, or calls a vendor endpoint.
+- Frozen body hash is verified; unsent snapshots and unavailable payload are
+  explicitly labelled. Credential fields are masked; business fields remain.
+- Same-origin, active admin, current environment, no-store response and zero
+  client cache retention. No migration or worker rollout.
+- User authorized staging then selective production; implementation in progress.
+
 ## SUR-34 Unit Examiner External Land Area (2026-10-19, Issue #656)
 
 - Staging-only candidate: add a disabled LT (Luas Tanah), in square metres, beside
