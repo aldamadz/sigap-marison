@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { normalizeProductionSerial } from "@/lib/production-code";
+import { parseCurrencyInput } from "@/lib/rupiah";
 
 type ExcelRow = Record<string, string | number | boolean | null | undefined>;
 type UnitAllocationTemplateRow = {
@@ -249,13 +250,58 @@ export const exportUnitAllocationTemplateToXlsx = async (
   saveAs(new Blob([buffer]), fileName);
 };
 
-export const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
+const normalizeSpreadsheetHeader = (value: unknown) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+const spreadsheetValue = (value: unknown): unknown => {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value && typeof value === "object" && "text" in value) return value.text ?? "";
+  if (value && typeof value === "object" && "result" in value) return value.result ?? "";
+  return value;
+};
+
+const spreadsheetAddress = (row: number, column: number) => {
+  let letters = "";
+  for (let index = column + 1; index > 0; index = Math.floor((index - 1) / 26)) {
+    letters = String.fromCharCode(65 + (index - 1) % 26) + letters;
+  }
+  return `${letters}${row + 1}`;
+};
+
+const normalizeSpreadsheetRows = (rows: unknown[][], currencyHeaders: readonly string[]) => {
+  const aliases = new Set(currencyHeaders.map(normalizeSpreadsheetHeader));
+  const headerIndex = rows.findIndex(row => row.some(value => aliases.has(normalizeSpreadsheetHeader(spreadsheetValue(value)))));
+  const headers = rows[headerIndex] || [];
+  return rows.map((row, rowIndex) => (currencyHeaders.length ? Array.from(row) : row).map((rawValue, columnIndex) => {
+    const value = spreadsheetValue(rawValue);
+    const header = String(spreadsheetValue(headers[columnIndex]) ?? "");
+    if (headerIndex >= 0 && rowIndex > headerIndex && aliases.has(normalizeSpreadsheetHeader(header))) {
+      const isFormula = rawValue && typeof rawValue === "object" && ("formula" in rawValue || "sharedFormula" in rawValue);
+      const missingResult = isFormula && (!("result" in rawValue) || rawValue.result === undefined || rawValue.result === null || rawValue.result === "");
+      if (!missingResult && (value === null || value === undefined || String(value).trim() === "")) return "";
+      // Excel formulas retain fractions even when the displayed amount has no decimals.
+      const amount = typeof value === "number" && Number.isFinite(value) && value >= 0
+        ? parseCurrencyInput(Math.round(value))
+        : parseCurrencyInput(value);
+      if (missingResult || amount === null) {
+        throw new Error(`Sel ${spreadsheetAddress(rowIndex, columnIndex)} (${header}): nominal tidak valid. Isi angka rupiah; jika memakai rumus, hitung ulang dan simpan file di Excel terlebih dahulu.`);
+      }
+      return String(amount);
+    }
+    return String(value ?? "");
+  }));
+};
+
+export const readSpreadsheetRows = async (
+  file: File,
+  options: { currencyHeaders?: readonly string[] } = {},
+): Promise<string[][]> => {
   if (/\.csv$/i.test(file.name)) {
     const text = await file.text();
-    return text
+    const rows = text
       .split(/\r?\n/)
       .filter((line) => line.trim())
       .map(parseCsvLine);
+    return normalizeSpreadsheetRows(rows, options.currencyHeaders || []);
   }
 
   const workbook = new ExcelJS.Workbook();
@@ -263,17 +309,18 @@ export const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
   const worksheet = workbook.worksheets[0];
   if (!worksheet) return [];
 
-  const rows: string[][] = [];
+  const rows: unknown[][] = [];
   worksheet.eachRow({ includeEmpty: true }, (row) => {
     const values = Array.isArray(row.values) ? row.values.slice(1) : [];
-    rows.push(values.map((value) => {
-      if (value instanceof Date) return value.toISOString().slice(0, 10);
-      if (value && typeof value === "object" && "text" in value) return String((value as { text?: string }).text || "");
-      if (value && typeof value === "object" && "result" in value) return String((value as { result?: unknown }).result ?? "");
-      return String(value ?? "");
-    }));
+    rows.push(options.currencyHeaders?.length ? values.map((value, index) => {
+      if (value && typeof value === "object" && ("formula" in value || "sharedFormula" in value)) {
+        // ExcelJS's value object omits a zero formula result; the getter retains it.
+        return { ...value, result: row.getCell(index + 1).result };
+      }
+      return value;
+    }) : values);
   });
-  return rows;
+  return normalizeSpreadsheetRows(rows, options.currencyHeaders || []);
 };
 
 export const writeCsvFile = (rows: ExcelRow[], fileName: string) => {
