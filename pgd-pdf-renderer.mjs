@@ -206,9 +206,9 @@ export const normalizePgdDocumentData = (source = {}, options = {}) => {
       };
     }),
     notes: [
-      isFund ? `Jenis dana: ${input.fund_type === "production_cost" ? "Biaya Produksi" : "Biaya Operasional"}` : "",
-      isFund ? `Total pengajuan: ${formatMoneyId(input.fund_amount) || "Rp 0"}` : "",
       text(input.catatan || source.notes, ""),
+      isFund ? `Jenis dana: ${input.fund_type === "production_cost" ? "Biaya Produksi" : input.fund_type === "marketing_cost" ? "Biaya Marketing" : "Biaya Operasional"}` : "",
+      isFund ? `Total pengajuan: ${formatMoneyId(input.fund_amount) || "Rp 0"}` : "",
     ].filter(Boolean).join("\n"),
     signatures,
   };

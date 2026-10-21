@@ -3,6 +3,7 @@ import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import { Keu1SubmissionEditor } from "@/components/surat/Keu1SubmissionEditor";
 import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RAB_NOT_REQUIRED_KEY, REQUESTER_HAS_RAB_KEY, usesRequesterRabChoice } from "@/lib/fund-rab";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -134,11 +135,21 @@ export const fundModule: UsageModule = {
           value={ctx.input.items}
           onChange={(items) => ctx.setInputValue("items", items)}
         />
+        <div className="mt-5 space-y-2">
+          <Label htmlFor="fund-requester-notes">Catatan pemohon (opsional)</Label>
+          <Textarea
+            id="fund-requester-notes"
+            rows={4}
+            value={typeof ctx.input.catatan === "string" ? ctx.input.catatan : ""}
+            onChange={(event) => ctx.setInputValue("catatan", event.target.value)}
+          />
+        </div>
       </>
     );
   },
   hiddenFieldKeys(ctx) {
     return ["items", "fund_amount", "fund_type", "fund_without_project", "free_cash_sisa_bulan_lalu", REQUESTER_HAS_RAB_KEY, RAB_NOT_REQUIRED_KEY,
+      ...(!isKeu1Usage(ctx) && !isKeu10Form(ctx.usage.master_forms) ? ["catatan"] : []),
       ...(isKeu10Form(ctx.usage.master_forms) ? ["total", "grand_total", "keu10_grand_total", "keu1_grand_total", "keu10_purpose_code"] : []),
     ];
   },
@@ -205,6 +216,9 @@ export const fundModule: UsageModule = {
     return [
       ...(usesRequesterRabChoice(ctx.usage, ctx.category) ? [{
         key: RAB_NOT_REQUIRED_KEY, label: "Kebutuhan RAB", value: ctx.input[RAB_NOT_REQUIRED_KEY] === true ? "Tidak memerlukan RAB" : "RAB dapat dilampirkan (opsional)",
+      }] : []),
+      ...(typeof ctx.input.catatan === "string" && ctx.input.catatan.trim() ? [{
+        key: "catatan", label: "Catatan pemohon", value: ctx.input.catatan,
       }] : []),
       ...(usesFundSubmissionType(ctx.usage.master_forms, ctx.category) ? [{
         key: "fund_type",

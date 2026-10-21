@@ -144,6 +144,7 @@ test("renders the latest Fund user inputs in the native document", () => {
       request_category: "non_asset",
       fund_type: "production_cost",
       fund_amount: 1500000,
+      catatan: "Pemadatan jalan\nMohon jadwalkan minggu ini.",
       items: [{ nama_barang: "Semen", jumlah: 10, satuan: "sak", nominal: 1500000 }],
     },
   });
@@ -151,6 +152,18 @@ test("renders the latest Fund user inputs in the native document", () => {
   assert.match(data.items[0].note, /Nominal: Rp 1\.500\.000/);
   assert.match(data.notes, /Jenis dana: Biaya Produksi/);
   assert.match(data.notes, /Total pengajuan: Rp 1\.500\.000/);
+  assert.equal(data.notes, "Pemadatan jalan\nMohon jadwalkan minggu ini.\nJenis dana: Biaya Produksi\nTotal pengajuan: Rp 1.500.000");
+});
+
+test("keeps requester notes optional and labels all Fund types correctly", () => {
+  for (const [fund_type, label] of [["operational", "Biaya Operasional"], ["production_cost", "Biaya Produksi"], ["marketing_cost", "Biaya Marketing"]]) {
+    const input = { request_category: "non_asset", fund_type, fund_amount: 349000 };
+    assert.equal(normalizePgdDocumentData({ form_input_data: input }).notes,
+      `Jenis dana: ${label}\nTotal pengajuan: Rp 349.000`);
+    assert.equal(normalizePgdDocumentData({ form_input_data: { ...input, catatan: "Catatan pemohon" } }).notes,
+      `Catatan pemohon\nJenis dana: ${label}\nTotal pengajuan: Rp 349.000`);
+  }
+  assert.equal(normalizePgdDocumentData({ form_input_data: { request_category: "asset", catatan: "Catatan aset" } }).notes, "Catatan aset");
 });
 
 test("builds and renders every supported dynamic signature formation", async () => {
