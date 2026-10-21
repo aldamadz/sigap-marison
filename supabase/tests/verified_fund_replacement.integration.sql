@@ -109,3 +109,4 @@ begin
  if v_fails<>13 then raise exception 'Unexpected guard coverage %',v_fails; end if;
  raise notice 'Verified Fund replacement and manual receipt: all assertions passed';
 end $$;
+select 'Verified Fund replacement and manual receipt: all assertions passed' as result;
