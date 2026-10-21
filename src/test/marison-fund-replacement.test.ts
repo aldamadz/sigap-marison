@@ -48,7 +48,7 @@ describe("Fund generation replacement",()=>{
     [{...job,status:"succeeded",external_reference:"8"}],
     [job,{...job,id:"manual",status:"outcome_unknown"}],
     [job,{...job,id:"new",generation:2,status:"pending"}],
-  ])("blocks any acceptance, uncertain result, or active/newer generation",async history=>{
+  ].map(history => ({ history })))("blocks any acceptance, uncertain result, or active/newer generation",async ({history})=>{
     const h=harness({history});expect(await h.preflightMarisonOutboundReplacement({},"job")).toMatchObject({eligible:false});
     expect(h.preview).not.toHaveBeenCalled();await expect(h.createMarisonOutboundReplacement({},"job")).rejects.toMatchObject({status:409});expect(h.rpc).not.toHaveBeenCalled();
   });
