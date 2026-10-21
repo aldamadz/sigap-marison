@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## MRN-25 Fund Postman Preview Extension (2026-10-21, Issue #648)
+
+- Separate on-demand Postman tab for Fund: main_document contains the verified
+  final PDF; attachments retain supplemental files, never a duplicate main PDF.
+- Frozen history/hash and business values, including marketing_cost, are unchanged.
+- Reuses only existing, active, same-letter capabilities on the configured app
+  origin. Stale/missing links, unmatched files or incomplete payload fail closed.
+- Admin/current-environment/same-origin/no-store protections remain. No new
+  token, vendor call, dispatch, replay or database migration. Manual Postman POST
+  is a real send and may duplicate vendor data; verify receipt first.
+- User explicitly authorized staging then selective production. Candidate branch
+  codex/fund-postman-payload-20261021; runtime acceptance pending.
+
 ## MRN-25 Outbound Payload Viewer (2026-10-21, Issue #688)
 
 - Admin-only, on-demand stored JSON viewer per dispatch/generation in Integration.

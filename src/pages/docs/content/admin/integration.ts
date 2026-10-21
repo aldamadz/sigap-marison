@@ -44,6 +44,7 @@ export const adminIntegrationDetailSections: DocsSection[] = [
       rows: [
         ["Status environment", "Menunjukkan koneksi staging atau production yang dikunci saat deployment."],
         ["Lihat payload", "Membuka JSON tersimpan per generasi di Antrean Outbound, beserta endpoint dan hash. Salin JSON tidak mengirim ulang. Snapshot yang belum dibekukan bukan bukti payload terkirim; credential API tidak ditampilkan."],
+        ["Payload untuk Postman (Dana)", "Tab terpisah menempatkan PDF final di main_document dan mempertahankan lampiran pendukung dalam attachments. Jenis dana dan nilai tidak diubah, termasuk marketing_cost. Hanya memakai tautan tersimpan yang aktif; tidak membuat job atau mengirim ulang. POST manual dapat membuat pengajuan nyata/duplikat: konfirmasi penerimaan Digivasi dahulu."],
         ["Cek koneksi", "Memeriksa akses SIGAP ke endpoint Projects, Unit, dan Non Unit tanpa mengubah master data."],
         ["Periksa karyawan", "Menampilkan jumlah data karyawan dan kantor yang akan dibuat, diperbarui, dilewati, atau perlu ditinjau."],
         ["Sinkron karyawan", "Memperbarui master kantor dan karyawan SIGAP setelah admin menyetujui hasil pemeriksaan."],
