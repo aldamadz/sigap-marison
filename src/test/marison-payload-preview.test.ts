@@ -39,14 +39,21 @@ describe("stored outbound payload preview", () => {
 });
 const source = readFileSync("backend/src/domain-runtime.ts", "utf8");
 const handler = source.slice(source.indexOf("const getMarisonOutboundPayloadPreview ="), source.indexOf("const preflightMarisonOutboundRecovery ="));
-function harness(options: { denied?: boolean; originDenied?: boolean; stored?: unknown; error?: unknown } = {}) {
+function harness(options: { denied?: boolean; originDenied?: boolean; stored?: unknown; error?: unknown; letter?: unknown; tokenError?: unknown } = {}) {
   const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.stored === undefined ? job : options.stored, error: options.error })) };
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query);
-  const from = vi.fn(() => query);
+  const letterQuery = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.letter === undefined ? { id: "letter-a", status: "DONE", pdf_path: "main.pdf" } : options.letter, error: null })) };
+  letterQuery.select.mockReturnValue(letterQuery); letterQuery.eq.mockReturnValue(letterQuery);
+  const tokens = { select: vi.fn(), in: vi.fn(async () => ({ data: [], error: options.tokenError })) };
+  tokens.select.mockReturnValue(tokens);
+  const prepare = vi.fn(() => ({ payload: { type: "marketing_cost", main_document: "verified-link" }, payloadHash: "candidate" }));
+  const from = vi.fn((table: string) => table === "surat_registrasi" ? letterQuery : table === "file_view_tokens" ? tokens : query);
   const context = { supabase: { from }, requireAdminUser: async () => { if (options.denied) throw Object.assign(new Error("Forbidden"), { status: 403 }); }, getBearerToken: () => "session", marisonDeploymentEnvironment: "staging", previewStoredMarisonPayload,
+    process: { env: { APP_PUBLIC_URL: "https://sigap.test" } }, fundPostmanLinks: () => [{ tokenHash: "hash" }], previewFundForPostman: prepare,
+    resolveFinalMarisonPdfPath: () => "main.pdf", parseStorageRef: vi.fn(),
     assertSameOrigin: () => { if (options.originDenied) throw Object.assign(new Error("Origin"), { status: 403 }); } };
   const runtime = vm.runInNewContext(handler + "\n({getMarisonOutboundPayloadPreview});", context);
-  return { get: (value = id) => runtime.getMarisonOutboundPayloadPreview({}, value), from, query };
+  return { get: (value = id, view = "stored") => runtime.getMarisonOutboundPayloadPreview({}, value, view), from, query, letterQuery, tokens, prepare };
 }
 describe("admin payload endpoint", () => {
   it.each([{ denied: true }, { originDenied: true }])("rejects unauthorized before DB access %j", async options => {
@@ -66,5 +73,25 @@ describe("admin payload endpoint", () => {
     expect(readFileSync("backend/src/routes/domain.routes.ts", "utf8")).toContain('{ method: "GET", url: "/api/integrations/marison/dispatches/:dispatchId/payload" }');
     expect(handler).not.toMatch(/\.rpc\(|fetch\(|buildMarisonDispatchPayload|createMarisonOutboundReplacement/);
     expect(source).toContain('res.setHeader("Cache-Control", "private, no-store")');
+  });
+  it("validates view before DB and refuses Postman for other kinds or incomplete history", async () => {
+    const h = harness(); await expect(h.get(id, "other")).rejects.toMatchObject({ status: 400 });
+    expect(h.from).not.toHaveBeenCalled();
+    await expect(h.get(id, "postman")).rejects.toMatchObject({ status: 409 });
+    await expect(harness({ stored: { ...job, kind: "fund", endpoint: "/fund-submissions", payload_body: null } }).get(id, "postman")).rejects.toMatchObject({ status: 409 });
+  });
+  it("uses read-only letter/token queries and returns separate source/hash for the candidate", async () => {
+    const h = harness({ stored: { ...job, surat_id: "letter-a", kind: "fund", endpoint: "/fund-submissions" } });
+    expect(await h.get(id, "postman")).toMatchObject({ source: "postman", payloadHash: "candidate", sourcePayloadHash: job.payload_hash, payload: { type: "marketing_cost" } });
+    expect(h.letterQuery.eq).toHaveBeenCalledWith("id", "letter-a");
+    expect(h.tokens.in).toHaveBeenCalledWith("token_hash", ["hash"]);
+    expect(h.prepare).toHaveBeenCalledOnce();
+    const stored = await h.get(); expect(stored).toMatchObject({ source: "frozen", payloadHash: job.payload_hash });
+  });
+  it("blocks nonfinal/missing letters and token lookup errors", async () => {
+    const stored = { ...job, surat_id: "letter-a", kind: "fund", endpoint: "/fund-submissions" };
+    await expect(harness({ stored, letter: { status: "PROSES" } }).get(id, "postman")).rejects.toMatchObject({ status: 409 });
+    await expect(harness({ stored, letter: null }).get(id, "postman")).rejects.toMatchObject({ status: 409 });
+    await expect(harness({ stored, tokenError: { message: "private" } }).get(id, "postman")).rejects.toThrow("Tautan payload gagal diperiksa.");
   });
 });

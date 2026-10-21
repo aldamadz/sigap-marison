@@ -31,6 +31,7 @@ import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
 import { buildMarisonDocumentBundle } from "./lib/marison-document-links.js";
 import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
 import { previewStoredMarisonPayload } from "./lib/marison-payload-preview.js";
+import { fundPostmanLinks, previewFundForPostman } from "./lib/marison-fund-postman-preview.js";
 import {
   mapSuratRejectionRpcError,
   normalizeSuratRejectionRequest,
@@ -4017,20 +4018,42 @@ const listMarisonOutboundDispatches = async (req, url) => {
   };
 };
 
-const getMarisonOutboundPayloadPreview = async (req, dispatchId) => {
+const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored") => {
   assertSameOrigin(req);
   await requireAdminUser(getBearerToken(req));
+  if (!["stored", "postman"].includes(view)) {
+    throw Object.assign(new Error("Pilihan payload tidak valid."), { status: 400 });
+  }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dispatchId)) {
     throw Object.assign(new Error("ID pengiriman tidak valid."), { status: 400 });
   }
   const { data: job, error } = await supabase.from("marison_outbound_dispatches")
-    .select("id, environment, generation, kind, endpoint, payload, payload_body, payload_hash, post_started_at")
+    .select("id, surat_id, environment, generation, kind, endpoint, payload, payload_body, payload_hash, post_started_at")
     .eq("id", dispatchId).eq("environment", marisonDeploymentEnvironment).maybeSingle();
   if (error) throw Object.assign(new Error("Payload pengiriman gagal dimuat."), { status: 500 });
   if (!job || job.environment !== marisonDeploymentEnvironment) {
     throw Object.assign(new Error("Pengiriman tidak ditemukan pada environment ini."), { status: 404 });
   }
-  return previewStoredMarisonPayload(job);
+  const stored = previewStoredMarisonPayload(job);
+  if (view === "stored") return stored;
+  if (job.kind !== "fund" || !stored.payload || stored.source !== "frozen" || stored.redacted || !job.payload_hash || stored.endpoint !== "/fund-submissions") {
+    throw Object.assign(new Error("Payload untuk Postman hanya tersedia untuk Dana dengan payload beku yang lengkap."), { status: 409 });
+  }
+  const { data: surat, error: suratError } = await supabase.from("surat_registrasi")
+    .select("id, status, pdf_path, surat_signatures(step_order,is_signed,signed_at,pdf_path_snap), surat_attachments(file_url)")
+    .eq("id", job.surat_id).maybeSingle();
+  if (suratError || !surat || !["DONE", "SELESAI", "COMPLETED"].includes(String(surat.status || "").toUpperCase())) {
+    throw Object.assign(new Error("Dokumen Dana final tidak tersedia untuk preview Postman."), { status: 409 });
+  }
+  const links = fundPostmanLinks(stored.payload, process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "");
+  const { data: capabilities, error: tokenError } = await supabase.from("file_view_tokens")
+    .select("token_hash,surat_id,purpose,storage_origin,bucket,object_path,expires_at,revoked_at,consumed_at")
+    .in("token_hash", links.map(value => value.tokenHash));
+  if (tokenError) throw Object.assign(new Error("Tautan payload gagal diperiksa."), { status: 500 });
+  const candidate = previewFundForPostman({ payload: stored.payload, suratId: surat.id,
+    finalPdf: resolveFinalMarisonPdfPath(surat), currentAttachments: surat.surat_attachments || [],
+    links, capabilities: capabilities || [], parseRef: parseStorageRef });
+  return { ...stored, ...candidate, source: "postman", sourcePayloadHash: stored.payloadHash };
 };
 
 const preflightMarisonOutboundRecovery = async (job, surat) => {
@@ -4932,7 +4955,7 @@ export const handleRequest = async (req, res) => {
       const marisonPayloadMatch = url.pathname.match(/^\/api\/integrations\/marison\/dispatches\/([0-9a-f-]+)\/payload$/i);
       if (req.method === "GET" && marisonPayloadMatch) {
         res.setHeader("Cache-Control", "private, no-store");
-        return sendJson(res, 200, await getMarisonOutboundPayloadPreview(req, marisonPayloadMatch[1]));
+        return sendJson(res, 200, await getMarisonOutboundPayloadPreview(req, marisonPayloadMatch[1], url.searchParams.get("view") || "stored"));
       }
       if (req.method === "POST" && marisonReconcileMatch) {
         const result = await reconcileMarisonOutboundDispatch(req, marisonReconcileMatch[1]);
