@@ -46,8 +46,8 @@ describe("docs-troubleshooting-registry D2C", () => {
     expect(getDocsEntrySections(fallback).map((section) => section.title)).toEqual(["Fungsi utama", "Alur penggunaan", "Contoh penggunaan", "Kendala umum"]);
   });
 
-  it("matches documentation content after REC-03 parent photo updates", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("8e888b955b9a32efe85dfea867be9fc3135efc0c2464765aff19fe648b7acd81");
+  it("matches documentation content after MRN-25 payload viewer updates", () => {
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("9ab91a928286cd7c93749296d7b99912182048f491b63eeb97b6e8da0ad3b2d3");
   });
 
   it("keeps facade and imports acyclic", () => {
