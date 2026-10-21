@@ -2,6 +2,10 @@ import { type DocsChangelogEntry } from "../types";
 
 export const DOCS_CHANGELOG: DocsChangelogEntry[] = [
   {
+    version: "v1.27.0", date: "21 Oktober 2026",
+    changes: ["Menambahkan panduan Lihat payload pada Antrean Outbound: JSON tersimpan per generasi, endpoint, hash, dan salin JSON tanpa mengirim ulang."],
+  },
+  {
     version: "v1.26.0",
     date: "8 September 2026",
     changes: [

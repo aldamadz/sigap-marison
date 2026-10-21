@@ -12,7 +12,7 @@ vi.mock("@/providers/MarisonEnvironmentProvider", () => ({
 
 vi.mock("@/services/marison-integration.service", async () => {
   const actual = await vi.importActual<typeof import("@/services/marison-integration.service")>("@/services/marison-integration.service");
-  return { ...actual, marisonIntegrationService: { listDispatches: vi.fn(), preflightDispatch: vi.fn(), reconcileDispatch: vi.fn(), createReplacement: vi.fn(), preflightReplacement: vi.fn() } };
+  return { ...actual, marisonIntegrationService: { listDispatches: vi.fn(), getPayload: vi.fn(), preflightDispatch: vi.fn(), reconcileDispatch: vi.fn(), createReplacement: vi.fn(), preflightReplacement: vi.fn() } };
 });
 
 const row = { id: "job-1", suratId: "surat-1", noSurat: "047/UAI/MKT.1.NKMZ7/VII/2026", title: "Unit test", environment: "staging", generation: 1, replacementOfDispatchId: null, kind: "unit", status: "failed_terminal", attemptCount: 3, nextAttemptAt: null, lastAttemptAt: null, externalReference: null, errorCode: null, failureReason: "Resolution sources are required", reconciliationCount: 0, createdAt: "2026-08-03T00:00:00Z", updatedAt: "2026-08-03T00:00:00Z", postStartedAt: null, completedAt: null } as any;
