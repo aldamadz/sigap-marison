@@ -107,9 +107,9 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches documentation content after DASH-03 dashboard updates", () => {
+  it("matches documentation content after REC-03 parent photo updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("97c38e67e31cc5ae2a28b18d4117a35156e08222bd037079e2d2a44ec7715162");
+      .toBe("581c4fd4a6cdacbca43eee7be432bd8764c75a6d61e99a39b11a6efb85749fb3");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {
