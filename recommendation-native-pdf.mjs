@@ -74,7 +74,7 @@ const buildHeader = (data, logoDataUrl, totalPages) => ({
           body: [
             [{ text: "No form", bold: true }, { text: data.formNumber, bold: true, alignment: "center" }],
             [{ text: "Berlaku tanggal", bold: true }, { text: "01 Januari 2024", alignment: "center" }],
-            [{ text: "Halaman", bold: true }, { text: data.revisionHistory?.length ? "1 (lihat footer)" : `1 dari ${totalPages}`, alignment: "center" }],
+            [{ text: "Halaman", bold: true }, { text: `1 dari ${totalPages}`, alignment: "center" }],
           ],
         },
         layout: borderLayout,
@@ -112,23 +112,67 @@ const itemNotes = (item) => {
   return item.details.map((detail) => text(detail.notes, "")).filter(Boolean).join("\n");
 };
 
+const compactText = (value, limit = 160) => {
+  const valueText = text(value, "").replace(/\s+/g, " ");
+  return valueText.length > limit ? `${valueText.slice(0, limit).trimEnd()}... (lihat rincian)` : valueText;
+};
+
+const needsItemDetails = (item) => [
+  [item.applicantName, 100], [item.registrationNumber, 60], [item.location, 80],
+  [item.pic, 80], [item.applicantNotes, 160], [detailSummary(item), 220], [itemNotes(item), 160],
+].some(([value, limit]) => text(value, "").length > limit || text(value, "").split(/\r?\n/).length > 4);
+
+const compactRecommendation = (item, index) => {
+  const summary = detailSummary(item);
+  if (summary.length <= 220) return compactText(summary, 220);
+  const actions = new Map();
+  for (const detail of item.details) {
+    const label = actionLabel(detail.action);
+    actions.set(label, (actions.get(label) || 0) + 1);
+  }
+  return `${item.details.length} rincian (${[...actions].map(([label, count]) => `${label}: ${count}`).join(", ")}).\nLihat rincian item ${index + 1} pada halaman lanjutan.`;
+};
+
+const expandedItemBlocks = (data) => data.items.flatMap((item, index) => needsItemDetails(item) ? [{
+  pageBreak: "before",
+  stack: [
+    { text: "RINCIAN REKOMENDASI", bold: true, fontSize: 14, color: "#17324d", margin: [0, 0, 0, 8] },
+    { text: `ITEM ${index + 1} - ${item.applicantName}`, bold: true, fontSize: 11 },
+    { text: `No. registrasi: ${text(item.registrationNumber)} | Lokasi: ${text(item.location)} | PIC: ${text(item.pic)}`, margin: [0, 5, 0, 5] },
+    { text: [{ text: "Kerusakan / catatan pemohon: ", bold: true }, { text: text(item.applicantNotes) }], margin: [0, 0, 0, 8] },
+    ...(isRejected(item.status)
+      ? [{ text: `Tidak direkomendasikan: ${text(item.rejectionReason)}`, color: REJECTED }]
+      : item.details.map((detail, detailIndex) => ({
+        unbreakable: [detail.heading, detail.description, detail.notes].join(" ").length < 800,
+        stack: [
+          { text: `${index + 1}.${detailIndex + 1} ${text(detail.heading)}`, bold: true, color: "#17324d", margin: [0, 5, 0, 2] },
+          { text: `Tindakan: ${actionLabel(detail.action)}` },
+          ...(text(detail.description, "").localeCompare(actionLabel(detail.action), "id", { sensitivity: "base" }) === 0
+            ? [] : [{ text: text(detail.description, ""), margin: [0, 2, 0, 0] }]),
+          { text: [{ text: "Catatan pemeriksa: ", bold: true }, { text: text(detail.notes) }], margin: [0, 2, 0, 2] },
+        ],
+      }))),
+  ],
+  fontSize: 9,
+}] : []);
+
 const buildMainPage = (data, logoDataUrl, totalPages) => {
   const rows = data.items.map((item, index) => {
     const rejected = isRejected(item.status);
     const markers = recommendationMarkers(item);
     return [
       { text: String(index + 1), alignment: "center" },
-      { text: item.applicantName, bold: true, decoration: rejected ? "lineThrough" : undefined, color: rejected ? MUTED : BORDER },
-      { text: text(item.registrationNumber, ""), alignment: "center" },
-      { text: [item.location, item.pic].filter(Boolean).join(" / ") || "-" },
-      { text: text(item.applicantNotes, "") },
+      { text: compactText(item.applicantName, 100), bold: true, decoration: rejected ? "lineThrough" : undefined, color: rejected ? MUTED : BORDER },
+      { text: compactText(item.registrationNumber, 60), alignment: "center" },
+      { text: [compactText(item.location, 80), compactText(item.pic, 80)].filter(Boolean).join(" / ") || "-" },
+      { text: compactText(item.applicantNotes) },
       { text: markers.service, bold: true, alignment: "center", color: "#166534" },
       { text: markers.replace, bold: true, alignment: "center", color: "#166534" },
-      { text: detailSummary(item), color: rejected ? REJECTED : BORDER },
-      { text: itemNotes(item), color: rejected ? REJECTED : BORDER },
+      { text: rejected ? compactText(detailSummary(item), 220) : compactRecommendation(item, index), color: rejected ? REJECTED : BORDER },
+      { text: itemNotes(item).length > 160 ? `Catatan per rincian item ${index + 1} pada halaman lanjutan.` : compactText(itemNotes(item)), color: rejected ? REJECTED : BORDER },
     ];
   });
-  const minimumRows = 8;
+  const minimumRows = data.items.some(needsItemDetails) ? rows.length : 8;
   while (rows.length < minimumRows) {
     rows.push([
       { text: String(rows.length + 1), alignment: "center" },
@@ -156,6 +200,7 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
     {
       table: {
         headerRows: 2,
+        dontBreakRows: true,
         widths: ["3%", "23%", "8%", "16%", "13%", "5%", "5%", "14%", "13%"],
         heights: (row) => row < 2 ? 15 : 22,
         body: [
@@ -179,9 +224,10 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
     {
       table: {
         widths: ["72%", "28%"],
+        dontBreakRows: true,
         heights: [112],
         body: [[
-          { text: [{ text: "Catatan :\n", bold: true }, { text: data.notes || "" }], margin: [4, 2, 4, 2] },
+          { text: [{ text: "Catatan :\n", bold: true }, { text: compactText(data.notes) }], margin: [4, 2, 4, 2] },
           {
             stack: [
               { text: data.placeDate, alignment: "center", margin: [0, 0, 0, 2] },
@@ -209,7 +255,7 @@ const buildImageGrid = (images) => {
     if (pair.length === 1) pair.push({ text: "" });
     rows.push(pair);
   }
-  return { table: { widths: ["50%", "50%"], body: rows }, layout: borderLayout };
+  return { table: { widths: ["50%", "50%"], dontBreakRows: true, body: rows }, layout: borderLayout };
 };
 
 export const normalizeRecommendationDocumentData = (source = {}, options = {}) => {
@@ -226,14 +272,19 @@ export const normalizeRecommendationDocumentData = (source = {}, options = {}) =
   };
 };
 
-export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl = null) => ({
+export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl = null, totalPages = 1 + pages.length) => ({
   pageSize: "A4",
   pageOrientation: "landscape",
   pageMargins: [18, 14, 18, 14],
   defaultStyle: { font: "Roboto", fontSize: 8, color: BORDER },
   footer: (page, total) => ({ text: `Halaman ${page} dari ${total}`, fontSize: 7, alignment: "right", margin: [18, 0, 18, 0] }),
   content: [
-    ...buildMainPage(data, logoDataUrl, 1 + pages.length),
+    ...buildMainPage(data, logoDataUrl, totalPages),
+    ...(data.notes?.length > 160 || String(data.notes || "").split(/\r?\n/).length > 4 ? [{ pageBreak: "before", stack: [
+      { text: "CATATAN PENGAJUAN", bold: true, fontSize: 14, margin: [0, 0, 0, 8] },
+      { text: data.notes, fontSize: 9 },
+    ] }] : []),
+    ...expandedItemBlocks(data),
     ...pages.flatMap((page) => {
       const rejected = isRejected(page.status || page.detailStatus);
       const detailLabel = page.showDetailNumber
@@ -243,7 +294,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
         pageBreak: "before",
         stack: [
           { text: `ITEM ${page.itemNumber} - ${page.applicantName}`, bold: true, fontSize: 15, color: "#17324d" },
-          { text: `${detailLabel}${page.continuation ? " (LANJUTAN)" : ""}`, bold: true, fontSize: 12, color: "white", fillColor: "#245b78", margin: [0, 5, 0, 5] },
+          { text: `${detailLabel}${page.continuation ? " (LANJUTAN)" : ""}`, bold: true, fontSize: 12, color: "#17324d", margin: [0, 5, 0, 5] },
           {
             text: [
               `Status: ${rejected ? "Tidak direkomendasikan" : "Direkomendasikan"}`,
@@ -278,7 +329,17 @@ export const renderRecommendationPdf = async (data, options = {}) => {
     pages.push({ ...plan, images });
   }
   const logoDataUrl = options.logoDataUrl || await loadLogoDataUrl(options.logoPath);
-  const definition = buildRecommendationDocumentDefinition(data, pages, logoDataUrl);
-  const buffer = await pdfMake.createPdf(definition).getBuffer();
-  return Buffer.from(buffer);
+  let expectedPages = 1 + pages.length;
+  // Layout may add pages for long text or revision appendices. Rebuild from fresh
+  // nodes with the actual total; pdfmake mutates the first definition during layout.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const definition = buildRecommendationDocumentDefinition(data, pages, logoDataUrl, expectedPages);
+    const footer = definition.footer;
+    let actualPages = expectedPages;
+    definition.footer = (page, total) => { actualPages = total; return footer(page, total); };
+    const buffer = await pdfMake.createPdf(definition).getBuffer();
+    if (actualPages === expectedPages) return Buffer.from(buffer);
+    expectedPages = actualPages;
+  }
+  throw new Error("Penomoran halaman rekomendasi belum stabil.");
 };
