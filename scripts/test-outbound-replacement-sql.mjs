@@ -1,11 +1,21 @@
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const baseMigration = readFileSync("supabase/migrations/20260729103000_durable_marison_outbound_dispatch.sql", "utf8");
 const replacementMigration = readFileSync("supabase/migrations/20260803120000_marison_outbound_replacement_jobs.sql", "utf8");
 const recoveryGuardMigration = readFileSync("supabase/migrations/20260924170000_guard_pre_post_outbound_recovery.sql", "utf8");
 const verifiedUnitMigration = readFileSync("supabase/migrations/20261014100000_verified_unit_outbound_replacement.sql", "utf8");
 const verifiedUnitAssertions = readFileSync("supabase/tests/verified_unit_replacement.integration.sql", "utf8");
+const fund = process.argv.includes("--fund");
+const fundSetup = fund ? `
+alter table public.surat_registrasi add column updated_at timestamptz default clock_timestamp();
+alter table public.marison_outbound_dispatches add column payload_resolution_sources jsonb default '{}';
+alter table public.marison_outbound_dispatches drop constraint marison_outbound_dispatches_kind_check;
+alter table public.marison_outbound_dispatches add constraint marison_outbound_dispatches_kind_check check(kind in ('unit','non_unit','asset','fund'));
+alter table public.marison_outbound_dispatches drop constraint marison_outbound_dispatch_endpoint_kind;
+alter table public.marison_outbound_dispatches add constraint marison_outbound_dispatch_endpoint_kind check(endpoint is null or (kind='fund' and endpoint='/fund-submissions') or (kind='unit' and endpoint='/unit-submissions'));
+` + readFileSync("supabase/migrations/20261021100000_verified_fund_outbound_replacement.sql", "utf8")
+  + readFileSync("supabase/tests/verified_fund_replacement.integration.sql", "utf8") : "";
 
 const fixtureSql = `
 create schema if not exists extensions;
@@ -197,8 +207,33 @@ try {
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   process.stdout.write(run(
     ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"],
-    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + verifiedUnitMigration + assertionsSql + verifiedUnitAssertions
+    fixtureSql + baseMigration + replacementMigration + recoveryGuardMigration + verifiedUnitMigration + assertionsSql + verifiedUnitAssertions + fundSetup
   ));
+  if (fund) {
+    const old="20000000-0000-0000-0000-000000000012";
+    run(["exec","-i",id,"psql","-U","postgres","-v","ON_ERROR_STOP=1"], `
+      insert into public.surat_registrasi(id,status) values('10000000-0000-0000-0000-000000000012','DONE');
+      insert into public.surat_signatures(surat_id,is_signed,signed_at) values('10000000-0000-0000-0000-000000000012',true,now());
+      insert into public.marison_outbound_dispatches(id,surat_id,environment,generation,kind,endpoint,idempotency_key,status,error_code,response,
+        post_started_at,last_attempt_at,attempt_count,payload,payload_body,payload_hash,payload_built_at,contract_version)
+      select '${old}','10000000-0000-0000-0000-000000000012','production',1,'fund','/fund-submissions','test:fund:concurrent','failed_terminal','marison_http_422',response,
+        now(),now(),1,payload,payload_body,payload_hash,now(),contract_version from public.marison_outbound_dispatches where id='20000000-0000-0000-0000-000000000010';
+    `);
+    const sql=`begin;select public.create_verified_fund_outbound_replacement(d.id,'00000000-0000-0000-0000-000000000001','concurrent confirmation',d.payload_hash,
+      ((d.payload-'attachments')||'{"main_document":"https://app.test/main.pdf","attachments":[]}'::jsonb)::text,s.updated_at,true,true,true)->>'dispatch_id'
+      from public.marison_outbound_dispatches d join public.surat_registrasi s on s.id=d.surat_id where d.id='${old}';select pg_sleep(0.2);commit;`;
+    const connection=()=>new Promise((resolve,reject)=>{
+      const child=spawn("docker",["exec","-i",id,"psql","-U","postgres","-At","-v","ON_ERROR_STOP=1"]);
+      let output="",error="";child.stdout.on("data",data=>{output+=data;});child.stderr.on("data",data=>{error+=data;});
+      child.on("error",reject);child.on("close",code=>code===0?resolve(output.match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/)?.[0]):reject(new Error(error)));
+      child.stdin.end(sql);
+    });
+    const children=await Promise.all([connection(),connection()]);
+    if(!children[0]||children[0]!==children[1])throw new Error("Concurrent Fund requests did not return the same generation");
+    const count=run(["exec","-i",id,"psql","-U","postgres","-At","-v","ON_ERROR_STOP=1"],`select count(*) from public.marison_outbound_dispatches where replacement_of_dispatch_id='${old}';`).trim();
+    if(count!=="1")throw new Error("Concurrent Fund replacement duplicated a job");
+    console.log("Fund concurrency: two parallel connections returned exactly one generation2 child; no vendor POST.");
+  }
 } finally {
   run(["rm", "-f", id]);
 }

@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
   if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
   if (/actionable_role_dashboard.*\.sql$|test-actionable-dashboard-sql\.mjs$/u.test(file)) gates.add('actionable-dashboard-sql');
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
@@ -136,6 +137,10 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'fund-outbound-replacement-sql') {
+    run('node', ['scripts/test-outbound-replacement-sql.mjs', '--fund']);
+    continue;
+  }
   if (gate === 'maintenance-edge') {
     run('node', ['--test', 'ops/maintenance/edge-worker.test.mjs', 'ops/maintenance/server.test.mjs']);
     run('node', ['scripts/build-maintenance-edge.mjs']);
