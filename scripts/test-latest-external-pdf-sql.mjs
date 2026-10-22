@@ -78,10 +78,12 @@ const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine
 try {
   let ready = false;
   for (let n = 0; n < 40; n++) {
-    ready = spawnSync("docker", ["exec", id, "pg_isready", "-U", "postgres"], { encoding: "utf8" }).status === 0;
+    ready = spawnSync("docker", ["exec", id, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], { encoding: "utf8" }).status === 0;
     if (ready) break;
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Postgres not ready");
-  process.stdout.write(run(["exec", "-i", id, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + migration + assertions));
+  const output = run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], fixture + migration + migration + assertions);
+  if (!output.includes("Latest external PDF: all assertions passed")) throw new Error("SQL assertions marker missing");
+  process.stdout.write(output);
 } finally { run(["rm", "-f", id]); }
