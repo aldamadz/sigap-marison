@@ -63,3 +63,14 @@
   never positional list order; compare publication state again after metadata
   reads so a concurrent revision cannot mix working attachments with old approvals.
   `docs/PROJECT_CONTEXT.md` remains absent; no shared document structure changed.
+
+## 2026-10-22 [Codex] MRN-28 / Issue #711
+
+- Active: isolated `codex/latest-payload-preview-20261022` from main `13739c9`.
+- User approved Generate Payload Terbaru: immutable sent history plus current
+  canonical candidate, field comparisons, timestamp/validation and JSON export.
+- Staging target; asked separately whether to promote this addition to production.
+  No outbound resend, new generation, payload rewrite, migration or token mint.
+- Read-only capability reuse fails closed when new documents lack existing active
+  links. Canonical builder injection also prevents automatic PDF job enqueue.
+- Remaining: exact-source Linux gates, UI visual acceptance, staging PR/deployment.

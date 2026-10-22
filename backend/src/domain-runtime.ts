@@ -30,6 +30,7 @@ import {
 import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
 import { buildMarisonDocumentBundle } from "./lib/marison-document-links.js";
 import { resolveExternalFileReference } from "./lib/external-file-reference.js";
+import { currentPayloadPreview, reusableCurrentFileLinks, storedCapabilityLinks } from "./lib/marison-current-payload.js";
 import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
 import { previewStoredMarisonPayload } from "./lib/marison-payload-preview.js";
 import { fundPostmanLinks, previewFundForPostman } from "./lib/marison-fund-postman-preview.js";
@@ -3367,8 +3368,11 @@ const resolveMarisonOutboundIdentity = async (surat, { requireRequester = true, 
   };
 };
 
-const buildMarisonDocumentLinks = async (surat, actorId = null) => {
+const buildMarisonDocumentLinks = async (surat, actorId = null, existingFileLink = null) => {
   const finalPdfPath = resolveFinalMarisonPdfPath(surat);
+  if (!finalPdfPath && existingFileLink) {
+    throw Object.assign(new Error("PDF final terbaru belum tersedia. Preview tidak membuat job PDF baru."), { status: 409 });
+  }
   if (!finalPdfPath && String(surat?.file_path || "").startsWith("native://document/")) {
     const { data: existingJob, error: existingJobError } = await supabase
       .from("document_pdf_jobs")
@@ -3397,7 +3401,7 @@ const buildMarisonDocumentLinks = async (surat, actorId = null) => {
     finalPdfPath,
     attachments: asArrayValue(surat?.surat_attachments),
     parseRef: parseStorageRef,
-    mintLink: (rawPath, reference) => buildPersistentMarisonFileLink(surat, rawPath, actorId, reference),
+    mintLink: existingFileLink || ((rawPath, reference) => buildPersistentMarisonFileLink(surat, rawPath, actorId, reference)),
   });
 };
 
@@ -3449,7 +3453,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
   }
   const verifiedUnitReceipt = overrides.requireUnsubmittedUnitReferences
     ? verifiedUnitReplacementReceipt(projectId, verifiedReferences) : null;
-  const documents = await buildMarisonDocumentLinks(surat, actorId);
+  const documents = await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink);
   const payload = {
     submission_number: surat.no_surat,
     project_id: projectId,
@@ -3568,7 +3572,7 @@ const buildMarisonNonUnitPayload = async (surat, input, actorId, overrides = {})
     err.status = 422;
     throw err;
   }
-  const documents = await buildMarisonDocumentLinks(surat, actorId);
+  const documents = await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink);
   return {
     endpoint: "/non-unit-submissions",
     kind: "non_unit",
@@ -3609,7 +3613,7 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
   const recommendationDocumentLink = recommendationDocument
     ? recommendationFileReference(recommendationDocument.id)
     : null;
-  const documents = await buildMarisonDocumentLinks(surat, actorId);
+  const documents = await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink);
   const applicantAttachments = documents.attachments;
   const payload = mapMarisonAssetRequest({
     request: {
@@ -3660,7 +3664,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
   const branchId = projectId == null
     ? resolveMarisonFundBranch({ employees, requesterNik: overrides.nik })
     : requireExternalInteger(overrides.branchId, "Branch ID proyek");
-  const documents = await buildMarisonDocumentLinks(surat, actorId);
+  const documents = await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink);
 
   return {
     ...mapMarisonFundSubmission({
@@ -4010,17 +4014,80 @@ const listMarisonOutboundDispatches = async (req, url) => {
   };
 };
 
+const generateCurrentMarisonPayloadPreview = async (job, stored) => {
+  const unavailable = (message) => Object.assign(new Error(message), { status: 409 });
+  const loadDocument = async () => {
+    const result = await supabase.from("surat_registrasi").select(`
+      id,no_surat,judul_surat,status,updated_at,current_step,created_at,created_by,form_usage_id,file_path,pdf_path,
+      office_id,project_id,dept_id,form_input_data,requester_snapshot,location_snapshot,data_snapshot,
+      surat_signatures(id,user_id,role_name,label_jabatan,step_order,is_signed,signed_at,catatan,signer_snapshot,pdf_path_snap,
+        profiles:user_id(id,nik,job_title,is_active,deleted_at,marison_employee_id,marison_synced_at)),
+      surat_attachments(id,file_url,file_name,file_type,file_size,stage,requirement_key,requirement_label,signature_id)
+    `).eq("id", job.surat_id).maybeSingle();
+    if (result.error || !result.data) throw unavailable("Data pengajuan terbaru gagal dimuat.");
+    return result.data;
+  };
+  const surat = await loadDocument();
+  if (!["DONE", "SELESAI", "COMPLETED"].includes(String(surat.status).toUpperCase())
+    || !surat.surat_signatures?.length || surat.surat_signatures.some(row => row.is_signed !== true || !row.signed_at)) {
+    throw unavailable("Pengajuan terbaru belum selesai disetujui. Payload tidak dibuat dari draft revisi.");
+  }
+  if (!stored.endpoint || stored.redacted) throw unavailable("Riwayat pengiriman tidak lengkap untuk perbandingan.");
+  const links = storedCapabilityLinks(stored.payload, process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "");
+  const entries = [];
+  if (links.size) {
+    const result = await supabase.from("file_view_tokens").select("*").in("token_hash", [...links.keys()]);
+    if (result.error) throw unavailable("Tautan external gagal divalidasi.");
+    for (const token of result.data || []) {
+      if (token.revoked_at || (token.expires_at && (!Number.isFinite(Date.parse(token.expires_at)) || Date.parse(token.expires_at) <= Date.now()))) continue;
+      if (token.purpose === "external_marison" && token.surat_id === surat.id) {
+        const ref = await resolveExternalFileReference(supabase, token.id, parseStorageRef, token);
+        entries.push({ url: links.get(token.token_hash), suratId: token.surat_id, purpose: token.purpose, ref });
+      } else if (token.purpose === "external_marison_recommendation_pdf") {
+        entries.push({ url: links.get(token.token_hash), suratId: token.surat_id, purpose: token.purpose });
+      }
+    }
+  }
+  const mappings = await getMarisonOutboundMappings(surat, job.kind);
+  const dispatch = await buildMarisonDispatchPayload(surat, null, {
+    ...mappings, requireUnsubmittedUnitReferences: false,
+    existingFileLink: reusableCurrentFileLinks(entries, surat.id, parseStorageRef),
+  });
+  const expanded = await expandRecommendationFileReferences(dispatch.payload, async reference => {
+    const entry = entries.find(value => value.purpose === "external_marison_recommendation_pdf" && value.suratId === reference.surat_id);
+    const active = await supabase.from("surat_linked_documents").select("id").eq("parent_surat_id", surat.id)
+      .eq("child_surat_id", reference.surat_id).eq("link_type", "recommendation").eq("status", "active").limit(1).maybeSingle();
+    const current = await supabase.rpc("recommendation_pdf_is_current", { p_child_surat_id: reference.surat_id });
+    if (!entry || active.error || !active.data || current.error || current.data !== true) {
+      throw unavailable("Tautan PDF rekomendasi aktif belum tersedia pada payload historis. Tidak ada tautan atau pengiriman baru yang dibuat.");
+    }
+    return entry.url;
+  });
+  dispatch.payload = assertMarisonOutboundContract(job.kind, expanded.payload);
+  const safe = previewStoredMarisonPayload({ ...job, payload_body: null, payload_hash: null, payload: dispatch.payload });
+  if (safe.redacted) throw unavailable("Kandidat mengandung field privat dan tidak dapat diekspor.");
+  const confirmed = await loadDocument();
+  const fingerprint = row => JSON.stringify({ ...row,
+    surat_signatures: [...row.surat_signatures].sort((a, b) => a.id.localeCompare(b.id)),
+    surat_attachments: [...row.surat_attachments].sort((a, b) => a.id.localeCompare(b.id)),
+  });
+  if (fingerprint(confirmed) !== fingerprint(surat)) throw unavailable("Data berubah saat payload dibuat. Generate ulang dari data terbaru.");
+  return { ...stored, ...currentPayloadPreview(stored, { ...dispatch, payload: safe.payload }, job.kind, surat.updated_at),
+    acceptedPreviously: job.status === "succeeded", dispatchStatus: job.status,
+  };
+};
+
 const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored") => {
   assertSameOrigin(req);
   await requireAdminUser(getBearerToken(req));
-  if (!["stored", "postman"].includes(view)) {
+  if (!["stored", "postman", "latest"].includes(view)) {
     throw Object.assign(new Error("Pilihan payload tidak valid."), { status: 400 });
   }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dispatchId)) {
     throw Object.assign(new Error("ID pengiriman tidak valid."), { status: 400 });
   }
   const { data: job, error } = await supabase.from("marison_outbound_dispatches")
-    .select("id, surat_id, environment, generation, kind, endpoint, payload, payload_body, payload_hash, post_started_at")
+    .select("id, surat_id, environment, generation, status, kind, endpoint, payload, payload_body, payload_hash, post_started_at")
     .eq("id", dispatchId).eq("environment", marisonDeploymentEnvironment).maybeSingle();
   if (error) throw Object.assign(new Error("Payload pengiriman gagal dimuat."), { status: 500 });
   if (!job || job.environment !== marisonDeploymentEnvironment) {
@@ -4028,6 +4095,7 @@ const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored"
   }
   const stored = previewStoredMarisonPayload(job);
   if (view === "stored") return stored;
+  if (view === "latest") return generateCurrentMarisonPayloadPreview(job, stored);
   if (job.kind !== "fund" || !stored.payload || stored.source !== "frozen" || stored.redacted || !job.payload_hash || stored.endpoint !== "/fund-submissions") {
     throw Object.assign(new Error("Payload untuk Postman hanya tersedia untuk Dana dengan payload beku yang lengkap."), { status: 409 });
   }
