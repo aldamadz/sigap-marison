@@ -74,3 +74,39 @@
 - Read-only capability reuse fails closed when new documents lack existing active
   links. Canonical builder injection also prevents automatic PDF job enqueue.
 - Remaining: exact-source Linux gates, UI visual acceptance, staging PR/deployment.
+
+## 2026-10-22 [Codex] MRN-28 Completed / Issue #711
+
+- Supersedes the staging-only/pending status above: user subsequently explicitly
+  authorized staging then production. Source `8f56cd60c0318295b017b6ac6655ef8e620c0368`;
+  PR #712 staging, #713 selective production, #714 ancestry sync.
+- Live staging `1008cb9cdb2ef44bfe607c91963585826a458ec7` contains the production
+  target before cutover; production live `aec4be43b3f0d7fe3839af6ad49a51b3dccebd82`.
+  Public SHA/health/live/ready/root passed. Workers retained IDs; no migration.
+- Exact-source clean Linux npm ci/lint/typecheck/frontend and backend build,
+  diff check, 136 focused tests (11 files) and audit high/critical gate passed.
+  Four existing moderate development advisories remain, no dependency changes.
+  Hosted check 119628988615 did not start due account billing/spending limit;
+  this is NOT CI success. TypeScript target incompatibility was corrected and
+  all gates rerun; no unrelated baseline assertions weakened.
+- Actual component Playwright desktop1440/mobile390 light/dark passed explicit-only
+  generation, JSON download, no viewport overflow and no JavaScript errors.
+  Mobile warning/comparison/JSON now share one scroll region, footer stays usable.
+- Staging protected public API tested 12 existing dispatches: current candidates
+  for Asset/Fund/Unit passed; three incomplete samples fail closed with 409.
+  Anonymous401/non-admin403 and full before/after hashes of documents, signatures,
+  attachments, PDF jobs, file tokens, archive metadata and dispatches verified.
+- Production 051 generation 1 AND accepted generation 2 return latest Unit JSON:
+  2048 upper/lower1703120/246000;2074 1703120/434492;2173 1826521/1203009.
+  Four nominal differences are visible; eight total canonical field changes.
+  Both views correctly warn already accepted, even when viewing failed gen1.
+  Source/business/file tables and frozen payloads remain byte-identical.
+- No vendor business POST, resend, replacement generation, approval, token mint,
+  PDF enqueue, database/schema change or worker restart. No release blockers.
+  Data in the external system is NOT corrected by generate/copy/download; use a
+  separately authorized vendor correction path, not duplicate POST. Existing active
+  file links are required; missing links cannot be silently minted by this preview.
+- Durable finding: inject read-only document-link resolution into canonical
+  builders, block their enqueue fallback and compare document state after reads.
+  Previewing already-submitted Units must not issue a send/replacement receipt.
+  `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
