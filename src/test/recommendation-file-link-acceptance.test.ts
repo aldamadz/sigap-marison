@@ -37,6 +37,10 @@ const clients = (role: "admin" | "user" = "admin") => {
     auth: { getUser: async () => ({ data: { user: { id: userId } }, error: null }) },
     from: (table: string) => {
       if (table === "profiles") return query(() => ({ role, is_active: true, deleted_at: null }));
+      if (table === "file_view_tokens") return query(() => ({
+        id: tokenId, surat_id: suratId, purpose: "external_marison_recommendation_pdf",
+        bucket: "dokumen_surat", object_path: "pdf/previous.pdf", storage_origin: "external",
+      }));
       if (table === "marison_outbound_dispatches") return query(() => ({
         id: jobId, surat_id: suratId, environment: "staging", kind: "asset", endpoint: "/asset-purchase-requests",
         contract_version: "test", payload, payload_body: JSON.stringify(payload), payload_hash: "hash", status: "processing",

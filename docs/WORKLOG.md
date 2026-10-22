@@ -19,3 +19,16 @@
   and live acceptance. `docs/PROJECT_CONTEXT.md` absent at task start; durable
   finding: read/detail predicates must not recurse through RLS, while monitoring
   scope never confers approval rights. Runtime proof follows in a dated entry.
+
+## 2026-10-22 [Codex] MRN-27 / Issue #704
+
+- Active: `codex/external-pdf-latest-20261022`, isolated from production d525f498.
+- User explicitly requests staging then production: existing external PDF links
+  resolve the latest approved publication without resending the business request.
+- Main/attachment logical references, immutable attachment metadata history and
+  atomic stable-ID replacement retain old objects. Preview/email snapshots stay
+  pinned; recommendation links retain canonical fingerprint validation.
+- Forward migration `20261022090000` pending real PostgreSQL tests and staged
+  rollout. No outbound recovery, new generation, vendor POST or payload rewrite.
+- Focused local tests: 68 passed. Remaining: clean Linux gates, database preflight,
+  PRs, staging acceptance, selective production promotion and runtime verification.

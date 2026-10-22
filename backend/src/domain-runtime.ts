@@ -29,6 +29,7 @@ import {
 } from "./lib/http.js";
 import { resolveFinalMarisonPdfPath } from "./lib/marison-final-pdf.js";
 import { buildMarisonDocumentBundle } from "./lib/marison-document-links.js";
+import { resolveExternalFileReference } from "./lib/external-file-reference.js";
 import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
 import { previewStoredMarisonPayload } from "./lib/marison-payload-preview.js";
 import { fundPostmanLinks, previewFundForPostman } from "./lib/marison-fund-postman-preview.js";
@@ -1226,7 +1227,7 @@ const buildEmailFileLink = async (suratId, rawPath, config, requestedBy = null) 
   });
 };
 
-const buildPersistentMarisonFileLink = async (surat, rawPath, requestedBy = null) => {
+const buildPersistentMarisonFileLink = async (surat, rawPath, requestedBy = null, reference = null) => {
   const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
   const requested = parseStorageRef(rawPath);
   if (!appUrl || !requested) return null;
@@ -1242,6 +1243,9 @@ const buildPersistentMarisonFileLink = async (surat, rawPath, requestedBy = null
       surat_id: surat.id,
       requested_by: requestedBy,
       purpose: "external_marison",
+      reference_kind: reference?.kind || null,
+      reference_attachment_id: reference?.attachmentId || null,
+      reference_slot_singleton: reference?.singleton === true,
       expires_at: null,
     });
   if (error) throw error;
@@ -2337,27 +2341,8 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
     err.status = 422;
     throw err;
   }
-  const rowsToReplace = (oldRows || []).filter((row) => row.requirement_key !== VERIFIER_OPTIONAL_ATTACHMENT_KEY);
-  const keysToReplace = requirementKeys.filter((key) => key !== VERIFIER_OPTIONAL_ATTACHMENT_KEY);
-
-  if (rowsToReplace.length > 0) {
-    await Promise.all(rowsToReplace.map(async (row) => {
-      const ref = parseStorageRef(row.file_url);
-      if (!ref?.bucket || !ref?.path) return;
-      const { error } = await storageClientForRef(ref).storage.from(ref.bucket).remove([ref.path]);
-      if (error) console.error("Storage remove failed:", { path: row.file_url, message: error.message });
-    }));
-
-    const { error: deleteError } = await supabase
-      .from("surat_attachments")
-      .delete()
-      .eq("surat_id", suratId)
-      .eq("signature_id", signatureId)
-      .eq("stage", stage)
-      .in("requirement_key", keysToReplace);
-    if (deleteError) throw deleteError;
-  }
-
+  // Upload new objects first. The atomic metadata RPC archives old references;
+  // previous bytes are retained for signed history and delivered file links.
   const rows = [];
   for (const [index, file] of files.entries()) {
     const meta = metadata[index] || {};
@@ -2389,10 +2374,10 @@ const replaceSignatureAttachmentFiles = async (token, req) => {
 
   if (rows.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from("surat_attachments")
-    .insert(rows)
-    .select("*");
+  const { data, error } = await supabase.rpc("replace_signature_attachment_metadata", {
+    p_actor: user.id, p_surat: suratId, p_signature: signatureId, p_stage: stage,
+    p_expected: oldRows || [], p_files: rows,
+  });
   if (error) throw error;
   return data || [];
 };
@@ -2903,6 +2888,13 @@ const isStorageRefAllowedForSurat = async (surat, requested) => {
     .flatMap(snapshot => Array.isArray(snapshot?.attachments) ? snapshot.attachments : [])
     .map(attachment => attachment?.file_url));
   if (historyUrls.map(parseStorageRef).filter(Boolean).some(ref => storageRefKey(ref) === storageRefKey(requested))) return true;
+  const { data: fileHistory, error: fileHistoryError } = await supabase.from("surat_attachment_file_history")
+    .select("attachment_snapshot").eq("surat_id", surat.id).limit(1000);
+  if (fileHistoryError) throw fileHistoryError;
+  if ((fileHistory || []).some(row => {
+    const ref = parseStorageRef(row.attachment_snapshot?.file_url);
+    return ref && (ref.origin || "primary") === (requested.origin || "primary") && storageRefKey(ref) === storageRefKey(requested);
+  })) return true;
   if (requested?.bucket !== "dokumen_surat") return false;
 
   const { data: completedJobs, error } = await supabase
@@ -3405,7 +3397,7 @@ const buildMarisonDocumentLinks = async (surat, actorId = null) => {
     finalPdfPath,
     attachments: asArrayValue(surat?.surat_attachments),
     parseRef: parseStorageRef,
-    mintLink: (rawPath) => buildPersistentMarisonFileLink(surat, rawPath, actorId),
+    mintLink: (rawPath, reference) => buildPersistentMarisonFileLink(surat, rawPath, actorId, reference),
   });
 };
 
@@ -3546,7 +3538,7 @@ const getMarisonRecommendationDocument = async (parentSuratId) => {
         id, user_id, role_name, label_jabatan, step_order, is_signed, signed_at, catatan, signer_snapshot,
         profiles:user_id ( id, full_name, nik, job_title )
       ),
-      surat_attachments ( id, file_url, file_name, file_type, file_size, requirement_key, requirement_label )
+      surat_attachments ( id, file_url, file_name, file_type, file_size, stage, signature_id, requirement_key, requirement_label )
     `)
     .eq("id", link.child_surat_id)
     .maybeSingle();
@@ -4050,12 +4042,17 @@ const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored"
   }
   const links = fundPostmanLinks(stored.payload, process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "");
   const { data: capabilities, error: tokenError } = await supabase.from("file_view_tokens")
-    .select("token_hash,surat_id,purpose,storage_origin,bucket,object_path,expires_at,revoked_at,consumed_at")
+    .select("id,token_hash,surat_id,purpose,storage_origin,bucket,object_path,expires_at,revoked_at,consumed_at,reference_kind,reference_attachment_id,reference_slot_singleton")
     .in("token_hash", links.map(value => value.tokenHash));
   if (tokenError) throw Object.assign(new Error("Tautan payload gagal diperiksa."), { status: 500 });
+  const effectiveCapabilities = [];
+  for (const capability of capabilities || []) {
+    const ref = await resolveExternalFileReference(supabase, capability.id, parseStorageRef, capability);
+    effectiveCapabilities.push({ ...capability, storage_origin: ref.origin, bucket: ref.bucket, object_path: ref.path });
+  }
   const candidate = previewFundForPostman({ payload: stored.payload, suratId: surat.id,
     finalPdf: resolveFinalMarisonPdfPath(surat), currentAttachments: surat.surat_attachments || [],
-    links, capabilities: capabilities || [], parseRef: parseStorageRef });
+    links, capabilities: effectiveCapabilities, parseRef: parseStorageRef });
   return { ...stored, ...candidate, source: "postman", sourcePayloadHash: stored.payloadHash, sourceSuratUpdatedAt: surat.updated_at };
 };
 
@@ -4674,12 +4671,14 @@ const consumeFileViewToken = async (viewToken) => {
     throw err;
   }
 
-  const tokenStorageRef = {
+  const pinnedReference = {
     origin: tokenData.storage_origin,
     bucket: tokenData.bucket,
     path: tokenData.object_path,
   };
-  const { data, error } = await storageClientForRef(tokenStorageRef).storage.from(tokenData.bucket).download(tokenData.object_path);
+  const effective = await resolveExternalFileReference(supabase, tokenData.token_id, parseStorageRef, undefined, pinnedReference);
+  const tokenStorageRef = { origin: effective.origin, bucket: effective.bucket, path: effective.path };
+  const { data, error } = await storageClientForRef(tokenStorageRef).storage.from(effective.bucket).download(effective.path);
   if (error || !data) {
     const err = new Error(error?.message || "File tidak ditemukan");
     err.status = 404;
@@ -4696,7 +4695,7 @@ const consumeFileViewToken = async (viewToken) => {
     surat = suratData || null;
   }
 
-  return consumedFileViewTokenResult(tokenData, data, surat, buildDocumentFilename);
+  return consumedFileViewTokenResult({ ...tokenData, bucket: effective.bucket, object_path: effective.path, storage_origin: effective.origin }, data, surat, buildDocumentFilename);
 };
 
 const revokeRecommendationFileLinks = async (req, suratId) => {
