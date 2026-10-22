@@ -14,6 +14,13 @@
   receipt; existing send/recovery validation remains unchanged. No migration.
 - Source 051 addendum repair and MRN-27 are production prerequisites already present.
   Production promotion requires explicit authorization for this addition.
+- 2026-10-22 [Codex] Released after explicit user production authorization:
+  PR #712/#713/#714, live staging `1008cb9cdb`, production `aec4be43b3`.
+  136 focused tests, clean Linux lint/typecheck/build/audit high gate and UI
+  desktop/mobile light/dark passed. Protected public acceptance proves corrected
+  051 addendum values for both generations, with every source/file/dispatch table
+  unchanged; no external resend. Hosted CI billing prevented startup, not a pass.
+  Details and current limits are in the dated MRN-28 completion worklog.
 
 ## MRN-27 Latest Published External PDF Links (2026-10-22, Issue #704)
 
