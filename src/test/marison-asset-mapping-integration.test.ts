@@ -33,7 +33,7 @@ describe("REC-03 Marison asset runtime integration", () => {
     const builder = runtime.slice(start, end);
 
     expect(builder).toContain("input.requires_recommendation === true");
-    expect(builder).toContain("await buildMarisonDocumentLinks(surat, actorId)");
+    expect(builder).toContain("await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink)");
     expect(builder).toContain("recommendationRequired,");
     expect(builder).toContain("applicantAttachments,");
   });
@@ -54,7 +54,7 @@ describe("REC-03 Marison asset runtime integration", () => {
     const end = runtime.indexOf("const buildMarisonFundPayload", start);
     const builder = runtime.slice(start, end);
 
-    expect(builder).toContain("const documents = await buildMarisonDocumentLinks(surat, actorId)");
+    expect(builder).toContain("const documents = await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink)");
     expect(builder).toContain("main_document: documents.mainDocument");
     expect(builder).toContain("const applicantAttachments = documents.attachments");
     expect(builder).not.toMatch(/recommendationRequired\s*\?\s*\[\]/);

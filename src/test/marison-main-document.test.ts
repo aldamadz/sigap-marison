@@ -31,7 +31,7 @@ describe("Digivasi main_document contract (15 October 2026)", () => {
     const builders = ["Unit", "NonUnit", "Asset", "Fund", "Dispatch"];
     for (let i = 0; i < builders.length - 1; i++) {
       const body = source.slice(source.indexOf(`const buildMarison${builders[i]}Payload`), source.indexOf(`const buildMarison${builders[i + 1]}Payload`));
-      expect(body).toContain("await buildMarisonDocumentLinks(surat, actorId)");
+      expect(body).toContain("await buildMarisonDocumentLinks(surat, actorId, overrides.existingFileLink)");
       expect(body).toContain(builders[i] === "Fund" ? "mainDocument: documents.mainDocument" : "main_document: documents.mainDocument");
       expect(body).toContain("documents.attachments");
       expect(body).not.toContain("attachments[0]");

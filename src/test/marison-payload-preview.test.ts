@@ -48,14 +48,26 @@ function harness(options: { denied?: boolean; originDenied?: boolean; stored?: u
   tokens.select.mockReturnValue(tokens);
   const prepare = vi.fn(() => ({ payload: { type: "marketing_cost", main_document: "verified-link" }, payloadHash: "candidate" }));
   const from = vi.fn((table: string) => table === "surat_registrasi" ? letterQuery : table === "file_view_tokens" ? tokens : query);
-  const context = { supabase: { from }, requireAdminUser: async () => { if (options.denied) throw Object.assign(new Error("Forbidden"), { status: 403 }); }, getBearerToken: () => "session", marisonDeploymentEnvironment: "staging", previewStoredMarisonPayload,
+  const current = vi.fn(async () => ({ source: "latest", payload: { corrected: true } }));
+  const context = { supabase: { from }, generateCurrentMarisonPayloadPreview: current, requireAdminUser: async () => { if (options.denied) throw Object.assign(new Error("Forbidden"), { status: 403 }); }, getBearerToken: () => "session", marisonDeploymentEnvironment: "staging", previewStoredMarisonPayload,
     process: { env: { APP_PUBLIC_URL: "https://sigap.test" } }, fundPostmanLinks: () => [{ tokenHash: "hash" }], previewFundForPostman: prepare,
     resolveFinalMarisonPdfPath: () => "main.pdf", parseStorageRef: vi.fn(),
     assertSameOrigin: () => { if (options.originDenied) throw Object.assign(new Error("Origin"), { status: 403 }); } };
   const runtime = vm.runInNewContext(handler + "\n({getMarisonOutboundPayloadPreview});", context);
-  return { get: (value = id, view = "stored") => runtime.getMarisonOutboundPayloadPreview({}, value, view), from, query, letterQuery, tokens, prepare };
+  return { get: (value = id, view = "stored") => runtime.getMarisonOutboundPayloadPreview({}, value, view), from, query, letterQuery, tokens, prepare, current };
 }
 describe("admin payload endpoint", () => {
+  it("uses the separate latest generator only after admin, environment and history validation", async () => {
+    const h = harness();
+    expect(await h.get(id, "latest")).toMatchObject({ source: "latest" });
+    expect(h.current).toHaveBeenCalledWith(job, expect.objectContaining({ source: "frozen" }));
+    const denied = harness({ denied: true });
+    await expect(denied.get(id, "latest")).rejects.toMatchObject({ status: 403 });
+    expect(denied.current).not.toHaveBeenCalled();
+    const foreign = harness({ stored: { ...job, environment: "production" } });
+    await expect(foreign.get(id, "latest")).rejects.toMatchObject({ status: 404 });
+    expect(foreign.current).not.toHaveBeenCalled();
+  });
   it.each([{ denied: true }, { originDenied: true }])("rejects unauthorized before DB access %j", async options => {
     const h = harness(options); await expect(h.get()).rejects.toMatchObject({ status: 403 }); expect(h.from).not.toHaveBeenCalled();
   });
