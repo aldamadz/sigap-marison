@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { compareCurrentPayload, currentPayloadPreview, reusableCurrentFileLinks, storedCapabilityLinks } from "../../backend/src/lib/marison-current-payload";
 import { previewStoredMarisonPayload } from "../../backend/src/lib/marison-payload-preview";
 import { buildMarisonDocumentBundle } from "../../backend/src/lib/marison-document-links";
-import { getExternalUnitReference, applyExternalUnitReference } from "../../shared/src/external-unit-reference";
+import { getExternalUnitReference, applyExternalUnitReference } from "@sigap/shared";
 import { buildProductionCode } from "../../production-code.mjs";
 
 const origin = "https://sigap.test";

@@ -43,7 +43,7 @@ export function compareCurrentPayload(before: unknown, after: unknown): Change[]
     if (hasLeft && hasRight && object(left) && object(right) && Array.isArray(left) === Array.isArray(right)) {
       for (const field of new Set([...Object.keys(left), ...Object.keys(right)])) {
         walk(left[field], right[field], Array.isArray(right) ? `${path}[${field}]` : path ? `${path}.${field}` : field,
-          Object.hasOwn(left, field), Object.hasOwn(right, field), depth + 1);
+          Object.prototype.hasOwnProperty.call(left, field), Object.prototype.hasOwnProperty.call(right, field), depth + 1);
       }
     } else changes.push({ path: path || "$", before: hasLeft ? left : null, after: hasRight ? right : null, removed: !hasRight, added: !hasLeft });
   };
