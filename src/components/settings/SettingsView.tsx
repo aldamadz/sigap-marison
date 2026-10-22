@@ -8,6 +8,8 @@ import {
   Camera, Phone, CalendarDays, Monitor, Moon, Sun
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { Link } from 'react-router';
+import { desktopIntegrationVisible } from '@/lib/desktop-api';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -209,6 +211,7 @@ export const SettingsView = () => {
       <header>
         <h2 className="text-2xl font-bold text-foreground">Settings</h2>
         <p className="text-sm text-muted-foreground">Kelola profil, tampilan, dan keamanan akun.</p>
+        {desktopIntegrationVisible() && <Button asChild variant="outline" className="mt-3"><Link to="/settings/devices"><Monitor className="mr-2 h-4 w-4" />Perangkat terhubung</Link></Button>}
       </header>
 
       <div className="grid gap-6">

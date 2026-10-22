@@ -14,6 +14,7 @@ import { AttentionProvider } from "@/providers/AttentionProvider";
 import { RealtimeSync } from "@/providers/RealtimeSync";
 import { MarisonEnvironmentProvider } from "@/providers/MarisonEnvironmentProvider";
 import { isWorkCalendarEnabled } from "@/lib/feature-availability";
+import { desktopIntegrationVisible } from "@/lib/desktop-api";
 
 // STATIC IMPORT (Hanya Login karena ini entry point pertama)
 import LoginPage from "@/pages/auth/LoginPage"; 
@@ -54,6 +55,8 @@ const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrati
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 const AccessConfigurationPage = lazy(() => import("./pages/admin/AccessConfigurationPage"));
 const MaintenanceConfigurationPage = lazy(() => import("./pages/admin/MaintenanceConfigurationPage"));
+const DesktopAuthorizePage = lazy(() => import("./pages/auth/DesktopAuthorizePage"));
+const DesktopDevicesPage = lazy(() => import("./pages/settings/DesktopDevicesPage"));
 
 // Konfigurasi Query Client
 const queryClient = new QueryClient({
@@ -186,6 +189,7 @@ const App = () => {
           element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />}
         />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {desktopIntegrationVisible() && <Route path="/desktop/authorize" element={isAuth ? <DesktopAuthorizePage /> : <LoginPage />} />}
         <Route path="/maintenance-admin" element={isAuth ? <Navigate to="/admin/configuration/maintenance" replace /> : <LoginPage />} />
         <Route path="/docs" element={<PublicDocsPage />} />
         <Route path="/docs/:topicSlug" element={<PublicDocsPage />} />
@@ -203,6 +207,7 @@ const App = () => {
           <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
           <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
           <Route path="/settings" element={<SettingsPage />} />
+          {desktopIntegrationVisible() && <Route path="/settings/devices" element={<DesktopDevicesPage />} />}
 
           {/* SURAT MODULE */}
           <Route path="/surat/registrasi" element={<SuratPage />} />
@@ -236,6 +241,7 @@ const App = () => {
   <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
   <Route path="access" element={<AccessConfigurationPage />} />
   <Route path="maintenance" element={<MaintenanceConfigurationPage />} />
+  {desktopIntegrationVisible() && <Route path="desktop-devices" element={<DesktopDevicesPage admin />} />}
 </Route>
         </Route>
 
