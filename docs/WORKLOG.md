@@ -32,3 +32,34 @@
   rollout. No outbound recovery, new generation, vendor POST or payload rewrite.
 - Focused local tests: 68 passed. Remaining: clean Linux gates, database preflight,
   PRs, staging acceptance, selective production promotion and runtime verification.
+
+## 2026-10-22 [Codex] MRN-27 Completed / Issue #704
+
+- Supersedes the pending release status above. Source `704ef70d93719e85a88d6a64b8168fdf96e6e982`;
+  PR #705 staging, #706 selective production, #707 ancestry synchronization.
+- Live staging `5bbacb456b2211f16bf477299d8ff1625fcee210` contained production
+  target before cutover; production `8768534043e947d0c74daa40a471a8f9d93eaf66`.
+  Public SHA/health/live/ready/root verified; production workers kept their IDs.
+- Forward migration `20261022090000` applied and verified both environments,
+  normalized SHA256 `9b2fa427651dd1d8aba3be607680b79973c39098f7d55db527e1d9d4d8179541`.
+  Audited known historical lineage drift; no replay, include-all or ledger repair.
+  Dispatch rows, original token coordinates/security fields and active attachments
+  unchanged during application. Archive RLS/ACLs and service-only RPCs verified.
+- Exact-source clean Linux lint/typecheck/frontend+backend builds/diff check passed;
+  100 focused tests in eight files and real disposable PostgreSQL assertions passed,
+  including repeat migration, immutable archive, stale replacement, actor checks,
+  preview single-use, revocation and canonical recommendation resolution.
+- GitHub hosted check 119591459656 did not start because billing/spending is blocked;
+  this is not CI success. Four existing moderate development advisories remain;
+  npm audit high/critical gate passed. No dependency changes in this feature.
+- Read-only public acceptance: staging main URL repeated twice, exact canonical
+  bytes and no-store; production letter 051 main AND legacy recap URLs changed to
+  the latest corrected bytes without mutating their token coordinates or the
+  frozen dispatches. Prior physical objects remained byte-identical.
+- No vendor POST, resend, new generation, approval, content correction or worker
+  rollout. No blockers remain. Vendor-local downloaded copies are outside SIGAP
+  URL resolution; archive metadata does not recreate files deleted before this fix.
+- Durable finding: bind future tokens to logical document/attachment identity,
+  never positional list order; compare publication state again after metadata
+  reads so a concurrent revision cannot mix working attachments with old approvals.
+  `docs/PROJECT_CONTEXT.md` remains absent; no shared document structure changed.
