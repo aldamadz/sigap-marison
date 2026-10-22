@@ -47,6 +47,10 @@ describe("verifier optional attachment boundary", () => {
     expect(handler).toContain('supabase.rpc("is_inbox_task_active"');
     expect(handler.indexOf('supabase.rpc("is_inbox_task_active"')).toBeLessThan(handler.indexOf("const { data: oldRows"));
     expect(handler.indexOf("hasValidOptionalFileSignature(")).toBeLessThan(handler.indexOf("const { data: oldRows"));
-    expect(handler).toContain("row.requirement_key !== VERIFIER_OPTIONAL_ATTACHMENT_KEY");
+    expect(handler).toContain('supabase.rpc("replace_signature_attachment_metadata"');
+    expect(handler).toContain("p_expected: oldRows || [], p_files: rows");
+    expect(handler.indexOf('.upload(filePath')).toBeLessThan(handler.indexOf('supabase.rpc("replace_signature_attachment_metadata"'));
+    expect(handler).not.toContain('.remove(');
+    expect(handler).not.toContain('.delete()');
   });
 });

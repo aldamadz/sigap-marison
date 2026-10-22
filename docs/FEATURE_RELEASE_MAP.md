@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## MRN-27 Latest Published External PDF Links (2026-10-22, Issue #704)
+
+- External links follow the same document's approved published main/attachment
+  PDF. Preview, email and historical signer links remain pinned; no outbound resend.
+- Original capability coordinates and immutable sent body/hash remain evidence.
+  Only canonical publications qualify; drafts, revoked/expired links, foreign
+  origins/documents and ambiguous replacements never select a newer file.
+- Retain previous attachment objects and archive metadata append-only. Atomic
+  replacement preserves stable IDs in one-file slots; multi-file replacements
+  require unambiguous identity rather than relying on list position.
+- Forward migration20261022090000; recommendation resolution retains its canonical
+  fingerprint gate. User explicitly authorized staging then selective production.
+- Vendor-local downloaded copies still require vendor reload; only SIGAP-hosted
+  delivered URLs are controlled here. No real vendor POST in acceptance.
+
 ## SUR-36 Unit Addendum Import Amounts (2026-10-21, Issue #700)
 
 - Candidate `codex/unit-addendum-import-20261021` from main, target staging.
