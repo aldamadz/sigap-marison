@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## AUTH-09 Desktop Pairing and Notifications (2026-10-22, Issue #718)
+
+- 2026-10-22 [Codex] Staging-only pilot for the team's Tauri Windows/macOS app.
+  Browser account consent, eight-digit device confirmation and S256 proof issue
+  private scoped device credentials, not web/Supabase/admin access.
+- Own profile and paginated existing notification inbox, explicit mark-read,
+  token rotation/reuse revocation, account/password guards and own/admin device
+  revocation. Production gate remains disabled; no production rollout authorized.
+- Additive migration20261022120000, service-role-only tables/RPCs with RLS and
+  explicit grants. No new notification producer, worker or vendor mutation.
+- API contract and team handoff: `DESKTOP_STAGING_CONTRACT.md` and
+  `PROMPT_TIM_TAURI_SIGAP.md`. Native signed app/OS delivery must be accepted by
+  the desktop team. Runtime staging evidence belongs in the dated worklog.
+
 ## MRN-28 Current Payload Candidate (2026-10-22, Issue #711)
 
 - Candidate `codex/latest-payload-preview-20261022` from main, staging first.

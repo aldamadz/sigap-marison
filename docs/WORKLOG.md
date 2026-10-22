@@ -110,3 +110,13 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+# 2026-10-22 [Codex] AUTH-09 Desktop staging integration started
+
+- Issue #718, branch `codex/desktop-sigap-integration-20261022`, main-based.
+- User authorized staging preparation and team prompt, not production.
+- Isolated device pairing/notifications and own/admin revocation; browser consent
+  uses existing account login. No credential sharing with Tauri JavaScript.
+- Forward migration20261022120000 and contract/team prompt prepared. Focused
+  API tests24 passed; PostgreSQL, UI and deployed acceptance still pending.
+- No production changes. `docs/PROJECT_CONTEXT.md` was absent; this task does not
+  invent historical project knowledge or change shared-file structure.

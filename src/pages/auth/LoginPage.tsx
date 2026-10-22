@@ -76,7 +76,8 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const destination = window.location.pathname === '/maintenance-admin' ? '/admin/configuration/maintenance' : '/dashboard';
+    const destination = window.location.pathname === '/maintenance-admin' ? '/admin/configuration/maintenance'
+      : window.location.pathname === '/desktop/authorize' ? `/desktop/authorize${window.location.search}` : '/dashboard';
     setIsLoading(true);
 
     try {
