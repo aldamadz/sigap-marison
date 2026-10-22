@@ -13,6 +13,11 @@
 - API contract and team handoff: `DESKTOP_STAGING_CONTRACT.md` and
   `PROMPT_TIM_TAURI_SIGAP.md`. Native signed app/OS delivery must be accepted by
   the desktop team. Runtime staging evidence belongs in the dated worklog.
+- 2026-10-22 [Codex] ACTIVE in staging at `cb56ddceca371a25078040d667141dc496ac35d0`,
+  PR #719/#720 and migration20261022120000. Seven public desktop APIs,53-item
+  pagination/ownership, rotation/reuse, logout isolation and browser/admin device
+  revocation passed.27 focused tests and real PostgreSQL/clean Linux gates passed;
+  hosted CI did not start due billing. Production and four staging workers unchanged.
 
 ## MRN-28 Current Payload Candidate (2026-10-22, Issue #711)
 

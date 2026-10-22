@@ -158,3 +158,28 @@ client/origin configuration review and acceptance from the actual signed apps.
 Use official current Tauri2 docs for the team's installed version. Windows/macOS
 native permissions, app identity, packaging and signing must be tested by the
 desktop team; a browser toast is not proof of native notification delivery.
+
+## Staging Activation Evidence
+
+2026-10-22 [Codex]: activated at runtime
+`cb56ddceca371a25078040d667141dc496ac35d0` (PR #719/#720), with the selected
+migration20261022120000 applied and private-table/RPC grants verified.
+Earlier404 responses came from the pre-AUTH-09 runtime, not a Tauri client error.
+
+All seven desktop endpoints passed authenticated public acceptance: pairing,
+token exchange, profile, notification list, mark-read, refresh and logout.
+53 temporary tester notifications traversed two pages without loss; foreign
+read attempts404, missing desktop credentials401, and non-admin device admin403.
+Fixtures were removed and acceptance device sessions revoked. No existing
+notification, document, approval, vendor job or production data was changed.
+
+Real browser approval and admin revocation passed, including1440px desktop and
+390px mobile light/dark layouts. Admin revocation immediately rejects the device
+token. Native Windows/macOS app delivery remains the desktop team's acceptance.
+
+Clean exact-merge Linux checks:27 targeted tests, PostgreSQL17 assertions and
+concurrent single-use exchange, lint/typecheck/frontend/backend build passed.
+Hosted CI could not start due account billing/spending; it is not reported as
+CI success. Four existing moderate development advisories remain; no high or
+critical advisory. The app-only rollout left all four staging workers/services
+on their previous container IDs/images. Production remains unchanged.
