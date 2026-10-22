@@ -14,6 +14,12 @@
   fingerprint gate. User explicitly authorized staging then selective production.
 - Vendor-local downloaded copies still require vendor reload; only SIGAP-hosted
   delivered URLs are controlled here. No real vendor POST in acceptance.
+- 2026-10-22 [Codex] Released: PR #705/#706/#707; staging live `5bbacb456b`,
+  production live `8768534043`. Migration applied with frozen dispatch/token proof
+  in both environments. 100 focused tests, real PostgreSQL, lint/typecheck/build
+  passed. Public production 051 main and recap legacy URLs return newer bytes;
+  original objects and dispatches unchanged. Hosted CI billing prevented startup,
+  not a reported CI pass. See the dated MRN-27 completion in `docs/WORKLOG.md`.
 
 ## SUR-36 Unit Addendum Import Amounts (2026-10-21, Issue #700)
 
