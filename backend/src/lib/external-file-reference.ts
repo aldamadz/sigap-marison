@@ -68,8 +68,9 @@ export async function resolveExternalFileReference(client: any, tokenId: string,
   if (token.purpose !== "external_marison" || !/\.pdf$/i.test(token.object_path)) {
     return consumedReference || { bucket: token.bucket, path: token.object_path, origin: token.storage_origin || "primary" };
   }
-  const result = await client.from("surat_registrasi")
-    .select("id,status,file_path,pdf_path,surat_signatures(id,step_order,is_signed,signed_at,pdf_path_snap)").eq("id", token.surat_id).maybeSingle();
+  const publication = () => client.from("surat_registrasi")
+    .select("id,status,updated_at,file_path,pdf_path,surat_signatures(id,step_order,is_signed,signed_at,pdf_path_snap)").eq("id", token.surat_id).maybeSingle();
+  const result = await publication();
   if (result.error || !result.data) throw unavailable();
   const [jobResult, attachmentResult, historyResult] = await Promise.all([
     client.from("document_pdf_jobs").select("status,pdf_url,source_file_path,signature_id").eq("surat_id", token.surat_id).eq("status", "done").order("created_at", { ascending: false }).limit(1000),
@@ -77,6 +78,13 @@ export async function resolveExternalFileReference(client: any, tokenId: string,
     client.from("surat_attachment_file_history").select("attachment_snapshot").eq("surat_id", token.surat_id).order("archived_at", { ascending: false }).limit(1000),
   ]);
   if ([jobResult, attachmentResult, historyResult].some(value => value.error || value.data?.length === 1000)) throw unavailable();
+  // A revision may start while the metadata requests are in flight. Do not join
+  // its new attachments to an older approval snapshot read before that revision.
+  const confirmed = await publication();
+  const fingerprint = (row: Document | null) => row && JSON.stringify({ ...row,
+    surat_signatures: [...(row.surat_signatures || [])].sort((a, b) => a.id.localeCompare(b.id)),
+  });
+  if (confirmed.error || fingerprint(confirmed.data) !== fingerprint(result.data)) throw unavailable();
   return chooseExternalFileReference({ token, document: result.data, jobs: jobResult.data || [], attachments: attachmentResult.data || [],
     history: (historyResult.data || []).map((row: { attachment_snapshot: Attachment }) => row.attachment_snapshot), parseRef });
 }

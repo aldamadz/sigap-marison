@@ -63,12 +63,14 @@ describe("latest published external PDF reference", () => {
 
 describe("canonical resolver boundary", () => {
   function clientFor(failure?: string) {
+    let documentReads = 0;
     const records: Record<string, unknown> = {
       file_view_tokens: token, surat_registrasi: document, document_pdf_jobs: jobs,
       surat_attachments: [], surat_attachment_file_history: [],
     };
     const from = vi.fn((table: string) => {
-      const result = { data: records[table], error: failure === table ? new Error("unavailable") : null };
+      if (table === "surat_registrasi") documentReads++;
+      const result = { data: table === "surat_registrasi" && failure === "concurrent_revision" && documentReads > 1 ? { ...document, status: "PROSES" } : records[table], error: failure === table ? new Error("unavailable") : null };
       const chain: Record<string, unknown> = {};
       for (const method of ["select", "eq", "order"]) chain[method] = vi.fn(() => chain);
       chain.maybeSingle = vi.fn(async () => result);
@@ -81,8 +83,11 @@ describe("canonical resolver boundary", () => {
     const client = clientFor();
     expect((await resolveExternalFileReference(client, "t", parseRef)).path).toBe("new.pdf");
     expect(client.from.mock.calls.map(([table]) => table)).toEqual([
-      "file_view_tokens", "surat_registrasi", "document_pdf_jobs", "surat_attachments", "surat_attachment_file_history",
+      "file_view_tokens", "surat_registrasi", "document_pdf_jobs", "surat_attachments", "surat_attachment_file_history", "surat_registrasi",
     ]);
+  });
+  it("does not combine a previously approved snapshot with a concurrent working revision", async () => {
+    await expect(resolveExternalFileReference(clientFor("concurrent_revision"), "t", parseRef)).rejects.toThrow();
   });
   it.each(["file_view_tokens", "surat_registrasi", "document_pdf_jobs", "surat_attachments", "surat_attachment_file_history"])("fails closed if %s cannot be read", async table => {
     await expect(resolveExternalFileReference(clientFor(table), "t", parseRef)).rejects.toThrow();
