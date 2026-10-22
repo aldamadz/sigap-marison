@@ -59,10 +59,11 @@ function harness(options: { status?: string; signed?: boolean; missingToken?: bo
   const letter = { id: "letter", status: options.status || "DONE", updated_at: "2026-10-22", file_path: "native://document/letter", pdf_path: options.noPdf ? null : "new.pdf", surat_signatures: [{ id: "s", is_signed: options.signed !== false, signed_at: "2026-10-22" }], surat_attachments: [] };
   const token = { id: "t", token_hash: hash, purpose: "external_marison", surat_id: "letter", revoked_at: options.revoked ? "2026-10-22" : null, expires_at: options.expired ? "2000-01-01" : null };
   const from = vi.fn((table: string) => {
-    if (!["surat_registrasi", "file_view_tokens"].includes(table)) throw new Error(`Unexpected table ${table}`);
+    if (!["surat_registrasi", "file_view_tokens", "marison_outbound_dispatches"].includes(table)) throw new Error(`Unexpected table ${table}`);
     const chain: any = {};
-    for (const method of ["select", "eq"]) chain[method] = () => chain;
+    for (const method of ["select", "eq", "limit"]) chain[method] = () => chain;
     chain.maybeSingle = async () => {
+      if (table === "marison_outbound_dispatches") return { data: { id: "accepted-generation" }, error: null };
       reads++;
       return { data: { ...letter, status: options.concurrent && reads > 1 ? "PROSES" : letter.status }, error: null };
     };

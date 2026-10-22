@@ -50,13 +50,14 @@ export function MarisonPayloadDialog({ row, onClose }: { row: MarisonDispatchRow
         <Badge variant="outline">{row.environment === "production" ? "Production" : "Staging"}</Badge>
         {data?.endpoint && <code className="break-all">{data.method} {data.endpoint}</code>}
       </div>
+      <div className="min-h-0 space-y-4 overflow-y-auto" role="region" aria-label="Isi payload">
       {query.isFetching ? <div role="status" className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Memuat payload</div>
         : query.isError ? <div role="alert" className="space-y-3 rounded-md border border-destructive/30 p-4 text-sm">
           <p>{query.error instanceof Error ? query.error.message : "Payload gagal dimuat."}</p>
           <Button variant="outline" size="sm" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Coba lagi</Button>
         </div> : !json ? <p role="status" className="py-8 text-sm text-muted-foreground">{view === "latest" ? "Kandidat belum dibuat." : "Payload belum tersimpan untuk generasi ini."}</p>
           : <>
-            {data?.source === "latest" ? <div className="min-h-0 space-y-3 overflow-y-auto text-sm">
+            {data?.source === "latest" ? <div className="space-y-3 text-sm">
               <div className="flex flex-wrap items-center gap-2"><Badge variant="outline">Validasi lulus</Badge><span className="text-muted-foreground">Kandidat terbaru; belum dikirim. Riwayat tetap utuh.</span></div>
               <p className="font-medium text-amber-700 dark:text-amber-300">{data.acceptedPreviously ? "Pengajuan ini sudah diterima external. Gunakan jalur koreksi, bukan POST ulang yang dapat membuat duplikat." : "Mengirim JSON dari Postman dapat membuat pengajuan nyata. Periksa status penerimaan terlebih dahulu."}</p>
               <details className="rounded-md border border-border" open={Boolean(data.fieldChanges?.length)}>
@@ -76,6 +77,7 @@ export function MarisonPayloadDialog({ row, onClose }: { row: MarisonDispatchRow
             <pre tabIndex={0} aria-label="JSON payload" className="max-h-[50dvh] min-h-0 min-w-0 shrink overflow-auto rounded-md border border-border bg-muted/40 p-4 font-mono text-xs leading-5">{json}</pre>
             {data?.payloadHash && <p className="break-all font-mono text-xs text-muted-foreground">{["postman", "latest"].includes(data.source) ? "SHA-256 kandidat" : "SHA-256 tersimpan"}: {data.payloadHash}</p>}
           </>}
+      </div>
       <DialogFooter className="shrink-0">
         <Button variant="outline" onClick={onClose}>Tutup</Button>
         <Button variant="outline" disabled={!json || query.isError || query.isFetching} onClick={download}><Download className="mr-2 h-4 w-4" />Unduh JSON</Button>

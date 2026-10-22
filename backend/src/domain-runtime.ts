@@ -4072,8 +4072,11 @@ const generateCurrentMarisonPayloadPreview = async (job, stored) => {
     surat_attachments: [...row.surat_attachments].sort((a, b) => a.id.localeCompare(b.id)),
   });
   if (fingerprint(confirmed) !== fingerprint(surat)) throw unavailable("Data berubah saat payload dibuat. Generate ulang dari data terbaru.");
+  const accepted = await supabase.from("marison_outbound_dispatches").select("id").eq("surat_id", surat.id)
+    .eq("environment", job.environment).eq("status", "succeeded").limit(1).maybeSingle();
+  if (accepted.error) throw unavailable("Status penerimaan pengajuan belum dapat dipastikan.");
   return { ...stored, ...currentPayloadPreview(stored, { ...dispatch, payload: safe.payload }, job.kind, surat.updated_at),
-    acceptedPreviously: job.status === "succeeded", dispatchStatus: job.status,
+    acceptedPreviously: Boolean(accepted.data), dispatchStatus: job.status,
   };
 };
 
