@@ -13,7 +13,7 @@ try {
   run(["run", "--rm", "-d", "--name", container, "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:17-alpine"]);
   let ready = false;
   for (let i = 0; i < 30; i++) {
-    const check = spawnSync("docker", ["exec", container, "pg_isready", "-U", "postgres"], { encoding: "utf8" });
+    const check = spawnSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], { encoding: "utf8" });
     if (check.status === 0) { ready = true; break; }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
