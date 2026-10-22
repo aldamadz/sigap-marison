@@ -73,3 +73,12 @@ dan pencabutan akses dari Settings/Konfigurasi SIGAP. Jangan memakai production.
 Serahkan perubahan terfokus, tes terdampak, panduan build/signing, screenshot
 login/inbox/status koneksi, bukti native popup kedua OS dan daftar batas yang
 belum diuji. Jangan mengklaim lulus native popup hanya dari tes browser.
+
+## Status Backend Staging
+
+2026-10-22 [Codex]: AUTH-09 aktif pada runtime
+`cb56ddceca371a25078040d667141dc496ac35d0`. Ketujuh endpoint dan halaman
+persetujuan/pencabutan perangkat sudah diuji melalui domain staging. Mulai
+pairing baru untuk pengujian; kode lama kedaluwarsa setelah5 menit atau sekali
+ditukar. `/me` dan `/notifications` membalas401 tanpa Bearer token perangkat,
+bukan404. Jangan memakai token Supabase/web untuk endpoint desktop.
