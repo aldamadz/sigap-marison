@@ -202,11 +202,17 @@ export type MarisonPayloadPreview = {
   endpoint: string | null;
   postStartedAt: string | null;
   payloadHash: string | null;
-  source: "frozen" | "snapshot" | "unavailable" | "postman";
+  source: "frozen" | "snapshot" | "unavailable" | "postman" | "latest";
   payload: Record<string, unknown> | null;
   redacted: boolean;
   sourcePayloadHash?: string;
   changes?: string[];
+  generatedAt?: string;
+  sourceSuratUpdatedAt?: string | null;
+  acceptedPreviously?: boolean;
+  dispatchStatus?: string;
+  validation?: "passed";
+  fieldChanges?: { path: string; before: unknown; after: unknown; added: boolean; removed: boolean }[];
 };
 
 export type MarisonDispatchPage = {
@@ -294,6 +300,7 @@ export const marisonIntegrationService = {
   preflightReplacement: (dispatchId: string) => request<ReplacementPreflight>(`/api/integrations/marison/dispatches/${dispatchId}/replacement-preflight`),
   getPayload: (dispatchId: string) => request<MarisonPayloadPreview>(`/api/integrations/marison/dispatches/${encodeURIComponent(dispatchId)}/payload`, { cache: "no-store" }),
   getPostmanPayload: (dispatchId: string) => request<MarisonPayloadPreview>(`/api/integrations/marison/dispatches/${encodeURIComponent(dispatchId)}/payload?view=postman`, { cache: "no-store" }),
+  getLatestPayload: (dispatchId: string) => request<MarisonPayloadPreview>(`/api/integrations/marison/dispatches/${encodeURIComponent(dispatchId)}/payload?view=latest`, { cache: "no-store" }),
   createReplacement: (dispatchId: string, reason: string, confirmProductionSend = false, fundConfirmation?: { confirmNotReceived: boolean; confirmVendorFixed: boolean }) => request<{ replacementId: string | null; skipped?: boolean; code?: string | null }>(`/api/integrations/marison/dispatches/${dispatchId}/replacement`, {
     method: "POST",
     body: JSON.stringify({ reason, ...(confirmProductionSend ? { confirmProductionSend: true } : {}), ...fundConfirmation }),

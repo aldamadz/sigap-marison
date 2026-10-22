@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## MRN-28 Current Payload Candidate (2026-10-22, Issue #711)
+
+- Candidate `codex/latest-payload-preview-20261022` from main, staging first.
+- Admin Integration keeps immutable sent payload and explicitly generates current
+  JSON through canonical outbound builders with an injected read-only link strategy.
+  Shows field changes, timestamp, validation, hash and copy/download actions.
+- No dispatch preparation, generation, vendor business POST, token mint or PDF job.
+  Existing same-environment capabilities must resolve to canonical approved files;
+  missing links/recommendation transport URLs stop generation, never substitute
+  internal/public storage URLs or bypass fingerprint checks.
+- Unit preview can inspect already-submitted units but cannot issue a replacement
+  receipt; existing send/recovery validation remains unchanged. No migration.
+- Source 051 addendum repair and MRN-27 are production prerequisites already present.
+  Production promotion requires explicit authorization for this addition.
+
 ## MRN-27 Latest Published External PDF Links (2026-10-22, Issue #704)
 
 - External links follow the same document's approved published main/attachment
