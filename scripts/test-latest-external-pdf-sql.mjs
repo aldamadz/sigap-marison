@@ -72,7 +72,7 @@ end $$;
 function run(args, input = "") {
   const r = spawnSync("docker", args, { input, encoding: "utf8", timeout: 120000 });
   if (r.status !== 0) throw new Error(r.stderr + r.stdout);
-  return r.stdout;
+  return args.includes("psql") ? r.stdout + r.stderr : r.stdout;
 }
 const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
 try {
