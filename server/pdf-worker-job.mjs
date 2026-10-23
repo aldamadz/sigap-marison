@@ -300,8 +300,7 @@ export const createRecommendationJobHandler = ({
   const targetSignature = job.signature_id
     ? (signatures || []).find((signature) => signature.id === job.signature_id)
     : null;
-  const revisionHistory = await loadRequesterRevisionHistory(supabase,job,surat,targetSignature);
-  const data = normalizeRecommendationDocumentData(await enrichRevisionActors(supabase,surat,revisionHistory), {
+  const data = normalizeRecommendationDocumentData(surat, {
     items: recommendation.items,
     signatures: signatures || [],
     targetStep: targetSignature?.step_order || 0,

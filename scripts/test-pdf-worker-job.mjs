@@ -61,6 +61,25 @@ test("preview can be rendered by the recommendation handler without altering the
   assert.deepEqual(job, PREVIEW_JOB);
 });
 
+test("recommendation PDF skips audit queries but preserves source and signature context", async () => {
+  const source = { id: "recommendation", file_path: PREVIEW_JOB.source_file_path, form_input_data: { catatan: "Current note" } };
+  const original = structuredClone(source);
+  const db = makeSupabase({ surat_registrasi: { data: source, error: null } });
+  const from = db.from.bind(db);
+  db.from = table => {
+    assert.ok(!["surat_requester_revision_history", "profiles"].includes(table), "recommendation must not fetch printable revision history");
+    return from(table);
+  };
+  const handler = createRecommendationJobHandler({
+    supabase: db,
+    normalizeRecommendationDocumentData: (surat, options) => { assert.deepEqual(surat, original); return options; },
+    renderRecommendationPdf: async () => FAKE_PDF,
+    downloadStorageFile: async () => { throw new Error("Unexpected download"); },
+  });
+  assert.deepEqual(await handler(PREVIEW_JOB, { items: [] }), FAKE_PDF);
+  assert.deepEqual(source, original);
+});
+
 test("final canonical recommendation keeps its immutable snapshot and publication path", async () => {
   const job = { ...PREVIEW_JOB, render_payload: RECOMMENDATION_PAYLOAD, recommendation_content_fingerprint: "frozen-fingerprint" };
   const source = await resolveRecommendationPdfJob({ rpc: () => { throw new Error("Must not read live data"); } }, job);

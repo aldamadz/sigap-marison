@@ -3,7 +3,6 @@ import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import sharp from "sharp";
 import { buildRecommendationPagePlan } from "./recommendation-pdf.mjs";
 import { buildNativeSignatureBlock, loadLogoDataUrl, normalizeNativeSignatures } from "./pgd-pdf-renderer.mjs";
-import { revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 
 const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
@@ -319,7 +318,6 @@ export const normalizeRecommendationDocumentData = (source = {}, options = {}) =
   return {
     formNumber: text(location?.form?.nomor_form || source?.data_snapshot?.form?.nomor_form, "FM-UAI.HRD-30-00"),
     noSurat: text(source.no_surat, "DRAFT/UAI/REKOMENDASI"),
-    revisionHistory: revisionHistoryEntries(source),
     placeDate: [text(source.request_place, ""), formatDateId(source.request_date)].filter(Boolean).join(", ") || "-",
     notes: text(input.catatan || source.notes, ""),
     items: Array.isArray(options.items) ? options.items : [],
@@ -348,7 +346,6 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
         ...buildAttachmentCards(data, pages),
       ],
     }] : []),
-    ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
   ],
 });
 
@@ -366,7 +363,7 @@ export const renderRecommendationPdf = async (data, options = {}) => {
   }
   const logoDataUrl = options.logoDataUrl || await loadLogoDataUrl(options.logoPath);
   let expectedPages = 1 + pages.length;
-  // Layout may add pages for long text or revision appendices. Rebuild from fresh
+  // Layout may add pages for long text or photos. Rebuild from fresh
   // nodes with the actual total; pdfmake mutates the first definition during layout.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const definition = buildRecommendationDocumentDefinition(data, pages, logoDataUrl, expectedPages);
