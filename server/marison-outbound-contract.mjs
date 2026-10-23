@@ -131,7 +131,7 @@ export const marisonFundSubmissionSchema = z.object({
   amount: nonNegativeInteger,
   items: z.array(z.object({
     nama_barang: requiredText,
-    jumlah: positiveInteger,
+    jumlah: z.number().finite().positive().max(Number.MAX_SAFE_INTEGER),
     satuan: requiredText,
     nominal: nonNegativeInteger,
   }).strict()),

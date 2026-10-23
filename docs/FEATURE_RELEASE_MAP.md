@@ -45,6 +45,20 @@
 
 ## SUR-36 Unit Addendum Import Amounts (2026-10-21, Issue #700)
 
+### SUR-37 Decimal Item Quantities (2026-10-23, Issue #726)
+
+- 2026-10-23 [Codex] Positive item measurements accept up to six decimal places,
+  including values below one. Inputs/drafts/confirmation/recommendation models,
+  KEU totals and PDFs must preserve them without digit stripping or integer fallback.
+- Building/unit allocation counts and identifiers stay integral. Whole-Rupiah
+  extended prices round once per line through exact scaled integer arithmetic;
+  KEU10 SQL uses the same rule. No historical business data or payload rewrite.
+- Migration20261023120000 replaces only recommendation quantity validation and
+  KEU10 normalization, preserving ACLs and unrelated safeguards. Test in real
+  PostgreSQL before selected staging then production rollout explicitly authorized.
+- Fund serialization preserves decimal quantities. Vendor Asset quantity remains
+  integer-only per current external docs; do not round or fabricate outbound values.
+
 - Candidate `codex/unit-addendum-import-20261021` from main, target staging.
 - Unit XLSX import rounds numeric values and cached numeric formula results only
   in the Struktur Atas/Bawah columns to whole rupiah before strict parsing.

@@ -167,8 +167,8 @@ await assert.rejects(renderKeu10Pdf({ ...data, items: Array.from({ length: 101 }
 for (const items of [undefined, null, {}, [], [{}], [null], ["not a row"], [[]], [validItem, null]]) {
   assert.throws(() => normalizeKeu10DocumentData(withItems(items)), /KEU 10/);
 }
-for (const qty of [undefined, null, "", " ", 0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1,
-  "1.5", "-2", "1e2", "abc2", true, false, [], {}, "9007199254740992"]) {
+for (const qty of [undefined, null, "", " ", 0, -1, 0.0000001, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1,
+  "1.0000001", "-2", "1e2", "abc2", true, false, [], {}, "9007199254740992"]) {
   assert.throws(() => normalizeKeu10DocumentData(withItems([{ ...validItem, jumlah: qty }])), /Jumlah atau harga/);
 }
 for (const price of [undefined, null, "", " ", -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1,
@@ -192,7 +192,7 @@ assert.throws(() => normalizeKeu10DocumentData({ ...source, form_input_data: { i
 assert.throws(() => normalizeKeu10DocumentData({ ...source, form_input_data: { items: [
   { ...validItem, jumlah: 1, estimasi_harga_satuan: Number.MAX_SAFE_INTEGER }, { ...validItem, jumlah: 1, estimasi_harga_satuan: 1 },
 ] } }), /rentang angka aman/);
-for (const item of [{ ...data.items[0], jumlah: 0 }, { ...data.items[0], jumlah: 1.5 },
+for (const item of [{ ...data.items[0], jumlah: 0 }, { ...data.items[0], jumlah: 0.0000001 },
   { ...data.items[0], hargaSatuan: -1 }, { ...data.items[0], hargaSatuan: NaN }]) {
   assert.throws(() => buildKeu10DocumentDefinition({ ...data, items: [item] }), /Jumlah atau harga/);
   await assert.rejects(renderKeu10Pdf({ ...data, items: [item] }), /Jumlah atau harga/);
@@ -204,6 +204,13 @@ assert.equal(forgedDefinition.content[2].stack[0].table.body[0][5].text, "Rp 207
 assert.equal(forgedDefinition.content[1].table.body[1][5].text, "Rp 200.000.000");
 
 const definition = buildKeu10DocumentDefinition(data);
+for (const jumlah of [0.5, 1.5, "1,5"]) {
+  const decimal = normalizeKeu10DocumentData(withItems([{ ...validItem, jumlah, estimasi_harga_satuan: 1001 }]));
+  const quantity = Number(String(jumlah).replace(",", "."));
+  assert.equal(decimal.items[0].jumlah, quantity);
+  assert.equal(decimal.grandTotal, Math.round(quantity * 1001));
+  assert.equal(buildKeu10DocumentDefinition({ ...decimal, signatures: data.signatures }).content[1].table.body[1][2].text, quantity.toLocaleString("id-ID"));
+}
 const header = definition.header(2, 3).table.body[0];
 assert.deepEqual(header[1].stack.map((line) => line.text), ["FORM BIAYA PENGADAAN TANAH &", "PENGURUSAN IZIN"]);
 assert.ok(header[1].stack.every((line) => line.noWrap === true));

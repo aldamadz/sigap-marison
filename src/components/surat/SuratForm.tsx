@@ -3010,6 +3010,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                     ) : (
                       <Input
                         type={column.type === "number" ? "number" : "text"}
+                        step={column.type === "number" && /jumlah|qty|volume/i.test(column.key) ? "any" : undefined}
+                        inputMode={column.type === "number" && /jumlah|qty|volume/i.test(column.key) ? "decimal" : undefined}
                         value={String(row?.[column.key] ?? "")}
                         onChange={e => updateTableCell(field.key, rowIndex, column.key, e.target.value)}
                         className="h-12 bg-background text-sm"

@@ -57,7 +57,7 @@ export function Keu10SubmissionEditor({ value, onChange }: Props) {
               </div>
               <div className="min-w-0 space-y-2">
                 <Label htmlFor={`keu10-jumlah-${index}`}>Jumlah</Label>
-                <Input id={`keu10-jumlah-${index}`} type="number" min={1} step={1} required value={row.jumlah ?? ""}
+                <Input id={`keu10-jumlah-${index}`} type="number" min={0} step="any" inputMode="decimal" required value={row.jumlah ?? ""}
                   aria-invalid={rowIssues.some((issue) => issue.field === "jumlah")} aria-describedby={errorId}
                   onChange={(event) => updateRow(index, { jumlah: event.target.value })} />
               </div>

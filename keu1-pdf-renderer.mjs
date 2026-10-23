@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 import { signerRevisionNotes, revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
@@ -77,12 +78,13 @@ export const resolveKeu1MasterForm = async (client, formUsageId) => {
 
 const normalizeKeu1Item = (row, index) => {
   const record = asObject(row);
-  const quantity = Number(record.jumlah ?? record.quantity ?? record.qty ?? 1);
-  const safeQuantity = Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1;
+  const safeQuantity = parseItemQuantity(record.jumlah ?? record.quantity ?? record.qty ?? 1);
+  if (safeQuantity === null) throw new Error(`Jumlah item Kas Kecil ${index + 1} tidak valid.`);
   const rawUnitPrice = record.estimasi_harga_satuan ?? record.harga_satuan ?? record.unit_price ?? record.nominal;
   const hasUnitPrice = rawUnitPrice != null && String(rawUnitPrice).trim() !== "";
   const unitPrice = parseMoney(rawUnitPrice);
-  const total = safeQuantity * unitPrice;
+  const total = itemQuantityTotal(safeQuantity, unitPrice);
+  if (total === null) throw new Error(`Total item ${index + 1} di luar rentang angka aman.`);
   return {
     no: index + 1,
     keterangan: text(record.keterangan ?? record.nama_barang ?? record.name ?? record.description ?? record.item_name, ""),
@@ -311,7 +313,7 @@ export const buildKeu1DocumentDefinition = (data, logoDataUrl = null) => {
             ...items.map((item) => [
               itemCell(item.keterangan || item.satuan || Number(item.jumlah) > 1 || item.hasUnitPrice ? item.no : ""),
               itemCell(item.keterangan, "left"),
-              itemCell(typeof item.jumlah === "number" ? item.jumlah.toLocaleString("id-ID") : item.jumlah),
+              itemCell(typeof item.jumlah === "number" ? item.jumlah.toLocaleString("id-ID", { maximumFractionDigits: 6 }) : item.jumlah),
               itemCell(item.satuan),
               moneyCell(item.hargaSatuan, item.hasUnitPrice ?? item.hargaSatuan != null),
               moneyCell(item.total, item.hasUnitPrice ?? item.total != null),

@@ -430,7 +430,7 @@ describe("buildRecommendationMultiDetail pure unit tests", () => {
     expect(errors).toContain("Item 1: lokasi wajib dipilih.");
     expect(errors).toContain("Item 1: PIC wajib dipilih.");
     expect(errors).toContain("Item 1.1: nama atau spesifikasi wajib diisi.");
-    expect(errors).toContain("Item 1.1: jumlah minimal 1.");
+    expect(errors).toContain("Item 1.1: jumlah harus lebih dari 0, maksimal 6 angka desimal.");
     expect(errors).toContain("Item 1.1: uraian wajib diisi.");
     expect(errors).toContain("Item 1.1: keterangan wajib diisi.");
     expect(errors).toContain("Item 1.1: lampiran gambar wajib ditambahkan.");
