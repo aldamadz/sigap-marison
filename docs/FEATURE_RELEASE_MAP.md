@@ -12,6 +12,9 @@
   deprecated Expect-CT, COEP/COOP compatibility, safe reporting and rollback.
 - Full evidence/limitations: `docs/reviews/2026-10-23-security-prd-review.md`.
   No application, dependency, database, permission, secret or runtime changes.
+- 2026-10-23 [Codex] Subsequent independent audit requested and completed.
+  Sensitive findings delivered locally to owner, outside ordinary PR documents.
+  No remediation authorized or performed; see sanitized follow-up worklog.
 
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 

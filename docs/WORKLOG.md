@@ -134,3 +134,23 @@
 - Remaining: owner decision on revised scope, CI billing restoration and separate
   implementation authorization. `docs/PROJECT_CONTEXT.md` absent; no shared
   document structure created or changed. Durable findings are captured in review.
+
+## 2026-10-23 [Codex] SEC-02 Independent Audit Follow-Up / Issue #748
+
+- Owner requested an independent detailed vulnerability search, report before
+  remediation. Completed source and read-only configuration/catalog inspection,
+  plus isolated synthetic handler checks without business network requests.
+- Sensitive findings were delivered to the owner as a local report outside
+  versioned repository documents; do not copy exploit details to ordinary issues
+  or PRs. This is not a clean bill of health or a completed remediation release.
+- Production application baseline remains `ba813c92d7`. External API runtime
+  source was independently matched to the reviewed source by normalized hash.
+- No application edits, migrations, ACL/bucket/security setting changes, secret
+  rotation, business data writes, approvals, uploads, emails, push sends, external
+  business POSTs, deployment or worker restart were performed. Existing-file
+  verification used only bounded read-only samples; synthetic tests used fakes.
+- Remaining: owner review and explicit authorization of a scoped remediation;
+  active exploitation, stress testing and forensic assessment were not performed.
+  Docs-only diff checks and evidence-link validation passed; no full suite/build
+  rerun because no application code was changed. Hosted CI billing remains a
+  separate known blocker, not a reported SUCCESS.
