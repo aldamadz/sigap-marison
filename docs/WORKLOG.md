@@ -110,3 +110,30 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+
+## 2026-10-23 [Codex] OPS-13 Production Proxy Recovered / Issue #722
+
+- User explicitly approved only production proxy recovery after read-only audit.
+  Isolated `codex/production-proxy-recovery-20261023` from main `3597004`.
+- Cause: CT103 shared Caddy active SIGAP route still targeted retired Ubuntu
+  `10.10.10.246:3010`; host source already targeted CT104 `192.168.0.251:3010`.
+  Old single-file bind mount/active configuration drift caused upstream502 and
+  Cloudflare's maintenance fallback. No scheduled maintenance (`phase=none`).
+- Recovered at 03:22:44 UTC / 10:22:44 WIB by root-ETag guarded single-dial PATCH.
+  Whole active config equals the original plus exactly that scalar change;
+  host source unchanged. Private backups/proof stay inside CT103, not Git.
+- Public root/live/ready/version/session/maintenance HTTP200. Production SHA
+  unchanged `aec4be43b3f0d7fe3839af6ad49a51b3dccebd82`; staging also unchanged.
+  Anonymous Playwright1440/390 login acceptance passed with no maintenance
+  fallback, overflow, page errors or same-origin5xx. No login was submitted.
+- No app/DB/worker release, container restart, DNS/maintenance schedule change,
+  account/approval mutation or vendor POST. Incident recovery is complete.
+- Durable follow-up: existing in-container Caddyfile bind mount remains stale;
+  do not blindly reload it. Directory bind/recreation requires a separate shared
+  proxy change and review of pending host-file edits. See ops runbook.
+- Focused helper tests cover owned-host isolation, matcher ambiguity, source
+  relays, drift rejection and chunked HTTP/ETag handling. App quality gates are
+  not claimed for this operations-only record; runtime acceptance is above.
+- Keep the operational record PR open: merging main/staging triggers app deploy
+  and would exceed the user's narrow recovery scope. PROJECT_CONTEXT is absent;
+  no shared documentation structure changed.

@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## OPS-13 Production Proxy Recovery (2026-10-23, Issue #722)
+
+- 2026-10-23 [Codex] Operational recovery completed with explicit production
+  authorization. Only the active SIGAP Caddy dial changed from retired Ubuntu
+  `10.10.10.246:3010` to Proxmox CT104 `192.168.0.251:3010`.
+- Public root/health/session HTTP200 and anonymous desktop/mobile login passed;
+  production runtime remains `aec4be43b3`. No app/DB/worker deployment or restart.
+- Root ETag, private backups and whole-config comparison preserve shared routes.
+  Host source already correct; its stale single-file container bind mount remains
+  a separate coordinated follow-up. Never reload the stale container Caddyfile.
+- Source helper/tests/runbook in `ops/production-proxy`; documentation PR must
+  not trigger an unnecessary app rollout. See dated completion in WORKLOG.
+
 ## MRN-28 Current Payload Candidate (2026-10-22, Issue #711)
 
 - Candidate `codex/latest-payload-preview-20261022` from main, staging first.
