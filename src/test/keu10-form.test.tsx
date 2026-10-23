@@ -26,8 +26,12 @@ describe("KEU 10 identity and client arithmetic", () => {
     expect(validateKeu10SubmissionItems([item])).toEqual([]);
     expect(item.total).toBe(1);
   });
-  it.each([0, -1, 1.5, "", "NaN", Infinity, true])("rejects invalid quantity %s", (jumlah) => {
+  it.each([0, -1, 0.0000001, "", "NaN", Infinity, true])("rejects invalid quantity %s", (jumlah) => {
     expect(validateKeu10SubmissionItems([{ ...item, jumlah }])).toEqual(expect.arrayContaining([expect.objectContaining({ field: "jumlah" })]));
+  });
+  it.each([0.5, 1.5, "1,5"])("preserves decimal quantity %s and recomputes whole-Rupiah totals", (jumlah) => {
+    expect(validateKeu10SubmissionItems([{ ...item, jumlah }])).toEqual([]);
+    expect(getKeu10SubmissionAmount([{ ...item, jumlah }])).toBe(Number(String(jumlah).replace(",", ".")) * 150_000);
   });
   it.each(["", -1, Infinity, "1e5", "1.50"])("rejects invalid price %s", (estimasi_harga_satuan) => {
     expect(validateKeu10SubmissionItems([{ ...item, estimasi_harga_satuan }]).length).toBeGreaterThan(0);

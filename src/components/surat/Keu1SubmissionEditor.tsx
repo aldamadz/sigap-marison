@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { itemQuantityTotal } from "@sigap/shared";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ export function Keu1SubmissionEditor({ value, freeCashValue, onChange, onFreeCas
     if (target && ("jumlah" in patch || "estimasi_harga_satuan" in patch)) {
       const quantity = parseKeu1Quantity(target.jumlah) ?? 0;
       const unitPrice = parseKeu1Money(target.estimasi_harga_satuan) ?? 0;
-      target.total = quantity * unitPrice;
+      target.total = itemQuantityTotal(quantity, unitPrice) ?? 0;
     }
     onChange(nextRows);
   };
@@ -63,7 +64,7 @@ export function Keu1SubmissionEditor({ value, freeCashValue, onChange, onFreeCas
         const rowIssues = issues.filter((issue) => issue.index === index);
         const quantity = parseKeu1Quantity(row.jumlah) ?? 0;
         const unitPrice = parseKeu1Money(row.estimasi_harga_satuan) ?? 0;
-        const rowTotal = quantity * unitPrice;
+        const rowTotal = itemQuantityTotal(quantity, unitPrice) ?? 0;
         return (
           <fieldset key={row.id || index} className="min-w-0 rounded-md border border-border bg-background p-4">
             <legend className="px-2 text-xs font-semibold text-muted-foreground">Item {index + 1}</legend>
@@ -84,8 +85,9 @@ export function Keu1SubmissionEditor({ value, freeCashValue, onChange, onFreeCas
                 <Input
                   id={`keu1-item-jumlah-${index}`}
                   type="number"
-                  min={1}
-                  step={1}
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
                   value={String(row.jumlah ?? "")}
                   onChange={(event) => updateRow(index, { jumlah: event.target.value })}
                   placeholder="1"

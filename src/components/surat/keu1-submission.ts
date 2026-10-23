@@ -1,4 +1,5 @@
 import { parseCurrencyInput } from "@/lib/rupiah";
+import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 
 export type Keu1SubmissionItem = {
   id?: string;
@@ -42,8 +43,7 @@ export function normalizeKeu1SubmissionItems(value: unknown): Keu1SubmissionItem
 }
 
 export function parseKeu1Quantity(value: unknown): number | null {
-  const quantity = Number(value);
-  return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
+  return parseItemQuantity(value);
 }
 
 export function parseKeu1Money(value: unknown): number | null {
@@ -53,7 +53,7 @@ export function parseKeu1Money(value: unknown): number | null {
 function computeItemTotal(row: Keu1SubmissionItem): number {
   const quantity = parseKeu1Quantity(row.jumlah) ?? 0;
   const unitPrice = parseKeu1Money(row.estimasi_harga_satuan) ?? 0;
-  return quantity * unitPrice;
+  return itemQuantityTotal(quantity, unitPrice) ?? 0;
 }
 
 export function getKeu1SubmissionAmount(value: unknown): number {
@@ -82,9 +82,12 @@ export function validateKeu1SubmissionItems(value: unknown): Keu1SubmissionValid
   return rows.flatMap((row, index) => {
     const issues: Keu1SubmissionValidationIssue[] = [];
     if (!text(row.keterangan)) issues.push({ index, field: "keterangan", message: `Keterangan item ${index + 1} wajib diisi.` });
-    if (parseKeu1Quantity(row.jumlah) === null) issues.push({ index, field: "jumlah", message: `Jumlah item ${index + 1} wajib berupa angka bulat minimal 1.` });
+    if (parseKeu1Quantity(row.jumlah) === null) issues.push({ index, field: "jumlah", message: `Jumlah item ${index + 1} harus lebih dari 0, maksimal 6 angka desimal.` });
     if (!text(row.satuan)) issues.push({ index, field: "satuan", message: `Satuan item ${index + 1} wajib diisi.` });
     if (parseKeu1Money(row.estimasi_harga_satuan) === null) issues.push({ index, field: "estimasi_harga_satuan", message: `Estimasi harga satuan item ${index + 1} wajib diisi.` });
+    else if (parseKeu1Quantity(row.jumlah) !== null && itemQuantityTotal(row.jumlah, parseKeu1Money(row.estimasi_harga_satuan)) === null) {
+      issues.push({ index, field: "estimasi_harga_satuan", message: `Total item ${index + 1} melebihi batas angka aman.` });
+    }
     return issues;
   });
 }

@@ -2,14 +2,12 @@ import {
   assertMarisonOutboundContract,
   MARISON_FUND_CONTRACT_VERSION,
 } from "./marison-outbound-contract.mjs";
+import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 
 const text = (value) => String(value ?? "").trim();
 const nullableText = (value) => text(value) || null;
 const normalizedNik = (value) => text(value).toUpperCase().replace(/\s+/gu, " ");
-const positiveInteger = (value) => {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
-};
+const positiveQuantity = (value) => parseItemQuantity(value) ?? 0;
 const nonNegativeInteger = (value) => {
   const parsed = Number(String(value ?? "").replace(/[^\d-]/gu, ""));
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
@@ -17,18 +15,18 @@ const nonNegativeInteger = (value) => {
 
 const normalizeFundItems = (items) => (Array.isArray(items) ? items : []).map((item) => ({
   nama_barang: text(item?.nama_barang ?? item?.item_name ?? item?.nama ?? item?.name),
-  jumlah: positiveInteger(item?.jumlah ?? item?.quantity),
+  jumlah: positiveQuantity(item?.jumlah ?? item?.quantity),
   satuan: text(item?.satuan ?? item?.sat ?? item?.unit),
   nominal: nonNegativeInteger(item?.nominal ?? item?.subtotal ?? item?.nilai),
 }));
 
 export const mapKeu1ItemsForFund = (items) => (Array.isArray(items) ? items : []).map((item, index) => {
-  const quantity = positiveInteger(item?.jumlah);
+  const quantity = positiveQuantity(item?.jumlah);
   const rawUnitPrice = item?.estimasi_harga_satuan;
   const unitPrice = typeof rawUnitPrice === "number" || /^\d+$/u.test(text(rawUnitPrice))
     ? Number(rawUnitPrice)
     : NaN;
-  const nominal = quantity * unitPrice;
+  const nominal = itemQuantityTotal(quantity, unitPrice);
   if (!text(item?.keterangan) || !quantity || !text(item?.satuan) ||
       !Number.isSafeInteger(unitPrice) || unitPrice < 0 || !Number.isSafeInteger(nominal)) {
     const error = new Error(`Rincian Kas Kecil item ${index + 1} tidak valid untuk pengiriman.`);

@@ -14,6 +14,13 @@ const parents = [
   { id: "item-b", nama_barang: "Printer", jumlah: 2 },
 ];
 
+test("fractional assets fail explicitly instead of dropping quantity or a recommended item", () => {
+  assert.throws(() => mapMarisonApplicantAssetItems({ applicantItems: [{ nama_barang: "Kabel", jumlah: 1.5 }], attachments: [] }), /jumlah bulat/);
+  assert.throws(() => mapMarisonAssetItems({ applicantItems: parents,
+    recommendationRows: [{ parent_item_id: "item-a", details: [{ detail_name: "Kabel", quantity: 1.5 }, { detail_name: "Printer", quantity: 1 }] }],
+    recommendationPdf: pdf, applicantAttachments: [] }), /jumlah bulat/);
+});
+
 test("recommended assets retain main PDF, requester/checker files and recommendation PDF without duplicates", () => {
   const attachments = [
     { name: "Dokumen Pengajuan Final", link: "https://sigap.test/main.pdf" },

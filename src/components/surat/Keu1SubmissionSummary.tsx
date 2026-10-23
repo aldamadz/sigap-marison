@@ -1,5 +1,6 @@
 import { getKeu1FinancialSummary, normalizeKeu1SubmissionItems, parseKeu1Money, parseKeu1Quantity } from "@/components/surat/keu1-submission";
 import { formatRupiahZero } from "@/lib/rupiah";
+import { itemQuantityTotal } from "@sigap/shared";
 
 type Props = {
   items: unknown;
@@ -36,7 +37,7 @@ export function Keu1SubmissionSummary({ items, freeCashValue }: Props) {
                   <td className="px-3 py-2 text-right tabular-nums">{quantity ?? "-"}</td>
                   <td className="px-3 py-2">{row.satuan || "-"}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{price === null ? "-" : formatRupiahZero(price)}</td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">{price === null || quantity === null ? "-" : formatRupiahZero(quantity * price)}</td>
+                  <td className="px-3 py-2 text-right font-medium tabular-nums">{price === null || quantity === null ? "-" : formatRupiahZero(itemQuantityTotal(quantity, price))}</td>
                 </tr>
               );
             })}

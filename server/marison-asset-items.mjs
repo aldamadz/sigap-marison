@@ -1,3 +1,5 @@
+import { parseItemQuantity } from "@sigap/shared";
+
 const asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const asArray = (value) => Array.isArray(value) ? value : [];
 const text = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
@@ -132,7 +134,11 @@ export const mapMarisonAssetItems = ({ applicantItems, recommendationRows, recom
 
     return detailRows(row).flatMap((detail) => {
       if (!canonical && isNotRecommended(detail)) return [];
-      const quantity = positiveInteger(detail.quantity ?? detail.jumlah ?? parent.quantity ?? parent.jumlah);
+      const rawQuantity = detail.quantity ?? detail.jumlah ?? parent.quantity ?? parent.jumlah;
+      if (parseItemQuantity(rawQuantity) !== null && !Number.isInteger(parseItemQuantity(rawQuantity))) {
+        throw new MarisonAssetItemsError("API external Aset masih mensyaratkan jumlah bulat. Jumlah desimal tidak dibulatkan atau dihilangkan otomatis.");
+      }
+      const quantity = positiveInteger(rawQuantity);
       const assetName = text(
         detail.asset_name,
         detail.detail_name,
@@ -165,7 +171,11 @@ export const mapMarisonApplicantAssetItems = ({ applicantItems, attachments }) =
   const outgoing = asArray(applicantItems).flatMap((value) => {
     const item = asRecord(value);
     const assetName = text(item.asset_name, item.nama_barang, item.item_name, item.nama, item.barang, item.name);
-    const quantity = positiveInteger(item.quantity ?? item.jumlah);
+    const rawQuantity = item.quantity ?? item.jumlah;
+    if (parseItemQuantity(rawQuantity) !== null && !Number.isInteger(parseItemQuantity(rawQuantity))) {
+      throw new MarisonAssetItemsError("API external Aset masih mensyaratkan jumlah bulat. Jumlah desimal tidak dibulatkan atau dihilangkan otomatis.");
+    }
+    const quantity = positiveInteger(rawQuantity);
     if (!assetName) return [];
     const description = text(item.description, item.keterangan, item.notes, item.catatan);
     return [{

@@ -27,6 +27,13 @@ const detail = (id: string, order = 0): RecommendationDetail => ({
 });
 
 describe("recommendation multi-detail contract", () => {
+  it("preserves decimal applicant and component measurements through canonical and flat forms", () => {
+    const model = readLegacyRecommendationItems([{ parent_item_id: "measure", parent_item_name: "Kabel", parent_item_quantity: 1.5,
+      detail_id: "detail", nama_barang: "Kabel pengganti", jumlah: 0.5, recommendation_action: "replace" }]);
+    expect(model.items[0].applicant_original.quantity).toBe(1.5);
+    expect(model.items[0].details[0].quantity).toBe(0.5);
+    expect(flattenRecommendationItems(model)[0]).toMatchObject({ parent_item_quantity: 1.5, jumlah: 0.5 });
+  });
   it("accepts shared canonical v1 fixture without a separate specification field", () => {
     const fixture = JSON.parse(readFileSync(join(process.cwd(), "fixtures/recommendation-multi-detail-v1.json"), "utf8"));
     const model = readLegacyRecommendationItems(fixture.items);
@@ -252,7 +259,7 @@ describe("recommendation multi-detail contract", () => {
 
   it("creates injected IDs and rejects invalid required values", () => {
     expect(createRecommendationId(() => "detail-fixed")).toBe("detail-fixed");
-    expect(() => readLegacyRecommendationItems([{ nama_barang: "Printer", jumlah: 0, service: true }])).toThrow("positive integer");
+    expect(() => readLegacyRecommendationItems([{ nama_barang: "Printer", jumlah: 0, service: true }])).toThrow("positive quantity");
     const historical = readLegacyRecommendationItems([{
       nama_barang: "Printer",
       jumlah: 1,
