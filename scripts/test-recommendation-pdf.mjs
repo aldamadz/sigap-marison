@@ -272,13 +272,29 @@ test("keeps a complex computer compact on the form and preserves every component
   assert.equal(JSON.stringify(data), before);
 });
 
-test("keeps the attachment detail heading visible and accepts actual rendered page totals including revision pages", () => {
+test("keeps the attachment detail heading visible and accepts actual rendered page totals", () => {
   const items = canonicalMultiDetail();
   const data = normalizeRecommendationDocumentData({}, { items });
   const definition = buildRecommendationDocumentDefinition(data, buildRecommendationPagePlan(items), null, 19);
   assert.match(JSON.stringify(definition.content[0]), /1 dari 19/);
   const visibleHeadings = JSON.stringify(definition.content).match(/"color":"white"/g) || [];
   assert.equal(visibleHeadings.length, 0, "text-only fillColor is not a visible background");
+});
+
+test("omits recommendation revision history without changing source audit or current content", () => {
+  const source = {
+    no_surat: "TEST/RECOMMENDATION",
+    form_input_data: { catatan: "Catatan terkini tetap tampil" },
+    requester_revision_history: [{ reason: "AUDIT_ONLY_SENTINEL", before_snapshot: {}, after_snapshot: {} }],
+    revision_history: [{ reason: "AUDIT_ONLY_SENTINEL" }],
+  };
+  const original = structuredClone(source);
+  const data = normalizeRecommendationDocumentData(source, { items: canonicalMultiDetail() });
+  const definition = buildRecommendationDocumentDefinition({ ...data, revisionHistory: [{ reason: "AUDIT_ONLY_SENTINEL" }] }, []);
+  assert.equal(data.revisionHistory, undefined);
+  assert.doesNotMatch(JSON.stringify(definition), /AUDIT_ONLY_SENTINEL|RIWAYAT REVISI/);
+  assert.match(JSON.stringify(definition), /Catatan terkini tetap tampil/);
+  assert.deepEqual(source, original);
 });
 
 test("flows attachment cards with photos on the left and complete item metadata on the right", () => {
