@@ -7,8 +7,21 @@ import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import { getKeu1FinancialSummary, validateKeu1SubmissionItems } from "@/components/surat/keu1-submission";
 import { toMarisonFundSubmissionItems, validateFundSubmissionItems } from "@/components/surat/fund-submission";
 import { getKeu10SubmissionAmount } from "@/features/surat/registration/lib/keu10-form";
+import { getRevisionItemChanges } from "@/components/surat/revision-utils";
+import { signerRevisionNotes } from "../../document-revision-notes.mjs";
 
 describe("decimal item measurements", () => {
+  it("keeps revision UI and PDF line totals identical to the canonical whole-Rupiah amount", () => {
+    const row = { id: "a", keterangan: "Sewa", jumlah: 1, satuan: "Hari", estimasi_harga_satuan: 1001 };
+    const revision = { reason: "Sesuaikan volume", changes: { keu10_finance_proposal: true,
+      keu10_base: { document_snapshot: { form_input_data: { items: [row] } } },
+      confirmed_input: { items: [{ ...row, jumlah: 1.5 }] } } };
+    const ui = getRevisionItemChanges(revision);
+    expect(ui[0].nilai_disetujui).toContain("Total: Rp 1.502");
+    const pdf = signerRevisionNotes({ data_snapshot: { revision } }).join("\n");
+    expect(pdf).toContain("Total: Rp 1.502");
+    expect(pdf).not.toContain("1501.5");
+  });
   it.each([[0.5, 0.5], ["1,5", 1.5], ["12.75", 12.75], ["0.000001", 0.000001], [2, 2]])("preserves %s", (input, expected) => {
     expect(parseItemQuantity(input)).toBe(expected);
   });

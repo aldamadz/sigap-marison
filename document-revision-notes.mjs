@@ -1,3 +1,5 @@
+import { itemQuantityTotal } from "@sigap/shared";
+
 const object = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const rows = value => Array.isArray(value) ? value.map(object) : [];
 const valueText = (value, type) => {
@@ -19,7 +21,7 @@ export function signerRevisionNotes(source = {}) {
     const before = rows(object(original.form_input_data).items);
     const after = rows(object(changes.confirmed_input || changes.keu10_proposed_input).items);
     const used = new Set();
-    const describe = item => `Jumlah: ${item.jumlah}; Harga satuan: ${valueText(item.estimasi_harga_satuan,"money")}; Total: ${valueText(Number(item.jumlah)*Number(item.estimasi_harga_satuan),"money")}; Keterangan: ${item.keterangan || "-"}; Satuan: ${item.satuan || "-"}`;
+    const describe = item => `Jumlah: ${item.jumlah}; Harga satuan: ${valueText(item.estimasi_harga_satuan,"money")}; Total: ${valueText(itemQuantityTotal(item.jumlah,Number(item.estimasi_harga_satuan)),"money")}; Keterangan: ${item.keterangan || "-"}; Satuan: ${item.satuan || "-"}`;
     items = before.flatMap((item, index) => {
       const match = item.id ? after.findIndex(row => row.id === item.id) : index < after.length ? index : -1;
       const next = match >= 0 ? after[match] : undefined;
