@@ -4485,7 +4485,7 @@ const getAuthorizedSurat = async (suratId, token, authenticatedUser = null, { in
   const [signaturesRes, attachmentsRes] = await Promise.all([
     supabase
       .from("surat_signatures")
-      .select("id, user_id, verifier_snapshot, file_path_snap, pdf_path_snap")
+      .select("id, user_id, is_signed, verifier_snapshot, file_path_snap, pdf_path_snap")
       .eq("surat_id", suratId),
     includeAttachments
       ? supabase
