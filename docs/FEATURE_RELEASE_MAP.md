@@ -1357,6 +1357,16 @@ verifikasi juga runtime, database, worker, dan smoke test.
 
 ## REC-03 Attachment PDF Layout (2026-10-21, Issue #684)
 
+### REC-04 No Printed Revision History (2026-10-23, Issue #725)
+
+- 2026-10-23 [Codex] User authorized staging then production. Recommendation
+  PDFs omit revision-history appendices and their actor/history queries. Current
+  form, signatures, component descriptions and photo attachments remain intact.
+- Application audit records and other form PDFs are unchanged. App/PDF worker
+  must be rolled out together. Already-generated files are not silently rewritten;
+  retain signer/archive PDFs and use canonical regeneration for selected main PDFs.
+- Focused renderer/worker regressions pass62 tests before integration gates.
+
 - Attachment appendix follows the approved preview reference: bounded image
   column on the left and item identity/action/location/PIC/description/notes on
   the right. Several short component blocks can share a page, without forced
