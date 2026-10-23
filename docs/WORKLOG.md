@@ -110,3 +110,31 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+
+## 2026-10-23 [Codex] REC-05 Recommendation Images Recovered / Issue #741
+
+- User explicitly authorized staging then production and requested normal images
+  with a result summary. Isolated branch codex/recommendation-image-access-20261023
+  from mainb5bcb21; no parallel active image-routing claim was found.
+- Target from screenshot identified read-only as015/UAI/PBO.4/X/2026, KC Madiun
+  computer recommendation. Ten canonical photo references and objects existed.
+  Internal relay returned200 PNG, public URL404 from the application.
+- Root cause: active shared Caddy SIGAP host lacked public-storage relay, while
+  persisted host source already had it. This was configuration drift, not a file
+  deleted by CT104 cache cleanup or a recommendation/PDF content error.
+- Six focused Python tests and isolated real Caddy on staging host passed. A
+  root-ETag-guarded PATCH inserted only the established public-storage route;
+  exact full-config equality verified no other active setting changed. Persisted
+  source unchanged. Ten TLS-origin PNG hashes equal direct storage bytes.
+- Cloudflare exact-file purge cleared negative404 cache for26 current image URLs.
+  Actual Chrome decoded26 production and six staging existing images, all with
+  nonzero dimensions; desktop1440/mobile390 screenshots inspected. Both public
+  roots/live/ready/version/maintenance200, phase none. Staging already used its
+  working Supabase image origin and required no proxy or application deployment.
+- Runtime SHAs unchanged: staging5fef5a38a09cf28ecdf79e23978bdb644de74dd7;
+  productionb5bcb21f67781960ff93df412784b307dc524789. No server/app/worker restart,
+  database write, approval, PDF generation or outbound business POST performed.
+- Private proxy backup/proof retained inside CT103; no secrets in repository.
+  Root user changes untouched. PROJECT_CONTEXT still absent; shared structure
+  unchanged. Old bind-mount inode requires separate shared-proxy reconciliation;
+  do not blindly reload it. Future proxy smoke tests must include a storage image.

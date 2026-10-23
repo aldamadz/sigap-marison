@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## REC-05 Recommendation Image Routing (2026-10-23, Issue #741)
+
+- 2026-10-23 [Codex] Completed authorized staging-first verification and production
+  proxy recovery. Existing public image URLs returned application404 because the
+  active SIGAP route lacked its storage relay; all objects remained intact.
+- Only the public-storage relay was restored using guarded Caddy API patching;
+  no application deployment, data/ACL change, PDF rebuild or external resend.
+- Six focused tests, isolated staging Caddy, ten production origin image hashes,
+  actual Chrome decoding of26 production/six staging images and both-domain
+  health/version/maintenance acceptance passed. Exact-file negative cache purged.
+- The shared stale mount remains an infrastructure follow-up, not permission to
+  reload unrelated pending configuration. See ops/recommendation-image-routing.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
