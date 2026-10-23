@@ -110,3 +110,46 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+
+## 2026-10-23 [Codex] OPS-14 / REC-04 / SUR-37 / SEC-01 Completed
+
+- User explicitly approved CT104 production cleanup, then staging and production
+  release for recommendation PDF history omission and decimal item quantities.
+- OPS-14/#724: only unused build cache older24h pruned with2GB retained;
+  observed10.8GiB recovered. Disk84% to65%, final70% after selected builds with
+  about17GiB free. Cleanup container/image inventories unchanged; no data, logs,
+  images, rollback releases or volumes removed. Record PR#728 remains Draft.
+- REC-04/#725 source7221322; SUR-37/#726 sourcee64ebac plusf6437fd; SEC-01/#727
+  sourcef70149a. Staging#730/#731/#732, production#733/#734/#735, sync#736;
+  revision-total follow-up#737/#738/#739. No whole-staging promotion.
+- Final live staging5fef5a38a09cf28ecdf79e23978bdb644de74dd7 contains main;
+  productionb5bcb21f67781960ff93df412784b307dc524789 app/PDF sameimagea92556414c.
+  Other production services unchanged. Public root/live/ready/version/session/
+  maintenance200; Playwright1440/390 both domains passed without business writes.
+- Migration20261023120000 applied to both DBs after exact catalog/ledger audit;
+  same ACL/owner/flags, no business UPDATE. Exact selected tree matches clean
+  Linux tested6fbc0f70fe;271 focused Vitest,88 native tests, real PostgreSQL,
+  lint/typecheck/frontend+backend builds and audit high gate passed.30 additional
+  revision Vitest and9 native revision checks passed. No full-suite claim.
+- PDF recommendations omit printed revision history, not stored audit. Current
+  005/011/013 rebuilt/reused with2/5/7pages; actual form/signatures/pagination/
+  bounds verified. Prior objects and source/signature/audit/frozen dispatch
+  guards passed; no vendor POST/resend/replacement generation. Initial operator
+  preview attempts produced extra derived005 PDF jobs, all done; capabilities
+  are single-use, so final archive comparison used scoped storage coordinates.
+- Decimal item measurements accept positive values below1 with at most6 places.
+  Exact line totals round once to whole Rupiah, including revision UI/PDF.
+  Unit building counts/IDs unchanged. External Asset still requires integers:
+  fail explicitly rather than omit or round a fractional item; vendor contract
+  expansion remains separate. Fund serialization tested without vendor POST.
+- Newly published DOMPurify high/critical advisories fixed with3.4.17 only;
+  four moderate and one low baseline advisory remain. Hosted checks blocked
+  before startup by billing, NOT CI success (check120234202725 evidence).
+- Missing staging worker rollback image rebuilt from exactfc75b29b38 source;
+  worker file/shared output/package-lock hashes matched live worker before
+  coordinated cutover. Brief edge503 during replacement cleared at readiness.
+- Durable findings: preview tokens are single-use; never poll by re-enqueueing.
+  Preserve current/archived PDFs separately and use canonical guarded refresh,
+  not a business resend, for presentation changes. Full evidence and remaining
+  limits are in docs/releases/20261023-ct104-recommendation-decimals.md.
+  PROJECT_CONTEXT remains absent; shared document structure unchanged.

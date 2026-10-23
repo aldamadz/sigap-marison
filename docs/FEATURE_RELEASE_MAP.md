@@ -1,5 +1,21 @@
 # SIGAP Feature and Release Map
 
+## 2026-10-23 [Codex] Selected Release Completed
+
+- OPS-14/#724: CT104 unused build cache cleaned; disk84% to65%, final70%
+  after releases, about17GiB free. No document/database/rollback deletion.
+- REC-04/#725, SUR-37/#726 and SEC-01/#727 are live on staging `5fef5a38a0`
+  and production `b5bcb21f67`, including coordinated app/PDF worker rollout.
+- Migration20261023120000 verified in both environments; ACL/owner unchanged.
+  Current recommendation005/011/013 PDFs refreshed without revision appendices;
+  source/signature/audit/frozen outbound guards passed, no external resend.
+- Decimal measurements preserve up to6 places and exact whole-Rupiah totals;
+  building counts remain integral. Vendor Asset integer-only constraint remains
+  explicit and is never hidden by rounding or dropping an item.
+- Public desktop/mobile, PDF and focused gates passed; hosted CI billing failed
+  before startup, not CI success. Full evidence/limits:
+  `docs/releases/20261023-ct104-recommendation-decimals.md`.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
