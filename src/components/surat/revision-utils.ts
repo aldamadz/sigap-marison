@@ -1,4 +1,5 @@
 import { formatSummaryValue } from "@/components/surat/request-summary";
+import { itemQuantityTotal } from "@sigap/shared";
 import { parseRupiahInteger, formatRupiah as formatRupiahCanonical } from "@/lib/rupiah";
 
 export type RevisionItemChange = {
@@ -52,7 +53,7 @@ export const getRevisionItemChanges = (revision?: ActiveRevision | null): Revisi
     const before = Array.isArray(original.items) ? original.items.map(asRecord) : [];
     const after = Array.isArray(proposed.items) ? proposed.items.map(asRecord) : [];
     const used = new Set<number>();
-    const describe = (item: Record<string, unknown>) => `Jumlah: ${item.jumlah}; Harga satuan: ${formatRupiahCanonical(item.estimasi_harga_satuan)}; Total: ${formatRupiahCanonical(Number(item.jumlah) * Number(item.estimasi_harga_satuan))}; Keterangan: ${String(item.keterangan || "-")}; Satuan: ${String(item.satuan || "-")}`;
+    const describe = (item: Record<string, unknown>) => `Jumlah: ${item.jumlah}; Harga satuan: ${formatRupiahCanonical(item.estimasi_harga_satuan)}; Total: ${formatRupiahCanonical(itemQuantityTotal(item.jumlah, Number(item.estimasi_harga_satuan)))}; Keterangan: ${String(item.keterangan || "-")}; Satuan: ${String(item.satuan || "-")}`;
     const result = before.flatMap((item, index): RevisionItemChange[] => {
       const match = item.id ? after.findIndex(row => row.id === item.id) : index < after.length ? index : -1;
       const next = match >= 0 ? after[match] : undefined;
