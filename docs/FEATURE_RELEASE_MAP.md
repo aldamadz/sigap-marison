@@ -1313,6 +1313,18 @@ bila diperlukan, rencana rollback, dan smoke test production.
 | P2 | `docs/README.md` masih menyebut arsitektur lama | Dokumentasi dapat menyesatkan | Selaraskan dengan BFF Node + SSE + worker |
 | P2 | External read-only API masih memiliki source/schema dormant | Surface dan biaya pemeliharaan | Audit consumer sebelum keputusan hapus |
 
+## DOC-12 Historical Signed PDF Download (2026-10-23, Issue #743)
+
+- 2026-10-23 [Codex] Candidate main-based fix routes Monitoring Admin's signed
+  stage download through the canonical signature-bound PDF endpoint instead of
+  treating native document markers as stored file paths. Applies to legacy and
+  native snapshots; unsigned/rejected-only stages offer no signed download.
+- Explicit user authorization: staging then selected production. Historical
+  stage3 must exclude approval marks from stages4/5 even after final completion.
+  Existing document authorization, snapshots, approvals and outbound stay intact.
+- Target014/UAI/PBO.1/X/2026 is already DONE with five signed stages at diagnosis;
+  user requested its historical stage3. No migration or PDF worker source change.
+
 ## 8. Baseline Selective Release
 
 Sebelum fitur baru pertama dimulai, siapkan:

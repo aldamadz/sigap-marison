@@ -461,18 +461,19 @@ const MonitoringAdminPage = () => {
                         </div>
                       </div>
 
-                      {(sig.pdf_path_snap || sig.file_path_snap) && (() => {
-                        const snapPath = sig.pdf_path_snap || sig.file_path_snap;
-                        const snapKey = documentOperationKey.file(selectedSurat.id, String(sig.id || snapPath));
+                      {sig.is_signed && (sig.pdf_path_snap || sig.file_path_snap) && (() => {
+                        const snapKey = documentOperationKey.pdf(selectedSurat.id, sig.id);
                         const opening = isOpening(snapKey);
                         return (
                           <button 
+                            type="button"
+                            aria-label={`Unduh PDF tahap ${sig.step_order}`}
                             disabled={opening}
-                            onClick={() => void openFile(selectedSurat.id, snapPath, snapKey)}
+                            onClick={() => void openPdf(selectedSurat.id, snapKey, { signatureId: sig.id })}
                             className="flex items-center gap-2 px-2 py-1 bg-background border border-border rounded text-primary hover:bg-muted transition-colors disabled:cursor-wait disabled:opacity-70"
                           >
                             {opening ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-                            <span className="text-xs font-semibold">{opening ? "Membuka" : "Snap"}</span>
+                            <span className="text-xs font-semibold">{opening ? "Membuka" : `PDF tahap ${sig.step_order}`}</span>
                           </button>
                         );
                       })()}
