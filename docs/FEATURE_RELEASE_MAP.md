@@ -1242,6 +1242,10 @@ bila diperlukan, rencana rollback, dan smoke test production.
 
 ## DOC-12 Historical Signed PDF Download (2026-10-23, Issue #743)
 
+- 2026-10-23 [Codex] Released stage3a27afac/prodba813c92. Actual014 historical
+  stage3 PDF200, visually only1-3 approval marks and4/5 blank. Source/signatures/
+  outbound unchanged. See release document for33+58 tests and CI billing caveat.
+
 - 2026-10-23 [Codex] Candidate main-based fix routes Monitoring Admin's signed
   stage download through the canonical signature-bound PDF endpoint instead of
   treating native document markers as stored file paths. Applies to legacy and

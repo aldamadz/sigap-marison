@@ -1,5 +1,21 @@
 # Worklog
 
+## 2026-10-23 [Codex] DOC-12 / Issue #743 Completed
+
+- Explicitly authorized staging then production. Fixed Monitoring Admin native
+  snapshot download through signature-bound PDF and missing is_signed projection.
+  Sourcef249e090; PR744/746stage,745prod,747ancestry. Live stage3a27afac contains
+  prodba813c92 before cutover.33 focused+58 native tests, clean Linux lint/type/
+  builds/audit passed. Hosted CI billing prevents startup, not SUCCESS.
+- Actual014/UAI/PBO.1/X/2026 stage3 PDF200/103124bytes, visual exactly3 approval
+  marks and4/5 blank. Source/decision/time/outbound hashes unchanged; only PDFcache/
+  viewer token operations, no approval/external resend. App-only release, no
+  migration/worker restart; all nonapp container identities remain unchanged.
+- Fixture1440/390 and both public domains passed health/version/assets/anonymous
+  denial. QAserver stopped; prior recommendation images remain200. Full evidence
+  in docs/releases/20261023-partial-signed-pdf-download.md. PROJECT_CONTEXT absent,
+  primary user changes preserved. Evidence branch does not require app rollout.
+
 ## 2026-10-19 [Codex] DASH-03 / Issue #638
 
 - Active: `feature/actionable-role-dashboard-20261019`, isolated worktree from
