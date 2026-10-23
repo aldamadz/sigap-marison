@@ -19,6 +19,14 @@
   revocation passed.27 focused tests and real PostgreSQL/clean Linux gates passed;
   hosted CI did not start due billing. Production and four staging workers unchanged.
 
+## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
+
+- 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
+  DOMPurify3.4.16. Selective patch to3.4.17 is a prerequisite for the authorized
+  REC-04/SUR-37 release, not an unrelated dependency refresh.
+- Only direct pin/lock and focused sanitizer regression; preserve all other
+  dependency versions. Staging first, then selective production after gates.
+
 ## MRN-28 Current Payload Candidate (2026-10-22, Issue #711)
 
 - Candidate `codex/latest-payload-preview-20261022` from main, staging first.
