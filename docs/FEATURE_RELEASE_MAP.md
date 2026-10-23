@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## SEC-02 Security PRD Review (2026-10-23, Issue #748)
+
+- 2026-10-23 [Codex] Read-only review requested before any implementation.
+  Isolated `codex/security-prd-review-20261023` from main `ba813c92d7`.
+- Compared supplied PRD v1.0 against source, live headers, Cloudflare read-only
+  settings, hosted check annotations and current npm audit. Review complete;
+  implementation, security configuration changes and deployment not authorized.
+- Key corrections: SPA/nonces versus style attributes, existing audit and blocked
+  CI billing, conditional file confidentiality, shared-zone TLS/WAF scope,
+  deprecated Expect-CT, COEP/COOP compatibility, safe reporting and rollback.
+- Full evidence/limitations: `docs/reviews/2026-10-23-security-prd-review.md`.
+  No application, dependency, database, permission, secret or runtime changes.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
