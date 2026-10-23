@@ -71,8 +71,9 @@ export function FundSubmissionEditor({ value, onChange }: Props) {
                 <Input
                   id={`fund-item-quantity-${index}`}
                   type="number"
-                  min={1}
-                  step={1}
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
                   value={String(row.jumlah ?? "")}
                   onChange={(event) => updateRow(index, { jumlah: event.target.value })}
                   placeholder="1"

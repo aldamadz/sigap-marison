@@ -17,6 +17,14 @@ const approval = {
 };
 
 describe("Marison Fund Submission mapper", () => {
+  it("preserves decimal Fund quantities and rounds KEU line amounts consistently", () => {
+    const items = mapKeu1ItemsForFund([{ keterangan: "Sewa", jumlah: "1,5", satuan: "hari", estimasi_harga_satuan: 1001 }]);
+    expect(items).toEqual([{ nama_barang: "Sewa", jumlah: 1.5, satuan: "hari", nominal: 1502 }]);
+    const mapped = mapMarisonFundSubmission({ request: { submissionNumber: "DECIMAL", type: "operational", title: "Sewa", items },
+      branchId: 1, division: "Teknik", approvals: [approval] });
+    expect(mapped.payload.items[0].jumlah).toBe(1.5);
+    expect(mapped.payload.amount).toBe(1502);
+  });
   it.each(["operational", "production_cost", "marketing_cost"])("preserves the explicit %s fund type", (type) => {
     const result = mapMarisonFundSubmission({
       request: { submissionNumber: "001/TEST/FUND", type, title: "Pengajuan dana", amount: 1000,

@@ -1,4 +1,5 @@
 import pdfMakeModule from "pdfmake/build/pdfmake.js";
+import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 import { signerRevisionNotes, revisionHistoryEntries, revisionAppendixBlock } from "./document-revision-notes.mjs";
 import pdfFontsModule from "pdfmake/build/vfs_fonts.js";
 import { normalizeKeu1DocumentData } from "./keu1-pdf-renderer.mjs";
@@ -26,11 +27,7 @@ const asObject = (value) => value && typeof value === "object" && !Array.isArray
 const text = (value, fallback = "") => String(value ?? "").trim() || fallback;
 const formNumber = (value) => text(value).toUpperCase();
 
-const parseQuantity = (value) => {
-  if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value.trim()))) return null;
-  const quantity = Number(value);
-  return Number.isSafeInteger(quantity) && quantity >= 1 ? quantity : null;
-};
+const parseQuantity = parseItemQuantity;
 
 const parseUnitPrice = (value) => {
   if (typeof value === "number") return Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -62,12 +59,12 @@ const sumItems = (items) => {
   if (!Array.isArray(items) || !items.length) throw new Error("Rincian biaya KEU 10 wajib diisi.");
   if (items.length > 100) throw new Error("Rincian biaya KEU 10 maksimal 100 item.");
   const grandTotal = items.reduce((sum, item) => {
-    if (!item || !Number.isSafeInteger(item.jumlah) || item.jumlah < 1
+    if (!item || parseQuantity(item.jumlah) === null
       || !Number.isSafeInteger(item.hargaSatuan) || item.hargaSatuan < 0) {
       throw new Error("Jumlah atau harga item KEU 10 tidak valid.");
     }
-    const total = item.jumlah * item.hargaSatuan;
-    if (!Number.isSafeInteger(total) || !Number.isSafeInteger(sum + total)) {
+    const total = itemQuantityTotal(item.jumlah, item.hargaSatuan);
+    if (total === null || !Number.isSafeInteger(sum + total)) {
       throw new Error("Total biaya KEU 10 di luar rentang angka aman.");
     }
     return sum + total;
@@ -225,9 +222,9 @@ export const buildKeu10DocumentDefinition = (data, logoDataUrl = null) => {
   if (!FORM_NUMBERS.has(formNumber(data?.formNumber))) throw new Error("Dokumen bukan form KEU 10 yang dikenali.");
   const grandTotal = sumItems(data.items);
   const itemRows = data.items.map((item, index) => [
-    cell(index + 1, "center"), cell(item.keterangan), cell(item.jumlah.toLocaleString("id-ID"), "center"),
+    cell(index + 1, "center"), cell(item.keterangan), cell(item.jumlah.toLocaleString("id-ID", { maximumFractionDigits: 6 }), "center"),
     cell(item.satuan, "center"), cell(money(item.hargaSatuan), "right"),
-    cell(money(item.jumlah * item.hargaSatuan), "right"),
+    cell(money(itemQuantityTotal(item.jumlah, item.hargaSatuan)), "right"),
   ]);
   while (itemRows.length < 12) itemRows.push(Array.from({ length: 6 }, () => cell("")));
   const itemWidths = widthsFor([0.053, 0.315, 0.16, 0.102, 0.158, 0.212]);

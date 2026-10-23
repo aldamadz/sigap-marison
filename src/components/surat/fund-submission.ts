@@ -1,5 +1,6 @@
 import { parseCurrencyInput } from "@/lib/rupiah";
 import { isPgdItemStatus } from "@/components/surat/pgd-item-status";
+import { parseItemQuantity } from "@sigap/shared";
 
 export type FundSubmissionItem = {
   id?: string;
@@ -49,8 +50,7 @@ export function normalizeFundSubmissionItems(value: unknown): FundSubmissionItem
 }
 
 export function parseFundSubmissionQuantity(value: unknown): number | null {
-  const quantity = Number(value);
-  return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
+  return parseItemQuantity(value);
 }
 
 export function parseFundSubmissionNominal(value: unknown): number | null {
@@ -72,7 +72,7 @@ export function validateFundSubmissionItems(value: unknown): FundSubmissionValid
   return rows.flatMap((row, index) => {
     const issues: FundSubmissionValidationIssue[] = [];
     if (!text(row.nama_barang)) issues.push({ index, field: "nama_barang", message: `Nama item ${index + 1} wajib diisi.` });
-    if (parseFundSubmissionQuantity(row.jumlah) === null) issues.push({ index, field: "jumlah", message: `Jumlah item ${index + 1} wajib berupa angka bulat minimal 1.` });
+    if (parseFundSubmissionQuantity(row.jumlah) === null) issues.push({ index, field: "jumlah", message: `Jumlah item ${index + 1} harus lebih dari 0, maksimal 6 angka desimal.` });
     if (!text(row.satuan)) issues.push({ index, field: "satuan", message: `Satuan item ${index + 1} wajib diisi.` });
     if (parseFundSubmissionNominal(row.nominal) === null) issues.push({ index, field: "nominal", message: `Nominal item ${index + 1} wajib berupa Rupiah non-negatif.` });
     if (!isPgdItemStatus(row.status)) issues.push({ index, field: "status", message: `Pilih status 1–4 untuk item ${index + 1}.` });

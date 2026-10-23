@@ -16,6 +16,7 @@ import {
   parseCurrencyInput,
 } from "@/lib/rupiah";
 import { cn } from "@/lib/utils";
+import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 
 export type NonAsetItemRow = Record<string, unknown>;
 
@@ -62,8 +63,7 @@ export const getNonAsetItemColumnKeys = (
 };
 
 const parseQty = (value: unknown): number => {
-  const parsed = parseInt(text(value).replace(/[^\d]/g, ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  return parseItemQuantity(value) ?? 0;
 };
 
 /** Total satu baris = harga satuan (nominal) × jumlah. */
@@ -71,7 +71,7 @@ export const getNonAsetItemRowTotal = (row: NonAsetItemRow, keys: {
   qtyKey: string;
   nominalKey: string;
 }): number => parseCurrencyInput(row?.[keys.nominalKey]) !== null
-  ? (parseCurrencyInput(row?.[keys.nominalKey]) ?? 0) * parseQty(row?.[keys.qtyKey])
+  ? itemQuantityTotal(row?.[keys.qtyKey], parseCurrencyInput(row?.[keys.nominalKey])) ?? 0
   : 0;
 
 const FieldShell = ({
@@ -192,8 +192,8 @@ export function NonAsetItemEditor({ rows, columns, onChange }: Props) {
                   <Input
                     type="number"
                     min={0}
-                    step={1}
-                    inputMode="numeric"
+                    step="any"
+                    inputMode="decimal"
                     className="h-10 bg-background text-left tabular-nums"
                     placeholder="0"
                     aria-label={`${labelFor(keys.qtyKey, "Jumlah")} barang/jasa ${rowIndex + 1}`}

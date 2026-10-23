@@ -1,4 +1,5 @@
 import React from "react";
+import { itemQuantityTotal } from "@sigap/shared";
 import { FundSubmissionEditor } from "@/components/surat/FundSubmissionEditor";
 import { Keu1SubmissionEditor } from "@/components/surat/Keu1SubmissionEditor";
 import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
@@ -302,9 +303,7 @@ export const fundModule: UsageModule = {
       delete next.grand_total;
     } else if (isKeu1Usage(ctx)) {
       const keu1Items = normalizeKeu1SubmissionItems(next.items).map((item) => {
-        const quantity = Number(item.jumlah) || 0;
-        const unitPrice = Number(item.estimasi_harga_satuan) || 0;
-        return { ...item, total: quantity * unitPrice };
+        return { ...item, total: itemQuantityTotal(item.jumlah, Number(item.estimasi_harga_satuan)) ?? 0 };
       });
       next.items = keu1Items;
       const financial = getKeu1FinancialSummary(keu1Items, next.free_cash_sisa_bulan_lalu);

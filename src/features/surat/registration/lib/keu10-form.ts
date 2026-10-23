@@ -1,3 +1,4 @@
+import { itemQuantityTotal } from "@sigap/shared";
 import {
   createKeu1SubmissionItem,
   normalizeKeu1SubmissionItems,
@@ -20,8 +21,7 @@ export function getKeu10ItemTotal(row: Keu10SubmissionItem): number | null {
   const quantity = parseKeu1Quantity(row.jumlah);
   const price = parseKeu1Money(row.estimasi_harga_satuan);
   if (quantity === null || price === null) return null;
-  const total = quantity * price;
-  return Number.isSafeInteger(total) ? total : null;
+  return itemQuantityTotal(quantity, price);
 }
 
 export function normalizeKeu10SubmissionItems(value: unknown): Keu10SubmissionItem[] {

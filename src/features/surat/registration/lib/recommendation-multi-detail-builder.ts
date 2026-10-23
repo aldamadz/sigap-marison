@@ -1,4 +1,5 @@
 import {
+  parseItemQuantity,
   flattenRecommendationItems,
   withoutRecommendationEstimatedPrices,
   type RecommendationAction,
@@ -29,8 +30,7 @@ const asRecord = (value: unknown): InputRecord =>
 const text = (value: unknown) => String(value ?? "").trim();
 
 const positiveQuantity = (value: unknown) => {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  return parseItemQuantity(value) ?? 1;
 };
 
 const createId = (idFactory: IdFactory) => {
@@ -208,7 +208,7 @@ export function recommendationMultiDetailErrors(model: RecommendationMultiDetail
     [...parent.details].sort((a, b) => a.order - b.order).forEach((detail, detailIndex) => {
       const label = `${item}.${detailIndex + 1}`;
       if (!text(detail.name)) errors.push(`${label}: nama atau spesifikasi wajib diisi.`);
-      if (!Number.isInteger(detail.quantity) || detail.quantity < 1) errors.push(`${label}: jumlah minimal 1.`);
+      if (parseItemQuantity(detail.quantity) === null) errors.push(`${label}: jumlah harus lebih dari 0, maksimal 6 angka desimal.`);
       if (!text(detail.description)) errors.push(`${label}: uraian wajib diisi.`);
       if (!text(detail.notes)) errors.push(`${label}: keterangan wajib diisi.`);
       if (detail.attachments.length === 0 && !isRecommendationParentOverview(parent, detail)) {

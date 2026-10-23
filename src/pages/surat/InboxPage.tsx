@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
+import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
 import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewStage } from "@/lib/fund-rab";
 import { ApprovalAttachmentPicker } from "@/features/surat/inbox/components/ApprovalAttachmentPicker";
@@ -1104,7 +1105,13 @@ const handleApprove = async (item: any) => {
   };
 
   const updateApprovedRevisionValue = (item: any, row: (typeof revisionRows)[number], value: string) => {
-    if (row.value_type === "unit_count" || row.value_type === "quantity") {
+    if (row.value_type === "quantity") {
+      const approved = parseItemQuantity(value);
+      const requested = parseItemQuantity(row.nilai_diajukan);
+      updateRevisionRow(row.index, { nilai_disetujui: value, action: !value || approved === requested ? "keep" : approved === null ? "reject" : "adjust" });
+      return;
+    }
+    if (row.value_type === "unit_count") {
       const digits = value.replace(/[^\d]/g, "");
       const approvedCount = Number(digits || 0);
       const requestedCount = Number(String(row.nilai_diajukan || "").replace(/[^\d]/g, "")) || getRequestedUnitCount(item);
@@ -2173,7 +2180,7 @@ const handleApprove = async (item: any) => {
             ? normalizeKeu1SubmissionItems(rows).map((row, index) => {
               const quantity = parseKeu1Quantity(row.jumlah);
               const price = parseKeu1Money(row.estimasi_harga_satuan);
-              return [index + 1, row.keterangan || "-", quantity ?? "-", row.satuan || "-", price === null ? "-" : formatRupiahCanonical(price), price === null || quantity === null ? "-" : formatRupiahCanonical(quantity * price)];
+              return [index + 1, row.keterangan || "-", quantity ?? "-", row.satuan || "-", price === null ? "-" : formatRupiahCanonical(price), price === null || quantity === null ? "-" : formatRupiahCanonical(itemQuantityTotal(quantity, price))];
             })
             : rows.map((row: any, index: number) => [
               index + 1,
@@ -3091,14 +3098,19 @@ const handleApprove = async (item: any) => {
                           </div>
                           <div>
                             <Label className="text-xs">{revisionDialogItem ? getRevisionApprovedLabel(revisionDialogItem) : "Nilai disetujui"}</Label>
-                            <NominalInput
+                            {row.value_type === "quantity" ? <Input
+                              type="number" min={0} step="any" inputMode="decimal"
+                              value={row.nilai_disetujui}
+                              onChange={(event) => revisionDialogItem && updateApprovedRevisionValue(revisionDialogItem, row, event.target.value)}
+                              className="mt-1 h-10"
+                            /> : <NominalInput
                               value={row.nilai_disetujui}
                               onCommit={(canonical) => revisionDialogItem
                                 ? updateApprovedRevisionValue(revisionDialogItem, row, canonical)
                                 : updateRevisionRow(row.index, { nilai_disetujui: canonical })}
                               placeholder={revisionDialogItem ? getApprovedValuePlaceholder(revisionDialogItem, row) : "Isi nilai yang disetujui"}
                               className="mt-1 h-10"
-                            />
+                            />}
                           </div>
                         </>
                       )}

@@ -1,3 +1,5 @@
+import { parseItemQuantity } from "./item-quantity.js";
+
 export type RecommendationStatus = "recommended" | "not_recommended";
 export type RecommendationAction = "purchase_new" | "replace" | "service";
 export type RecommendationIdFactory = () => string;
@@ -109,10 +111,9 @@ function text(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function positiveInteger(value: unknown, field: string): number {
-  if (typeof value === "string" && !/^\s*\d+\s*$/.test(value)) throw new Error(`${field} must be a positive integer.`);
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${field} must be a positive integer.`);
+function positiveQuantity(value: unknown, field: string): number {
+  const parsed = parseItemQuantity(value);
+  if (parsed === null) throw new Error(`${field} must be a positive quantity with at most 6 decimal places.`);
   return parsed;
 }
 
@@ -236,7 +237,7 @@ function hasNestedDetails(row: LegacyRow): boolean {
 function validateParent(parent: RecommendationParentItem): void {
   if (!Number.isInteger(parent.order) || parent.order < 0) throw new Error("parent.order must be a nonnegative integer.");
   if (!text(parent.applicant_original.name)) throw new Error("Applicant original name is required.");
-  positiveInteger(parent.applicant_original.quantity, "applicant_original.quantity");
+  positiveQuantity(parent.applicant_original.quantity, "applicant_original.quantity");
   if (parent.status === "not_recommended") {
     if (!text(parent.location)) throw new Error("Not-recommended parent requires location.");
     if (!text(parent.pic)) throw new Error("Not-recommended parent requires PIC.");
@@ -246,7 +247,7 @@ function validateParent(parent: RecommendationParentItem): void {
   if (parent.details.length === 0) throw new Error("Recommended parent requires at least one detail.");
   parent.details.forEach((detail) => {
     if (!text(detail.name)) throw new Error("Recommendation detail name/spec is required.");
-    positiveInteger(detail.quantity, "detail.quantity");
+    positiveQuantity(detail.quantity, "detail.quantity");
     normalizeAction({ recommendation_action: detail.action });
   });
 }
@@ -258,7 +259,7 @@ export function readLegacyRecommendationItems(rows: unknown): RecommendationMult
     const row = record(raw);
     const original = record(row.applicant_original);
     const originalName = text(original.name ?? row.parent_item_name ?? row.original_name ?? row.nama_barang ?? row.nama ?? row.name);
-    const originalQuantity = positiveInteger(original.quantity ?? row.parent_item_quantity ?? row.original_quantity ?? row.jumlah ?? row.quantity ?? 1, "applicant_original.quantity");
+    const originalQuantity = positiveQuantity(original.quantity ?? row.parent_item_quantity ?? row.original_quantity ?? row.jumlah ?? row.quantity ?? 1, "applicant_original.quantity");
     const originalNotes = text(original.notes ?? row.parent_item_notes ?? row.original_notes ?? row.catatan ?? row.notes);
     if (!originalName) throw new Error("Applicant original name is required.");
     const parentId = text(row.parent_item_id) || (hasNestedDetails(row) ? text(row.id) : "") ||
@@ -300,7 +301,7 @@ export function readLegacyRecommendationItems(rows: unknown): RecommendationMult
         order: nonnegativeInteger(detailRow.order ?? detailRow.no, parent!.details.length),
         action,
         name,
-        quantity: positiveInteger(detailRow.quantity ?? detailRow.jumlah ?? 1, "detail.quantity"),
+        quantity: positiveQuantity(detailRow.quantity ?? detailRow.jumlah ?? 1, "detail.quantity"),
         description,
         description_manually_edited: detailRow.description_manually_edited === true,
         notes: text(detailRow.notes ?? detailRow.catatan),
