@@ -14,13 +14,15 @@ type PreviewFixtureOptions = {
   signer?: boolean;
   readJob?: (kind: "active" | "done") => Promise<void>;
   activeJob?: boolean;
+  signatures?: Record<string, unknown>[];
 };
 
 const createQuery = (table: string, tokenInserts: unknown[], options: PreviewFixtureOptions) => {
   const equal = new Map<string, unknown>();
   const included = new Map<string, unknown[]>();
+  let columns: string[] = [];
   const builder: any = {
-    select: () => builder,
+    select: (value: string) => { columns = value.split(",").map(column => column.trim()); return builder; },
     eq: (column: string, value: unknown) => { equal.set(column, value); return builder; },
     in: (column: string, values: unknown[]) => { included.set(column, values); return builder; },
     not: () => builder,
@@ -55,7 +57,7 @@ const createQuery = (table: string, tokenInserts: unknown[], options: PreviewFix
         if (equal.get("status") === "done") {
           await options.readJob?.("done");
           return {
-            data: { id: jobId, status: "done", pdf_url: pdfUrl, error_message: null, signature_id: null },
+            data: { id: jobId, status: "done", pdf_url: pdfUrl, error_message: null, signature_id: equal.get("signature_id") || null },
             error: null,
           };
         }
@@ -74,7 +76,9 @@ const createQuery = (table: string, tokenInserts: unknown[], options: PreviewFix
       return { data: null, error: null };
     },
     then: (resolve: (value: unknown) => unknown) => resolve({
-      data: table === "surat_signatures" && options.signer ? [{ id: "signature-id", user_id: userId, verifier_snapshot: [] }] : [],
+      data: table === "surat_signatures" ? (options.signatures ?? (options.signer
+        ? [{ id: "signature-id", user_id: userId, verifier_snapshot: [] }] : []))
+        .map(row => Object.fromEntries(Object.entries(row).filter(([key]) => columns.includes(key)))) : [],
       error: null,
     }),
   };
@@ -111,6 +115,38 @@ afterEach(async () => {
 });
 
 describe("PDF job preview fast path", () => {
+  it("loads the signed state needed to serve a native stage3 snapshot", async () => {
+    const signatureId = "30000000-0000-4000-8000-000000000003";
+    const clients = createClients({ signatures: [{
+      id: signatureId, user_id: userId, is_signed: true,
+      file_path_snap: `native://document/${suratId}/approval/${signatureId}/1`, pdf_path_snap: null,
+    }] });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({
+      method: "GET", url: `/api/documents/${suratId}/pdf?signature_id=${signatureId}`,
+      headers: { authorization: "Bearer session-token" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "ready", signatureId, viewUrl: expect.stringMatching(/^\/api\/files\/view\//) });
+    expect(clients.tokenInserts).toHaveLength(1);
+  });
+
+  it.each([false, undefined])("does not render a signature without a verified signed state: %s", async isSigned => {
+    const signatureId = "30000000-0000-4000-8000-000000000003";
+    const clients = createClients({ signatures: [{
+      id: signatureId, user_id: userId, is_signed: isSigned,
+      file_path_snap: `native://document/${suratId}/approval/${signatureId}/1`, pdf_path_snap: pdfUrl,
+    }] });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({
+      method: "GET", url: `/api/documents/${suratId}/pdf?signature_id=${signatureId}`,
+      headers: { authorization: "Bearer session-token" },
+    });
+    expect(response.statusCode).toBe(422);
+    expect(clients.tokenInserts).toHaveLength(0);
+    expect(clients.supabase.from).not.toHaveBeenCalledWith("document_pdf_jobs");
+  });
+
   it("mints the one-time viewer token in the cached PDF response", async () => {
     const clients = createClients();
     booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
