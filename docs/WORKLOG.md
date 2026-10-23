@@ -110,3 +110,15 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+
+## 2026-10-23 [Codex] OPS-14 CT104 Cleanup Completed / Issue #724
+
+- Root disk84% before,65% after. Unused Docker build cache older24h only;
+  retained2GB cache. Docker reclaimed12.47GB; filesystem measured10.8GiB recovery.
+- All8 container IDs/images/start/state/restart fields and complete image inventory
+  unchanged;7 services remain running. No restart, deployment, volume/data/PDF/log
+  deletion. Public production readiness HTTP200 after cleanup.
+- Private proofs stay inside CT104; runbook `ops/ct104-cache-cleanup.md` has no
+  secrets. Existing release and rollback directories retained intentionally.
+- Operational recovery complete; record PR is not a reason to redeploy the app.
+  PROJECT_CONTEXT remains absent; shared document structure unchanged.

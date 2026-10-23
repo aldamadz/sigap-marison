@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## OPS-14 CT104 Disk Cleanup (2026-10-23, Issue #724)
+
+- 2026-10-23 [Codex] Completed with explicit production cleanup authorization.
+  Removed only unused Docker build cache older than24h, keeping2GB cache.
+- Root usage84% to65%; observed10.8GiB recovered, about20.1GiB free. All container
+  identities/state/restarts and image inventory unchanged. Public readiness200.
+- No images, rollback releases, documents, database, volume or secrets removed;
+  no restart/deploy. See `ops/ct104-cache-cleanup.md` for evidence and limits.
+
 ## MRN-28 Current Payload Candidate (2026-10-22, Issue #711)
 
 - Candidate `codex/latest-payload-preview-20261022` from main, staging first.
