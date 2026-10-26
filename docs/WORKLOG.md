@@ -1,5 +1,20 @@
 # Worklog
 
+## 2026-10-26 [Codex] OPS-15 / #750 Remediation Follow-Up
+
+- Maris authorized repairing multi-WAN routing with production access preserved,
+  not changing monitoring timeouts. Work continues on the existing isolated
+  `codex/public-probe-diagnosis-20261026` branch.
+- Router UI is TP-Link Omada Controller at `https://10.10.10.1/`, not MikroTik.
+  Authentication is required; requested operator login in the Browser Codex tab,
+  without asking for passwords/tokens or bypassing browser certificate warnings.
+- 08:41 WIB baseline still fails only the affected production Cloudflare address
+  from monitoring/app, while proxy HTTPS to both addresses and direct origin
+  health/version succeed. Application remains healthy and has not restarted.
+- No production configuration/runtime/data changes. Pending management access
+  before inspecting exact rules, private backup, narrowly scoped rollback-ready
+  correction and post-change public/origin/Blackbox verification. No recovery claim.
+
 ## 2026-10-26 [Codex] OPS-15 / Issue #750
 
 - Read-only diagnosis complete; network remediation remains open. Isolated

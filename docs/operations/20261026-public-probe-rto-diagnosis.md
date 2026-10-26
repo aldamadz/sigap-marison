@@ -74,3 +74,25 @@ known concern; do not reload the shared proxy from its stale container file.
 No production/staging config, DNS, routing, app, database, worker, monitoring
 threshold or business data was changed. No restart, deploy or external submission
 was performed. Investigation is documented; network remediation remains open.
+
+## Remediation Follow-Up, 26 October 08:41 WIB
+
+- Maris explicitly authorized inspecting and repairing the failing multi-WAN
+  path while preserving production access. Grafana timeouts must not be changed.
+- Gateway `10.10.10.1` exposes TP-Link Omada Controller. The visible controller
+  page requires login; an authenticated management session is not yet available.
+  The router policy/NAT/WAN configuration therefore remains unverified. A browser
+  tab was left for operator login; no credentials were requested in chat, guessed,
+  extracted from another application, or reset.
+- A new pinned HTTPS baseline reproduces the failure from CT 102 and CT 104.
+  From proxy CT 103, both production addresses returned HTTP 200 in about
+  0.18/0.40 seconds. Both tested staging addresses returned 200 from all three
+  sources. The app was healthy/running/not restarting/not OOM-killed, and origin
+  live/ready/version returned 200 from the proxy in 2-4 ms.
+- Next action after login: inspect active policy ordering, WAN state, link-backup
+  behavior, NAT/port forwarding and affected source groups; preserve a private
+  configuration backup and an exact rollback for any narrowly scoped change.
+  Verify both production addresses from CT 102/104/103, direct origin readiness,
+  public access and subsequent Blackbox samples before declaring recovery.
+- No router, OS route, NAT, DNS, Grafana, application, worker or database change
+  has been made. The user-requested repair is still pending management access.
