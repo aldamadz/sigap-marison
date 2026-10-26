@@ -1,5 +1,26 @@
 # Worklog
 
+## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
+
+- PR #754 staged the recommendation PDF layout follow-up; PR #755 selectively
+  merged the feature to main; PR #756 synchronized main ancestry into staging.
+  Live staging `d33970e412eedf2a2a5ecec66bc637ba1c053a91`, production
+  `76af3f9fe64a2c1b50f52f787b12b9a8847257c7`. App and PDF worker share
+  the intended image in each environment; unrelated workers were unchanged.
+- Production migration `20261026030000` passed a rollback-only rehearsal,
+  then applied atomically with one ledger record on CT 110. Existing surat and
+  signature counts remained 80 and 353; no historical additional signer was
+  fabricated. Private schema and authenticated-only registration ACL verified.
+- Four eight-signer PDF fixtures were rendered/visually inspected; the
+  recommendation footer now remains on page one when item rows permit. Clean
+  Linux focused PDF tests, lint, typecheck and app build passed. Production PDF
+  worker rendered PGD, KEU 1, KEU 10 and recommendation test fixtures directly.
+  Five public production ready probes returned 200 after rollout.
+- Hosted GitHub quality-check jobs did not start due account billing/spending
+  limit; this is not CI success. No live production application submission,
+  approval, PDF regeneration of existing documents or external resend was used
+  for acceptance. Existing stored PDFs remain unchanged until normal publication.
+
 ## 2026-10-26 [Codex] SUR-38 PDF verification and production candidate / Issue #751
 
 - User authorized selective staging-then-production release after PDF verification.
