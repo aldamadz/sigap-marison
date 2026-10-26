@@ -131,6 +131,8 @@ export const normalizeKeu10DocumentData = (source = {}, options = {}) => {
     items,
     grandTotal,
     signatures,
+    hasAdditionalSigners: Array.isArray(source.policy_snapshot?.signer_plan)
+      && source.policy_snapshot.signer_plan.some(signer => signer.is_additional === true),
   };
 };
 
@@ -185,7 +187,18 @@ const widthsFor = (ratios, padding = 6) => ratios.map((ratio) => (CONTENT_WIDTH 
 const cell = (value, alignment = "left", extra = {}) => ({ text: text(value), alignment, ...extra });
 const money = (value) => `Rp ${Number(value).toLocaleString("id-ID")}`;
 
-const buildSignatureBlock = (signatures) => {
+const buildSignatureBlock = (signatures, hasAdditionalSigners = false) => {
+  if (hasAdditionalSigners) {
+    const ranks = { Membuat: 1, Memeriksa: 2, Verifikator: 2, Menyetujui: 3 };
+    if (!Array.isArray(signatures) || signatures.length < 4 || signatures.length > 8
+      || signatures.filter(signer => signer.role === "Verifikator").length !== 1
+      || !["Membuat", "Memeriksa", "Menyetujui"].every(role => signatures.some(signer => signer.role === role))
+      || signatures.some((signer, index) => !ranks[signer.role]
+        || (index > 0 && ranks[signer.role] < ranks[signatures[index - 1].role]))) {
+      throw new Error("Susunan tanda tangan tambahan KEU 10 tidak valid.");
+    }
+    return buildNativeSignatureBlock(signatures);
+  }
   if (!Array.isArray(signatures) || ![4, 5, 6].includes(signatures.length)) {
     throw new Error("Grup tanda tangan KEU 10 harus memuat satu Membuat, satu Verifikator, dan satu Menyetujui.");
   }
@@ -283,7 +296,7 @@ export const buildKeu10DocumentDefinition = (data, logoDataUrl = null) => {
             layout: borderLayout,
           },
           ...nativeDocumentRejectionBlock(data.isRejected),
-          { ...buildSignatureBlock(data.signatures), margin: [82, 4, 0, 0] },
+          { ...buildSignatureBlock(data.signatures, data.hasAdditionalSigners), margin: [82, 4, 0, 0] },
         ],
       },
       ...revisionAppendixBlock(data.revisionHistory,data.noSurat),

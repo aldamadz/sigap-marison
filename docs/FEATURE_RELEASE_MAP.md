@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## SUR-38 Requester Additional Signers (2026-10-26, Issue #751)
+
+- Candidate `feature/requester-additional-signers-20261026`, staging only.
+  Required configured signers are locked; additions can be inserted, removed
+  and moved within Membuat/Memeriksa/Menyetujui, up to eight total signers.
+- Server validates the complete mandatory route and active candidates, atomically
+  freezes additional approvals, remaps recommendation/revision stage references,
+  and retains additions in revisited drafts and PDF snapshots. KEU10 preserves
+  mandatory finance/director checks and its amount-dependent revision rules.
+- Migration `20261026030000` pending staging application; existing documents are
+  unchanged. Approval/PDF/outbound include the actual full ordered route.
+  No production release authorization for this feature.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned

@@ -137,7 +137,34 @@ try {
         'Original config RPC remains private');`);
     process.stdout.write("Related branch officers: canonical KEU10 wrapper preserved; private configuration guard updated.\n");
   }
-  if (process.argv.includes("--requester-edit") || process.argv.includes("--recommendation-revision") || fundRabParity) {
+  if (process.argv.includes("--additional-signers")) {
+    run(psqlArgs, `alter table public.surat_recommendation_tasks add column if not exists required_before_step integer;
+      alter table public.surat_linked_documents add column if not exists required_before_step integer;`);
+    const migration = read(migrationRoot + "20261026030000_requester_additional_signers.sql");
+    run(psqlArgs, migration);
+    run(psqlArgs, migration);
+    const output = run(psqlArgs, read("supabase/tests/additional_signers.integration.sql"));
+    if (!output.includes("Additional signers: all assertions passed")) throw new Error(`Missing additional signers marker:\n${output}`);
+    process.stdout.write(output);
+    const submitPlan = () => new Promise((resolve,reject) => {
+      const child = spawn("docker",psqlArgs);
+      let stdout = "", stderr = "";
+      child.stdout.on("data",data => { stdout += data; });
+      child.stderr.on("data",data => { stderr += data; });
+      child.on("error",reject);
+      child.on("close",code => resolve({ code,stdout,stderr }));
+      child.stdin.end(`set role authenticated; select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+        select public.create_registration_with_signer_plan(input->'payload',input->'signers')->>'created'
+        from keu10_test.results where key='additional-concurrency';`);
+    });
+    const submitted = await Promise.all([submitPlan(),submitPlan()]);
+    if (submitted.some(result => result.code !== 0)
+      || submitted.filter(result => /\ntrue\s*$/.test(result.stdout)).length !== 1
+      || submitted.filter(result => /\nfalse\s*$/.test(result.stdout)).length !== 1) {
+      throw new Error(`Additional signer submission concurrency failed: ${JSON.stringify(submitted)}`);
+    }
+    process.stdout.write("Additional signer concurrency: one new registration, one idempotent retry.\n");
+  } else if (process.argv.includes("--requester-edit") || process.argv.includes("--recommendation-revision") || fundRabParity) {
     if (fundRabParity) {
       run(psqlArgs, `create publication supabase_realtime;
         create table public.activity_logs(id uuid primary key);

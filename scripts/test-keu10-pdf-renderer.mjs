@@ -300,6 +300,22 @@ const longSource = { ...source, form_input_data: { items: Array.from({ length: 1
   jumlah: 2, satuan: "Paket", estimasi_harga_satuan: 1_000 + index, total: 0,
 })) } };
 const longData = normalizeKeu10DocumentData(longSource, { signatures: sixSignatures });
+const additionalData = normalizeKeu10DocumentData({ ...source,
+  policy_snapshot: { signer_plan: [{ is_additional: true }] },
+}, { signatures: [
+  baseSignatures[0], record(2,"Membuat","Pembuat Tambahan","Supervisor Teknik"),
+  record(3,"Memeriksa","Pemeriksa Tambahan Satu","Assistant Manager"),
+  record(4,"Memeriksa","Pemeriksa Asli","Manager Pengembangan Bisnis"),
+  record(5,"Verifikator","Finance Asli","Mgr. Keu & Akt"),
+  record(6,"Memeriksa","Pemeriksa Tambahan Dua","Supervisor Umum"),
+  record(7,"Menyetujui","Direktur Satu Asli","Direktur I"),
+  record(8,"Menyetujui","Penyetuju Tambahan","Manager Legal",false),
+] });
+assert.equal(additionalData.hasAdditionalSigners,true);
+assert.doesNotThrow(() => buildKeu10DocumentDefinition(additionalData));
+assert.throws(() => buildKeu10DocumentDefinition({ ...additionalData,
+  signatures: [additionalData.signatures[7], ...additionalData.signatures.slice(0,7)],
+}), /tambahan KEU 10/);
 assert.equal(longData.items.length, 100);
 assert.equal(longData.grandTotal, 209_900);
 assert.equal(buildKeu10DocumentDefinition(longData).content[1].table.body.length, 101);
@@ -330,6 +346,7 @@ try {
     ["keu10-six", data],
     ["keu10-alias", normalizeKeu10DocumentData({ ...source, location_snapshot: { ...source.location_snapshot, form: { ...master, nomor_form: ALIAS } } }, { signatures: sixSignatures })],
     ["keu10-multipage", longData],
+    ["keu10-additional-eight", additionalData],
     ["keu10-preview-four", createKeu10PreviewData({ signature_count: 4, signature_roles: [1, 2, 1] })],
     ["keu10-preview-five", createKeu10PreviewData({ signature_count: 5, signature_roles: [1, 3, 1] })],
     ["keu10-preview-six", createKeu10PreviewData({ signature_count: 6, signature_roles: [1, 4, 1] })],

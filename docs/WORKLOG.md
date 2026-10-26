@@ -1,5 +1,27 @@
 # Worklog
 
+## 2026-10-26 [Codex] SUR-38 / Issue #751
+
+- Active: `feature/requester-additional-signers-20261026`, isolated from main
+  ba813c9. Staging only. Mandatory form steps remain required and retain their
+  relative order; requester additions can move before/after a mandatory signer
+  in the same Membuat/Memeriksa/Menyetujui group. Existing limit is eight total.
+- Atomic registration validates mandatory candidates before a private transaction
+  permit initializes additional rows and effective positions. Plan is frozen on
+  submit; revision drafts retain addition metadata. KEU10 mandatory finance and
+  amount-based director constraints remain canonical; PDF supports added rows.
+- Focused tests: 16 UI/helper assertions passed; real disposable PostgreSQL
+  verifies required signers, roles, retry, ordinary/KEU approvals, revision and
+  threshold correction, and concurrent submit. Lint/typecheck pass. PDF fixtures
+  rendered including eight signers, inspected visually without overlap.
+- Staging preflight: all 11 versions absent from main are present in origin/staging;
+  no unknown ledger version, historical replay or repair. Captured protected
+  function/constraint/business/runtime baseline at operator issue751/preflight.json.
+  App live 3a27afac, PDF worker 5fef5a38. New migration remains pending.
+- Audit reports a pre-existing high Zod advisory and six moderate/one low findings;
+  no dependency change or forced major upgrade in this feature. Hosted CI and
+  final staged acceptance remain pending. No production change authorized.
+
 ## 2026-10-19 [Codex] DASH-03 / Issue #638
 
 - Active: `feature/actionable-role-dashboard-20261019`, isolated worktree from
