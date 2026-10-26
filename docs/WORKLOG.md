@@ -1,5 +1,30 @@
 # Worklog
 
+## 2026-10-26 [Codex] SUR-38 staging rollout / Issue #751
+
+- PR #752 merged from `feature/requester-additional-signers-20261026` into
+  staging commit `a9643ac715beff6b7adfadee876db1b6b17ff9cf`. Production
+  remains untouched and has no release authorization for this feature.
+- Migration `20261026030000` applied only to staging after a successful rollback
+  dry-run. Ledger, anonymous/private ACLs, historical signature rows and
+  canonical function owners verified. No existing surat/PDF/outbound rows changed.
+- App and PDF worker run the same staging image and SHA above. Existing sync,
+  outbound and other containers retained their IDs; health live/ready/version and
+  registration page all returned 200. A recoverable copy of the prior PDF worker
+  filesystem was prepared before deployment because Docker had pruned its image.
+- Clean Linux image build, lint, typecheck and 102 affected tests in 11 files
+  passed. Real disposable PostgreSQL covered route protection, approvals, draft
+  revision, KEU10 threshold and concurrent retry. Nine PDF fixtures passed
+  Poppler and eight-signature visual inspection.
+- Live browser: Pengajuan Aset draft `035/UAI/PBO.1/X/2026` displayed all three
+  Add signer controls; added an active test BM as Memeriksa, moved it before
+  the mandatory HRD examiner, saved and refreshed with person/order retained.
+  Removed the test addition and restored the original draft. No submission or
+  outbound request occurred. Every Buat Baru form shares this editor.
+- Hosted GitHub check `121433079598` did not start due billing/spending limit;
+  never count it as a pass. Pre-existing high Zod advisory remains; package
+  dependencies were unchanged. Production promotion requires a later request.
+
 ## 2026-10-26 [Codex] SUR-38 / Issue #751
 
 - Active: `feature/requester-additional-signers-20261026`, isolated from main
