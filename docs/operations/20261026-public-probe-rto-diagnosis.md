@@ -96,3 +96,45 @@ was performed. Investigation is documented; network remediation remains open.
   public access and subsequent Blackbox samples before declaring recovery.
 - No router, OS route, NAT, DNS, Grafana, application, worker or database change
   has been made. The user-requested repair is still pending management access.
+
+## Remediation Applied, 26 October 09:34 WIB
+
+- After operator login, Omada site `maris` on ER7212PC v1.0 showed no prior
+  policy routing or configured static route. Both WANs were active: WAN3 next
+  hop `192.168.88.1`, SFP WAN/LAN1 next hop `192.168.18.1`; load balancing
+  weights remained SFP 2, WAN3 1. The four existing inbound port-forwarding
+  rules, including TCP 80/443 to proxy CT 103 on SFP WAN/LAN1, were recorded
+  before the change and rechecked unchanged afterward.
+- Created IP group `SIGAP_SERVERS_OPS15` containing only monitoring CT 102
+  `10.10.10.102/32`, application CT 104 `192.168.0.251/32`, and proxy CT 103
+  `10.10.10.253/32`. Created IP-port group `SIGAP_CF_HTTPS_OPS15` containing
+  only `172.67.187.163/32` on port 443. Enabled policy
+  `SIGAP_CF_WAN3_OPS15`: TCP, those source/destination groups, WAN3, with
+  Omada's other-WAN fallback enabled. No general default route, WAN weights,
+  NAT, firewall, VLAN, DNS, monitoring threshold or application config changed.
+- Before the rule, the affected production address timed out 3/3 TCP attempts
+  from CT 102 and CT 104. A later baseline also timed out 3/3 from CT 103;
+  its earlier successes indicate source-dependent WAN selection varied over
+  time. After adding all three exact source IPs, pinned HTTPS from each CT to
+  both production Cloudflare addresses and both staging addresses returned
+  HTTP 200. The affected address took approximately 0.36-0.39 seconds.
+  Direct production origin live/ready/version from the proxy returned 200 in
+  about 2-3 ms; application state remained healthy, with no restart or OOM.
+- At approximately 09:34 WIB, Prometheus recorded production public-path
+  `probe_success=1`, HTTP 200, duration 0.358 seconds. The most recent 60/60
+  samples over 15 minutes succeeded; staging also had 60/60. The production
+  30-minute range still contained 10 pre-remediation failures in 120 samples.
+  Historical 24-hour availability will improve only as old failures age out.
+- A scoped pre-change snapshot was saved outside the repository at
+  `C:/Users/Aldama/Downloads/sigap-ops15-router-before-20261026.json`.
+  A screenshot of the enabled final policy is at
+  `C:/Users/Aldama/Downloads/SIGAP-OPS15-Omada-routing-20261026.jpg`.
+  Omada Cloud disabled local full-controller export and offered file-server
+  export only; these artifacts are not a full backup.
+- Rollback: disable only `SIGAP_CF_WAN3_OPS15` in site `maris` > Network Config
+  > Routing > Policy Routing, then repeat pinned HTTPS checks and public probe.
+  The two OPS15 groups can remain unused. Do not restore the entire controller.
+  This bypasses the observed failing path for one current Cloudflare IP and
+  three production source IPs. A changing Cloudflare DNS address or other
+  client source may require a separate investigation; the upstream fault on
+  SFP WAN/LAN1 is not established or repaired by this policy.

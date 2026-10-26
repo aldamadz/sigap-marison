@@ -1,5 +1,23 @@
 # Worklog
 
+## 2026-10-26 [Codex] OPS-15 / #750 Scoped WAN Remediation
+
+- Supersedes the pending access/remediation status below. Omada policy
+  `SIGAP_CF_WAN3_OPS15` is enabled for CT 102, CT 103 and CT 104 to
+  `172.67.187.163/32` TCP 443 through WAN3, with fallback enabled.
+- Post-change pinned HTTPS from all three CTs to both production Cloudflare
+  addresses returned HTTP 200; direct origin remained 200/healthy without a
+  restart. Production and staging public probes each passed 60/60 samples
+  in the latest 15-minute window at approximately 09:34 WIB.
+- The four pre-existing inbound NAT rules and WAN weights remained unchanged.
+  Scoped pre-change JSON and final policy screenshot are stored in Downloads;
+  Omada Cloud did not allow a local full-controller backup export.
+- Rollback is disabling the single policy. Historical 24-hour Grafana RTOs
+  remain visible until they age out; this policy does not establish the exact
+  upstream fault or cover future Cloudflare addresses. Full evidence and
+  limitations: `docs/operations/20261026-public-probe-rto-diagnosis.md`.
+- No app/DB/worker deploy or Grafana threshold change. No new blocker.
+
 ## 2026-10-26 [Codex] OPS-15 / #750 Remediation Follow-Up
 
 - Maris authorized repairing multi-WAN routing with production access preserved,

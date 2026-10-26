@@ -2,6 +2,12 @@
 
 ## OPS-15 Public Probe Egress Diagnosis (2026-10-26, Issue #750)
 
+- 2026-10-26 [Codex] Subsequent production network remediation: enabled one
+  exact-source/destination Omada WAN3 policy for CT 102/103/104 to the failing
+  Cloudflare IPv4 TCP 443. Latest 15-minute public probes passed 60/60 for
+  production and 60/60 for staging. Origin, NAT and WAN weights stayed intact.
+  Rollback disables only `SIGAP_CF_WAN3_OPS15`; no app release or migration.
+  Scope and proof are documented in the operations note below.
 - 2026-10-26 [Codex] Read-only diagnosis: origin readiness probes succeeded
   100% over the sampled 24 hours, while the local production public-path probe
   succeeded about 63.4%. Failures predominantly preceded TCP/TLS establishment
