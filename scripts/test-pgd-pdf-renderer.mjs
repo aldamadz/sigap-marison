@@ -182,6 +182,7 @@ test("builds and renders every supported dynamic signature formation", async () 
     const pdf = await renderPgdPdf(data);
     assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
     assert.ok(pdf.length > 10_000, `PDF ${count} signer terlalu kecil`);
+    if (count === 8) assert.equal((pdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length, 1);
   }
 });
 

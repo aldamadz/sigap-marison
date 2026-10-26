@@ -182,6 +182,8 @@ export type FormFieldValue =
 export type FormInputData = Record<string, FormFieldValue>;
 
 export type SignerAssignment = {
+  is_additional?: boolean;
+  client_id?: string;
   step_order: number;
   role_name: string;
   label_jabatan: string;
