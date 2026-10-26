@@ -1496,3 +1496,14 @@ verifikasi juga runtime, database, worker, dan smoke test.
 - Migration `20261026030000` applied to staging after a rollback-verified dry-run;
   existing documents, signatures and outbound rows unchanged. Coordinated app/PDF
   rollout and public acceptance pending. No production authorization.
+
+### 2026-10-26 [Codex] SUR-38 staging release
+
+- PR #752 merged to staging SHA `a9643ac715beff6b7adfadee876db1b6b17ff9cf`.
+  App and PDF worker both run that image; four public smoke endpoints returned 200.
+- Live Pengajuan Aset draft confirmed all three Add controls, select, reorder,
+  autosave, refresh retention and removal. Disposable PostgreSQL covered ordinary
+  and KEU10 approvals, corrections and concurrency. No real approval or outbound.
+- Hosted CI did not start due GitHub billing. Clean Linux lint/typecheck/build and
+  102 focused tests passed; pre-existing high Zod advisory remains separately.
+  No production release authorized.
