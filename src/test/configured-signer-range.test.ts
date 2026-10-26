@@ -7,7 +7,7 @@ describe("configured signer range", () => {
   it("accepts exactly 2-8 selected signers during registration", () => {
     const service = read("src/services/surat.service.ts");
     expect(service).toContain("activeSigners.length < 2 || activeSigners.length > 8");
-    expect(service).toContain("configuredSteps.length !== activeSigners.length");
+    expect(service).toContain("configuredSteps.length !== configuredSigners.length");
     expect(service).not.toContain("activeSigners.length < 3 || activeSigners.length > 8");
   });
 

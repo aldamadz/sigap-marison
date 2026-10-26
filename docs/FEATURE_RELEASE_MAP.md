@@ -1483,3 +1483,16 @@ verifikasi juga runtime, database, worker, dan smoke test.
   are reconciled after layout. No schema or business workflow changes.
 - Explicit staging then selective production release requires coordinated app
   and PDF worker rollout. Existing stored PDFs are not bulk rewritten.
+
+## SUR-38 Requester Additional Signers (2026-10-26, Issue #751)
+
+- Candidate `feature/requester-additional-signers-20261026`, staging only.
+  Required configured signers are locked; additions can be inserted, removed
+  and moved within Membuat/Memeriksa/Menyetujui, up to eight total signers.
+- Server validates the complete mandatory route and active candidates, atomically
+  freezes additional approvals, remaps recommendation/revision stage references,
+  and retains additions in revisited drafts and PDF snapshots. KEU10 preserves
+  mandatory finance/director checks and its amount-dependent revision rules.
+- Migration `20261026030000` applied to staging after a rollback-verified dry-run;
+  existing documents, signatures and outbound rows unchanged. Coordinated app/PDF
+  rollout and public acceptance pending. No production authorization.

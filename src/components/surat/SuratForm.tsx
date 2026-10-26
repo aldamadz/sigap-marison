@@ -34,6 +34,8 @@ import {
 import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
 import { suratRecommendationApi } from "@/features/surat/recommendation/services/surat-recommendation-api";
 import { buildSignerAssignments } from "@/features/surat/registration/lib/signer-assignments";
+import { mergeAdditionalSigners } from "@/features/surat/registration/lib/additional-signers";
+import { SignerPlanEditor } from "@/components/surat/SignerPlanEditor";
 import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-autosave";
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
 import { useLinkedRecommendationContext } from "@/features/surat/registration/lib/use-linked-recommendation-context";
@@ -1358,6 +1360,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getEligibleSignerUsersForSigner = (signer?: SignerAssignment) => {
     if (!signer) return [];
+    if (signer.is_additional === true) return master.users.filter(user => user.is_active !== false
+      && !user.deleted_at && !signers.some(other => other.client_id !== signer.client_id && other.user_id === user.id));
     if (isEditableRevisionFinalSigner(signer)) return keu10FinalCandidates;
     if (isSelectableFirstMaker(signer)) return getFirstMakerCandidates(selectedUsage, signer);
     if (signer.candidate_fallback_mode === "related_branch_officer") {
@@ -1394,7 +1398,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     usage = selectedUsage,
     officeId = formData.office_id,
     departmentId = formData.dept_id || requesterDepartmentId,
-  ) => reconcileSignerAssignments(configured, persisted, (signer, persistedUserId) => {
+  ) => mergeAdditionalSigners(reconcileSignerAssignments(configured, persisted, (signer, persistedUserId) => {
     if (!isSelectableFirstMaker(signer, usage)) return currentProfile?.id || "";
     const candidates = getFirstMakerCandidates(usage, signer, officeId, departmentId);
     if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
@@ -1412,7 +1416,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     const candidates = getFirstMakerCandidates(usage, signer, officeId, departmentId);
     if (candidates.some(user => user.id === persistedUserId)) return persistedUserId;
     return candidates.some(user => user.id === currentProfile?.id) ? currentProfile?.id || "" : "";
-  });
+  }), persisted);
 
   const getFilteredSignerUsers = (index: number) => {
     const tokens = normalizeNameSearch(signerSearch[index] || "").split(" ").filter(Boolean);
@@ -4195,18 +4199,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   <h2 className="text-base font-semibold text-foreground">Penetapan Pejabat Penandatangan</h2>
                 </div>
 
-                <div className="mx-auto max-w-2xl space-y-3">
-                  {signers.map((s, i) => (
-                    <div key={i} className="flex flex-col items-center">
-                      <div className="flex w-full items-center gap-4 rounded-lg border bg-card p-4 shadow-[var(--shadow-card)] transition-colors hover:border-primary/50">
-                        <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-[10px] font-semibold">
-                          <span className="opacity-50 text-[7px]">KE</span>{s.step_order}
-                        </div>
-                        <div className="flex-1 text-left space-y-1">
-                          <div className="flex flex-col mb-2">
-                            <p className="text-xs font-semibold leading-tight text-primary">{s.label_jabatan}</p>
-                            <p className="text-[11px] font-medium text-muted-foreground">Status: {s.role_name}</p>
-                          </div>
+                <SignerPlanEditor signers={signers} editingEnabled={!externalRevision}
+                  onChange={next => { setSigners(next); setOpenSignerIndex(null); setSignerSearch({}); }}>
+                  {(s, i) => <>
                           <Popover open={openSignerIndex === i} onOpenChange={(open) => setOpenSignerIndex(open ? i : null)}>
                             <PopoverTrigger asChild>
                               <Button
@@ -4245,7 +4240,10 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                                         key={u.id}
                                         value={u.full_name}
                                         onSelect={() => {
-                                          setSigners(previous => previous.map((signer, index) => index === i ? { ...signer, user_id: u.id } : signer));
+                                          setSigners(previous => previous.map((signer, index) => index === i ? {
+                                            ...signer, user_id: u.id,
+                                            ...(signer.is_additional === true ? { label_jabatan: u.job_title || "Penandatangan tambahan" } : {}),
+                                          } : signer));
                                           setOpenSignerIndex(null);
                                           setSignerSearch(prev => ({ ...prev, [i]: "" }));
                                         }}
@@ -4266,8 +4264,6 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                               </Command>
                             </PopoverContent>
                           </Popover>
-                        </div>
-                      </div>
                       {isEditableRevisionFinalSigner(s) && revisionCandidates.status === "error" && (
                         <p className="mt-2 w-full text-left text-xs text-destructive" role="alert">Penyetuju revisi gagal dimuat. Muat ulang draft untuk mencoba kembali.</p>
                       )}
@@ -4276,10 +4272,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                           Belum ada kandidat aktif untuk {s.label_jabatan} pada kantor/departemen ini. Hubungi admin sebelum mengirim pengajuan.
                         </p>
                       )}
-                      {i < signers.length - 1 && <ArrowDown className="text-primary/20 w-4 h-4 my-1" />}
-                    </div>
-                  ))}
-                </div>
+                  </>}
+                </SignerPlanEditor>
 
                 <div className="flex flex-col gap-3 pt-6 sm:flex-row">
                   {useRegistrationWizard && (

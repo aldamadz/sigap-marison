@@ -1007,11 +1007,22 @@ export const suratService = {
         throw new Error("Penandatangan harus berjumlah 2 sampai 8 tahap sesuai konfigurasi.");
       }
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
+      const hasAdditionalSigners = activeSigners.some(signer => signer.is_additional === true);
+      const configuredSigners = activeSigners.filter(signer => signer.is_additional !== true);
+      for (const signer of activeSigners.filter(signer => signer.is_additional === true)) {
+        const profile = signerSnapshots[signer.user_id];
+        if (!profile?.is_active || profile.deleted_at || signer.form_usage_step_id
+          || !["membuat", "memeriksa", "menyetujui"].includes(signer.role_name)
+          || activeSigners.filter(other => other.user_id === signer.user_id).length !== 1) {
+          throw new Error("Penandatangan tambahan tidak aktif, duplikat, atau tidak sesuai kelompok.");
+        }
+      }
       const totalSteps = activeSigners.length;
       const snapshotSigners = activeSigners.map((s, idx) => {
         const profile = signerSnapshots[s.user_id] ?? {};
         return {
           user_id: s.user_id,
+          is_additional: s.is_additional === true,
           full_name: profile.full_name ?? null,
           nik: profile.nik ?? null,
           job_title: profile.job_title ?? null,
@@ -1068,7 +1079,7 @@ export const suratService = {
         if (validationError) throw validationError;
         const allConfiguredSteps = [...(configContext.usage?.form_usage_steps || [])]
           .sort((a: any, b: any) => a.step_order - b.step_order);
-        const activeStepIds = new Set(activeSigners.map(signer => signer.form_usage_step_id).filter(Boolean));
+        const activeStepIds = new Set(configuredSigners.map(signer => signer.form_usage_step_id).filter(Boolean));
         const missingRequiredStep = allConfiguredSteps.find((step: any) =>
           step.skip_if_no_candidate !== true
           && !activeStepIds.has(step.id)
@@ -1077,11 +1088,11 @@ export const suratService = {
           throw new Error(`Penandatangan tahap ${missingRequiredStep.step_order} belum dipilih.`);
         }
         const configuredSteps = allConfiguredSteps.filter((step: any) => activeStepIds.has(step.id));
-        if (configuredSteps.length !== activeSigners.length) {
+        if (configuredSteps.length !== configuredSigners.length) {
           throw new Error("Jumlah penandatangan tidak sesuai konfigurasi kegunaan.");
         }
         configuredSteps.forEach((step: any, index: number) => {
-          const assignment = activeSigners[index];
+          const assignment = configuredSigners[index];
           const eligibleIds = (step.form_usage_step_users || []).map((item: any) => item.user_id);
           const signerProfile = signerSnapshots[assignment.user_id] ?? {};
           const matchesAssignee = isContextualMakerStep(configContext.usage, step)
@@ -1176,7 +1187,18 @@ export const suratService = {
       cleanPayload.file_path = `native://document/${payloadDraftId || payloadReservationId || encodeURIComponent(String(payload.no_surat || "draft"))}`;
 
       const keu10Registration = isKeu10Form(context.form);
-      const { data: registrationResult, error: suratError } = keu10Registration
+      const atomicRegistration = keu10Registration || hasAdditionalSigners;
+      const { data: registrationResult, error: suratError } = hasAdditionalSigners
+        ? await supabase.rpc("create_registration_with_signer_plan", {
+            p_payload: cleanPayload,
+            p_signers: activeSigners.map(signer => ({
+              user_id: signer.user_id, role_name: signer.role_name,
+              form_usage_step_id: this.cleanUuid(signer.form_usage_step_id),
+              is_additional: signer.is_additional === true,
+              ...(signer.is_additional === true ? { client_id: signer.client_id } : {}),
+            })),
+          })
+        : keu10Registration
         ? await supabase.rpc("create_keu10_registration", {
             p_payload: cleanPayload,
             p_signers: activeSigners.map((signer) => ({
@@ -1187,13 +1209,13 @@ export const suratService = {
         : await supabase.rpc("create_surat_registrasi", { p_payload: cleanPayload });
 
       if (suratError) throw suratError;
-      const surat = keu10Registration ? registrationResult?.surat : registrationResult;
+      const surat = atomicRegistration ? registrationResult?.surat : registrationResult;
       if (!surat?.id) throw new Error("Surat gagal dibuat.");
 
       // A previous attempt may have committed the registration before a later
       // recommendation-link step failed. In that case the RPC returns the same
       // surat; do not duplicate its attachments, snapshots, or signatures.
-      if (keu10Registration && registrationResult.created !== true) {
+      if (atomicRegistration && registrationResult.created !== true) {
         await this.uploadAttachmentFiles(surat.id, attachmentFiles, user.id, {
           stage: "initial", requirements: payload.initial_attachment_meta || {}, idempotent: true,
         });
@@ -1218,7 +1240,7 @@ export const suratService = {
         });
         return surat;
       }
-      if (payloadDraftId && !keu10Registration) {
+      if (payloadDraftId && !atomicRegistration) {
         const { count: existingSignatureCount, error: existingSignatureError } = await supabase
           .from("surat_signatures")
           .select("id", { count: "exact", head: true })
@@ -1237,7 +1259,7 @@ export const suratService = {
       const uploadedAttachments = await this.uploadAttachmentFiles(surat.id, attachmentFiles, user?.id, {
         stage: "initial",
         requirements: payload.initial_attachment_meta || {},
-        idempotent: keu10Registration,
+        idempotent: atomicRegistration,
       });
       let reusedDraftAttachments: any[] = [];
       const draftAttachmentRows = buildRegistrationAttachmentRows({
@@ -1314,7 +1336,7 @@ export const suratService = {
 
       let requesterAutoApproved = false;
       if (signerPayload.length > 0) {
-        if (!keu10Registration) {
+        if (!atomicRegistration) {
           const { error: signerInsertError } = await supabase.from("surat_signatures").insert(signerPayload);
           if (signerInsertError) {
             await supabase.from("surat_registrasi").delete().eq("id", surat.id);
