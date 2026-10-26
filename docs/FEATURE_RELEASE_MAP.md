@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## OPS-15 Public Probe Egress Diagnosis (2026-10-26, Issue #750)
+
+- 2026-10-26 [Codex] Read-only diagnosis: origin readiness probes succeeded
+  100% over the sampled 24 hours, while the local production public-path probe
+  succeeded about 63.4%. Failures predominantly preceded TCP/TLS establishment
+  to Cloudflare address `172.67.187.163`; the other production address worked.
+- Repeated source comparisons and bounded TCP traceroutes establish different
+  outbound paths for working Proxmox/proxy and failing monitoring/app sources.
+  Router policy/WAN/NAT inspection is still needed; no production network fix,
+  monitoring threshold change, restart, deployment or database mutation occurred.
+- Evidence and limitations: `docs/operations/20261026-public-probe-rto-diagnosis.md`.
+  This documentation branch is not a runtime release or proof of remediation.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned

@@ -1,5 +1,23 @@
 # Worklog
 
+## 2026-10-26 [Codex] OPS-15 / Issue #750
+
+- Read-only diagnosis complete; network remediation remains open. Isolated
+  branch `codex/public-probe-diagnosis-20261026` from production main. No runtime,
+  router, DNS, monitoring, database, worker or business-data changes.
+- Production origin readiness availability 100%, public path about 63.4% in the
+  sampled 24 hours. Failures are overwhelmingly TCP connection timeouts to one
+  Cloudflare IPv4 address, not API/database processing or a failed scrape.
+- Proxmox/proxy sources connect successfully; monitoring/app sources repeatedly
+  fail. Traceroutes establish distinct upstream gateway paths. Router policy
+  routing/WAN/NAT inspection is the next step, without claiming an exact bad rule
+  or ISP yet. Keep public-path and origin availability distinct; do not hide RTOs.
+- Active Caddy application target is correct. Historical single-file mount
+  drift remains separate; shared proxy must not be blindly reloaded.
+- Full sanitized evidence: `docs/operations/20261026-public-probe-rto-diagnosis.md`.
+  Docs-only diff check; application tests/build/deploy not applicable.
+  `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+
 ## 2026-10-19 [Codex] DASH-03 / Issue #638
 
 - Active: `feature/actionable-role-dashboard-20261019`, isolated worktree from
