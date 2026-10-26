@@ -1486,19 +1486,17 @@ verifikasi juga runtime, database, worker, dan smoke test.
 
 ## SUR-38 Requester Additional Signers (2026-10-26, Issue #751)
 
-- Candidate `feature/requester-additional-signers-20261026`; staged, with
-  selective production promotion explicitly authorized after PDF verification.
+- Released from `feature/requester-additional-signers-20261026` to staging and
+  production after explicit production authorization and PDF verification.
   Required configured signers are locked; additions can be inserted, removed
   and moved within Membuat/Memeriksa/Menyetujui, up to eight total signers.
 - Server validates the complete mandatory route and active candidates, atomically
   freezes additional approvals, remaps recommendation/revision stage references,
   and retains additions in revisited drafts and PDF snapshots. KEU10 preserves
   mandatory finance/director checks and its amount-dependent revision rules.
-- Migration `20261026030000` applied to staging after a rollback-verified dry-run;
-  existing documents, signatures and outbound rows unchanged. Coordinated app/PDF
-  rollout and public acceptance completed for the initial staged feature. The
-  recommendation eight-signer PDF layout follow-up still requires staged rollout
-  before production promotion.
+- Migration `20261026030000` applied to staging and production after rollback
+  rehearsals; existing documents, signatures and outbound rows unchanged.
+  Coordinated app/PDF rollout completed in both environments.
 
 ### 2026-10-26 [Codex] SUR-38 staging release
 
@@ -1510,3 +1508,17 @@ verifikasi juga runtime, database, worker, dan smoke test.
 - Hosted CI did not start due GitHub billing. Clean Linux lint/typecheck/build and
   102 focused tests passed; pre-existing high Zod advisory remains separately.
   No production release authorized.
+
+### 2026-10-26 [Codex] SUR-38 production release
+
+- Production explicitly authorized after PDF review. PR #754 staged the
+  seven/eight-signer recommendation layout correction, PR #755 selectively
+  promoted SUR-38 to main, and PR #756 synchronized main ancestry to staging.
+- Live staging `d33970e412eedf2a2a5ecec66bc637ba1c053a91`; production
+  `76af3f9fe64a2c1b50f52f787b12b9a8847257c7`. Both app/PDF worker pairs
+  share an image. Production migration `20261026030000` is in CT 110 ledger;
+  previous documents/signatures remain untouched.
+- Eight-signer PGD, KEU 1, KEU 10 and recommendation PDF layouts were checked
+  visually. Runtime worker render smoke and five production public readiness
+  probes passed. Hosted CI remains blocked before execution by GitHub billing.
+  No live submission, historical PDF rewrite or outbound resend was performed.
