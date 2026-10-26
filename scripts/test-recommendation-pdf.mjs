@@ -185,6 +185,22 @@ test("renders the recommendation main form, details, images, and 3-8 signatures 
   }
 });
 
+test("keeps eight signer boxes on the recommendation form when rows are available", async () => {
+  const data = normalizeRecommendationDocumentData({ no_surat: "QA/REKOMENDASI" }, {
+    items: [],
+    signatures: Array.from({ length: 8 }, (_, index) => ({
+      step_order: index + 1,
+      role_name: index === 0 ? "Membuat" : index === 7 ? "Menyetujui" : "Memeriksa",
+      signer_snapshot: { full_name: `Pejabat Rekomendasi ${index + 1}`, job_title: `Jabatan ${index + 1}` },
+    })),
+  });
+  const definition = buildRecommendationDocumentDefinition(data, [], null);
+  assert.equal(definition.content[3].table.body.length, 6);
+  const pdf = await renderRecommendationPdf(data);
+  assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+  assert.equal((pdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length, 1);
+});
+
 test("keeps the FM-UAI.HRD-30-00 first-page table, reserved rows, notes, and lower-right signatures", () => {
   const items = resolveRecommendationSource({ recommendation_multi_detail: {
     version: 1,

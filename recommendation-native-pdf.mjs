@@ -171,7 +171,8 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
       { text: itemNotes(item).length > 160 ? `Catatan per rincian item ${index + 1} pada halaman lanjutan.` : compactText(itemNotes(item)), color: rejected ? REJECTED : BORDER },
     ];
   });
-  const minimumRows = data.items.some(needsItemDetails) ? rows.length : 8;
+  const minimumRows = data.items.some(needsItemDetails) ? rows.length :
+    data.signatures.length >= 7 ? Math.max(rows.length, 4) : 8;
   while (rows.length < minimumRows) {
     rows.push([
       { text: String(rows.length + 1), alignment: "center" },

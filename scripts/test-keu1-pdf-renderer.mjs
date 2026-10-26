@@ -147,4 +147,7 @@ assert.ok(Buffer.isBuffer(pdfBuffer));
 assert.ok(pdfBuffer.length > 0);
 assert.strictEqual(pdfBuffer.subarray(0, 4).toString("utf8"), "%PDF");
 
+const eightSignerPdf = await renderKeu1Pdf(createKeu1PreviewData({ signature_count: 8, signature_roles: [1, 6, 1] }));
+assert.strictEqual((eightSignerPdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length, 1);
+
 console.log("KEU 1 PDF renderer tests passed");

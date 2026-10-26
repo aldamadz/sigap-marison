@@ -1,5 +1,18 @@
 # Worklog
 
+## 2026-10-26 [Codex] SUR-38 PDF verification and production candidate / Issue #751
+
+- User authorized selective staging-then-production release after PDF verification.
+- PGD, KEU 1, KEU 10 and recommendation eight-signer PDFs rendered and visually
+  inspected, including partially signed documents. Signer identities and pending
+  boxes remained visible with no overlap or clipping.
+- Recommendation originally moved the eight-signer footer to a mostly empty
+  second page. Its unused filler rows now shrink only for seven/eight signers;
+  actual item rows remain intact. Re-rendered one page and added regression tests.
+- Focused PDF tests, lint, typecheck and frontend/backend build passed locally.
+  Remaining: staging PR and coordinated app/PDF-worker rollout, staging smoke,
+  production migration preflight, selective main PR, production rollout/smoke.
+
 ## 2026-10-26 [Codex] SUR-38 staging rollout / Issue #751
 
 - PR #752 merged from `feature/requester-additional-signers-20261026` into

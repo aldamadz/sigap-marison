@@ -1413,7 +1413,8 @@ verifikasi juga runtime, database, worker, dan smoke test.
 
 ## SUR-38 Requester Additional Signers (2026-10-26, Issue #751)
 
-- Candidate `feature/requester-additional-signers-20261026`, staging only.
+- Candidate `feature/requester-additional-signers-20261026`; staged, with
+  selective production promotion explicitly authorized after PDF verification.
   Required configured signers are locked; additions can be inserted, removed
   and moved within Membuat/Memeriksa/Menyetujui, up to eight total signers.
 - Server validates the complete mandatory route and active candidates, atomically
@@ -1422,7 +1423,9 @@ verifikasi juga runtime, database, worker, dan smoke test.
   mandatory finance/director checks and its amount-dependent revision rules.
 - Migration `20261026030000` applied to staging after a rollback-verified dry-run;
   existing documents, signatures and outbound rows unchanged. Coordinated app/PDF
-  rollout and public acceptance pending. No production authorization.
+  rollout and public acceptance completed for the initial staged feature. The
+  recommendation eight-signer PDF layout follow-up still requires staged rollout
+  before production promotion.
 
 ### 2026-10-26 [Codex] SUR-38 staging release
 
