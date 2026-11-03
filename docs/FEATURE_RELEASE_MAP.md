@@ -2,6 +2,11 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Owner correction supersedes earlier named exclusions:
+  public TOS v1.1 mentions only official services owned/operated by Marison.
+  No unaffiliated application is named in body, metadata or public history.
+  Staging then production verified; 34 tests pass. Maintenance policy corrected.
+
 - 2026-11-03 [Codex] Light/dark/system themes and policy footer links live.
   `marisoncloud.com/terms` edge-hosts TOS v1.0 for all services except XAU,
   without rebuilding the main app. Privacy remains the existing Absensi policy.

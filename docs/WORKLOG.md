@@ -1,5 +1,18 @@
 # Worklog
 
+## 2026-11-03 [Codex] Terms scope wording corrected by owner
+
+- Supersedes the earlier named-exclusion wording: the owner clarified that
+  unaffiliated applications must not be mentioned at all. TOS v1.1 now applies
+  only to services owned or officially operated by Marison Regency Group.
+  Public body, metadata and rendered history contain no third-party app name.
+  Initial public history summary was corrected explicitly at the owner's request;
+  original source remains available through Git, not on the public page.
+- Released `16ff1d0` to staging then production page Worker. Both canonical
+  main-host and status-host Terms return HTTP200 with v1.1 and verified clean
+  wording. Thirty-four tests, scoped lint/build/diff pass; no route, DB, service
+  ownership or unrelated app change. Future TOS review policy updated to match.
+
 ## 2026-11-03 [Codex] OPS-16 themes and platform Terms published
 
 - Released `f54022b` to staging then production page Worker. Light/dark/system
