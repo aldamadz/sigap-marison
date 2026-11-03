@@ -1,5 +1,44 @@
 # Worklog
 
+## 2026-11-03 [Codex] SEC-03 validation evidence and release hold / Issue #766
+
+- Source commit5310634; staging integration PR #767 preserves AUTH-09.
+ 217 related tests and39 desktop/Zod compatibility tests pass. Integration lint,
+  typecheck and frontend/backend builds pass; documentation clean install and
+  build pass with every resolved Zod at4.6.7. Root high/critical audit gate passes.
+- Source full suite:2716 pass,8 fail,7 pending. All8 failing assertion names
+  reproduce on isolated main baseline7a6aac7 using Zod3.25.76 (75 pass/8 fail
+  in the83-test subset). Baseline quality follow-up #769 includes possible CRLF
+  sensitivity; do not blindly update hashes or remove behavioral checks.
+- Unrelated documentation dependency findings tracked in #768. No blanket
+  npm audit fix, v3 compatibility fallback or quality/deployment bypass.
+- Release held: PR #767 hosted CI41610672160 was still in progress at the time
+  of this entry. No staging merge, deployment, worker restart or live migration.
+  Staging public version remainsd33970e412eedf2a2a5ecec66bc637ba1c053a91;
+  production untouched. KEU routing PR #765 remains separately unmerged.
+- Next: inspect hosted CI, reconcile baseline failures independently, then
+  coordinate app/worker staging rollout and smoke. Production needs explicit
+  authorization. Durable lesson: validate staging-only desktop consumers when
+  selectively upgrading a shared runtime dependency from main.
+
+## 2026-11-03 [Codex] SEC-03 Zod4 compatibility / Issue #766
+
+- User requested upgrade and validation after the existing high Zod advisory
+  blocked KEU routing. Branch `fix/zod4-validation-security` from main; staging
+  only. No production, live database or business dispatch changes.
+- Pinned Zod4.6.7 in all runtime workspaces and documentation overrides. Kept
+  unrelated dependency versions intact. Native email lowercase normalization
+  replaces transform to preserve credential typing under both TypeScript modes.
+- Isolated Linux installation:217 related tests, lint, typecheck and frontend,
+  backend/shared and Zudoku builds pass. New bounded regression checks collection
+  size rejection before per-element issues; no live load/exploit test performed.
+- Root audit:0 high/critical,21 moderate/1 low (runtime-only5 moderate/1 low).
+  Documentation Zod findings removed;19 unrelated findings remain, including
+ 10 high/2 critical. Do not describe the whole documentation toolchain as clean.
+- Pending integration, full dependency-change CI, AUTH-09 validation and staging
+  rollout/smoke. Source node_modules junction was left untouched; testing uses an
+  isolated build folder rather than mutating the user's shared dependency tree.
+
 ## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
 
 - PR #754 staged the recommendation PDF layout follow-up; PR #755 selectively
