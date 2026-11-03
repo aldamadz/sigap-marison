@@ -2,6 +2,16 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Production status follow-up live after explicit request.
+  D1 export and Time Travel bookmark captured before ordered migrations; raw
+  and daily counts match. Probe Worker now reads production SIGAP maintenance
+  revision 0 through `sigap-maintenance-production`; page Worker serves the
+  30-day history, maintenance section and incident timeline at the production
+  domain. Four public services are fresh/up; desktop/mobile and API/assets
+  passed. No SIGAP app or maintenance Worker change. Source PR #761 (staging)
+  and #762 (main) are open and unmerged because their merge would trigger an
+  unrelated SIGAP app deployment; root audit has an existing high advisory.
+
 - 2026-11-03 [Codex] SIGAP maintenance integration candidate: the status probe
   reads the maintenance Durable Object through a same-account Service binding,
   then copies only the public schedule to D1 with revision guards. Stale sync

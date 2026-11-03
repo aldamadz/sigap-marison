@@ -1,5 +1,30 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 production status integration live / Issue #760
+
+- Production D1 export was saved locally and SHA-256 verified before change;
+  Time Travel bookmark captured. Applied status history/events migration, then
+  SIGAP maintenance source migration. Backfilled raw/daily counts match for all
+  four services. The production probe is bound only to
+  `sigap-maintenance-production` and recorded production revision 0. No active
+  schedule exists; no test incident or maintenance remains in production D1.
+- Production `https://status.marisoncloud.com/`, `/api/status`, `/app.js`, and
+  `/logo.png` return 200. Four services report current observations; 30 daily
+  bars, click interaction, desktop and mobile layout, and browser console
+  passed. The public Worker remains read-only. SIGAP app, DB/Auth, outbound,
+  and maintenance Worker were not redeployed or modified.
+- Source PRs #761 to staging and #762 to main are open, not merged. A merge
+  would start the repository's SIGAP app deployment workflows despite an
+  ops-only diff. The root npm audit reports one pre-existing high `zod`
+  advisory; the status Workers have no npm dependencies. Twenty-one focused
+  tests, scoped ESLint, syntax check, build and diff check passed. Coordinate
+  source merges with a normal app release window or a reviewed path filter.
+- Postrelease verification: production maintenance revision still matches 0;
+  all four services have 296 raw and daily samples. PR #761 reports a merge
+  conflict against staging; #762 is clean but quality-check is still running.
+  Resolve source integration without merging unrelated staging into the
+  production feature branch. Neither PR is claimed merged or CI-successful.
+
 ## 2026-11-03 [Codex] OPS-16 SIGAP maintenance integration staging / Issue #760
 
 - Added forward-only D1 source/revision migration and Service binding to the
