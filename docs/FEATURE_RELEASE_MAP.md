@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
+
+- `status.marisoncloud.com` is live outside SIGAP origins on Cloudflare Workers
+  and D1. It monitors four production services each minute and shows honest
+  30-day sampled history, maintenance, and operator-authored incident timelines.
+- SIGAP production maintenance is copied through an internal Service binding,
+  revision-guarded; stale sync is explicit and full maintenance remains visible
+  past its estimate until completed. No public write endpoint or origin secret.
+- Source matches `feature/status-marisoncloud-page` at `1f0b081`. This staging
+  integration branch preserves existing staging documents instead of merging
+  unrelated staging code into the production candidate. Runtime already live;
+  source merges must not trigger an uncoordinated SIGAP application deployment.
+
 ## AUTH-09 Desktop Pairing and Notifications (2026-10-22, Issue #718)
 
 - 2026-10-22 [Codex] Staging-only pilot for the team's Tauri Windows/macOS app.
