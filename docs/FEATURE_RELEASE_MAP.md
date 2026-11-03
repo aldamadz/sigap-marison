@@ -2,6 +2,13 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Group Privacy v2.0 and TOS v1.2 now live after staging
+  acceptance. Main landing has header/footer policy links; legal pages and
+  status are connected. Desktop/mobile light/dark and navigation verified;
+  39 tests/lint/bundle checks pass. One new main-host route with strict handler
+  guards, all prior zone routes preserved. No business app/DB/auth changes.
+  This completion supersedes the candidate entry immediately below.
+
 - 2026-11-03 [Codex] Follow-up candidate: group Privacy v2.0, TOS v1.2
   alignment and main landing header/footer policy links. Canonical pages
   cross-link Beranda/Privacy/TOS/Status. Original app/assets are retained;

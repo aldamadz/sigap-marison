@@ -1,5 +1,31 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 Group Privacy And Landing Navigation Live
+
+- Source `aeb22ce` released to staging page Worker, then production after
+  acceptance. Public `/privacy` is now group-wide v2.0; `/terms` v1.2 points
+  to it. Both have Beranda/Privacy/TOS/Status navigation, theme controls,
+  canonical metadata, dates and history. Original Absensi source stays intact.
+- Production landing visibly has Ketentuan in its existing header and
+  Privacy Policy/Terms of Service/Status layanan in its existing footer.
+  Desktop and 390px browser acceptance: links navigate correctly, header nav
+  remains visible on mobile, no horizontal overflow, light/dark work and no
+  console errors. Staging uses an explicitly labeled navigation fixture.
+- Added only `marisoncloud.com/*` route, id
+  `b5c035fbb093469bb8ab8ec52173bb13`, to existing `marison-status-page`.
+  All eight pre-existing zone routes were compared and unchanged. Cloudflare
+  does not support query parameters in route patterns, so exact pathname
+  guards in the handler limit HTML enhancement to root. Root including query,
+  privacy/terms including trailing slash, assets and `/api/health` HTTP200;
+  main landing CSP remains intact. Other methods/paths pass to origin.
+- Thirty-nine focused tests, scoped ESLint, bundle build/syntax and diff checks
+  pass. Existing parent dependency audit (1 high Zod, 5 moderate, 1 low) remains
+  outside this dependency-free Worker; no parent app build or deploy was done.
+  No DB, auth, business record, SIGAP app/worker, DNS or origin restart changes.
+  Source PRs #762/#763 remain unmerged operations records, not a CI-success claim.
+  Policy text should still receive responsible owner/legal review; no compliance
+  certification is claimed. PROJECT_CONTEXT remains unavailable.
+
 ## 2026-11-03 [Codex] OPS-16 Group Privacy And Landing Navigation Candidate
 
 - Owner explicitly requested group-wide Privacy and discoverable Terms on the
