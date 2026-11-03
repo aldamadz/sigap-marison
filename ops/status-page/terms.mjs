@@ -1,11 +1,11 @@
 export const TERMS = {
-  version: '1.0',
+  version: '1.1',
   effectiveDate: '2026-11-03',
   dateLabel: '3 November 2026',
   sections: [
     { id: 'cakupan', title: 'Cakupan layanan', paragraphs: [
-      'Ketentuan ini mengatur penggunaan layanan digital yang secara resmi dioperasikan untuk Marison Regency Group melalui marisoncloud.com dan subdomainnya, termasuk SIGAP, Maris Drive, AI Workspace, Absensi, halaman status, dan layanan pendukung lainnya.',
-      'Layanan xau.marisoncloud.com secara tegas dikecualikan. Ketentuan ini tidak mengatur atau menyatakan persetujuan atas layanan tersebut. Ketentuan khusus layanan, perjanjian kerja, kebijakan perusahaan, dan perjanjian tertulis yang relevan tetap berlaku sesuai cakupannya.',
+      'Ketentuan ini hanya mengatur penggunaan layanan digital yang dimiliki atau secara resmi dioperasikan oleh Marison Regency Group, termasuk SIGAP, Maris Drive, AI Workspace, Absensi, halaman status, dan layanan pendukung resmi lainnya.',
+      'Ketentuan khusus layanan, perjanjian kerja, kebijakan perusahaan, dan perjanjian tertulis yang relevan tetap berlaku sesuai cakupannya.',
     ] },
     { id: 'akun', title: 'Akun dan kewenangan', paragraphs: [
       'Gunakan akun dan layanan hanya sesuai hak akses serta penugasan yang diberikan. Layanan internal ditujukan bagi karyawan dan pihak lain yang diberi izin; halaman publik dapat diakses sesuai fungsi yang tersedia.',
@@ -49,5 +49,8 @@ export const TERMS = {
       'Pertanyaan mengenai cakupan atau penerapan ketentuan dapat disampaikan kepada pengelola resmi Marison Regency Group. Ketentuan ini tidak menetapkan biaya, forum penyelesaian sengketa, atau persetujuan tambahan yang belum diatur dalam perjanjian yang relevan.',
     ] },
   ],
-  history: [{ version: '1.0', date: '2026-11-03', summary: 'Penerbitan awal: seluruh layanan Marison Cloud kecuali xau.marisoncloud.com; ketentuan penggunaan, privasi sesuai cakupan, status, dan RSS/Atom.' }],
+  history: [
+    { version: '1.1', date: '2026-11-03', summary: 'Memperjelas cakupan hanya untuk layanan resmi milik atau yang dioperasikan Marison Regency Group.' },
+    { version: '1.0', date: '2026-11-03', summary: 'Penerbitan awal: ketentuan penggunaan layanan, privasi sesuai cakupan, status, dan RSS/Atom.' },
+  ],
 };

@@ -61,7 +61,8 @@ page. No account data or cross-origin preference sharing is used.
 
 Footer links point to `https://marisoncloud.com/privacy` and `/terms`.
 The privacy page is not rewritten: its present scope is Absensi. Terms cover
-all Marison Cloud services except XAU, and explicitly preserve that distinction.
+only services owned or officially operated by Marison Regency Group, without
+naming unaffiliated applications or implying ownership from a shared domain.
 Follow `docs/legal/TERMS_MAINTENANCE.md` on every relevant service change.
 
 The same Worker renders `/terms` without D1. Production route

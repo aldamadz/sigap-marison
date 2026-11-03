@@ -2,11 +2,12 @@
 
 ## Owner And Scope
 
-2026-11-03 [Codex]: The user requires the Terms of Service to cover all Marison
-Cloud services except `xau.marisoncloud.com`, and to stay aligned with future
-changes. Source: `ops/status-page/terms.mjs`. Public canonical page:
-`https://marisoncloud.com/terms`. Do not change the XAU exclusion without an
-explicit new instruction. The privacy link remains the user-supplied
+2026-11-03 [Codex], user correction: Terms apply only to services owned or
+officially operated by Marison Regency Group. Public wording must not name
+unaffiliated applications or imply ownership merely from a shared domain.
+This supersedes the earlier named-exclusion approach. Keep Terms aligned with
+future service changes. Source: `ops/status-page/terms.mjs`. Canonical page:
+`https://marisoncloud.com/terms`. The privacy link remains the user-supplied
 `https://marisoncloud.com/privacy`; that page currently covers Absensi only.
 
 ## Required Release Review
