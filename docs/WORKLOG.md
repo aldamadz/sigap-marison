@@ -1,5 +1,19 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 status-page staging source integration / Issue #760
+
+- Replaces conflicted PR #761 using a branch from staging with identical
+  `ops/status-page` source from production candidate `1f0b081`. Existing staging
+  documents/code remain intact. Production source PR #762 stays selective.
+- Separate staging/production D1 and Workers were verified. Production public
+  page/API/assets return 200, four current probes are up, and maintenance sync
+  revision 0 matches production SIGAP. Staging sync revision 17 matches staging.
+  Raw/daily sample counts match; no test maintenance/incident remains.
+- Twenty-one focused tests, scoped ESLint, JS syntax, Worker build, desktop and
+  mobile acceptance pass. Root npm audit has an existing high zod advisory;
+  status Workers have no npm dependencies. Source PRs remain unmerged pending
+  coordinated app-release workflow handling; no CI success claim.
+
 ## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
 
 - PR #754 staged the recommendation PDF layout follow-up; PR #755 selectively
