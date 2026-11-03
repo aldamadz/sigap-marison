@@ -19,10 +19,12 @@ Staging `/_preview/landing` is an explicit navigation fixture, not a copy of
 the live application, and must return 404 in production. Verify the actual
 production landing after release, including its existing access button.
 
-Main-host routing is scoped to exact root plus root-with-query and privacy
-prefix, in addition to the pre-existing Terms prefix. Existing unrelated zone
-routes must remain unchanged. Roll back by removing only the added routes
-and restoring the previous page Worker; never change DNS or origin data.
+Main-host route `marisoncloud.com/*` is required because Cloudflare route
+patterns cannot contain query parameters. The handler itself limits rewriting
+to exact root HTML, serves the listed policy paths, and passes every other
+path/method through unchanged. The pre-existing Terms prefix and unrelated
+zone routes remain unchanged. Roll back by removing only the new main-host
+route and restoring the previous page Worker; never change DNS or origin data.
 
 ## Owner And Scope
 
