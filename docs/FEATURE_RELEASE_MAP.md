@@ -2,6 +2,11 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Four-color daily history live after staging acceptance:
+  green 100% healthy samples, yellow 99-<100%, orange 95-<99%, red <95%.
+  Gray means no data; current service state is independent. No historical
+  measurement rewrite. Twenty-two focused tests and responsive acceptance pass.
+
 - 2026-11-03 [Codex] Production status follow-up live after explicit request.
   D1 export and Time Travel bookmark captured before ordered migrations; raw
   and daily counts match. Probe Worker now reads production SIGAP maintenance

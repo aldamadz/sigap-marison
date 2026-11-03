@@ -1,5 +1,17 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 four-color daily history released
+
+- Staging acceptance then production page Worker uploaded from `af4879b`.
+  Daily healthy-sample ratios now map to green 100%, yellow 99-<100%, orange
+  95-<99%, red <95%; absent data remains gray. Current service condition and
+  raw/daily observations are unchanged. Tooltip/selection show percentage and
+  sample count. Maris Drive and Marison Cloud correctly render yellow today.
+- Twenty-two focused tests including exact threshold boundaries, scoped lint,
+  Worker build and diff check passed. Live production API/page and desktop/mobile
+  legend/click acceptance passed without browser errors. No DB migration,
+  probe/maintenance Worker upload, SIGAP app deploy or incident rewrite.
+
 ## 2026-11-03 [Codex] OPS-16 source PR conflict isolated / Issue #760
 
 - Closed superseded PR #761. Replacement staging PR #763 starts from staging
