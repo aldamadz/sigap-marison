@@ -1,5 +1,5 @@
 export const TERMS = {
-  version: '1.1',
+  version: '1.2',
   effectiveDate: '2026-11-03',
   dateLabel: '3 November 2026',
   sections: [
@@ -32,7 +32,7 @@ export const TERMS = {
       'Apabila ada kekeliruan catatan, gunakan mekanisme koreksi atau hubungi HRD/administrator resmi. Ketentuan ini tidak mengubah hak dan kewajiban ketenagakerjaan yang berlaku.',
     ] },
     { id: 'privasi', title: 'Privasi dan preferensi perangkat', paragraphs: [
-      'Pengolahan data mengikuti kebijakan privasi dan pemberitahuan yang relevan sesuai cakupan masing-masing layanan. Kebijakan Privasi pada marisoncloud.com/privacy saat ketentuan ini diterbitkan menjelaskan aplikasi Absensi; cakupan tersebut tidak otomatis diperluas menjadi seluruh layanan melalui ketentuan ini.',
+      'Pengolahan data dijelaskan pada Kebijakan Privasi Marison Regency Group di marisoncloud.com/privacy, yang mencakup seluruh sistem resmi milik atau yang dioperasikan Marison Regency Group. Jenis data dan pemrosesannya mengikuti layanan serta fitur yang digunakan, dengan pemberitahuan tambahan apabila diperlukan.',
       'Halaman status menyimpan pilihan tema di penyimpanan lokal browser bila tersedia. RSS/Atom dapat dibaca tanpa membuat akun atau menyerahkan alamat email pada halaman status. Aplikasi pembaca feed yang Anda gunakan dapat memiliki kebijakan pengolahan data tersendiri.',
     ] },
     { id: 'status', title: 'Status, notifikasi, dan pemeliharaan', paragraphs: [
@@ -50,6 +50,7 @@ export const TERMS = {
     ] },
   ],
   history: [
+    { version: '1.2', date: '2026-11-03', summary: 'Menyelaraskan rujukan privasi dengan Kebijakan Privasi seluruh sistem resmi Marison Regency Group.' },
     { version: '1.1', date: '2026-11-03', summary: 'Memperjelas cakupan hanya untuk layanan resmi milik atau yang dioperasikan Marison Regency Group.' },
     { version: '1.0', date: '2026-11-03', summary: 'Penerbitan awal: ketentuan penggunaan layanan, privasi sesuai cakupan, status, dan RSS/Atom.' },
   ],

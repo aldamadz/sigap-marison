@@ -123,6 +123,15 @@ SIGAP maintenance revision in D1 after at least one scheduled probe run.
 
 ## Operator records
 
+Public legal pages are served independently at `/terms` (v1.2) and `/privacy`
+(group notice v2.0). Both share themes, version/history and cross-navigation.
+The main-host successful HTML root is progressively enhanced with header/footer
+links using `/terms/landing.js` and `/terms/landing.css`; original application
+scripts, CSP, assets and errors are retained. A server-rendered fallback footer
+keeps links available if the enhancement cannot run. The explicit staging-only
+`/_preview/landing` fixture exercises the enhancement, not the entire live app.
+See `docs/legal/TERMS_MAINTENANCE.md` and `docs/legal/PRIVACY_REVIEW.md`.
+
 Set `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `CF_D1_DATABASE_ID`, and `CF_ENVIRONMENT`
 in the operator's private environment. Use a narrowly scoped D1 write token.
 Never commit or paste the token into an incident description. Create a JSON
