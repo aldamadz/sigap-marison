@@ -52,6 +52,9 @@ begin
   exception when sqlstate '55000' then null; end;
   if exists(select 1 from public.marison_outbound_dispatches where id=v_job.job_id and post_started_at is not null) then
     raise exception 'Blocked form reached POST marker'; end if;
+  perform public.claim_marison_outbound_dispatch('staging');
+  if not exists(select 1 from public.marison_outbound_dispatches where id=v_job.job_id and status='skipped') then
+    raise exception 'Ineligible old lease was not skipped on next poll'; end if;
 
   -- Unknown identities and conflicting snapshots fail closed; input cannot spoof form identity.
   insert into public.surat_registrasi(id,status,form_input_data)
