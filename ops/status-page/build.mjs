@@ -7,9 +7,11 @@ const logo = resolve(root, 'public/logo-marison.png');
 const output = resolve(import.meta.dirname, 'dist/page.mjs');
 
 const template = await readFile(source, 'utf8');
+const terms = await readFile(resolve(import.meta.dirname, 'terms.mjs'), 'utf8');
 const image = await readFile(logo);
 if (image.length > 100_000) throw new Error('Status page logo exceeds 100 KB');
-const compiled = template.replace('__LOGO_BASE64__', image.toString('base64'));
+const compiled = template.replace('__LOGO_BASE64__', image.toString('base64'))
+  .replace("import { TERMS } from './terms.mjs';", terms.replace(/^export /gm, ''));
 if (compiled === template) throw new Error('Logo placeholder not found');
 await mkdir(resolve(import.meta.dirname, 'dist'), { recursive: true });
 await writeFile(output, compiled);

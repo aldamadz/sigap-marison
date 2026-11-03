@@ -43,12 +43,34 @@ estimate remains visible until SIGAP marks it complete or cancelled.
 From `ops/status-page`:
 
 ```sh
-node --test probe.test.mjs page.test.mjs operator.test.mjs feed.test.mjs
+node --test probe.test.mjs page.test.mjs operator.test.mjs feed.test.mjs theme-legal.test.mjs
 node build.mjs
 ```
 
 The build embeds `public/logo-marison.png` into `dist/page.mjs` so an origin
 outage cannot break the status page branding. Never commit `dist/`.
+It also inlines the versioned `terms.mjs`; the deployed Worker has no relative
+module import or origin dependency for Terms rendering.
+
+The header theme control supports light, dark, and system preferences. A
+same-origin prepaint `/theme.js` bootstrap applies the saved local preference;
+storage denial falls back to in-memory/system behavior without blocking the
+page. No account data or cross-origin preference sharing is used.
+
+## Terms And Policy Links
+
+Footer links point to `https://marisoncloud.com/privacy` and `/terms`.
+The privacy page is not rewritten: its present scope is Absensi. Terms cover
+all Marison Cloud services except XAU, and explicitly preserve that distinction.
+Follow `docs/legal/TERMS_MAINTENANCE.md` on every relevant service change.
+
+The same Worker renders `/terms` without D1. Production route
+`marisoncloud.com/terms*` selects only the Terms page/assets; other matched
+paths are forwarded to the existing origin unchanged. This avoids deploying
+the main application's unrelated dirty checkout. Route ID at release:
+`a91f95d36a6349a5b04715d3a1dc8d17`. Theme/logo assets for the main host are under
+`/terms/`. Do not expose status API routes through the main host. Before rolling
+back to an older Worker without Terms support, coordinate this route as well.
 
 ## Deploy
 

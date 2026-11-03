@@ -1,3 +1,5 @@
+import { TERMS } from './terms.mjs';
+
 const SERVICES = [
   { id: 'drive', name: 'Maris Drive', domain: 'drive.marisoncloud.com', url: 'https://drive.marisoncloud.com' },
   { id: 'ai', name: 'AI Workspace', domain: 'ai.marisoncloud.com', url: 'https://ai.marisoncloud.com' },
@@ -214,13 +216,43 @@ export function renderAtom(events, origin = 'https://status.marisoncloud.com', n
   return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="id"><id>${origin}/</id><title>Status Layanan Marison Cloud</title><updated>${new Date(events[0]?.at ?? now).toISOString()}</updated><author><name>Tim IT Marison</name></author><link rel="self" type="application/atom+xml" href="${origin}/feed.atom"/><link rel="alternate" href="${origin}/"/>${entries}</feed>`;
 }
 
-// Lucide Copy, Rss, and X icons (ISC); see LUCIDE_LICENSE.txt.
+// Lucide icons (ISC); see LUCIDE_LICENSE.txt.
 const ICONS = {
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   rss: '<path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>',
   close: '<path d="M18 6 6 18m0-12 12 12"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/>',
 };
 const icon = (name) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+const themeSwitch = () => `<div class="theme-switch" role="group" aria-label="Tema tampilan">${[['light','sun','Terang'],['dark','moon','Gelap'],['system','monitor','Sistem']].map(([value,name,label]) => `<button class="icon-button" type="button" data-set-theme="${value}" aria-label="Tema ${label.toLowerCase()}" title="${label}" aria-pressed="false">${icon(name)}</button>`).join('')}</div>`;
+
+export const THEME_JS = String.raw`(()=>{
+  const key='marison-status-theme';
+  const valid=value=>['light','dark','system'].includes(value);
+  let choice='system';
+  try{const saved=localStorage.getItem(key);if(valid(saved))choice=saved}catch{}
+  const media=matchMedia('(prefers-color-scheme: dark)');
+  const apply=()=>{
+    const theme=choice==='system'?(media.matches?'dark':'light'):choice;
+    document.documentElement.dataset.theme=theme;
+    document.documentElement.dataset.themeChoice=choice;
+    document.querySelectorAll('[data-set-theme]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.setTheme===choice)));
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#15171c':'#f5f7f8');
+  };
+  apply();
+  document.addEventListener('DOMContentLoaded',apply);
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('[data-set-theme]');
+    if(!button||!valid(button.dataset.setTheme))return;
+    choice=button.dataset.setTheme;
+    try{localStorage.setItem(key,choice)}catch{}
+    apply();
+  });
+  media.addEventListener('change',()=>{if(choice==='system')apply()});
+  window.addEventListener('storage',event=>{if(event.key===key){choice=valid(event.newValue)?event.newValue:'system';apply()}});
+})();`;
 
 function escape(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
@@ -267,6 +299,24 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 .note{border-top:1px solid #d7e0e3;padding-top:22px;margin-top:37px;color:#687982;font-size:12px;line-height:1.6}.note strong{color:#364c59}footer{margin-top:26px;color:#84939b;font-size:12px}
 @media(max-width:760px){.shell{width:min(100% - 32px,1120px)}.top{height:72px}.brand img{width:90px;height:40px}.brand-mark{font-size:13px;padding-left:12px}.top-link{font-size:12px}main{padding-top:29px}.intro{align-items:start}h1{font-size:25px}.refresh{padding:9px}.refresh span{display:none}.service{grid-template-columns:1fr 1fr;gap:18px 12px;padding:20px 0}.service-name{grid-column:1/-1}.history-block{gap:9px}.history{gap:2px}.bar{height:24px}.history-caption{font-size:10px}.overview{padding:17px 16px}.overview strong{font-size:15px}.sections{grid-template-columns:1fr;gap:34px;margin-top:38px}}
 @media(max-width:400px){.top-link{display:none}.service{grid-template-columns:1fr 1fr}.history-caption{display:none}}
+.theme-switch{display:flex;align-items:center;border:1px solid #cdd8dc;border-radius:5px;padding:2px;gap:2px}.theme-switch .icon-button{width:34px;height:34px}.theme-switch [aria-pressed="true"]{background:#e0efe5;color:#216b3c}.header-actions{display:flex;align-items:center;gap:18px}.legal-links{display:flex;flex-wrap:wrap;gap:16px}.page-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}.legal-links a{text-decoration:none}.legal-links a:hover{text-decoration:underline}
+:root[data-theme="dark"]{color-scheme:dark;color:#e7eaf0;background:#15171c}
+[data-theme="dark"] header,[data-theme="dark"] .subscribe-dialog,[data-theme="dark"] .maintenance-item,[data-theme="dark"] .incident-item{background:#1e2128;color:#e7eaf0;border-color:#343941}
+[data-theme="dark"] .brand-mark,[data-theme="dark"] .feed-section,[data-theme="dark"] .service,[data-theme="dark"] .service-list,[data-theme="dark"] .status-section,[data-theme="dark"] .timeline,[data-theme="dark"] .note,[data-theme="dark"] .theme-switch{border-color:#3d444f}
+[data-theme="dark"] .subtitle,[data-theme="dark"] .domain,[data-theme="dark"] .metric-label,[data-theme="dark"] .section-heading span,[data-theme="dark"] .history-caption,[data-theme="dark"] .legend,[data-theme="dark"] .coverage,[data-theme="dark"] .empty,[data-theme="dark"] .event-meta,[data-theme="dark"] .timeline time,[data-theme="dark"] .note,[data-theme="dark"] footer,[data-theme="dark"] .overview small{color:#aab4c0}
+[data-theme="dark"] .top-link,[data-theme="dark"] .event-copy,[data-theme="dark"] .timeline p,[data-theme="dark"] .event-kicker,[data-theme="dark"] .note strong,[data-theme="dark"] .feed-field input{color:#d3dce7}
+[data-theme="dark"] .refresh,[data-theme="dark"] .feed-field{background:#171a20;color:#d3dce7;border-color:#47515d}
+[data-theme="dark"] .refresh:hover,[data-theme="dark"] .icon-button:hover{background:#303840;color:#e7eaf0}
+[data-theme="dark"] .theme-switch [aria-pressed="true"]{background:#284437;color:#b9f0ce}
+[data-theme="dark"] .icon-button{color:#b2bfcb}[data-theme="dark"] .eyebrow,[data-theme="dark"] .copy-feedback{color:#83d8a5}[data-theme="dark"] .rss-link,[data-theme="dark"] .event-warning{color:#f1c66f}
+[data-theme="dark"] .overview{background:#172e23;border-color:#345c45;border-left-color:#42bc75}[data-theme="dark"] .overview-dot{background:#42bc75;box-shadow:0 0 0 5px #254b34}
+[data-theme="dark"] .overview[data-status="degraded"]{background:#332b19;border-color:#77602c;border-left-color:#e3b747}[data-theme="dark"] .overview[data-status="degraded"] .overview-dot{background:#e3b747;box-shadow:0 0 0 5px #57451d}
+[data-theme="dark"] .overview[data-status="down"]{background:#361e24;border-color:#76404a;border-left-color:#ee7d87}[data-theme="dark"] .overview[data-status="down"] .overview-dot{background:#ee7d87;box-shadow:0 0 0 5px #582f38}
+[data-theme="dark"] .overview[data-status="unknown"]{background:#23262f;border-color:#515b69;border-left-color:#a5b2c2}[data-theme="dark"] .overview[data-status="unknown"] .overview-dot{background:#a5b2c2;box-shadow:0 0 0 5px #39404b}
+[data-theme="dark"] .bar.unknown{background:#3d444f}[data-theme="dark"] .status-dot{background:#59c88b}[data-theme="dark"] .service[data-status="down"] .status-dot{background:#ee7d87}[data-theme="dark"] .service[data-status="unknown"] .status-dot{background:#a5b2c2}
+[data-theme="dark"] .phase-badge{background:#42351e;color:#f1c66f}[data-theme="dark"] .phase-badge.resolved{background:#254434;color:#9ce2b6}[data-theme="dark"] .subscribe-dialog::backdrop{background:#0009}
+@media(max-width:760px){.header-actions{gap:10px}.header-actions .top-link{display:none}.theme-switch .icon-button{width:30px;height:34px}.brand{gap:8px}.brand-mark{padding-left:8px}}
+.legal-main{max-width:850px}.legal-main h1{margin:15px 0}.legal-meta{font-size:13px;color:#647582;margin-bottom:30px}.legal-toc{display:flex;flex-wrap:wrap;gap:10px 18px;padding:20px 0;border-block:1px solid #d7e0e3;margin-bottom:30px}.legal-toc a{font-size:13px;color:#39705b}.legal-section{padding:22px 0;border-bottom:1px solid #d7e0e3;scroll-margin-top:20px}.legal-section h2{margin-bottom:14px}.legal-section p{font-size:14px;line-height:1.8;margin:10px 0;color:#40535d}.legal-history{margin-top:30px}.legal-history li{font-size:13px;line-height:1.8;color:#647582}[data-theme="dark"] .legal-meta,[data-theme="dark"] .legal-history li{color:#aab4c0}[data-theme="dark"] .legal-section p{color:#d3dce7}[data-theme="dark"] .legal-toc,[data-theme="dark"] .legal-section{border-color:#3d444f}[data-theme="dark"] .legal-toc a{color:#83d8a5}
 `;
 
 const APP_JS = String.raw`
@@ -371,8 +421,8 @@ export function renderHtml(data, { preview = false } = {}) {
     <ol class="timeline">${item.timeline.map((update) => `<li class="${escape(update.phase)}"><strong>${escape(update.phaseLabel)}</strong><p>${escape(update.message)}</p><time datetime="${new Date(update.at).toISOString()}">${escape(update.atText)}</time></li>`).join('')}</ol>
   </li>`).join('');
   const generated = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(data.generatedAt);
-return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="alternate" type="application/atom+xml" title="Kabar Status Marison Cloud (Atom)" href="/feed.atom"><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-subscribe-v1" defer></script></head>
-  <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></header>
+return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="alternate" type="application/atom+xml" title="Kabar Status Marison Cloud (Atom)" href="/feed.atom"><link rel="icon" href="/logo.png"><script src="/theme.js?v=1"></script><style>${CSS}</style><script src="/app.js?v=20261103-theme-legal-v1" defer></script></head>
+  <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><div class="header-actions">${themeSwitch()}<a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></div></header>
   ${preview ? '<div class="preview-banner">Pratinjau staging: probe layanan production, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
   <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><div class="intro-actions"><button class="rss-link subscribe-trigger" id="subscribe" type="button" aria-haspopup="dialog">${icon('rss')} Berlangganan</button><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div></div>
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
@@ -380,7 +430,12 @@ return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="v
   <div class="sections"><section class="status-section" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Pemeliharaan terjadwal</h2>${maintenanceItems ? `<ul class="maintenance-list">${maintenanceItems}</ul>` : '<p class="empty">Tidak ada pemeliharaan yang dijadwalkan.</p>'}</section>
   <section class="status-section" aria-labelledby="incidents-title"><div class="section-heading"><h2 id="incidents-title">Riwayat insiden</h2><span>90 hari terakhir</span></div>${incidentItems ? `<ul class="incident-list">${incidentItems}</ul>` : '<p class="empty">Belum ada insiden yang tercatat.</p>'}</section></div>
   <div class="note"><strong>Tentang pemantauan.</strong> Pemeriksaan dilakukan dari luar server Marison setiap menit. Uptime dihitung dari sampel yang berhasil dikumpulkan dalam 30 hari; persentase cakupan menunjukkan kelengkapan pengukuran, bukan jaminan SLA. Jika pemeriksaan berhenti lebih dari 3 menit, status ditampilkan belum tersedia.</div>
-  <footer>Waktu ditampilkan dalam WIB (UTC+7).</footer></main>${subscriptionDialog}</body></html>`;
+  <footer class="page-footer"><span>Waktu ditampilkan dalam WIB (UTC+7).</span><nav class="legal-links" aria-label="Kebijakan layanan"><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://marisoncloud.com/terms">Terms of Service</a></nav></footer></main>${subscriptionDialog}</body></html>`;
+}
+
+export function renderTerms({ preview = false } = {}) {
+  const content = TERMS.sections.map((section, index) => `<section id="${section.id}" class="legal-section"><h2>${index + 1}. ${escape(section.title)}</h2>${section.paragraphs.map(text => `<p>${escape(text)}</p>`).join('')}${section.id === 'privasi' ? '<p><a href="https://marisoncloud.com/privacy">Baca Privacy Policy</a></p>' : ''}</section>`).join('');
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Terms of Service | Marison Cloud</title><meta name="description" content="Ketentuan penggunaan seluruh layanan Marison Cloud, kecuali xau.marisoncloud.com."><link rel="canonical" href="https://marisoncloud.com/terms"><script src="/terms/theme.js?v=1"></script><style>${CSS}</style></head><body><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com"><img src="/terms/logo.png" alt="Marison Cloud"></a><span class="brand-mark">Ketentuan layanan</span></div><div class="header-actions">${themeSwitch()}<a class="top-link" href="https://status.marisoncloud.com/">Status layanan</a></div></div></header>${preview ? '<div class="preview-banner">Pratinjau staging</div>' : ''}<main class="shell legal-main"><div class="eyebrow">Marison Regency Group</div><h1>Terms of Service</h1><p class="legal-meta">Versi ${TERMS.version} · Berlaku dan diperbarui ${TERMS.dateLabel}</p><nav class="legal-toc" aria-label="Daftar isi ketentuan">${TERMS.sections.map(section => `<a href="#${section.id}">${escape(section.title)}</a>`).join('')}</nav>${content}<section class="legal-history"><h2>Riwayat perubahan</h2><ul>${TERMS.history.map(item => `<li>Versi ${item.version} · ${item.date}: ${escape(item.summary)}</li>`).join('')}</ul></section><footer class="page-footer"><span>Marison Regency Group</span><nav class="legal-links" aria-label="Kebijakan layanan"><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://status.marisoncloud.com/">Status layanan</a></nav></footer></main></body></html>`;
 }
 
 const HEADERS = {
@@ -392,13 +447,19 @@ const HEADERS = {
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const mainHost = ['marisoncloud.com', 'www.marisoncloud.com'].includes(url.hostname);
+    const legalPaths = ['/terms', '/terms/', '/terms/theme.js', '/terms/logo.png'];
+    if (mainHost && !legalPaths.includes(path)) return fetch(request);
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: HEADERS });
-    const path = new URL(request.url).pathname;
-    if (path === '/logo.png') {
+    if (path === '/terms' || path === '/terms/') return new Response(request.method === 'HEAD' ? null : renderTerms({ preview: env.STATUS_ENVIRONMENT === 'staging' }), { headers: { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    if (path === '/logo.png' || path === '/terms/logo.png') {
       const bytes = Uint8Array.from(atob(LOGO_BASE64), (character) => character.charCodeAt(0));
       return new Response(request.method === 'HEAD' ? null : bytes, { headers: { ...HEADERS, 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
     }
     if (path === '/app.js') return new Response(request.method === 'HEAD' ? null : APP_JS, { headers: { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+    if (path === '/theme.js' || path === '/terms/theme.js') return new Response(request.method === 'HEAD' ? null : THEME_JS, { headers: { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
     if (['/rss.xml', '/feed.rss', '/atom.xml', '/feed.atom'].includes(path)) {
       try {
         const events = await loadFeed(env.DB);
