@@ -33,6 +33,10 @@
 - Pending: staging integration including AUTH-09 desktop validators, CI,
   coordinated application/worker rollout and public smoke. This unblocks the
   pre-existing Zod audit failure on KEU routing candidate PR #765, not its release.
+- 2026-11-03 [Codex] PR #767 integration also passes39 desktop/Zod tests and
+  lint/typecheck/build. Release held pending hosted CI; eight full-suite failures
+  reproduce on the Zod3 main baseline (#769). Documentation findings tracked in
+  #768. No live staging or production change; see dated validation worklog.
 
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 

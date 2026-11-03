@@ -1,5 +1,26 @@
 # Worklog
 
+## 2026-11-03 [Codex] SEC-03 validation evidence and release hold / Issue #766
+
+- Source commit5310634; staging integration PR #767 preserves AUTH-09.
+ 217 related tests and39 desktop/Zod compatibility tests pass. Integration lint,
+  typecheck and frontend/backend builds pass; documentation clean install and
+  build pass with every resolved Zod at4.6.7. Root high/critical audit gate passes.
+- Source full suite:2716 pass,8 fail,7 pending. All8 failing assertion names
+  reproduce on isolated main baseline7a6aac7 using Zod3.25.76 (75 pass/8 fail
+  in the83-test subset). Baseline quality follow-up #769 includes possible CRLF
+  sensitivity; do not blindly update hashes or remove behavioral checks.
+- Unrelated documentation dependency findings tracked in #768. No blanket
+  npm audit fix, v3 compatibility fallback or quality/deployment bypass.
+- Release held: PR #767 hosted CI41610672160 was still in progress at the time
+  of this entry. No staging merge, deployment, worker restart or live migration.
+  Staging public version remainsd33970e412eedf2a2a5ecec66bc637ba1c053a91;
+  production untouched. KEU routing PR #765 remains separately unmerged.
+- Next: inspect hosted CI, reconcile baseline failures independently, then
+  coordinate app/worker staging rollout and smoke. Production needs explicit
+  authorization. Durable lesson: validate staging-only desktop consumers when
+  selectively upgrading a shared runtime dependency from main.
+
 ## 2026-11-03 [Codex] SEC-03 Zod4 compatibility / Issue #766
 
 - User requested upgrade and validation after the existing high Zod advisory
