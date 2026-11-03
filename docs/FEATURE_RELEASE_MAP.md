@@ -2,6 +2,14 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] SIGAP maintenance integration candidate: the status probe
+  reads the maintenance Durable Object through a same-account Service binding,
+  then copies only the public schedule to D1 with revision guards. Stale sync
+  is shown explicitly; full maintenance remains visible past its estimate.
+  Incident handling remains an operator-authored timeline alongside automatic
+  probe health. Staging binding and D1 migration are live; production rollout
+  requires the ordered D1 migrations and separate Worker uploads.
+
 - 2026-11-03 [Codex] Staging follow-up live at
   `marison-status-page-staging.aldamaaa-id.workers.dev`: 30 daily bars,
   sampled uptime and coverage, planned-maintenance section, and incident

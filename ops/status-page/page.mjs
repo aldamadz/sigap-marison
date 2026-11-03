@@ -51,7 +51,7 @@ function historyFor(rows, now) {
   });
 }
 
-export function buildStatus({ recent = [], daily = [], incidents = [], updates = [], maintenance = [] }, now = Date.now()) {
+export function buildStatus({ recent = [], daily = [], incidents = [], updates = [], maintenance = [], sources = [] }, now = Date.now()) {
   const incidentRows = incidents.map((incident) => {
     const timeline = updates.filter((update) => update.incident_id === incident.id)
       .sort((left, right) => number(left.created_at) - number(right.created_at));
@@ -72,11 +72,15 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
         message: update.message, at: number(update.created_at), atText: dateTime(number(update.created_at)) }))].reverse(),
     };
   }).sort((left, right) => Number(left.phase === 'resolved') - Number(right.phase === 'resolved') || right.startedAt - left.startedAt);
-  const maintenanceRows = maintenance.filter((item) => !item.cancelled_at && number(item.ends_at) >= now)
+  const sigapSync = sources.find((source) => source.source === 'sigap');
+  const maintenanceRows = maintenance.filter((item) => !item.cancelled_at &&
+      (number(item.ends_at) >= now || (item.source === 'sigap' && item.impact === 'full' && number(item.starts_at) <= now)))
     .map((item) => ({ id: item.id, title: item.title, description: item.description,
       serviceNames: serviceNames(item.service_ids), startsAt: number(item.starts_at),
       endsAt: number(item.ends_at), startsText: dateTime(number(item.starts_at)),
-      endsText: dateTime(number(item.ends_at)), active: number(item.starts_at) <= now }))
+      endsText: dateTime(number(item.ends_at)), active: number(item.starts_at) <= now,
+      overdue: item.source === 'sigap' && item.impact === 'full' && number(item.ends_at) < now,
+      syncStale: item.source === 'sigap' && (!sigapSync || now - number(sigapSync.synced_at) > STALE_MS) }))
     .sort((left, right) => left.startsAt - right.startsAt);
   const services = SERVICES.map((service) => {
     const observations = recent.filter((row) => row.service === service.id)
@@ -125,13 +129,13 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
   }[overall];
   const timelineVersion = [
     ...incidentRows.map((incident) => `${incident.id}:${incident.timeline[0].id}`),
-    ...maintenanceRows.map((item) => `${item.id}:${item.active}`),
+    ...maintenanceRows.map((item) => `${item.id}:${item.startsAt}:${item.endsAt}:${item.description}:${item.active}:${item.syncStale}`),
   ].join('|');
   return { overall, overallLabel, services, incidents: incidentRows, maintenance: maintenanceRows, timelineVersion, generatedAt: now };
 }
 
 export async function loadStatus(db, now = Date.now()) {
-  const [recent, daily, incidents, updates, maintenance] = await Promise.all([
+  const [recent, daily, incidents, updates, maintenance, sources] = await Promise.all([
     db.prepare(`SELECT service, checked_at, outcome, latency_ms, position FROM (
       SELECT service, checked_at, outcome, latency_ms,
         ROW_NUMBER() OVER (PARTITION BY service ORDER BY checked_at DESC) AS position
@@ -144,12 +148,14 @@ export async function loadStatus(db, now = Date.now()) {
     db.prepare(`SELECT id, incident_id, phase, message, created_at FROM incident_updates
       WHERE incident_id IN (SELECT id FROM incidents WHERE started_at >= ? ORDER BY started_at DESC LIMIT 20)
       ORDER BY created_at ASC LIMIT 200`).bind(now - 90 * DAY_MS).all(),
-    db.prepare(`SELECT id, title, description, service_ids, starts_at, ends_at, cancelled_at
-      FROM maintenance WHERE cancelled_at IS NULL AND ends_at >= ? AND starts_at <= ?
-      ORDER BY starts_at ASC LIMIT 20`).bind(now, now + 30 * DAY_MS).all(),
+    db.prepare(`SELECT id, title, description, service_ids, starts_at, ends_at, cancelled_at, source, impact
+      FROM maintenance WHERE cancelled_at IS NULL AND
+      (ends_at >= ? OR (source = 'sigap' AND impact = 'full' AND starts_at <= ?))
+      AND starts_at <= ? ORDER BY starts_at ASC LIMIT 20`).bind(now, now, now + 30 * DAY_MS).all(),
+    db.prepare('SELECT source, revision, synced_at FROM status_sources').all(),
   ]);
   return buildStatus({ recent: recent.results, daily: daily.results, incidents: incidents.results,
-    updates: updates.results, maintenance: maintenance.results }, now);
+    updates: updates.results, maintenance: maintenance.results, sources: sources.results }, now);
 }
 
 function escape(value) {
@@ -163,6 +169,7 @@ const CSS = String.raw`
 *{box-sizing:border-box}body{margin:0}a{color:inherit}button{font:inherit}header{background:#fff;border-bottom:1px solid #dce3e6}
 .shell{width:min(1120px,calc(100% - 48px));margin:auto}.top{height:84px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .brand{display:flex;align-items:center;gap:18px}.brand img{width:118px;height:48px;object-fit:contain;object-position:left}.brand-mark{border-left:1px solid #dce3e6;padding-left:18px;font-size:15px;font-weight:700}
+.preview-banner{background:#fff4d8;border-bottom:1px solid #dfc885;color:#694b16;font-size:12px;padding:8px 24px;text-align:center}
 .top-link{font-size:13px;color:#355163;text-decoration:none}.top-link:hover{text-decoration:underline}main{padding:44px 0 80px}
 .eyebrow{color:#39705b;font-size:12px;font-weight:700;text-transform:uppercase}.intro{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:32px}
 h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.subtitle{font-size:14px;color:#647582;line-height:1.55}
@@ -186,6 +193,7 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 .maintenance-list,.incident-list{list-style:none;padding:0;margin:0}.maintenance-item{border:1px solid #d6e0e3;background:#fff;border-radius:5px;padding:17px 18px;margin-bottom:11px}
 .event-kicker{display:flex;align-items:center;gap:8px;color:#496376;font-size:11px;font-weight:700;text-transform:uppercase}.event-kicker .status-dot{background:#c68310}
 .maintenance-item h3,.incident-item h3{font-size:15px;line-height:1.4;margin:8px 0}.event-meta{font-size:12px;color:#627781;line-height:1.6}.event-copy{font-size:13px;color:#40535d;line-height:1.6;margin:10px 0}
+.event-warning{font-size:12px;color:#9a6113;line-height:1.5;margin-top:8px}
 .incident-item{border:1px solid #d6e0e3;background:#fff;border-radius:5px;padding:19px;margin-bottom:13px}.incident-top{display:flex;align-items:start;justify-content:space-between;gap:10px}
 .phase-badge{font-size:11px;font-weight:700;white-space:nowrap;padding:4px 8px;border-radius:3px;background:#fff1d4;color:#8d5800}.phase-badge.resolved{background:#e7f5eb;color:#218048}
 .timeline{list-style:none;margin:18px 0 0;padding:0 0 0 18px;border-left:2px solid #dce5e8}.timeline li{position:relative;padding:0 0 18px 15px}.timeline li:last-child{padding-bottom:0}.timeline li::before{content:'';position:absolute;left:-23px;top:2px;width:8px;height:8px;background:#b0c1c8;border-radius:50%}.timeline li.resolved::before{background:#2abf72}.timeline li.identified::before{background:#d49222}.timeline li.monitoring::before{background:#4b9acd}
@@ -248,7 +256,7 @@ document.querySelector('.service-list').addEventListener('click',event=>{
 setInterval(refresh,60000);
 `;
 
-export function renderHtml(data) {
+export function renderHtml(data, { preview = false } = {}) {
   const rows = data.services.map((service) => `<li class="service" data-service="${service.id}" data-status="${service.status}">
     <div class="service-name"><a href="${service.url}" target="_blank" rel="noopener noreferrer">${escape(service.name)}</a><span class="domain">${escape(service.domain)}</span></div>
     <div><div class="metric-label">Kondisi</div><div class="metric-value status-value"><span class="status-dot" aria-hidden="true"></span><span data-field="status">${escape(service.label)}</span></div></div>
@@ -261,6 +269,8 @@ export function renderHtml(data) {
     <div class="event-kicker"><span class="status-dot" aria-hidden="true"></span>${item.active ? 'Sedang berlangsung' : 'Terjadwal'}</div>
     <h3>${escape(item.title)}</h3><p class="event-meta">${escape(item.startsText)} – ${escape(item.endsText)}</p>
     <p class="event-copy">${escape(item.description)}</p><p class="event-meta">Layanan: ${escape(item.serviceNames.join(', '))}</p>
+    ${item.overdue ? '<p class="event-warning">Estimasi selesai terlewati; maintenance masih berlangsung.</p>' : ''}
+    ${item.syncStale ? '<p class="event-warning">Pembaruan jadwal SIGAP belum dapat dipastikan.</p>' : ''}
   </li>`).join('');
   const incidentItems = data.incidents.map((item) => `<li class="incident-item">
     <div class="incident-top"><div><div class="event-kicker"><span class="status-dot" aria-hidden="true"></span>${escape(item.serviceNames.join(', '))}</div>
@@ -271,6 +281,7 @@ export function renderHtml(data) {
   const generated = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(data.generatedAt);
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-history" defer></script></head>
   <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></header>
+  ${preview ? '<div class="preview-banner">Pratinjau staging: probe layanan production, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
   <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div>
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
   <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>Beroperasi</span><span class="legend-item"><span class="bar degraded"></span>Gangguan sebagian</span><span class="legend-item"><span class="bar down"></span>Gangguan</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
@@ -305,6 +316,6 @@ export default {
       if (path === '/api/status') return Response.json(data, { status: 503, headers: { ...HEADERS, 'cache-control': 'no-store' } });
     }
     if (path === '/api/status') return Response.json(data, { headers: { ...HEADERS, 'cache-control': 'no-store' } });
-    return new Response(request.method === 'HEAD' ? null : renderHtml(data), { headers: { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    return new Response(request.method === 'HEAD' ? null : renderHtml(data, { preview: env.STATUS_ENVIRONMENT === 'staging' }), { headers: { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
   },
 };

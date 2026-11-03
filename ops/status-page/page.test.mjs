@@ -44,10 +44,22 @@ test('one failing observation is a warning and persistent failures are down', ()
 
 test('D1 queries load recent, daily, incident and maintenance observations', async () => {
   const queries = [];
-  const db = { prepare(sql) { queries.push(sql); return { bind() { return { all: async () => ({ results: queries.length === 1 ? rows() : [] }) }; } }; } };
+  const db = { prepare(sql) { queries.push(sql); const statement = { all: async () => ({ results: queries.length === 1 ? rows() : [] }) }; statement.bind = () => statement; return statement; } };
   const status = await loadStatus(db, NOW);
-  assert.equal(queries.length, 5);
+  assert.equal(queries.length, 6);
   assert.equal(status.services.length, 4);
+});
+
+test('SIGAP full maintenance stays visible past its estimate and flags stale sync', () => {
+  const data = buildStatus({ recent: rows(), maintenance: [{ id: 'sigap:one', source: 'sigap', impact: 'full',
+    title: 'Perbaikan SIGAP', description: 'Pemeliharaan masih berlangsung', service_ids: '["sigap"]',
+    starts_at: NOW - 3600000, ends_at: NOW - 60000 }],
+  sources: [{ source: 'sigap', synced_at: NOW - 5 * 60000, revision: 2 }] }, NOW);
+  assert.equal(data.maintenance.length, 1);
+  assert.equal(data.maintenance[0].overdue, true);
+  assert.equal(data.maintenance[0].syncStale, true);
+  assert.match(renderHtml(data), /Estimasi selesai terlewati/);
+  assert.match(renderHtml(data), /Pembaruan jadwal SIGAP belum dapat dipastikan/);
 });
 
 test('active incidents and maintenance have a visible timeline', () => {
@@ -97,4 +109,10 @@ test('page uses a versioned, uncached interaction script', async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.match(await response.text(), /\.history \.bar/);
+});
+
+test('staging preview is labeled without changing the production page', () => {
+  const data = buildStatus({ recent: rows() }, NOW);
+  assert.match(renderHtml(data, { preview: true }), /Pratinjau staging/);
+  assert.doesNotMatch(renderHtml(data), /Pratinjau staging/);
 });

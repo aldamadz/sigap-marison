@@ -7,6 +7,8 @@ export const SERVICES = [
 
 const TIMEOUT_MS = 8000;
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const MAINTENANCE_HOSTS = new Set(['sigap.marisoncloud.com', 'sigap.marison-testing.biz.id']);
+const CATEGORY_LABELS = { repair: 'Perbaikan', development: 'Pengembangan', update: 'Pembaruan' };
 
 function jakartaDay(timestamp) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -122,11 +124,71 @@ export async function runChecks(env, checkedAt = Date.now(), fetchImpl = fetch) 
   return results;
 }
 
+function validScheduleState(state) {
+  if (!state || !Number.isSafeInteger(state.revision) || state.revision < 0) return false;
+  if (state.schedule === null) return true;
+  const schedule = state.schedule;
+  if (!schedule || typeof schedule !== 'object'
+    || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(schedule.id || '')
+    || !['published', 'completed', 'cancelled'].includes(schedule.status)
+    || !Object.hasOwn(CATEGORY_LABELS, schedule.category)
+    || !['full', 'disruption'].includes(schedule.impact)
+    || typeof schedule.message !== 'string' || schedule.message.trim().length < 5
+    || schedule.message.length > 1000) return false;
+  const start = Date.parse(schedule.startsAt), end = Date.parse(schedule.endsAt);
+  return Number.isFinite(start) && Number.isFinite(end) && end > start
+    && end - start <= 30 * 86400000;
+}
+
+export async function syncSigapMaintenance(env, syncedAt = Date.now()) {
+  const host = env.SIGAP_MAINTENANCE_HOSTNAME;
+  if (!MAINTENANCE_HOSTS.has(host) || !env.SIGAP_EDGE?.fetch) throw new Error('SIGAP maintenance binding is unavailable');
+  const response = await env.SIGAP_EDGE.fetch(new Request(`https://${host}/api/maintenance/status`, {
+    headers: { accept: 'application/json' }, signal: AbortSignal.timeout(5000),
+  }));
+  if (response.status !== 200 || !(response.headers.get('content-type') || '').includes('application/json')) {
+    await response.body?.cancel();
+    throw new Error('SIGAP maintenance state is unavailable');
+  }
+  const body = await readLimited(response, 8192);
+  let state;
+  try { state = JSON.parse(body); } catch { throw new Error('SIGAP maintenance state is invalid'); }
+  if (!validScheduleState(state)) throw new Error('SIGAP maintenance state is invalid');
+  const revision = state.revision;
+  const guard = `(SELECT revision FROM status_sources WHERE source = 'sigap') = ?`;
+  const statements = [env.DB.prepare(`INSERT INTO status_sources (source, revision, synced_at) VALUES ('sigap', ?, ?)
+    ON CONFLICT(source) DO UPDATE SET revision=excluded.revision, synced_at=excluded.synced_at
+    WHERE excluded.revision >= status_sources.revision`).bind(revision, syncedAt)];
+  const schedule = state.schedule?.status === 'published' ? state.schedule : null;
+  if (schedule) {
+    const key = `sigap:${schedule.id}`;
+    statements.push(env.DB.prepare(`UPDATE maintenance SET cancelled_at=?
+      WHERE source='sigap' AND id<>? AND cancelled_at IS NULL AND ${guard}`)
+      .bind(syncedAt, key, revision));
+    statements.push(env.DB.prepare(`INSERT INTO maintenance
+      (id, title, description, service_ids, starts_at, ends_at, created_at, source, impact)
+      SELECT ?, ?, ?, '["sigap"]', ?, ?, ?, 'sigap', ? WHERE ${guard}
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title, description=excluded.description,
+        starts_at=excluded.starts_at, ends_at=excluded.ends_at, impact=excluded.impact,
+        cancelled_at=NULL WHERE maintenance.source='sigap'`)
+      .bind(key, `${CATEGORY_LABELS[schedule.category]} SIGAP`, schedule.message.trim(),
+        Date.parse(schedule.startsAt), Date.parse(schedule.endsAt), syncedAt, schedule.impact, revision));
+  } else {
+    statements.push(env.DB.prepare(`UPDATE maintenance SET cancelled_at=?
+      WHERE source='sigap' AND cancelled_at IS NULL AND ${guard}`)
+      .bind(syncedAt, revision));
+  }
+  await env.DB.batch(statements);
+  return { revision, scheduleId: schedule?.id || null };
+}
+
 export default {
   async fetch() {
     return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
   },
   async scheduled(controller, env) {
     await runChecks(env, controller.scheduledTime);
+    try { await syncSigapMaintenance(env); }
+    catch { console.warn('SIGAP maintenance sync unavailable; retaining last known state'); }
   },
 };

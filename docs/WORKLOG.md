@@ -1,5 +1,19 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 SIGAP maintenance integration staging / Issue #760
+
+- Added forward-only D1 source/revision migration and Service binding to the
+  existing SIGAP maintenance Worker. Staging cron read revision 17 from the
+  staging edge state without changing it. An isolated D1 insert/upsert rehearsal
+  passed and its disposable record was deleted. The staging status page has a
+  visible preview banner; production domain still serves the earlier version.
+- SIGAP outages remain probe-derived. Incident investigation, confirmed cause,
+  monitoring and resolution are operator-authored D1 timeline entries; no
+  public write route or fabricated incident cause was added.
+- Next: final gates and source PRs, production D1 export/ordered migrations,
+  production Worker rollout with internal binding, live smoke and postrelease
+  revision check. Do not point production at the staging maintenance Worker.
+
 ## 2026-11-03 [Codex] OPS-16 staging history/timeline acceptance / Issue #760
 
 - Staging page and probe Workers are live on the separate staging D1. Four

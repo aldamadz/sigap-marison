@@ -24,6 +24,14 @@ have fresh results. The public Worker has no write route. An operator with D1
 write access publishes records through `operator.mjs`; the timeline is never
 inferred from HTTP failures alone.
 
+The scheduled probe also reads SIGAP's public maintenance state through an
+internal Cloudflare Service binding to `sigap-maintenance-{environment}`. Only
+the published schedule's public message, impact, and times are copied to D1.
+The revision prevents an older poll from restoring a cancelled schedule. If
+the binding is unavailable, the last schedule remains visible with a stale-sync
+warning; it is never silently cancelled. A full maintenance that exceeds its
+estimate remains visible until SIGAP marks it complete or cancelled.
+
 ## Build and test
 
 From `ops/status-page`:
@@ -39,11 +47,17 @@ outage cannot break the status page branding. Never commit `dist/`.
 ## Deploy
 
 1. For a new environment, create a D1 database and execute `schema.sql`.
-2. Apply `migrations/20261103090000_history_events.sql` before deploying the
-   new probe. On an existing database, take a D1 backup first. The migration
-   backfills daily summaries from retained raw checks.
+2. Apply `migrations/20261103090000_history_events.sql` and then
+   `migrations/20261103110000_sigap_maintenance_sync.sql` before deploying the
+   new probe. On an existing database, take a D1 backup first. The first
+   migration backfills daily summaries from retained raw checks.
 3. Upload `probe.mjs` and `dist/page.mjs` as module Workers with a D1 binding
-   named `DB` pointing to that database.
+   named `DB` pointing to that database. The probe also needs a Service binding
+   `SIGAP_EDGE` to `sigap-maintenance-staging` or
+   `sigap-maintenance-production`, and a plain-text binding
+   `SIGAP_MAINTENANCE_HOSTNAME` set to the matching SIGAP hostname. Staging's
+   page Worker additionally sets `STATUS_ENVIRONMENT=staging` for a visible
+   preview banner. Production has no preview banner.
 4. Enable workers.dev only for the probe and install its one-minute cron.
 5. Wait for real D1 samples, verify all four public/health probes, then attach
    the page Worker to `status.marisoncloud.com` as a custom domain.
@@ -52,7 +66,9 @@ outage cannot break the status page branding. Never commit `dist/`.
 Staging uses a different D1 database and workers.dev Workers named
 `marison-status-probe-staging` and `marison-status-page-staging`. Never attach
 the production custom domain to staging. Do not deploy the new probe before
-the migration: its daily-summary write requires `daily_checks`.
+the migrations: its daily-summary write requires `daily_checks`, and schedule
+sync requires `status_sources` plus the maintenance source fields. Verify the
+SIGAP maintenance revision in D1 after at least one scheduled probe run.
 
 ## Operator records
 
@@ -90,6 +106,21 @@ timezone, for example `2026-11-04T13:00:00+07:00`. Use
 ends. Production commands require `CF_ENVIRONMENT=production` **and** the
 `--production` argument. No record should be published without an operator
 checking the service scope, timing, and public wording.
+
+## Incident handling
+
+Probe failures change the service indicator automatically, but do not invent
+an incident narrative. The on-call operator confirms the impact, then creates
+an incident with `incident-create` and the affected service IDs. Each material
+step is a new `incident-update`: `identified` for the confirmed cause and
+action, `monitoring` after access returns while stability is checked, then
+`resolved` after verification. The page displays each message and timestamp
+in reverse chronological order. Do not write guesses as confirmed causes,
+include employee/document details, or publish credentials. Keep the D1 write
+token outside SIGAP and outside the public Worker. During a SIGAP origin outage,
+the operator CLI still writes directly to Cloudflare D1; the status page remains
+available. Planned SIGAP maintenance is synchronized automatically, so do not
+create a duplicate manual maintenance record for the same event.
 
 Do not add credentials or authenticated document URLs to probes. The status page
 cannot survive a Cloudflare account or zone outage; for that, a second provider
