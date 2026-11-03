@@ -45,11 +45,12 @@ test('theme works with denied storage and ignores invalid saved values', () => {
   assert.equal(theme('untrusted', true).root.dataset.themeChoice, 'system');
 });
 
-test('terms cover platform with explicit XAU exclusion and version history', () => {
+test('terms cover only official services without naming unaffiliated applications', () => {
   assert.equal(TERMS.history[0].version, TERMS.version);
   assert.equal(TERMS.history[0].date, TERMS.effectiveDate);
   const html = renderTerms();
-  assert.match(html, /xau.marisoncloud.com secara tegas dikecualikan/);
+  assert.match(html, /hanya mengatur penggunaan layanan digital yang dimiliki atau secara resmi dioperasikan oleh Marison Regency Group/);
+  assert.doesNotMatch(html, /xau/i);
   for (const name of ['SIGAP','Maris Drive','AI Workspace','Absensi']) assert.ok(html.includes(name));
   assert.match(html, /canonical" href="https:\/\/marisoncloud.com\/terms"/);
   assert.doesNotMatch(html, /src="\/app.js/);
