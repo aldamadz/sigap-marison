@@ -2,6 +2,12 @@
 
 ## MRN-29 Procurement Form Boundary (2026-11-03, Issue #411)
 
+- 2026-11-03 [Codex] IMPLEMENTED, NOT LIVE. PR#765 is the staging integration;
+  source877ea0a. Linux83 focused tests/lint/typecheck/frontend/backend build,
+  plus offline BFF3tests and PostgreSQL17 pass. Staging migration rehearsal
+  rolled back successfully. CI affected quality passed; audit fails on existing
+  high Zod dependency. No live migration/deploy; do not bypass security gate.
+
 - Owner correction: only PGD forms may dispatch to Procurement. All KEU forms
   belong to Finance; until its gateway exists, completion ends inside SIGAP.
 - Candidate branch `fix/keu-procurement-outbound-boundary` from main; staging

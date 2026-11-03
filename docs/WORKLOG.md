@@ -1,5 +1,32 @@
 # Worklog
 
+## 2026-11-03 [Codex] MRN-29 Implemented, Release Held By Existing Security Gate
+
+- Source877ea0a on `fix/keu-procurement-outbound-boundary`; staging integration
+  PR#765 (PR#764 superseded because of a documentation-only merge conflict).
+  All KEU blocks before preparation/materialization/recovery/POST; only trusted
+  PGD is eligible. Historical stored payload remains viewable. Poll cleanup
+  handles newly ineligible unsent leases without starving remaining PGD work.
+- Clean Linux lint, full typecheck, frontend/backend build and 83 focused tests
+  passed. Additional offline BFF acceptance3/3 passes, including frozen KEU
+  rejection409 with zero file mint/storage read. CI41607935629 affected quality
+  gate passed after its acceptance mock was updated; final audit failed.
+- Existing production-dependency audit:1high Zod (<4.6.6, suggested major4.6.7),
+  5moderate,1low. No dependency/lock change was made by this feature. Do not
+  merge/deploy by bypassing audit; a separately scoped compatibility/security
+  fix is required before rollout. Latest SQL-only follow-up passed real PG17.
+- Staging Management API preflight read35PGD/1KEU1/6HRD documents,42surat and
+  179signatures. Ledger audit: only new version20261103160000 is local-only;
+  11older remote-only entries (including staging AUTH09) were inventoried, no
+  repair/include-all used. Active function definitions backed up privately.
+  Both migration rehearsals used BEGIN/ROLLBACK and passed (7non-PGD blocked).
+  No live migration/queue/approval update, app deploy, vendor POST or resend.
+- Runtime staging remainsd33970e412eedf2a2a5ecec66bc637ba1c053a91; production
+  unchanged and not authorized by this request. Remaining: resolve the existing
+  audit blocker, rerun exact integration gates, apply selected staging migration,
+  deploy and accept staging; production needs explicit authorization.
+
+
 ## 2026-11-03 [Codex] MRN-29 Procurement Boundary In Progress / Issue #411
 
 - Owner clarified all KEU ends in SIGAP pending Finance gateway; only PGD
