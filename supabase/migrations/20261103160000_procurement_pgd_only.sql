@@ -31,6 +31,7 @@ do $migration$
 declare
   v_definition text;
   v_anchor text := E'  select d.id into v_job_id\n  from public.marison_outbound_dispatches d';
+  v_expired_anchor text := E'      and d.status = ''processing''\n      and d.lease_expires_at';
 begin
   v_definition := replace(pg_get_functiondef('public.ensure_marison_outbound_dispatch(uuid,text)'::regprocedure), E'\r\n', E'\n');
   if position('marison_procurement_routing_block' in v_definition) = 0 then
@@ -48,10 +49,31 @@ $guard$ || v_anchor);
   v_definition := replace(pg_get_functiondef('public.claim_marison_outbound_dispatch(text)'::regprocedure), E'\r\n', E'\n');
   v_anchor := 'where candidate.environment = p_environment';
   if position('marison_procurement_routing_block' in v_definition) = 0 then
-    if position(v_anchor in v_definition) = 0 then
+    if position(v_anchor in v_definition) = 0 or position('  for v_expired in' in v_definition) = 0
+       or position(v_expired_anchor in v_definition) = 0 then
       raise exception 'Unknown outbound claim implementation; audit before applying procurement boundary';
     end if;
-    execute replace(v_definition, v_anchor, v_anchor || E'\n    and public.marison_procurement_routing_block(candidate.surat_id) is null');
+    v_definition := replace(v_definition, v_anchor, v_anchor || E'\n    and public.marison_procurement_routing_block(candidate.surat_id) is null');
+    v_definition := replace(v_definition, v_expired_anchor,
+      E'      and d.status = ''processing''\n      and (d.post_started_at is not null or public.marison_procurement_routing_block(d.surat_id) is null)\n      and d.lease_expires_at');
+    execute replace(v_definition, '  for v_expired in', $cleanup$
+  -- A form can become ineligible after a lease was issued. Do not let an old
+  -- unsent lease starve eligible PGD work or get reopened by lease recovery.
+  with blocked as (
+    select d.id from public.marison_outbound_dispatches d
+    where d.environment = p_environment and d.status in ('pending','processing','failed_retryable')
+      and d.post_started_at is null and d.response is null and d.external_reference is null
+      and public.marison_procurement_routing_block(d.surat_id) is not null
+    for update skip locked
+  )
+  update public.marison_outbound_dispatches d
+  set status='skipped',skipped_code=public.marison_procurement_routing_block(d.surat_id),
+      skipped_reason='Tidak dikirim ke Pengadaan: hanya form PGD; KEU tetap di SIGAP.',
+      completed_at=clock_timestamp(),lease_token=null,lease_acquired_at=null,lease_expires_at=null,
+      updated_at=clock_timestamp()
+  from blocked where d.id=blocked.id;
+
+$cleanup$ || '  for v_expired in');
   end if;
 end;
 $migration$;
