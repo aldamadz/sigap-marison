@@ -2,6 +2,12 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Current condition is latest UP/DOWN, with stale/missing
+  evidence explicitly unknown. RSS 2.0 at `/rss.xml` is live after staging:
+  probe state changes, incidents/handling, maintenance. Stable GUIDs and
+  read-only feed; users subscribe through RSS readers, not automatic email.
+  Twenty-six focused tests and live XML/browser checks pass.
+
 - 2026-11-03 [Codex] Four-color daily history live after staging acceptance:
   green 100% healthy samples, yellow 99-<100%, orange 95-<99%, red <95%.
   Gray means no data; current service state is independent. No historical

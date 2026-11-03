@@ -1,5 +1,20 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 current condition and RSS released
+
+- Staging then production page Worker released from `dccc773`. Current condition
+  uses latest probe: UP only when both checks pass, DOWN on any failure, and
+  BELUM DIKETAHUI for missing/stale data. Historical four-color ratios unchanged.
+- `/rss.xml` serves RSS 2.0 for observed UP/DOWN changes, incident handling,
+  and maintenance; stable GUIDs, bounded queries, XML/HTML-safe content, and
+  503 on database error. RSS reader subscription/polling is required; no email,
+  WhatsApp, browser push or subscriber storage was added. Maintenance edits
+  retain the same GUID; reader-specific update notification behavior applies.
+- Twenty-six focused tests, scoped lint, Worker build/diff check pass. Live
+  staging/production feeds parse as XML; production repeat fetch keeps GUIDs
+  stable, page shows RSS link and four UP conditions, browser has no errors.
+  No schema, probe/maintenance Worker or SIGAP application deployment.
+
 ## 2026-11-03 [Codex] OPS-16 four-color daily history released
 
 - Staging acceptance then production page Worker uploaded from `af4879b`.
