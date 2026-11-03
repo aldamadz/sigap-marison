@@ -74,6 +74,7 @@ function harness(options: { status?: string; signed?: boolean; missingToken?: bo
   const rpc = vi.fn(() => { throw new Error("Unexpected RPC"); });
   const resolver = vi.fn(async () => parseRef("new.pdf"));
   const context = {
+    assertMarisonProcurementRoute: async () => {},
     supabase: { from, rpc }, storedCapabilityLinks, reusableCurrentFileLinks, currentPayloadPreview, previewStoredMarisonPayload,
     process: { env: { APP_PUBLIC_URL: origin } }, parseStorageRef: parseRef, resolveExternalFileReference: resolver,
     getMarisonOutboundMappings: async () => ({}),

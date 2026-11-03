@@ -15,6 +15,7 @@ function harness(options:{history?:unknown[];payload?:unknown;denied?:boolean;pr
   const preview=vi.fn(async()=>{if(options.previewError)throw options.previewError;return {payload:{type:"marketing_cost",main_document:"https://sigap.test/main.pdf",attachments:[]},sourcePayloadHash:"source-hash",sourceSuratUpdatedAt:"2026-10-21T00:00:00Z",changes:["Dokumen utama dipisahkan"]};});
   const from=vi.fn(()=>{readingHistory=false;return query;});
   const context={supabase:{from,rpc},marisonDeploymentEnvironment:"production",diagnoseVendorRejection,
+    assertMarisonProcurementRoute:async()=>{},
     assertSameOrigin:()=>{},requireAdminUser:async()=>{if(options.denied)throw Object.assign(new Error("Forbidden"),{status:403});return{id:"admin"};},
     getBearerToken:()=>"test",readJsonBody:async()=>options.payload||{reason:"Perbaikan vendor dikonfirmasi",confirmProductionSend:true,confirmNotReceived:true,confirmVendorFixed:true},
     getMarisonOutboundPayloadPreview:preview};

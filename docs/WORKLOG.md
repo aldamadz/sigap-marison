@@ -223,6 +223,27 @@
 - Pending integration, full dependency-change CI, AUTH-09 validation and staging
   rollout/smoke. Source node_modules junction was left untouched; testing uses an
   isolated build folder rather than mutating the user's shared dependency tree.
+## 2026-11-03 [Codex] MRN-29 Procurement Boundary In Progress / Issue #411
+
+- Owner clarified all KEU ends in SIGAP pending Finance gateway; only PGD
+  dispatches to Procurement. Claimed on Issue #411; branch from current main,
+  default staging only. Production not changed or authorized by this request.
+- New private SQL routing helper uses persisted form numbers with KEU veto and
+  strict PGD allowlist; category alone cannot grant outbound. Gates enqueue,
+  claim, preparation/reopen/replacement/POST updates. Legacy active pre-POST
+  jobs are skipped without deleting evidence; posted history remains unchanged.
+- Backend checks canonical routing before building or materializing frozen
+  payloads and before latest/Postman/recovery/replacement; stored evidence
+  remains readable. Removed the now-invalid KEU-to-Procurement item conversion.
+- PostgreSQL17 disposable test passes twice-applied migration and assertions.
+  Local lint passes. Parent node_modules link has stale @sigap/shared outputs,
+  causing unrelated local typecheck/Unit test failures; clean Linux gate is
+  required before any rollout. One stale source-string assertion was updated
+  to the existing four-argument file-link call (not a production code change).
+- TOS impact: this enforces the existing purpose-based integration boundary,
+  adds no new collection, recipient, consent or user obligation. No legal text
+  change needed. PROJECT_CONTEXT is still unavailable.
+
 
 ## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
 

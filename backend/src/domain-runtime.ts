@@ -11,7 +11,8 @@ import webpush from "web-push";
 import sharp from "sharp";
 import { hasUnavailableMarisonProjectBranch, getExternalUnitReference, applyExternalUnitReference } from "@sigap/shared";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
-import { createKeu1PreviewData, isKeu1Document, renderKeu1Pdf, resolveKeu1MasterForm } from "../../keu1-pdf-renderer.mjs";
+import { createKeu1PreviewData, isKeu1Document, renderKeu1Pdf } from "../../keu1-pdf-renderer.mjs";
+import { assertMarisonProcurementRoute, getMarisonProcurementRoute } from "./lib/marison-procurement-route.js";
 import { createKeu10PreviewData, isKeu10Document, renderKeu10Pdf } from "../../keu10-pdf-renderer.mjs";
 import { resolveRecommendationSource } from "../../recommendation-pdf.mjs";
 import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "../../recommendation-native-pdf.mjs";
@@ -59,7 +60,7 @@ import {
   normalizeMarisonSubmissionApprovals,
   resolveMarisonApprovalRoleLabel,
 } from "../../server/marison-outbound-contract.mjs";
-import { mapKeu1ItemsForFund, mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
+import { mapMarisonFundSubmission, resolveMarisonFundBranch, resolveMarisonFundDivision } from "../../server/marison-fund-submission.mjs";
 import { freezeMarisonAssetPayload, mapMarisonAssetRequest, MarisonAssetItemsError } from "../../server/marison-asset-items.mjs";
 import {
   consumedFileViewTokenResult,
@@ -3720,11 +3721,6 @@ const buildMarisonAssetPayload = async (surat, input, actorId, overrides = {}) =
 };
 
 const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) => {
-  const keu1MasterForm = !isKeu1Document(surat) && !isKeu10Document(surat) && surat.form_usage_id
-    ? await resolveKeu1MasterForm(supabase, surat.form_usage_id)
-    : null;
-  const keu1 = isKeu1Document(surat) || isKeu1Document({ resolved_master_form: keu1MasterForm });
-  const keu10 = isKeu10Document(surat) || isKeu10Document({ resolved_master_form: keu1MasterForm });
   // Fund tanpa proyek (dana umum) diizinkan: projectId null membuat payload tanpa project_id.
   const projectId = overrides.projectId == null ? null : requireExternalInteger(overrides.projectId, "Project ID");
   const fundType = firstString(input.fund_type, input.fund_submission_type);
@@ -3752,7 +3748,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
         title: surat.judul_surat,
         description: firstString(input.catatan, input.description, surat.judul_surat),
         amount: input.fund_amount,
-        items: keu1 || keu10 ? mapKeu1ItemsForFund(input.items) : input.items,
+        items: input.items,
       },
       projectId,
       branchId,
@@ -3768,6 +3764,7 @@ const buildMarisonFundPayload = async (surat, input, actorId, overrides = {}) =>
 };
 
 const buildMarisonDispatchPayload = async (surat, actorId, overrides = {}) => {
+  await assertMarisonProcurementRoute(supabase, surat.id);
   const input = getMarisonDispatchInput(surat);
   const category = String(input.request_category || input.request_mode || "").trim().toLowerCase();
   const isFund = category === "non_asset" || category === "nonasset";
@@ -3814,7 +3811,8 @@ const getMarisonDispatchQueueStatus = async (req, suratId) => {
     err.status = 404;
     throw err;
   }
-  if (marisonSubmissionDispatchEnabled && ["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
+  const routing = await getMarisonProcurementRoute(supabase, suratId);
+  if (routing.eligible && marisonSubmissionDispatchEnabled && ["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
     const { error: ensureError } = await supabase.rpc("ensure_marison_outbound_dispatch", {
       p_surat_id: suratId,
       p_environment: marisonDeploymentEnvironment,
@@ -3836,7 +3834,8 @@ const getMarisonDispatchQueueStatus = async (req, suratId) => {
   const legacyDispatch = asPlainRecord(surat.data_snapshot?.marison_dispatch);
 
   return {
-    enabled: marisonSubmissionDispatchEnabled,
+    enabled: marisonSubmissionDispatchEnabled && routing.eligible,
+    routing,
     suratId: surat.id,
     suratStatus: surat.status,
     environment: marisonDeploymentEnvironment,
@@ -3934,6 +3933,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     err.status = 409;
     throw err;
   }
+  await assertMarisonProcurementRoute(supabase, job.surat_id);
   // Check both logical construction and transport materialization, including
   // already-frozen payloads. An accepted predecessor is not a rejected retry.
   const unitRevisionAuthorization = await requireUnitDispatchContract(job);
@@ -4129,7 +4129,7 @@ const listMarisonOutboundDispatches = async (req, url) => {
         completedAt: row.completed_at,
         externalReference: row.external_reference,
         errorCode: row.error_code,
-        failureReason: lastVendorDiagnosis?.summary || row.error_message || row.skipped_reason || null,
+        failureReason: row.status === "skipped" ? row.skipped_reason : lastVendorDiagnosis?.summary || row.error_message || null,
         lastVendorDiagnosis,
         reconciliationCount: row.reconciliation_count,
         createdAt: row.created_at,
@@ -4153,6 +4153,7 @@ export const generateCurrentMarisonPayloadPreview = async (job, stored) => {
     return result.data;
   };
   const surat = await loadDocument();
+  await assertMarisonProcurementRoute(supabase, surat.id);
   if (!["DONE", "SELESAI", "COMPLETED"].includes(String(surat.status).toUpperCase())
     || !surat.surat_signatures?.length || surat.surat_signatures.some(row => row.is_signed !== true || !row.signed_at)) {
     throw unavailable("Pengajuan terbaru belum selesai disetujui. Payload tidak dibuat dari draft revisi.");
@@ -4224,6 +4225,7 @@ const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored"
   const stored = previewStoredMarisonPayload(job);
   if (view === "stored") return stored;
   if (view === "latest") return generateCurrentMarisonPayloadPreview(job, stored);
+  await assertMarisonProcurementRoute(supabase, job.surat_id);
   if (job.kind !== "fund" || !stored.payload || stored.source !== "frozen" || stored.redacted || !job.payload_hash || stored.endpoint !== "/fund-submissions") {
     throw Object.assign(new Error("Payload untuk Postman hanya tersedia untuk Dana dengan payload beku yang lengkap."), { status: 409 });
   }
@@ -4253,6 +4255,8 @@ const getMarisonOutboundPayloadPreview = async (req, dispatchId, view = "stored"
 };
 
 const preflightMarisonOutboundRecovery = async (job, surat) => {
+  const routing = await getMarisonProcurementRoute(supabase, job.surat_id);
+  if (!routing.eligible) return { eligible: false, reasonCode: routing.code, reason: routing.reason };
   if (!isPrePostRecoveryEligible(job, marisonDeploymentEnvironment) || !surat || !["SELESAI", "DONE"].includes(String(surat.status || "").toUpperCase())) {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
@@ -4418,6 +4422,8 @@ const preflightMarisonOutboundReplacement = async (req, dispatchId, { includeVer
     err.status = 409;
     throw err;
   }
+
+  await assertMarisonProcurementRoute(supabase, job.surat_id);
 
   let vendorResponse = null;
   try {
