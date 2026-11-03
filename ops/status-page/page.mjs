@@ -9,7 +9,7 @@ const STALE_MS = 3 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_DAYS = 30;
 const LOGO_BASE64 = '__LOGO_BASE64__';
-const LABELS = { up: 'Beroperasi', degraded: 'Gangguan sebagian', down: 'Gangguan', unknown: 'Belum tersedia' };
+const LABELS = { up: 'UP', down: 'DOWN', unknown: 'BELUM DIKETAHUI' };
 const PHASE_LABELS = { investigating: 'Investigasi', identified: 'Penyebab diketahui', monitoring: 'Pemantauan', resolved: 'Selesai' };
 
 function number(value) {
@@ -90,10 +90,9 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
     const observations = recent.filter((row) => row.service === service.id)
       .sort((left, right) => number(right.checked_at) - number(left.checked_at));
     const latest = observations[0];
-    const previous = observations[1];
     const age = latest ? now - number(latest.checked_at) : Infinity;
     let status = !latest || age < 0 || age > STALE_MS ? 'unknown' : latest.outcome;
-    if (status === 'down' && (!previous || previous.outcome !== 'down')) status = 'degraded';
+    if (status === 'degraded') status = 'down';
     if (!LABELS[status]) status = 'unknown';
 
     const serviceDays = daily.filter((row) => row.service === service.id);
@@ -162,6 +161,54 @@ export async function loadStatus(db, now = Date.now()) {
     updates: updates.results, maintenance: maintenance.results, sources: sources.results }, now);
 }
 
+export async function loadFeed(db, now = Date.now()) {
+  const since = now - 90 * DAY_MS;
+  const [incidents, updates, maintenance, changes] = await Promise.all([
+    db.prepare('SELECT id,title,summary,started_at FROM incidents WHERE started_at>=? ORDER BY started_at DESC LIMIT 40').bind(since).all(),
+    db.prepare(`SELECT u.id,u.phase,u.message,u.created_at,i.title FROM incident_updates u
+      JOIN incidents i ON i.id=u.incident_id WHERE u.created_at>=?
+      ORDER BY u.created_at DESC LIMIT 80`).bind(since).all(),
+    db.prepare(`SELECT id,title,description,starts_at,ends_at,created_at,cancelled_at FROM maintenance
+      WHERE created_at>=? OR cancelled_at>=? OR ends_at>=? ORDER BY created_at DESC LIMIT 40`).bind(since, since, now).all(),
+    db.prepare(`SELECT service,slot,checked_at,condition FROM (
+      SELECT service,slot,checked_at,CASE WHEN outcome='up' THEN 'UP' ELSE 'DOWN' END AS condition,
+      LAG(CASE WHEN outcome='up' THEN 'UP' ELSE 'DOWN' END) OVER (PARTITION BY service ORDER BY slot) AS previous,
+      LAG(checked_at) OVER (PARTITION BY service ORDER BY slot) AS previous_at
+      FROM checks WHERE checked_at>=?
+    ) WHERE previous IS NOT NULL AND condition<>previous AND checked_at-previous_at<=180000
+      ORDER BY checked_at DESC LIMIT 40`).bind(now - DAY_MS).all(),
+  ]);
+  const events = [
+    ...incidents.results.map((item) => ({ id: `incident:${item.id}`, title: `Investigasi: ${item.title}`,
+      description: item.summary, at: number(item.started_at), section: 'incidents-title' })),
+    ...updates.results.map((item) => ({ id: `update:${item.id}`, title: `${PHASE_LABELS[item.phase]}: ${item.title}`,
+      description: item.message, at: number(item.created_at), section: 'incidents-title' })),
+    ...maintenance.results.flatMap((item) => [
+      { id: `maintenance:${item.id}`, title: `Terjadwal: ${item.title}`,
+        description: `${item.description}\nMulai: ${dateTime(number(item.starts_at))}\nEstimasi selesai: ${dateTime(number(item.ends_at))}`,
+        at: number(item.created_at), section: 'maintenance-title' },
+      ...(item.cancelled_at ? [{ id: `maintenance-closed:${item.id}:${item.cancelled_at}`,
+        title: `Jadwal ditutup: ${item.title}`, description: 'Jadwal telah selesai atau dibatalkan oleh pengelola layanan.',
+        at: number(item.cancelled_at), section: 'maintenance-title' }] : []),
+    ]),
+    ...changes.results.filter((item) => SERVICES.some((service) => service.id === item.service)).map((item) => ({
+      id: `probe:${item.service}:${item.slot}`, title: `${SERVICES.find((service) => service.id === item.service).name}: ${item.condition}`,
+      description: `Hasil pemeriksaan publik berubah menjadi ${item.condition}. Ini hasil probe, bukan konfirmasi penyebab gangguan.`,
+      at: number(item.checked_at), section: 'services-title',
+    })),
+  ];
+  return events.filter((event) => event.at <= now).sort((a, b) => b.at - a.at || a.id.localeCompare(b.id)).slice(0, 80);
+}
+
+function xml(value) {
+  return escape(String(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '').replace(/[\uD800-\uDFFF]/gu, ''));
+}
+
+export function renderRss(events, origin = 'https://status.marisoncloud.com', now = Date.now()) {
+const items = events.map((event) => `<item><title>${xml(event.title)}</title><link>${origin}/#${event.section}</link><guid isPermaLink="false">${xml(event.id)}</guid><pubDate>${new Date(event.at).toUTCString()}</pubDate><description>${xml(escape(event.description))}</description></item>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Status Layanan Marison Cloud</title><link>${origin}/</link><description>Kabar kondisi layanan, insiden, dan maintenance Marison Cloud.</description><language>id</language><ttl>1</ttl><lastBuildDate>${new Date(events[0]?.at ?? now).toUTCString()}</lastBuildDate><atom:link href="${origin}/rss.xml" rel="self" type="application/rss+xml"/>${items}</channel></rss>`;
+}
+
 function escape(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -174,6 +221,7 @@ const CSS = String.raw`
 .shell{width:min(1120px,calc(100% - 48px));margin:auto}.top{height:84px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .brand{display:flex;align-items:center;gap:18px}.brand img{width:118px;height:48px;object-fit:contain;object-position:left}.brand-mark{border-left:1px solid #dce3e6;padding-left:18px;font-size:15px;font-weight:700}
 .preview-banner{background:#fff4d8;border-bottom:1px solid #dfc885;color:#694b16;font-size:12px;padding:8px 24px;text-align:center}
+.intro-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}.rss-link{font-size:13px;font-weight:600;color:#966215;text-decoration:none;padding:10px 4px}.rss-link:hover{text-decoration:underline}.rss-link:focus-visible{outline:2px solid #966215;outline-offset:2px}
 .top-link{font-size:13px;color:#355163;text-decoration:none}.top-link:hover{text-decoration:underline}main{padding:44px 0 80px}
 .eyebrow{color:#39705b;font-size:12px;font-weight:700;text-transform:uppercase}.intro{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:32px}
 h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.subtitle{font-size:14px;color:#647582;line-height:1.55}
@@ -208,7 +256,7 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 `;
 
 const APP_JS = String.raw`
-const labels={up:'Beroperasi',degraded:'Gangguan sebagian',down:'Gangguan',unknown:'Belum tersedia'};
+const labels={up:'UP',down:'DOWN',unknown:'BELUM DIKETAHUI'};
 const button=document.querySelector('#refresh');
 async function refresh(){
   button.disabled=true;
@@ -283,10 +331,10 @@ export function renderHtml(data, { preview = false } = {}) {
     <ol class="timeline">${item.timeline.map((update) => `<li class="${escape(update.phase)}"><strong>${escape(update.phaseLabel)}</strong><p>${escape(update.message)}</p><time datetime="${new Date(update.at).toISOString()}">${escape(update.atText)}</time></li>`).join('')}</ol>
   </li>`).join('');
   const generated = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(data.generatedAt);
-return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-history-v2" defer></script></head>
+return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-current-rss-v1" defer></script></head>
   <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></header>
   ${preview ? '<div class="preview-banner">Pratinjau staging: probe layanan production, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
-  <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div>
+  <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><div class="intro-actions"><a class="rss-link" href="/rss.xml" title="Berlangganan kabar melalui pembaca RSS">RSS</a><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div></div>
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
   <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>100% sehat</span><span class="legend-item"><span class="bar degraded"></span>99–&lt;100% sehat</span><span class="legend-item"><span class="bar partial"></span>95–&lt;99% sehat</span><span class="legend-item"><span class="bar down"></span>&lt;95% sehat</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
   <div class="sections"><section class="status-section" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Pemeliharaan terjadwal</h2>${maintenanceItems ? `<ul class="maintenance-list">${maintenanceItems}</ul>` : '<p class="empty">Tidak ada pemeliharaan yang dijadwalkan.</p>'}</section>
@@ -311,6 +359,18 @@ export default {
       return new Response(request.method === 'HEAD' ? null : bytes, { headers: { ...HEADERS, 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
     }
     if (path === '/app.js') return new Response(request.method === 'HEAD' ? null : APP_JS, { headers: { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+    if (path === '/rss.xml') {
+      try {
+        const events = await loadFeed(env.DB);
+        const origin = env.STATUS_ENVIRONMENT === 'staging'
+          ? 'https://marison-status-page-staging.aldamaaa-id.workers.dev' : 'https://status.marisoncloud.com';
+        return new Response(request.method === 'HEAD' ? null : renderRss(events, origin), {
+          headers: { ...HEADERS, 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'no-store' },
+        });
+      } catch {
+        return new Response(request.method === 'HEAD' ? null : 'Feed sementara tidak tersedia', { status: 503, headers: { ...HEADERS, 'cache-control': 'no-store' } });
+      }
+    }
     if (path !== '/' && path !== '/api/status') return new Response('Not found', { status: 404, headers: HEADERS });
     let data;
     try {

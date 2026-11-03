@@ -14,9 +14,10 @@ instead of bypassing it via a same-zone service binding. The probe records one
 sample per minute per service and keeps 30 days of raw samples. The public page
 shows 30 daily bars and a 30-day sampled availability rate, with measurement
 coverage displayed separately. Days before monitoring began are unknown, never
-assumed healthy. A sample older than three minutes is unknown, not healthy. A
-single failed sample is degraded; two consecutive failures are down. Health and
-public page are checked separately.
+assumed healthy. A sample older than three minutes is unknown, not healthy.
+Current condition is UP only when the latest public-page and health checks both
+pass; either failing is DOWN immediately. Missing/stale data is BELUM DIKETAHUI.
+Health and public page are checked separately.
 
 Daily history uses healthy-sample ratios: green at 100%, yellow from 99% to
 below 100%, orange from 95% to below 99%, and red below 95%. No data is gray.
@@ -42,7 +43,7 @@ estimate remains visible until SIGAP marks it complete or cancelled.
 From `ops/status-page`:
 
 ```sh
-node --test probe.test.mjs page.test.mjs operator.test.mjs
+node --test probe.test.mjs page.test.mjs operator.test.mjs feed.test.mjs
 node build.mjs
 ```
 
@@ -66,7 +67,23 @@ outage cannot break the status page branding. Never commit `dist/`.
 4. Enable workers.dev only for the probe and install its one-minute cron.
 5. Wait for real D1 samples, verify all four public/health probes, then attach
    the page Worker to `status.marisoncloud.com` as a custom domain.
-6. Check `/`, `/api/status`, `/app.js`, `/logo.png` on desktop and mobile.
+6. Check `/`, `/api/status`, `/app.js`, `/logo.png`, and `/rss.xml` on desktop and mobile.
+
+## RSS subscriptions
+
+The public RSS 2.0 feed is `https://status.marisoncloud.com/rss.xml`, linked
+from the page and advertised through RSS autodiscovery. Users subscribe with
+their own RSS reader; no email address, device permission, or subscriber data
+is collected, and this does not itself send email/WhatsApp/push notifications.
+Notifications depend on the reader's polling/notification settings.
+
+The feed contains incident openings/handling updates, maintenance publication
+and closure, and observed UP/DOWN transitions from the last 24 hours (including
+single-sample failures). Incident/maintenance records cover 90 days, with at most
+80 newest combined items. IDs stay stable across polling to avoid duplicates;
+maintenance edits update the existing item, so reader alerts for edits depend
+on the reader. Monitoring gaps are not invented as service-state transitions.
+Database errors return 503 instead of a misleading empty feed.
 
 Staging uses a different D1 database and workers.dev Workers named
 `marison-status-probe-staging` and `marison-status-page-staging`. Never attach

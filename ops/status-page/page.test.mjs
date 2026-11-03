@@ -45,9 +45,12 @@ test('daily history uses four health bands without changing current condition', 
   assert.equal(unknown.availability, null);
 });
 
-test('one failing observation is a warning and persistent failures are down', () => {
+test('latest failing observation is DOWN without waiting for a second failure', () => {
   const oneFailure = buildStatus({ recent: [rows('down')[0], ...rows().slice(1)] }, NOW);
-  assert.equal(oneFailure.services[0].status, 'degraded');
+  assert.equal(oneFailure.services[0].status, 'down');
+  assert.equal(oneFailure.services[0].label, 'DOWN');
+  assert.equal(buildStatus({ recent: rows('degraded') }, NOW).services[0].label, 'DOWN');
+  assert.equal(buildStatus({ recent: rows() }, NOW).services[0].label, 'UP');
   const persistent = buildStatus({ recent: [
     rows('down')[0],
     { ...rows('down', NOW - 75000)[0] },
@@ -119,7 +122,7 @@ test('status API fails closed when D1 is unavailable', async () => {
 
 test('page uses a versioned, uncached interaction script', async () => {
   const html = renderHtml(buildStatus({ recent: rows() }, NOW));
-  assert.match(html, /src="\/app\.js\?v=20261103-history-v2"/);
+  assert.match(html, /src="\/app\.js\?v=20261103-current-rss-v1"/);
   const response = await worker.fetch(new Request('https://status.marisoncloud.com/app.js'), {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
