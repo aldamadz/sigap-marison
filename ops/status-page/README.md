@@ -18,6 +18,11 @@ assumed healthy. A sample older than three minutes is unknown, not healthy. A
 single failed sample is degraded; two consecutive failures are down. Health and
 public page are checked separately.
 
+Daily history uses healthy-sample ratios: green at 100%, yellow from 99% to
+below 100%, orange from 95% to below 99%, and red below 95%. No data is gray.
+These bands do not override the current condition. Each day's tooltip includes
+its exact sampled percentage and count; historical probe records are unchanged.
+
 Incident and scheduled-maintenance records are separate from probe evidence.
 An unresolved incident gives the overall banner a warning only when all probes
 have fresh results. The public Worker has no write route. An operator with D1
