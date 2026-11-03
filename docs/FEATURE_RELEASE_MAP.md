@@ -2,6 +2,10 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Subscription dialog with RSS/Atom URLs and copy buttons
+  live after staging. Added Atom 1.0, kept existing RSS URL compatible.
+  Native modal close/Escape/focus, copy, responsive checks and 28 tests pass.
+
 - 2026-11-03 [Codex] Current condition is latest UP/DOWN, with stale/missing
   evidence explicitly unknown. RSS 2.0 at `/rss.xml` is live after staging:
   probe state changes, incidents/handling, maintenance. Stable GUIDs and

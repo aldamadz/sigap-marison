@@ -1,5 +1,20 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 subscription dialog and Atom released
+
+- Staging then production page Worker released from `d5745ec`. Berlangganan
+  opens a native dialog matching the user's reference layout: RSS/Atom readonly
+  URLs, Lucide copy/close icons, accessible copy feedback and manual fallback.
+  Escape restores focus, close works, mobile dimensions remain within viewport;
+  open dialog is not interrupted by timeline auto-refresh.
+- Added real Atom 1.0 at `/feed.atom` (alias `/atom.xml`), and `/feed.rss`
+  alongside the existing `/rss.xml`. All endpoints parse as valid XML and
+  return 200 with their correct media type in staging/production. No email or
+  push subscription system implied. Production copy action and browser console
+  passed; 28 focused tests, scoped ESLint, Worker build and diff check passed.
+- No D1 migration, probe/maintenance Worker or SIGAP app change. Source remains
+  in selective main PR #762 and staging integration PR #763, not auto-merged.
+
 ## 2026-11-03 [Codex] OPS-16 current condition and RSS released
 
 - Staging then production page Worker released from `dccc773`. Current condition
