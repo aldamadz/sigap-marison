@@ -26,7 +26,7 @@ const query = (result: () => unknown) => {
   return builder;
 };
 
-const clients = (role: "admin" | "user" = "admin") => {
+const clients = (role: "admin" | "user" = "admin", routingBlock: string | null = null) => {
   let revoked = false;
   let stale = false;
   let mintCount = 0;
@@ -53,6 +53,7 @@ const clients = (role: "admin" | "user" = "admin") => {
       throw new Error(`Unexpected table ${table}`);
     },
     rpc: async (name: string, args: any) => {
+      if (name === "marison_procurement_routing_block") return { data: routingBlock, error: null };
       if (name === "mint_recommendation_file_view_token") {
         mintArgs.push(args);
         mintCount += 1;
@@ -82,6 +83,20 @@ beforeEach(async () => { stubRuntimeEnv(vi); booted = await bootDomainRuntime();
 afterEach(async () => { await closeApp(booted); booted = null; unstubRuntimeEnv(vi); });
 
 describe("recommendation file links offline acceptance", () => {
+  it("blocks frozen KEU transport before minting a document link or reading storage", async () => {
+    const mock = clients("admin", "finance_not_connected");
+    booted!.runtime.setDomainRuntimeDependenciesForTest(mock);
+    const built = await booted!.app.inject({
+      method: "POST", url: `/api/internal/marison/outbound/${jobId}/build`,
+      headers: { "x-internal-outbound-token": "test-outbound-internal-token-32-characters-min", origin: "https://sigap.test", host: "sigap.test" },
+      payload: { leaseToken, transport: true, materializationAttemptId: "50000000-0000-4000-8000-000000000005" },
+    });
+    expect(built.statusCode).toBe(409);
+    expect(built.json().error).toContain("Form KEU selesai di SIGAP");
+    expect(mock.mintCount).toBe(0);
+    expect(mock.downloadedPaths).toEqual([]);
+  });
+
   it("materializes once, serves canonical PDF, revokes to 410, and rejects stale pointer without storage", async () => {
     const mock = clients();
     booted!.runtime.setDomainRuntimeDependenciesForTest(mock);

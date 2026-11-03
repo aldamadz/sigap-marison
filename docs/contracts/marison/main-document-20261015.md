@@ -1,5 +1,10 @@
 # Main Document Contract - 15 October 2026
 
+2026-11-03 [Codex] Routing correction (MRN-29, Issue #411): only validated PGD
+forms may use these Procurement endpoints. All KEU forms stop inside SIGAP
+until the Finance gateway is available. Earlier KEU-to-Fund routing described
+below is historical and superseded; existing sent payload evidence is retained.
+
 Primary source: https://external.marisonregency.id/docs
 
 The inline OpenAPI 3.1 document was inspected on 15 October 2026. All four
