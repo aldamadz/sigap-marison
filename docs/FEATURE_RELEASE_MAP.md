@@ -1,5 +1,24 @@
 # SIGAP Feature and Release Map
 
+## MRN-29 Procurement Form Boundary (2026-11-03, Issue #411)
+
+- Owner correction: only PGD forms may dispatch to Procurement. All KEU forms
+  belong to Finance; until its gateway exists, completion ends inside SIGAP.
+- Candidate branch `fix/keu-procurement-outbound-boundary` from main; staging
+  target only. Form identity is resolved from persisted snapshots/master form,
+  not editable category. Missing/conflicting identity fails closed.
+- Forward migration20261103160000 gates enqueue, claim and DB mutation/POST
+  boundaries, including recovery/replacement. Only pre-POST active jobs without
+  vendor responses/references are skipped; historical payloads and receipts stay.
+- Backend gates payload construction, frozen transport, latest/Postman preview,
+  and recovery. Stored payload evidence remains viewable. Approval status is
+  unchanged; no Finance endpoint, new send or automatic resend is introduced.
+- Real disposable PostgreSQL17 assertions pass, including rerun, all four PGD
+  categories, KEU1/10/future forms, missing/conflicting identities, old queue,
+  immutable posted evidence, reopen/replacement and cached-POST rejection.
+  Live staging rollout and production authorization are still pending.
+
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
