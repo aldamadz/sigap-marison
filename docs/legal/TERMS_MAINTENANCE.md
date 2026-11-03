@@ -1,5 +1,29 @@
 # Marison Cloud Terms Maintenance
 
+## 2026-11-03 Group Privacy And Landing Follow-up
+
+The owner explicitly extended Privacy to all official group systems. Privacy
+v2.0 (`ops/status-page/privacy.mjs`) now replaces the old Absensi-only public
+notice; TOS v1.2 refers to it. This supersedes the scope/hosting statements
+below that described the earlier release. See `PRIVACY_REVIEW.md` for evidence
+and limits; original Absensi source is retained unmodified in its repository.
+
+The public edge Worker serves `/privacy[/]` and `/terms[/]`, plus legal assets.
+Only a successful HTML GET on the main host `/` is enhanced with same-origin
+stylesheet/script and a no-JavaScript fallback footer. The existing React
+landing and all its assets remain at origin; its header/footer gain links
+after mounting. No login/session/form data is inspected. Non-HTML responses,
+origin failures, non-root paths and business API requests pass through.
+Keep CSP/security headers; discard body validators on transformed HTML.
+Staging `/_preview/landing` is an explicit navigation fixture, not a copy of
+the live application, and must return 404 in production. Verify the actual
+production landing after release, including its existing access button.
+
+Main-host routing is scoped to exact root plus root-with-query and privacy
+prefix, in addition to the pre-existing Terms prefix. Existing unrelated zone
+routes must remain unchanged. Roll back by removing only the added routes
+and restoring the previous page Worker; never change DNS or origin data.
+
 ## Owner And Scope
 
 2026-11-03 [Codex], user correction: Terms apply only to services owned or

@@ -1,4 +1,6 @@
 import { TERMS } from './terms.mjs';
+import { PRIVACY } from './privacy.mjs';
+import { LANDING_LINKS_CSS, LANDING_LINKS_JS, enhanceLanding, renderLandingPreview } from './landing-links.mjs';
 
 const SERVICES = [
   { id: 'drive', name: 'Maris Drive', domain: 'drive.marisoncloud.com', url: 'https://drive.marisoncloud.com' },
@@ -433,10 +435,18 @@ return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="v
   <footer class="page-footer"><span>Waktu ditampilkan dalam WIB (UTC+7).</span><nav class="legal-links" aria-label="Kebijakan layanan"><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://marisoncloud.com/terms">Terms of Service</a></nav></footer></main>${subscriptionDialog}</body></html>`;
 }
 
-export function renderTerms({ preview = false } = {}) {
-  const content = TERMS.sections.map((section, index) => `<section id="${section.id}" class="legal-section"><h2>${index + 1}. ${escape(section.title)}</h2>${section.paragraphs.map(text => `<p>${escape(text)}</p>`).join('')}${section.id === 'privasi' ? '<p><a href="https://marisoncloud.com/privacy">Baca Privacy Policy</a></p>' : ''}</section>`).join('');
-return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Terms of Service | Marison Cloud</title><meta name="description" content="Ketentuan penggunaan layanan digital resmi Marison Regency Group."><link rel="canonical" href="https://marisoncloud.com/terms"><script src="/terms/theme.js?v=1"></script><style>${CSS}</style></head><body><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com"><img src="/terms/logo.png" alt="Marison Cloud"></a><span class="brand-mark">Ketentuan layanan</span></div><div class="header-actions">${themeSwitch()}<a class="top-link" href="https://status.marisoncloud.com/">Status layanan</a></div></div></header>${preview ? '<div class="preview-banner">Pratinjau staging</div>' : ''}<main class="shell legal-main"><div class="eyebrow">Marison Regency Group</div><h1>Terms of Service</h1><p class="legal-meta">Versi ${TERMS.version} · Berlaku dan diperbarui ${TERMS.dateLabel}</p><nav class="legal-toc" aria-label="Daftar isi ketentuan">${TERMS.sections.map(section => `<a href="#${section.id}">${escape(section.title)}</a>`).join('')}</nav>${content}<section class="legal-history"><h2>Riwayat perubahan</h2><ul>${TERMS.history.map(item => `<li>Versi ${item.version} · ${item.date}: ${escape(item.summary)}</li>`).join('')}</ul></section><footer class="page-footer"><span>Marison Regency Group</span><nav class="legal-links" aria-label="Kebijakan layanan"><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://status.marisoncloud.com/">Status layanan</a></nav></footer></main></body></html>`;
+const policyNav = () => '<nav class="legal-links" aria-label="Navigasi layanan"><a href="https://marisoncloud.com/">Beranda</a><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://marisoncloud.com/terms">Terms of Service</a><a href="https://status.marisoncloud.com/">Status layanan</a></nav>';
+
+function renderPolicy(policy, { preview = false, privacy = false } = {}) {
+  const title = privacy ? 'Privacy Policy' : 'Terms of Service';
+  const path = privacy ? 'privacy' : 'terms';
+  const description = privacy ? 'Kebijakan privasi seluruh sistem digital resmi Marison Regency Group.' : 'Ketentuan penggunaan layanan digital resmi Marison Regency Group.';
+  const content = policy.sections.map((section, index) => `<section id="${section.id}" class="legal-section"><h2>${index + 1}. ${escape(section.title)}</h2>${section.paragraphs.map(text => `<p>${escape(text)}</p>`).join('')}</section>`).join('');
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>${title} | Marison Regency Group</title><meta name="description" content="${description}"><link rel="canonical" href="https://marisoncloud.com/${path}"><script src="/terms/theme.js?v=1"></script><style>${CSS}.policy-navigation{padding:16px 0;border-bottom:1px solid #d7e0e3}.policy-navigation a{font-size:13px;line-height:1.6}.policy-navigation .legal-links{gap:12px 24px}[data-theme="dark"] .policy-navigation{border-color:#3d444f}</style></head><body><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com/"><img src="/terms/logo.png" alt="Marison Regency Group"></a><span class="brand-mark">${privacy ? 'Privasi' : 'Ketentuan layanan'}</span></div><div class="header-actions">${themeSwitch()}</div></div></header><div class="shell policy-navigation">${policyNav()}</div>${preview ? '<div class="preview-banner">Pratinjau staging</div>' : ''}<main class="shell legal-main"><div class="eyebrow">Marison Regency Group</div><h1>${title}</h1><p class="legal-meta">${privacy ? 'Kebijakan Privasi · ' : ''}Versi ${policy.version} · Berlaku dan diperbarui ${policy.dateLabel}</p><nav class="legal-toc" aria-label="Daftar isi ${privacy ? 'privasi' : 'ketentuan'}">${policy.sections.map(section => `<a href="#${section.id}">${escape(section.title)}</a>`).join('')}</nav>${content}<section class="legal-history"><h2>Riwayat perubahan</h2><ul>${policy.history.map(item => `<li>Versi ${item.version} · ${item.date}: ${escape(item.summary)}</li>`).join('')}</ul></section><footer class="page-footer"><span>Marison Regency Group</span>${policyNav()}</footer></main></body></html>`;
 }
+
+export function renderTerms(options = {}) { return renderPolicy(TERMS, options); }
+export function renderPrivacy(options = {}) { return renderPolicy(PRIVACY, { ...options, privacy: true }); }
 
 const HEADERS = {
   'x-content-type-options': 'nosniff',
@@ -450,10 +460,19 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const mainHost = ['marisoncloud.com', 'www.marisoncloud.com'].includes(url.hostname);
-    const legalPaths = ['/terms', '/terms/', '/terms/theme.js', '/terms/logo.png'];
-    if (mainHost && !legalPaths.includes(path)) return fetch(request);
+    const legalPaths = ['/terms', '/terms/', '/privacy', '/privacy/', '/terms/theme.js', '/terms/logo.png', '/terms/landing.js', '/terms/landing.css'];
+    if (mainHost && !legalPaths.includes(path)) {
+      if (path !== '/' || !['GET', 'HEAD'].includes(request.method)) return fetch(request);
+      const originRequest = new Request(request);
+      for (const name of ['if-none-match', 'if-modified-since']) originRequest.headers.delete(name);
+      const response = await fetch(originRequest);
+      return request.method === 'HEAD' ? response : enhanceLanding(response);
+    }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: HEADERS });
+    if (path === '/_preview/landing' && env.STATUS_ENVIRONMENT === 'staging') return new Response(request.method === 'HEAD' ? null : renderLandingPreview(), { headers: { ...HEADERS, 'content-security-policy': HEADERS['content-security-policy'].replace("style-src 'unsafe-inline'", "style-src 'self'"), 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
     if (path === '/terms' || path === '/terms/') return new Response(request.method === 'HEAD' ? null : renderTerms({ preview: env.STATUS_ENVIRONMENT === 'staging' }), { headers: { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    if (path === '/privacy' || path === '/privacy/') return new Response(request.method === 'HEAD' ? null : renderPrivacy({ preview: env.STATUS_ENVIRONMENT === 'staging' }), { headers: { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    if (path === '/terms/landing.js' || path === '/terms/landing.css') return new Response(request.method === 'HEAD' ? null : path.endsWith('.js') ? LANDING_LINKS_JS : LANDING_LINKS_CSS, { headers: { ...HEADERS, 'content-type': `${path.endsWith('.js') ? 'text/javascript' : 'text/css'}; charset=utf-8`, 'cache-control': 'no-store' } });
     if (path === '/logo.png' || path === '/terms/logo.png') {
       const bytes = Uint8Array.from(atob(LOGO_BASE64), (character) => character.charCodeAt(0));
       return new Response(request.method === 'HEAD' ? null : bytes, { headers: { ...HEADERS, 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });

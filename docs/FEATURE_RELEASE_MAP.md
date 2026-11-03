@@ -2,6 +2,12 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Follow-up candidate: group Privacy v2.0, TOS v1.2
+  alignment and main landing header/footer policy links. Canonical pages
+  cross-link Beranda/Privacy/TOS/Status. Original app/assets are retained;
+  only root successful HTML is enhanced, no business API or auth changes.
+  39 focused tests pass; rollout evidence recorded separately in WORKLOG.
+
 - 2026-11-03 [Codex] Owner correction supersedes earlier named exclusions:
   public TOS v1.1 mentions only official services owned/operated by Marison.
   No unaffiliated application is named in body, metadata or public history.

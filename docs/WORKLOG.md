@@ -1,5 +1,23 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 Group Privacy And Landing Navigation Candidate
+
+- Owner explicitly requested group-wide Privacy and discoverable Terms on the
+  main landing and related pages. Privacy v2.0 and TOS v1.2 share canonical
+  links, version/history and light/dark controls. Previous Absensi source is
+  preserved, not redeployed from the dirty Maris Drive checkout. This update
+  supersedes earlier notes saying Privacy remains Absensi-only.
+- Root HTML enhancement is limited to public main-host successful HTML GET;
+  same-origin script adds header/footer links after React mounting, and a
+  server-rendered footer remains when JS is unavailable. CSP is retained;
+  body validators removed. API/assets/errors pass through. Staging fixture
+  is explicitly not a complete landing clone. No auth/DB/business changes.
+- 39 focused tests, scoped lint, bundle build/check and diff check pass.
+  Root npm audit still reports unrelated existing dependencies (1 high Zod,
+  5 moderate, 1 low); the deployed Worker has no third-party dependencies.
+  Staging/production rollout and browser acceptance pending at this entry.
+  Claim recorded in Issue #760; source PRs #762/#763 remain operations-only.
+
 ## 2026-11-03 [Codex] Terms scope wording corrected by owner
 
 - Supersedes the earlier named-exclusion wording: the owner clarified that
