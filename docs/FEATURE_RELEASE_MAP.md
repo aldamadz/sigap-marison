@@ -2,6 +2,19 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Staging follow-up live at
+  `marison-status-page-staging.aldamaaa-id.workers.dev`: 30 daily bars,
+  sampled uptime and coverage, planned-maintenance section, and incident
+  timeline. Real cron samples and daily aggregates match for all four services;
+  browser acceptance passed at mobile/desktop widths. No test incident or
+  maintenance remains. Production still runs the earlier status-page version.
+
+- 2026-11-03 [Codex] Follow-up in staging: 30-day daily history with honest
+  sample coverage, upcoming maintenance, and incident timeline with operator
+  publishing through D1. New forward-only D1 migration and separate staging
+  Workers/database; production `status.marisoncloud.com` remains on v1 until
+  explicitly promoted. No public write endpoint or fabricated history.
+
 - Public `status.marisoncloud.com` monitors Drive, AI Workspace, SIGAP and
   Marison Cloud from a Cloudflare Worker outside the origin servers.
 - A separate workers.dev scheduled Worker checks both public root and health

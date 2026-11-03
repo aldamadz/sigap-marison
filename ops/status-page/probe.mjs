@@ -8,6 +8,12 @@ export const SERVICES = [
 const TIMEOUT_MS = 8000;
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
+function jakartaDay(timestamp) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(timestamp);
+}
+
 async function readLimited(response, limit) {
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -95,11 +101,23 @@ export async function probeService(service, fetchImpl = fetch, checkedAt = Date.
 
 export async function runChecks(env, checkedAt = Date.now(), fetchImpl = fetch) {
   const results = await Promise.all(SERVICES.map((service) => probeService(service, fetchImpl, checkedAt)));
-  await env.DB.batch(results.map((result) => env.DB.prepare(
-    'INSERT INTO checks (service, slot, checked_at, outcome, latency_ms, http_status, reason) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(service, slot) DO UPDATE SET checked_at=excluded.checked_at, outcome=excluded.outcome, latency_ms=excluded.latency_ms, http_status=excluded.http_status, reason=excluded.reason',
-  ).bind(result.service, result.slot, result.checkedAt, result.outcome, result.latencyMs, result.httpStatus, result.reason)));
+  const day = jakartaDay(checkedAt);
+  const statements = results.flatMap((result) => [
+    env.DB.prepare('INSERT OR IGNORE INTO checks (service, slot, checked_at, outcome, latency_ms, http_status, reason) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(result.service, result.slot, result.checkedAt, result.outcome, result.latencyMs, result.httpStatus, result.reason),
+    env.DB.prepare(`INSERT INTO daily_checks (service, day, up_count, degraded_count, down_count, first_at, last_at)
+      SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1
+      ON CONFLICT(service, day) DO UPDATE SET
+        up_count=up_count+excluded.up_count,
+        degraded_count=degraded_count+excluded.degraded_count,
+        down_count=down_count+excluded.down_count,
+        last_at=MAX(last_at, excluded.last_at)`)
+      .bind(result.service, day, Number(result.outcome === 'up'), Number(result.outcome === 'degraded'), Number(result.outcome === 'down'), checkedAt, checkedAt),
+  ]);
+  await env.DB.batch(statements);
   if (Math.floor(checkedAt / 60000) % 1440 === 0) {
     await env.DB.prepare('DELETE FROM checks WHERE checked_at < ?').bind(checkedAt - RETENTION_MS).run();
+    await env.DB.prepare('DELETE FROM daily_checks WHERE day < ?').bind(jakartaDay(checkedAt - RETENTION_MS)).run();
   }
   return results;
 }

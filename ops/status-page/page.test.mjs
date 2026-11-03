@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import worker, { buildStatus, loadStatus } from './page.mjs';
+import worker, { buildStatus, loadStatus, renderHtml } from './page.mjs';
 
 const NOW = Date.UTC(2026, 10, 3, 5, 30, 0);
 const rows = (outcome = 'up', checkedAt = NOW - 15000) => [
@@ -13,12 +13,15 @@ const rows = (outcome = 'up', checkedAt = NOW - 15000) => [
 test('reports all four healthy services and sampled availability', () => {
   const data = buildStatus({
     recent: rows(),
-    totals: ['drive', 'ai', 'sigap', 'marison'].map((service) => ({ service, samples: 10, healthy: 9 })),
+    daily: ['drive', 'ai', 'sigap', 'marison'].map((service) => ({ service, day: '2026-11-03',
+      up_count: 9, down_count: 1, degraded_count: 0, first_at: NOW - 600000 })),
   }, NOW);
   assert.equal(data.overall, 'up');
   assert.equal(data.services.length, 4);
-  assert.equal(data.services[0].availability, '90.0%');
-  assert.equal(data.services[0].history.length, 24);
+  assert.equal(data.services[0].availability, '90.00%');
+  assert.equal(data.services[0].history.length, 30);
+  assert.equal(data.services[0].history.at(-1).status, 'down');
+  assert.equal(data.services[0].history[0].status, 'unknown');
 });
 
 test('stale observations never produce a green status', () => {
@@ -39,12 +42,45 @@ test('one failing observation is a warning and persistent failures are down', ()
   assert.equal(persistent.overall, 'down');
 });
 
-test('D1 queries load recent, weekly and hourly observations', async () => {
+test('D1 queries load recent, daily, incident and maintenance observations', async () => {
   const queries = [];
   const db = { prepare(sql) { queries.push(sql); return { bind() { return { all: async () => ({ results: queries.length === 1 ? rows() : [] }) }; } }; } };
   const status = await loadStatus(db, NOW);
-  assert.equal(queries.length, 3);
+  assert.equal(queries.length, 5);
   assert.equal(status.services.length, 4);
+});
+
+test('active incidents and maintenance have a visible timeline', () => {
+  const data = buildStatus({
+    recent: rows(),
+    incidents: [{ id: 'incident-1', title: 'Gangguan pengiriman', summary: 'Pengiriman tertunda',
+      severity: 'major', service_ids: '["sigap"]', started_at: NOW - 120000 }],
+    updates: [{ id: 'update-1', incident_id: 'incident-1', phase: 'identified',
+      message: 'Penyebab sedang diperbaiki', created_at: NOW - 60000 }],
+    maintenance: [{ id: 'maintenance-1', title: 'Pembaruan infrastruktur',
+      description: 'Pemeliharaan terjadwal', service_ids: '["drive","ai"]',
+      starts_at: NOW + 3600000, ends_at: NOW + 7200000 }],
+  }, NOW);
+  assert.equal(data.overall, 'degraded');
+  assert.equal(data.incidents[0].phase, 'identified');
+  assert.equal(data.incidents[0].timeline.length, 2);
+  assert.deepEqual(data.maintenance[0].serviceNames, ['Maris Drive', 'AI Workspace']);
+  assert.match(renderHtml(data), /Pembaruan infrastruktur/);
+  assert.match(renderHtml(data), /Penyebab sedang diperbaiki/);
+});
+
+test('missing probe data remains unknown even with an active incident', () => {
+  const data = buildStatus({ incidents: [{ id: 'incident-1', title: 'Gangguan SIGAP',
+    summary: 'Akses pengajuan terputus', severity: 'major', service_ids: '["sigap"]', started_at: NOW }] }, NOW);
+  assert.equal(data.overall, 'unknown');
+});
+
+test('public incident text is escaped before rendering', () => {
+  const data = buildStatus({ incidents: [{ id: 'incident-1', title: '<script>alert(1)</script>',
+    summary: 'Testing summary', severity: 'minor', service_ids: '["sigap"]', started_at: NOW }] }, NOW);
+  const html = renderHtml(data);
+  assert.ok(!html.includes('<script>alert(1)</script>'));
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
 test('status API fails closed when D1 is unavailable', async () => {
@@ -52,4 +88,13 @@ test('status API fails closed when D1 is unavailable', async () => {
   assert.equal(response.status, 503);
   const data = await response.json();
   assert.equal(data.overall, 'unknown');
+});
+
+test('page uses a versioned, uncached interaction script', async () => {
+  const html = renderHtml(buildStatus({ recent: rows() }, NOW));
+  assert.match(html, /src="\/app\.js\?v=20261103-history"/);
+  const response = await worker.fetch(new Request('https://status.marisoncloud.com/app.js'), {});
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.match(await response.text(), /\.history \.bar/);
 });

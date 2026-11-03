@@ -19,12 +19,12 @@ test('all public and health endpoints produce up observations', async () => {
     prepare(sql) {
       return { bind(...values) { rows.push({ sql, values }); return { run: async () => {} }; } };
     },
-    batch: async (statements) => assert.equal(statements.length, 4),
+    batch: async (statements) => assert.equal(statements.length, 8),
   };
   const checkedAt = Date.UTC(2026, 10, 3, 5, 23, 0);
   const result = await runChecks({ DB: db }, checkedAt, async (url) => responseFor(url));
   assert.deepEqual(result.map((item) => item.outcome), ['up', 'up', 'up', 'up']);
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 8);
   assert.equal(result[0].slot, Math.floor(checkedAt / 60000));
 });
 

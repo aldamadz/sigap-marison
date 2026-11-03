@@ -1,5 +1,34 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 staging history/timeline acceptance / Issue #760
+
+- Staging page and probe Workers are live on the separate staging D1. Four
+  public services are fresh/up; real raw and daily counts agree per service.
+  History-bar click, desktop/mobile layout without overflow, status API and
+  browser console passed. Simulated incident/maintenance records were removed.
+- Seventeen focused tests and the status Worker build passed. Versioned,
+  uncached `/app.js` prevents stale script behavior after page updates.
+- Source branch `feature/status-marisoncloud-page` awaits a staging PR.
+  Production domain, Workers and D1 remain unchanged for this follow-up.
+  Next: selective production promotion only after explicit request, with D1
+  backup and forward migration before uploading the probe.
+
+## 2026-11-03 [Codex] OPS-16 status history and incident follow-up / Issue #760
+
+- In progress on `feature/status-marisoncloud-page`: 30-day daily uptime bars,
+  sampled availability plus coverage, planned maintenance, and incident
+  timeline. Operator writes use validated D1 queries and a production flag;
+  the public Worker remains read-only.
+- New D1 `marison-status-staging` and separate staging probe/page Workers were
+  created. `schema.sql` and forward migration applied there only. D1 duplicate
+  insertion rehearsal confirmed `changes()` prevents double counting (1 then
+  0 changes); test rows were removed. Fifteen focused tests pass. Staging
+  preview serves all assets; simulated incident/maintenance are being used for
+  visual acceptance and must be removed before handoff.
+- Production status Worker, D1 schema and domain have not been changed for
+  this follow-up. Remaining: cron evidence, final responsive acceptance,
+  remove staging fixtures, source push/PR and explicit production request.
+
 ## 2026-11-03 [Codex] OPS-16 live Cloudflare rollout / Issue #760
 
 - `https://status.marisoncloud.com` is live on the `marison-status-page`
