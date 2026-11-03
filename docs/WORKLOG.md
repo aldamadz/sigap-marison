@@ -1,5 +1,18 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 public status page / Issue #760
+
+- Active branch `feature/status-marisoncloud-page` from main in an isolated
+  worktree. Cloudflare D1 `marison-status-prod` and scheduled probe Worker were
+  created outside SIGAP; the page Worker is built but not yet attached to the
+  production custom domain. DNS/custom-domain audit found no prior `status`
+  record or route. Four public endpoints and four health endpoints were
+  established; first scheduled sample and public smoke are pending.
+- Ten focused tests pass for healthy, degraded, down, stale, malformed and
+  database-unavailable paths. No credentials, document URLs or business POSTs
+  are used. Next: verify real cron samples, attach custom domain, inspect
+  desktop/mobile layout, create PRs and record deployment result.
+
 ## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
 
 - PR #754 staged the recommendation PDF layout follow-up; PR #755 selectively

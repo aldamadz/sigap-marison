@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
+
+- Public `status.marisoncloud.com` monitors Drive, AI Workspace, SIGAP and
+  Marison Cloud from a Cloudflare Worker outside the origin servers.
+- A separate workers.dev scheduled Worker checks both public root and health
+  endpoints every minute and writes bounded observations to D1. The page Worker
+  reads D1 only, so an origin outage does not prevent it from serving status.
+- Unknown/stale observations never display as healthy. The public page shows
+  24-hour history and seven-day sampled availability, not an SLA guarantee.
+- No SIGAP application, database, worker, or existing DNS route is changed.
+  Cloudflare account/zone failure remains a shared dependency. Release requires
+  real sample verification and production custom-domain smoke test.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
