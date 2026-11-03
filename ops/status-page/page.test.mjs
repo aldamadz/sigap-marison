@@ -30,6 +30,21 @@ test('stale observations never produce a green status', () => {
   assert.ok(data.services.every((service) => service.status === 'unknown'));
 });
 
+test('daily history uses four health bands without changing current condition', () => {
+  for (const [healthy, failed, expected] of [[10000, 0, 'up'], [9999, 1, 'degraded'],
+    [9900, 100, 'degraded'], [9899, 101, 'partial'], [9500, 500, 'partial'], [9499, 501, 'down']]) {
+    const data = buildStatus({ recent: rows(), daily: [{ service: 'drive', day: '2026-11-03',
+      up_count: healthy, down_count: failed, degraded_count: 0, first_at: NOW - 600000 }] }, NOW);
+    const day = data.services[0].history.at(-1);
+    assert.equal(day.status, expected);
+    assert.match(day.label, /sampel sehat \(10000 pemeriksaan\)/);
+    assert.equal(data.services[0].status, 'up');
+  }
+  const unknown = buildStatus({}, NOW).services[0].history.at(-1);
+  assert.equal(unknown.status, 'unknown');
+  assert.equal(unknown.availability, null);
+});
+
 test('one failing observation is a warning and persistent failures are down', () => {
   const oneFailure = buildStatus({ recent: [rows('down')[0], ...rows().slice(1)] }, NOW);
   assert.equal(oneFailure.services[0].status, 'degraded');
@@ -104,7 +119,7 @@ test('status API fails closed when D1 is unavailable', async () => {
 
 test('page uses a versioned, uncached interaction script', async () => {
   const html = renderHtml(buildStatus({ recent: rows() }, NOW));
-  assert.match(html, /src="\/app\.js\?v=20261103-history"/);
+  assert.match(html, /src="\/app\.js\?v=20261103-history-v2"/);
   const response = await worker.fetch(new Request('https://status.marisoncloud.com/app.js'), {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');

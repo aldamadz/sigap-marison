@@ -45,9 +45,13 @@ function historyFor(rows, now) {
     const day = jakartaDay(now - (HISTORY_DAYS - 1 - index) * DAY_MS);
     const row = buckets.get(day);
     const samples = number(row?.up_count) + number(row?.degraded_count) + number(row?.down_count);
-    const status = !samples ? 'unknown' : number(row.down_count) ? 'down'
-      : number(row.degraded_count) ? 'degraded' : 'up';
-    return { day, status, samples };
+    const ratio = samples ? number(row.up_count) / samples : null;
+    const status = ratio === null ? 'unknown' : ratio === 1 ? 'up'
+      : ratio >= 0.99 ? 'degraded' : ratio >= 0.95 ? 'partial' : 'down';
+    const availability = ratio === null ? null : (ratio * 100).toFixed(2) + '%';
+    const label = ratio === null ? 'Belum ada data'
+      : `${availability} sampel sehat (${samples} pemeriksaan)`;
+    return { day, status, samples, availability, label };
   });
 }
 
@@ -186,7 +190,7 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 .metric-label{font-size:11px;text-transform:uppercase;color:#76858e;margin-bottom:5px}.metric-value{font-size:13px;font-weight:600}.status-value{display:flex;align-items:center;gap:8px}.status-dot{width:8px;height:8px;border-radius:50%;background:#288e4e;flex:none}
 .service[data-status="degraded"] .status-dot{background:#c68310}.service[data-status="down"] .status-dot{background:#cb4949}.service[data-status="unknown"] .status-dot{background:#788d98}
 .history-block{grid-column:1/-1;display:flex;align-items:center;gap:17px;min-width:0}.history{display:grid;grid-template-columns:repeat(30,minmax(0,1fr));gap:3px;flex:1;min-width:0}.bar{height:20px;background:#2abf72;border-radius:2px;border:0;padding:0}.history .bar{width:100%;cursor:pointer}.history .bar:focus-visible{outline:2px solid #275b78;outline-offset:2px}
-.bar.degraded{background:#dfad4c}.bar.down{background:#de6969}.bar.unknown{background:#d9e1e5}.history-caption{font-size:11px;color:#71818b;white-space:nowrap}
+.bar.degraded{background:#e9c341}.bar.partial{background:#e58a35}.bar.down{background:#de6969}.bar.unknown{background:#d9e1e5}.history-caption{font-size:11px;color:#71818b;white-space:nowrap}
 .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;color:#6c7d86;font-size:11px}.legend-item{display:inline-flex;align-items:center;gap:7px}.legend .bar{width:12px;height:12px}
 .coverage{display:block;color:#71818b;font-size:11px;font-weight:400;margin-top:3px}.sections{display:grid;grid-template-columns:1fr 1.4fr;gap:32px;margin-top:48px;align-items:start}
 .status-section{border-top:2px solid #cbd9dc;padding-top:18px;min-width:0}.status-section h2{margin-bottom:17px}.empty{color:#73838c;font-size:13px;line-height:1.5;padding:17px 0}
@@ -229,7 +233,7 @@ async function refresh(){
       row.querySelectorAll('.history .bar').forEach((bar,index)=>{
         const entry=service.history[index];
         bar.className='bar '+entry.status;
-        bar.title=entry.day+': '+labels[entry.status]+' ('+entry.samples+' pemeriksaan)';
+        bar.title=entry.day+': '+entry.label;
         bar.setAttribute('aria-label',bar.title);
       });
     }
@@ -262,7 +266,7 @@ export function renderHtml(data, { preview = false } = {}) {
     <div><div class="metric-label">Kondisi</div><div class="metric-value status-value"><span class="status-dot" aria-hidden="true"></span><span data-field="status">${escape(service.label)}</span></div></div>
     <div><div class="metric-label">Respons terakhir</div><div class="metric-value" data-field="latency">${escape(service.latency)}</div></div>
     <div><div class="metric-label">Uptime sampel 30 hari</div><div class="metric-value" data-field="availability">${escape(service.availability)}</div><span class="coverage" data-field="coverage">${escape(service.coverage)}</span></div>
-    <div class="history-block"><div class="history" aria-label="Riwayat kondisi 30 hari">${service.history.map((entry) => `<button type="button" class="bar ${entry.status}" title="${escape(entry.day)}: ${LABELS[entry.status]} (${entry.samples} pemeriksaan)" aria-label="${escape(entry.day)}: ${LABELS[entry.status]} (${entry.samples} pemeriksaan)"></button>`).join('')}</div><span class="history-caption">30 hari terakhir</span></div>
+    <div class="history-block"><div class="history" aria-label="Riwayat kondisi 30 hari">${service.history.map((entry) => `<button type="button" class="bar ${entry.status}" title="${escape(entry.day)}: ${escape(entry.label)}" aria-label="${escape(entry.day)}: ${escape(entry.label)}"></button>`).join('')}</div><span class="history-caption">30 hari terakhir</span></div>
     <span class="domain" data-field="updated">${escape(service.updated)}</span>
   </li>`).join('');
   const maintenanceItems = data.maintenance.map((item) => `<li class="maintenance-item">
@@ -279,12 +283,12 @@ export function renderHtml(data, { preview = false } = {}) {
     <ol class="timeline">${item.timeline.map((update) => `<li class="${escape(update.phase)}"><strong>${escape(update.phaseLabel)}</strong><p>${escape(update.message)}</p><time datetime="${new Date(update.at).toISOString()}">${escape(update.atText)}</time></li>`).join('')}</ol>
   </li>`).join('');
   const generated = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(data.generatedAt);
-  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-history" defer></script></head>
+return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-history-v2" defer></script></head>
   <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></header>
   ${preview ? '<div class="preview-banner">Pratinjau staging: probe layanan production, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
   <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div>
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
-  <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>Beroperasi</span><span class="legend-item"><span class="bar degraded"></span>Gangguan sebagian</span><span class="legend-item"><span class="bar down"></span>Gangguan</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
+  <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>100% sehat</span><span class="legend-item"><span class="bar degraded"></span>99–&lt;100% sehat</span><span class="legend-item"><span class="bar partial"></span>95–&lt;99% sehat</span><span class="legend-item"><span class="bar down"></span>&lt;95% sehat</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
   <div class="sections"><section class="status-section" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Pemeliharaan terjadwal</h2>${maintenanceItems ? `<ul class="maintenance-list">${maintenanceItems}</ul>` : '<p class="empty">Tidak ada pemeliharaan yang dijadwalkan.</p>'}</section>
   <section class="status-section" aria-labelledby="incidents-title"><div class="section-heading"><h2 id="incidents-title">Riwayat insiden</h2><span>90 hari terakhir</span></div>${incidentItems ? `<ul class="incident-list">${incidentItems}</ul>` : '<p class="empty">Belum ada insiden yang tercatat.</p>'}</section></div>
   <div class="note"><strong>Tentang pemantauan.</strong> Pemeriksaan dilakukan dari luar server Marison setiap menit. Uptime dihitung dari sampel yang berhasil dikumpulkan dalam 30 hari; persentase cakupan menunjukkan kelengkapan pengukuran, bukan jaminan SLA. Jika pemeriksaan berhenti lebih dari 3 menit, status ditampilkan belum tersedia.</div>
