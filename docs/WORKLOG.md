@@ -1,5 +1,27 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 themes and platform Terms published
+
+- Released `f54022b` to staging then production page Worker. Light/dark/system
+  controls apply before paint, persist locally, and tolerate unavailable storage.
+  Status/modal/Terms follow theme; reload, mobile overflow and browser-console
+  acceptance passed. Thirty-four focused tests, scoped lint/build/diff passed.
+- Footer links to the user's Privacy Policy and new canonical
+  `https://marisoncloud.com/terms`. TOS v1.0 covers all Marison Cloud services
+  except XAU, including explicit service/data/AI/status/feed boundaries and
+  dated history. Existing privacy page remains Absensi-specific, which the TOS
+  states; no silent expansion or legal-review/compliance guarantee is claimed.
+- Added only route `marisoncloud.com/terms*` to the existing status Worker;
+  canonical Terms and local theme/logo assets serve without D1. Other matched
+  main paths pass through. All old routes unchanged; main root/privacy HTTP200
+  bodies have identical SHA-256 before/after. No app restart, DB migration,
+  XAU change or modification to the dirty Maris Drive checkout.
+- User explicitly requires future relevant changes to keep TOS updated:
+  `docs/legal/TERMS_MAINTENANCE.md` is the required release-review checklist.
+  Review every service change; version/date/history must change when terms do.
+  Material legal/commercial changes require owner/legal review, not autonomous
+  publication. Source PR #762/#763 remain unmerged operations records.
+
 ## 2026-11-03 [Codex] OPS-16 subscription dialog and Atom released
 
 - Staging then production page Worker released from `d5745ec`. Berlangganan

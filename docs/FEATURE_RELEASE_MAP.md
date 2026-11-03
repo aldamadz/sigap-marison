@@ -2,6 +2,14 @@
 
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
+- 2026-11-03 [Codex] Light/dark/system themes and policy footer links live.
+  `marisoncloud.com/terms` edge-hosts TOS v1.0 for all services except XAU,
+  without rebuilding the main app. Privacy remains the existing Absensi policy.
+  Required future release rule: review/update versioned TOS for relevant feature,
+  access, data, notification or responsibility changes; follow
+  `docs/legal/TERMS_MAINTENANCE.md`. Thirty-four tests and responsive theme/live
+  route checks pass; old main root/privacy bodies and unrelated routes unchanged.
+
 - 2026-11-03 [Codex] Subscription dialog with RSS/Atom URLs and copy buttons
   live after staging. Added Atom 1.0, kept existing RSS URL compatible.
   Native modal close/Escape/focus, copy, responsive checks and 28 tests pass.
