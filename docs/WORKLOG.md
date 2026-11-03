@@ -1,5 +1,15 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 source PR conflict isolated / Issue #760
+
+- Closed superseded PR #761. Replacement staging PR #763 starts from staging
+  and contains byte-identical `ops/status-page` source from production candidate
+  `1f0b081`, with additive staging documentation. Selective main PR #762 remains
+  separate. This corrects the earlier open/conflicted PR status without bringing
+  unrelated staging application changes into the production candidate.
+- Runtime remains live as verified below. Source PRs are deliberately unmerged
+  pending coordinated app-workflow handling; do not claim CI success or merge.
+
 ## 2026-11-03 [Codex] OPS-16 production status integration live / Issue #760
 
 - Production D1 export was saved locally and SHA-256 verified before change;
