@@ -1,5 +1,94 @@
 # SIGAP Feature and Release Map
 
+## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
+
+- 2026-11-03 [Codex] Group Privacy v2.0 and TOS v1.2 now live after staging
+  acceptance. Main landing has header/footer policy links; legal pages and
+  status are connected. Desktop/mobile light/dark and navigation verified;
+  39 tests/lint/bundle checks pass. One new main-host route with strict handler
+  guards, all prior zone routes preserved. No business app/DB/auth changes.
+  This completion supersedes the candidate entry immediately below.
+
+- 2026-11-03 [Codex] Follow-up candidate: group Privacy v2.0, TOS v1.2
+  alignment and main landing header/footer policy links. Canonical pages
+  cross-link Beranda/Privacy/TOS/Status. Original app/assets are retained;
+  only root successful HTML is enhanced, no business API or auth changes.
+  39 focused tests pass; rollout evidence recorded separately in WORKLOG.
+
+- 2026-11-03 [Codex] Owner correction supersedes earlier named exclusions:
+  public TOS v1.1 mentions only official services owned/operated by Marison.
+  No unaffiliated application is named in body, metadata or public history.
+  Staging then production verified; 34 tests pass. Maintenance policy corrected.
+
+- 2026-11-03 [Codex] Light/dark/system themes and policy footer links live.
+  `marisoncloud.com/terms` edge-hosts TOS v1.0 for all services except XAU,
+  without rebuilding the main app. Privacy remains the existing Absensi policy.
+  Required future release rule: review/update versioned TOS for relevant feature,
+  access, data, notification or responsibility changes; follow
+  `docs/legal/TERMS_MAINTENANCE.md`. Thirty-four tests and responsive theme/live
+  route checks pass; old main root/privacy bodies and unrelated routes unchanged.
+
+- 2026-11-03 [Codex] Subscription dialog with RSS/Atom URLs and copy buttons
+  live after staging. Added Atom 1.0, kept existing RSS URL compatible.
+  Native modal close/Escape/focus, copy, responsive checks and 28 tests pass.
+
+- 2026-11-03 [Codex] Current condition is latest UP/DOWN, with stale/missing
+  evidence explicitly unknown. RSS 2.0 at `/rss.xml` is live after staging:
+  probe state changes, incidents/handling, maintenance. Stable GUIDs and
+  read-only feed; users subscribe through RSS readers, not automatic email.
+  Twenty-six focused tests and live XML/browser checks pass.
+
+- 2026-11-03 [Codex] Four-color daily history live after staging acceptance:
+  green 100% healthy samples, yellow 99-<100%, orange 95-<99%, red <95%.
+  Gray means no data; current service state is independent. No historical
+  measurement rewrite. Twenty-two focused tests and responsive acceptance pass.
+
+- 2026-11-03 [Codex] Production status follow-up live after explicit request.
+  D1 export and Time Travel bookmark captured before ordered migrations; raw
+  and daily counts match. Probe Worker now reads production SIGAP maintenance
+  revision 0 through `sigap-maintenance-production`; page Worker serves the
+  30-day history, maintenance section and incident timeline at the production
+  domain. Four public services are fresh/up; desktop/mobile and API/assets
+  passed. No SIGAP app or maintenance Worker change. Source PR #761 (staging)
+  and #762 (main) are open and unmerged because their merge would trigger an
+  unrelated SIGAP app deployment; root audit has an existing high advisory.
+
+- 2026-11-03 [Codex] SIGAP maintenance integration candidate: the status probe
+  reads the maintenance Durable Object through a same-account Service binding,
+  then copies only the public schedule to D1 with revision guards. Stale sync
+  is shown explicitly; full maintenance remains visible past its estimate.
+  Incident handling remains an operator-authored timeline alongside automatic
+  probe health. Staging binding and D1 migration are live; production rollout
+  requires the ordered D1 migrations and separate Worker uploads.
+
+- 2026-11-03 [Codex] Staging follow-up live at
+  `marison-status-page-staging.aldamaaa-id.workers.dev`: 30 daily bars,
+  sampled uptime and coverage, planned-maintenance section, and incident
+  timeline. Real cron samples and daily aggregates match for all four services;
+  browser acceptance passed at mobile/desktop widths. No test incident or
+  maintenance remains. Production still runs the earlier status-page version.
+
+- 2026-11-03 [Codex] Follow-up in staging: 30-day daily history with honest
+  sample coverage, upcoming maintenance, and incident timeline with operator
+  publishing through D1. New forward-only D1 migration and separate staging
+  Workers/database; production `status.marisoncloud.com` remains on v1 until
+  explicitly promoted. No public write endpoint or fabricated history.
+
+- Public `status.marisoncloud.com` monitors Drive, AI Workspace, SIGAP and
+  Marison Cloud from a Cloudflare Worker outside the origin servers.
+- A separate workers.dev scheduled Worker checks both public root and health
+  endpoints every minute and writes bounded observations to D1. The page Worker
+  reads D1 only, so an origin outage does not prevent it from serving status.
+- Unknown/stale observations never display as healthy. The public page shows
+  24-hour history and seven-day sampled availability, not an SLA guarantee.
+- No SIGAP application, database, worker, or existing DNS route is changed.
+  Cloudflare account/zone failure remains a shared dependency. Release requires
+  real sample verification and production custom-domain smoke test.
+- 2026-11-03 [Codex] Production custom domain is live. The first two scheduled
+  rounds recorded eight successful public/health observations; desktop/mobile,
+  status API, asset routes and manual refresh passed. Source PR is pending
+  GitHub connector confirmation; app deploy is intentionally not triggered.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
