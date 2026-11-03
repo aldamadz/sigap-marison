@@ -122,7 +122,7 @@ test('status API fails closed when D1 is unavailable', async () => {
 
 test('page uses a versioned, uncached interaction script', async () => {
   const html = renderHtml(buildStatus({ recent: rows() }, NOW));
-  assert.match(html, /src="\/app\.js\?v=20261103-current-rss-v1"/);
+  assert.match(html, /src="\/app\.js\?v=20261103-subscribe-v1"/);
   const response = await worker.fetch(new Request('https://status.marisoncloud.com/app.js'), {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');

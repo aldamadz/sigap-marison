@@ -209,6 +209,19 @@ const items = events.map((event) => `<item><title>${xml(event.title)}</title><li
   return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Status Layanan Marison Cloud</title><link>${origin}/</link><description>Kabar kondisi layanan, insiden, dan maintenance Marison Cloud.</description><language>id</language><ttl>1</ttl><lastBuildDate>${new Date(events[0]?.at ?? now).toUTCString()}</lastBuildDate><atom:link href="${origin}/rss.xml" rel="self" type="application/rss+xml"/>${items}</channel></rss>`;
 }
 
+export function renderAtom(events, origin = 'https://status.marisoncloud.com', now = Date.now()) {
+  const entries = events.map((event) => `<entry><id>${origin}/events/${encodeURIComponent(event.id)}</id><title type="text">${xml(event.title)}</title><updated>${new Date(event.at).toISOString()}</updated><link href="${origin}/#${event.section}"/><summary type="text">${xml(event.description)}</summary></entry>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="id"><id>${origin}/</id><title>Status Layanan Marison Cloud</title><updated>${new Date(events[0]?.at ?? now).toISOString()}</updated><author><name>Tim IT Marison</name></author><link rel="self" type="application/atom+xml" href="${origin}/feed.atom"/><link rel="alternate" href="${origin}/"/>${entries}</feed>`;
+}
+
+// Lucide Copy, Rss, and X icons (ISC); see LUCIDE_LICENSE.txt.
+const ICONS = {
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  rss: '<path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>',
+  close: '<path d="M18 6 6 18m0-12 12 12"/>',
+};
+const icon = (name) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+
 function escape(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -222,6 +235,7 @@ const CSS = String.raw`
 .brand{display:flex;align-items:center;gap:18px}.brand img{width:118px;height:48px;object-fit:contain;object-position:left}.brand-mark{border-left:1px solid #dce3e6;padding-left:18px;font-size:15px;font-weight:700}
 .preview-banner{background:#fff4d8;border-bottom:1px solid #dfc885;color:#694b16;font-size:12px;padding:8px 24px;text-align:center}
 .intro-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}.rss-link{font-size:13px;font-weight:600;color:#966215;text-decoration:none;padding:10px 4px}.rss-link:hover{text-decoration:underline}.rss-link:focus-visible{outline:2px solid #966215;outline-offset:2px}
+.subscribe-trigger{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;cursor:pointer}.subscribe-dialog{width:min(540px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:auto;margin:auto;padding:24px;border:1px solid #cdd8dc;border-radius:8px;background:#fff;color:#202c34;box-shadow:0 20px 65px #142b3033}.subscribe-dialog::backdrop{background:#101b2866}.subscribe-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.subscribe-heading h2{font-size:18px}.icon-button{display:grid;place-items:center;width:40px;height:40px;padding:0;border:0;border-radius:4px;background:transparent;color:#65757f;cursor:pointer;flex-shrink:0}.icon-button:hover{background:#edf3f0;color:#254336}.icon-button:focus-visible{outline:2px solid #269653;outline-offset:2px}.feed-section{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;border-bottom:1px solid #dce3e6;padding-bottom:12px;margin-bottom:20px}.feed-label{display:block;font-size:13px;font-weight:600;margin:20px 0 9px}.feed-field{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:center;border:1px solid #ccd7dc;border-radius:5px;background:#f7f9fa;padding:3px 4px 3px 12px}.feed-field input{width:100%;min-width:0;padding:8px 0;border:0;outline:0;background:transparent;color:#354653;font-size:13px;font-family:inherit}.feed-field:focus-within{outline:2px solid #269653;outline-offset:2px}.copy-feedback{min-height:20px;margin-top:12px;font-size:12px;color:#287346}.subscribe-dialog:focus{outline:none}@media(max-width:760px){.intro{flex-wrap:wrap}.subscribe-dialog{padding:20px}.intro-actions{flex-wrap:wrap}}
 .top-link{font-size:13px;color:#355163;text-decoration:none}.top-link:hover{text-decoration:underline}main{padding:44px 0 80px}
 .eyebrow{color:#39705b;font-size:12px;font-weight:700;text-transform:uppercase}.intro{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:32px}
 h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.subtitle{font-size:14px;color:#647582;line-height:1.55}
@@ -258,13 +272,33 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 const APP_JS = String.raw`
 const labels={up:'UP',down:'DOWN',unknown:'BELUM DIKETAHUI'};
 const button=document.querySelector('#refresh');
+const subscribeDialog=document.querySelector('#subscribe-dialog');
+document.querySelector('#subscribe').addEventListener('click',()=>subscribeDialog.showModal());
+document.querySelector('#close-subscribe').addEventListener('click',()=>subscribeDialog.close());
+subscribeDialog.addEventListener('click',event=>{
+  if(event.target!==subscribeDialog)return;
+  const rect=subscribeDialog.getBoundingClientRect();
+  if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)subscribeDialog.close();
+});
+subscribeDialog.addEventListener('close',()=>{document.querySelector('#copy-feedback').textContent=''});
+subscribeDialog.querySelectorAll('[data-copy]').forEach(copyButton=>copyButton.addEventListener('click',async()=>{
+  const input=document.getElementById(copyButton.dataset.copy);
+  copyButton.disabled=true;
+  try{
+    await navigator.clipboard.writeText(input.value);
+    document.querySelector('#copy-feedback').textContent='Tautan '+copyButton.dataset.format+' disalin.';
+  }catch{
+    input.focus();input.select();
+    document.querySelector('#copy-feedback').textContent='Salin otomatis tidak tersedia. Tautan sudah dipilih.';
+  }finally{copyButton.disabled=false}
+}));
 async function refresh(){
   button.disabled=true;
   try{
     const response=await fetch('/api/status',{cache:'no-store'});
     if(!response.ok)throw new Error('Status tidak tersedia');
     const data=await response.json();
-    if(data.timelineVersion!==document.body.dataset.timelineVersion){location.reload();return}
+    if(data.timelineVersion!==document.body.dataset.timelineVersion){if(!subscribeDialog.open)location.reload();return}
     const overview=document.querySelector('#overview');
     overview.dataset.status=data.overall;
     document.querySelector('#overall-label').textContent=data.overallLabel;
@@ -309,6 +343,12 @@ setInterval(refresh,60000);
 `;
 
 export function renderHtml(data, { preview = false } = {}) {
+  const feedOrigin = preview ? 'https://marison-status-page-staging.aldamaaa-id.workers.dev' : 'https://status.marisoncloud.com';
+  const subscriptionDialog = `<dialog id="subscribe-dialog" class="subscribe-dialog" aria-labelledby="subscribe-title">
+    <div class="subscribe-heading"><h2 id="subscribe-title">Berlangganan kabar</h2><button id="close-subscribe" class="icon-button" type="button" aria-label="Tutup dialog" title="Tutup">${icon('close')}</button></div>
+    <div class="feed-section">${icon('rss')} RSS</div>
+    ${[['rss', 'RSS', '/feed.rss'], ['atom', 'Atom', '/feed.atom']].map(([id, label, path]) => `<label class="feed-label" for="${id}-url">${label} feed</label><div class="feed-field"><input id="${id}-url" type="url" readonly value="${feedOrigin}${path}" spellcheck="false"><button type="button" class="icon-button" data-copy="${id}-url" data-format="${label}" aria-label="Salin tautan ${label}" title="Salin tautan ${label}">${icon('copy')}</button></div>`).join('')}
+    <p id="copy-feedback" class="copy-feedback" role="status" aria-live="polite"></p></dialog>`;
   const rows = data.services.map((service) => `<li class="service" data-service="${service.id}" data-status="${service.status}">
     <div class="service-name"><a href="${service.url}" target="_blank" rel="noopener noreferrer">${escape(service.name)}</a><span class="domain">${escape(service.domain)}</span></div>
     <div><div class="metric-label">Kondisi</div><div class="metric-value status-value"><span class="status-dot" aria-hidden="true"></span><span data-field="status">${escape(service.label)}</span></div></div>
@@ -331,16 +371,16 @@ export function renderHtml(data, { preview = false } = {}) {
     <ol class="timeline">${item.timeline.map((update) => `<li class="${escape(update.phase)}"><strong>${escape(update.phaseLabel)}</strong><p>${escape(update.message)}</p><time datetime="${new Date(update.at).toISOString()}">${escape(update.atText)}</time></li>`).join('')}</ol>
   </li>`).join('');
   const generated = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(data.generatedAt);
-return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-current-rss-v1" defer></script></head>
+return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="alternate" type="application/atom+xml" title="Kabar Status Marison Cloud (Atom)" href="/feed.atom"><link rel="icon" href="/logo.png"><style>${CSS}</style><script src="/app.js?v=20261103-subscribe-v1" defer></script></head>
   <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></header>
   ${preview ? '<div class="preview-banner">Pratinjau staging: probe layanan production, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
-  <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><div class="intro-actions"><a class="rss-link" href="/rss.xml" title="Berlangganan kabar melalui pembaca RSS">RSS</a><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div></div>
+  <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><div class="intro-actions"><button class="rss-link subscribe-trigger" id="subscribe" type="button" aria-haspopup="dialog">${icon('rss')} Berlangganan</button><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div></div>
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
   <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>100% sehat</span><span class="legend-item"><span class="bar degraded"></span>99–&lt;100% sehat</span><span class="legend-item"><span class="bar partial"></span>95–&lt;99% sehat</span><span class="legend-item"><span class="bar down"></span>&lt;95% sehat</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
   <div class="sections"><section class="status-section" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Pemeliharaan terjadwal</h2>${maintenanceItems ? `<ul class="maintenance-list">${maintenanceItems}</ul>` : '<p class="empty">Tidak ada pemeliharaan yang dijadwalkan.</p>'}</section>
   <section class="status-section" aria-labelledby="incidents-title"><div class="section-heading"><h2 id="incidents-title">Riwayat insiden</h2><span>90 hari terakhir</span></div>${incidentItems ? `<ul class="incident-list">${incidentItems}</ul>` : '<p class="empty">Belum ada insiden yang tercatat.</p>'}</section></div>
   <div class="note"><strong>Tentang pemantauan.</strong> Pemeriksaan dilakukan dari luar server Marison setiap menit. Uptime dihitung dari sampel yang berhasil dikumpulkan dalam 30 hari; persentase cakupan menunjukkan kelengkapan pengukuran, bukan jaminan SLA. Jika pemeriksaan berhenti lebih dari 3 menit, status ditampilkan belum tersedia.</div>
-  <footer>Waktu ditampilkan dalam WIB (UTC+7).</footer></main></body></html>`;
+  <footer>Waktu ditampilkan dalam WIB (UTC+7).</footer></main>${subscriptionDialog}</body></html>`;
 }
 
 const HEADERS = {
@@ -359,13 +399,14 @@ export default {
       return new Response(request.method === 'HEAD' ? null : bytes, { headers: { ...HEADERS, 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
     }
     if (path === '/app.js') return new Response(request.method === 'HEAD' ? null : APP_JS, { headers: { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
-    if (path === '/rss.xml') {
+    if (['/rss.xml', '/feed.rss', '/atom.xml', '/feed.atom'].includes(path)) {
       try {
         const events = await loadFeed(env.DB);
         const origin = env.STATUS_ENVIRONMENT === 'staging'
           ? 'https://marison-status-page-staging.aldamaaa-id.workers.dev' : 'https://status.marisoncloud.com';
-        return new Response(request.method === 'HEAD' ? null : renderRss(events, origin), {
-          headers: { ...HEADERS, 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'no-store' },
+        const atom = path === '/atom.xml' || path === '/feed.atom';
+        return new Response(request.method === 'HEAD' ? null : atom ? renderAtom(events, origin) : renderRss(events, origin), {
+          headers: { ...HEADERS, 'content-type': `${atom ? 'application/atom+xml' : 'application/rss+xml'}; charset=utf-8`, 'cache-control': 'no-store' },
         });
       } catch {
         return new Response(request.method === 'HEAD' ? null : 'Feed sementara tidak tersedia', { status: 503, headers: { ...HEADERS, 'cache-control': 'no-store' } });
