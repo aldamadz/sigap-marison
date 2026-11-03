@@ -21,6 +21,6 @@ export const bffQuerySchema = z.object({
 export type BffQuery = z.infer<typeof bffQuerySchema>;
 
 export const loginSchema = z.object({
-  email: z.string().trim().email().transform((value) => value.toLowerCase()),
+  email: z.string().trim().email().toLowerCase(),
   password: z.string().min(1).max(4096),
 });
