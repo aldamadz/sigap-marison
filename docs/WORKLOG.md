@@ -1,5 +1,23 @@
 # Worklog
 
+## 2026-11-03 [Codex] SEC-03 Zod4 compatibility / Issue #766
+
+- User requested upgrade and validation after the existing high Zod advisory
+  blocked KEU routing. Branch `fix/zod4-validation-security` from main; staging
+  only. No production, live database or business dispatch changes.
+- Pinned Zod4.6.7 in all runtime workspaces and documentation overrides. Kept
+  unrelated dependency versions intact. Native email lowercase normalization
+  replaces transform to preserve credential typing under both TypeScript modes.
+- Isolated Linux installation:217 related tests, lint, typecheck and frontend,
+  backend/shared and Zudoku builds pass. New bounded regression checks collection
+  size rejection before per-element issues; no live load/exploit test performed.
+- Root audit:0 high/critical,21 moderate/1 low (runtime-only5 moderate/1 low).
+  Documentation Zod findings removed;19 unrelated findings remain, including
+ 10 high/2 critical. Do not describe the whole documentation toolchain as clean.
+- Pending integration, full dependency-change CI, AUTH-09 validation and staging
+  rollout/smoke. Source node_modules junction was left untouched; testing uses an
+  isolated build folder rather than mutating the user's shared dependency tree.
+
 ## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
 
 - PR #754 staged the recommendation PDF layout follow-up; PR #755 selectively
