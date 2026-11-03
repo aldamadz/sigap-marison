@@ -12,6 +12,10 @@
 - No SIGAP application, database, worker, or existing DNS route is changed.
   Cloudflare account/zone failure remains a shared dependency. Release requires
   real sample verification and production custom-domain smoke test.
+- 2026-11-03 [Codex] Production custom domain is live. The first two scheduled
+  rounds recorded eight successful public/health observations; desktop/mobile,
+  status API, asset routes and manual refresh passed. Source PR is pending
+  GitHub connector confirmation; app deploy is intentionally not triggered.
 
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 

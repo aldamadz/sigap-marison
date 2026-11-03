@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-03 [Codex] OPS-16 live Cloudflare rollout / Issue #760
+
+- `https://status.marisoncloud.com` is live on the `marison-status-page`
+  Cloudflare Worker. `marison-status-probe` runs every minute on workers.dev;
+  D1 `marison-status-prod` records real checks. At release, all four services
+  returned `up` across two scheduled rounds. Final domain returned HTTP 200
+  for page, API, JavaScript and logo. Manual refresh advanced to the next
+  sample with no browser error; desktop and 390px mobile were inspected.
+- The page Worker serves from D1 and embeds its own logo. It has no origin
+  dependency or production SIGAP app/data change. Probe's public fetch route
+  returns 404; page workers.dev preview and temporary canary were removed.
+  Cloudflare zone/account failure remains a shared dependency. Availability
+  stays "Belum cukup data" until ten samples exist, then uses seven-day samples.
+- Source commit `f9b680d` was pushed on the feature branch. GitHub MCP opened
+  an interactive confirmation form for the staging PR but did not create it;
+  CLI token cannot read pull requests. Do not claim a PR or merge yet. Because
+  SIGAP's staging/main push workflows deploy the app even for ops-only changes,
+  source merge requires coordination; the independent status service is live.
+
 ## 2026-11-03 [Codex] OPS-16 public status page / Issue #760
 
 - Active branch `feature/status-marisoncloud-page` from main in an isolated
