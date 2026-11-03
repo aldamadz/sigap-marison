@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## SEC-03 Zod4 Validation Security (2026-11-03, Issue #766)
+
+- 2026-11-03 [Codex] `fix/zod4-validation-security` upgrades root, backend,
+  shared and documentation Zod to4.6.7 for GHSA-mrhx-c7xc-m3w5. Staging only;
+  no production authorization. No database migration or business resend.
+- Retain login normalization/password bytes, BFF defaults/record values,
+  HTTP400 field errors, environment defaults and strict outbound contracts.
+  Parsed Asset/Unit/Non Unit/Fund fixtures match captured Zod3 JSON hashes.
+- Linux lint, typecheck, frontend/backend builds and217 related tests pass.
+  Zudoku build passes. Root audit has0 high/critical; documentation still has
+  unrelated10 high/2 critical findings requiring a separate dependency review.
+- Pending: staging integration including AUTH-09 desktop validators, CI,
+  coordinated application/worker rollout and public smoke. This unblocks the
+  pre-existing Zod audit failure on KEU routing candidate PR #765, not its release.
+
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
 - 2026-10-23 [Codex] Newly published high/critical advisories affect pinned
