@@ -71,8 +71,14 @@ outage cannot break the status page branding. Never commit `dist/`.
 
 ## RSS subscriptions
 
-The public RSS 2.0 feed is `https://status.marisoncloud.com/rss.xml`, linked
-from the page and advertised through RSS autodiscovery. Users subscribe with
+The Berlangganan button opens a native modal with readonly RSS and Atom URLs,
+copy buttons and accessible feedback. Escape/close restore focus; clipboard
+denial selects the URL for manual copy. The modal uses bundled Lucide icons
+under `LUCIDE_LICENSE.txt`, without remote assets.
+
+RSS 2.0 is available at `https://status.marisoncloud.com/feed.rss` and the
+existing `/rss.xml`. Atom 1.0 is at `/feed.atom` (alias `/atom.xml`). Both are
+advertised through feed autodiscovery and use the same event source. Users subscribe with
 their own RSS reader; no email address, device permission, or subscriber data
 is collected, and this does not itself send email/WhatsApp/push notifications.
 Notifications depend on the reader's polling/notification settings.
