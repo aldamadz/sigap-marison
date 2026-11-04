@@ -104,6 +104,7 @@ for (const file of allChangedFiles) {
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
   if (/revision_recommendation_task.*\.sql$/u.test(file)) gates.add('revision-recommendation-sql');
   if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
+  if (/preserve_external_unit_addendum_review.*\.sql$|unit_external_addendum_review.*\.sql$/u.test(file)) gates.add('unit-external-addendum-sql');
     if (/registration_draft_(reservation_lifecycle|recommendation_scope|recommendation_office_guard|helper_execution).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
   if (/external_only.*projects.*\.sql$/u.test(file)) gates.add("external-project-source-sql");
@@ -166,6 +167,10 @@ for (const gate of gates) {
   if (gate === 'unit-partial-readiness-sql') {
     run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--partial']);
     run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--partial', '--production-shape']);
+  }
+  else if (gate === 'unit-external-addendum-sql') {
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--external-addendum']);
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--external-addendum', '--production-shape']);
   }
   else if (gate === 'delegated-office-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--delegated-offices']);
   else if (gate === 'revision-appendix-pdf') run('node', ['--test','scripts/test-revision-appendix.mjs']);
