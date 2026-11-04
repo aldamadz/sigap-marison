@@ -2,6 +2,14 @@
 
 ## REC-06 Recommendation Enabled During Revision (2026-11-04, Issue #773)
 
+- 2026-11-04 [Codex] Completed staging and selective production after explicit
+  authorization. Live staging5c467fe51c7a / productioned124b690cec; PR774-779.
+ 0900+1000 ledger/ACLs verified,39 targeted tests and PR CI passed. Actual
+  requester/IT inbox acceptance passed under staging rollback. Recovered only
+  the missing task for001/MBP/03.14-000.3.1/XI/2026 as016/UAI/PBO.4/XI/2026;
+  source/revision/signature/outbound fingerprints unchanged. No approval, resend,
+  PDF rewrite or worker restart. Details in the dated completion worklog.
+
 - Follow-up20261104100000 restricts allocation to active requests; completed,
   cancelled and rejected archives never acquire new tasks during metadata edits.
   Added forward-only because0900 had already reached staging.
