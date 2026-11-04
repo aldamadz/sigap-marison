@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-04 [Codex] Quality baseline merged; staging runtime rollout pending / Issue #769
+
+- #769 fix merged into staging as `314635c` (PR #786) after its Quality Gate
+  passed. Deploy Staging run 41784282776 passed the full quality job in 9m43s
+  but the deploy step stopped on the coordinated-worker guard: only `dockerfile`
+  differs in the worker set, from the SEC-04 Node 22.23.4 pin, and the staging
+  Compose project builds app, PDF worker, Marison sync and Marison outbound from
+  the same `agenda-flow:staging` image.
+- Observed state: staging source `314635c`; staging runtime `/health/version`
+  still `5c467fe` with `/health/ready` 200; production runtime `ed124b6` with
+  `/health/ready` 200. No migration, worker restart, secret, business data or
+  production change was made, and the guard was not bypassed.
+- Next: an operator with staging host access rebuilds `agenda-flow:staging` and
+  recreates `agenda-flow-staging`, `agenda-pdf-worker-staging`,
+  `agenda-marison-sync-staging` and `agenda-marison-outbound-staging` in a
+  coordinated window without a live PDF lease, then runs
+  `bash scripts/deploy-app.sh staging <staging-head>` for the head that includes
+  this entry and smoke-tests `https://sigap.marison-testing.biz.id`.
+
 ## 2026-11-04 [Codex] SEC-04 staging integration / Issue #782
 
 - PR #784 merged into staging as `21a99c8` after the branch absorbed
