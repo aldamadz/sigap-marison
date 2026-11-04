@@ -1,5 +1,42 @@
 # Worklog
 
+## 2026-11-04 [Codex] REC-06 completed in staging and production / Issue #773
+
+- User explicitly authorized production and narrow task recovery. Sourcef1f4703
+  plus active-only follow-up07eab6e; PR #774/#775/#776 then #777/#778/#779.
+  Live staging5c467fe51c7aecdc678e49d7a789d63afbf62052 contains production
+  ed124b690cecea1e89a977b1dc09620e08f1c8aa. Both PR quality/audit gates passed;
+ 39 targeted Vitest tests, lint/typecheck/build and real canonical PostgreSQL
+  requester/IT inbox, both factory shapes, replay, late rollback and concurrent
+  lock-order tests pass. No unrelated full-suite refresh or weakened tests.
+- Staging applied0900 then forward-only1000 after rehearsals. Actual Hariono
+  tester requester->draft->submit->IT inbox acceptance passed in a full rollback;
+  temporary PBO reviewer addition was needed only for its old PRC single-account
+  fixture and did not persist. Counts remained42/179/5/75 for surat/signatures/
+  tasks/reservations. No production employee data was used for staging acceptance.
+- Production applied20261104090000 and20261104100000 atomically after rollback
+  rehearsal and staged runtime ancestry verification. Canonical owners/ACLs and
+  independent recommendation signature-guard body were preserved. Migration
+  alone left100 surat/446 signatures/10 tasks/151 reservations unchanged.
+- Authorized recovery of001/MBP/03.14-000.3.1/XI/2026 created task
+  dc76986d-875c-409d-a535-e3b97c004ad1,016/UAI/PBO.4/XI/2026,waiting. Actual IT
+  inbox RPC visibility passed. Recovery uses an active authorized admin context
+  and records explicit operator/issue/reason metadata in the audit log. Parent,
+  revision, signature and outbound row fingerprints remained identical inside
+  the same transaction. Post-recovery counts are100/446/11/152:one task and one
+  reservation only. The current requester revision remains open, not auto-approved.
+- Public root/live/ready/version probes200 in both environments. Production app
+  healthy/restart0; all six non-app container IDs/images stayed unchanged. No
+  historical PDF regeneration, approval, vendor resend, worker or external API
+  restart. Retained rollback image and protected migration/recovery/smoke proofs
+  under operator issue773 directories; no secrets committed.
+- Automatic app-only deploy duplicates were cancelled or stopped at migration
+  acknowledgement gates; operator rollout used the exact applied versions.
+  CT104 has no host Node binary, so unchanged repository deployment gates ran in
+  a network-isolated pinned official Node22.23.1-bookworm helper with read-only
+  source mount. No host package installation or gate bypass. Zod4.6.7 from SEC-03
+  remains in place; unrelated KEU routing PR #765 was not included.
+
 ## 2026-11-04 [Codex] REC-06 active-only follow-up / Issue #773
 
 - Forward-only migration20261104100000 limits new task allocation to PROSES and
