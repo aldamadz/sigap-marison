@@ -1,5 +1,34 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-16 component status released / Issue #760
+
+- Completed staging then production publication, source ecda415. Public
+  status.marisoncloud.com now shows Production, Staging, Storage and expandable
+  Service SIGAP with four independent worker/API observations and histories.
+- Production D1 migration20261104110000 adds only observation tables. All1,498
+  retired-domain samples per domain remain; their counters stopped increasing.
+  Original production SIGAP history continues, including real timeout failures.
+  Raw component counts match daily summaries in both environments after replay.
+- Production signed reports accepted, forged signatures401 in both environments.
+  Timer Result=success/ExecMainStatus0, every minute. No new storage port; no
+  app/worker restart or business DB writes/claims/vendor POST. All seven runtime
+  container IDs and application SHAs unchanged from preflight.
+- Current eight displayed component/child states UP. Browser desktop/mobile390,
+  dark/light, dropdown keyboard/disclosure, refresh and no overflow/errors checked.
+  Public root/API/RSS/Atom/Privacy/Terms and both app versions200.45 JavaScript
+  plus4 collector tests, scoped lint/build/syntax/diff pass. This is not proof
+  of99.99% uptime or end-to-end vendor/business workflow availability.
+- Worker production versions: page9a55653b-badd-4838-95b8-1fcce07a3e58,
+  probefb62d2e0-5552-4792-b7bd-f3f26d4b956b. Staging pageceaada31-e485-4773-93fe-a60d00526ded,
+  probe10ac37cf-ab4c-4068-8bdf-119132039597. Rollback/bookmarks documented in
+  docs/STATUS_SIGAP_COMPONENT_ROLLOUT_20261104.md. Ops PRs762/763 stay unmerged
+  records: merging stale app baselines just for Worker publication is unsafe.
+- Parent checkout audit still reports1 high/21 moderate/1 low from its older
+  inherited npm baseline. Deployed standalone Workers/collector use no npm
+  packages and SIGAP's separately released Zod4 app is not rebuilt/downgraded.
+  PROJECT_CONTEXT remains absent. Remaining timeout cause is tracked separately
+  in OPS-15/#750, not claimed fixed by monitoring changes.
+
 ## 2026-11-04 [Codex] OPS-16 component status staging acceptance / Issue #760
 
 - Active source feature/status-marisoncloud-page. Four top-level SIGAP components

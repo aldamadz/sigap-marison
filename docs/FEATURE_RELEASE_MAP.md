@@ -2,6 +2,11 @@
 
 ## 2026-11-04 [Codex] OPS-16 SIGAP Component Status / Issue #760
 
+- Release correction: completed staging then production at ecda415. Public
+  page/probe and signed read-only collector live;49 focused tests and browser
+  acceptance pass. Retired monitors stop collecting without resetting history.
+  Application/worker container IDs and app SHAs unchanged; no business resend.
+  Earlier pending-publication entry below records the pre-release checkpoint.
 - User selects four active components: SIGAP Production, SIGAP Staging, SIGAP
   Storage and expandable Service SIGAP (PDF, sync, outbound, external API).
 - Production collector/page release explicitly authorized after staging.
