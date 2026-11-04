@@ -1,5 +1,38 @@
 # Worklog
 
+## 2026-11-04 [Codex] MRN-802 Verified Returned Unit Revision Dispatch
+
+- Active on isolated main-based `codex/unit-returned-revision-802`, Issue #802.
+  User confirmed Digivasi rejects duplicate new document numbers but accepts
+  returned revisions under the same number, and authorized staging then production.
+  The earlier051 one-shot returned HTTP200 with the same submission_id2. That
+  completed job is NOT reopened, queued or sent again by this implementation.
+- Supersedes the blanket accepted-Unit revision hold only for proven returns:
+  private external decision/latest event, resolved revision, archived accepted
+  predecessor, document number/project, sequential dispatch and fresh signatures
+  from the configured restart step must agree. Accepted payload body/hash and
+  vendor receipt must be intact. Internal edits, rejected decisions, stale or
+  reused returns, completed jobs and unknown outcomes remain blocked.
+- Check authorization before BOTH logical build and frozen transport. Reuse a
+  submitted unit only if present in that same accepted project's frozen payload;
+  additions require explicit has_submitted=false. Missing/unknown unit state or
+  another submission's unit fails422. Ordinary rejected replacement protections
+  remain. Canonical payload, current API references, main_document, attachments
+  and durable outbox are reused; no new HTTP endpoint, role grant or migration.
+- Queue no longer labels every accepted-predecessor row as contract-blocked;
+  actual validation/HTTP diagnosis is preserved. Admin recovery GET/POST both load
+  full generation/predecessor context before allowing pre-POST rebuild.
+- Focused tests cover valid return, forged/cross-context/stale/consumed evidence,
+  approval restart, private read failure, token/lease boundary and foreign units.
+  Real dispatcher fixtures materialize a valid candidate without a business POST.
+  Worker fixtures prove one POST and succeeded/reference2 or terminal422/unknown
+  timeout/5xx, without automatic business retry. Lint/typecheck/backend/frontend
+  builds and audit high/critical gate pass;20 pre-existing moderate advisories.
+- Read-only historical051 replay against the new compiled validator passes when
+  reconstructing its pre-POST state ONLY in memory. The actual succeeded job is
+  blocked. Zero writes/business POST; no data/history/approval changes. Remaining:
+  exact-source hosted gates, staging deploy/acceptance then selective production.
+
 ## 2026-11-04 [Codex] MRN-797 Explicit Single-POST Exception Authorized
 
 - Supersedes the no-resend boundary below only for051 generation3. After being
