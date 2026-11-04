@@ -2,6 +2,14 @@
 
 ## SEC-03 Zod4 Validation Security (2026-11-03, Issue #766)
 
+- 2026-11-04 [Codex] Production explicitly authorized and rolled out after
+  staging. PR #767/#770/#771; live staging `e551ce318ca6`, production
+  `dc863dfebdf5`. App/PDF/outbound/sync load4.6.7 in both environments; docs
+  artifacts rebuilt while API source/auth and worker source/TLS remain intact.
+  Public health/login-validation/docs smoke passes. No migration or resend.
+  Full CI baseline failures (#769) and unrelated docs advisories (#768) remain
+  disclosed. KEU routing #765 is not included. See dated completion worklog.
+
 - 2026-11-03 [Codex] `fix/zod4-validation-security` upgrades root, backend,
   shared and documentation Zod to4.6.7 for GHSA-mrhx-c7xc-m3w5. Staging only;
   no production authorization. No database migration or business resend.
