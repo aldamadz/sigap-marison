@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-04 Selective Production Release Started / Issue #782
+
+- User explicitly authorized production after staging7108cf5 and requested a
+  separate public-latency investigation prompt. No routing/DNS change is bundled.
+- `codex/sec04-production-release` starts at main ed124b6 and retains the original
+  SEC-04 commits08f2fa3/a3d0c0c, excluding their later staging-history merge.
+- Reproduced seven stale baseline assertions on this production source,58 passes.
+  Applied the corresponding OPS-QG checks without removing coverage. The eighth
+  realtime-flush file exists only on staging and is not imported into production.
+  Main troubleshooting docs intentionally differ from staging in the existing
+  projectless user guidance; production-only normalized hash4305a73a is used.
+  Admin hash0c485e76 and MRN-25/release guidance match the reviewed existing source.
+- Staging four-service runtime was verified7108cf5, Node22.23.4, restart0;
+  external API has a separate image and must be validated/rolled separately.
+  Production source/runtime ed124b6 and readiness200 were observed before work.
+- Remaining: selected CI gates, main/staging ancestry and live staging promotion,
+  protected configuration/rollback preflight, coordinated production runtime
+  rollout and public smoke. No migration, approval, replay or vendor business POST.
+
 ## 2026-11-04 [Codex] SEC-04 private-audit candidate hardening / Issue #782
 
 - Validated the selected private-audit candidates with synthetic fixtures in an

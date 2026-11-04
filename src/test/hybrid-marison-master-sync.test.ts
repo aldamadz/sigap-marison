@@ -134,8 +134,8 @@ describe("Hybrid Marison master sync", () => {
     expect(migration).toContain("before insert or update of code, name, office_id, entity_id");
     expect(migration).toContain("set entity_id = null");
     expect(page).toContain("masterReviewRowClass");
-    expect(page).toContain("<TableHead className=\"text-xs font-semibold\">Keterangan</TableHead>");
-    expect(page).toContain("getProjectNotes");
+    expect(page).toMatch(/<TableHead[^>]*>Keterangan<\/TableHead>/);
+    expect(page).toContain("<MasterReviewStatus required={project.marison_review_required} reasons={project.marison_review_reasons} />");
   });
 
   it("uses the same review row and Keterangan column for employees, offices, and projects", () => {

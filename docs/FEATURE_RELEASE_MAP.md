@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## SEC-04 Selective Production Promotion (2026-11-04, Issue #782)
+
+- User authorized production after staging acceptance. Main-based candidate
+  contains only original SEC-04 commits08f2fa3/a3d0c0c and the main-relevant
+  OPS-QG assertion reconciliation; the staging-history merge is excluded.
+- Main has seven stale baseline assertions, not the staging-only realtime-flush
+  file. Preserve the distinct production documentation hash and all coverage.
+- Runtime/API rollout and final proof pending. No production routing, database,
+  approval or outbound resend change is part of this release. Latency diagnosis
+  remains a separate measurement task; no latency improvement is claimed here.
+
 ## SEC-04 Private-Audit Candidate Hardening (2026-11-04, Issue #782)
 
 - The selected candidates were validated with synthetic fixtures and fixed:
