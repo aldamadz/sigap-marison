@@ -19,6 +19,22 @@
   revocation passed.27 focused tests and real PostgreSQL/clean Linux gates passed;
   hosted CI did not start due billing. Production and four staging workers unchanged.
 
+## REC-06 Recommendation Enabled During Revision (2026-11-04, Issue #773)
+
+- Canonical input updates create a missing recommendation task for an active
+  requester/delegated admin without duplicate numbers/tasks or office grants.
+  Parent-row/advisory lock order is consistent with direct task allocation.
+- Private, transaction-bound requester submission can restore the exact asking
+  step while recommendation work is pending; signature and terminal-status
+  approval gates remain enforced. No public trigger-helper execute permission.
+- Migration20261104090000 is forward-only and replayable. No historical bulk
+  backfill, signature reset, new vendor POST or change to form identities.
+- User authorized staging then selective production and narrow recovery of
+  001/MBP/03.14-000.3.1/XI/2026. Relevant Vitest38 tests, canonical PostgreSQL
+  requester/inbox flow, two factory shapes and concurrent allocation pass.
+  Staging schema applied; actual tester RPC/inbox acceptance passed under full
+  rollback. Production still pending selected PR, rollout and audited recovery.
+
 ## SEC-03 Zod4 Validation Security (2026-11-03, Issue #766)
 
 - 2026-11-03 [Codex] `fix/zod4-validation-security` upgrades root, backend,

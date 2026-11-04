@@ -261,6 +261,35 @@ try {
       if (!photoOutput.includes("Recommendation revision photos: all assertions passed")) throw new Error("Missing recommendation photo marker");
       process.stdout.write(photoOutput);
     }
+    if (process.argv.includes('--recommendation-enable')) {
+      run(psqlArgs, `alter table public.master_offices add column code text;
+        alter table public.master_dept_letter_types add column sort_index integer default 4;
+        alter table public.surat_reservations add column created_at timestamptz,add column expires_at timestamptz;
+        alter table public.surat_recommendation_tasks alter column id set default gen_random_uuid();
+        alter table public.surat_recommendation_tasks alter column status set default 'waiting';
+        alter table public.surat_recommendation_tasks add column reservation_id uuid,add column no_surat text,
+          add column no_urut integer,add column entity_id uuid,add column office_id uuid,
+          add column required_before_step integer,add column created_by uuid,add column claimed_at timestamptz,
+          add column created_at timestamptz default now(),add column updated_at timestamptz default now();
+        create table public.letter_number_counter_configs(scope_type text,is_active boolean,entity_id uuid,dept_id uuid,project_id uuid,year integer,start_from integer);
+        create table public.user_access_grants(user_id uuid,permission_key text,office_id uuid);
+        ${canonical('20261012140000_delegated_issuing_office.sql','can_issue_for_office')}
+        ${canonical('20261012140000_delegated_issuing_office.sql','guard_delegated_issuing_office')}
+        create trigger guard_delegated_issuing_office before insert or update of office_id on public.surat_reservations for each row execute function public.guard_delegated_issuing_office();
+        create trigger guard_delegated_issuing_office before insert or update of office_id on public.surat_registrasi for each row execute function public.guard_delegated_issuing_office();
+        ${canonical('20260812135500_fix_recommendation_internal_number_reservation.sql','create_recommendation_task_for_parent')}
+        create function public.recommendation_pdf_is_current(uuid) returns boolean language sql as $$select false$$;
+        ${canonical('20260810143000_rec03_recommendation_multi_detail_foundation.sql','guard_parent_approval_for_recommendation')}
+        ${canonical('20260810143000_rec03_recommendation_multi_detail_foundation.sql','guard_parent_signature_for_recommendation')}
+        create trigger recommendation_parent_guard before update of current_step,status on public.surat_registrasi for each row execute function public.guard_parent_approval_for_recommendation();
+        create trigger recommendation_signature_guard before update of is_signed on public.surat_signatures for each row execute function public.guard_parent_signature_for_recommendation();
+        ${canonical('20260707124500_reopen_recommendation_revision_flow.sql','get_my_recommendation_tasks')}`);
+      run(psqlArgs, read(migrationRoot+'20261016090000_recommendation_internal_office_reservation.sql'));
+      run(psqlArgs, read(migrationRoot+'20261016091000_recommendation_internal_active_actor.sql'));
+      const patch=read(migrationRoot+'20261104090000_revision_recommendation_task.sql');
+      run(psqlArgs,patch+patch);
+      process.stdout.write(run(psqlArgs,read('supabase/tests/revision_recommendation_task_rpc.integration.sql')));
+    }
     const submit = () => new Promise((resolve,reject) => {
       const child=spawn("docker",psqlArgs);
       let stderr="";
