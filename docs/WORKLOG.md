@@ -1,5 +1,26 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-18 completed / Issue #783
+
+- Supersedes pending status below. Source6055de0/fc869be on isolated branch,
+  source PR#785 targets the status feature branch only; not an old SIGAP app deploy.
+- Focused51Node tests including real SQLite lifecycle/migration pass,4collector
+  tests pass, scoped ESLint/Worker build/syntax/diff pass. Stage D1/bookmark first,
+  then independent page/probe rollout and real completed-history fixture acceptance.
+  Exact disposable stage fixture removed; authoritative SIGAP staging history stays.
+- Production D1 preflight/bookmark and additive migration applied; old closure
+  stayed unknown until canonical poll confirmed completed for the exact schedule ID.
+  Today's first-observed11:22WIB closure preserved, original10:22WIB start/message
+  and estimate retained. No fabricated incident row, no probe evidence rewrite.
+- Page/probe versions productionda8bebd7-2595-4b59-a193-3649e6bd79ca /
+  bef4338a-edc2-4b44-a357-116617c7afa5; staging3b3d9be2-bc87-4db0-92be-588aa0572f16 /
+  19e374d0-9e2f-464e-9f34-21d31f55fcdc. Previous Worker versions remain rollback.
+- Public page/API/RSS/Atom and legal pages200; actual browser shows completed
+  schedule timeline and explicit planned-maintenance label. SIGAP root200 and
+  canonical maintenance statecompleted/phase none. No app/DB/Auth/storage/worker
+  rollout, new maintenance window, approval or outbound. Retention90days is display
+  only; old maintenance records are not deleted. Hosted CI is not claimed.
+
 ## 2026-11-04 [Codex] OPS-18 maintenance history / Issue #783
 
 - New isolated `codex/status-maintenance-history-20261104` from deployed OPS-16

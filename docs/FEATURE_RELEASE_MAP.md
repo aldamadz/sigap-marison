@@ -2,6 +2,11 @@
 
 ## OPS-18 Maintenance History (2026-11-04, Issue #783)
 
+- Released status-only staging and public production: source6055de0/fc869be,
+  PR#785.51Node/SQLite+4collector tests, scoped lint/build/syntax pass. Public
+  completed schedule/API/feed/browser acceptance passed; original observed closure
+  preserved. No SIGAP application deployment or new maintenance activation.
+
 - Isolated status-only follow-up from deployed OPS-16 source e9f5457. Previous
   sync incorrectly stored completed schedules as cancelled and page filtered them
   out. Existing evidence retained; no source incident or downtime is invented.
