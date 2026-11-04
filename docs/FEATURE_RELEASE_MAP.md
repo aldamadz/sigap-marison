@@ -1,5 +1,23 @@
 # SIGAP Feature and Release Map
 
+## OPS-QG Quality Baseline Reconciliation (2026-11-04, Issue #769)
+
+- Reconciled the eight stale full-suite assertions against the current
+  implementation without removing coverage: documentation content hashes now
+  cover the documented MRN-25 payload viewer entries, and source expectations
+  follow the shared `RealtimeSync` flush, atomic KEU10/additional-signer
+  registration, persistent file-link reference argument, `MasterReviewStatus`
+  Keterangan column, bounded external-revision autosave timer and the
+  `--results` calendar suite.
+- Documentation content changes were verified as intentional before the hash
+  update (commits `7f4b709`, `dbbc4e5`, `4980dff`, `fc73a9d`, `f07ff54` release
+  guidance); no assertion was deleted and no snapshot was refreshed blindly.
+- Full suite on CI-like Node24.22.2:295 files,2855 passed,1 skipped,0 failed.
+  This unblocks the deploy quality job that runs the full suite when
+  `package-lock.json` changes, including the SEC-04 staging deploy.
+- No product runtime, database, migration, secret or deployment change; the
+  edit is limited to test expectations. Status: staging candidate.
+
 ## SEC-04 Private-Audit Candidate Hardening (2026-11-04, Issue #782)
 
 - The selected candidates were validated with synthetic fixtures and fixed:
