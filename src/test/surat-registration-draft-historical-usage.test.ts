@@ -161,9 +161,10 @@ describe("registration draft historical usage", () => {
   it("loads the exact stored usage even when its status is archived", async () => {
     const draftQuery = createDraftQuery();
     const usageQuery = createUsageQuery();
+    const revisionQuery = createRevisionQuery();
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === "surat_registration_drafts") return draftQuery;
-      if (table === "surat_revision_events") return createRevisionQuery();
+      if (table === "surat_revision_events") return revisionQuery;
       if (table === "form_usages") return usageQuery;
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -186,13 +187,34 @@ describe("registration draft historical usage", () => {
     const usageError = { code: "PGRST301", message: "row is not readable" };
     const draftQuery = createDraftQuery();
     const usageQuery = createUsageQuery({ data: archivedUsage, error: usageError });
+    const revisionQuery = createRevisionQuery();
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === "surat_registration_drafts") return draftQuery;
-      if (table === "surat_revision_events") return createRevisionQuery();
+      if (table === "surat_revision_events") return revisionQuery;
       if (table === "form_usages") return usageQuery;
       throw new Error(`Unexpected table: ${table}`);
     });
 
     await expect(suratService.getRegistrationDraft(draft.id)).rejects.toBe(usageError);
+  });
+
+  it("refuses a linked draft whose revision event is no longer open", async () => {
+    const revisionQuery = createRevisionQuery({
+      data: {
+        id: draft.revision_event_id,
+        status: "resolved",
+        target_type: "requester",
+        reason: "Perbaiki jumlah unit.",
+        changes: { external_submission_revision: true, revision_generation: 2 },
+      },
+      error: null,
+    });
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "surat_registration_drafts") return createDraftQuery();
+      if (table === "surat_revision_events") return revisionQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(suratService.getRegistrationDraft(draft.id)).rejects.toThrow("Permintaan perbaikan pengajuan tidak tersedia.");
   });
 });

@@ -491,7 +491,7 @@ describe("admin-user createUser", () => {
       status: 500,
       message: "Gagal memperbarui profil; identitas Auth telah dikembalikan.",
     });
-
+    
     expect(ports.authAdmin.updateUserById).toHaveBeenCalledTimes(2);
     const rollbackCall = vi.mocked(ports.authAdmin.updateUserById).mock.calls[1];
     expect(rollbackCall[0]).toBe(NEW_USER_ID);

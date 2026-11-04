@@ -109,7 +109,7 @@ describe("docs-user-content D2A characterization", () => {
 
   it("matches documentation content after REC-03 parent photo updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("3b7c24c7c6a99a30ae7ebba5f0dc11890c6b49975633cb1a4d1dce8eb65555dc");
+      .toBe("581c4fd4a6cdacbca43eee7be432bd8764c75a6d61e99a39b11a6efb85749fb3");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

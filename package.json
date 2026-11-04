@@ -44,6 +44,7 @@
     "test:work-calendar-sql": "node scripts/test-work-calendar-sql.mjs",
     "test:work-calendar-bootstrap-sql": "node scripts/test-work-calendar-bootstrap-sql.mjs",
     "test:canonical-submission-workflows-sql": "node scripts/test-canonical-submission-workflows-sql.mjs",
+    "test:staging-split-account-fixtures-sql": "node scripts/test-staging-split-account-fixtures-sql.mjs",
     "test:fund-item-checklist-sql": "node scripts/test-canonical-submission-workflows-sql.mjs --fund-checklist",
     "test:production-runtime-contract-recovery-sql": "node scripts/test-production-runtime-contract-recovery-sql.mjs",
     "import:holidays": "node scripts/import-holidays.mjs",

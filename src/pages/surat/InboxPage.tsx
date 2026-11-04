@@ -73,6 +73,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
+import { UnitLandAreaField } from "@/components/surat/UnitLandAreaField";
 import { RecommendationDecisionSummary } from "@/components/surat/RecommendationDecisionSummary";
 import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
 import { getKeu1FinancialSummary, normalizeKeu1SubmissionItems, parseKeu1Money, parseKeu1Quantity } from "@/components/surat/keu1-submission";
@@ -1764,12 +1765,13 @@ const handleApprove = async (item: any) => {
               <div className="flex h-28 flex-col items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"><Home className="mb-2 h-5 w-5" />Pilih kavling terlebih dahulu.</div>
             ) : (
               <div className="max-h-[520px] overflow-auto rounded-lg border border-border">
-                <table className="w-full min-w-[1240px] border-collapse text-sm">
+                <table className="w-full min-w-[1416px] border-collapse text-sm">
                   <thead className="sticky top-0 z-20 bg-muted text-xs text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
                     <tr>
                       <th className="sticky left-0 z-30 w-12 border-r border-border bg-muted px-3 py-3 text-center font-semibold">No.</th>
                       <th className="sticky left-12 z-30 w-28 border-r border-border bg-muted px-3 py-3 text-left font-semibold">Kavling</th>
                       <th className="w-32 border-r border-border px-3 py-3 text-left font-semibold">Tipe Unit</th>
+                      <th className="w-44 border-r border-border px-3 py-3 text-left font-semibold">LT (Luas Tanah)<span className="block font-normal">m²</span></th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Atas</th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Bawah</th>
                       <th className="w-36 border-r border-border px-3 py-3 text-left font-semibold">Nomor</th>
@@ -1801,6 +1803,9 @@ const handleApprove = async (item: any) => {
                             className="h-11 text-sm"
                           />
                           {!getAllocationUnitType(unit) && <p className="mt-1 text-xs text-destructive">Lengkapi tipe di sistem perencanaan.</p>}
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <UnitLandAreaField unit={unit} label={unit.label} />
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <NominalInput

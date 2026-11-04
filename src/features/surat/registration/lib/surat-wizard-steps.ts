@@ -83,6 +83,6 @@ export function shouldShowStepSection(
 ): boolean {
   if (!hasDraft) return false;
   if (sectionStep === WIZARD_STEP_SIGNERS && !hasSigners) return false;
-
+  
   return activeStep === 0 || activeStep === sectionStep;
 }

@@ -221,6 +221,7 @@ describe("durable Marison outbound dispatch", () => {
     expect(suratSelect).toContain("project_id");
     expect(suratSelect).toContain("surat_signatures");
     expect(suratSelect).toContain("surat_attachments");
+    expect(suratSelect).toMatch(/surat_signatures\s*\([^)]*\bpdf_path_snap\b/);
   });
 
   it("protects the internal build route with a minimum-length constant-time token", () => {

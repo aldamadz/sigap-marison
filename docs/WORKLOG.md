@@ -39,6 +39,27 @@
   Production maintenance estimate11:22WIB must be explicitly completed regardless
   of remaining offline audit/release work. No production upgrade yet.
 
+## 2026-11-03 [Codex] SEC-03 validation evidence and release hold / Issue #766
+
+- Source commit5310634; staging integration PR #767 preserves AUTH-09.
+ 217 related tests and39 desktop/Zod compatibility tests pass. Integration lint,
+  typecheck and frontend/backend builds pass; documentation clean install and
+  build pass with every resolved Zod at4.6.7. Root high/critical audit gate passes.
+- Source full suite:2716 pass,8 fail,7 pending. All8 failing assertion names
+  reproduce on isolated main baseline7a6aac7 using Zod3.25.76 (75 pass/8 fail
+  in the83-test subset). Baseline quality follow-up #769 includes possible CRLF
+  sensitivity; do not blindly update hashes or remove behavioral checks.
+- Unrelated documentation dependency findings tracked in #768. No blanket
+  npm audit fix, v3 compatibility fallback or quality/deployment bypass.
+- Release held: PR #767 hosted CI41610672160 was still in progress at the time
+  of this entry. No staging merge, deployment, worker restart or live migration.
+  Staging public version remainsd33970e412eedf2a2a5ecec66bc637ba1c053a91;
+  production untouched. KEU routing PR #765 remains separately unmerged.
+- Next: inspect hosted CI, reconcile baseline failures independently, then
+  coordinate app/worker staging rollout and smoke. Production needs explicit
+  authorization. Durable lesson: validate staging-only desktop consumers when
+  selectively upgrading a shared runtime dependency from main.
+
 ## 2026-11-04 [Codex] REC-06 active-only follow-up / Issue #773
 
 - Forward-only migration20261104100000 limits new task allocation to PROSES and
@@ -284,3 +305,49 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+# 2026-10-22 [Codex] AUTH-09 Desktop staging integration started
+
+- Issue #718, branch `codex/desktop-sigap-integration-20261022`, main-based.
+- User authorized staging preparation and team prompt, not production.
+- Isolated device pairing/notifications and own/admin revocation; browser consent
+  uses existing account login. No credential sharing with Tauri JavaScript.
+- Forward migration20261022120000 and contract/team prompt prepared. Focused
+  API tests24 passed; PostgreSQL, UI and deployed acceptance still pending.
+- No production changes. `docs/PROJECT_CONTEXT.md` was absent; this task does not
+  invent historical project knowledge or change shared-file structure.
+
+## 2026-10-22 [Codex] AUTH-09 Staging Activated, Issue #718
+
+- Previous404 root cause: staging was still1008cb9cdb, #719 remained Draft and
+  the selected migration had not been applied. User explicitly requested activation.
+- PR #719/#720 merged normally to staging. Live/public SHA
+  `cb56ddceca371a25078040d667141dc496ac35d0`; app10ee9c542dbe, image
+  `83f54b24a2c80a8902a4a6c5ad62277c76876e173f678438ad1f4c5387867417`, healthy,
+  restart0. Main/production untouched. No secret or broad CORS/role change.
+- Only forward migration20261022120000 applied, exact SHA256
+  c67a65f94a511e2f566447dabed0215e5d58904e8472e0d94c647ee4c880d13b.
+  Known ten remote-only historical migrations audited unchanged; no older local
+  drift. Three RLS tables and five internal functions service-only verified.
+  No migration repair, replay or include-all. Outbound rows remained unchanged.
+- Clean exact-merge Linux:27 focused tests, real PostgreSQL17 assertions and
+  concurrent exchange exactly one winner, lint/typecheck/frontend+backend build,
+  audit high gate passed. First repeated SQL runner hit the image's temporary
+  Unix-socket startup; test-only3608d31 now waits for the final TCP listener.
+  Hosted checks119721058570/119750532114 never started due billing/spending,
+  not CI success. Four moderate development advisories predate this release.
+- Public authenticated acceptance passed all seven desktop endpoints.53 temporary
+  notifications traversed two pages, own read persisted, foreign read404,
+  anonymous401/non-admin403, no-store, desktop/web isolation, rotation and refresh
+  reuse revocation, logout preserves web. Synthetic fixtures removed and test
+  device sessions revoked; existing inbox and document/vendor data untouched.
+- Real public browser: anonymous link presents normal login; explicit consent,
+  device exchange, own device page and admin confirmation/revocation passed.
+  1440 desktop and390 mobile light/dark: logo loaded, no horizontal overflow or
+  page errors. Revoked token immediately401. Screenshots/proofs private on operator.
+- All four non-app staging containers retained IDs/images/restart0: PDF,
+  external API, sync and outbound. No vendor POST, worker rollout or production
+  deployment. App/root/live/ready and public revision smoke passed.
+- Deliverable contract and `PROMPT_TIM_TAURI_SIGAP.md` match live staging. Native
+  packaged Windows/macOS notifications remain the desktop team's test, not a
+  claimed browser capability. Fully exited apps still require future OS push.
+  PROJECT_CONTEXT remains absent; no shared-file structure change.

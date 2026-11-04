@@ -99,8 +99,8 @@ if (changesGlobalTestInfrastructure) {
 const gates = new Set();
 for (const file of allChangedFiles) {
   if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
-  if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
   if (/actionable_role_dashboard.*\.sql$|test-actionable-dashboard-sql\.mjs$/u.test(file)) gates.add('actionable-dashboard-sql');
+  if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
   if (/revision_recommendation_task.*\.sql$/u.test(file)) gates.add('revision-recommendation-sql');
   if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
@@ -131,13 +131,17 @@ for (const file of allChangedFiles) {
   if (/recommendation_parent_transport.*\.sql$/u.test(file)) gates.add("recommendation-transport-sql");
   if (/rec03.*file.*link.*\.sql$|test-rec03-file-link-sql\.mjs$/u.test(file)) gates.add("test:rec03-file-link-sql");
   if (/outbound.*replacement.*\.sql$|test-outbound-replacement-sql\.mjs$/u.test(file)) gates.add("test:outbound-replacement-sql");
-  if (/external.*submission.*decision.*\.sql$|test-external-submission-decisions-sql\.mjs$/u.test(file)) gates.add("test:external-submission-decisions-sql");
+  if (/external.*submission.*decision.*\.sql$|validated_unit_project_revision\.sql$|test-external-submission-decisions-sql\.mjs$/u.test(file)) gates.add("test:external-submission-decisions-sql");
   if (/branch-asset-without-project.*\.sql$|branch-asset-without-project\.integration\.sql$|test-branch-asset-without-project-sql\.mjs$/u.test(file)) gates.add("test:branch-asset-without-project-sql");
   if (/work.calendar.*\.sql$|test-work-calendar-sql\.mjs$/u.test(file)) gates.add("test:work-calendar-sql");
   if (/work.calendar.bootstrap.*\.sql$|test-work-calendar-bootstrap-sql\.mjs$/u.test(file)) gates.add("test:work-calendar-bootstrap-sql");
 }
 
 for (const gate of gates) {
+  if (gate === 'actionable-dashboard-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
+    continue;
+  }
   if (gate === 'revision-recommendation-sql') {
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--revision-update']);
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--revision-update', '--production-shape']);
@@ -151,10 +155,6 @@ for (const gate of gates) {
   if (gate === 'maintenance-edge') {
     run('node', ['--test', 'ops/maintenance/edge-worker.test.mjs', 'ops/maintenance/server.test.mjs']);
     run('node', ['scripts/build-maintenance-edge.mjs']);
-    continue;
-  }
-  if (gate === 'actionable-dashboard-sql') {
-    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
     continue;
   }
   if (gate === 'recommendation-office-reservation-sql') {
