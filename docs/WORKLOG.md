@@ -41,7 +41,7 @@
 - Protected operator evidence stays on Proxmox in a root-only directory, not in
   Git or user-visible logs. Browser acceptance was unavailable because browser
   surfaces were disabled; no UI verification is claimed. Do not repeat the POST.
-  Remaining: obtain vendor revision/ownership/idempotency contract before enabling
+  Follow-up Issue #802: obtain vendor revision/ownership/idempotency contract before enabling
   automatic accepted-Unit revision delivery; general duplicate guard stays closed.
 
 ## 2026-11-04 [Codex] SEC-04 Live Production And SUR-30 Staging Promotion Checkpoint

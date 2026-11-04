@@ -11,7 +11,7 @@
   audited receipt; accepted generation2 and prior history remain intact. No retry.
 - No migration, worker restart, permission widening or general duplicate bypass.
   Canonical latest preview remains read-only. Browser acceptance was unavailable.
-  General revision automation still requires a documented vendor update/ownership/
+  Follow-up #802: general revision automation still requires a documented vendor update/ownership/
   idempotency contract; this one successful same-number POST is not that contract.
 
 ## SEC-04 Production Verified / SUR-30 Staging Applied (2026-11-04)
