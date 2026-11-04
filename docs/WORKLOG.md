@@ -1,5 +1,49 @@
 # Worklog
 
+## 2026-11-04 [Codex] MRN-797 Released And One Authorized Revision Accepted
+
+- Supersedes the pending release/no-resend entries for Issue #797. Selective
+  source `c0dfaef92eca3d8726e204de19d41b7d4819815d`; PR #798 main, #799 staging,
+  #800 main-ancestry synchronization. Live staging `55583dc1bbd00a0b5e16fbe54bc34ba3e75f7483`
+  verified before production `2d02f73a59db17e7ec20c0209a0043aa1fae6869`.
+- Official staging run 41804858142 and production run 41805301042 passed quality
+  AND deployment. Earlier green production preflights skipped deploy while parity
+  was pending; these were not treated as runtime releases. Focused validation was
+  40/40; lint, typecheck, frontend/backend builds and hosted gates passed. Existing
+  moderate advisories remain; no new dependency changes or high/critical failure.
+- Compiled staging acceptance confirms accepted-revision409 and ordinary rejected
+  replacement behavior with no vendor business request. Production before/after
+  fingerprints prove the classification release did not alter051, signatures or
+  any dispatch. No migration, worker rollout, secret, network or ACL changes.
+  Five production containers retain environment/ports/mounts and Node22.23.4;
+  worker/API IDs unchanged, restart counts zero. Public ready/version now200.
+  Brief public503 fallback was observed during app replacement around09:14UTC;
+  this was not a zero-downtime deployment. Readiness and new SHA verified09:14:32UTC.
+- User explicitly authorized exactly one same-number revision POST for051 after
+  accepting duplicate submission/SPK risk. Canonical latest payload was rebuilt
+  read-only from the completed document and active historical links; project23,
+  unit IDs2048/2074/2173, three units, upper/lower addendum total7116262 checked.
+  SHA256 `223dd3853ebed00c42c877cdfd2173ed8bf180012edd292996c16accb54afaf3`.
+  An exclusive host-side marker prevents another attempt, including after timeout.
+- Exactly ONE business POST returned HTTP200: submission_id2 (same as predecessor),
+  submission_number051/UAI/MKT.1.SGN/X/2026, total_units3, total_addendum7116262,
+  statusreview, message: Pengajuan unit berhasil diterima dan siap diproses Purchasing.
+  No automatic retry or second POST. This is evidence for this revision, not a
+  general vendor idempotency/update guarantee or proof about downstream SPK rows.
+- Recorded the actual receipt on generation3 in one narrow audited transaction,
+  first exercised with ROLLBACK. No reopen/pending state or queue replay. Previously
+  empty payload/POST fields now contain the actual canonical body/hash/timestamps;
+  response/reference/completion reflect vendor evidence. Original three local
+  build failures remain in reconciliation before_state; attempt_count is preserved.
+  Exactly one mark_succeeded event binds the authorizing active admin and receipt.
+  Generation2 and ALL other dispatches remained byte-identical. Signatures and
+  business document unchanged; only its outbound summary and timestamp may change.
+- Protected operator evidence stays on Proxmox in a root-only directory, not in
+  Git or user-visible logs. Browser acceptance was unavailable because browser
+  surfaces were disabled; no UI verification is claimed. Do not repeat the POST.
+  Follow-up Issue #802: obtain vendor revision/ownership/idempotency contract before enabling
+  automatic accepted-Unit revision delivery; general duplicate guard stays closed.
+
 ## 2026-11-04 [Codex] SEC-04 Live Production And SUR-30 Staging Promotion Checkpoint
 
 - SEC-04 production completed independently: selective PR789 main626b5bd,
