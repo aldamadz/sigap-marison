@@ -37,7 +37,9 @@ describe("Unit accepted revision versus rejected replacement", () => {
     expect(preflight.indexOf("await requireUnitDispatchContract(job)")).toBeLessThan(preflight.indexOf("resolveMarisonOutboundIdentity"));
     expect(preflight).toContain("UNIT_EXTERNAL_REVISION_UNVERIFIED");
     expect(source).not.toContain("failureReason: revisionContractPending ? unitRevisionContractMessage");
-    const getPreflight = source.slice(source.indexOf("const marisonPreflightMatch ="), source.indexOf("const marisonReplacementPreflightMatch ="));
+    const preflightStart = source.indexOf("const marisonPreflightMatch =");
+    expect(preflightStart).toBeGreaterThan(-1);
+    const getPreflight = source.slice(preflightStart, preflightStart + 2200);
     expect(getPreflight).toContain("generation, created_at, replacement_of_dispatch_id");
   });
 });
