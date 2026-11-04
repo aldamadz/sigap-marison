@@ -33,6 +33,10 @@ const createQuery = (table: string, tokenInserts: unknown[], options: PreviewFix
       return Promise.resolve({ data: null, error: null });
     },
     maybeSingle: async () => {
+      if (table === "profiles") return {
+        data: { role: "staff", is_active: true, deleted_at: null },
+        error: null,
+      };
       if (table === "surat_registrasi") return {
         data: {
           id: suratId,

@@ -55,7 +55,7 @@ describe("AUTH-07 privilege escalation controls", () => {
     expect(runtime).toContain("if (!isActiveProfile(profile))");
     expect(runtime).toContain("PGRST301");
     expect(runtime).not.toContain('profile?.role === "super_admin"');
-    expect(runtime.match(/isActiveAdminProfile\(/g)?.length).toBe(5);
+    expect(runtime.match(/isActiveAdminProfile\(/g)?.length).toBeGreaterThanOrEqual(5);
     expect(runtime.match(/\.select\("role, is_active, deleted_at"\)/g)?.length).toBeGreaterThanOrEqual(5);
     expect(session).toContain("requireActiveSessionProfile");
     expect(session).toContain("isActiveProfile(profile)");

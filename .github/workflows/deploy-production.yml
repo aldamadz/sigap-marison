@@ -27,11 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ready: ${{ steps.parity.outputs.ready }}
+      sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+      - name: Resolve the production commit under test
+        id: resolve
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Confirm live staging contains main
         id: parity
         run: bash scripts/check-staging-parity.sh
@@ -43,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.preflight.outputs.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -63,11 +67,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.preflight.outputs.sha }}
           fetch-depth: 0
       - name: Recheck live staging and deploy production app only
         env:
           MIGRATION_VERSIONS: ${{ inputs.migration_versions || '' }}
         run: |
           bash scripts/check-staging-parity.sh --require-ready
-          bash scripts/deploy-app.sh production "$(git rev-parse HEAD)" "$MIGRATION_VERSIONS"
+          test "$(git rev-parse HEAD)" = "${{ needs.preflight.outputs.sha }}"
+          bash scripts/deploy-app.sh production "${{ needs.preflight.outputs.sha }}" "$MIGRATION_VERSIONS"
