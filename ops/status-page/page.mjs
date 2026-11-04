@@ -103,7 +103,7 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
         serviceNames: serviceNames(item.service_ids), startedAt: started, startedText: dateTime(started),
         timeline: [
           { phase: 'resolved', phaseLabel: MAINTENANCE_LABELS[status], at: closed, atText: dateTime(closed),
-            message: status === 'completed' ? 'SIGAP telah menandai pemeliharaan selesai. Waktu ini adalah waktu penutupan terpantau pada halaman status.'
+            message: status === 'completed' ? 'Pemeliharaan telah ditandai selesai. Waktu ini adalah waktu penutupan terpantau pada halaman status.'
               : status === 'cancelled' ? 'Pemeliharaan dibatalkan oleh pengelola layanan.'
                 : status === 'replaced' ? 'Sumber SIGAP telah mengganti jadwal ini dengan jadwal lain.'
                   : status === 'elapsed' ? 'Periode gangguan terjadwal berakhir sesuai estimasi; bukan konfirmasi waktu pengerjaan aktual.'
@@ -111,7 +111,7 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
           ...(started <= now && closed >= started ? [{ phase: 'monitoring', phaseLabel: 'Waktu mulai terjadwal',
             message: item.impact === 'full' ? 'Pemeliharaan dengan penghentian sementara akses layanan.' : 'Potensi gangguan akses tanpa penghentian penuh.',
             at: started, atText: dateTime(started) }] : []),
-          { phase: 'identified', phaseLabel: 'Jadwal pemeliharaan', message: `${item.description}\nEstimasi selesai: ${dateTime(number(item.ends_at))}`,
+          { phase: 'identified', phaseLabel: 'Jadwal tercatat', message: `${item.description}\nEstimasi selesai: ${dateTime(number(item.ends_at))}`,
             at: number(item.created_at || item.starts_at), atText: dateTime(number(item.created_at || item.starts_at)) },
         ] };
     });

@@ -150,6 +150,7 @@ export async function syncSigapMaintenance(env, syncedAt = Date.now()) {
   const schedule = state.schedule;
   if (schedule) {
     const key = `sigap:${schedule.id}`;
+    const serviceIds = host === 'sigap.marisoncloud.com' ? '["sigap"]' : '["sigap_staging"]';
     statements.push(env.DB.prepare(`UPDATE maintenance SET lifecycle_status='replaced',
       closed_at=COALESCE(closed_at, ?), cancelled_at=COALESCE(cancelled_at, ?)
       WHERE source='sigap' AND id<>? AND lifecycle_status='published' AND cancelled_at IS NULL AND ${guard}`)
@@ -158,16 +159,16 @@ export async function syncSigapMaintenance(env, syncedAt = Date.now()) {
     statements.push(env.DB.prepare(`INSERT INTO maintenance
       (id, title, description, service_ids, starts_at, ends_at, created_at, source, impact,
         lifecycle_status, closed_at, cancelled_at)
-      SELECT ?, ?, ?, '["sigap"]', ?, ?, ?, 'sigap', ?, ?, ?, ? WHERE ${guard}
+      SELECT ?, ?, ?, ?, ?, ?, ?, 'sigap', ?, ?, ?, ? WHERE ${guard}
       ON CONFLICT(id) DO UPDATE SET title=excluded.title, description=excluded.description,
-        starts_at=excluded.starts_at, ends_at=excluded.ends_at, impact=excluded.impact,
+        service_ids=excluded.service_ids, starts_at=excluded.starts_at, ends_at=excluded.ends_at, impact=excluded.impact,
         lifecycle_status=excluded.lifecycle_status,
         closed_at=CASE WHEN excluded.lifecycle_status='published' THEN NULL
           ELSE COALESCE(maintenance.closed_at, maintenance.cancelled_at, excluded.closed_at) END,
         cancelled_at=CASE WHEN excluded.lifecycle_status='cancelled'
           THEN COALESCE(maintenance.cancelled_at, maintenance.closed_at, excluded.closed_at) ELSE NULL END
         WHERE maintenance.source='sigap'`)
-      .bind(key, `${CATEGORY_LABELS[schedule.category]} SIGAP`, schedule.message.trim(),
+      .bind(key, `${CATEGORY_LABELS[schedule.category]} SIGAP`, schedule.message.trim(), serviceIds,
         Date.parse(schedule.startsAt), Date.parse(schedule.endsAt), syncedAt, schedule.impact,
         schedule.status, closed ? syncedAt : null, schedule.status === 'cancelled' ? syncedAt : null, revision));
   } else {
