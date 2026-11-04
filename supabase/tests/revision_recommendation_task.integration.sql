@@ -64,6 +64,15 @@ select test_assert((select not(form_input_data ? 'requires_recommendation') from
 select test_assert((select count(*)=2 from surat_reservations), 'late failure does not leak reserved number');
 reset role;
 alter table surat_recommendation_tasks drop constraint rec06_late_failure;
+select set_config('request.jwt.claim.sub',test_id(10)::text,true);
+set local role authenticated;
+insert into surat_registrasi(id,office_id,policy_snapshot,status) values
+  (test_id(108),test_id(2),test_config(),'DONE'),
+  (test_id(109),test_id(2),test_config(),'VOID'),
+  (test_id(110),test_id(2),test_config(),'REJECTED');
+update surat_registrasi set form_input_data='{"requires_recommendation":true}' where id in(test_id(108),test_id(109),test_id(110));
+select test_assert(not exists(select 1 from surat_recommendation_tasks where parent_surat_id in(test_id(108),test_id(109),test_id(110))), 'archive updates never create new tasks');
+reset role;
 select test_assert(not has_function_privilege('authenticated','public.create_missing_revision_recommendation_task()','execute')
   and not has_function_privilege('anon','public.create_missing_revision_recommendation_task()','execute'), 'trigger is not a public endpoint');
 select test_assert(has_function_privilege('authenticated','public.create_recommendation_task_for_parent(uuid)','execute'), 'canonical factory grant retained');

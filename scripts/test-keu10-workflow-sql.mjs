@@ -288,6 +288,8 @@ try {
       run(psqlArgs, read(migrationRoot+'20261016091000_recommendation_internal_active_actor.sql'));
       const patch=read(migrationRoot+'20261104090000_revision_recommendation_task.sql');
       run(psqlArgs,patch+patch);
+      const active=read(migrationRoot+'20261104100000_revision_recommendation_task_active_only.sql');
+      run(psqlArgs,active+active);
       process.stdout.write(run(psqlArgs,read('supabase/tests/revision_recommendation_task_rpc.integration.sql')));
     }
     const submit = () => new Promise((resolve,reject) => {

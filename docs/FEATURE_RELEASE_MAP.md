@@ -21,6 +21,9 @@
 
 ## REC-06 Recommendation Enabled During Revision (2026-11-04, Issue #773)
 
+- Follow-up20261104100000 restricts allocation to active requests; completed,
+  cancelled and rejected archives never acquire new tasks during metadata edits.
+  Added forward-only because0900 had already reached staging.
 - Canonical input updates create a missing recommendation task for an active
   requester/delegated admin without duplicate numbers/tasks or office grants.
   Parent-row/advisory lock order is consistent with direct task allocation.
