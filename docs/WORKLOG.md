@@ -1,5 +1,32 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-04 Live Production And SUR-30 Staging Promotion Checkpoint
+
+- SEC-04 production completed independently: selective PR789 main626b5bd,
+  staging parity PR790/live03a1e93 before cutover. Hosted exact-main quality
+  41794042636 and final Deploy Production41794954594 succeeded.
+- Production app3d37850b68c9 uses main626b5bd; PDFc3af751fdaf4,
+  syncfc03d1194fee,outbound657fba2b5a1f and API99e7d80fd17a have SEC-04
+  dependency-only images with original source fingerprints/SHAs retained.
+  All Node22.23.4/restart0; Fastify5.12.7 and Nodemailer10.1.4 where installed
+  verified with offline synthetic probes. Stage API patched/verified first.
+  Effective environment, TLS mount, ports and unrelated containers preserved.
+  Public root/version/live/ready200; no maintenance, migration or resend for SEC-04.
+- SUR-30 isolated sourceca58d15 and staging integrationPR793/9635e8c passed
+  Quality41797961420. New migration20261104160000 (SHA256b80bd155a0ffa037101b3ca5779d4afcc6ebc147f8778ebdd6da5eb8f47ec433)
+  applied only to staging at this checkpoint. Prior9 valid reviews preserved;
+  all document/signature/review/revision/archive/outbound fingerprints unchanged.
+- Historical migration-ledger differences audited against protected REC-06 after
+  snapshots: stage244 and production241 versions exactly match those baselines.
+  Only the selected new version is applied, no repair/include-all/bulk replay.
+  Production rehearsal under the existing supabase_admin function owner rolled
+  back successfully:051 becomes valid, remains PROSES/step5, exactly1 new valid
+  Unit document, all business fingerprints and original guards unchanged.
+- Selective production PR794 merged as c9ca0e7 after hosted candidate quality
+  41798358890 succeeded. This sync brings that main commit into staging ancestry
+  without promoting unrelated staging features. Production migration/cutover
+  still pending live-staging parity and explicit selected-migration ACK.
+
 ## 2026-11-04 [Codex] Quality baseline merged; staging runtime rollout pending / Issue #769
 
 - #769 fix merged into staging as `314635c` (PR #786) after its Quality Gate
