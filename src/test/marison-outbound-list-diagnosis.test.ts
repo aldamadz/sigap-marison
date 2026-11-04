@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import {describe,expect,it,vi} from 'vitest';
 import {diagnoseVendorRejection} from '../../server/marison-rejection-diagnosis.mjs';
 const source=readFileSync('backend/src/domain-runtime.ts','utf8');
-const handler=source.slice(source.indexOf('const listMarisonOutboundDispatches ='),source.indexOf('const preflightMarisonOutboundRecovery ='));
+const handler=source.slice(source.indexOf('const listMarisonOutboundDispatches ='),source.indexOf('export const generateCurrentMarisonPayloadPreview ='));
 function harness(forbidden=false) {
   const rows=['fund','unit','asset'].map(kind=>({id:kind,kind,status:'failed_terminal',environment:'production',generation:1,error_code:'marison_http_422',error_message:'HTTP 422',response:{error:`SQLSTATE[42703]: column "main_document" of relation "private_table" does not exist; SQL: nik=1234567890123456; https://private.example/token`},payload:{secret:'private-body'},surat_registrasi:{no_surat:kind,judul_surat:'UJI'}}));
   const original=structuredClone(rows);

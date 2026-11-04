@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## MRN-802 Verified Returned Unit Revision Delivery (2026-11-04)
+
+- Main-based candidate; user authorized staging then production. Supersedes the
+  generic MRN-797 contract hold for authenticated external-return revisions that
+  have been corrected and reapproved, not duplicate new submissions.
+- Bind the private decision/revision/archive to the exact accepted predecessor,
+  unchanged document number/project and next dispatch. Recheck at frozen transport;
+  only the original submitted units or new explicitly unsubmitted units are allowed.
+- Closed/completed/uncertain/superseded revisions stay blocked. Existing outbox
+  lease, POST marker, immutable payload, audit and unknown-outcome policy remain.
+  No migration, worker source edit or new API.051 remains succeeded, never resent.
+- Focused authorization/real-dispatcher/worker tests and read-only historical replay
+  precede staging and production acceptance. Deployment pending.
+
 ## MRN Unit External Revision Dispatch Intent (2026-11-04, Issue #797)
 
 - Accepted Unit external revisions are not rejected422 replacements, even though
