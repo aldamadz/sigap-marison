@@ -102,6 +102,7 @@ for (const file of allChangedFiles) {
   if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
   if (/actionable_role_dashboard.*\.sql$|test-actionable-dashboard-sql\.mjs$/u.test(file)) gates.add('actionable-dashboard-sql');
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
+  if (/revision_recommendation_task.*\.sql$/u.test(file)) gates.add('revision-recommendation-sql');
   if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
     if (/registration_draft_(reservation_lifecycle|recommendation_scope|recommendation_office_guard|helper_execution).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
@@ -137,6 +138,12 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'revision-recommendation-sql') {
+    run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--revision-update']);
+    run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--revision-update', '--production-shape']);
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--requester-edit', '--recommendation-enable']);
+    continue;
+  }
   if (gate === 'fund-outbound-replacement-sql') {
     run('node', ['scripts/test-outbound-replacement-sql.mjs', '--fund']);
     continue;

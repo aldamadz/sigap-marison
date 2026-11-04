@@ -1,5 +1,31 @@
 # Worklog
 
+## 2026-11-04 [Codex] REC-06 recommendation revision / Issue #773
+
+- Claimed `fix/revision-enable-recommendation` from main. Production read-only
+  diagnosis confirmed001/MBP/03.14-000.3.1/XI/2026 requires recommendation but
+  has zero tasks; insert-only trigger misses requester revisions. Its current
+  requester revision remains open; no source/signature/outbound mutation made.
+- Forward migration20261104090000 uses canonical allocation on input update,
+  preserves actor/capability guards, and normalizes parent/task lock ordering.
+  Exact private submit permit restores the asking step without approving it;
+  separate signature and terminal-status guards remain strict.
+- Red test reproduces missing task. Real PostgreSQL tests pass both factory
+  shapes, replay, ownership, late rollback, task/number dedupe, lock concurrency,
+  canonical request->draft->submit->IT inbox, old approvals and history retained.
+  Relevant38 Vitest tests, lint/typecheck/frontend/backend builds pass.
+- Staging preflight/rehearsal clean; only new migration was missing, remote-only
+  versions zero in staging overlay inventory. Applied with unchanged42 surat,
+ 179 signatures,5 tasks,75 reservations and preserved function owners/ACLs.
+- Actual Hariono UJI staging fixture request/draft/submit/inbox acceptance passes
+  within ROLLBACK. Its old single-account usage assigns PRC staff as recommendation
+  maker; the test temporarily adds one existing active PBO candidate inside the
+  same rollback transaction. No profile, candidate or document changes persist.
+- User explicitly authorized production plus narrow missing-task recovery.
+  Remaining: source/staging/main PRs, staged runtime ancestry, production schema
+  preflight/rehearsal/apply, audited recovery with unchanged parent/revision/
+  signature/outbound fingerprints, and public smoke. No external resend.
+
 ## 2026-11-03 [Codex] SEC-03 Zod4 compatibility / Issue #766
 
 - User requested upgrade and validation after the existing high Zod advisory
