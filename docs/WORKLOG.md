@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-04 [Codex] MRN-797 Explicit Single-POST Exception Authorized
+
+- Supersedes the no-resend boundary below only for051 generation3. After being
+  told generation2 already exists as vendor submission_id2 and a same-number POST
+  may create a duplicate submission/SPK, the user explicitly authorized exactly
+  one real POST and accepted duplicate risk. No automatic retry is authorized.
+- The general duplicate guard stays fail-closed. Operator exception uses the
+  existing canonical latest-payload preview (now module-exported for trusted local
+  operator tooling, no new HTTP endpoint or public permission) and records an
+  exclusive one-shot attempt plus payload hash and vendor response privately.
+  Any timeout/ambiguous response stops; never repeat to find out what happened.
+- Staging/production classification release remains separately verified. Historical
+  accepted generation2 is not overwritten. Record actual vendor reference, including
+  a different ID if returned; do not claim an in-place update without evidence.
+
+## 2026-11-04 [Codex] MRN Unit External Revision Dispatch / Issue #797
+
+- User reports051 generation3 terminal failure and explicitly authorizes staging
+  then production, but no resend. Separate branchcodex/unit-external-revision-dispatch.
+  Read-only evidence: generation2 accepted on October21 as vendor submission_id2;
+  generation3 created after external revision, payload absent/post_started_at null,
+  three local build attempts, no vendor POST. Current document DONE, review valid.
+- Cause: accepted revision and rejected HTTP422 replacement both reuse
+  replacement_of_dispatch_id. Unit builder incorrectly requires all units to be
+  previously unsubmitted for both, and a plain Error becomes500/retries.
+- Added private intent classification binding predecessor ID/document/environment/
+  kind/generation. Accepted predecessors require a vendor revision contract and
+  fail closed409 before logical build or frozen-payload materialization; pre-POST
+  recovery also rejects reopening this class. Rejected replacement and initial
+  paths retain the existing unsubmitted-reference guard. Invalid unit references
+  now return422 rather than retryable500, with no permission/duplicate bypass.
+- Admin list uses one scoped batch predecessor query to explain historical revision
+  failures without rewriting persisted jobs, payloads, responses or accepted history.
+  Current official vendor OpenAPI only documents create POST/unit-submissions;
+  no revision/update semantics or accepted-record ownership lookup is documented.
+  Delivery remains blocked pending Digivasi's duplicate-safe revision contract.
+- Pure tests and real raw dispatcher fixtures prove409 at logical/transport stages,
+  no outbound network, no database RPC/write and unchanged frozen payload. No
+  job reopened or new generation created. Remaining: gates, staging/main selective
+  release and read-only production diagnosis acceptance. No migration/worker edit.
+
 ## 2026-11-04 [Codex] SUR-30 External Addendum Review Preservation / Issue #791
 
 - User reports051/UAI/MKT.1.SGN/X/2026 final approval blocked after external
