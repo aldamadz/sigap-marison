@@ -1,13 +1,9 @@
 import { TERMS } from './terms.mjs';
 import { PRIVACY } from './privacy.mjs';
 import { LANDING_LINKS_CSS, LANDING_LINKS_JS, enhanceLanding, renderLandingPreview } from './landing-links.mjs';
+import { COMPONENTS, ALL_COMPONENTS, LEGACY_COMPONENTS } from './components.mjs';
 
-const SERVICES = [
-  { id: 'drive', name: 'Maris Drive', domain: 'drive.marisoncloud.com', url: 'https://drive.marisoncloud.com' },
-  { id: 'ai', name: 'AI Workspace', domain: 'ai.marisoncloud.com', url: 'https://ai.marisoncloud.com' },
-  { id: 'sigap', name: 'SIGAP', domain: 'sigap.marisoncloud.com', url: 'https://sigap.marisoncloud.com' },
-  { id: 'marison', name: 'Marison Cloud', domain: 'marisoncloud.com', url: 'https://marisoncloud.com' },
-];
+const SERVICES = [...ALL_COMPONENTS, ...LEGACY_COMPONENTS];
 
 const STALE_MS = 3 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,6 +11,9 @@ const HISTORY_DAYS = 30;
 const LOGO_BASE64 = '__LOGO_BASE64__';
 const LABELS = { up: 'UP', down: 'DOWN', unknown: 'BELUM DIKETAHUI' };
 const PHASE_LABELS = { investigating: 'Investigasi', identified: 'Penyebab diketahui', monitoring: 'Pemantauan', resolved: 'Selesai' };
+const OBSERVATION_LABELS = { process_down: 'Proses layanan tidak berjalan.', dependency_failed: 'Layanan belum siap merespons.',
+  queue_stalled: 'Progres pekerjaan melewati batas pemeriksaan.', check_unavailable: 'Kondisi layanan belum dapat diperiksa.',
+  disabled: 'Layanan dinonaktifkan melalui konfigurasi.' };
 
 function number(value) {
   const parsed = Number(value);
@@ -50,11 +49,11 @@ function historyFor(rows, now) {
     const row = buckets.get(day);
     const samples = number(row?.up_count) + number(row?.degraded_count) + number(row?.down_count);
     const ratio = samples ? number(row.up_count) / samples : null;
-    const status = ratio === null ? 'unknown' : ratio === 1 ? 'up'
+    const status = ratio === null || (number(row?.unknown_count) > 0 && ratio === 1) ? 'unknown' : ratio === 1 ? 'up'
       : ratio >= 0.99 ? 'degraded' : ratio >= 0.95 ? 'partial' : 'down';
     const availability = ratio === null ? null : (ratio * 100).toFixed(2) + '%';
     const label = ratio === null ? 'Belum ada data'
-      : `${availability} sampel sehat (${samples} pemeriksaan)`;
+      : `${availability} sampel sehat (${samples} pemeriksaan)${number(row?.unknown_count) ? `; ${number(row.unknown_count)} pemeriksaan belum diketahui` : ''}`;
     return { day, status, samples, availability, label };
   });
 }
@@ -90,7 +89,7 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
       overdue: item.source === 'sigap' && item.impact === 'full' && number(item.ends_at) < now,
       syncStale: item.source === 'sigap' && (!sigapSync || now - number(sigapSync.synced_at) > STALE_MS) }))
     .sort((left, right) => left.startsAt - right.startsAt);
-  const services = SERVICES.map((service) => {
+  const componentStatus = (service) => {
     const observations = recent.filter((row) => row.service === service.id)
       .sort((left, right) => number(right.checked_at) - number(left.checked_at));
     const latest = observations[0];
@@ -121,9 +120,18 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
       availability,
       coverage,
       samples,
+      note: status === 'unknown' && age > STALE_MS ? 'Menunggu laporan kesehatan terbaru.' : OBSERVATION_LABELS[latest?.reason] || '',
       history: historyFor(serviceDays, now),
+      ...(service.children ? { children: service.children.map(componentStatus) } : {}),
     };
-  });
+  };
+  const services = COMPONENTS.map(componentStatus);
+  // A stale child can never be hidden behind a fresh aggregate observation.
+  const group = services.find(service => service.children);
+  const groupStatus = group.children.some(child => child.status === 'down') ? 'down'
+    : group.children.some(child => child.status === 'unknown') ? 'unknown' : group.status;
+  group.status = groupStatus; group.label = LABELS[groupStatus];
+  if (groupStatus === 'unknown') { group.latency = '—'; group.updated = 'Menunggu laporan kesehatan terbaru'; }
 
   const overall = services.some((service) => service.status === 'down') ? 'down'
     : services.some((service) => service.status === 'unknown') ? 'unknown'
@@ -143,13 +151,16 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
 
 export async function loadStatus(db, now = Date.now()) {
   const [recent, daily, incidents, updates, maintenance, sources] = await Promise.all([
-    db.prepare(`SELECT service, checked_at, outcome, latency_ms, position FROM (
-      SELECT service, checked_at, outcome, latency_ms,
+    db.prepare(`SELECT service, checked_at, outcome, latency_ms, reason, position FROM (
+      SELECT service, checked_at, outcome, latency_ms, reason,
         ROW_NUMBER() OVER (PARTITION BY service ORDER BY checked_at DESC) AS position
-      FROM checks WHERE checked_at >= ?
+      FROM (SELECT service,checked_at,outcome,latency_ms,reason FROM checks WHERE service='sigap'
+        UNION ALL SELECT service,checked_at,outcome,latency_ms,reason FROM component_checks) WHERE checked_at >= ?
     ) WHERE position <= 2`).bind(now - STALE_MS - 60000).all(),
-    db.prepare(`SELECT service, day, up_count, degraded_count, down_count, first_at
-      FROM daily_checks WHERE day >= ?`).bind(jakartaDay(now - (HISTORY_DAYS - 1) * DAY_MS)).all(),
+    db.prepare(`SELECT service, day, up_count, degraded_count, down_count, unknown_count, first_at
+      FROM (SELECT service,day,up_count,degraded_count,down_count,0 AS unknown_count,first_at FROM daily_checks WHERE service='sigap'
+        UNION ALL SELECT service,day,up_count,degraded_count,down_count,unknown_count,first_at FROM component_daily_checks)
+      WHERE day >= ?`).bind(jakartaDay(now - (HISTORY_DAYS - 1) * DAY_MS)).all(),
     db.prepare(`SELECT id, title, summary, severity, service_ids, started_at
       FROM incidents WHERE started_at >= ? ORDER BY started_at DESC LIMIT 20`).bind(now - 90 * DAY_MS).all(),
     db.prepare(`SELECT id, incident_id, phase, message, created_at FROM incident_updates
@@ -175,10 +186,11 @@ export async function loadFeed(db, now = Date.now()) {
     db.prepare(`SELECT id,title,description,starts_at,ends_at,created_at,cancelled_at FROM maintenance
       WHERE created_at>=? OR cancelled_at>=? OR ends_at>=? ORDER BY created_at DESC LIMIT 40`).bind(since, since, now).all(),
     db.prepare(`SELECT service,slot,checked_at,condition FROM (
-      SELECT service,slot,checked_at,CASE WHEN outcome='up' THEN 'UP' ELSE 'DOWN' END AS condition,
-      LAG(CASE WHEN outcome='up' THEN 'UP' ELSE 'DOWN' END) OVER (PARTITION BY service ORDER BY slot) AS previous,
+      SELECT service,slot,checked_at,CASE WHEN outcome='up' THEN 'UP' WHEN outcome IN ('down','degraded') THEN 'DOWN' END AS condition,
+      LAG(CASE WHEN outcome='up' THEN 'UP' WHEN outcome IN ('down','degraded') THEN 'DOWN' END) OVER (PARTITION BY service ORDER BY slot) AS previous,
       LAG(checked_at) OVER (PARTITION BY service ORDER BY slot) AS previous_at
-      FROM checks WHERE checked_at>=?
+      FROM (SELECT service,slot,checked_at,outcome FROM checks WHERE service='sigap'
+        UNION ALL SELECT service,slot,checked_at,outcome FROM component_checks) WHERE checked_at>=?
     ) WHERE previous IS NOT NULL AND condition<>previous AND checked_at-previous_at<=180000
       ORDER BY checked_at DESC LIMIT 40`).bind(now - DAY_MS).all(),
   ]);
@@ -195,7 +207,7 @@ export async function loadFeed(db, now = Date.now()) {
         title: `Jadwal ditutup: ${item.title}`, description: 'Jadwal telah selesai atau dibatalkan oleh pengelola layanan.',
         at: number(item.cancelled_at), section: 'maintenance-title' }] : []),
     ]),
-    ...changes.results.filter((item) => SERVICES.some((service) => service.id === item.service)).map((item) => ({
+    ...changes.results.filter((item) => ALL_COMPONENTS.some((service) => service.id === item.service)).map((item) => ({
       id: `probe:${item.service}:${item.slot}`, title: `${SERVICES.find((service) => service.id === item.service).name}: ${item.condition}`,
       description: `Hasil pemeriksaan publik berubah menjadi ${item.condition}. Ini hasil probe, bukan konfirmasi penyebab gangguan.`,
       at: number(item.checked_at), section: 'services-title',
@@ -226,6 +238,7 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>',
 };
 const icon = (name) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 const themeSwitch = () => `<div class="theme-switch" role="group" aria-label="Tema tampilan">${[['light','sun','Terang'],['dark','moon','Gelap'],['system','monitor','Sistem']].map(([value,name,label]) => `<button class="icon-button" type="button" data-set-theme="${value}" aria-label="Tema ${label.toLowerCase()}" title="${label}" aria-pressed="false">${icon(name)}</button>`).join('')}</div>`;
@@ -284,7 +297,7 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 .service-list{list-style:none;margin:0;padding:0;border-top:1px solid #d7e0e3}.service{display:grid;grid-template-columns:minmax(190px,1.5fr) minmax(150px,1fr) minmax(165px,1fr) minmax(140px,1fr);gap:14px 18px;align-items:center;padding:23px 2px;border-bottom:1px solid #d7e0e3}
 .service-name a{font-size:15px;font-weight:700;text-decoration:none}.service-name a:hover{text-decoration:underline}.domain{display:block;font-size:12px;color:#71818b;margin-top:4px;overflow-wrap:anywhere}
 .metric-label{font-size:11px;text-transform:uppercase;color:#76858e;margin-bottom:5px}.metric-value{font-size:13px;font-weight:600}.status-value{display:flex;align-items:center;gap:8px}.status-dot{width:8px;height:8px;border-radius:50%;background:#288e4e;flex:none}
-.service[data-status="degraded"] .status-dot{background:#c68310}.service[data-status="down"] .status-dot{background:#cb4949}.service[data-status="unknown"] .status-dot{background:#788d98}
+.service[data-status="up"]>div .status-dot{background:#288e4e}.service[data-status="degraded"]>div .status-dot{background:#c68310}.service[data-status="down"]>div .status-dot{background:#cb4949}.service[data-status="unknown"]>div .status-dot{background:#788d98}
 .history-block{grid-column:1/-1;display:flex;align-items:center;gap:17px;min-width:0}.history{display:grid;grid-template-columns:repeat(30,minmax(0,1fr));gap:3px;flex:1;min-width:0}.bar{height:20px;background:#2abf72;border-radius:2px;border:0;padding:0}.history .bar{width:100%;cursor:pointer}.history .bar:focus-visible{outline:2px solid #275b78;outline-offset:2px}
 .bar.degraded{background:#e9c341}.bar.partial{background:#e58a35}.bar.down{background:#de6969}.bar.unknown{background:#d9e1e5}.history-caption{font-size:11px;color:#71818b;white-space:nowrap}
 .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;color:#6c7d86;font-size:11px}.legend-item{display:inline-flex;align-items:center;gap:7px}.legend .bar{width:12px;height:12px}
@@ -315,10 +328,11 @@ h1{font-size:32px;line-height:1.22;margin:8px 0 9px;font-weight:720}p{margin:0}.
 [data-theme="dark"] .overview[data-status="degraded"]{background:#332b19;border-color:#77602c;border-left-color:#e3b747}[data-theme="dark"] .overview[data-status="degraded"] .overview-dot{background:#e3b747;box-shadow:0 0 0 5px #57451d}
 [data-theme="dark"] .overview[data-status="down"]{background:#361e24;border-color:#76404a;border-left-color:#ee7d87}[data-theme="dark"] .overview[data-status="down"] .overview-dot{background:#ee7d87;box-shadow:0 0 0 5px #582f38}
 [data-theme="dark"] .overview[data-status="unknown"]{background:#23262f;border-color:#515b69;border-left-color:#a5b2c2}[data-theme="dark"] .overview[data-status="unknown"] .overview-dot{background:#a5b2c2;box-shadow:0 0 0 5px #39404b}
-[data-theme="dark"] .bar.unknown{background:#3d444f}[data-theme="dark"] .status-dot{background:#59c88b}[data-theme="dark"] .service[data-status="down"] .status-dot{background:#ee7d87}[data-theme="dark"] .service[data-status="unknown"] .status-dot{background:#a5b2c2}
+[data-theme="dark"] .bar.unknown{background:#3d444f}[data-theme="dark"] .status-dot{background:#59c88b}[data-theme="dark"] .service[data-status="up"]>div .status-dot{background:#59c88b}[data-theme="dark"] .service[data-status="down"]>div .status-dot{background:#ee7d87}[data-theme="dark"] .service[data-status="unknown"]>div .status-dot{background:#a5b2c2}
 [data-theme="dark"] .phase-badge{background:#42351e;color:#f1c66f}[data-theme="dark"] .phase-badge.resolved{background:#254434;color:#9ce2b6}[data-theme="dark"] .subscribe-dialog::backdrop{background:#0009}
 @media(max-width:760px){.header-actions{gap:10px}.header-actions .top-link{display:none}.theme-switch .icon-button{width:30px;height:34px}.brand{gap:8px}.brand-mark{padding-left:8px}}
 .legal-main{max-width:850px}.legal-main h1{margin:15px 0}.legal-meta{font-size:13px;color:#647582;margin-bottom:30px}.legal-toc{display:flex;flex-wrap:wrap;gap:10px 18px;padding:20px 0;border-block:1px solid #d7e0e3;margin-bottom:30px}.legal-toc a{font-size:13px;color:#39705b}.legal-section{padding:22px 0;border-bottom:1px solid #d7e0e3;scroll-margin-top:20px}.legal-section h2{margin-bottom:14px}.legal-section p{font-size:14px;line-height:1.8;margin:10px 0;color:#40535d}.legal-history{margin-top:30px}.legal-history li{font-size:13px;line-height:1.8;color:#647582}[data-theme="dark"] .legal-meta,[data-theme="dark"] .legal-history li{color:#aab4c0}[data-theme="dark"] .legal-section p{color:#d3dce7}[data-theme="dark"] .legal-toc,[data-theme="dark"] .legal-section{border-color:#3d444f}[data-theme="dark"] .legal-toc a{color:#83d8a5}
+.service-details{grid-column:1/-1;width:100%;min-width:0}.service-details summary{display:flex;align-items:center;gap:9px;width:fit-content;max-width:100%;padding:9px 12px;cursor:pointer;border:1px solid #b9cbd0;border-radius:5px;font-size:13px;font-weight:600;list-style:none}.service-details summary::-webkit-details-marker{display:none}.service-details summary:focus-visible{outline:2px solid #27834b;outline-offset:3px}.service-details[open]>summary svg{transform:rotate(180deg)}.service-children{list-style:none;margin:16px 0 0;padding:0 0 0 20px;border-left:2px solid #c4d6ce}.service-children>.service:last-child{border-bottom:0}.service-name>strong{font-size:15px}.service-status-note{grid-column:1/-1;font-size:12px;color:#687982;line-height:1.5;margin:0}.service-children .service-name{min-width:0;overflow-wrap:anywhere}[data-theme="dark"] .service-details summary{border-color:#596b69}[data-theme="dark"] .service-children{border-color:#486052}[data-theme="dark"] .service-status-note{color:#aab4c0}@media(max-width:760px){.service-children{padding-left:12px}}
 `;
 
 const APP_JS = String.raw`
@@ -355,7 +369,7 @@ async function refresh(){
     overview.dataset.status=data.overall;
     document.querySelector('#overall-label').textContent=data.overallLabel;
     document.querySelector('#updated-at').textContent='Diperbarui '+new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(data.generatedAt)+' WIB';
-    for(const service of data.services){
+    for(const service of data.services.flatMap(item=>[item,...(item.children||[])])){
       const row=document.querySelector('[data-service="'+service.id+'"]');
       if(!row)continue;
       row.dataset.status=service.status;
@@ -364,7 +378,8 @@ async function refresh(){
       row.querySelector('[data-field="availability"]').textContent=service.availability;
       row.querySelector('[data-field="coverage"]').textContent=service.coverage;
       row.querySelector('[data-field="updated"]').textContent=service.updated;
-      row.querySelectorAll('.history .bar').forEach((bar,index)=>{
+      row.querySelector('[data-field="note"]').textContent=service.note||'';
+      row.querySelectorAll(':scope > .history-block .history .bar').forEach((bar,index)=>{
         const entry=service.history[index];
         bar.className='bar '+entry.status;
         bar.title=entry.day+': '+entry.label;
@@ -401,14 +416,17 @@ export function renderHtml(data, { preview = false } = {}) {
     <div class="feed-section">${icon('rss')} RSS</div>
     ${[['rss', 'RSS', '/feed.rss'], ['atom', 'Atom', '/feed.atom']].map(([id, label, path]) => `<label class="feed-label" for="${id}-url">${label} feed</label><div class="feed-field"><input id="${id}-url" type="url" readonly value="${feedOrigin}${path}" spellcheck="false"><button type="button" class="icon-button" data-copy="${id}-url" data-format="${label}" aria-label="Salin tautan ${label}" title="Salin tautan ${label}">${icon('copy')}</button></div>`).join('')}
     <p id="copy-feedback" class="copy-feedback" role="status" aria-live="polite"></p></dialog>`;
-  const rows = data.services.map((service) => `<li class="service" data-service="${service.id}" data-status="${service.status}">
-    <div class="service-name"><a href="${service.url}" target="_blank" rel="noopener noreferrer">${escape(service.name)}</a><span class="domain">${escape(service.domain)}</span></div>
+  const renderService = (service) => `<li class="service" data-service="${service.id}" data-status="${service.status}">
+    <div class="service-name">${service.url ? `<a href="${service.url}" target="_blank" rel="noopener noreferrer">${escape(service.name)}</a>` : `<strong>${escape(service.name)}</strong>`}<span class="domain">${escape(service.domain)}</span></div>
     <div><div class="metric-label">Kondisi</div><div class="metric-value status-value"><span class="status-dot" aria-hidden="true"></span><span data-field="status">${escape(service.label)}</span></div></div>
-    <div><div class="metric-label">Respons terakhir</div><div class="metric-value" data-field="latency">${escape(service.latency)}</div></div>
+    <div><div class="metric-label">${service.url ? 'Respons terakhir' : 'Durasi pemeriksaan'}</div><div class="metric-value" data-field="latency">${escape(service.latency)}</div></div>
     <div><div class="metric-label">Uptime sampel 30 hari</div><div class="metric-value" data-field="availability">${escape(service.availability)}</div><span class="coverage" data-field="coverage">${escape(service.coverage)}</span></div>
     <div class="history-block"><div class="history" aria-label="Riwayat kondisi 30 hari">${service.history.map((entry) => `<button type="button" class="bar ${entry.status}" title="${escape(entry.day)}: ${escape(entry.label)}" aria-label="${escape(entry.day)}: ${escape(entry.label)}"></button>`).join('')}</div><span class="history-caption">30 hari terakhir</span></div>
     <span class="domain" data-field="updated">${escape(service.updated)}</span>
-  </li>`).join('');
+    <p class="service-status-note" data-field="note">${escape(service.note || '')}</p>
+    ${service.children ? `<details class="service-details"><summary>${icon('chevron')} Kondisi tiap service (${service.children.length})</summary><ul class="service-children">${service.children.map(renderService).join('')}</ul></details>` : ''}
+  </li>`;
+  const rows = data.services.map(renderService).join('');
   const maintenanceItems = data.maintenance.map((item) => `<li class="maintenance-item">
     <div class="event-kicker"><span class="status-dot" aria-hidden="true"></span>${item.active ? 'Sedang berlangsung' : 'Terjadwal'}</div>
     <h3>${escape(item.title)}</h3><p class="event-meta">${escape(item.startsText)} – ${escape(item.endsText)}</p>
@@ -423,15 +441,15 @@ export function renderHtml(data, { preview = false } = {}) {
     <ol class="timeline">${item.timeline.map((update) => `<li class="${escape(update.phase)}"><strong>${escape(update.phaseLabel)}</strong><p>${escape(update.message)}</p><time datetime="${new Date(update.at).toISOString()}">${escape(update.atText)}</time></li>`).join('')}</ol>
   </li>`).join('');
   const generated = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(data.generatedAt);
-return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan layanan Marison Cloud."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="alternate" type="application/atom+xml" title="Kabar Status Marison Cloud (Atom)" href="/feed.atom"><link rel="icon" href="/logo.png"><script src="/theme.js?v=1"></script><style>${CSS}</style><script src="/app.js?v=20261103-theme-legal-v1" defer></script></head>
+return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f7f8"><title>Status Layanan | Marison Cloud</title><meta name="description" content="Status ketersediaan SIGAP production, staging, storage, dan layanan pendukung."><link rel="alternate" type="application/rss+xml" title="Kabar Status Marison Cloud" href="/rss.xml"><link rel="alternate" type="application/atom+xml" title="Kabar Status Marison Cloud (Atom)" href="/feed.atom"><link rel="icon" href="/logo.png"><script src="/theme.js?v=1"></script><style>${CSS}</style><script src="/app.js?v=20261104-components-v1" defer></script></head>
   <body data-timeline-version="${escape(data.timelineVersion)}"><header><div class="shell top"><div class="brand"><a href="https://marisoncloud.com" aria-label="Marison Cloud"><img src="/logo.png" alt="Marison"></a><span class="brand-mark">Status layanan</span></div><div class="header-actions">${themeSwitch()}<a class="top-link" href="https://marisoncloud.com">Kembali ke Marison Cloud →</a></div></div></header>
-  ${preview ? '<div class="preview-banner">Pratinjau staging: probe layanan production, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
-  <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan publik</div><h1>Kondisi layanan Marison Cloud</h1><p class="subtitle">Diperiksa dari luar infrastruktur Marison setiap menit.</p></div><div class="intro-actions"><button class="rss-link subscribe-trigger" id="subscribe" type="button" aria-haspopup="dialog">${icon('rss')} Berlangganan</button><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div></div>
+  ${preview ? '<div class="preview-banner">Pratinjau staging halaman status: probe SIGAP production dan staging, jadwal SIGAP staging. Halaman publik tetap status.marisoncloud.com.</div>' : ''}
+  <main class="shell"><div class="intro"><div><div class="eyebrow">Pemantauan SIGAP</div><h1>Kondisi layanan SIGAP</h1><p class="subtitle">Production, staging, penyimpanan, dan layanan pendukung.</p></div><div class="intro-actions"><button class="rss-link subscribe-trigger" id="subscribe" type="button" aria-haspopup="dialog">${icon('rss')} Berlangganan</button><button class="refresh" id="refresh" type="button" aria-label="Perbarui status">↻ <span>Perbarui</span></button></div></div>
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
   <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>100% sehat</span><span class="legend-item"><span class="bar degraded"></span>99–&lt;100% sehat</span><span class="legend-item"><span class="bar partial"></span>95–&lt;99% sehat</span><span class="legend-item"><span class="bar down"></span>&lt;95% sehat</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
   <div class="sections"><section class="status-section" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Pemeliharaan terjadwal</h2>${maintenanceItems ? `<ul class="maintenance-list">${maintenanceItems}</ul>` : '<p class="empty">Tidak ada pemeliharaan yang dijadwalkan.</p>'}</section>
   <section class="status-section" aria-labelledby="incidents-title"><div class="section-heading"><h2 id="incidents-title">Riwayat insiden</h2><span>90 hari terakhir</span></div>${incidentItems ? `<ul class="incident-list">${incidentItems}</ul>` : '<p class="empty">Belum ada insiden yang tercatat.</p>'}</section></div>
-  <div class="note"><strong>Tentang pemantauan.</strong> Pemeriksaan dilakukan dari luar server Marison setiap menit. Uptime dihitung dari sampel yang berhasil dikumpulkan dalam 30 hari; persentase cakupan menunjukkan kelengkapan pengukuran, bukan jaminan SLA. Jika pemeriksaan berhenti lebih dari 3 menit, status ditampilkan belum tersedia.</div>
+  <div class="note"><strong>Tentang pemantauan.</strong> Aplikasi production dan staging diperiksa dari luar server setiap menit. Storage dan service diperiksa kolektor internal melalui kesiapan layanan, proses, dan progres antrean; pemeriksaan ini tidak menjalankan pengajuan atau menguji pengiriman ke vendor. Uptime dihitung dari sampel yang tersedia dalam 30 hari, bukan jaminan SLA. Data lebih dari 3 menit menjadi belum diketahui. Riwayat sebelum pemantauan dimulai tidak dianggap sehat.</div>
   <footer class="page-footer"><span>Waktu ditampilkan dalam WIB (UTC+7).</span><nav class="legal-links" aria-label="Kebijakan layanan"><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://marisoncloud.com/terms">Terms of Service</a></nav></footer></main>${subscriptionDialog}</body></html>`;
 }
 

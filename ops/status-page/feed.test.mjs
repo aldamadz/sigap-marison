@@ -16,14 +16,14 @@ test('RSS combines stable probe, incident, handling, and maintenance events', as
     [{ id: 'u', title: 'Gangguan SIGAP', phase: 'monitoring', message: 'Layanan pulih', created_at: NOW - 500 }],
     [{ id: 'm', title: 'Pembaruan SIGAP', description: 'Perbaikan layanan', starts_at: NOW + 1000,
       ends_at: NOW + 2000, created_at: NOW - 2000, cancelled_at: null }],
-    [{ service: 'drive', slot: 10, condition: 'DOWN', checked_at: NOW - 1500 }],
+    [{ service: 'sigap_pdf', slot: 10, condition: 'DOWN', checked_at: NOW - 1500 }],
   ];
   const first = await loadFeed(database(groups), NOW);
   const second = await loadFeed(database(groups), NOW + 100);
   assert.deepEqual(first.map(x => x.id), second.map(x => x.id));
   assert.equal(first[0].id, 'update:u');
   assert.equal(first.length, 4);
-  assert.match(renderRss(first, undefined, NOW), /<guid isPermaLink="false">probe:drive:10<\/guid>/);
+  assert.match(renderRss(first, undefined, NOW), /<guid isPermaLink="false">probe:sigap_pdf:10<\/guid>/);
 });
 
 test('RSS encodes XML and HTML safely, strips invalid control characters', () => {

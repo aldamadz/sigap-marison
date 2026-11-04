@@ -19,12 +19,13 @@ test('all public and health endpoints produce up observations', async () => {
     prepare(sql) {
       return { bind(...values) { rows.push({ sql, values }); return { run: async () => {} }; } };
     },
-    batch: async (statements) => assert.equal(statements.length, 8),
+    batch: async (statements) => assert.equal(statements.length, 4),
   };
   const checkedAt = Date.UTC(2026, 10, 3, 5, 23, 0);
   const result = await runChecks({ DB: db }, checkedAt, async (url) => responseFor(url));
-  assert.deepEqual(result.map((item) => item.outcome), ['up', 'up', 'up', 'up']);
-  assert.equal(rows.length, 8);
+  assert.deepEqual(result.map((item) => item.outcome), ['up', 'up']);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(result.map(item => item.service), ['sigap', 'sigap_staging']);
   assert.equal(result[0].slot, Math.floor(checkedAt / 60000));
 });
 
@@ -45,13 +46,14 @@ test('failed public root with ready health is degraded', async () => {
 });
 
 test('probe rejects invalid health and network failure', async () => {
-  const service = SERVICES.find((item) => item.id === 'ai');
-  const malformed = await probeService(service, async (url) => url.endsWith('/api/health')
+  const service = SERVICES.find((item) => item.id === 'sigap_staging');
+  const malformed = await probeService(service, async (url) => url.endsWith('/health/ready')
     ? new Response('<html>ok</html>', { headers: { 'content-type': 'text/html' } }) : responseFor(url));
   assert.equal(malformed.outcome, 'down');
   const network = await probeService(service, async () => { throw new Error('offline'); });
   assert.equal(network.outcome, 'down');
   assert.equal(network.reason, 'network');
+  assert.equal(network.httpStatus, null);
 });
 
 test('public probe URL does not expose an on-demand checker', async () => {

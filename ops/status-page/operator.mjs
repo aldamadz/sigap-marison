@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ALL_COMPONENTS } from './components.mjs';
 
-const SERVICES = new Set(['drive', 'ai', 'sigap', 'marison']);
+const SERVICES = new Set(ALL_COMPONENTS.map(service => service.id));
 const PHASES = new Set(['identified', 'monitoring', 'resolved']);
 
 function requiredText(value, label, maxLength) {

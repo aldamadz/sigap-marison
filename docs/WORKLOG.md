@@ -1,5 +1,23 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-16 component status staging acceptance / Issue #760
+
+- Active source feature/status-marisoncloud-page. Four top-level SIGAP components
+  with expandable PDF/sync/outbound/API child states. User explicitly authorizes
+  read-only production collector and publication after staging verification.
+- Staging additive D1 migration applied after bookmark capture; compiled page
+  and probe deployed with original bindings/maintenance sync retained. Authentic
+  collector reports accepted; all components currently UP, no synthetic healthy
+  history. Existing public production page remains unchanged at this point.
+- Proxmox collector timer enabled, reporting only to staging until promotion.
+  It reads queues in READ ONLY/ROLLBACK and checks existing process/readiness
+  interfaces. No app/worker restart, new storage port, job claim or vendor POST.
+  Private signing key/config remain operator-only outside Git.
+-45 JavaScript and4 Python tests, scoped lint/build/syntax pass. Desktop/mobile
+  disclosure and keyboard interaction verified; no horizontal overflow. Pending:
+  final source commit, production D1/Worker rollout, collector target addition,
+  public acceptance and final evidence. PROJECT_CONTEXT remains unavailable.
+
 ## 2026-11-03 [Codex] OPS-16 Group Privacy And Landing Navigation Live
 
 - Source `aeb22ce` released to staging page Worker, then production after

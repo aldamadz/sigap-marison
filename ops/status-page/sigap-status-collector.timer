@@ -1,0 +1,11 @@
+[Unit]
+Description=Publish SIGAP status every minute
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=60
+AccuracySec=1
+Unit=sigap-status-collector.service
+
+[Install]
+WantedBy=timers.target

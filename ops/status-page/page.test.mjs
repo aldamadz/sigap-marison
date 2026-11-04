@@ -1,19 +1,16 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import worker, { buildStatus, loadStatus, renderHtml } from './page.mjs';
+import { ALL_COMPONENTS } from './components.mjs';
 
 const NOW = Date.UTC(2026, 10, 3, 5, 30, 0);
-const rows = (outcome = 'up', checkedAt = NOW - 15000) => [
-  { service: 'drive', checked_at: checkedAt, outcome, latency_ms: 120 },
-  { service: 'ai', checked_at: checkedAt, outcome, latency_ms: 140 },
-  { service: 'sigap', checked_at: checkedAt, outcome, latency_ms: 170 },
-  { service: 'marison', checked_at: checkedAt, outcome, latency_ms: 110 },
-];
+const rows = (outcome = 'up', checkedAt = NOW - 15000) => ALL_COMPONENTS.map(component =>
+  ({ service: component.id, checked_at: checkedAt, outcome, latency_ms: 120 }));
 
 test('reports all four healthy services and sampled availability', () => {
   const data = buildStatus({
     recent: rows(),
-    daily: ['drive', 'ai', 'sigap', 'marison'].map((service) => ({ service, day: '2026-11-03',
+    daily: ALL_COMPONENTS.map(({ id: service }) => ({ service, day: '2026-11-03',
       up_count: 9, down_count: 1, degraded_count: 0, first_at: NOW - 600000 })),
   }, NOW);
   assert.equal(data.overall, 'up');
@@ -33,7 +30,7 @@ test('stale observations never produce a green status', () => {
 test('daily history uses four health bands without changing current condition', () => {
   for (const [healthy, failed, expected] of [[10000, 0, 'up'], [9999, 1, 'degraded'],
     [9900, 100, 'degraded'], [9899, 101, 'partial'], [9500, 500, 'partial'], [9499, 501, 'down']]) {
-    const data = buildStatus({ recent: rows(), daily: [{ service: 'drive', day: '2026-11-03',
+    const data = buildStatus({ recent: rows(), daily: [{ service: 'sigap', day: '2026-11-03',
       up_count: healthy, down_count: failed, degraded_count: 0, first_at: NOW - 600000 }] }, NOW);
     const day = data.services[0].history.at(-1);
     assert.equal(day.status, expected);
@@ -122,7 +119,7 @@ test('status API fails closed when D1 is unavailable', async () => {
 
 test('page uses a versioned, uncached interaction script', async () => {
   const html = renderHtml(buildStatus({ recent: rows() }, NOW));
-  assert.match(html, /src="\/app\.js\?v=20261103-theme-legal-v1"/);
+  assert.match(html, /src="\/app\.js\?v=20261104-components-v1"/);
   const response = await worker.fetch(new Request('https://status.marisoncloud.com/app.js'), {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');

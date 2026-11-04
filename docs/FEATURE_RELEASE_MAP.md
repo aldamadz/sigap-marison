@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## 2026-11-04 [Codex] OPS-16 SIGAP Component Status / Issue #760
+
+- User selects four active components: SIGAP Production, SIGAP Staging, SIGAP
+  Storage and expandable Service SIGAP (PDF, sync, outbound, external API).
+- Production collector/page release explicitly authorized after staging.
+  Preserve original production `sigap` history and retired domain evidence;
+  only new component observation tables are added to status D1, not app DB.
+- Staging signed real telemetry and responsive keyboard/disclosure acceptance
+  pass.45 scoped JavaScript tests,4 Python collector tests, scoped lint and
+  compiled Worker build pass. No app/worker restart or business POST.
+- Production publication pending final status rollout and public acceptance.
+  Collector checks process/readiness/progress, not synthetic business operations;
+  stale/unobservable/disabled services are unknown, never forced green.
+
 ## OPS-16 Independent Public Status Page (2026-11-03, Issue #760)
 
 - 2026-11-03 [Codex] Group Privacy v2.0 and TOS v1.2 now live after staging

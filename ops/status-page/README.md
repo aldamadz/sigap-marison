@@ -1,5 +1,79 @@
 # Marison Cloud public status
 
+## 2026-11-04 [Codex] SIGAP Component Monitoring
+
+This update supersedes the original four-domain monitoring scope below. The
+active page has four top-level components: SIGAP Production (`sigap`, preserving
+its history), SIGAP Staging, SIGAP Storage, and Service SIGAP. A native details
+disclosure reveals PDF, directory sync, outbound, and external API observations.
+The three retired domains are no longer probed or displayed, but their original
+`checks`/`daily_checks` records are not repurposed, reset, or deleted by migration.
+Ordinary documented 30-day retention still applies. Historical event names stay
+resolvable. RSS/Atom probe changes follow only the active components.
+
+Apply `migrations/20261104110000_sigap_components.sql` before uploading the new
+Workers. It only adds component tables; the original SIGAP row identity remains
+unchanged. `build.mjs` now produces both `dist/page.mjs` and `dist/probe.mjs` as
+self-contained modules. Upload those compiled files, not the importing sources.
+The existing one-minute cron, D1 bindings, legal routes, and SIGAP maintenance
+binding must be retained. Only the page's status scope changes; group Privacy,
+Terms and main-landing navigation must continue working.
+
+Production/staging application probes remain independent GET checks from
+Cloudflare. Null HTTP status on timeout stays null, not a misleading 200.
+Successful latency now includes reading the bounded response body.
+
+`collector.py` runs on the Proxmox operator host through
+`sigap-status-collector.timer`, once per minute. It performs only:
+
+- Private Storage API readiness from CT110 and MinIO readiness inside VM100
+  through its existing guest agent. No new public/LAN storage port is opened.
+- CT104 container/process inspection for the four allowlisted services.
+- PostgreSQL SELECTs inside `BEGIN READ ONLY`, two-second statement timeout and
+  ROLLBACK, to detect queued PDF work older than ten minutes, expired processing
+  leases, due outbound work older than fifteen minutes, and recent successful
+  or currently running scheduled directory sync. This never claims a job,
+  renders a document, runs sync, approves a document, or POSTs to the vendor.
+- An existing API external `/health` GET on the private network.
+
+These are process/readiness/progress checks, not synthetic end-to-end business
+transactions. An idle process with no pending work does not prove a complete
+future business operation will succeed. Historical terminal vendor rejections
+or old failed PDF jobs alone do not mean the worker process is down. Disabled
+workers or unavailable observations are unknown, not UP.
+
+The collector publishes only allowlisted component IDs, timestamps, states,
+generic reasons and durations. No document numbers, queue counts, employee data,
+internal URLs, credentials, payloads, or error details enter the public report.
+The private Ed25519 key and operator configuration live outside Git in an
+owner-only directory on the operator host. Each probe Worker receives its public
+key and an exact `COLLECTOR_AUDIENCE` binding; signatures cover timestamp, host,
+path and exact body. `/report` rejects bad/stale signatures, unknown components,
+oversized bodies and duplicates within one minute cannot rewrite an observation.
+There is no public collector administration, shell endpoint or unsigned write.
+The reporting connection verifies HTTPS and does not follow redirects.
+
+The collector requires root only for existing Proxmox `pct`/guest-agent access;
+it exposes no listener or Docker socket. Its systemd unit uses a private temp
+directory, no new privileges, owner-only umask and a bounded run timeout.
+Do not describe it as a new least-privilege database role: the local operator's
+existing PostgreSQL access is constrained by the script's read-only transaction,
+not by a newly provisioned role. The app/worker containers are not restarted.
+
+Fresh aggregate state cannot conceal a failed/stale child. Lost reports become
+unknown after three minutes; no outage is invented as healthy history. The
+status page still runs outside Proxmox and remains reachable if the collector
+or all monitored infrastructure stops. Latency for internal components is
+labeled **Durasi pemeriksaan**, not user-facing request latency.
+
+Verification: `node --test ops/status-page/*.test.mjs`,
+`python -B ops/status-page/collector_test.py`, scoped ESLint, Worker build/syntax,
+staging signed real reports and desktop/mobile keyboard/disclosure checks.
+Before production apply, capture D1 Time Travel bookmark and Worker deployment
+version IDs. Rollback means stop/disable only the collector timer and restore the
+previous page/probe Worker versions; retain the additive tables and old evidence.
+Never roll back or change SIGAP business data to undo monitoring.
+
 This deployment is independent of all four monitored origins. Two Cloudflare
 Workers share one D1 database:
 
