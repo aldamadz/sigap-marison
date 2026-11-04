@@ -47,7 +47,7 @@ describe("docs-troubleshooting-registry D2C", () => {
   });
 
   it("matches documentation content after MRN-25 payload viewer updates", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("470ffe24212ae955fbe49d723f7189f0bbec56ee444735d7887e58cafe95e2c1");
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("4305a73ad40c78f8fa58d427dcafc5aedc9285d81845b48894797c9b1d6b5101");
   });
 
   it("keeps facade and imports acyclic", () => {

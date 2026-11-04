@@ -31,7 +31,7 @@ describe("native document pipeline", () => {
     expect(createBody).toContain("registrationResult.created !== true");
     expect(createBody).toContain("Link only missing stored files");
     expect(createBody).toMatch(/if \(!keu10Registration\) \{\s+const dataSnapshot/);
-    expect(createBody).toMatch(/if \(!keu10Registration\) \{\s+const \{ error: signerInsertError \}/);
+    expect(createBody).toMatch(/if \(!atomicRegistration\) \{\s+const \{ error: signerInsertError \}/);
   });
 
   it("keeps approval database-native and generates only the final PDF asynchronously", () => {

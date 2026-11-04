@@ -1,5 +1,46 @@
 # SIGAP Feature and Release Map
 
+## SEC-04 Selective Production Promotion (2026-11-04, Issue #782)
+
+- User authorized production after staging acceptance. Main-based candidate
+  contains only original SEC-04 commits08f2fa3/a3d0c0c and the main-relevant
+  OPS-QG assertion reconciliation; the staging-history merge is excluded.
+- Main has seven stale baseline assertions, not the staging-only realtime-flush
+  file. Preserve the distinct production documentation hash and all coverage.
+- Runtime/API rollout and final proof pending. No production routing, database,
+  approval or outbound resend change is part of this release. Latency diagnosis
+  remains a separate measurement task; no latency improvement is claimed here.
+
+## SEC-04 Private-Audit Candidate Hardening (2026-11-04, Issue #782)
+
+- The selected candidates were validated with synthetic fixtures and fixed:
+  legacy email recipient/HTML context, multipart aggregate cap, inactive
+  participant document access, storage-origin ownership, unrestricted push
+  endpoints, and production deploy commit binding. New suite 12/12 green after
+  the fixes.
+- No database migration, ACL sweep, outbound resend, or production data change.
+  Deferred candidates need owner confirmation: external-api `trustProxy`,
+  generic storage overwrite ownership, stateless cookie revocation,
+  active-profile cache and attachment replacement task binding.
+- Status: staging candidate pending PR/deploy verification; production not
+  released. Rollback is a source revert; no schema rollback required.
+
+## SEC-04 Compatible Runtime Security Patch (2026-11-04, Issue #782)
+
+- Follow-up to user-authorized OPS-17 tests-first maintenance/security review.
+  Frozen audit source stays in a separate worktree; remediation starts from main.
+- Pin application and external API image stages to Node22.23.4, replacing22.23.1
+  and the API floating Node22 tag. Pin Fastify5.12.7 and Nodemailer10.1.4 in the
+  relevant workspaces; root lockfile changes only those two installed packages.
+- Regression fixtures cover NUL DNS rejection, nested-comment recipient parsing,
+  canonical-case header constraints and reviewed image pins. The three behavior
+  checks fail under old runtime/dependencies and all4 pass on the candidate.
+- No auth-flow, database permission/schema, form identity, approval or outbound
+  payload change. No mail/network service is contacted by regression fixtures.
+- Full candidate gates and staging verification pending. No production runtime
+  upgrade at this checkpoint. Root audit0 high/critical,20 moderate dependency
+  records remain; separate documentation dependency review stays in #768.
+
 ## REC-06 Recommendation Enabled During Revision (2026-11-04, Issue #773)
 
 - Follow-up20261104100000 restricts allocation to active requests; completed,

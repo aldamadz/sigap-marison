@@ -73,7 +73,7 @@ describe("Marison outbound submission dispatch", () => {
     expect(server).toContain('purpose: "external_marison"');
     expect(server).toContain('expires_at: null');
     expect(server).toContain('`${appUrl}/api/files/view/${rawToken}/${filename}`');
-    expect(server).toContain("buildPersistentMarisonFileLink(surat, rawPath, actorId)");
+    expect(server).toContain("buildPersistentMarisonFileLink(surat, rawPath, actorId, reference)");
     expect(migration).toContain("fvt.expires_at is null or fvt.expires_at > now()");
     expect(migration).toContain("v_token.purpose not in ('email', 'external_marison')");
   });

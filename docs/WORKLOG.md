@@ -1,5 +1,74 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-QG Production-Only Eighth Assertion Identified
+
+- Hosted candidate run41792231355 passed the remaining checks but exposed one
+  further stale MRN-16 source assertion: main expected the old no-options identity
+  call, although its production builder/recovery already pass the dispatch kind.
+  Staging already has the two correct assertions. Ported those exact assertions
+  without changing runtime behavior or weakening requester/signer identity checks.
+- This corrects the preceding checkpoint: seven failures reproduced in the initial
+  targeted set; the full main-based gate found the eighth in a different file
+  from staging's eighth realtime test. Full hosted gate must pass before promotion.
+
+## 2026-11-04 [Codex] SEC-04 Selective Production Release Started / Issue #782
+
+- User explicitly authorized production after staging7108cf5 and requested a
+  separate public-latency investigation prompt. No routing/DNS change is bundled.
+- `codex/sec04-production-release` starts at main ed124b6 and retains the original
+  SEC-04 commits08f2fa3/a3d0c0c, excluding their later staging-history merge.
+- Reproduced seven stale baseline assertions on this production source,58 passes.
+  Applied the corresponding OPS-QG checks without removing coverage. The eighth
+  realtime-flush file exists only on staging and is not imported into production.
+  Main troubleshooting docs intentionally differ from staging in the existing
+  projectless user guidance; production-only normalized hash4305a73a is used.
+  Admin hash0c485e76 and MRN-25/release guidance match the reviewed existing source.
+- Staging four-service runtime was verified7108cf5, Node22.23.4, restart0;
+  external API has a separate image and must be validated/rolled separately.
+  Production source/runtime ed124b6 and readiness200 were observed before work.
+- Remaining: selected CI gates, main/staging ancestry and live staging promotion,
+  protected configuration/rollback preflight, coordinated production runtime
+  rollout and public smoke. No migration, approval, replay or vendor business POST.
+
+## 2026-11-04 [Codex] SEC-04 private-audit candidate hardening / Issue #782
+
+- Validated the selected private-audit candidates with synthetic fixtures in an
+  isolated worktree: no production data, SMTP, push provider, Supabase, or
+  outbound network. The new 12-check suite was red on ed124b6 and is green after
+  the fixes.
+- Fixed legacy `/api/notifications/email` so a non-admin can only email itself
+  and title/message/link are escaped; enforced the multipart aggregate cap while
+  streaming before `formData()`; reused the active-profile gate in
+  `getAuthorizedSurat`; included storage origin in ownership keys; restricted
+  Web Push endpoints to known providers; pinned production quality/deploy jobs
+  to the preflight-resolved commit.
+- Deferred without code changes: external-api `trustProxy`, generic storage
+  overwrite ownership, stateless cookie revocation, active-profile cache and
+  attachment replacement task binding. They need owner/environment decisions.
+- lint, typecheck and production build pass. Targeted suites pass. Full suite on
+  CI-like Node24.22.2: 2743 passed, 8 pre-existing failures remain (docs hashes
+  and source-drift checks already on main); they reproduce with this hardening
+  stashed. Local Node24.11.1 predates the SEC-04 NUL-DNS fix, so that check
+  passes only on the pinned/CI runtime.
+- Staging PR and deploy verification pending. Production runtime, database,
+  secrets and deployment untouched; no maintenance window opened.
+
+## 2026-11-04 [Codex] SEC-04 runtime hardening / Issue #782
+
+- Separate `codex/runtime-security-20261104` from main ed124b6; OPS-17 audit source
+  remains immutable apart from its parent-owned documentation checkpoints.
+- Official October21 Node security release22.23.4 applies to the observed app
+  runtime22.23.1. Compatible Fastify5.12.7 and Nodemailer10.1.4 address published
+  header normalization and address-parser advisories; no speculative app RCE claim.
+- Exact old versions fail3 bounded component regressions; candidate passes4/4.
+  Dependencies installed with ignore-scripts in a fresh bounded credential-free
+  container; actual tests execute separately with network none/read-only deps.
+- Full candidate regression/build gates running. Scope excludes broad ACL or
+  authentication changes, replay and major documentation dependency upgrades.
+- Root audit now0high/critical/low,20moderate records; baseline had22 total.
+  Production maintenance estimate11:22WIB must be explicitly completed regardless
+  of remaining offline audit/release work. No production upgrade yet.
+
 ## 2026-11-04 [Codex] REC-06 active-only follow-up / Issue #773
 
 - Forward-only migration20261104100000 limits new task allocation to PROSES and
