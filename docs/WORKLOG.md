@@ -78,6 +78,21 @@
   change. Staging deploy and smoke test remain the next step; production
   untouched.
 
+## 2026-11-04 [Codex] MRN-797 Explicit Single-POST Exception Authorized
+
+- Supersedes the no-resend boundary below only for051 generation3. After being
+  told generation2 already exists as vendor submission_id2 and a same-number POST
+  may create a duplicate submission/SPK, the user explicitly authorized exactly
+  one real POST and accepted duplicate risk. No automatic retry is authorized.
+- The general duplicate guard stays fail-closed. Operator exception uses the
+  existing canonical latest-payload preview (now module-exported for trusted local
+  operator tooling, no new HTTP endpoint or public permission) and records an
+  exclusive one-shot attempt plus payload hash and vendor response privately.
+  Any timeout/ambiguous response stops; never repeat to find out what happened.
+- Staging/production classification release remains separately verified. Historical
+  accepted generation2 is not overwritten. Record actual vendor reference, including
+  a different ID if returned; do not claim an in-place update without evidence.
+
 ## 2026-11-04 [Codex] MRN Unit External Revision Dispatch / Issue #797
 
 - User reports051 generation3 terminal failure and explicitly authorizes staging

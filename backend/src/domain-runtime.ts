@@ -4119,7 +4119,7 @@ const listMarisonOutboundDispatches = async (req, url) => {
   };
 };
 
-const generateCurrentMarisonPayloadPreview = async (job, stored) => {
+export const generateCurrentMarisonPayloadPreview = async (job, stored) => {
   const unavailable = (message) => Object.assign(new Error(message), { status: 409 });
   const loadDocument = async () => {
     const result = await supabase.from("surat_registrasi").select(`
