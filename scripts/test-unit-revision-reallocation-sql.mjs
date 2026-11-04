@@ -5,7 +5,8 @@ const migration = readFileSync("supabase/migrations/20260811170000_unit_revision
 const statusMigration = readFileSync("supabase/migrations/20260811173000_keep_open_checker_revision_in_revision_status.sql", "utf8");
 const notificationMigration = readFileSync("supabase/migrations/20260811174500_notify_signed_users_on_checker_revision.sql", "utf8");
 const assertions = readFileSync("supabase/tests/unit_revision_reallocation.integration.sql", "utf8");
-const partial = process.argv.includes('--partial');
+const externalAddendum = process.argv.includes('--external-addendum');
+const partial = process.argv.includes('--partial') || externalAddendum;
 
 const fixture = `
 create schema auth;
@@ -114,6 +115,23 @@ try {
     if (!output.includes('Unit partial readiness: all assertions passed')) throw new Error('Partial Unit assertions did not finish');
     process.stdout.write(output);
     console.log(`Unit partial readiness shape: ${productionShape ? 'production without legacy guards' : 'staging legacy reallocation guards'}.`);
+    if (externalAddendum) {
+      const externalFixture = `
+        create table public.external_submission_decision_events(
+          id uuid primary key,event_id uuid,surat_id uuid,decision text,revision_generation integer);
+        create table public.surat_external_revision_history(
+          id uuid primary key,surat_id uuid,decision_event_id uuid,generation integer,
+          document_snapshot jsonb,signatures_snapshot jsonb);
+      `;
+      const externalMigration = readFileSync('supabase/migrations/20261104160000_preserve_external_unit_addendum_review.sql','utf8');
+      const externalAssertions = readFileSync('supabase/tests/unit_external_addendum_review.integration.sql','utf8');
+      const externalOutput = run(['exec','-i',id,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+        externalFixture+externalMigration+externalMigration+externalAssertions,true);
+      if (!externalOutput.includes('External Unit addendum review: all assertions passed')) {
+        throw new Error('External addendum assertions did not finish');
+      }
+      process.stdout.write(externalOutput);
+    }
   }
 } finally {
   run(["rm", "-f", id]);
