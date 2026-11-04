@@ -3,12 +3,12 @@ type UnitReference = { id: number; type: string; hasSubmitted: unknown };
 export const verifiedUnitReplacementReceipt = (projectId: number, references: UnitReference[]) => {
   if (!Number.isSafeInteger(projectId) || projectId < 1 || references.length < 1
     || new Set(references.map((unit) => unit.id)).size !== references.length) {
-    throw new Error("Referensi proyek/kavling pengiriman pengganti tidak valid.");
+    throw Object.assign(new Error("Referensi proyek/kavling pengiriman pengganti tidak valid."), { status: 422 });
   }
   for (const unit of references) {
     if (!Number.isSafeInteger(unit.id) || unit.id < 1 || !unit.type.trim()
       || unit.type.length > 100 || unit.hasSubmitted !== false) {
-      throw new Error("Kavling sudah dikirim atau status pengirimannya belum dapat dipastikan dari Marison.");
+      throw Object.assign(new Error("Kavling sudah dikirim atau status pengirimannya belum dapat dipastikan dari Marison."), { status: 422 });
     }
   }
   return {
