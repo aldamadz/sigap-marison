@@ -1,5 +1,40 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-03 staging and production rollout completed / Issue #766
+
+- User explicitly requested production deployment after the compatibility report.
+  PR #767 integrated staging, #770 selectively merged Zod to main and #771
+  synchronized main ancestry before production rollout. Live staging
+  `e551ce318ca6e05d143980d40fa678de2ca71f7b`, production
+  `dc863dfebdf5d462b21da23358c06980b5f99e2a`. Production is an ancestor of live
+  staging. KEU routing PR #765 remains separately unmerged and was not deployed.
+- Staging app and all three workers load Zod4.6.7. Production app/PDF worker
+  share the selective main image; older outbound/sync workers received only
+  the tested Zod package overlay. Source-file hashes, environment, commands,
+  networks and TLS/storage mounts match their prior runtime. Rollback images
+  and protected runtime snapshots were retained. Pruned staging rollback images
+  were recovered from running filesystems without embedding runtime secrets as
+  image ENV; these recovery artifacts remain private to the operator.
+- External API documentation artifacts built with Zod4.6.7 were published in
+  both environments. Server/auth/OpenAPI source hashes and credentials remain
+  unchanged. Unrelated tunnels, file relay, Database/Auth and Storage untouched.
+- Public smoke passes in both environments: root/live/ready/version and docs
+  HTTP200; invalid email login HTTP400 retains fieldErrors. Production probes
+  measured approximately103-207ms in this sample, not a long-term SLA promise.
+  Production app/PDF have zero restarts; outbound/sync dependency probes pass.
+- Relevant217 tests,39 desktop/Zod tests, lint/typecheck/build and root high audit
+  passed before rollout. Hosted full CI remained red:2820 passed,8 failed,7
+  skipped on staging. The same8 assertions reproduce on staging Zod3 baseline
+  (71 passed/8 failed subset); source main baseline has its separately recorded
+  eight failures. No tests were deleted, relaxed or green CI status fabricated.
+  Existing failures remain tracked in #769; documentation dependency advisories
+  unrelated to Zod remain in #768 and were not claimed resolved.
+- No migration, account reset, historical document rewrite, approval, manual
+  dispatch preparation or vendor resend. CT104 retains about12GiB free. Private
+  app/worker/docs rollback and public-smoke proofs are under operator issue766
+  directories. Release evidence PR is documentation only; do not merge it merely
+  to trigger another application deployment.
+
 ## 2026-11-03 [Codex] SEC-03 Zod4 compatibility / Issue #766
 
 - User requested upgrade and validation after the existing high Zod advisory
