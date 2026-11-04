@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-15 SIGAP-only read-only reliability audit / Issue #750
+
+- Completed diagnosis, not remediation. Four isolated eight-second failed
+  samples verified in production D1; adjacent minutes were healthy. Root failed
+  three times and readiness once. Actual outage durations/root cause remain
+  unproven. Monitoring history begins 3 November, not a full 30 days.
+- Deployed probe confirmed to replace null HTTP status with 200 on timeout.
+  App readiness does not check dependencies; request logging is disabled and
+  current app logs cannot reconstruct the earlier events. Preserve failed
+  evidence; do not increase timeouts or erase history to improve appearance.
+- All 12 bounded local/public GET checks passed; current tunnel/app healthy.
+  CT104 disk85% is a capacity risk, not established causation. No production,
+  staging, DNS/routing, monitoring scope/threshold, business-data or runtime
+  changes. Other-service monitor removal remains future scope.
+- Next: staged endpoint-level diagnostics, safe slow/error timing, meaningful
+  bounded readiness and rolling-deploy rehearsal before production authorization.
+  Evidence: docs/operations/20261104-sigap-reliability-audit.md. PROJECT_CONTEXT
+  remains absent. No new code, migration or release gate is claimed.
+
 ## 2026-11-04 [Codex] REC-06 active-only follow-up / Issue #773
 
 - Forward-only migration20261104100000 limits new task allocation to PROSES and
