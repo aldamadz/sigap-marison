@@ -5,6 +5,10 @@ const migration = readFileSync("supabase/migrations/20261104090000_revision_reco
 const selector = readFileSync("scripts/test-changed.mjs", "utf8");
 
 describe("revision recommendation task release contract", () => {
+  it("does not create tasks when archived documents are updated", () => {
+    const followup=readFileSync("supabase/migrations/20261104100000_revision_recommendation_task_active_only.sql", "utf8");
+    expect(followup).toContain("not in ('PROSES','MENUNGGU_PERBAIKAN') then return new");
+  });
   it("creates the canonical task on input updates without a client-side second request", () => {
     expect(migration).toContain("after update of form_input_data on public.surat_registrasi");
     expect(migration).toContain("perform public.create_recommendation_task_for_parent(new.id)");

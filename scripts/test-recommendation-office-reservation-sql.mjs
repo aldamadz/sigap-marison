@@ -193,7 +193,10 @@ try {
       create trigger recommendation_approval before update of current_step,status on surat_registrasi for each row execute function guard_parent_approval_for_recommendation();
       create trigger recommendation_signature before update of is_signed on surat_signatures for each row execute function guard_parent_signature_for_recommendation();`);
     const patch = read('supabase/migrations/20261104090000_revision_recommendation_task.sql');
-    if (!process.argv.includes('--before-rec06')) run(psql, patch + patch);
+    if (!process.argv.includes('--before-rec06')) {
+      const active = read('supabase/migrations/20261104100000_revision_recommendation_task_active_only.sql');
+      run(psql, patch + patch + active + active);
+    }
     run(psql, read('supabase/tests/revision_recommendation_task.integration.sql'));
     const connection = (sql) => new Promise((resolve, reject) => {
       const child = spawn('docker', psql); let error = '';

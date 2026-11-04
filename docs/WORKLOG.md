@@ -1,5 +1,15 @@
 # Worklog
 
+## 2026-11-04 [Codex] REC-06 active-only follow-up / Issue #773
+
+- Forward-only migration20261104100000 limits new task allocation to PROSES and
+  MENUNGGU_PERBAIKAN. Migration0900 was already applied in staging, so it was not
+  edited. Completed, VOID and rejected archival updates are regression tested.
+- Both migration rehearsals/selected staging applies and rollback-only canonical
+  tester submit/inbox acceptance pass, with42 surat/179 signatures/5 tasks/75
+  reservations unchanged. Production0900/1000 will be applied atomically after
+  the final source/main/staging ancestry synchronization. No production writes yet.
+
 ## 2026-11-04 [Codex] REC-06 recommendation revision / Issue #773
 
 - Claimed `fix/revision-enable-recommendation` from main. Production read-only
