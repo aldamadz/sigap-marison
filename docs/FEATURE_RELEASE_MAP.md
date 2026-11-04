@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SEC-04 Production Verified / SUR-30 Staging Applied (2026-11-04)
+
+- SEC-04 app live production626b5bd, stage03a1e93 before promotion; exact-main
+  quality and official deployment succeeded. Five production services Node22.23.4,
+  restart0. Worker/API source fingerprints retained in dependency-only SEC-04
+  images; app contains selected hardening. No new maintenance or latency claim.
+- SUR-30 migration20261104160000 applied/verified on staging, nine valid reviews
+  preserved and business fingerprints unchanged. Real PostgreSQL17 both shapes,
+  repeat apply/tamper/ACL/final signature checks and production rollback-only
+  rehearsal passed. Only051 gains valid-review status in production rehearsal;
+  statusPROSES/step5 and approvals unchanged. Production apply still pending.
+- Main c9ca0e7 is synchronized for required live-staging ancestry. Selective
+  feature sourceca58d15; no full staging-to-main merge or historical data rewrite.
+
 ## OPS-QG Quality Baseline Reconciliation (2026-11-04, Issue #769)
 
 - Reconciled the eight stale full-suite assertions against the current
