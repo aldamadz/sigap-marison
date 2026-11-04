@@ -9,6 +9,7 @@ const delegation = read('supabase/migrations/20261012140000_delegated_issuing_of
 const triggerSource = read('supabase/migrations/20260626190000_recommendation_tasks_shared_lock.sql');
 const migration = read('supabase/migrations/20261016090000_recommendation_internal_office_reservation.sql');
 const activeActorMigration = read('supabase/migrations/20261016091000_recommendation_internal_active_actor.sql');
+const revisionUpdate = process.argv.includes('--revision-update');
 function routine(source, name) {
   const start = source.indexOf(`create or replace function public.${name}(`);
   const end = source.indexOf('$$;', start);
@@ -172,6 +173,44 @@ try {
   if (!ready) throw new Error('Disposable Postgres not ready');
   run(psql, fixture);
   if (!process.argv.includes('--baseline')) run(psql, migration + migration + activeActorMigration + activeActorMigration);
+  if (revisionUpdate) {
+    const rec = read('supabase/migrations/20260810143000_rec03_recommendation_multi_detail_foundation.sql');
+    run(psql, `alter table surat_registrasi add column current_step integer default 1, add column status text default 'PROSES', add column data_snapshot jsonb default '{}';
+      create schema requester_revision_internal;
+      create table requester_revision_internal.permits(transaction_id bigint,surat_id uuid,operation text);
+      revoke all on schema requester_revision_internal from public,anon,authenticated,service_role;
+      revoke all on requester_revision_internal.permits from public,anon,authenticated,service_role;
+      create table surat_revision_events(id uuid,surat_id uuid,status text,target_type text,changes jsonb);
+      create table surat_linked_documents(parent_surat_id uuid,child_surat_id uuid,link_type text,status text);
+      create table surat_signatures(surat_id uuid,step_order integer,is_signed boolean default false);
+      create function recommendation_pdf_is_current(id uuid) returns boolean language sql as $$select coalesce((select status='DONE' from public.surat_registrasi where public.surat_registrasi.id=$1),false)$$;
+      ${routine(rec, 'guard_parent_approval_for_recommendation')}
+      ${routine(rec, 'guard_parent_signature_for_recommendation')}
+      alter function guard_parent_approval_for_recommendation() owner to postgres;
+      alter function guard_parent_signature_for_recommendation() owner to postgres;
+      grant all on all tables in schema public to postgres;
+      grant select,insert,update on surat_signatures to authenticated;
+      create trigger recommendation_approval before update of current_step,status on surat_registrasi for each row execute function guard_parent_approval_for_recommendation();
+      create trigger recommendation_signature before update of is_signed on surat_signatures for each row execute function guard_parent_signature_for_recommendation();`);
+    const patch = read('supabase/migrations/20261104090000_revision_recommendation_task.sql');
+    if (!process.argv.includes('--before-rec06')) run(psql, patch + patch);
+    run(psql, read('supabase/tests/revision_recommendation_task.integration.sql'));
+    const connection = (sql) => new Promise((resolve, reject) => {
+      const child = spawn('docker', psql); let error = '';
+      child.stdout.resume(); child.stderr.on('data', chunk => { error += chunk; });
+      child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(new Error(error)));
+      child.stdin.end(sql);
+    });
+    const prefix = `begin; set local statement_timeout='5s'; select set_config('request.jwt.claim.sub',test_id(10)::text,true);set local role authenticated;`;
+    await Promise.all([
+      connection(`${prefix} select id from surat_registrasi where id=test_id(200) for update; select pg_sleep(0.6);
+        update surat_registrasi set form_input_data='{"requires_recommendation":true}' where id=test_id(200);commit;`),
+      connection(`${prefix} select pg_sleep(0.2); select create_recommendation_task_for_parent(test_id(200));commit;`),
+    ]);
+    run(psql, `select test_assert((select count(*)=1 from surat_recommendation_tasks where parent_surat_id=test_id(200)), 'update/direct factory concurrency has one winner');`);
+    console.log('Revision recommendation tasks: canonical factory, ownership, rollback, replay and two-connection lock-order assertions passed.');
+    process.exitCode = 0;
+  } else {
   run(psql, assertions);
   // Separate connections contend on the real factory's department advisory lock.
   const submit = (n) => new Promise((resolve,reject) => {
@@ -185,4 +224,5 @@ try {
   run(psql, `select test_assert((select count(*)=4 and count(distinct no_urut)=4 from surat_reservations),'parallel unique numbers');
     select test_assert(not exists(select 1 from recommendation_numbering_internal.reservation_authorizations),'no parallel capability leaks');`);
   console.log('Recommendation office reservation: all assertions passed (real canonical factory/guards, non-superuser owner, migration replay, rollback, authorization, concurrency).');
+  }
 } finally { run(['rm','-f',id]); }
