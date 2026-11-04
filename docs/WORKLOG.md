@@ -1,5 +1,21 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-04 runtime hardening / Issue #782
+
+- Separate `codex/runtime-security-20261104` from main ed124b6; OPS-17 audit source
+  remains immutable apart from its parent-owned documentation checkpoints.
+- Official October21 Node security release22.23.4 applies to the observed app
+  runtime22.23.1. Compatible Fastify5.12.7 and Nodemailer10.1.4 address published
+  header normalization and address-parser advisories; no speculative app RCE claim.
+- Exact old versions fail3 bounded component regressions; candidate passes4/4.
+  Dependencies installed with ignore-scripts in a fresh bounded credential-free
+  container; actual tests execute separately with network none/read-only deps.
+- Full candidate regression/build gates running. Scope excludes broad ACL or
+  authentication changes, replay and major documentation dependency upgrades.
+- Root audit now0high/critical/low,20moderate records; baseline had22 total.
+  Production maintenance estimate11:22WIB must be explicitly completed regardless
+  of remaining offline audit/release work. No production upgrade yet.
+
 ## 2026-11-04 [Codex] REC-06 active-only follow-up / Issue #773
 
 - Forward-only migration20261104100000 limits new task allocation to PROSES and

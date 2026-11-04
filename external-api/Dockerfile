@@ -1,5 +1,5 @@
 # ── Stage 1: Build Zudoku docs ──
-FROM node:22-alpine AS builder
+FROM node:22.23.4-alpine AS builder
 
 WORKDIR /build
 
@@ -24,7 +24,7 @@ RUN find docs-zudoku/dist/docs -name "*.html" -exec sed -i 's/<html lang="en"/<h
  && find docs-zudoku/dist/docs -name "*.html" -exec sed -i 's#<link rel="preconnect" href="https://cdn.zudoku.dev/">##' {} +
 
 # ── Stage 2: Production server ──
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 
 WORKDIR /app
 
