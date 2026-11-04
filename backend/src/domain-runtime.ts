@@ -32,6 +32,7 @@ import { buildMarisonDocumentBundle } from "./lib/marison-document-links.js";
 import { resolveExternalFileReference } from "./lib/external-file-reference.js";
 import { currentPayloadPreview, reusableCurrentFileLinks, storedCapabilityLinks } from "./lib/marison-current-payload.js";
 import { verifiedUnitReplacementReceipt } from "./lib/marison-unit-replacement.js";
+import { assertUnitDispatchContract, classifyUnitDispatchIntent, unitRevisionContractMessage } from "./lib/marison-unit-dispatch-intent.js";
 import { previewStoredMarisonPayload } from "./lib/marison-payload-preview.js";
 import { fundPostmanLinks, previewFundForPostman } from "./lib/marison-fund-postman-preview.js";
 import {
@@ -3848,6 +3849,15 @@ const getMarisonDispatchQueueStatus = async (req, suratId) => {
   };
 };
 
+const requireUnitDispatchContract = async (job) => {
+  if (job.kind !== "unit" || !job.replacement_of_dispatch_id) return;
+  const { data: previous, error } = await supabase.from("marison_outbound_dispatches")
+    .select("id, surat_id, environment, kind, status, generation, external_reference")
+    .eq("id", job.replacement_of_dispatch_id).eq("environment", job.environment).maybeSingle();
+  if (error) throw Object.assign(new Error("Riwayat pengiriman Unit gagal diperiksa."), { status: 503 });
+  assertUnitDispatchContract(job, previous);
+};
+
 const buildMarisonOutboundJob = async (req, jobId) => {
   if (!marisonSubmissionDispatchEnabled) {
     const err = new Error("Outbound Marison tidak aktif pada environment ini.");
@@ -3878,7 +3888,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
 
   const { data: job, error: jobError } = await supabase
     .from("marison_outbound_dispatches")
-    .select("id, surat_id, environment, kind, endpoint, contract_version, payload, payload_body, payload_hash, status, lease_token, lease_expires_at, post_started_at, replacement_of_dispatch_id")
+    .select("id, surat_id, environment, generation, kind, endpoint, contract_version, payload, payload_body, payload_hash, status, lease_token, lease_expires_at, post_started_at, replacement_of_dispatch_id")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -3899,6 +3909,9 @@ const buildMarisonOutboundJob = async (req, jobId) => {
     err.status = 409;
     throw err;
   }
+  // Check both logical construction and transport materialization, including
+  // already-frozen payloads. An accepted predecessor is not a rejected retry.
+  await requireUnitDispatchContract(job);
   if (job.payload_body) {
     const logicalPayload = typeof job.payload_body === "string" ? JSON.parse(job.payload_body) : job.payload_body;
     if (transport) {
@@ -4053,12 +4066,28 @@ const listMarisonOutboundDispatches = async (req, url) => {
   const { data, error, count } = await query;
   if (error) throw error;
 
+  const predecessorIds = [...new Set((data || []).filter(row => row.kind === "unit" && row.replacement_of_dispatch_id)
+    .map(row => row.replacement_of_dispatch_id))];
+  const predecessors = new Map();
+  if (predecessorIds.length) {
+    const { data: rows, error: historyError } = await supabase.from("marison_outbound_dispatches")
+      .select("id, surat_id, environment, generation, kind, status, external_reference")
+      .eq("environment", marisonDeploymentEnvironment).in("id", predecessorIds);
+    if (historyError) throw Object.assign(new Error("Riwayat antrean Unit gagal dimuat."), { status: 503 });
+    for (const row of rows || []) predecessors.set(row.id, row);
+  }
+
   return {
     environment: marisonDeploymentEnvironment,
     page,
     pageSize,
     total: count || 0,
     items: (data || []).map((row) => {
+      let revisionContractPending = false;
+      if (row.kind === "unit" && row.replacement_of_dispatch_id && row.status !== "succeeded") {
+        try { revisionContractPending = classifyUnitDispatchIntent(row, predecessors.get(row.replacement_of_dispatch_id) || null) === "accepted_submission_revision"; }
+        catch { /* Missing historical context must not be presented as acceptance. */ }
+      }
       const diagnosis = row.status === "failed_terminal" && row.error_code?.startsWith("marison_http_422")
         ? diagnoseVendorRejection(row.response) : null;
       const lastVendorDiagnosis = diagnosis?.reasonCode === "VENDOR_MAIN_DOCUMENT_SCHEMA_MISSING" ? diagnosis : null;
@@ -4079,7 +4108,8 @@ const listMarisonOutboundDispatches = async (req, url) => {
         completedAt: row.completed_at,
         externalReference: row.external_reference,
         errorCode: row.error_code,
-        failureReason: lastVendorDiagnosis?.summary || row.error_message || row.skipped_reason || null,
+        failureReason: revisionContractPending ? unitRevisionContractMessage
+          : lastVendorDiagnosis?.summary || row.error_message || row.skipped_reason || null,
         lastVendorDiagnosis,
         reconciliationCount: row.reconciliation_count,
         createdAt: row.created_at,
@@ -4089,7 +4119,7 @@ const listMarisonOutboundDispatches = async (req, url) => {
   };
 };
 
-const generateCurrentMarisonPayloadPreview = async (job, stored) => {
+export const generateCurrentMarisonPayloadPreview = async (job, stored) => {
   const unavailable = (message) => Object.assign(new Error(message), { status: 409 });
   const loadDocument = async () => {
     const result = await supabase.from("surat_registrasi").select(`
@@ -4207,6 +4237,7 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     return { eligible: false, reasonCode: "NOT_PRE_POST_FAILURE", reason: "Job tidak terbukti gagal sebelum POST." };
   }
   try {
+    await requireUnitDispatchContract(job);
     const identity = await resolveMarisonOutboundIdentity(surat, { kind: job.kind });
     const mappings = await getMarisonOutboundMappings(surat, job.kind);
     const sources = { ...mappings.sources, ...identity.sources };
@@ -4224,6 +4255,9 @@ const preflightMarisonOutboundRecovery = async (job, surat) => {
     normalizePayloadResolutionSources(sources, { kind: job.kind, approvalCount: identity.approvals.length });
     return { eligible: true, reasonCode: null, reason: null };
   } catch (error) {
+    if (error?.code === "unit_external_revision_contract_required") {
+      return { eligible: false, reasonCode: "UNIT_EXTERNAL_REVISION_CONTRACT_REQUIRED", reason: unitRevisionContractMessage };
+    }
     const message = error instanceof Error ? error.message : "Identity payload belum siap.";
     return { eligible: false, ...classifyMarisonRecoveryIssue(message) };
   }
@@ -4257,7 +4291,7 @@ const reconcileMarisonOutboundDispatch = async (req, dispatchId) => {
     throw err;
   }
   if (action === "reopen_terminal_pre_post") {
-    const { data: job, error: jobError } = await supabase.from("marison_outbound_dispatches").select("id, surat_id, environment, status, kind, post_started_at, response, external_reference").eq("id", dispatchId).maybeSingle();
+    const { data: job, error: jobError } = await supabase.from("marison_outbound_dispatches").select("id, surat_id, environment, status, kind, generation, replacement_of_dispatch_id, post_started_at, response, external_reference").eq("id", dispatchId).maybeSingle();
     if (jobError) throw jobError;
     if (!job) {
       const err = new Error("Job outbound tidak ditemukan.");
