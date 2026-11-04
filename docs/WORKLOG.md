@@ -1,5 +1,42 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-18 completed / Issue #783
+
+- Supersedes pending status below. Source6055de0/fc869be on isolated branch,
+  source PR#785 targets the status feature branch only; not an old SIGAP app deploy.
+- Focused51Node tests including real SQLite lifecycle/migration pass,4collector
+  tests pass, scoped ESLint/Worker build/syntax/diff pass. Stage D1/bookmark first,
+  then independent page/probe rollout and real completed-history fixture acceptance.
+  Exact disposable stage fixture removed; authoritative SIGAP staging history stays.
+- Production D1 preflight/bookmark and additive migration applied; old closure
+  stayed unknown until canonical poll confirmed completed for the exact schedule ID.
+  Today's first-observed11:22WIB closure preserved, original10:22WIB start/message
+  and estimate retained. No fabricated incident row, no probe evidence rewrite.
+- Page/probe versions productionda8bebd7-2595-4b59-a193-3649e6bd79ca /
+  bef4338a-edc2-4b44-a357-116617c7afa5; staging3b3d9be2-bc87-4db0-92be-588aa0572f16 /
+  19e374d0-9e2f-464e-9f34-21d31f55fcdc. Previous Worker versions remain rollback.
+- Public page/API/RSS/Atom and legal pages200; actual browser shows completed
+  schedule timeline and explicit planned-maintenance label. SIGAP root200 and
+  canonical maintenance statecompleted/phase none. No app/DB/Auth/storage/worker
+  rollout, new maintenance window, approval or outbound. Retention90days is display
+  only; old maintenance records are not deleted. Hosted CI is not claimed.
+
+## 2026-11-04 [Codex] OPS-18 maintenance history / Issue #783
+
+- New isolated `codex/status-maintenance-history-20261104` from deployed OPS-16
+  feature sourcee9f5457, not dirty OPS-17 or SEC-04 worktrees. Source status-only
+  is not merged/deployed as an old application baseline. PROJECT_CONTEXT absent.
+- Production read-only D1 confirms today's schedule remains stored with its
+  message/start/end, but old sync writes completed as cancelled and page hides it.
+- Additive D1 migration20261104130000 preserves all old rows; ambiguous old SIGAP
+  closures become unknown, reconciled only from current matching source ID.
+  Explicit completion stays separate from cancellation; first observed closure
+  is preserved. No exact actual completion/start claim from polling timestamps.
+- Focused Node/real SQLite tests cover completion/replay/stale polls, old-record
+  recovery, cancelled/replaced/null, history retention and output escaping.
+  Remaining: final gates, staging D1/Workers acceptance, public status rollout.
+  No SIGAP app/worker/database changes, downtime activation or outbound actions.
+
 ## 2026-11-04 [Codex] OPS-16 component status released / Issue #760
 
 - Completed staging then production publication, source ecda415. Public

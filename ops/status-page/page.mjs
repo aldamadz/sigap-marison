@@ -11,6 +11,8 @@ const HISTORY_DAYS = 30;
 const LOGO_BASE64 = '__LOGO_BASE64__';
 const LABELS = { up: 'UP', down: 'DOWN', unknown: 'BELUM DIKETAHUI' };
 const PHASE_LABELS = { investigating: 'Investigasi', identified: 'Penyebab diketahui', monitoring: 'Pemantauan', resolved: 'Selesai' };
+const MAINTENANCE_LABELS = { completed: 'Selesai terpantau', cancelled: 'Dibatalkan',
+  replaced: 'Jadwal diganti', unknown: 'Jadwal ditutup', elapsed: 'Periode berakhir' };
 const OBSERVATION_LABELS = { process_down: 'Proses layanan tidak berjalan.', dependency_failed: 'Layanan belum siap merespons.',
   queue_stalled: 'Progres pekerjaan melewati batas pemeriksaan.', check_unavailable: 'Kondisi layanan belum dapat diperiksa.',
   disabled: 'Layanan dinonaktifkan melalui konfigurasi.' };
@@ -80,7 +82,7 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
     };
   }).sort((left, right) => Number(left.phase === 'resolved') - Number(right.phase === 'resolved') || right.startedAt - left.startedAt);
   const sigapSync = sources.find((source) => source.source === 'sigap');
-  const maintenanceRows = maintenance.filter((item) => !item.cancelled_at &&
+  const maintenanceRows = maintenance.filter((item) => (!item.lifecycle_status || item.lifecycle_status === 'published') && !item.cancelled_at &&
       (number(item.ends_at) >= now || (item.source === 'sigap' && item.impact === 'full' && number(item.starts_at) <= now)))
     .map((item) => ({ id: item.id, title: item.title, description: item.description,
       serviceNames: serviceNames(item.service_ids), startsAt: number(item.starts_at),
@@ -89,6 +91,32 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
       overdue: item.source === 'sigap' && item.impact === 'full' && number(item.ends_at) < now,
       syncStale: item.source === 'sigap' && (!sigapSync || now - number(sigapSync.synced_at) > STALE_MS) }))
     .sort((left, right) => left.startsAt - right.startsAt);
+  const maintenanceHistory = maintenance.filter((item) => (item.lifecycle_status && item.lifecycle_status !== 'published')
+      || item.cancelled_at || (number(item.ends_at) < now && !(item.source === 'sigap' && item.impact === 'full')))
+    .map((item) => {
+      const status = item.lifecycle_status && item.lifecycle_status !== 'published' ? item.lifecycle_status
+        : item.cancelled_at ? (item.source === 'sigap' ? 'unknown' : 'cancelled') : 'elapsed';
+      const closed = number(item.closed_at || item.cancelled_at || item.ends_at);
+      const started = number(item.starts_at);
+      return { id: item.id, kind: 'maintenance', title: item.title, summary: item.description,
+        phase: 'resolved', phaseLabel: MAINTENANCE_LABELS[status], maintenanceStatus: status,
+        serviceNames: serviceNames(item.service_ids), startedAt: started, startedText: dateTime(started),
+        timeline: [
+          { phase: 'resolved', phaseLabel: MAINTENANCE_LABELS[status], at: closed, atText: dateTime(closed),
+            message: status === 'completed' ? 'Pemeliharaan telah ditandai selesai. Waktu ini adalah waktu penutupan terpantau pada halaman status.'
+              : status === 'cancelled' ? 'Pemeliharaan dibatalkan oleh pengelola layanan.'
+                : status === 'replaced' ? 'Sumber SIGAP telah mengganti jadwal ini dengan jadwal lain.'
+                  : status === 'elapsed' ? 'Periode gangguan terjadwal berakhir sesuai estimasi; bukan konfirmasi waktu pengerjaan aktual.'
+                    : 'Jadwal telah ditutup. Status selesai atau dibatalkan tidak tersedia pada catatan lama.' },
+          ...(started <= now && closed >= started ? [{ phase: 'monitoring', phaseLabel: 'Waktu mulai terjadwal',
+            message: item.impact === 'full' ? 'Pemeliharaan dengan penghentian sementara akses layanan.' : 'Potensi gangguan akses tanpa penghentian penuh.',
+            at: started, atText: dateTime(started) }] : []),
+          { phase: 'identified', phaseLabel: 'Jadwal tercatat', message: `${item.description}\nEstimasi selesai: ${dateTime(number(item.ends_at))}`,
+            at: number(item.created_at || item.starts_at), atText: dateTime(number(item.created_at || item.starts_at)) },
+        ] };
+    });
+  const history = [...incidentRows.map(item => ({ ...item, kind: 'incident' })), ...maintenanceHistory]
+    .sort((left, right) => Number(left.phase === 'resolved') - Number(right.phase === 'resolved') || right.startedAt - left.startedAt);
   const componentStatus = (service) => {
     const observations = recent.filter((row) => row.service === service.id)
       .sort((left, right) => number(right.checked_at) - number(left.checked_at));
@@ -145,8 +173,9 @@ export function buildStatus({ recent = [], daily = [], incidents = [], updates =
   const timelineVersion = [
     ...incidentRows.map((incident) => `${incident.id}:${incident.timeline[0].id}`),
     ...maintenanceRows.map((item) => `${item.id}:${item.startsAt}:${item.endsAt}:${item.description}:${item.active}:${item.syncStale}`),
+    ...maintenanceHistory.map(item => `${item.id}:${item.maintenanceStatus}:${item.timeline[0].at}:${item.summary}`),
   ].join('|');
-  return { overall, overallLabel, services, incidents: incidentRows, maintenance: maintenanceRows, timelineVersion, generatedAt: now };
+  return { overall, overallLabel, services, incidents: incidentRows, history, maintenance: maintenanceRows, timelineVersion, generatedAt: now };
 }
 
 export async function loadStatus(db, now = Date.now()) {
@@ -166,10 +195,13 @@ export async function loadStatus(db, now = Date.now()) {
     db.prepare(`SELECT id, incident_id, phase, message, created_at FROM incident_updates
       WHERE incident_id IN (SELECT id FROM incidents WHERE started_at >= ? ORDER BY started_at DESC LIMIT 20)
       ORDER BY created_at ASC LIMIT 200`).bind(now - 90 * DAY_MS).all(),
-    db.prepare(`SELECT id, title, description, service_ids, starts_at, ends_at, cancelled_at, source, impact
-      FROM maintenance WHERE cancelled_at IS NULL AND
-      (ends_at >= ? OR (source = 'sigap' AND impact = 'full' AND starts_at <= ?))
-      AND starts_at <= ? ORDER BY starts_at ASC LIMIT 20`).bind(now, now, now + 30 * DAY_MS).all(),
+    db.prepare(`SELECT id, title, description, service_ids, starts_at, ends_at, cancelled_at, source, impact,
+        created_at, lifecycle_status, closed_at FROM maintenance
+      WHERE starts_at <= ? AND (ends_at >= ? OR closed_at >= ?
+        OR (source='sigap' AND impact='full' AND lifecycle_status='published' AND cancelled_at IS NULL))
+      ORDER BY CASE WHEN lifecycle_status='published' AND cancelled_at IS NULL AND
+        (ends_at >= ? OR (source='sigap' AND impact='full')) THEN 0 ELSE 1 END,
+        starts_at DESC LIMIT 60`).bind(now + 30 * DAY_MS, now - 90 * DAY_MS, now - 90 * DAY_MS, now).all(),
     db.prepare('SELECT source, revision, synced_at FROM status_sources').all(),
   ]);
   return buildStatus({ recent: recent.results, daily: daily.results, incidents: incidents.results,
@@ -183,8 +215,9 @@ export async function loadFeed(db, now = Date.now()) {
     db.prepare(`SELECT u.id,u.phase,u.message,u.created_at,i.title FROM incident_updates u
       JOIN incidents i ON i.id=u.incident_id WHERE u.created_at>=?
       ORDER BY u.created_at DESC LIMIT 80`).bind(since).all(),
-    db.prepare(`SELECT id,title,description,starts_at,ends_at,created_at,cancelled_at FROM maintenance
-      WHERE created_at>=? OR cancelled_at>=? OR ends_at>=? ORDER BY created_at DESC LIMIT 40`).bind(since, since, now).all(),
+    db.prepare(`SELECT id,title,description,starts_at,ends_at,created_at,cancelled_at,closed_at,lifecycle_status FROM maintenance
+      WHERE created_at>=? OR cancelled_at>=? OR closed_at>=? OR ends_at>=?
+      ORDER BY created_at DESC LIMIT 40`).bind(since, since, since, now).all(),
     db.prepare(`SELECT service,slot,checked_at,condition FROM (
       SELECT service,slot,checked_at,CASE WHEN outcome='up' THEN 'UP' WHEN outcome IN ('down','degraded') THEN 'DOWN' END AS condition,
       LAG(CASE WHEN outcome='up' THEN 'UP' WHEN outcome IN ('down','degraded') THEN 'DOWN' END) OVER (PARTITION BY service ORDER BY slot) AS previous,
@@ -203,9 +236,10 @@ export async function loadFeed(db, now = Date.now()) {
       { id: `maintenance:${item.id}`, title: `Terjadwal: ${item.title}`,
         description: `${item.description}\nMulai: ${dateTime(number(item.starts_at))}\nEstimasi selesai: ${dateTime(number(item.ends_at))}`,
         at: number(item.created_at), section: 'maintenance-title' },
-      ...(item.cancelled_at ? [{ id: `maintenance-closed:${item.id}:${item.cancelled_at}`,
-        title: `Jadwal ditutup: ${item.title}`, description: 'Jadwal telah selesai atau dibatalkan oleh pengelola layanan.',
-        at: number(item.cancelled_at), section: 'maintenance-title' }] : []),
+      ...(item.closed_at || item.cancelled_at ? [{ id: `maintenance-closed:${item.id}:${item.closed_at || item.cancelled_at}`,
+        title: `${MAINTENANCE_LABELS[item.lifecycle_status] || 'Jadwal ditutup'}: ${item.title}`,
+        description: `${item.description}\nStatus: ${MAINTENANCE_LABELS[item.lifecycle_status] || 'Jadwal ditutup'}. Waktu penutupan terpantau pada halaman status.`,
+        at: number(item.closed_at || item.cancelled_at), section: 'incidents-title' }] : []),
     ]),
     ...changes.results.filter((item) => ALL_COMPONENTS.some((service) => service.id === item.service)).map((item) => ({
       id: `probe:${item.service}:${item.slot}`, title: `${SERVICES.find((service) => service.id === item.service).name}: ${item.condition}`,
@@ -434,9 +468,9 @@ export function renderHtml(data, { preview = false } = {}) {
     ${item.overdue ? '<p class="event-warning">Estimasi selesai terlewati; maintenance masih berlangsung.</p>' : ''}
     ${item.syncStale ? '<p class="event-warning">Pembaruan jadwal SIGAP belum dapat dipastikan.</p>' : ''}
   </li>`).join('');
-  const incidentItems = data.incidents.map((item) => `<li class="incident-item">
+  const incidentItems = (data.history || data.incidents).map((item) => `<li class="incident-item">
     <div class="incident-top"><div><div class="event-kicker"><span class="status-dot" aria-hidden="true"></span>${escape(item.serviceNames.join(', '))}</div>
-    <h3>${escape(item.title)}</h3></div><span class="phase-badge ${item.phase === 'resolved' ? 'resolved' : ''}">${escape(item.phaseLabel)}</span></div>
+    <h3>${item.kind === 'maintenance' ? 'Pemeliharaan terjadwal: ' : ''}${escape(item.title)}</h3></div><span class="phase-badge ${item.phase === 'resolved' ? 'resolved' : ''}">${escape(item.phaseLabel)}</span></div>
     <p class="event-meta">${escape(item.startedText)}</p><p class="event-copy">${escape(item.summary)}</p>
     <ol class="timeline">${item.timeline.map((update) => `<li class="${escape(update.phase)}"><strong>${escape(update.phaseLabel)}</strong><p>${escape(update.message)}</p><time datetime="${new Date(update.at).toISOString()}">${escape(update.atText)}</time></li>`).join('')}</ol>
   </li>`).join('');
@@ -448,7 +482,7 @@ return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="v
   <div class="overview" id="overview" data-status="${data.overall}" role="status" aria-live="polite"><span class="overview-dot" aria-hidden="true"></span><div><strong id="overall-label">${escape(data.overallLabel)}</strong><small id="updated-at">Diperbarui ${escape(generated)} WIB</small></div></div>
   <section aria-labelledby="services-title"><div class="section-heading"><h2 id="services-title">Layanan</h2><span>4 layanan dipantau</span></div><ul class="service-list">${rows}</ul><div class="legend"><span class="legend-item"><span class="bar"></span>100% sehat</span><span class="legend-item"><span class="bar degraded"></span>99–&lt;100% sehat</span><span class="legend-item"><span class="bar partial"></span>95–&lt;99% sehat</span><span class="legend-item"><span class="bar down"></span>&lt;95% sehat</span><span class="legend-item"><span class="bar unknown"></span>Belum ada data</span></div></section>
   <div class="sections"><section class="status-section" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Pemeliharaan terjadwal</h2>${maintenanceItems ? `<ul class="maintenance-list">${maintenanceItems}</ul>` : '<p class="empty">Tidak ada pemeliharaan yang dijadwalkan.</p>'}</section>
-  <section class="status-section" aria-labelledby="incidents-title"><div class="section-heading"><h2 id="incidents-title">Riwayat insiden</h2><span>90 hari terakhir</span></div>${incidentItems ? `<ul class="incident-list">${incidentItems}</ul>` : '<p class="empty">Belum ada insiden yang tercatat.</p>'}</section></div>
+  <section class="status-section" aria-labelledby="incidents-title"><div class="section-heading"><h2 id="incidents-title">Riwayat insiden &amp; pemeliharaan</h2><span>90 hari terakhir</span></div>${incidentItems ? `<ul class="incident-list">${incidentItems}</ul>` : '<p class="empty">Belum ada insiden atau pemeliharaan yang tercatat.</p>'}</section></div>
   <div class="note"><strong>Tentang pemantauan.</strong> Aplikasi production dan staging diperiksa dari luar server setiap menit. Storage dan service diperiksa kolektor internal melalui kesiapan layanan, proses, dan progres antrean; pemeriksaan ini tidak menjalankan pengajuan atau menguji pengiriman ke vendor. Uptime dihitung dari sampel yang tersedia dalam 30 hari, bukan jaminan SLA. Data lebih dari 3 menit menjadi belum diketahui. Riwayat sebelum pemantauan dimulai tidak dianggap sehat.</div>
   <footer class="page-footer"><span>Waktu ditampilkan dalam WIB (UTC+7).</span><nav class="legal-links" aria-label="Kebijakan layanan"><a href="https://marisoncloud.com/privacy">Privacy Policy</a><a href="https://marisoncloud.com/terms">Terms of Service</a></nav></footer></main>${subscriptionDialog}</body></html>`;
 }

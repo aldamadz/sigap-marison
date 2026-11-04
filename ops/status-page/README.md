@@ -243,6 +243,21 @@ checking the service scope, timing, and public wording.
 
 ## Incident handling
 
+Completed SIGAP maintenance is retained in the combined incident/maintenance
+history for90 days, with its original message, scheduled start, estimated end and
+observed closure. It is explicitly labeled planned maintenance, never fabricated
+as an unplanned incident or unresolved outage. Completion, cancellation, replaced
+schedules and legacy unknown closure are distinct. The old cancelled_at field
+alone cannot prove completion; current authoritative SIGAP state can reconcile
+the same schedule ID without deleting the old row or changing probe history.
+The closure timestamp is first observed by the status sync, not claimed to be
+the exact operational completion time. RSS/Atom closure IDs remain stable.
+
+Apply `migrations/20261104130000_maintenance_lifecycle_history.sql` before the
+updated page/probe. On existing databases, back up/bookmark first, inspect columns
+and apply this additive migration only once. Do not replay all prior migrations.
+The SIGAP maintenance Worker and application need no restart or deployment.
+
 Probe failures change the service indicator automatically, but do not invent
 an incident narrative. The on-call operator confirms the impact, then creates
 an incident with `incident-create` and the affected service IDs. Each material
