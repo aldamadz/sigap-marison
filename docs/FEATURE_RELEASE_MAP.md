@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## MRN-797 Production Release And Bounded Revision Receipt (2026-11-04)
+
+- Live staging `55583dc`, production `2d02f73`; PRs #798/#799/#800. Official
+  deployments and compiled acceptance passed. Accepted revisions receive explicit
+  contract-required409 instead of being misclassified as rejected replacements.
+- The user subsequently accepted duplicate risk for exactly one operator POST of
+  051/UAI/MKT.1.SGN/X/2026. Vendor HTTP200 returned the same submission_id2,
+  three units and corrected addendum7116262. Generation3 now succeeded with one
+  audited receipt; accepted generation2 and prior history remain intact. No retry.
+- No migration, worker restart, permission widening or general duplicate bypass.
+  Canonical latest preview remains read-only. Browser acceptance was unavailable.
+  General revision automation still requires a documented vendor update/ownership/
+  idempotency contract; this one successful same-number POST is not that contract.
+
 ## SEC-04 Production Verified / SUR-30 Staging Applied (2026-11-04)
 
 - SEC-04 app live production626b5bd, stage03a1e93 before promotion; exact-main

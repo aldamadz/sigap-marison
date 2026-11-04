@@ -29,3 +29,15 @@ contract or permission to bypass the guard for other revisions. Capture payload
 hash, exclusive single attempt and response; never retry an ambiguous outcome.
 A general delivery fix still requires contract tests in staging.
 Original accepted payload/response and examiner history remain immutable.
+
+## Observed Authorized One-Shot Result
+
+After staging55583dc and production2d02f73 passed deployment and acceptance,
+exactly one operator POST for051 returned HTTP200 with submission_id2 (unchanged),
+total_units3, total_addendum7116262 and statusreview. Canonical body SHA256:
+`223dd3853ebed00c42c877cdfd2173ed8bf180012edd292996c16accb54afaf3`.
+The actual receipt is audited on generation3, without reopening the queue or
+altering accepted generation2. There was no second business POST or automatic retry.
+This establishes acceptance for this case only: it does not document concurrency,
+idempotency, unit ownership or downstream Purchasing/SPK effects. Keep the general
+revision guard until those contracts and staging tests are available.
