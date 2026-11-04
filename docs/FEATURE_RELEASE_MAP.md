@@ -1,5 +1,23 @@
 # SIGAP Feature and Release Map
 
+## SEC-04 / OPS-QG Staging Runtime Verified (2026-11-04, Issue #782)
+
+- Supersedes the earlier staging-candidate/pending rollout entries below:
+  source and public runtime now `7108cf540f2b75c773c5a9a4a0d827df7446f46e`.
+  App, PDF worker, sync and outbound were rebuilt/recreated together from one
+  image, Node22.23.4, all restart0. Effective environment and rollback images
+  retained; no live PDF lease or pending outbound existed before stopping workers.
+- SEC-04 hosted12-check validation and OPS-QG full2855-pass/1-skip baseline were
+  already green. Exact-image runtime behavior probes3/3 and Fastify5.12.7 /
+  Nodemailer10.1.4 version checks passed. Official deploy script passed unchanged
+  after rollout; public root/version/live/ready200 and anonymous desktop APIs401.
+- No database migration, failed-job replay, approval or business resend. Separate
+  external API image is unchanged and not covered by this four-service rollout.
+  Production remains `ed124b6`, ready200, not released. Deferred audit candidates
+  and documentation dependency issue #768 remain separate, not silently closed.
+- Rollback uses protected per-service previous images/configuration; no schema
+  rollback required. Operator continuation/proof: `codex/sec04-staging-rollout-proof`.
+
 ## OPS-QG Quality Baseline Reconciliation (2026-11-04, Issue #769)
 
 - Reconciled the eight stale full-suite assertions against the current

@@ -1,5 +1,43 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-04 / OPS-QG Coordinated Staging Rollout Completed
+
+- Supersedes the pending worker-rollout checkpoints below. Operator continuation
+  claimed on #782; isolated proof branch `codex/sec04-staging-rollout-proof`.
+  Exact source/runtime `7108cf540f2b75c773c5a9a4a0d827df7446f46e` contains PRs
+  #784, #786 and #787. Hosted Quality Gate41785867884 and the quality job in
+  Deploy Staging41785867913 passed; no baseline assertion or guard was bypassed.
+- Before rollout, verified that only `dockerfile` changed in the guarded worker
+  set and no migration changed. PDF/outbound queues had no active/pending work.
+  Captured effective container configuration and per-service rollback images in
+  protected operator files; environment values were not printed or committed.
+- Built one image `5e456c69944496d2e956a04aeae961ed75772523b301aeb355de86a404c35f08`
+  from the exact source, gracefully stopped idle workers, then recreated app,
+  PDF, sync and outbound together. Preserved effective environment, commands,
+  network aliases, published ports and health checks. The first config comparison
+  caught an empty-host versus IPv4-only port binding; restored the original
+  all-interface binding before final acceptance. No assertion was relaxed.
+- Verified app8bac04b0f3d9, PDFd649cfee6ddb, sync9e60819ad1e6 and
+  outbound0801eb24c248 use that same image/SHA, Node22.23.4 and restart0.
+  App/outbound healthy; PDF/sync running. Separate external API container was
+  not replaced and retained its ID/image; its image pin rollout remains separate.
+- Three synthetic runtime behavior probes passed inside the running app without
+  SMTP, push or real DNS requests: NUL hostname rejection, nested-comment email
+  parsing, and canonical-case forbidden-header validation. Installed Fastify5.12.7
+  and Nodemailer10.1.4 verified. Source validation remains the previously green
+  hosted12-check SEC-04 suite and full2855-pass/1-skip baseline, not a new full run.
+- Unchanged `bash scripts/deploy-app.sh staging <7108cf5-full-sha>` passed as an
+  already-current verification after coordinated rollout. Public root, version,
+  live and ready returned200 with the exact SHA; anonymous desktop me/notifications
+  returned401 rather than404. PDF statuses remained done129/failed94; staging
+  outbound remained succeeded20/skipped3/failed_terminal12. No failed job replay.
+- Production was only read for verification: `ed124b690cecea1e89a977b1dc09620e08f1c8aa`,
+  ready200, unchanged. No production deployment, maintenance, database/schema,
+  secret rotation, ACL sweep, approval or business resend. Remaining: explicit
+  selective production release decision, separate external API image rollout,
+  and the previously deferred audit candidates. PROJECT_CONTEXT remains absent;
+  no shared document structure changed. Rollback snapshots stay protected on host.
+
 ## 2026-11-04 [Codex] Quality baseline merged; staging runtime rollout pending / Issue #769
 
 - #769 fix merged into staging as `314635c` (PR #786) after its Quality Gate
