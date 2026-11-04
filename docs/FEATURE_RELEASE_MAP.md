@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## SUR-30 External Addendum Review Released (2026-11-04, Issue #791)
+
+- Released selectively via PR793/794/795. Live productionc9ca0e7 and stagingfdc7eff;
+  both contain migration20261104160000, exact SHA256b80bd155a0ffa037101b3ca5779d4afcc6ebc147f8778ebdd6da5eb8f47ec433.
+  Official production workflow41799702136 and both staging workflows succeeded.
+- Production051 valid-review false->true, still PROSES/step5 and30->3 units,
+  including validation as the approval guard role. Original business/signature/
+  review/archive/revision/outbound fingerprints and public guards unchanged.
+  No historical receipt rewrite, auto-approval, PDF regeneration or resend.
+- Positive/tamper/stale/ACL/final-signature PostgreSQL17 tests passed on both
+  deployment shapes and repeated migration; focused7/7 plus lint/typecheck/build
+  and hosted selected gates passed. Root/live/ready200. Transient503 during app
+  replacement was observed; no zero-downtime or latency improvement claim.
+- All production services retain the SEC-04 Node22.23.4 patch, restart0;
+  worker/API source and configuration preserved. Rollback restores the retained
+  original validator via a new forward migration, never rewrites or deletes history.
+
 ## SEC-04 Production Verified / SUR-30 Staging Applied (2026-11-04)
 
 - SEC-04 app live production626b5bd, stage03a1e93 before promotion; exact-main

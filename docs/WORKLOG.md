@@ -1,5 +1,49 @@
 # Worklog
 
+## 2026-11-04 [Codex] SUR-30 Staging And Production Completed / Issue #791
+
+- Supersedes the pending production checkpoints below. Selective featureca58d15,
+  staging integrationPR793/9635e8c, productionPR794/c9ca0e7 and ancestry sync
+  PR795/fdc7eff are merged. No staging-only feature was promoted to main.
+- Staging official acknowledged deployment41798438892 passed, then synced staging
+  deployment41798957739 passed. Live stagingfdc7eff contains mainc9ca0e7 before
+  production apply/deploy. Exact-main quality41798633481 succeeded; production
+  workflow41799702136 passed with exact migration ACK20261104160000. Unacknowledged
+  automatic runs were cancelled before deploy and replaced with acknowledged
+  official runs; no guard, test or migration ledger was bypassed.
+- Migration20261104160000 SHA256b80bd155a0ffa037101b3ca5779d4afcc6ebc147f8778ebdd6da5eb8f47ec433
+  applied selectively to both environments. Ledger drift was audited against
+  existing REC-06 snapshots, no include-all/repair/replay. Rehearsals rolled back;
+  application checks locked the ledger and compared the original function before
+  DDL. Production used its existing supabase_admin function owner, without
+  granting elevated rights to application roles.
+- Production051/UAI/MKT.1.SGN/X/2026 now passes the review predicate, including
+  read-only evaluation as postgres (the approval guard role). It remains PROSES,
+  current_step5, requested30/allocated3: final approval was NOT performed.
+  Exactly one previously-invalid Unit document gains valid review status;
+  all existing valid reviews are preserved. Original document/signature/review/
+  external archive/revision/outbound fingerprints are identical within migration
+  transactions. The two existing public approval/verification guards are unchanged.
+- Real PostgreSQL17 on legacy-staging and production shapes passed repeat apply,
+  positive correction, legacy exact path, altered unit/project/count/type/production/
+  money, changed archived verifier/note, missing resolution, stale generation,
+  missing last signature and private ACL tests. Focused Vitest7/7, lint/typecheck,
+  frontend/backend build and hosted selected gates passed; no unnecessary full
+  suite rerun for this migration-only fix. Existing20 moderate advisories remain.
+- Final public runtime productionc9ca0e75c95c1b02e3dd1b9043efa246db6ca219,
+  stagingfdc7eff384cbae3dfd761f9bf8f2522181714e04. Production app58b4de9e946a
+  healthy/restart0; all five services retain Node22.23.4. Existing SEC-04 worker/API
+  container IDs, effective environment, ports, TLS mount and unrelated containers
+  preserved. Public root/live/ready200 and both environment readiness200 passed.
+  One transient edge fallback503 was observed during app replacement, then200;
+  do not describe this rollout as zero-downtime or a public-latency improvement.
+- No historical receipt overwrite, PDF regeneration, signature action, business
+  resend, routing/DNS change or new maintenance schedule. Existing final signer
+  can retry the normal approval flow; no final approval/outbound E2E was performed
+  on production. Protected operator rollback/proof files retained. PROJECT_CONTEXT
+  remains absent; shared document structure was not changed. Separate SEC-04
+  deferred audit candidates and documentation dependency issue #768 remain open.
+
 ## 2026-11-04 [Codex] SEC-04 Live Production And SUR-30 Staging Promotion Checkpoint
 
 - SEC-04 production completed independently: selective PR789 main626b5bd,
