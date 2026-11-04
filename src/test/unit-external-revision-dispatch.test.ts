@@ -31,10 +31,15 @@ describe("Unit accepted revision versus rejected replacement", () => {
     const source = readFileSync("backend/src/domain-runtime.ts", "utf8");
     const build = source.slice(source.indexOf("const buildMarisonOutboundJob ="), source.indexOf("const listMarisonOutboundDispatches ="));
     expect(build.indexOf("await requireUnitDispatchContract(job)")).toBeLessThan(build.indexOf("if (job.payload_body)"));
-    expect(build).toContain('job.environment === "production" && job.kind === "unit" && Boolean(job.replacement_of_dispatch_id)');
+    expect(build).toContain('Boolean(job.replacement_of_dispatch_id) && !unitRevisionAuthorization');
+    expect(build).toContain('verifyUnitRevisionReferences(logicalPayload.project_id');
     const preflight = source.slice(source.indexOf("const preflightMarisonOutboundRecovery ="), source.indexOf("const reconcileMarisonOutboundDispatch ="));
     expect(preflight.indexOf("await requireUnitDispatchContract(job)")).toBeLessThan(preflight.indexOf("resolveMarisonOutboundIdentity"));
-    expect(preflight).toContain("UNIT_EXTERNAL_REVISION_CONTRACT_REQUIRED");
-    expect(source).toContain("failureReason: revisionContractPending ? unitRevisionContractMessage");
+    expect(preflight).toContain("UNIT_EXTERNAL_REVISION_UNVERIFIED");
+    expect(source).not.toContain("failureReason: revisionContractPending ? unitRevisionContractMessage");
+    const preflightStart = source.indexOf("const marisonPreflightMatch =");
+    expect(preflightStart).toBeGreaterThan(-1);
+    const getPreflight = source.slice(preflightStart, preflightStart + 2200);
+    expect(getPreflight).toContain("generation, created_at, replacement_of_dispatch_id");
   });
 });
