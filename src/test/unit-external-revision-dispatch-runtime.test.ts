@@ -32,12 +32,12 @@ describe("Unit revision production pre-POST boundary", () => {
       status: "succeeded", external_reference: "2", generation: 2 };
     const rpc = vi.fn(() => { throw new Error("No database writes permitted"); });
     const from = vi.fn((table: string) => {
-      expect(table).toBe("marison_outbound_dispatches");
+      expect(["marison_outbound_dispatches", "surat_registrasi"]).toContain(table);
       let id = "";
       const query = {
         select: () => query,
         eq: (column: string, value: string) => { if (column === "id") id = value; return query; },
-        maybeSingle: async () => ({ data: id === jobId ? job : previous, error: null }),
+        maybeSingle: async () => ({ data: table === "surat_registrasi" ? null : id === jobId ? job : previous, error: null }),
       };
       return query;
     });
@@ -54,7 +54,7 @@ describe("Unit revision production pre-POST boundary", () => {
     };
     await runtime.handleRequest(request, response);
     expect(response.statusCode, response.body).toBe(409);
-    expect(JSON.parse(response.body).error).toContain("jalur revisi Digivasi terkonfirmasi");
+    expect(JSON.parse(response.body).error).toContain("bukti pengembalian external");
     expect(rpc).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
     expect(job.payload_body).toBe(frozen ? '{"fixture":true}' : null);

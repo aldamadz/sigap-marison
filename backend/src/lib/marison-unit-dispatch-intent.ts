@@ -12,8 +12,7 @@ type UnitDispatch = {
 const conflict = (message: string, code: string) => Object.assign(new Error(message), { status: 409, code });
 
 export const unitRevisionContractMessage =
-  "Pengajuan Unit sebelumnya sudah diterima Marison. Revisi harus memperbarui pengajuan yang sama; "
-  + "pengiriman ditahan sampai jalur revisi Digivasi terkonfirmasi agar tidak membuat duplikat.";
+  "Revisi Unit memerlukan bukti pengembalian external dan persetujuan ulang yang valid sebelum dikirim kembali.";
 
 export const classifyUnitDispatchIntent = (job: UnitDispatch, previous: UnitDispatch | null) => {
   if (job.kind !== "unit" || !job.replacement_of_dispatch_id) return "initial" as const;
