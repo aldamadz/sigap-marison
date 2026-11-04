@@ -1,5 +1,16 @@
 # Worklog
 
+## 2026-11-04 [Codex] OPS-QG Production-Only Eighth Assertion Identified
+
+- Hosted candidate run41792231355 passed the remaining checks but exposed one
+  further stale MRN-16 source assertion: main expected the old no-options identity
+  call, although its production builder/recovery already pass the dispatch kind.
+  Staging already has the two correct assertions. Ported those exact assertions
+  without changing runtime behavior or weakening requester/signer identity checks.
+- This corrects the preceding checkpoint: seven failures reproduced in the initial
+  targeted set; the full main-based gate found the eighth in a different file
+  from staging's eighth realtime test. Full hosted gate must pass before promotion.
+
 ## 2026-11-04 [Codex] SEC-04 Selective Production Release Started / Issue #782
 
 - User explicitly authorized production after staging7108cf5 and requested a
