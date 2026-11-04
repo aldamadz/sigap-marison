@@ -1,5 +1,48 @@
 # Worklog
 
+## 2026-11-04 [Codex] MRN-802 Staging And Production Completed
+
+- Supersedes pending deployment in the MRN-802 entry below. Selective source
+  `e7bec74e2f794572d0d07f75b6c14ad46c9e6eac`; PR #804 staging, #803 main,
+  #805 required main-ancestry sync. First staging `a2646ae` passed compiled
+  acceptance before main promotion; final live staging
+  `1d2d83154340b839a93a8c61eb0199a241781e71` contains selected production
+  `4ea5e6c82a36ce65481d830f5c7ce8a91ab6558a` and passed acceptance again.
+- Official staging runs41810078911/41810977031 and production41811323105
+  completed quality AND deploy successfully. Source PR checks41809813358 and
+  41809956000 passed. Local95 focused tests in8 files, lint, typecheck,
+  frontend/backend builds and audit high/critical gate passed;20 existing moderate
+  advisories remain. No suite coverage removed or quality bypass. A new source
+  boundary assertion was corrected before the final95/95 run and release.
+- Both live containers' compiled revision checks pass valid returned reapproval,
+  same accepted-unit reuse, foreign-unit refusal and consumed/open/unknown-state
+  refusal. Internal request without token returns401. No real business POST in
+  this task; worker network tests used synthetic responses. Browser surfaces were
+  unavailable; no browser or full vendor round-trip acceptance is claimed.
+- Production historical051 replay reconstructs the old pre-POST context ONLY in
+  memory and passes; the actual succeeded generation3 is blocked. Fingerprints
+  of eight protected tables (document/signatures/attachments/revisions/decisions/
+  archive/outbound/reconciliation) are identical across rollout. Still exactly
+  three dispatch generations, generation3 succeeded/reference2. No approval,
+  receipt rewrite, resend or business-data change. The prior797 POST is not repeated.
+- Read-only configured external-source probe confirms units2048/2074/2173 have
+  has_submitted=true with current type30 5.3. Runtime uses current API type, not
+  a hardcoded30. Only IDs in the same accepted project's frozen payload can reuse
+  a true flag; other/new units must explicitly be unsubmitted. Unknowns stay held.
+- Production appc571223d1b2e healthy/restart0, Node22.23.4. PDFc3af751fdaf4,
+  syncfc03d1194fee, outbound657fba2b5a1f and API99e7d80fd17a retain IDs;
+  environment/ports/mounts and unrelated containers unchanged. Public production
+  root/ready/version and staging ready/version200 with expected SHAs. App-recreate
+  deployment is not a zero-downtime guarantee. No migration, secret, ACL or network
+  changes, no worker source rollout. No blockers for this scoped implementation.
+- Durable finding: derive revision permission from the private external event,
+  resolved revision, archived accepted dispatch and restarted signatures; never
+  trust a client revision flag or disable has_submitted checking globally. A
+  successful same-number POST is not general retry/idempotency permission:
+  timeout/5xx stays unknown, completed returns cannot be reused. Project changes
+  or another submission's unit cannot use this narrow same-project authorization.
+  `docs/PROJECT_CONTEXT.md` remains absent; shared document structure unchanged.
+
 ## 2026-11-04 [Codex] SEC-04 Live Production And SUR-30 Staging Promotion Checkpoint
 
 - SEC-04 production completed independently: selective PR789 main626b5bd,

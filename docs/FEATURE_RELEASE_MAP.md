@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## MRN-802 Released: Verified External Unit Returns (2026-11-04)
+
+- Staging `1d2d831`, production `4ea5e6c`; PRs #804/#803/#805 and official
+  deployment/compiled acceptance passed.95 targeted tests passed, no migration.
+- A private returned revision corrected and reapproved can use the same document
+  number. Bind the accepted predecessor/archive and project; reuse its submitted
+  units only, or add explicitly unsubmitted units. Frozen transport rechecks it.
+- Completed, uncertain, superseded and unapproved revisions remain blocked. No
+  broad duplicate bypass or automatic retry after POST. Existing non-Unit flows
+  are unchanged.051 remains succeeded/reference2, byte-identical across8 protected
+  tables and NOT resent. Workers/permissions/configuration were not changed.
+- Public health/version200; browser/full vendor round-trip not exercised. Prior
+  actual051 HTTP200 plus synthetic dispatcher/worker tests and read-only historical
+  replay provide the scoped evidence, not a blanket vendor idempotency guarantee.
+
 ## SEC-04 Production Verified / SUR-30 Staging Applied (2026-11-04)
 
 - SEC-04 app live production626b5bd, stage03a1e93 before promotion; exact-main
