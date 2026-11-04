@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## OPS-18 Maintenance History (2026-11-04, Issue #783)
+
+- Isolated status-only follow-up from deployed OPS-16 source e9f5457. Previous
+  sync incorrectly stored completed schedules as cancelled and page filtered them
+  out. Existing evidence retained; no source incident or downtime is invented.
+- Add lifecycle_status/closed_at to status D1; retain original times and message,
+  distinguish completion, cancellation, replacement and legacy unknown closure.
+- Completed maintenance appears in combined90-day incident/maintenance history,
+  with scheduled start, estimated end and explicitly observed closure; RSS/Atom
+  closure IDs and first-seen timestamp are stable on repeated polling.
+- Pending focused gates/staging acceptance and public status rollout. No SIGAP
+  application/schema/worker change or new maintenance window required.
+
 ## 2026-11-04 [Codex] OPS-16 SIGAP Component Status / Issue #760
 
 - Release correction: completed staging then production at ecda415. Public

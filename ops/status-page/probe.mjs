@@ -147,24 +147,34 @@ export async function syncSigapMaintenance(env, syncedAt = Date.now()) {
   const statements = [env.DB.prepare(`INSERT INTO status_sources (source, revision, synced_at) VALUES ('sigap', ?, ?)
     ON CONFLICT(source) DO UPDATE SET revision=excluded.revision, synced_at=excluded.synced_at
     WHERE excluded.revision >= status_sources.revision`).bind(revision, syncedAt)];
-  const schedule = state.schedule?.status === 'published' ? state.schedule : null;
+  const schedule = state.schedule;
   if (schedule) {
     const key = `sigap:${schedule.id}`;
-    statements.push(env.DB.prepare(`UPDATE maintenance SET cancelled_at=?
-      WHERE source='sigap' AND id<>? AND cancelled_at IS NULL AND ${guard}`)
-      .bind(syncedAt, key, revision));
+    statements.push(env.DB.prepare(`UPDATE maintenance SET lifecycle_status='replaced',
+      closed_at=COALESCE(closed_at, ?), cancelled_at=COALESCE(cancelled_at, ?)
+      WHERE source='sigap' AND id<>? AND lifecycle_status='published' AND cancelled_at IS NULL AND ${guard}`)
+      .bind(syncedAt, syncedAt, key, revision));
+    const closed = schedule.status !== 'published';
     statements.push(env.DB.prepare(`INSERT INTO maintenance
-      (id, title, description, service_ids, starts_at, ends_at, created_at, source, impact)
-      SELECT ?, ?, ?, '["sigap"]', ?, ?, ?, 'sigap', ? WHERE ${guard}
+      (id, title, description, service_ids, starts_at, ends_at, created_at, source, impact,
+        lifecycle_status, closed_at, cancelled_at)
+      SELECT ?, ?, ?, '["sigap"]', ?, ?, ?, 'sigap', ?, ?, ?, ? WHERE ${guard}
       ON CONFLICT(id) DO UPDATE SET title=excluded.title, description=excluded.description,
         starts_at=excluded.starts_at, ends_at=excluded.ends_at, impact=excluded.impact,
-        cancelled_at=NULL WHERE maintenance.source='sigap'`)
+        lifecycle_status=excluded.lifecycle_status,
+        closed_at=CASE WHEN excluded.lifecycle_status='published' THEN NULL
+          ELSE COALESCE(maintenance.closed_at, maintenance.cancelled_at, excluded.closed_at) END,
+        cancelled_at=CASE WHEN excluded.lifecycle_status='cancelled'
+          THEN COALESCE(maintenance.cancelled_at, maintenance.closed_at, excluded.closed_at) ELSE NULL END
+        WHERE maintenance.source='sigap'`)
       .bind(key, `${CATEGORY_LABELS[schedule.category]} SIGAP`, schedule.message.trim(),
-        Date.parse(schedule.startsAt), Date.parse(schedule.endsAt), syncedAt, schedule.impact, revision));
+        Date.parse(schedule.startsAt), Date.parse(schedule.endsAt), syncedAt, schedule.impact,
+        schedule.status, closed ? syncedAt : null, schedule.status === 'cancelled' ? syncedAt : null, revision));
   } else {
-    statements.push(env.DB.prepare(`UPDATE maintenance SET cancelled_at=?
-      WHERE source='sigap' AND cancelled_at IS NULL AND ${guard}`)
-      .bind(syncedAt, revision));
+    statements.push(env.DB.prepare(`UPDATE maintenance SET lifecycle_status='unknown',
+      closed_at=COALESCE(closed_at, ?), cancelled_at=COALESCE(cancelled_at, ?)
+      WHERE source='sigap' AND lifecycle_status='published' AND cancelled_at IS NULL AND ${guard}`)
+      .bind(syncedAt, syncedAt, revision));
   }
   await env.DB.batch(statements);
   return { revision, scheduleId: schedule?.id || null };

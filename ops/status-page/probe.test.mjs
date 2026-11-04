@@ -80,8 +80,10 @@ test('SIGAP maintenance is read through an internal binding and written by revis
   state.revision = 5;
   state.schedule.status = 'completed';
   await syncSigapMaintenance(env);
-  assert.equal(statements.length, 5);
-  assert.match(statements[4].sql, /cancelled_at/);
+  assert.equal(statements.length, 6);
+  assert.match(statements[5].sql, /lifecycle_status=excluded.lifecycle_status/);
+  assert.equal(statements[5].values[7], 'completed');
+  assert.equal(statements[5].values[9], null);
 });
 
 test('invalid or unavailable maintenance state never clears the last known schedule', async () => {
