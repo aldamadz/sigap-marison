@@ -19,4 +19,11 @@ describe("verified Unit replacement references", () => {
     expect(() => verifiedUnitReplacementReceipt(24, [])).toThrow();
     expect(() => verifiedUnitReplacementReceipt(0, [unit])).toThrow();
   });
+  it("returns a non-retryable validation status rather than a transient server error", () => {
+    for (const hasSubmitted of [true, undefined]) {
+      try { verifiedUnitReplacementReceipt(24, [{ ...unit, hasSubmitted }]); }
+      catch (error) { expect(error).toMatchObject({ status: 422 }); continue; }
+      throw new Error("Unproven reference unexpectedly accepted");
+    }
+  });
 });

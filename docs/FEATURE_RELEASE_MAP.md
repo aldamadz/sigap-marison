@@ -32,6 +32,19 @@
 - No product runtime, database, migration, secret or deployment change; the
   edit is limited to test expectations. Status: staging candidate.
 
+## MRN Unit External Revision Dispatch Intent (2026-11-04, Issue #797)
+
+- Accepted Unit external revisions are not rejected422 replacements, even though
+  both reference a previous dispatch. Bind the predecessor context; accepted
+  predecessor paths fail closed409 until a duplicate-safe vendor revision contract
+  exists. Ordinary replacement still requires explicit unsubmitted unit references.
+- Queue diagnosis explains the revision hold without mutating historical jobs.
+  Recovery cannot reopen an accepted revision as a new submission. Reference
+  validation is422, not transient500; no three-attempt retry for deterministic data.
+- User authorized staging then production, explicitly no resend. Source/gates and
+  deployment pending. Actual051 revision delivery remains blocked by missing vendor
+  update/resubmission contract; do not claim the adendum reached Marison.
+
 ## SUR-30 External Addendum Review Preservation (2026-11-04, Issue #791)
 
 - Selective main-based fix for retained30-to3 readiness review blocked at final
