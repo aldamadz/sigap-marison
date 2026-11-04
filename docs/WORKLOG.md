@@ -1,5 +1,32 @@
 # Worklog
 
+## 2026-11-04 [Codex] SUR-30 External Addendum Review Preservation / Issue #791
+
+- User reports051/UAI/MKT.1.SGN/X/2026 final approval blocked after external
+  revision; explicitly authorized staging then production without approval/resend.
+  Separate branch `codex/unit-partial-external-revision` from main626b5bd.
+- Read-only production diagnosis: request30,allocation3, retained76-character
+  examiner note, identity/time/signature/project all match. Only four monetary
+  fields across three allocation_detail objects differ from the October15 receipt;
+  unit identities, raw catalog, type and production metadata are unchanged.
+  Resolved external generation1 restarts at step5, after the signed examiner;
+  immutable external archive contains the corrected allocation exactly.
+- New forward-only migration20261104160000 preserves the original exact-snapshot
+  validator as the primary path. Private fallback requires current persisted input,
+  resolved linked external decision/generation, later approval restart, archived
+  signed verifier/note/time, same project/count/unit/order/type/production metadata,
+  and exact financial values in that external archive. No post-archive edit or
+  same-count unit substitution can reuse the receipt. No history row is rewritten.
+- Disposable PostgreSQL17 regressions pass on legacy staging and production
+  shapes, including repeat migration, exact legacy path, positive correction,
+  forged identity/type/production/count/project/money, stale/open revisions,
+  altered archived verifier/note, missing final signature and private-helper ACLs.
+  Focused Vitest7/7 passes. Selected test gate now runs both SQL deployment shapes.
+- Remaining: CI, audited selected staging migration and runtime, production
+  rehearsal/selective release/application, then read-only051 validation. No
+  production approval, historical PDF regeneration, dispatch replay or business
+  POST is authorized by this bug fix. Existing final signer must act normally.
+
 ## 2026-11-04 [Codex] OPS-QG Production-Only Eighth Assertion Identified
 
 - Hosted candidate run41792231355 passed the remaining checks but exposed one

@@ -1,5 +1,21 @@
 # SIGAP Feature and Release Map
 
+## SUR-30 External Addendum Review Preservation (2026-11-04, Issue #791)
+
+- Selective main-based fix for retained30-to3 readiness review blocked at final
+  approval after audited external adendum correction. User authorized staging
+  then production, no approval or resend. Migration20261104160000 is additive;
+  original exact-snapshot validation remains the primary path and rollback target.
+- Additional private validation accepts only unchanged project/count/unit/order,
+  type/production metadata and verifier identity/time/note, with corrected upper/
+  lower monetary fields exactly matching the current resolved external archive.
+  Review stage must precede configured approval restart. No history rewrite,
+  new external send, fabricated examiner note or automatic final approval.
+- Real PostgreSQL17 staging/production shapes pass positive, tamper, stale-event,
+  final-signature and ACL checks; applied twice successfully. Deployment pending.
+  Rollback restores the original validator body through a new forward migration;
+  retained legacy function is private. No data rollback or history deletion.
+
 ## SEC-04 Selective Production Promotion (2026-11-04, Issue #782)
 
 - User authorized production after staging acceptance. Main-based candidate
