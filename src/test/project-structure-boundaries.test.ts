@@ -165,10 +165,14 @@ describe("project structure boundaries", () => {
     // or its own debounce timer.
     expect(form).toContain("useSuratAutosave");
     expect(form).not.toContain('useState<"idle" | "saving" | "saved" | "error">');
-    expect(form).not.toContain("window.setTimeout(() => {");
-    // The original autosave useEffect has been removed; the
-    // `}, 900);` debounce close must not appear inline any more.
-    expect(form).not.toContain("}, 900);");
+    // Ordinary draft autosave stays in the hook. The single inline timer that
+    // remains is the documented external-revision baseline save, so it must
+    // stay guarded by the revision inputs and keep its 900ms debounce.
+    const inlineTimers = form.match(/window\.setTimeout\(\(\) => \{/g) ?? [];
+    expect(inlineTimers).toHaveLength(1);
+    expect(form).toMatch(
+      /if \(!externalRevision \|\| !activeDraftId[\s\S]*?\) return;[\s\S]*?window\.setTimeout\(\(\) => \{[\s\S]*?saveRegistrationDraft\([\s\S]*?\}, 900\);/,
+    );
   });
 
   it("keeps surat draft restore lifecycle out of SuratForm.tsx", () => {

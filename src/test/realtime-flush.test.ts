@@ -270,9 +270,15 @@ describe("provider wiring contract", () => {
     expect(src).toContain("onRealtimeReconnect");
   });
 
-  it("InboxPage flushes all inbox keys without a separate 700ms timer", async () => {
+  it("InboxPage relies on the shared realtime flush without a separate 700ms timer", async () => {
     const src = await read("src/pages/surat/InboxPage.tsx");
-    expect(src).toContain("createRealtimeFlush");
+    const realtimeSync = await read("src/providers/RealtimeSync.tsx");
+    // Query refresh is owned by the shared RealtimeSync provider, which merges
+    // keys through createRealtimeFlush and revalidates on reconnect.
+    expect(realtimeSync).toContain("createRealtimeFlush");
+    expect(realtimeSync).toContain("surat-inbox-compact");
+    expect(realtimeSync).toContain("surat-inbox-detail");
+    expect(src).not.toContain("createRealtimeFlush");
     expect(src).toContain("surat-inbox-compact");
     expect(src).toContain("surat-inbox-detail");
     expect(src).toContain("onRealtimeReconnect");

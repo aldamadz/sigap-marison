@@ -94,7 +94,7 @@ describe("docs-admin-content D2B", () => {
 
   it("matches documentation content after MRN-25 payload viewer updates", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "8e79bfb7408424f97508cc08ac586c2e2f13de34fb8664f3eebc30b83568ce91",
+      "0c485e76c2becd83512b8d2fcd86e3db110ed6b42a55ed73b08f50b159995362",
     );
   });
 

@@ -1,5 +1,37 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-04 staging integration / Issue #782
+
+- PR #784 merged into staging as `21a99c8` after the branch absorbed
+  `origin/staging`. The PR Quality Gate failed only the eight pre-existing
+  baseline assertions, which also failed on the already-merged SEC-03 PR; the
+  new SEC-04 suite passed12/12 in hosted CI.
+- Deploy Staging run41777285026 then failed its `quality:changed` step for the
+  same eight assertions because the dependency pins change `package-lock.json`,
+  which selects the full suite. The staging runtime was not changed by that run;
+  no bypass or gate edit was used.
+- Resolution is tracked in #769 on `fix/quality-baseline-769`; production
+  runtime, database, secrets and deployment remain untouched.
+
+## 2026-11-04 [Codex] Quality baseline reconciliation / Issue #769
+
+- Claimed #769 on `fix/quality-baseline-769` from staging after SEC-04 merged as
+  `21a99c8`; its deploy quality job failed the full suite on the same eight
+  pre-existing assertions that also failed on merged SEC-03, not on SEC-04 code.
+- Reconciled all eight without deleting coverage: recomputed the admin and
+  troubleshooting content hashes only after verifying the MRN-25 payload viewer
+  and release-guidance commits, pointed the source expectations at the current
+  `RealtimeSync` flush owner, atomic KEU10/additional-signer registration,
+  persistent file-link `reference` argument and `MasterReviewStatus` Keterangan
+  cell, bounded the SuratForm autosave assertion to its documented
+  external-revision timer, and included the calendar `--results` suite.
+- Local evidence: targeted eight files79/79 pass; lint and typecheck clean; full
+  suite on CI-like Node24.22.2 295 files,2855 passed,1 skipped,0 failed. Hash
+  values match the hosted Linux received values, so the drift was not CRLF.
+- No product runtime, database, migration, secret, outbound call or deployment
+  change. Staging deploy and smoke test remain the next step; production
+  untouched.
+
 ## 2026-11-04 [Codex] SEC-04 private-audit candidate hardening / Issue #782
 
 - Validated the selected private-audit candidates with synthetic fixtures in an
