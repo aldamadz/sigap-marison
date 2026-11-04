@@ -21,7 +21,11 @@ updates an existing record, invent a PUT/PATCH endpoint, or remove duplicate gua
 - Idempotency/retry rules and response/lookup for confirming revision acceptance.
 - Whether prior Purchasing/SPK processing must be returned or unlocked first.
 
-SIGAP generation3 remains terminal and unmodified; no resend or new generation
-is authorized. A future delivery fix requires contract tests in staging and
-separate explicit permission to recover/send the real production revision.
+Initially SIGAP generation3 remained terminal and no resend was authorized.
+On November4 the user subsequently accepted the explicitly explained risk of a
+duplicate submission/SPK and authorized one operator POST for051 with its existing
+submission number. This is a bounded operator exception, not a reusable vendor
+contract or permission to bypass the guard for other revisions. Capture payload
+hash, exclusive single attempt and response; never retry an ambiguous outcome.
+A general delivery fix still requires contract tests in staging.
 Original accepted payload/response and examiner history remain immutable.
