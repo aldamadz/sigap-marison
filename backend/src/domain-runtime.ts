@@ -1039,11 +1039,41 @@ const consumeTemplatePreview = (token) => {
   return preview.pdf;
 };
 
+// Web Push endpoints are provider-issued URLs. Accepting an arbitrary https URL
+// lets an authenticated account turn the server into an SSRF probe against
+// internal hosts, so only the known push providers are allowed.
+const PUSH_ENDPOINT_HOSTS = new Set([
+  "fcm.googleapis.com",
+  "android.googleapis.com",
+  "updates.push.services.mozilla.com",
+  "push.services.mozilla.com",
+  "web.push.apple.com",
+]);
+const PUSH_ENDPOINT_HOST_SUFFIXES = [
+  ".notify.windows.com",
+  ".push.apple.com",
+  ".push.services.mozilla.com",
+];
+
+const isAllowedPushEndpoint = (endpoint) => {
+  let url;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  return PUSH_ENDPOINT_HOSTS.has(host)
+    || PUSH_ENDPOINT_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+};
+
 const normalizePushSubscription = (value) => {
   const endpoint = String(value?.endpoint || "").trim();
   const p256dh = String(value?.keys?.p256dh || "").trim();
   const auth = String(value?.keys?.auth || "").trim();
-  if (!/^https:\/\//i.test(endpoint) || !p256dh || !auth) {
+  if (!isAllowedPushEndpoint(endpoint) || !p256dh || !auth) {
     const err = new Error("Subscription Web Push tidak valid.");
     err.status = 400;
     throw err;
@@ -1722,8 +1752,23 @@ const sendInternalEmailNotification = async (token, payload) => {
   const legacyUserIds = Array.isArray(payload?.user_ids) ? payload.user_ids.filter(Boolean) : [];
 
   if (!suratId) {
-    const userIds = legacyUserIds;
-    if (userIds.length === 0) return { sent: 0, recipients: [] };
+    const requestedUserIds = legacyUserIds;
+    if (requestedUserIds.length === 0) return { sent: 0, recipients: [] };
+    // The legacy branch has no document context, so an ordinary account may
+    // only notify itself. Only an active admin may address arbitrary users.
+    const { data: actorProfile, error: actorProfileError } = await supabase
+      .from("profiles")
+      .select("role, is_active, deleted_at")
+      .eq("id", actor.id)
+      .maybeSingle();
+    if (actorProfileError) throw actorProfileError;
+    const actorIsAdmin = isActiveAdminProfile(actorProfile);
+    if (!actorIsAdmin && requestedUserIds.some((userId) => userId !== actor.id)) {
+      const err = new Error("Forbidden");
+      err.status = 403;
+      throw err;
+    }
+    const userIds = actorIsAdmin ? requestedUserIds : [actor.id];
     const { data: profiles, error: profileError } = await supabase
       .from("profiles")
       .select("id, email, full_name, department_id, office_id")
@@ -1746,16 +1791,19 @@ const sendInternalEmailNotification = async (token, payload) => {
     const link = typeof payload?.link === "string" ? payload.link : "";
     const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || "").replace(/\/+$/, "");
     const fullLink = link && appUrl && link.startsWith("/") ? `${appUrl}${link}` : link;
+    const safeTitle = escapeEmailHtml(title);
+    const safeMessage = escapeEmailHtml(message);
+    const safeLink = getSafeEmailHttpUrl(fullLink);
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
-        <h2 style="font-size:18px;margin:0 0 12px">${title}</h2>
-        <p style="font-size:14px;margin:0 0 16px">${message.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[char]))}</p>
-        ${fullLink ? `<p><a href="${fullLink}" style="display:inline-block;background:#111827;color:white;padding:10px 14px;border-radius:6px;text-decoration:none;font-size:13px">Buka SIGAP</a></p>` : ""}
-        <p style="margin-top:24px;font-size:11px;color:#6b7280">Email otomatis dari SIGAP. Dikirim oleh ${actor.email || actor.id}.</p>
+        <h2 style="font-size:18px;margin:0 0 12px">${safeTitle}</h2>
+        <p style="font-size:14px;margin:0 0 16px">${safeMessage}</p>
+        ${safeLink ? `<p><a href="${escapeEmailHtml(safeLink)}" style="display:inline-block;background:#111827;color:white;padding:10px 14px;border-radius:6px;text-decoration:none;font-size:13px">Buka SIGAP</a></p>` : ""}
+        <p style="margin-top:24px;font-size:11px;color:#6b7280">Email otomatis dari SIGAP. Dikirim oleh ${escapeEmailHtml(actor.email || actor.id)}.</p>
       </div>
     `;
     const transporter = getMailTransporter();
-    await transporter.sendMail({ from: smtpConfig.from, to: recipients, subject: title, text: `${message}${fullLink ? `\n\n${fullLink}` : ""}`, html });
+    await transporter.sendMail({ from: smtpConfig.from, to: recipients, subject: title, text: `${message}${safeLink ? `\n\n${safeLink}` : ""}`, html });
     return { sent: recipients.length, recipients };
   }
 
@@ -1992,12 +2040,36 @@ const sendInternalNotification = async (token, payload) => {
   return { inserted: data?.length || 0, email, push };
 };
 
-const parseUploadForm = async (req) => {
+const readBoundedRequestBody = async (req, maxBytes) => {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > maxBytes) {
+      const err = new Error(`Ukuran file terlalu besar. Maksimal ${Math.floor(maxBytes / 1024 / 1024)} MB.`);
+      err.status = 413;
+      throw err;
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, total);
+};
+
+const parseUploadForm = async (req, maxBytes = MAX_UPLOAD_BYTES) => {
+  // Content-Length is optional and can be omitted with chunked transfer
+  // encoding, so the aggregate cap must be enforced while reading the stream
+  // rather than trusting the header alone.
+  const body = await readBoundedRequestBody(req, maxBytes);
+  const headers = { ...req.headers };
+  delete headers["content-length"];
+  delete headers["Content-Length"];
+  delete headers["transfer-encoding"];
+  delete headers["Transfer-Encoding"];
   const request = new Request(`http://localhost${req.url}`, {
     method: req.method,
-    headers: req.headers,
-    body: req,
-    duplex: "half",
+    headers,
+    body,
   });
   return request.formData();
 };
@@ -2851,7 +2923,10 @@ const canReadActiveRecommendationViaParent = async (childSuratId, userId) => {
   }, userId));
 };
 
-const storageRefKey = (ref) => ref ? `${ref.bucket}/${ref.path}` : "";
+// Ownership comparisons must include the storage origin: the same bucket/path
+// can exist on the primary and self-hosted storage backends, and a reference
+// from one origin must not authorize reading the other.
+const storageRefKey = (ref) => ref ? `${ref.origin || "primary"}/${ref.bucket}/${ref.path}` : "";
 
 const storageClientForRef = (ref) => {
   if (ref?.origin === "external" && storageSupabase) {
@@ -4461,13 +4536,10 @@ const getAuthorizedSurat = async (suratId, token, authenticatedUser = null, { in
 
   let userRes = authenticatedUser ? { user: authenticatedUser } : null;
   if (!userRes?.user) {
-    const { data, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !data?.user) {
-      const err = new Error("Unauthorized");
-      err.status = 401;
-      throw err;
-    }
-    userRes = data;
+    // Use the active-profile gate, not the raw auth call, so a deactivated
+    // participant cannot keep reading documents with a still-valid token.
+    const user = await requireSupabaseUser(token);
+    userRes = { user };
   }
 
   const { data: surat, error: suratError } = await supabase

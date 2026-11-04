@@ -1,0 +1,492 @@
+// SEC-04 validation fixtures for the 2026-11-04 private audit candidates.
+//
+// Every fixture below is synthetic: no production data, no SMTP server, no
+// push service, no Supabase, and no outbound network. The real raw dispatcher
+// (backend/src/domain-runtime.ts) is exercised through a fake service client so
+// the failing behavior is reproduced from the shipped source, not from prose.
+import { readFileSync } from "node:fs";
+import { Readable, Transform } from "node:stream";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mailCapture = vi.hoisted(() => ({ messages: [] as Array<Record<string, unknown>> }));
+const pushCapture = vi.hoisted(() => ({ sent: [] as Array<Record<string, unknown>> }));
+
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: () => ({
+      sendMail: async (options: Record<string, unknown>) => {
+        mailCapture.messages.push(options);
+        return { messageId: "fixture" };
+      },
+    }),
+  },
+}));
+
+vi.mock("web-push", () => ({
+  default: {
+    setVapidDetails: () => undefined,
+    sendNotification: async (subscription: unknown, payload: string) => {
+      pushCapture.sent.push({ subscription, payload });
+      return {};
+    },
+  },
+}));
+
+type FakeOptions = {
+  user?: { id: string; email?: string } | null;
+  profiles?: Record<string, Record<string, unknown> | null>;
+  recipientProfiles?: Array<Record<string, unknown>>;
+  surat?: Record<string, unknown> | null;
+  signatures?: Array<Record<string, unknown>>;
+  attachments?: Array<Record<string, unknown>>;
+  downloadPrimary?: (bucket: string, path: string) => Promise<unknown>;
+  downloadExternal?: (bucket: string, path: string) => Promise<unknown>;
+};
+
+const fixtureFile = (text: string) => ({ type: "application/pdf", arrayBuffer: async () => Buffer.from(text) });
+
+const createFakeSupabase = (options: FakeOptions) => {
+  const writes: Array<{ table: string; op: string; payload: unknown }> = [];
+
+  const resolve = async (query: any) => {
+    const { table, op, payload } = query;
+    if (op !== "select") {
+      writes.push({ table, op, payload });
+      return { data: null, error: null };
+    }
+    if (table === "profiles") {
+      if (query.inFilters.length > 0) return { data: options.recipientProfiles || [], error: null };
+      const id = query.filters.find(([column]: [string, unknown]) => column === "id")?.[1] as string;
+      return { data: options.profiles?.[id] ?? null, error: null };
+    }
+    if (table === "master_departments" || table === "master_offices") return { data: [], error: null };
+    if (table === "surat_registrasi") return { data: options.surat ?? null, error: null };
+    if (table === "surat_signatures") return { data: options.signatures || [], error: null };
+    if (table === "surat_attachments") return { data: options.attachments || [], error: null };
+    if (table === "surat_requester_revision_history") return { data: [], error: null };
+    if (table === "surat_attachment_file_history") return { data: [], error: null };
+    if (table === "document_pdf_jobs") return { data: [], error: null };
+    return { data: [], error: null };
+  };
+
+  const from = (table: string) => {
+    const query: any = { table, op: "select", payload: null, filters: [], inFilters: [], limit: null };
+    const builder: any = {
+      select: () => builder,
+      eq: (column: string, value: unknown) => {
+        query.filters.push([column, value]);
+        return builder;
+      },
+      in: (column: string, values: unknown[]) => {
+        query.inFilters.push([column, values]);
+        return builder;
+      },
+      is: (column: string, value: unknown) => {
+        query.filters.push([column, value]);
+        return builder;
+      },
+      not: () => builder,
+      order: () => builder,
+      limit: (value: number) => {
+        query.limit = value;
+        return builder;
+      },
+      insert: (payload: unknown) => {
+        query.op = "insert";
+        query.payload = payload;
+        return builder;
+      },
+      upsert: (payload: unknown) => {
+        query.op = "upsert";
+        query.payload = payload;
+        return builder;
+      },
+      update: (payload: unknown) => {
+        query.op = "update";
+        query.payload = payload;
+        return builder;
+      },
+      delete: () => {
+        query.op = "delete";
+        return builder;
+      },
+      maybeSingle: async () => {
+        const result = await resolve(query);
+        const data = Array.isArray(result.data) ? (result.data[0] ?? null) : (result.data ?? null);
+        return { data, error: result.error ?? null };
+      },
+      single: async () => {
+        const result = await resolve(query);
+        const data = Array.isArray(result.data) ? (result.data[0] ?? null) : (result.data ?? null);
+        return { data, error: result.error ?? (data ? null : { message: "not found" }) };
+      },
+      then: (onFulfilled: any, onRejected: any) => resolve(query).then(onFulfilled, onRejected),
+    };
+    return builder;
+  };
+
+  const storageFor = (download?: FakeOptions["downloadPrimary"]) => ({
+    from: () => ({
+      download: async (path: string) => download
+        ? { data: await download("bucket", path), error: null }
+        : { data: fixtureFile("fixture"), error: null },
+      upload: async () => ({ data: null, error: null }),
+    }),
+  });
+
+  const client: any = {
+    auth: {
+      getUser: async () => options.user
+        ? { data: { user: options.user }, error: null }
+        : { data: { user: null }, error: { message: "Unauthorized" } },
+    },
+    from,
+    rpc: async () => ({ data: true, error: null }),
+    storage: storageFor(options.downloadPrimary),
+  };
+  const storageClient: any = {
+    ...client,
+    storage: storageFor(options.downloadExternal),
+  };
+  return { client, storageClient, writes };
+};
+
+const jsonRequest = (
+  method: string,
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) => {
+  const stream: any = Readable.from([Buffer.from(JSON.stringify(body))]);
+  stream.method = method;
+  stream.url = url;
+  stream.headers = {
+    host: "sigap.test",
+    origin: "https://sigap.test",
+    authorization: "Bearer fixture-token",
+    "content-type": "application/json",
+    ...headers,
+  };
+  return stream;
+};
+
+const getRequest = (url: string, headers: Record<string, string> = {}) => {
+  const stream: any = Readable.from([]);
+  stream.method = "GET";
+  stream.url = url;
+  stream.headers = { host: "sigap.test", authorization: "Bearer fixture-token", ...headers };
+  return stream;
+};
+
+const makeResponse = () => {
+  const chunks: Buffer[] = [];
+  const response: any = {
+    statusCode: 0,
+    headers: {} as Record<string, string>,
+    body: Buffer.alloc(0),
+    setHeader(name: string, value: string) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    writeHead(status: number, headers: Record<string, string> = {}) {
+      this.statusCode = status;
+      for (const [key, value] of Object.entries(headers)) this.headers[key.toLowerCase()] = String(value);
+      return this;
+    },
+    end(chunk?: Buffer | string) {
+      if (chunk) chunks.push(Buffer.from(chunk));
+      this.body = Buffer.concat(chunks);
+    },
+  };
+  return response;
+};
+
+const boot = async (options: FakeOptions) => {
+  const runtime = await import("../../backend/src/domain-runtime.ts");
+  const fake = createFakeSupabase(options);
+  runtime.setDomainRuntimeDependenciesForTest({
+    supabase: fake.client,
+    storageSupabase: fake.storageClient,
+  });
+  return { runtime, fake };
+};
+
+const activeProfile = { role: "staff", is_active: true, deleted_at: null };
+
+beforeEach(() => {
+  mailCapture.messages.length = 0;
+  pushCapture.sent.length = 0;
+  vi.resetModules();
+  for (const [key, value] of Object.entries({
+    SUPABASE_URL: "https://database.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+    SUPABASE_PUBLISHABLE_KEY: "publishable-test-key",
+    SESSION_SECRET: "test-session-secret-at-least-32-characters-long",
+    STORAGE_MODE: "self_hosted_supabase",
+    STORAGE_SUPABASE_URL: "https://storage.test",
+    STORAGE_SUPABASE_SERVICE_ROLE_KEY: "storage-service-role-key",
+    STORAGE_PUBLIC_BASE_URL: "https://storage.test/storage/v1/object/public",
+    STORAGE_PATH_PREFIX: "",
+    APP_PUBLIC_URL: "https://sigap.test",
+    SMTP_HOST: "smtp.fixture.test",
+    SMTP_USER: "noreply@fixture.test",
+    SMTP_PASS: "fixture-pass",
+    SMTP_FROM: "noreply@fixture.test",
+    WEB_PUSH_PUBLIC_KEY: "fixture-public",
+    WEB_PUSH_PRIVATE_KEY: "fixture-private",
+    MAX_UPLOAD_BYTES: "1024",
+    MARISON_DEPLOYMENT_ENVIRONMENT: "staging",
+    MARISON_OUTBOUND_INTERNAL_TOKEN: "fixture-outbound-internal-token-32-characters-min",
+    NODE_ENV: "test",
+  })) {
+    vi.stubEnv(key, value);
+  }
+  vi.stubGlobal("fetch", vi.fn(() => {
+    throw new Error("FAIL-CLOSED: no outbound network allowed in validation fixtures");
+  }));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.resetModules();
+});
+
+describe("audit candidate: legacy notification email recipient context", () => {
+  it("does not let an ordinary account email an unrelated user", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1", email: "actor@fixture.test" },
+      profiles: { "actor-1": activeProfile, "victim-1": activeProfile },
+      recipientProfiles: [{ id: "victim-1", email: "victim@fixture.test", department_id: null, office_id: null }],
+    });
+    const request = jsonRequest("POST", "/api/notifications/email", {
+      user_ids: ["victim-1"],
+      title: "Fixture",
+      message: "Fixture message",
+    });
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode, response.body.toString("utf8")).toBe(403);
+    expect(mailCapture.messages).toHaveLength(0);
+  });
+});
+
+describe("audit candidate: notification email HTML construction", () => {
+  it("keeps attacker-controlled title and link as data, not HTML", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1", email: "actor@fixture.test" },
+      profiles: { "actor-1": activeProfile },
+      recipientProfiles: [{ id: "actor-1", email: "actor@fixture.test", department_id: null, office_id: null }],
+    });
+    const request = jsonRequest("POST", "/api/notifications/email", {
+      user_ids: ["actor-1"],
+      title: "<img src=x onerror=alert(1)>",
+      message: "Fixture message",
+      link: "javascript:alert(1)",
+    });
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode).toBe(200);
+    expect(mailCapture.messages).toHaveLength(1);
+    const html = String(mailCapture.messages[0].html || "");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(html).not.toContain('href="javascript:');
+  });
+});
+
+describe("audit candidate: raw multipart aggregate cap", () => {
+  it("rejects a chunked multipart body beyond the cap before buffering it all", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1" },
+      profiles: { "actor-1": activeProfile },
+    });
+    const boundary = "----sigapFixtureBoundary";
+    const filler = "A".repeat(2 * 1024 * 1024);
+    const body = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="path"',
+      "",
+      filler,
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="bucket"',
+      "",
+      "lampiran_surat",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+
+    let bytesRead = 0;
+    const metered = new Transform({
+      transform(chunk, _encoding, callback) {
+        bytesRead += chunk.length;
+        callback(null, chunk);
+      },
+    });
+    const bodyBuffer = Buffer.from(body);
+    const chunks: Buffer[] = [];
+    for (let offset = 0; offset < bodyBuffer.length; offset += 64 * 1024) {
+      chunks.push(bodyBuffer.subarray(offset, offset + 64 * 1024));
+    }
+    Readable.from(chunks).pipe(metered);
+    const request: any = metered;
+    request.method = "POST";
+    request.url = "/api/storage/upload";
+    request.headers = {
+      host: "sigap.test",
+      origin: "https://sigap.test",
+      authorization: "Bearer fixture-token",
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    };
+
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode).toBe(413);
+    expect(bytesRead).toBeLessThan(body.length);
+    expect(bytesRead).toBeLessThan(1536 * 1024);
+  });
+
+  it("does not reject a small multipart body before field validation", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1" },
+      profiles: { "actor-1": activeProfile },
+    });
+    const boundary = "----sigapSmallBoundary";
+    const body = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="bucket"',
+      "",
+      "lampiran_surat",
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="path"',
+      "",
+      "fixture/small.txt",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+    const request: any = Readable.from([Buffer.from(body)]);
+    request.method = "POST";
+    request.url = "/api/storage/upload";
+    request.headers = {
+      host: "sigap.test",
+      origin: "https://sigap.test",
+      authorization: "Bearer fixture-token",
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    };
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode, response.body.toString("utf8")).toBe(400);
+    expect(response.body.toString("utf8")).toContain("File wajib dikirim");
+  });
+});
+
+describe("audit candidate: inactive participant document access", () => {
+  it("rejects a deactivated direct participant before reading the document", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1" },
+      profiles: { "actor-1": { role: "staff", is_active: false, deleted_at: null } },
+      surat: {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        no_surat: "001/FIX/2026",
+        judul_surat: "Fixture",
+        status: "proses",
+        created_by: "owner-1",
+        file_path: "https://database.test/storage/v1/object/public/dokumen_surat/fixture.pdf",
+        pdf_path: null,
+        lampiran_path: null,
+      },
+      signatures: [{ id: "sig-1", user_id: "actor-1", is_signed: false, verifier_snapshot: null, file_path_snap: null, pdf_path_snap: null }],
+    });
+    const request = getRequest(
+      "/api/documents/123e4567-e89b-12d3-a456-426614174000/file?path=dokumen_surat%2Ffixture.pdf",
+    );
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode, response.body.toString("utf8")).toBe(401);
+  });
+});
+
+describe("audit candidate: storage origin dropped from ownership comparison", () => {
+  it("does not treat a primary-origin document reference as authorization for external storage", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1" },
+      profiles: { "actor-1": activeProfile },
+      surat: {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        no_surat: "001/FIX/2026",
+        judul_surat: "Fixture",
+        status: "proses",
+        created_by: "owner-1",
+        file_path: "https://database.test/storage/v1/object/public/dokumen_surat/fixture.pdf",
+        pdf_path: null,
+        lampiran_path: null,
+      },
+      signatures: [{ id: "sig-1", user_id: "actor-1", is_signed: false, verifier_snapshot: null, file_path_snap: null, pdf_path_snap: null }],
+      downloadPrimary: async () => fixtureFile("PRIMARY"),
+      downloadExternal: async () => fixtureFile("EXTERNAL"),
+    });
+    const request = getRequest(
+      "/api/documents/123e4567-e89b-12d3-a456-426614174000/file?path=https%3A%2F%2Fstorage.test%2Fstorage%2Fv1%2Fobject%2Fpublic%2Fdokumen_surat%2Ffixture.pdf",
+    );
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode, response.body.toString("utf8")).toBe(403);
+    expect(response.body.toString("utf8")).not.toContain("EXTERNAL");
+  });
+});
+
+describe("audit candidate: unrestricted web push endpoint", () => {
+  it.each([
+    "https://127.0.0.1/push",
+    "https://localhost/push",
+    "https://10.0.0.5/push",
+    "https://attacker.example/push",
+  ])("rejects an endpoint outside the known push providers: %s", async (endpoint) => {
+    const { runtime } = await boot({
+      user: { id: "actor-1" },
+      profiles: { "actor-1": activeProfile },
+    });
+    const request = jsonRequest("POST", "/api/push/subscribe", {
+      subscription: { endpoint, keys: { p256dh: "fixture-key", auth: "fixture-auth" } },
+    });
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode).toBe(400);
+    expect(pushCapture.sent).toHaveLength(0);
+  });
+
+  it("accepts a real push-provider host", async () => {
+    const { runtime } = await boot({
+      user: { id: "actor-1" },
+      profiles: { "actor-1": activeProfile },
+    });
+    const request = jsonRequest("POST", "/api/push/subscribe", {
+      subscription: {
+        endpoint: "https://fcm.googleapis.com/fcm/send/fixture",
+        keys: { p256dh: "fixture-key", auth: "fixture-auth" },
+      },
+    });
+    const response = makeResponse();
+    await runtime.handleRequest(request, response);
+
+    expect(response.statusCode).toBe(200);
+  });
+});
+
+describe("audit candidate: production deploy is not bound to the tested commit", () => {
+  const workflow = readFileSync(join(process.cwd(), ".github/workflows/deploy-production.yml"), "utf8")
+    .replace(/\r\n/g, "\n");
+
+  it("pins every production job to the commit resolved by preflight", () => {
+    expect(workflow).toMatch(/outputs:\s*\n\s*ready:.*\n\s*sha:/);
+    expect(workflow.match(/ref: \$\{\{ needs\.preflight\.outputs\.sha \}\}/g)).toHaveLength(2);
+    expect(workflow).toContain('bash scripts/deploy-app.sh production "${{ needs.preflight.outputs.sha }}"');
+  });
+});

@@ -1,5 +1,28 @@
 # Worklog
 
+## 2026-11-04 [Codex] SEC-04 private-audit candidate hardening / Issue #782
+
+- Validated the selected private-audit candidates with synthetic fixtures in an
+  isolated worktree: no production data, SMTP, push provider, Supabase, or
+  outbound network. The new 12-check suite was red on ed124b6 and is green after
+  the fixes.
+- Fixed legacy `/api/notifications/email` so a non-admin can only email itself
+  and title/message/link are escaped; enforced the multipart aggregate cap while
+  streaming before `formData()`; reused the active-profile gate in
+  `getAuthorizedSurat`; included storage origin in ownership keys; restricted
+  Web Push endpoints to known providers; pinned production quality/deploy jobs
+  to the preflight-resolved commit.
+- Deferred without code changes: external-api `trustProxy`, generic storage
+  overwrite ownership, stateless cookie revocation, active-profile cache and
+  attachment replacement task binding. They need owner/environment decisions.
+- lint, typecheck and production build pass. Targeted suites pass. Full suite on
+  CI-like Node24.22.2: 2743 passed, 8 pre-existing failures remain (docs hashes
+  and source-drift checks already on main); they reproduce with this hardening
+  stashed. Local Node24.11.1 predates the SEC-04 NUL-DNS fix, so that check
+  passes only on the pinned/CI runtime.
+- Staging PR and deploy verification pending. Production runtime, database,
+  secrets and deployment untouched; no maintenance window opened.
+
 ## 2026-11-04 [Codex] SEC-04 runtime hardening / Issue #782
 
 - Separate `codex/runtime-security-20261104` from main ed124b6; OPS-17 audit source

@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## SEC-04 Private-Audit Candidate Hardening (2026-11-04, Issue #782)
+
+- The selected candidates were validated with synthetic fixtures and fixed:
+  legacy email recipient/HTML context, multipart aggregate cap, inactive
+  participant document access, storage-origin ownership, unrestricted push
+  endpoints, and production deploy commit binding. New suite 12/12 green after
+  the fixes.
+- No database migration, ACL sweep, outbound resend, or production data change.
+  Deferred candidates need owner confirmation: external-api `trustProxy`,
+  generic storage overwrite ownership, stateless cookie revocation,
+  active-profile cache and attachment replacement task binding.
+- Status: staging candidate pending PR/deploy verification; production not
+  released. Rollback is a source revert; no schema rollback required.
+
 ## SEC-04 Compatible Runtime Security Patch (2026-11-04, Issue #782)
 
 - Follow-up to user-authorized OPS-17 tests-first maintenance/security review.
