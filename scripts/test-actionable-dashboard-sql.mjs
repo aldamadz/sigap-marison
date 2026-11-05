@@ -6,7 +6,9 @@ const start = source.indexOf('create or replace function public.calculate_busine
 const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
-const signerScope = process.argv.includes('--signer-scope');
+const notifications = process.argv.includes('--notifications');
+const receiving = process.argv.includes('--receiving');
+const signerScope = process.argv.includes('--signer-scope') || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
 const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
@@ -129,7 +131,7 @@ do $$begin begin perform get_actionable_dashboard();exception when insufficient_
 reset role;rollback;
 `;
 const run = (args,input='') => { const r=spawnSync('docker',args,{input,encoding:'utf8',timeout:120000});if(r.status!==0)throw Error(r.stderr+r.stdout);return r.stdout; };
-const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root','--health-cmd','pg_isready -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
+const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root','--health-cmd','pg_isready -h 127.0.0.1 -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
 try {
  let ready=false;for(let i=0;i<80;i++){if(run(['inspect','--format','{{.State.Health.Status}}',container]).trim()==='healthy'){ready=true;break;}Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw Error('Disposable PostgreSQL not ready');
@@ -144,5 +146,45 @@ try {
  const concurrent=await Promise.all([parallelReminder(),parallelReminder()]);
  if(concurrent.filter(output=>/^true$/m.test(output)).length!==1)throw Error('Concurrent reminders must have exactly one sender');
  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],"select check_ok((select count(*)=1 from notifications),'concurrent reminders deduplicated');");
+ if(notifications){
+  const setup=`alter table notifications add column is_read boolean default false,add column read_at timestamptz;
+   create table public.holidays(holiday_date date primary key);
+   create table public.work_calendar_entries(id uuid primary key,owner_id uuid references profiles(id),work_date date,due_date date,
+    title text,kind text default 'work',status text default 'planned',starts_at timestamptz,realization text,deleted_at timestamptz);`;
+  const delivery=read('supabase/migrations/20261105062000_notification_delivery.sql');
+  const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],setup
+   +read('supabase/migrations/20260626164000_web_push_subscriptions.sql')+delivery+delivery+read('supabase/tests/notification_delivery.integration.sql'));
+  if(!proof.includes('NTF06 delivery, planner and authorization assertions passed'))throw Error('Missing notification SQL assertions');
+  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+   "insert into web_push_subscriptions(user_id,endpoint,subscription) values(tid(1),'https://fcm.googleapis.com/concurrent','{\"endpoint\":\"https://fcm.googleapis.com/concurrent\"}');insert into notifications(user_id,title,is_read,data) values(tid(1),'Concurrent',false,'{}');");
+  const claim=()=>new Promise((resolve,reject)=>{
+   const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});let output='',error='';
+   child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(Error(error)));
+   child.stdin.end("begin;select count(*) from claim_notification_push(1,array[tid(1)]);select pg_sleep(0.1);commit;");
+  });
+  const claims=await Promise.all([claim(),claim()]);
+  if(claims.filter(output=>/^1$/m.test(output)).length!==1)throw Error('Concurrent queue claims must have exactly one winner');
+  console.log('NTF06: notification assertions and two-connection queue concurrency passed.');
+ }
+ if(receiving){
+  const setup=`alter table master_departments add column code text;
+   alter table surat_registrasi add column letter_type_id uuid,add column penggunaan_id uuid,add column request_date date,add column requester_snapshot jsonb,add column location_snapshot jsonb;
+   alter table surat_signatures add column action_type text,add column requires_unit_allocation boolean,add column attachment_requirements_snapshot jsonb;
+   alter table surat_revision_events add column target_user_ids uuid[],add column target_type text,add column target_step integer;
+   create table master_letter_types(id uuid,name text);create table master_forms(id uuid,nama_form text);create table master_penggunaan_detail(id uuid,form_id uuid);
+   create table surat_linked_documents(parent_surat_id uuid);create table holidays(holiday_date date);
+   insert into department_kpi_configs values(tid(2),true,120,array[1,2,3,4,5],'08:00','17:00','12:00','13:00','Asia/Jakarta');`;
+  const kpi=read('supabase/migrations/20260706170000_pause_sla_during_process_revision.sql');
+  let count=monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('),monitoringRecovery.indexOf('create or replace function public.get_user_active_sla_breach_count('));
+  if(process.argv.includes('--live-shape'))count=count.replaceAll('where ss.user_id','WHERE ss.user_id').replaceAll('where not coalesce','WHERE NOT COALESCE');
+  const policy=read('supabase/migrations/20261105063000_department_receiving_periods.sql');
+  const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],setup
+   +kpi.slice(kpi.indexOf('create or replace function public.get_department_kpi_summary('))
+   +read('supabase/migrations/20260814120000_user_active_sla_breach_count.sql')
+   +read('supabase/migrations/20260924090000_restore_production_compact_inbox.sql')+count+policy+policy
+   +read('supabase/tests/department_receiving_periods.integration.sql'));
+  if(!proof.includes('SLA02 monthly receiving and frozen clocks passed'))throw Error('Missing SLA02 assertions');
+  console.log('SLA02: monthly rules, immutable stage snapshots, receiving guards, RLS and clocks passed.');
+ }
  console.log('Actionable dashboard: all assertions passed (canonical business clock, real PostgreSQL, RLS, hierarchy, queue, history, SLA, authorization).');
 } finally {run(['rm','-f',container]);}

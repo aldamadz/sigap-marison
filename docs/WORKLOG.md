@@ -1,5 +1,74 @@
 # Worklog
 
+## 2026-11-05 [Codex] SLA-02 Monthly Receiving Candidate
+
+- Issue825; main-based owned `codex/department-receiving-periods-20261105`.
+  Staging only. User approved moving closed intake to the next period rather
+  than rejecting it; monthly SLA/receiving overrides are separate from defaults.
+- New rules/admin audit, immutable per-stage processing snapshot, bounded
+  working-day/holiday reopening and canonical future-availability enforcement
+  implemented. Completed/historical signatures are not backfilled or rewritten.
+- Future stages stay out of actionable inbox/count, SLA breach and running SLA.
+  Signature/verification writes and manual reminders reject early processing.
+  Limited progress detail exposes only reception date/message, not internal rules.
+- PostgreSQL17 applies migration twice and checks exact cutoff, monthly override,
+  month/year rollover, holiday/weekend/break, snapshot forgery/clock immutability,
+  early actions, RLS/admin audit and existing dashboard reminder concurrency.
+  Nineteen focused UI/validation/dashboard tests pass; final gates, actual staging
+  shape rehearsal and deployment remain. No production or vendor action.
+
+## 2026-11-05 [Codex] NTF-06 Notification Delivery Candidate
+
+- Issue823; owned `codex/notification-delivery-20261105`, based on main f38df45.
+  User selected browser popups, approved organization reminders and calendar
+  reminders; Ticketing deferred. New package targets staging, not production.
+- Durable bounded planner/leases, sanitized generic push, provider revalidation,
+  retry/ownership/preferences, canonical login/task navigation and settings
+  implemented. No old notification backfill or business/outbound actions.
+- Real PG17 twice-applied assertions and two-connection single-winner delivery
+  pass. Synthetic provider/network fixtures, landing/login/permission UI tests,
+  existing inbox approval/revision regressions, lint/typecheck/build run locally.
+- A regression test exposed the old URL-clearing effect selecting an unrelated
+  task when the intended task was absent; removed that fallback, retained normal
+  initial selection and composite approval/verification identity.
+- Remaining: final source gates/PR, live staging DB rehearsal/rollout with
+  tester-only audience and explicit browser acceptance. Department monthly
+  receiving/SLA policies are a separate remaining work item, not implemented by
+  this notification candidate. `docs/PROJECT_CONTEXT.md` remains absent.
+
+## 2026-11-05 [Codex] OPS-18 Completion Release Notice Candidate
+
+- Claimed821 on codex/maintenance-whats-new-20261105 from main; staging only.
+  Admin notes publish only on actual complete after start, expire at next WIB
+  midnight and remain separate from next schedule. Public status hides draft
+  notes; existing signed/CAS controls and maintenance status behavior retained.
+- What's New uses the existing maintenance-status query and authenticated
+  account preference, no additional status polling. Explicit opt-out is stored
+  via new20261105061000, one bounded row/account, authenticated own-user RPC;
+  close/X/Mengerti only suppresses the current browser session. Failed durable
+  dismissal stays visible with an error, never silently claims success.
+- Edge/server15 tests, affected frontend20 tests and actual PG17 ownership/
+  duplicate/inactive/anonymous/direct-write assertions pass. Remaining gates,
+  responsive/browser acceptance and staging rollout pending. No remote changes
+  or production authorization. PROJECT_CONTEXT remains absent.
+
+## 2026-11-05 [Codex] CAL-10 Shared Team Calendar Implementation
+
+- Claimed819 on main-based codex/calendar-team-scope-20261105. User approved
+  organization read scope independent of reporting, including KC child KCP.
+  Default target is staging; no production permission for this new feature set.
+- New migration20261105060000 preserves original reporting access and owner-only
+  writes, adds active same-department Pusat and branch office read access across
+  team search/availability/aggregates/detail/export and entry/event RLS.
+- Existing pagination/carryover/date/ACL contracts retained; unknown live RPC
+  shapes fail closed pending audit. Disposable PG17 repeated migration and real
+  authenticated tests pass peer read/no write/delete, cross-scope isolation,
+  office transfer and deactivated/deleted profile cases. Legacy suites run in
+  separate databases rather than silently changing historical expectations.
+- Other approved work (monthly reception/SLA, durable notifications/reminders,
+  post-maintenance What's New) remains separate. No remote schema/data changes
+  yet. PROJECT_CONTEXT absent; shared structure unchanged.
+
 ## 2026-11-04 [Codex] SEC-04 Live Production And SUR-30 Staging Promotion Checkpoint
 
 - SEC-04 production completed independently: selective PR789 main626b5bd,

@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { addMonths, format, startOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { ArrowRight, BellRing, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePenLine, FileText, Inbox, RefreshCw, Search, Timer, TriangleAlert, Undo2, Users, XCircle } from 'lucide-react';
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { dashboardRowLink, getActionableDashboard, remindDashboardRequest, type DashboardBucket, type DashboardRow, type DashboardScope } from '@/services/actionable-dashboard.service';
 import { todayWorkDate } from '@/features/work-calendar/lib/work-calendar-date';
 import { toast } from 'sonner';
+import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
 
 export const DASHBOARD_BUCKET_LABELS: Record<DashboardBucket, string> = {
   all: 'Semua', active: 'Antrean aktif', ready: 'Perlu tanda tangan', blocked: 'Menunggu kelengkapan',
@@ -40,6 +41,7 @@ const workDuration = (minutes: number) => {
 };
 
 export const DashboardSla = ({ row }: { row: DashboardRow }) => {
+  if(row.receiving_at && Date.parse(row.receiving_at)>Date.now())return <ReceivingPeriodNotice availableAt={row.receiving_at} note={row.receiving_message}/>;
   if (row.bucket === 'returned') return <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"><Undo2 className="h-3.5 w-3.5" />Dijeda untuk perbaikan</span>;
   if (row.elapsed_minutes === null) return <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{['completed', 'rejected'].includes(row.bucket) ? 'Tidak terukur' : 'Belum mulai'}</span>;
   const late = row.elapsed_minutes > row.sla_minutes;
@@ -51,7 +53,9 @@ export const DashboardSla = ({ row }: { row: DashboardRow }) => {
 };
 
 export function ActionableDashboard({ userId }: { userId: string }) {
-  const [scope, setScope] = useState<DashboardScope>('mine');
+  const [params]=useSearchParams();
+  const requestedScope=['mine','signer','team'].includes(params.get('scope') || '')?params.get('scope') as DashboardScope:null;
+  const [scope, setScope] = useState<DashboardScope>(requestedScope || 'mine');
   const [bucket, setBucket] = useState<DashboardBucket>('active');
   const [month, setMonth] = useState(() => startOfMonth(new Date(`${todayWorkDate()}T12:00:00`)));
   const [search, setSearch] = useState('');
@@ -75,7 +79,8 @@ export function ActionableDashboard({ userId }: { userId: string }) {
   });
   const data = query.data;
   const selectBucket = (value: DashboardBucket) => { setBucket(value); setPage(1); };
-  const initialTabChosen = useRef(false);
+  const initialTabChosen = useRef(requestedScope!==null);
+  useEffect(()=>{if(requestedScope){initialTabChosen.current=true;setScope(requestedScope);setBucket(requestedScope==='signer'?'ready':'active');setPage(1);}},[requestedScope]);
   const changeScope = (value: DashboardScope) => { initialTabChosen.current = true; setScope(value); selectBucket(value === 'signer' ? 'ready' : 'active'); setSearch(''); };
   useEffect(() => {
     if (!data || initialTabChosen.current) return;
@@ -168,7 +173,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
                   {row.needs_recommendation && row.bucket !== 'completed' && <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"><Clock3 className="h-3 w-3 shrink-0" />Menunggu rekomendasi</div>}
                   {row.revision_reason && <p className="mt-2 line-clamp-2 max-w-56 text-xs text-muted-foreground">{row.revision_reason}</p>}</td>
                 <td className="block min-w-0 px-4 pb-4 lg:table-cell lg:py-5"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">SLA</span><DashboardSla row={row} /></td><td className="block self-end px-4 pb-4 lg:table-cell lg:py-5"><div className="flex justify-end gap-2 lg:justify-start">
-                  {row.can_remind !== false && row.current_signer_id !== userId && ((row.bucket === 'returned' && scope !== 'mine') || (['ready','waiting'].includes(row.bucket) && !row.needs_verification && !row.needs_recommendation)) &&
+                  {(!row.receiving_at||Date.parse(row.receiving_at)<=Date.now()) && row.can_remind !== false && row.current_signer_id !== userId && ((row.bucket === 'returned' && scope !== 'mine') || (['ready','waiting'].includes(row.bucket) && !row.needs_verification && !row.needs_recommendation)) &&
                     <Button variant="ghost" size="icon" title="Ingatkan penanggung jawab" aria-label={`Ingatkan ${row.no_surat || row.title}`} disabled={reminding !== null} onClick={() => { void remind(row); }}><BellRing className={cn('h-4 w-4', reminding === row.id && 'animate-pulse')} /></Button>}
                   <Button asChild variant="outline" size="icon" title="Buka pengajuan" aria-label={`Buka ${row.no_surat || row.title}`}><Link to={dashboardRowLink(row, scope)}><ArrowRight className="h-4 w-4" /></Link></Button>
                 </div></td>

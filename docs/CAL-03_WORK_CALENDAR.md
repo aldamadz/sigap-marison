@@ -1,5 +1,16 @@
 # Kalender Kerja (Unified Work Calendar)
 
+## Pembaruan CAL-10: Lingkup Tim (Kandidat Staging, 5 November 2026)
+
+- Anggota Kantor Pusat dapat membaca kalender rekan satu departemen.
+- Anggota KC dapat membaca kalender satu kantor dan KCP di bawahnya;
+  anggota KCP hanya mendapat tambahan akses untuk kantor KCP yang sama.
+- Akses atasan yang sudah berlaku tetap tersedia. Relasi atasan tidak perlu
+  diubah hanya untuk menampilkan kalender rekan satu tim.
+- Pencarian anggota, ringkasan, detail pekerjaan, riwayat dan ekspor mengikuti
+  lingkup yang sama. Perpindahan kantor/departemen memperbarui akses otomatis.
+- Kalender anggota lain hanya dapat dibaca; ubah/hapus tetap hak pemilik.
+
 Manual singkat fitur **Kalender Kerja** SIGAP. Dokumen ini adalah rujukan
 pengguna, admin, dan operator untuk fitur CAL-03 fase **F1–F7** yang saat ini
 telah dirilis di production dan staging. Revisi PDF harian pada Issue #528

@@ -1,5 +1,50 @@
 # SIGAP Feature and Release Map
 
+## SLA-02 Department Receiving Periods (2026-11-05)
+
+- Issue825, main-based staging-only candidate. Regular monthly cutoff/opening
+  and specific-month overrides are independent of processing SLA. Closed intake
+  queues a request to the next period rather than rejecting it.
+- New activated stages freeze their calendar/SLA and reception date. Existing
+  signatures are not backfilled. Future reception cannot be signed, verified,
+  reminded or counted overdue; dashboard and monitoring explain its start.
+- Migration20261105063000; real PG17 repeat/clock/authorization tests pass.
+  Admin edits retain actor/before/after audit. Live rehearsal and rollout pending.
+
+## NTF-06 Durable Notifications And Canonical Task Links (2026-11-05)
+
+- Issue823, main-based candidate; staging only. Department/office digests,
+  work-calendar reminders and explicit browser push preferences use a bounded
+  server planner plus durable service-only delivery leases.
+- Canonical notification landing preserves login return, verifies task access
+  and type, and never substitutes an unrelated first task. Peers can remind
+  within SUR39 progress scope; existing cooldown and actor audit remain.
+- Migration20261105062000; repeat PG17/concurrent claims and targeted tests pass.
+  Default jobs off; staging enablement requires explicit tester audience.
+  Runtime and browser acceptance pending. No Ticketing/broadcast/production.
+
+## OPS-18 Post-Maintenance What's New (2026-11-05, Issue821)
+
+- Staging-only candidate. Admin-authored plain-text notes are private until
+  actual completion after the scheduled start. Expired ETA/cancellation never
+  publishes notes. Edge-owned release survives subsequent scheduling and is
+  public only until next midnight WIB, not for24hours.
+- New migration20261105061000 stores one dismissal preference per account;
+  explicit opt-out follows the user across devices. Closing without opt-out is
+  session-only. Owner RLS, authenticated active-user RPC, no direct write grants.
+- Existing maintenance notice/recovery and independent edge fallback preserved.
+  Edge/unit/PostgreSQL tests pass; UI acceptance and staging rollout pending.
+
+## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
+
+- User approved shared Pusat-department and branch-office calendars, KC including
+  descendant KCP. Existing active reporting hierarchy remains readable; only
+  owner mutations remain allowed. Target staging only; production not authorized.
+- Migration20261105060000 shares one current-profile scope across team RPCs,
+  entry/event read policies, counts/search/detail/export. No profile ACL expansion,
+  task rewrite or notification escalation change. Actual PG17 authorization,
+  repeat migration, read-only peer, transfer and department/office cases pass.
+
 ## SEC-04 Production Verified / SUR-30 Staging Applied (2026-11-04)
 
 - SEC-04 app live production626b5bd, stage03a1e93 before promotion; exact-main

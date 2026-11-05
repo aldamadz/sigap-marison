@@ -15,6 +15,7 @@ import {
 } from "@/services/department-kpi.service";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {DepartmentReceivingPolicy} from '@/components/configuration/DepartmentReceivingPolicy';
 
 const today = new Date();
 const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -231,6 +232,7 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
                 Simpan Konfigurasi
               </Button>
             </div>
+            <DepartmentReceivingPolicy key={filters.deptId} deptId={filters.deptId}/>
           </>
         )}
       </CardContent>

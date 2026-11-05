@@ -8,6 +8,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 import { MaintenanceNotice } from "@/components/app/MaintenanceNotice";
+import { notificationReturnPath } from "@/lib/notification-target";
 
 import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
@@ -28,6 +29,7 @@ const ActivityLogsPage = lazy(() => import("@/pages/activity-logs/ActivityLogsPa
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const PublicDocsPage = lazy(() => import("@/pages/docs/PublicDocsPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const NotificationOpenPage = lazy(() => import("@/pages/notifications/NotificationOpenPage"));
 
 // LAZY IMPORT - SURAT & MONITORING
 const SuratPage = lazy(() => import("@/pages/surat/SuratPage"));
@@ -186,7 +188,7 @@ const App = () => {
         {/* PUBLIC ROUTE */}
         <Route
           path="/"
-          element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+          element={isAuth ? <Navigate to={notificationReturnPath(location.state?.from)} replace /> : <LoginPage />}
         />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         {desktopIntegrationVisible() && <Route path="/desktop/authorize" element={isAuth ? <DesktopAuthorizePage /> : <LoginPage />} />}
@@ -197,9 +199,10 @@ const App = () => {
 
         {/* PROTECTED ROUTES */}
         <Route
-          element={isAuth ? <AppLayout /> : <Navigate to="/" replace />}
+          element={isAuth ? <AppLayout /> : <Navigate to="/" replace state={{from:location.pathname==='/notifications/open'?location.pathname+location.search:undefined}} />}
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/notifications/open" element={<NotificationOpenPage />} />
           <Route
             path="/calendar"
             element={isWorkCalendarEnabled ? <WorkCalendarPage /> : <WorkCalendarUnavailablePage />}
