@@ -1,5 +1,19 @@
 # Worklog
 
+## 2026-11-05 [Codex] NTF-06 First Push Activation Follow-Up
+
+- Staging package is live at3e66a9e (PR828 / deployment42008023544). Tester P3
+  successfully saved notification preferences, but in-app browser push activation
+  failed. No test push has been sent; popup acceptance remains incomplete.
+- Source inspection identified a first-install race: register() can resolve
+  before a worker is active. Subscription now waits for serviceWorker.ready,
+  bounded15seconds with timer cleanup; provider AbortError becomes an actionable
+  sanitized status rather than a false success or raw provider error.
+- Five service regressions and four preference UI cases pass; affected lint,
+  typecheck and frontend build pass. Normal Chrome comparison requested because
+  an embedded browser may not provide a functioning push provider. This fix is
+  staging-only, with no migration, provider allowlist relaxation or auto-prompt.
+
 ## 2026-11-05 [Codex] NTF-06 Notification Delivery Candidate
 
 - Issue823; owned `codex/notification-delivery-20261105`, based on main f38df45.
