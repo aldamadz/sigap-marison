@@ -10,6 +10,7 @@ export const COMPONENTS = [
   { id: 'sigap_staging', name: 'SIGAP Staging', domain: 'sigap.marison-testing.biz.id', url: 'https://sigap.marison-testing.biz.id', health: '/health/ready' },
   { id: 'sigap_storage', name: 'SIGAP Storage', domain: 'Storage API dan kesiapan penyimpanan' },
   { id: 'sigap_services', name: 'Service SIGAP', domain: 'Layanan pendukung production', children: WORKERS },
+  { id: 'cctv', name: 'CCTV', domain: 'cctv.marisoncloud.com', url: 'https://cctv.marisoncloud.com', pageTitle: 'CCTV', scope: 'Ketersediaan halaman login; bukan kondisi kamera atau rekaman' },
 ];
 
 export const ALL_COMPONENTS = [...COMPONENTS, ...WORKERS];

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import worker, { probeService, runChecks, syncSigapMaintenance, SERVICES } from './probe.mjs';
 
 function responseFor(url) {
+  if (new URL(url).hostname === 'cctv.marisoncloud.com') return new Response('<html><head><title>Masuk - CCTV Kos AUB</title></head></html>', { headers: { 'content-type': 'text/html' } });
   const path = new URL(url).pathname;
   if (path === '/health/ready') return Response.json({ status: 'ready' });
   if (path === '/api/health') {
@@ -19,13 +20,13 @@ test('all public and health endpoints produce up observations', async () => {
     prepare(sql) {
       return { bind(...values) { rows.push({ sql, values }); return { run: async () => {} }; } };
     },
-    batch: async (statements) => assert.equal(statements.length, 4),
+    batch: async (statements) => assert.equal(statements.length, 6),
   };
   const checkedAt = Date.UTC(2026, 10, 3, 5, 23, 0);
   const result = await runChecks({ DB: db }, checkedAt, async (url) => responseFor(url));
-  assert.deepEqual(result.map((item) => item.outcome), ['up', 'up']);
-  assert.equal(rows.length, 4);
-  assert.deepEqual(result.map(item => item.service), ['sigap', 'sigap_staging']);
+  assert.deepEqual(result.map((item) => item.outcome), ['up', 'up', 'up']);
+  assert.equal(rows.length, 6);
+  assert.deepEqual(result.map(item => item.service), ['sigap', 'sigap_staging', 'cctv']);
   assert.equal(result[0].slot, Math.floor(checkedAt / 60000));
 });
 

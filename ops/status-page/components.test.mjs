@@ -9,16 +9,16 @@ const payload = () => ({ version: 1, observedAt: now, components: ['sigap_storag
   .map(id => ({ id, status: 'up', reason: 'healthy', latencyMs: 10 })) });
 const recent = () => ALL_COMPONENTS.map(item => ({ service: item.id, checked_at: now, outcome: 'up', latency_ms: 10 }));
 
-test('four top-level components and expandable worker details preserve original production ID', () => {
+test('SIGAP components and CCTV preserve original production ID and expandable worker details', () => {
   const data = buildStatus({ recent: recent() }, now);
-  assert.deepEqual(data.services.map(item => item.id), ['sigap', 'sigap_staging', 'sigap_storage', 'sigap_services']);
+  assert.deepEqual(data.services.map(item => item.id), ['sigap', 'sigap_staging', 'sigap_storage', 'sigap_services', 'cctv']);
   assert.equal(data.overall, 'up');
   assert.equal(data.services[3].children.length, 4);
   const html = renderHtml(data);
   assert.match(html, /<details class="service-details"><summary>/);
   assert.match(html, /Kondisi tiap service \(4\)/);
   assert.doesNotMatch(html, /data-service="(?:drive|ai|marison)"/);
-  assert.equal(COMPONENTS.length, 4);
+  assert.equal(COMPONENTS.length, 5);
 });
 
 test('group cannot remain UP when one worker is down or stale', () => {
