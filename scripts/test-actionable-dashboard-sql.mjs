@@ -6,6 +6,21 @@ const start = source.indexOf('create or replace function public.calculate_busine
 const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
+const signerScope = process.argv.includes('--signer-scope');
+const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
+const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
+const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
+  monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('))
+  + monitoringSource.slice(monitoringSource.indexOf('create or replace function public.get_my_surat_monitoring_stats('),
+    monitoringSource.indexOf('create or replace function public.enforce_surat_reservation_number_scope()'));
+const signerScopeMigration = signerScope ? read('supabase/migrations/20261105050000_signer_organization_monitoring.sql') : '';
+const signerScopeSetup = `
+alter table profiles add column job_title text,add column avatar_url text;
+alter table surat_registrasi add column file_path text,add column lampiran_path text,add column form_input_data jsonb default '{}';
+alter table surat_signatures add column label_jabatan text,add column catatan text;
+create table surat_attachments(id uuid,surat_id uuid,created_at timestamptz,file_url text);
+`;
+const signerScopeAssertions = signerScope ? read('supabase/tests/signer_organization_monitoring.integration.sql') : '';
 const fixture = `
 create role postgres nologin nosuperuser;create role authenticated;create role anon;create role service_role;
 create schema auth;grant usage on schema auth to postgres,authenticated,anon;
@@ -118,7 +133,8 @@ const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-
 try {
  let ready=false;for(let i=0;i<80;i++){if(run(['inspect','--format','{{.State.Health.Status}}',container]).trim()==='healthy'){ready=true;break;}Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw Error('Disposable PostgreSQL not ready');
- run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],fixture+migration+migration+labels+labels+assertions);
+ run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],fixture+migration+migration+labels+labels
+  +(signerScope ? signerScopeSetup+monitoringRpcs+signerScopeMigration+signerScopeMigration : '')+assertions+signerScopeAssertions);
  const parallelReminder = () => new Promise((resolve,reject) => {
   const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});
   let output='',error='';child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});
