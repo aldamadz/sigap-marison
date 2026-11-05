@@ -9,6 +9,7 @@ export type DashboardRow = {
   current_signer_id: string | null; current_signer_name: string | null; current_role: string | null;
   needs_verification: boolean; needs_recommendation: boolean; revision_reason: string | null;
   started_at: string | null; elapsed_minutes: number | null; sla_minutes: number;
+  can_remind?: boolean;
 };
 export type DashboardSummary = Record<'active' | 'ready' | 'blocked' | 'upcoming' | 'returned' | 'completed' | 'rejected' | 'within_sla' | 'overdue' | 'completed_on_time' | 'completed_measured', number>;
 export type ActionableDashboardData = {

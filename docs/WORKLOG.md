@@ -1,5 +1,27 @@
 # Worklog
 
+## 2026-11-05 [Codex] SUR-39 Signer Organization Progress Scope
+
+- Issue812, main-based `codex/signer-scope-monitoring-20261105`; user explicitly
+  authorized staging then production. Members see progress when an active signer
+  belongs to their Pusat department, exact KCP or KC descendant scope. Current
+  profile/hierarchy drives transfers; no snapshot or manual ACL backfill.
+- New read-only helper updates monitoring list/detail/count and dashboard team
+  scope. Original can_read_surat/can_monitor_surat_scope, document RLS, reminders,
+  inbox, approval and mutations stay unchanged. Newly visible progress strips
+  private input/files/attachments/signature snapshots. Dashboard suppresses
+  reminder controls when the old write-authorizing monitoring scope is absent.
+- PostgreSQL17 tests cover both the original dashboard regression/concurrent
+  reminders and new cross-requester scope, pagination, department/KC/KCP isolation,
+  transfers, disabled/deleted profiles, anonymous denial and private-file refusal.
+  New migration applied twice in disposable database; all assertions passed.
+- Updated dashboard/monitoring guidance; reviewed only those intended content
+  changes before refreshing the user-doc fingerprint. Lint/typecheck/build pass;
+  focused runtime tests passed. Real-environment rehearsal and rollout pending.
+- MRN29 now independently live production84a494a/staging8c7df66. Both compiled
+  no-send acceptance gates and public health passed; receipt history untouched.
+  PROJECT_CONTEXT remains absent; no shared document structure changes.
+
 ## 2026-11-05 [Codex] MRN-29 Staging Database Applied, Runtime Pending
 
 - IntegrationPR810 merged8b57f3e after hosted Quality41966316475 SUCCESS;

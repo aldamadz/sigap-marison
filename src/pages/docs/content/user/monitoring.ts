@@ -10,9 +10,10 @@ export const monitoringDocs: DocsEntry = {
     icon: SearchCheck,
     version: "v1.0.0",
     updatedAt: DOCS_UPDATED_AT,
-    summary: "Melacak dokumen yang Anda buat, termasuk progres tanda tangan, status, dokumen, dan lampiran.",
+    summary: "Pantau pengajuan sendiri dan progres pengajuan yang melibatkan penandatangan dari departemen atau kantor Anda.",
     whenToUse: [
       "Mengecek dokumen sudah sampai tahap mana.",
+      "Memantau pengajuan dari tempat lain jika penandatangannya berasal dari departemen atau kantor Anda. Akses dokumen tetap mengikuti izin sebelumnya.",
       "Membuka PDF dokumen atau lampiran.",
       "Melihat alasan penolakan atau catatan proses.",
     ],

@@ -14,7 +14,7 @@ export const dashboardDocs: DocsEntry = {
     { type: 'feature-grid', title: 'Bagian pada Dashboard', items: [
       { title: 'Pengajuan saya', description: 'Pengajuan yang Anda buat: antrean aktif, perlu perbaikan, selesai, dan ditolak.' },
       { title: 'Tanda tangan saya', description: 'Tugas pejabat yang benar-benar ditugaskan kepada Anda. Tanda tangan otomatis pemohon pada tahap pertama tidak dihitung sebagai beban kerja penandatangan.' },
-      { title: 'Departemen / kantor', description: 'Pusat melihat departemen sendiri. KCP melihat kantor sendiri. KC melihat kantor sendiri dan seluruh KCP turunannya. Semua anggota dapat memantau; admin dapat melihat seluruh organisasi.' },
+      { title: 'Departemen / kantor', description: 'Pusat memantau departemen sendiri. KCP memantau kantor sendiri. KC mencakup KCP turunannya. Pengajuan juga terlihat jika penandatangan aktif berasal dari lingkup tersebut. Hak membuka dokumen dan menyetujui tetap mengikuti izin yang berlaku.' },
       { title: 'Kalender Kerja', description: 'Pekerjaan Anda hari ini dan pekerjaan tertunda tetap tersedia. Ringkasan Agenda lama tidak lagi ditampilkan.' },
     ] },
     { type: 'table', title: 'Membaca antrean tanda tangan', columns: ['Kategori', 'Arti'], rows: [
