@@ -7,14 +7,16 @@ const carryoverMigration = "20261006080000_work_calendar_carryover_deadlines.sql
 const carryoverTest = "work_calendar_carryover_deadlines.integration.sql";
 const resultsMigration = "20261013130000_work_calendar_preserve_partial_results.sql";
 const resultsTest = "work_calendar_partial_results.integration.sql";
+const teamMigration = "20261105060000_work_calendar_organization_scope.sql";
+const teamTest = "work_calendar_organization_scope.integration.sql";
 const mode = process.argv[2] ?? "--all";
-if (!["--all", "--baseline", "--carryover", "--results"].includes(mode) || process.argv.length > 3) {
-  throw new Error("Usage: node scripts/test-work-calendar-sql.mjs [--all|--baseline|--carryover|--results]");
+if (!["--all", "--baseline", "--carryover", "--results", "--team-scope"].includes(mode) || process.argv.length > 3) {
+  throw new Error("Usage: node scripts/test-work-calendar-sql.mjs [--all|--baseline|--carryover|--results|--team-scope]");
 }
 
 // Historic assertions and the new contract need separate disposable databases.
 if (mode === "--all") {
-  for (const suite of ["--baseline", "--carryover", "--results"]) {
+  for (const suite of ["--baseline", "--carryover", "--results", "--team-scope"]) {
     const result = spawnSync(process.execPath, [process.argv[1], suite], { stdio: "inherit" });
     if (result.error) throw result.error;
     if (result.status !== 0) process.exit(result.status ?? 1);
@@ -27,6 +29,7 @@ const migrationFiles = readdirSync(migrationsDir)
   .filter((name) => !name.endsWith("_work_calendar_bootstrap.sql"))
   .filter((name) => !name.endsWith("_work_calendar_notification_scope.sql"))
   .filter((name) => name !== resultsMigration)
+  .filter((name) => name !== teamMigration)
   .filter((name) => mode !== "--baseline" || name !== carryoverMigration)
   .sort();
 
@@ -44,8 +47,9 @@ const testFiles = readdirSync(testsDir)
   .filter((name) => name.includes("work_calendar") && name.endsWith(".sql"))
   .filter((name) => name !== "work_calendar_bootstrap.integration.sql")
   .filter((name) => name !== "work_calendar_notification_scope.integration.sql")
+  .filter((name) => mode === "--team-scope" ? name === teamTest : name !== teamTest)
   .filter((name) => mode === "--results" ? name === resultsTest : name !== resultsTest)
-  .filter((name) => mode === "--results" || (mode === "--carryover" ? name === carryoverTest : mode !== "--baseline" || name !== carryoverTest))
+  .filter((name) => mode === "--team-scope" || mode === "--results" || (mode === "--carryover" ? name === carryoverTest : mode !== "--baseline" || name !== carryoverTest))
   .sort();
 
 const assertions = testFiles
@@ -318,6 +322,7 @@ end $$;
 ` : ""}
 
 -- Run integration tests
+${mode === "--team-scope" ? readFileSync(join(migrationsDir, teamMigration), "utf8").repeat(2) : ""}
 ${assertions}
 `;
 
@@ -376,6 +381,9 @@ try {
   }
   if (mode === "--results" && !output.includes("CAL-03 partial results integration: all assertions passed")) {
     throw new Error("SQL runner did not see the partial results success marker.\n" + output);
+  }
+  if (mode === "--team-scope" && !output.includes("CAL-10 organization scope: all assertions passed")) {
+    throw new Error("SQL runner did not see the organization scope success marker.\n" + output);
   }
   process.stdout.write(output);
 } finally {

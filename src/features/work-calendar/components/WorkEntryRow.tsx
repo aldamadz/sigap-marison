@@ -215,7 +215,7 @@ function WorkEntryRowControls({
           onCloseAutoFocus={onCloseAutoFocus}
         >
           <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-            {readOnly ? "Entry bawahan" : "Tindakan"}
+            {readOnly ? "Pekerjaan anggota tim" : "Tindakan"}
           </DropdownMenuLabel>
           <DropdownMenuItem className="gap-2" onSelect={onOpenDetail}>
             <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
