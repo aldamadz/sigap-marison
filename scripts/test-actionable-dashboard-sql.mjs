@@ -6,7 +6,8 @@ const start = source.indexOf('create or replace function public.calculate_busine
 const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
-const signerScope = process.argv.includes('--signer-scope');
+const receiving = process.argv.includes('--receiving');
+const signerScope = process.argv.includes('--signer-scope') || receiving;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
 const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
@@ -144,5 +145,24 @@ try {
  const concurrent=await Promise.all([parallelReminder(),parallelReminder()]);
  if(concurrent.filter(output=>/^true$/m.test(output)).length!==1)throw Error('Concurrent reminders must have exactly one sender');
  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],"select check_ok((select count(*)=1 from notifications),'concurrent reminders deduplicated');");
+ if(receiving){
+  const setup=`alter table master_departments add column code text;
+   alter table surat_registrasi add column letter_type_id uuid,add column penggunaan_id uuid,add column request_date date,add column requester_snapshot jsonb,add column location_snapshot jsonb;
+   alter table surat_signatures add column action_type text,add column requires_unit_allocation boolean,add column attachment_requirements_snapshot jsonb;
+   alter table surat_revision_events add column target_user_ids uuid[],add column target_type text,add column target_step integer;
+   create table master_letter_types(id uuid,name text);create table master_forms(id uuid,nama_form text);create table master_penggunaan_detail(id uuid,form_id uuid);
+   create table surat_linked_documents(parent_surat_id uuid);create table holidays(holiday_date date);
+   insert into department_kpi_configs values(tid(2),true,120,array[1,2,3,4,5],'08:00','17:00','12:00','13:00','Asia/Jakarta');`;
+  const kpi=read('supabase/migrations/20260706170000_pause_sla_during_process_revision.sql');
+  const count=monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('),monitoringRecovery.indexOf('create or replace function public.get_user_active_sla_breach_count('));
+  const policy=read('supabase/migrations/20261105063000_department_receiving_periods.sql');
+  const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],setup
+   +kpi.slice(kpi.indexOf('create or replace function public.get_department_kpi_summary('))
+   +read('supabase/migrations/20260814120000_user_active_sla_breach_count.sql')
+   +read('supabase/migrations/20260924090000_restore_production_compact_inbox.sql')+count+policy+policy
+   +read('supabase/tests/department_receiving_periods.integration.sql'));
+  if(!proof.includes('SLA02 monthly receiving and frozen clocks passed'))throw Error('Missing SLA02 assertions');
+  console.log('SLA02: monthly rules, immutable stage snapshots, receiving guards, RLS and clocks passed.');
+ }
  console.log('Actionable dashboard: all assertions passed (canonical business clock, real PostgreSQL, RLS, hierarchy, queue, history, SLA, authorization).');
 } finally {run(['rm','-f',container]);}

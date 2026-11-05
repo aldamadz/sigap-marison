@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## SLA-02 Department Receiving Periods (2026-11-05)
+
+- Issue825, main-based staging-only candidate. Regular monthly cutoff/opening
+  and specific-month overrides are independent of processing SLA. Closed intake
+  queues a request to the next period rather than rejecting it.
+- New activated stages freeze their calendar/SLA and reception date. Existing
+  signatures are not backfilled. Future reception cannot be signed, verified,
+  reminded or counted overdue; dashboard and monitoring explain its start.
+- Migration20261105063000; real PG17 repeat/clock/authorization tests pass.
+  Admin edits retain actor/before/after audit. Live rehearsal and rollout pending.
+
 ## SUR-40 Project And Signer Search (2026-11-05, Issue813)
 
 - Main-based candidate, staging then production authorized. Searchable project

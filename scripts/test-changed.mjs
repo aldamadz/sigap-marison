@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
   if (/signer_organization_monitoring.*\.sql$/u.test(file)) gates.add('signer-organization-monitoring-sql');
   if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
   if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
@@ -140,6 +141,10 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'department-receiving-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving']);
+    continue;
+  }
   if (gate === 'signer-organization-monitoring-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--signer-scope']);
     continue;
