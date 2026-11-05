@@ -143,6 +143,7 @@ for (const file of allChangedFiles) {
 for (const gate of gates) {
   if (gate === 'department-receiving-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving']);
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving', '--live-shape']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
