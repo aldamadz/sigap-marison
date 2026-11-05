@@ -401,7 +401,7 @@ describe("WorkCalendarWorkspace — Team Overview server-side (CAL-03 F4A)", () 
       { key: "Enter" },
     );
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getByText("Entry bawahan")).toBeInTheDocument();
+    expect(within(menu).getByText("Pekerjaan anggota tim")).toBeInTheDocument();
     expect(within(menu).getByText("Lihat detail")).toBeInTheDocument();
     expect(within(menu).queryByText("Hapus")).toBeNull();
     fireEvent.keyDown(document.body, { key: "Escape" });

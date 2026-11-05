@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
+
+- User approved shared Pusat-department and branch-office calendars, KC including
+  descendant KCP. Existing active reporting hierarchy remains readable; only
+  owner mutations remain allowed. Target staging only; production not authorized.
+- Migration20261105060000 shares one current-profile scope across team RPCs,
+  entry/event read policies, counts/search/detail/export. No profile ACL expansion,
+  task rewrite or notification escalation change. Actual PG17 authorization,
+  repeat migration, read-only peer, transfer and department/office cases pass.
+
 ## SUR-40 Project And Signer Search (2026-11-05, Issue813)
 
 - Main-based candidate, staging then production authorized. Searchable project
