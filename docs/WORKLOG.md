@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-05 [Codex] MRN-29, SUR-39 And SUR-40 Production Verified
+
+- Final selected production source/runtime f38df45e1c9f737e7ce1a493450d5fbd082a1981,
+  app bba66ac4d463. PR814/815 promoted only the two main-based features; no full
+  staging-to-main merge. Staging parity PR817/runtime
+  7fa455ffca0ab589b858ac2206e363147b78dafa, app0022eb214392 contains that main.
+- Hosted source/integration checks41971386961/41972871828/41971741264 and parity
+  41974025067 passed. Official staging41972424424/41974319110 and production
+  41974826137 completed their quality AND deploy jobs successfully. Automatic
+  staging41972423707 stopped correctly on the missing exact migration ACK;
+  it was not bypassed. Obsolete/no-ACK automatic production attempts were
+  cancelled or skipped, never counted as releases.
+- SUR39 migration20261105050000 applied exactly once in each environment after
+  rollback rehearsals on both real schemas. Normalized SHA256
+  5fbbf0ff863d043fab1a070888b800602fcc95a0475f261e2be3ba0b2f953aeb.
+  Historical ledgers were audited, not repaired/replayed; production execution
+  used the existing supabase_admin owner context. No business-row backfill.
+- Read-only progress includes active signers in the viewer's Pusat department,
+  exact KCP or KC descendant scope. Both post-deploy real-data smoke tests pass
+  three newly authorized examples with unchanged business fingerprints and
+  document/mutation authority. Files, private input, snapshots, approvals and
+  reminder permissions are not widened. PG17 tests retain the original dashboard
+  concurrency cases and cover transfers, deleted/inactive users and isolation.
+- SUR40:159 affected tests/27files, separate progress tests28/4files, lint,
+  typecheck/build and related hosted gates passed. Desktop1366/mobile390 shared
+  control checks passed keyboard selection, office search and viewport bounds.
+  Live staging browser using the existing IG Sri Mariastuti session selected
+  Sragen Test via search/Enter and loaded26-unit capacity; Status Pengajuan
+  displayed42 documents with32done/8process/2rejected. This admin-session browser
+  smoke does not replace the restricted-user SQL authorization tests. No number,
+  draft save, approval or submission was performed in browser acceptance.
+- Public root/live/ready/version200 and exact SHAs verified on both domains.
+  Worker IDs, app environment/ports/mounts/security settings preserved. Compiled
+  app no-send checks still allow PGD and reject KEU/latest payload409 in both
+  environments. No vendor POST, resend, automatic approval or Ticketing work.
+- MRN29 was independently released earlier via PR809/main84a494a; its migration
+  20261103160000 remains applied. Existing22 historical KEU dispatch records,
+  including14 receipts from this morning, remain intact; no vendor cancellation
+  or deletion is claimed. Current ineligible active jobs:0. PROJECT_CONTEXT
+  remains absent; shared-file structure unchanged. Product release complete.
+
 ## 2026-11-05 [Codex] SUR-40 Searchable Registration Choices
 
 - Issue813, main-based `codex/registration-search-20261105`; staging then

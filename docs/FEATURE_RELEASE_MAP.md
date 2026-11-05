@@ -1,5 +1,25 @@
 # SIGAP Feature and Release Map
 
+## MRN-29 / SUR-39 / SUR-40 Production Completion (2026-11-05)
+
+- Supersedes pending-runtime notes below: production f38df45 and staging7fa455f
+  are live and verified. Selective PR814/815, staging parity817; production
+  workflow41974826137 quality/deploy SUCCESS after live-staging ancestry checks.
+- SUR39 migration20261105050000 is applied/verified in both environments.
+  Status Pengajuan and dashboard show read-only progress through active signers
+  from the same Pusat department, KCP office or KC descendant scope. Original
+  document/file, approval and reminder authority is unchanged; three real-data
+  examples passed per environment with no persistent business writes.
+- SUR40 searchable project controls cover standard registration and SPK Unit;
+  signer search covers name/job/department/office within eligible candidates.
+  Existing number/revision locks and external project scope remain intact.
+  159 related tests, PG17 authorization/concurrency, responsive shared-control
+  checks and live staging project-search/monitoring browser smoke passed.
+- MRN29 KEU boundary remains verified in both compiled runtimes: only eligible
+  PGD goes to Procurement. KEU stays in SIGAP pending the Finance gate. Existing
+  historical vendor receipts are preserved, not revoked or resent. Public health
+  and runtime SHAs passed; no worker rollout or Ticketing integration.
+
 ## SUR-40 Project And Signer Search (2026-11-05, Issue813)
 
 - Main-based candidate, staging then production authorized. Searchable project
