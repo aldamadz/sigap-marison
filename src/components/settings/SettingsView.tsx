@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getCurrentUser } from '@/services/user-ui.service';
 import { getOffices } from '@/services/office.service';
 import { supabase } from '@/lib/supabase';
+import { NotificationPreferences } from './NotificationPreferences';
 
 const AVATAR_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -212,6 +213,7 @@ export const SettingsView = () => {
       </header>
 
       <div className="grid gap-6">
+        {user?.id && <NotificationPreferences userId={user.id} />}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm">
           <div className="flex flex-col md:flex-row gap-10 items-start">
             

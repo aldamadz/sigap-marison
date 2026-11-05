@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-05 [Codex] NTF-06 Notification Delivery Candidate
+
+- Issue823; owned `codex/notification-delivery-20261105`, based on main f38df45.
+  User selected browser popups, approved organization reminders and calendar
+  reminders; Ticketing deferred. New package targets staging, not production.
+- Durable bounded planner/leases, sanitized generic push, provider revalidation,
+  retry/ownership/preferences, canonical login/task navigation and settings
+  implemented. No old notification backfill or business/outbound actions.
+- Real PG17 twice-applied assertions and two-connection single-winner delivery
+  pass. Synthetic provider/network fixtures, landing/login/permission UI tests,
+  existing inbox approval/revision regressions, lint/typecheck/build run locally.
+- A regression test exposed the old URL-clearing effect selecting an unrelated
+  task when the intended task was absent; removed that fallback, retained normal
+  initial selection and composite approval/verification identity.
+- Remaining: final source gates/PR, live staging DB rehearsal/rollout with
+  tester-only audience and explicit browser acceptance. Department monthly
+  receiving/SLA policies are a separate remaining work item, not implemented by
+  this notification candidate. `docs/PROJECT_CONTEXT.md` remains absent.
+
 ## 2026-11-05 [Codex] SUR-40 Searchable Registration Choices
 
 - Issue813, main-based `codex/registration-search-20261105`; staging then

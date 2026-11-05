@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## NTF-06 Durable Notifications And Canonical Task Links (2026-11-05)
+
+- Issue823, main-based candidate; staging only. Department/office digests,
+  work-calendar reminders and explicit browser push preferences use a bounded
+  server planner plus durable service-only delivery leases.
+- Canonical notification landing preserves login return, verifies task access
+  and type, and never substitutes an unrelated first task. Peers can remind
+  within SUR39 progress scope; existing cooldown and actor audit remain.
+- Migration20261105062000; repeat PG17/concurrent claims and targeted tests pass.
+  Default jobs off; staging enablement requires explicit tester audience.
+  Runtime and browser acceptance pending. No Ticketing/broadcast/production.
+
 ## SUR-40 Project And Signer Search (2026-11-05, Issue813)
 
 - Main-based candidate, staging then production authorized. Searchable project

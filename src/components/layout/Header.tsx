@@ -8,6 +8,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { id as localeID } from 'date-fns/locale'
 import { useNavigate } from 'react-router'
 import { notificationService } from '@/services/notification.service'
+import { notificationOpenPath } from '@/lib/notification-target'
+import { BrowserNotificationButton } from '@/components/settings/BrowserNotificationButton'
 import { useAttention } from '@/providers/AttentionProvider'
 import {
   getWorkCalendarNotificationMeta,
@@ -47,7 +49,7 @@ const mapDbNotification = (row: any): Notification => {
     type: typeMap[row.type] ?? 'completed',
     time: new Date(row.created_at),
     isRead: !!row.is_read,
-    url: row.link || '/surat/monitoring',
+    url: notificationOpenPath(row.id),
     ...(calendarCategory ? { calendarCategory } : {}),
   }
 }
@@ -96,7 +98,7 @@ interface HeaderProps {
 export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: HeaderProps) => {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const { state: attentionState, eventVersion, refetch: refetchAttention, requestPushPermission } = useAttention()
+  const { state: attentionState, eventVersion, refetch: refetchAttention } = useAttention()
   const unreadCount = attentionState.unreadNotifications
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const previousUnreadRef = useRef<number | null>(null)
@@ -156,11 +158,6 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
   useEffect(() => {
     loadNotifications()
   }, [eventVersion, loadNotifications])
-
-  useEffect(() => {
-    if (!notificationsOpen) return
-    requestPushPermission().catch(() => {})
-  }, [notificationsOpen, requestPushPermission])
 
   const handleMarkAllRead = useCallback(async () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
@@ -259,6 +256,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
                   </div>
                 </div>
               </SheetHeader>
+              <div className="border-b px-4 py-3"><BrowserNotificationButton /></div>
 
               <div className="flex-1 overflow-y-auto">
                 {notifications.length === 0 ? (
@@ -349,6 +347,7 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
               </div>
 
               <div className="max-h-[60vh] overflow-y-auto">
+                <div className="border-b p-3"><BrowserNotificationButton /></div>
                 {notifications.length === 0 ? (
                   <div className="p-8 text-center flex flex-col items-center gap-3">
                     <Inbox className="w-10 h-10 text-muted-foreground/20" />

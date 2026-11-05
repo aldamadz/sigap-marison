@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, CheckCircle2, FileCheck2, Lock, Loader2, RefreshCcw, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -176,6 +176,8 @@ const RecommendationEmptyState = ({ isRefreshing, onRefresh }: { isRefreshing: b
 
 export default function RecommendationTasksPage() {
   const navigate = useNavigate();
+  const [params]=useSearchParams();
+  const requestedTaskId=params.get('task');
   const queryClient = useQueryClient();
   const [currentUserId, setCurrentUserId] = useState("");
   const [accessAllowed, setAccessAllowed] = useState<boolean | null>(null);
@@ -232,6 +234,9 @@ export default function RecommendationTasksPage() {
     }),
     [tasksQuery.data]
   );
+  useEffect(()=>{
+    if(requestedTaskId && tasks.some(task=>task.id===requestedTaskId))document.getElementById(`recommendation-task-${requestedTaskId}`)?.scrollIntoView?.({block:'center'});
+  },[requestedTaskId,tasks]);
 
   const handleClaim = async (task: RecommendationTask) => {
     if (claimingId) return;
@@ -282,6 +287,10 @@ export default function RecommendationTasksPage() {
 
       <RefreshNotice show={isRefreshing && !tasksQuery.error} />
 
+      {requestedTaskId && !tasksQuery.isPending && !tasksQuery.error && !tasks.some(task=>task.id===requestedTaskId) && (
+        <p role="status" className="border-y py-3 text-sm text-muted-foreground">Tugas pada notifikasi sudah berubah atau tidak tersedia untuk akun ini.</p>
+      )}
+
       {tasksQuery.isLoading && <RecommendationListSkeleton />}
 
       {tasksQuery.error && (
@@ -303,7 +312,7 @@ export default function RecommendationTasksPage() {
           const candidateNames = getCandidateNames(task);
           const isRevision = task.status === "revision_requested";
           return (
-            <Card key={task.id} className={cn("overflow-hidden", lockedByOther && "bg-muted/30")}>
+            <Card key={task.id} id={`recommendation-task-${task.id}`} className={cn("overflow-hidden", lockedByOther && "bg-muted/30",requestedTaskId===task.id && "border-primary ring-1 ring-primary")}>
               <CardContent className="p-4 sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">

@@ -4,7 +4,8 @@ import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-
 import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewStage } from "@/lib/fund-rab";
 import { ApprovalAttachmentPicker } from "@/features/surat/inbox/components/ApprovalAttachmentPicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { isNotificationUuid, notificationTask } from '@/lib/notification-target';
 import {
   useInboxPagination,
 } from "@/features/surat/inbox/lib/use-inbox-pagination";
@@ -244,13 +245,26 @@ export default function InboxPage() {
   }, [inbox, kpiFilter, kpiBySignature]);
 
   const requestedTaskKey = searchParams.get("task");
+  const requestedId=requestedTaskKey?.split(':').at(-1);
+  const requestedType=requestedTaskKey?.includes(':')?requestedTaskKey.split(':')[0]:null;
+  const requestedTaskQuery=useQuery({
+    queryKey:['surat-inbox-detail',requestedId],
+    queryFn:()=>suratInboxApi.getMyInboxDetail(requestedId!),
+    enabled:isNotificationUuid(requestedId) && !!currentUser?.id && !inbox.some(item=>item.id===requestedId),
+    staleTime:30000,retry:false,
+  });
+  const requestedTask=requestedTaskQuery.isError?null:notificationTask(requestedTaskQuery.data,currentUser?.id || '',requestedType);
+  useEffect(()=>{
+    if(requestedTaskKey){setSearchTerm('');setDebouncedSearch('');setCategoryFilter('all');setKpiFilter('all');setActionFilter('all');}
+  },[requestedTaskKey]);
   const legacySelectedCompactItem =
     filteredInbox.find((item: any) => item.id === requestedTaskKey && isVerificationTask(item)) ||
     filteredInbox.find((item: any) => item.id === requestedTaskKey);
   const selectedCompactItem =
     filteredInbox.find((item: any) => getInboxTaskKey(item) === requestedTaskKey) ||
     legacySelectedCompactItem ||
-    filteredInbox[0] ||
+    requestedTask ||
+    (!requestedTaskKey ? filteredInbox[0] : null) ||
     null;
   const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const selectedSignatureId = selectedCompactItem?.id || null;
@@ -346,7 +360,6 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (!selectedItem) {
-      if (requestedTaskKey) setSearchParams({}, { replace: true });
       return;
     }
     if (selectedTaskKey && requestedTaskKey !== selectedTaskKey) {
@@ -2728,6 +2741,10 @@ const handleApprove = async (item: any) => {
 
   return (
     <div className="sigap-page animate-in fade-in duration-300">
+      {requestedTaskKey && !selectedCompactItem && <div role="status" className="space-y-2 border-y border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <p>{requestedTaskQuery.isFetching?'Memuat tugas yang dipilih...':'Tugas yang dipilih tidak tersedia untuk akun ini atau sudah berpindah tahap.'}</p>
+        {!requestedTaskQuery.isFetching && <div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>{void requestedTaskQuery.refetch();}}>Coba lagi</Button><Button asChild variant="outline" size="sm"><Link to={isNotificationUuid(searchParams.get('document'))?`/surat/monitoring?document=${searchParams.get('document')}`:'/surat/monitoring'}>Lihat status pengajuan</Link></Button></div>}
+      </div>}
 
       <header className="sigap-panel sigap-panel-accent flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex items-center gap-3">

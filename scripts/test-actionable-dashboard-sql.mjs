@@ -6,7 +6,8 @@ const start = source.indexOf('create or replace function public.calculate_busine
 const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
-const signerScope = process.argv.includes('--signer-scope');
+const notifications = process.argv.includes('--notifications');
+const signerScope = process.argv.includes('--signer-scope') || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
 const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
@@ -144,5 +145,25 @@ try {
  const concurrent=await Promise.all([parallelReminder(),parallelReminder()]);
  if(concurrent.filter(output=>/^true$/m.test(output)).length!==1)throw Error('Concurrent reminders must have exactly one sender');
  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],"select check_ok((select count(*)=1 from notifications),'concurrent reminders deduplicated');");
+ if(notifications){
+  const setup=`alter table notifications add column is_read boolean default false,add column read_at timestamptz;
+   create table public.holidays(holiday_date date primary key);
+   create table public.work_calendar_entries(id uuid primary key,owner_id uuid references profiles(id),work_date date,due_date date,
+    title text,kind text default 'work',status text default 'planned',starts_at timestamptz,realization text,deleted_at timestamptz);`;
+  const delivery=read('supabase/migrations/20261105062000_notification_delivery.sql');
+  const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],setup
+   +read('supabase/migrations/20260626164000_web_push_subscriptions.sql')+delivery+delivery+read('supabase/tests/notification_delivery.integration.sql'));
+  if(!proof.includes('NTF06 delivery, planner and authorization assertions passed'))throw Error('Missing notification SQL assertions');
+  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+   "insert into web_push_subscriptions(user_id,endpoint,subscription) values(tid(1),'https://fcm.googleapis.com/concurrent','{\"endpoint\":\"https://fcm.googleapis.com/concurrent\"}');insert into notifications(user_id,title,is_read,data) values(tid(1),'Concurrent',false,'{}');");
+  const claim=()=>new Promise((resolve,reject)=>{
+   const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});let output='',error='';
+   child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(Error(error)));
+   child.stdin.end("begin;select count(*) from claim_notification_push(1,array[tid(1)]);select pg_sleep(0.1);commit;");
+  });
+  const claims=await Promise.all([claim(),claim()]);
+  if(claims.filter(output=>/^1$/m.test(output)).length!==1)throw Error('Concurrent queue claims must have exactly one winner');
+  console.log('NTF06: notification assertions and two-connection queue concurrency passed.');
+ }
  console.log('Actionable dashboard: all assertions passed (canonical business clock, real PostgreSQL, RLS, hierarchy, queue, history, SLA, authorization).');
 } finally {run(['rm','-f',container]);}
