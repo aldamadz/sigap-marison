@@ -1,5 +1,22 @@
 # Worklog
 
+## 2026-11-05 [Codex] SLA-02 Monthly Receiving Candidate
+
+- Issue825; main-based owned `codex/department-receiving-periods-20261105`.
+  Staging only. User approved moving closed intake to the next period rather
+  than rejecting it; monthly SLA/receiving overrides are separate from defaults.
+- New rules/admin audit, immutable per-stage processing snapshot, bounded
+  working-day/holiday reopening and canonical future-availability enforcement
+  implemented. Completed/historical signatures are not backfilled or rewritten.
+- Future stages stay out of actionable inbox/count, SLA breach and running SLA.
+  Signature/verification writes and manual reminders reject early processing.
+  Limited progress detail exposes only reception date/message, not internal rules.
+- PostgreSQL17 applies migration twice and checks exact cutoff, monthly override,
+  month/year rollover, holiday/weekend/break, snapshot forgery/clock immutability,
+  early actions, RLS/admin audit and existing dashboard reminder concurrency.
+  Nineteen focused UI/validation/dashboard tests pass; final gates, actual staging
+  shape rehearsal and deployment remain. No production or vendor action.
+
 ## 2026-11-05 [Codex] NTF-06 Notification Delivery Candidate
 
 - Issue823; owned `codex/notification-delivery-20261105`, based on main f38df45.

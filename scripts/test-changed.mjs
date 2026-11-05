@@ -99,6 +99,7 @@ if (changesGlobalTestInfrastructure) {
 const gates = new Set();
 for (const file of allChangedFiles) {
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
+  if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
   if (/signer_organization_monitoring.*\.sql$/u.test(file)) gates.add('signer-organization-monitoring-sql');
   if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
   if (/release_notice_preferences\.sql$|release-notice-sql\.test\.mjs$/u.test(file)) gates.add('release-notice-sql');
@@ -152,6 +153,10 @@ for (const gate of gates) {
   }
   if (gate === 'notification-delivery-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--notifications']);
+    continue;
+  }
+  if (gate === 'department-receiving-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
