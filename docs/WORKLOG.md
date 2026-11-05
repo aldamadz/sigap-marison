@@ -1,5 +1,27 @@
 # Worklog
 
+## 2026-11-05 [Codex] MRN-29 Staging Database Applied, Runtime Pending
+
+- IntegrationPR810 merged8b57f3e after hosted Quality41966316475 SUCCESS;
+  selectivePR809 targets main and must wait for live staging acceptance. Old765
+  closed as superseded, not reported as a successful historical deployment.
+- Selected migration20261103160000 SHA256
+  e8bc7a89cf9ea8fc526532cb0b4cf9c4eac4f0f4f7b7320621f58dd9cec59c07
+  rehearsed with rollback on both real schemas and applied only to staging.
+  Exact source-related selection passes171 tests/20 files; no full-suite bypass.
+- Protected SUR30 preflight comparison proves each current legacy ledger is
+  unchanged except the already authorized20261104160000. Stage245/prod242
+  versions before this change; no repair/include-all/replay of historical drift.
+  Stage now246. Routing: stage35PGD allowed,1KEU and6HRD blocked; production
+  rehearsal62PGD allowed,31KEU and10HRD blocked. Private service-only ACL passes.
+- Production read-only evidence confirms14 KEU receipts succeeded today around
+  09:13-09:17WIB. Preserve all22 historical KEU dispatches, payloads and receipts;
+  no external cancellation/deletion or repeated POST authorized. No active unsent
+  ineligible job at preflight. Transaction assertions preserve document/signature/
+  revision fingerprints and allow only specified unsent dispatch retirement.
+- Remaining: staging app deployment41966678302 with selected migration ACK,
+  compiled no-send acceptance, mainCI/promotion, ancestry sync and production.
+
 ## 2026-11-05 [Codex] MRN-29 Release Resumed After Explicit Authorization
 
 - User reports Kas Kecil still reaching Procurement and authorizes staging then
