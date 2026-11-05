@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import type { UsageModuleContext } from "../usage-contract";
 import type { ProjectOption, ProjectRaw } from "@/components/surat/form/surat-form-types";
@@ -92,22 +93,17 @@ export function UnitContextPanel({ ctx }: { ctx: UsageModuleContext }) {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="unit-request-project" className="text-xs font-semibold text-muted-foreground">Proyek</Label>
-          <Select
+          <SearchableSelect id="unit-request-project" label="Proyek"
             value={requestedProject?.value || requestedProject?.id || ""}
             onValueChange={handleExternalProjectChange}
             disabled={projectsLoading || isNumberedContextLocked}
-          >
-            <SelectTrigger id="unit-request-project" className="h-12 bg-background/70 text-sm">
-              <SelectValue placeholder={projectsLoading ? "Memuat proyek..." : "Pilih proyek"} />
-            </SelectTrigger>
-            <SelectContent>
-              {externalProjects.map(project => (
-                <SelectItem key={project.value} value={project.value} disabled={!project.raw?.code}>
-                  {project.label}{project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            className="h-12 bg-background/70 text-sm"
+            placeholder={requestedProject?.label || (projectsLoading ? "Memuat proyek..." : "Pilih proyek")}
+            searchPlaceholder="Cari nama, kode proyek, atau kantor..." emptyText="Proyek tidak ditemukan."
+            options={externalProjects.map(project => ({ value: project.value,
+              label: `${project.label}${project.raw?.branch?.name ? ` - ${project.raw.branch.name}` : ""}`,
+              keywords: [String(project.raw?.code || "")], disabled: !project.raw?.code }))}
+          />
           {projectsError && <p className="text-[10px] font-semibold text-destructive">{projectsError}</p>}
           {requestedProject?.code ? (
             <p className={cn(

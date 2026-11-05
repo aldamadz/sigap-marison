@@ -1,5 +1,21 @@
 # Worklog
 
+## 2026-11-05 [Codex] SUR-40 Searchable Registration Choices
+
+- Issue813, main-based `codex/registration-search-20261105`; staging then
+  production authorized together with SUR39. Shared native Command/Popover
+  project selector covers standard/KEU/PGD and separate SPK Unit contexts.
+- Search accepts project name/code/office. Existing signer search now includes
+  job/department/office, still filtering only pre-authorized eligible candidates.
+  Numbered context locking, Unit revision eligibility, disabled external projects,
+  no-project choice, input callbacks and stored identities remain unchanged.
+- Searchable control uses a modal popover to avoid focus restoration from the
+  previous form selector closing the new search. Tests cover typing, keyboard,
+  empty state, no-project, disabled controls, reopen/reset and real form revision.
+-159 related tests/27files, lint/typecheck/frontend build pass. No dependency,
+  migration, API, approval or vendor POST changes. Browser/runtime rollout pending.
+  PROJECT_CONTEXT absent; shared document structure unchanged.
+
 ## 2026-11-05 [Codex] SUR-39 Signer Organization Progress Scope
 
 - Issue812, main-based `codex/signer-scope-monitoring-20261105`; user explicitly
