@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## OPS-18 Post-Maintenance What's New (2026-11-05, Issue821)
+
+- Staging-only candidate. Admin-authored plain-text notes are private until
+  actual completion after the scheduled start. Expired ETA/cancellation never
+  publishes notes. Edge-owned release survives subsequent scheduling and is
+  public only until next midnight WIB, not for24hours.
+- New migration20261105061000 stores one dismissal preference per account;
+  explicit opt-out follows the user across devices. Closing without opt-out is
+  session-only. Owner RLS, authenticated active-user RPC, no direct write grants.
+- Existing maintenance notice/recovery and independent edge fallback preserved.
+  Edge/unit/PostgreSQL tests pass; UI acceptance and staging rollout pending.
+
 ## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
 
 - User approved shared Pusat-department and branch-office calendars, KC including

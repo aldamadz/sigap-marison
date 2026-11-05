@@ -1,4 +1,4 @@
-import { announcementStart, publicState, validateSchedule } from './schedule.mjs';
+import { announcementStart, dayInWib, publicState, validateSchedule } from './schedule.mjs';
 
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' };
 const json = (data, status = 200) => Response.json(data, { status, headers });
@@ -42,7 +42,12 @@ export class MaintenanceControl {
         if(command.action==='publish')schedule=validateSchedule(command.schedule,Date.now(),state.schedule?.status==='published'?state.schedule:null);
         else if(['complete','cancel'].includes(command.action) && state.schedule?.status==='published')schedule={...state.schedule,status:command.action==='complete'?'completed':'cancelled'};
         else return json({error:'Tindakan tidak tersedia.'},400);
-        const next={revision:state.revision+1,schedule:{...schedule,id:state.schedule?.status==='published'?state.schedule.id:crypto.randomUUID()}};
+        const next={...state,revision:state.revision+1,schedule:{...schedule,id:state.schedule?.status==='published'?state.schedule.id:crypto.randomUUID()}};
+        if(command.action==='complete' && schedule.whatsNew && Date.now()>=Date.parse(schedule.startsAt)) {
+          const completedAt=new Date().toISOString();
+          next.release={id:next.schedule.id,completedAt,expiresAt:new Date(Date.parse(`${dayInWib(completedAt)}T00:00:00+07:00`)+86400000).toISOString(),
+            items:schedule.whatsNew.split('\n').map(line=>line.trim()).filter(Boolean)};
+        }
         const audit={revision:next.revision,actorId:command.actorId,action:command.action,at:new Date().toISOString(),before:state.schedule,after:next.schedule};
         await storage.put(`audit:${String(next.revision).padStart(12,'0')}`,audit);
         await storage.put('state',next);

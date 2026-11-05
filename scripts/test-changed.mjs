@@ -100,6 +100,7 @@ const gates = new Set();
 for (const file of allChangedFiles) {
   if (/signer_organization_monitoring.*\.sql$/u.test(file)) gates.add('signer-organization-monitoring-sql');
   if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
+  if (/release_notice_preferences\.sql$|release-notice-sql\.test\.mjs$/u.test(file)) gates.add('release-notice-sql');
   if (/actionable_role_dashboard.*\.sql$|test-actionable-dashboard-sql\.mjs$/u.test(file)) gates.add('actionable-dashboard-sql');
   if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
@@ -142,6 +143,10 @@ for (const file of allChangedFiles) {
 for (const gate of gates) {
   if (gate === 'actionable-dashboard-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
+    continue;
+  }
+  if (gate === 'release-notice-sql') {
+    run('node', ['--test', 'ops/maintenance/release-notice-sql.test.mjs']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
