@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## SUR-40 Project And Signer Search (2026-11-05, Issue813)
+
+- Main-based candidate, staging then production authorized. Searchable project
+  controls across registration categories and SPK Unit use external name/code/
+  office. Signer search adds job/department/office to existing name matching.
+- No expansion of selectable projects/offices or authorized signer candidates.
+  Numbered drafts remain locked except validated Unit external revision context.
+-159 related tests/27files and lint/typecheck/build pass; real UI and rollout
+  pending. No migration or outbound side effects.
+
 ## MRN-29 Explicit Staging And Production Release (2026-11-05)
 
 - User authorized completing MRN-29 after Kas Kecil still reached Procurement.
