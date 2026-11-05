@@ -37,7 +37,7 @@ describe('maintenance advance notice',()=>{
     }
   });
   it('daily suppression cannot bypass full maintenance; open dashboards navigate to the edge page without checking origin access',async()=>{
-    const full={...state,phase:'maintenance',schedule:{...state.schedule!,impact:'full',startsAt:new Date(Date.now()-1000).toISOString()}};
+    const full={...state,serverNow:new Date().toISOString(),phase:'maintenance',schedule:{...state.schedule!,impact:'full',startsAt:new Date(Date.now()-1000).toISOString()}};
     localStorage.setItem(noticeDismissalKey('actor-1',full as MaintenanceState,Date.now()),'1');mocks.status.mockResolvedValue(full);
     const fetch=vi.fn();vi.stubGlobal('fetch',fetch);mount();
     await waitFor(()=>expect(mocks.openPage).toHaveBeenCalledTimes(1));
