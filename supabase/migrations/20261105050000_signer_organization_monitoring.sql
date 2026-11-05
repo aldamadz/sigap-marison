@@ -40,8 +40,7 @@ declare
 begin
  foreach identity in array array[
   'public.get_surat_monitoring_page(integer,integer,text,text,timestamptz,timestamptz)',
-  'public.get_surat_monitoring_detail(uuid)',
-  'public.get_my_surat_monitoring_stats(timestamptz,timestamptz)'
+  'public.get_surat_monitoring_detail(uuid)'
  ] loop
   definition := pg_get_functiondef(identity::regprocedure);
   if position(new_scope in definition)=0 then
@@ -72,6 +71,29 @@ begin
  end if;
 end;
 $migration$;
+
+-- Production still has the legacy requester-only counter. Normalize only this
+-- read-only RPC so its totals match the same scoped list in both environments.
+create or replace function public.get_my_surat_monitoring_stats(
+ p_date_from timestamptz default null,p_date_to timestamptz default null
+)
+returns table(total bigint,selesai bigint,proses bigint,ditolak bigint)
+language sql stable security definer set search_path='' as $$
+ with classified as (
+  select case
+   when surat.status in ('REJECTED','DITOLAK') or exists(select 1 from public.surat_signatures s
+    where s.surat_id=surat.id and s.status='REJECTED') then 'ditolak'
+   when surat.status in ('DONE','SELESAI') or (
+    exists(select 1 from public.surat_signatures s where s.surat_id=surat.id)
+    and not exists(select 1 from public.surat_signatures s where s.surat_id=surat.id and not coalesce(s.is_signed,false))) then 'selesai'
+   else 'proses' end bucket
+  from public.surat_registrasi surat where public.can_monitor_surat_progress(surat.id)
+   and (p_date_from is null or surat.created_at>=p_date_from)
+   and (p_date_to is null or surat.created_at<p_date_to)
+ ) select count(*)::bigint,count(*) filter(where bucket='selesai')::bigint,
+  count(*) filter(where bucket='proses')::bigint,count(*) filter(where bucket='ditolak')::bigint
+ from classified;
+$$;
 
 revoke all on function public.get_surat_monitoring_page(integer,integer,text,text,timestamptz,timestamptz) from public,anon;
 revoke all on function public.get_surat_monitoring_detail(uuid) from public,anon;
