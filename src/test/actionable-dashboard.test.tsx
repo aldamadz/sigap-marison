@@ -26,9 +26,9 @@ const bundle = (extra: Partial<ActionableDashboardData> = {}): ActionableDashboa
   summary: { active: 8, ready: 2, blocked: 1, upcoming: 3, returned: 2, completed: 4, rejected: 1, within_sla: 5, overdue: 1, completed_on_time: 3, completed_measured: 4 },
   count: 1, rows: [row], groups: [{ name: 'KC Solo', active: 1, overdue: 0 }, { name: 'KCP Karanganyar', active: 7, overdue: 1 }], ...extra,
 });
-const renderDashboard = () => {
+const renderDashboard = (path='/dashboard') => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(<MemoryRouter><QueryClientProvider client={client}><ActionableDashboard userId="actor-1" /></QueryClientProvider></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={client}><ActionableDashboard userId="actor-1" /></QueryClientProvider></MemoryRouter>);
 };
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe('actionable dashboard', () => {
@@ -51,10 +51,16 @@ describe('actionable dashboard', () => {
   it('selects signer view automatically only for actual approval assignments and separates upcoming work', async () => {
     mocks.get.mockResolvedValue(bundle({ has_signatures: true }));renderDashboard();
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Tanda tangan saya' })).toHaveAttribute('aria-selected','true'));
-    expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ scope:'signer',bucket:'ready' }));
+    await waitFor(()=>expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ scope:'signer',bucket:'ready' })));
     fireEvent.click(screen.getAllByRole('button', { name: 'Belum sampai tahap saya' })[0]);
     await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ bucket:'upcoming' })));
     expect(screen.getByRole('link', { name:row.title })).toHaveAttribute('href','/surat/inbox?task=approval%3Asig-1');
+  });
+  it('respects an explicit team notification destination even when the user has signing assignments',async()=>{
+    mocks.get.mockResolvedValue(bundle({has_signatures:true}));renderDashboard('/dashboard?scope=team');
+    await waitFor(()=>expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({scope:'team',bucket:'active'})));
+    expect(screen.getByRole('tab',{name:'Departemen / kantor'})).toHaveAttribute('aria-selected','true');
+    expect(mocks.get.mock.calls.some(([request])=>request.scope==='signer')).toBe(false);
   });
   it('team view has branch groups and server-side search, SLA drilldown, pagination', async () => {
     mocks.get.mockResolvedValue(bundle({ count:25 }));renderDashboard();await screen.findByText(row.title);
