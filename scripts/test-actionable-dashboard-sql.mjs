@@ -131,7 +131,7 @@ do $$begin begin perform get_actionable_dashboard();exception when insufficient_
 reset role;rollback;
 `;
 const run = (args,input='') => { const r=spawnSync('docker',args,{input,encoding:'utf8',timeout:120000});if(r.status!==0)throw Error(r.stderr+r.stdout);return r.stdout; };
-const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root','--health-cmd','pg_isready -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
+const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root','--health-cmd','pg_isready -h 127.0.0.1 -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
 try {
  let ready=false;for(let i=0;i<80;i++){if(run(['inspect','--format','{{.State.Health.Status}}',container]).trim()==='healthy'){ready=true;break;}Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw Error('Disposable PostgreSQL not ready');
