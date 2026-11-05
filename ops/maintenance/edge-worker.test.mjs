@@ -108,3 +108,32 @@ test('origin failures/tunnel 530 are branded 503, APIs JSON, no replay; security
   const failed=await createEdgeHandler(async()=>{throw Error('private host');}).fetch(request(),env);assert.equal(failed.status,503);assert.doesNotMatch(await failed.text(),/private host/);
   assert.equal((await createEdgeHandler().fetch(new Request('https://other.example/'),env)).status,404);
 });
+
+test('release notes are private until actual completion, expire at midnight WIB and survive a new schedule',async()=>{
+  const notes='Perbaikan: Notifikasi\nPenambahan fitur: Reminder';
+  const active={...schedule,startsAt:new Date(now-60000).toISOString(),whatsNew:notes};
+  const {env,map}=stored({revision:1,schedule:active});
+  const handler=createEdgeHandler(async()=>new Response('origin'));
+  const before=await (await handler.fetch(request('/api/maintenance/status'),env)).json();
+  assert(!before.release);assert(!('whatsNew' in before.schedule));
+  const command={action:'complete',expectedRevision:1,actorId:'00000000-0000-0000-0000-000000000001'};
+  assert.equal((await handler.fetch(signed(JSON.stringify(command)),env)).status,200);
+  const state=map.get('state');
+  assert.deepEqual(state.release.items,notes.split('\n'));assert.equal(state.release.id,active.id);
+  assert.equal(state.release.expiresAt,new Date(Date.parse(`${new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(state.release.completedAt))}T00:00:00+07:00`)+86400000).toISOString());
+  assert(publicState(state,Date.parse(state.release.expiresAt)-1).release);
+  assert(!publicState(state,Date.parse(state.release.expiresAt)).release);
+  const publish={action:'publish',expectedRevision:2,actorId:command.actorId,schedule:future};
+  assert.equal((await handler.fetch(signed(JSON.stringify(publish)),env)).status,200);
+  assert.deepEqual(map.get('state').release,state.release);
+});
+
+test('cancel, future completion, missing notes and elapsed estimate never publish release notes',async()=>{
+  for(const [action,s] of [['cancel',{...schedule,whatsNew:'Tidak diterbitkan'}],['complete',{...schedule,whatsNew:'Belum mulai'}],['complete',{...schedule,startsAt:new Date(now-60000).toISOString()}]]) {
+    const {env,map}=stored({revision:1,schedule:s});const handler=createEdgeHandler(async()=>new Response('origin'));
+    assert.equal((await handler.fetch(signed(JSON.stringify({action,expectedRevision:1,actorId:'00000000-0000-0000-0000-000000000001'})),env)).status,200);
+    assert(!map.get('state').release);
+  }
+  assert(!publicState({revision:1,schedule:{...schedule,whatsNew:'Masih berlangsung'}},Date.parse(schedule.endsAt)+1000).release);
+  for(const whatsNew of [123,{},'x'.repeat(1501),Array(11).fill('Baris').join('\n')])assert.throws(()=>validateSchedule({...future,whatsNew},now));
+});

@@ -5,6 +5,7 @@ import { AlertTriangle, CalendarClock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { WhatsNewNotice } from './WhatsNewNotice';
 import { maintenanceService, maintenanceDate, maintenanceLabels, noticeDismissalKey, maintenanceDay } from '@/services/maintenance.service';
 
 export function MaintenanceNotice({userId}:{userId:string}) {
@@ -23,10 +24,12 @@ export function MaintenanceNotice({userId}:{userId:string}) {
   useEffect(()=>{
     if(isFull && !recoveryPage)maintenanceService.openPage();
   },[isFull,recoveryPage]);
-  if(!data || !schedule || schedule.status!=='published')return null;
+  if(!data)return null;
+  const release=data.release && !recoveryPage ? <WhatsNewNotice key={`${userId}:${data.release.id}`} userId={userId} release={data.release} now={effectiveNow} /> : null;
+  if(!schedule || schedule.status!=='published')return release;
   const announceAt=Date.parse(`${new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(schedule.startsAt))}T00:00:00+07:00`)-86400000;
   const visible=effectiveNow>=announceAt && (schedule.impact==='full' || effectiveNow<Date.parse(schedule.endsAt!));
-  if(!visible)return null;
+  if(!visible)return release;
   const key=noticeDismissalKey(userId,data,effectiveNow);
   let hidden=false;try{hidden=localStorage.getItem(key)==='1';}catch{/* Storage may be disabled; dismissal remains session-only. */}
   const close=()=>{if(checked)try{localStorage.setItem(key,'1');}catch{/* Keep the modal dismissible even if storage is unavailable. */}setClosedKey(key);setChecked(false);};
