@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## MRN-29 Explicit Staging And Production Release (2026-11-05)
+
+- User authorized completing MRN-29 after Kas Kecil still reached Procurement.
+  Original765 was never merged/deployed; SEC-03 resolved its former audit blocker.
+- Current-main selective PR809 preserves returned-Unit safeguards while adding
+  the private persisted-form boundary to enqueue/claim/build/transport/recovery.
+  Only unsent ineligible active work may be skipped; posted evidence is immutable.
+- All KEU remains in SIGAP pending Finance gateway; no Ticketing integration,
+  historical receipt deletion, business resend or automatic approval. Focused
+  tests/PG17 pass; environment migration and rollout verification pending.
+
 ## MRN-802 Verified Returned Unit Revision Delivery (2026-11-04)
 
 - Main-based candidate; user authorized staging then production. Supersedes the

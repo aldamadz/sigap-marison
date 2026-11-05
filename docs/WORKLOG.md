@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-05 [Codex] MRN-29 Release Resumed After Explicit Authorization
+
+- User reports Kas Kecil still reaching Procurement and authorizes staging then
+  production. Diagnosis: original PR765 remains unmerged; its prior Zod audit
+  blocker was fixed separately, not a completed KEU release. Ticketing deferred.
+- Current-main candidate `codex/keu-procurement-release-20261105`, PR809, carries
+  only the existing MRN-29 boundary. Preserve both new routing authorization and
+  MRN-802 returned-Unit validation before logical/frozen transport construction.
+- Real PostgreSQL17 twice-applied migration and no-POST assertions pass. Focused
+  runtime/unit/file-link/routing tests66/66 pass after building shared outputs;
+  Unit fixtures allow only the new read-only form RPC, still rejecting all writes.
+  Lint, typecheck, frontend/backend builds and high/critical runtime audit pass.
+  Four pre-existing moderate runtime dependency records remain; no lock changes.
+- Remaining: audit current environment ledgers, transaction rollback rehearsals,
+  exact integration CI, selected migration, staging runtime acceptance, selective
+  main promotion and staging ancestry, production rollout/acceptance. No live
+  migration, dispatch cleanup, approval, vendor POST or resend at this checkpoint.
+- PROJECT_CONTEXT remains absent; no shared document structure change.
+
 ## 2026-11-04 [Codex] MRN-802 Verified Returned Unit Revision Dispatch
 
 - Active on isolated main-based `codex/unit-returned-revision-802`, Issue #802.

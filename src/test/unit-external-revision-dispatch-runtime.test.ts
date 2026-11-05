@@ -41,7 +41,11 @@ describe("Unit revision production pre-POST boundary", () => {
       };
       return query;
     });
-    runtime.setDomainRuntimeDependenciesForTest({ supabase: { from, rpc } });
+    runtime.setDomainRuntimeDependenciesForTest({ supabase: { from, rpc: async (name: string, args: unknown) => {
+      if (name !== "marison_procurement_routing_block") return rpc();
+      expect(args).toEqual({ p_surat_id: job.surat_id });
+      return { data: null, error: null };
+    } } });
     const request: any = Readable.from([Buffer.from(JSON.stringify({ leaseToken: lease,
       transport: frozen, ...(frozen ? { materializationAttemptId: attempt } : {}) }))]);
     request.method = "POST";
