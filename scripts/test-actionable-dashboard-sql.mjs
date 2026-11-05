@@ -175,7 +175,8 @@ try {
    create table surat_linked_documents(parent_surat_id uuid);create table holidays(holiday_date date);
    insert into department_kpi_configs values(tid(2),true,120,array[1,2,3,4,5],'08:00','17:00','12:00','13:00','Asia/Jakarta');`;
   const kpi=read('supabase/migrations/20260706170000_pause_sla_during_process_revision.sql');
-  const count=monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('),monitoringRecovery.indexOf('create or replace function public.get_user_active_sla_breach_count('));
+  let count=monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('),monitoringRecovery.indexOf('create or replace function public.get_user_active_sla_breach_count('));
+  if(process.argv.includes('--live-shape'))count=count.replaceAll('where ss.user_id','WHERE ss.user_id').replaceAll('where not coalesce','WHERE NOT COALESCE');
   const policy=read('supabase/migrations/20261105063000_department_receiving_periods.sql');
   const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],setup
    +kpi.slice(kpi.indexOf('create or replace function public.get_department_kpi_summary('))

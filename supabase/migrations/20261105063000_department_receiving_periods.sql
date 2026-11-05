@@ -178,11 +178,11 @@ begin
   select pg_get_functiondef(p.oid) into strict definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname=name;
   if position('ss.available_at is null or ss.available_at<=now()' in definition)>0 then continue;end if;
   anchor:=case when name='is_inbox_task_active' then 'where ss.id = p_signature_id' else 'where ss.user_id = p_user_id' end;
-  if position(anchor in definition)=0 then raise exception 'Unknown inbox intake query: %',name;end if;
-  definition:=replace(definition,anchor,anchor||' and (ss.available_at is null or ss.available_at<=now())');
+  if position(anchor in lower(definition))=0 then raise exception 'Unknown inbox intake query: %',name;end if;
+  definition:=regexp_replace(definition,replace(anchor,'.','\.'),anchor||' and (ss.available_at is null or ss.available_at<=now())','gi');
   if name<>'is_inbox_task_active' then
-   if position('where not coalesce(ss.is_signed, false)' in definition)=0 then raise exception 'Unknown verifier intake query: %',name;end if;
-   definition:=replace(definition,'where not coalesce(ss.is_signed, false)','where (ss.available_at is null or ss.available_at<=now()) and not coalesce(ss.is_signed, false)');
+   if position('where not coalesce(ss.is_signed, false)' in lower(definition))=0 then raise exception 'Unknown verifier intake query: %',name;end if;
+   definition:=regexp_replace(definition,'where not coalesce\(ss.is_signed, false\)','where (ss.available_at is null or ss.available_at<=now()) and not coalesce(ss.is_signed, false)','gi');
   end if;
   execute definition;
  end loop;
