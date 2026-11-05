@@ -1,5 +1,37 @@
 # Worklog
 
+## 2026-11-05 [Codex] CAL-10 / OPS-18 / NTF-06 / SLA-02 Staging Rollout
+
+- Supersedes the candidate rollout status below. PR828 merged sourcecf200be to
+  staging3e66a9ea21804521be51a20613bfd9a0e0eb08e4. Official deployment42008023544
+  quality/deploy both SUCCESS; public health/live/ready/root and exact SHA passed.
+  App3bfa4e59150d is healthy/restart0; all four staging worker/API IDs preserved.
+- Only20261105060000/061000/062000/063000 applied to actual staging, after exact
+  lineage audit and twice-applied rollback rehearsal. Ledger247->251, five new
+  tables verified. Normalized package SHA256
+  77ede672b187e46de6ed96fbbe190cecedd2ebeca8f9dcb0959f65867e922af5.
+  Business fingerprints, canonical guards and existing histories retained;
+  no policy/signature/notification backfill or default receiving rule inserted.
+- Existing staging Cloudflare maintenance worker updated in place, retaining
+  bindings/public key/control namespace/revision17/completed schedule history.
+  Edge versionb1c56d1c284249cda58e844c3da9638f supports completion release notes;
+  no new live maintenance/release event created for acceptance.
+- Hosted affected gate504tests/45files passed, plus lint/typecheck/build/audit
+  high-critical gate. Real PG17 covers legacy calendar suites, organization RLS,
+  outbox concurrency, release dismissal ownership and monthly receiving/clock
+  guards. Live rollback-only checks verified3actual active peer examples with
+  zero persistent business writes. Twelve component screenshots cover receiving,
+  settings/release, desktop/mobile and light/dark without overflow or JS errors.
+- Live Tester P3 saved notification preferences successfully. Push jobs enabled
+  ONLY for this one tester, not all users; no test push sent, zero cycle warnings.
+  Embedded-browser push activation failed; Chrome comparison requested. Follow-up
+  PR830 waits for an active worker and reports provider failure safely. Real OS
+  popup/background-click acceptance remains open, not inferred from mocks/CI.
+  Live post-maintenance modal event acceptance also remains open.
+- No production promotion authorized for this package. Production stayedf38df45,
+  readiness200. No submission/approval/external POST, worker restart, account
+  organization change or secret disclosure. PROJECT_CONTEXT remains absent.
+
 ## 2026-11-05 [Codex] SLA-02 Monthly Receiving Candidate
 
 - Issue825; main-based owned `codex/department-receiving-periods-20261105`.

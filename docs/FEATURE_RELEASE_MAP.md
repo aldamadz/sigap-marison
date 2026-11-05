@@ -1,5 +1,21 @@
 # SIGAP Feature and Release Map
 
+## Department Package Staging Runtime Verified (2026-11-05, Issue827)
+
+- CAL-10, OPS-18, NTF-06 and SLA-02 deployed together through PR828 at live
+  staging3e66a9e, official run42008023544 SUCCESS, readiness200. Four exact forward
+  migrations20261105060000/061000/062000/063000 applied after lineage/repeat
+  rehearsal; ledger251/five tables verified. No historical business backfill.
+- OPS-18 staging edge updated with existing configuration/state retained. Active
+  peer scope checked on3actual examples; settings save checked as Tester P3.
+  Package CI504tests passed plus real PostgreSQL/security and responsive checks.
+- Acceptance incomplete: actual embedded-browser push activation failed; focused
+  first-worker readiness fix PR830 and normal Chrome comparison pending. Push
+  background jobs are restricted to Tester P3 only, not a general staging rollout.
+  Real completion-event modal acceptance also pending; synthetic tests passed.
+- Production not authorized or changed. Preserve independent source branches
+  for selective future promotion; never merge the entire staging branch to main.
+
 ## SLA-02 Department Receiving Periods (2026-11-05)
 
 - Issue825, main-based staging-only candidate. Regular monthly cutoff/opening
