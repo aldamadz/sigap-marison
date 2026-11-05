@@ -7,14 +7,14 @@ const NOW = Date.UTC(2026, 10, 3, 5, 30, 0);
 const rows = (outcome = 'up', checkedAt = NOW - 15000) => ALL_COMPONENTS.map(component =>
   ({ service: component.id, checked_at: checkedAt, outcome, latency_ms: 120 }));
 
-test('reports all four healthy services and sampled availability', () => {
+test('reports all five healthy services and sampled availability', () => {
   const data = buildStatus({
     recent: rows(),
     daily: ALL_COMPONENTS.map(({ id: service }) => ({ service, day: '2026-11-03',
       up_count: 9, down_count: 1, degraded_count: 0, first_at: NOW - 600000 })),
   }, NOW);
   assert.equal(data.overall, 'up');
-  assert.equal(data.services.length, 4);
+  assert.equal(data.services.length, 5);
   assert.equal(data.services[0].availability, '90.00%');
   assert.equal(data.services[0].history.length, 30);
   assert.equal(data.services[0].history.at(-1).status, 'down');
@@ -62,7 +62,7 @@ test('D1 queries load recent, daily, incident and maintenance observations', asy
   const db = { prepare(sql) { queries.push(sql); const statement = { all: async () => ({ results: queries.length === 1 ? rows() : [] }) }; statement.bind = () => statement; return statement; } };
   const status = await loadStatus(db, NOW);
   assert.equal(queries.length, 6);
-  assert.equal(status.services.length, 4);
+  assert.equal(status.services.length, 5);
 });
 
 test('SIGAP full maintenance stays visible past its estimate and flags stale sync', () => {

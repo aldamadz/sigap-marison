@@ -1,5 +1,22 @@
 # Marison Cloud public status
 
+## 2026-11-05 [Codex] CCTV Public Availability
+
+The existing SIGAP components remain active; CCTV is a fifth top-level component.
+Its one-minute Cloudflare probe checks the branded public login at
+`https://cctv.marisoncloud.com/`. No JSON health endpoint is available, so the
+scope explicitly excludes camera/recording health. No credentials, streams,
+camera inventory or recordings are requested. HTTP/network/title failures are
+DOWN; missing or stale samples are unknown. Prior days are not backfilled UP.
+
+Apply `migrations/20261105090000_cctv_component.sql` as ONE atomic D1 batch before
+deploying page/probe bundles. It expands the component CHECK constraints through
+verified copy/swap; every old row/column is compared before replacing the tables.
+Repeated application preserves samples and summaries, including CCTV. Keep the
+original SIGAP history, telemetry allowlist, cron, bindings and legal routes.
+The existing RSS/Atom, incidents and maintenance service selection include CCTV.
+Rollback uses previous Worker version IDs; keep the expanded compatible schema.
+
 ## 2026-11-04 [Codex] SIGAP Component Monitoring
 
 This update supersedes the original four-domain monitoring scope below. The

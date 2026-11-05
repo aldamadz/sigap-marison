@@ -65,7 +65,9 @@ async function check(url, kind, service, fetchImpl) {
     latencyMs = Math.round(performance.now() - started);
     if (body === null) return { ok: false, latencyMs, httpStatus: 200, reason: 'large_response' };
     if (kind === 'page') {
-      const ok = contentType.includes('text/html') && /<html[\s>]/i.test(body);
+      const title = /<title[^>]*>([^<]*)<\/title>/i.exec(body)?.[1] || '';
+      const ok = contentType.includes('text/html') && /<html[\s>]/i.test(body)
+        && (!service.pageTitle || title.toLowerCase().includes(service.pageTitle.toLowerCase()));
       return { ok, latencyMs, httpStatus: 200, reason: ok ? null : 'invalid_page' };
     }
     let parsed;
@@ -83,6 +85,11 @@ async function check(url, kind, service, fetchImpl) {
 }
 
 export async function probeService(service, fetchImpl = fetch, checkedAt = Date.now()) {
+  if (!service.health) {
+    const page = await check(`${service.url}/`, 'page', service, fetchImpl);
+    return { service: service.id, slot: Math.floor(checkedAt / 60000), checkedAt,
+      outcome: page.ok ? 'up' : 'down', latencyMs: page.latencyMs, httpStatus: page.httpStatus, reason: page.reason };
+  }
   const [page, health] = await Promise.all([
     check(`${service.url}/`, 'page', service, fetchImpl),
     check(`${service.url}${service.health}`, 'health', service, fetchImpl),

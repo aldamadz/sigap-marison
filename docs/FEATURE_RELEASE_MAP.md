@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## OPS-19 CCTV Public Status (2026-11-05, Issue #807)
+
+- Fifth top-level component on the independent status Worker. Public login
+  availability only, no camera/recording claim; current UP/DOWN, sampled history
+  and existing RSS/Atom/operator incident support. Unknown data stays unknown.
+- Forward status-D1 migration20261105090000 preserves every historical row while
+  expanding the component allowlist.55 scoped tests and actual staging UP/API/feed
+  checks passed. Production pending. Keep cron/bindings, no SIGAP application deploy.
+
 ## OPS-18 Maintenance History (2026-11-04, Issue #783)
 
 - Released status-only staging and public production: source6055de0/fc869be,
