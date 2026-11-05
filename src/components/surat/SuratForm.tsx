@@ -5,6 +5,7 @@ import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
 import { isKeu10FinalCandidate } from "@/features/surat/registration/lib/keu10-workflow";
 import { normalizeKeu10Config } from "@/features/surat/registration/lib/keu10-config";
 import { isContextualMakerStep, isFirstMakerCandidate } from "@/features/surat/registration/lib/first-maker-candidates";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { isRelatedBranchManager } from "@/features/surat/registration/lib/branch-manager-candidates";
 import { getBranchOfficerCandidates } from "@/features/surat/registration/lib/branch-officer-candidates";
 import { useSearchParams } from "react-router";
@@ -1425,7 +1426,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     if (tokens.length === 0) return eligibleUsers;
 
     return eligibleUsers.filter((u: MasterRecord) => {
-      const haystack = normalizeNameSearch(u.full_name || "");
+      const office = master.offices.find(item => item.id === u.office_id);
+      const department = master.depts.find(item => item.id === u.department_id);
+      const haystack = normalizeNameSearch([u.full_name, u.job_title, office?.name, department?.name].filter(Boolean).join(" "));
       return tokens.every(token => haystack.includes(token));
     });
   };
@@ -3911,26 +3914,22 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                       {allowsOptionalProject ? "Proyek Cabang (opsional)" : requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
                     </Label>
                     {allowsOptionalProject || (hasRegisteredProjectCandidates && projectSelectionOptions.length > 0) ? (
-                      <Select disabled={!!generatedNoSurat} value={formData.project_id || (allowsOptionalProject ? "without-project" : "")}
-                        onValueChange={value => handleProjectChange(value === "without-project" ? "" : value)}>
-                        <SelectTrigger className="h-11 border-primary/40 bg-primary/5">
-                          <SelectValue placeholder="Pilih Proyek..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allowsOptionalProject && <SelectItem value="without-project">Tanpa proyek</SelectItem>}
-                          {projectSelectionOptions.map((p: MasterRecord) => {
+                      <SearchableSelect disabled={!!generatedNoSurat} label={allowsOptionalProject ? "Proyek Cabang (opsional)" : requiresMarisonProject ? "Proyek Tujuan" : "Proyek Cabang"}
+                        value={formData.project_id || (allowsOptionalProject ? "without-project" : "")}
+                        onValueChange={value => handleProjectChange(value === "without-project" ? "" : value)}
+                        className="h-11 border-primary/40 bg-primary/5" placeholder="Pilih Proyek..."
+                        searchPlaceholder="Cari nama, kode proyek, atau kantor..." emptyText="Proyek tidak ditemukan."
+                        options={[
+                          ...(allowsOptionalProject ? [{ value: "without-project", label: "Tanpa proyek" }] : []),
+                          ...projectSelectionOptions.map((p: MasterRecord) => {
                             const projectOffice = master.offices?.find((office: MasterRecord) => office.id === p.office_id);
                             const projectLabel = p.code ? `${p.code} - ${p.name}` : p.name;
-                            return (
-                              <SelectItem key={p.id} value={p.id}>
-                                {requiresMarisonProject && isPusatSelected && projectOffice?.name
-                                  ? `${projectLabel} — ${projectOffice.name}`
-                                  : projectLabel}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
+                            return { value: p.id, label: requiresMarisonProject && isPusatSelected && projectOffice?.name
+                              ? `${projectLabel} - ${projectOffice.name}` : projectLabel,
+                              keywords: [projectOffice?.name || ""] };
+                          }),
+                        ]}
+                      />
                     ) : requiresMarisonProject && !shouldUseDefaultBranchProject ? (
                       <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                         <div className="text-sm font-medium">Belum ada proyek yang siap digunakan</div>
@@ -4228,7 +4227,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                                 <CommandInput
                                   value={signerSearch[i] || ""}
                                   onValueChange={(value) => setSignerSearch(prev => ({ ...prev, [i]: value }))}
-                                  placeholder="Cari nama depan, tengah, atau belakang..."
+                                  placeholder="Cari nama, jabatan, departemen, atau kantor..."
+                                  aria-label="Cari penandatangan"
                                 />
                                 <CommandList className="max-h-[260px]">
                                   <CommandEmpty>User tidak ditemukan.</CommandEmpty>
