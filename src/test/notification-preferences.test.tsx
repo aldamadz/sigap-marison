@@ -25,4 +25,14 @@ describe('self-service notification settings',()=>{
   expect(await screen.findByText('Pengaturan belum dapat disimpan. Coba lagi.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Aktifkan notifikasi browser'}));expect(await screen.findByText('Izin notifikasi browser belum diberikan.')).toBeInTheDocument();
  });
+ it.each([
+  ['worker_not_ready','Layanan notifikasi browser belum siap. Muat ulang halaman, lalu coba lagi.'],
+  ['provider_unavailable','Layanan push browser tidak dapat dihubungi. Coba melalui Chrome atau Edge, lalu periksa koneksi Anda.'],
+ ])('explains %s without presenting activation as successful',async(reason,message)=>{
+  h.subscribe.mockResolvedValue({enabled:false,reason});mount();
+  fireEvent.click(await screen.findByRole('button',{name:'Aktifkan notifikasi browser'}));
+  expect(await screen.findByText(message)).toBeInTheDocument();
+  expect(screen.queryByText('Notifikasi browser aktif')).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Aktifkan notifikasi browser'})).toBeEnabled();
+ });
 });
