@@ -31,6 +31,7 @@
   `package-lock.json` changes, including the SEC-04 staging deploy.
 - No product runtime, database, migration, secret or deployment change; the
   edit is limited to test expectations. Status: staging candidate.
+
 ## SUR-39 Signer Organization Progress Monitoring (2026-11-05, Issue812)
 
 - Explicitly authorized staging then production. Read-only Status Pengajuan and

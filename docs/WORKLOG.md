@@ -77,6 +77,7 @@
 - No product runtime, database, migration, secret, outbound call or deployment
   change. Staging deploy and smoke test remain the next step; production
   untouched.
+
 ## 2026-11-05 [Codex] SUR-39 Signer Organization Progress Scope
 
 - Issue812, main-based `codex/signer-scope-monitoring-20261105`; user explicitly
