@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-05 [Codex] MRN-29 Staging Database Applied, Runtime Pending
+
+- IntegrationPR810 merged8b57f3e after hosted Quality41966316475 SUCCESS;
+  selectivePR809 targets main and must wait for live staging acceptance. Old765
+  closed as superseded, not reported as a successful historical deployment.
+- Selected migration20261103160000 SHA256
+  e8bc7a89cf9ea8fc526532cb0b4cf9c4eac4f0f4f7b7320621f58dd9cec59c07
+  rehearsed with rollback on both real schemas and applied only to staging.
+  Exact source-related selection passes171 tests/20 files; no full-suite bypass.
+- Protected SUR30 preflight comparison proves each current legacy ledger is
+  unchanged except the already authorized20261104160000. Stage245/prod242
+  versions before this change; no repair/include-all/replay of historical drift.
+  Stage now246. Routing: stage35PGD allowed,1KEU and6HRD blocked; production
+  rehearsal62PGD allowed,31KEU and10HRD blocked. Private service-only ACL passes.
+- Production read-only evidence confirms14 KEU receipts succeeded today around
+  09:13-09:17WIB. Preserve all22 historical KEU dispatches, payloads and receipts;
+  no external cancellation/deletion or repeated POST authorized. No active unsent
+  ineligible job at preflight. Transaction assertions preserve document/signature/
+  revision fingerprints and allow only specified unsent dispatch retirement.
+- Remaining: staging app deployment41966678302 with selected migration ACK,
+  compiled no-send acceptance, mainCI/promotion, ancestry sync and production.
+
+## 2026-11-05 [Codex] MRN-29 Release Resumed After Explicit Authorization
+
+- User reports Kas Kecil still reaching Procurement and authorizes staging then
+  production. Diagnosis: original PR765 remains unmerged; its prior Zod audit
+  blocker was fixed separately, not a completed KEU release. Ticketing deferred.
+- Current-main candidate `codex/keu-procurement-release-20261105`, PR809, carries
+  only the existing MRN-29 boundary. Preserve both new routing authorization and
+  MRN-802 returned-Unit validation before logical/frozen transport construction.
+- Real PostgreSQL17 twice-applied migration and no-POST assertions pass. Focused
+  runtime/unit/file-link/routing tests66/66 pass after building shared outputs;
+  Unit fixtures allow only the new read-only form RPC, still rejecting all writes.
+  Lint, typecheck, frontend/backend builds and high/critical runtime audit pass.
+  Four pre-existing moderate runtime dependency records remain; no lock changes.
+- Remaining: audit current environment ledgers, transaction rollback rehearsals,
+  exact integration CI, selected migration, staging runtime acceptance, selective
+  main promotion and staging ancestry, production rollout/acceptance. No live
+  migration, dispatch cleanup, approval, vendor POST or resend at this checkpoint.
+- PROJECT_CONTEXT remains absent; no shared document structure change.
+
 ## 2026-11-04 [Codex] MRN-802 Verified Returned Unit Revision Dispatch
 
 - Active on isolated main-based `codex/unit-returned-revision-802`, Issue #802.
@@ -223,6 +264,54 @@
 - Pending integration, full dependency-change CI, AUTH-09 validation and staging
   rollout/smoke. Source node_modules junction was left untouched; testing uses an
   isolated build folder rather than mutating the user's shared dependency tree.
+## 2026-11-03 [Codex] MRN-29 Implemented, Release Held By Existing Security Gate
+
+- Source877ea0a on `fix/keu-procurement-outbound-boundary`; staging integration
+  PR#765 (PR#764 superseded because of a documentation-only merge conflict).
+  All KEU blocks before preparation/materialization/recovery/POST; only trusted
+  PGD is eligible. Historical stored payload remains viewable. Poll cleanup
+  handles newly ineligible unsent leases without starving remaining PGD work.
+- Clean Linux lint, full typecheck, frontend/backend build and 83 focused tests
+  passed. Additional offline BFF acceptance3/3 passes, including frozen KEU
+  rejection409 with zero file mint/storage read. CI41607935629 affected quality
+  gate passed after its acceptance mock was updated; final audit failed.
+- Existing production-dependency audit:1high Zod (<4.6.6, suggested major4.6.7),
+  5moderate,1low. No dependency/lock change was made by this feature. Do not
+  merge/deploy by bypassing audit; a separately scoped compatibility/security
+  fix is required before rollout. Latest SQL-only follow-up passed real PG17.
+- Staging Management API preflight read35PGD/1KEU1/6HRD documents,42surat and
+  179signatures. Ledger audit: only new version20261103160000 is local-only;
+  11older remote-only entries (including staging AUTH09) were inventoried, no
+  repair/include-all used. Active function definitions backed up privately.
+  Both migration rehearsals used BEGIN/ROLLBACK and passed (7non-PGD blocked).
+  No live migration/queue/approval update, app deploy, vendor POST or resend.
+- Runtime staging remainsd33970e412eedf2a2a5ecec66bc637ba1c053a91; production
+  unchanged and not authorized by this request. Remaining: resolve the existing
+  audit blocker, rerun exact integration gates, apply selected staging migration,
+  deploy and accept staging; production needs explicit authorization.
+
+
+## 2026-11-03 [Codex] MRN-29 Procurement Boundary In Progress / Issue #411
+
+- Owner clarified all KEU ends in SIGAP pending Finance gateway; only PGD
+  dispatches to Procurement. Claimed on Issue #411; branch from current main,
+  default staging only. Production not changed or authorized by this request.
+- New private SQL routing helper uses persisted form numbers with KEU veto and
+  strict PGD allowlist; category alone cannot grant outbound. Gates enqueue,
+  claim, preparation/reopen/replacement/POST updates. Legacy active pre-POST
+  jobs are skipped without deleting evidence; posted history remains unchanged.
+- Backend checks canonical routing before building or materializing frozen
+  payloads and before latest/Postman/recovery/replacement; stored evidence
+  remains readable. Removed the now-invalid KEU-to-Procurement item conversion.
+- PostgreSQL17 disposable test passes twice-applied migration and assertions.
+  Local lint passes. Parent node_modules link has stale @sigap/shared outputs,
+  causing unrelated local typecheck/Unit test failures; clean Linux gate is
+  required before any rollout. One stale source-string assertion was updated
+  to the existing four-argument file-link call (not a production code change).
+- TOS impact: this enforces the existing purpose-based integration boundary,
+  adds no new collection, recipient, consent or user obligation. No legal text
+  change needed. PROJECT_CONTEXT is still unavailable.
+
 
 ## 2026-10-26 [Codex] SUR-38 production release completed / Issue #751
 

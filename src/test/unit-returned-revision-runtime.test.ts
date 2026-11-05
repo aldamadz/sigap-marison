@@ -56,7 +56,11 @@ async function request({ unsigned = false, foreignUnit = false, dataError = fals
     return query;
   });
   const runtime = await import("../../backend/src/domain-runtime.ts");
-  runtime.setDomainRuntimeDependenciesForTest({ supabase: { from, rpc } });
+  runtime.setDomainRuntimeDependenciesForTest({ supabase: { from, rpc: async (name: string, args: unknown) => {
+    if (name !== "marison_procurement_routing_block") return rpc();
+    expect(args).toEqual({ p_surat_id: job.surat_id });
+    return { data: null, error: null };
+  } } });
   const req: any = Readable.from([Buffer.from(JSON.stringify({ leaseToken: lease, transport: true, materializationAttemptId: attempt }))]);
   req.method = "POST"; req.url = `/api/internal/marison/outbound/${job.id}/build`;
   req.headers = { host: "sigap.test", "content-type": "application/json", "x-internal-outbound-token": badToken ? "bad-token" : internalToken };
