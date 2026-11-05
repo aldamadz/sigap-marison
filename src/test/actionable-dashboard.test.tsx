@@ -54,7 +54,7 @@ describe('actionable dashboard', () => {
     await waitFor(()=>expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ scope:'signer',bucket:'ready' })));
     fireEvent.click(screen.getAllByRole('button', { name: 'Belum sampai tahap saya' })[0]);
     await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ bucket:'upcoming' })));
-    expect(screen.getByRole('link', { name:row.title })).toHaveAttribute('href','/surat/inbox?task=approval%3Asig-1');
+    expect(await screen.findByRole('link', { name:row.title })).toHaveAttribute('href','/surat/inbox?task=approval%3Asig-1');
   });
   it('respects an explicit team notification destination even when the user has signing assignments',async()=>{
     mocks.get.mockResolvedValue(bundle({has_signatures:true}));renderDashboard('/dashboard?scope=team');
