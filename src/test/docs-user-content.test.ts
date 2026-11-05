@@ -107,9 +107,9 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches documentation content after REC-03 parent photo updates", () => {
+  it("matches documentation content after SUR-39 signer monitoring scope", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("581c4fd4a6cdacbca43eee7be432bd8764c75a6d61e99a39b11a6efb85749fb3");
+      .toBe("cdb27df963da4bbf9e8587fa7b2b7e88bb8d95c2051fe013bc1d497d126bc24a");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

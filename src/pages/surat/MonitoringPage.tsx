@@ -210,8 +210,9 @@ const MonitoringPage = () => {
   const selectedSignatures = getSortedApprovalSignatures(selectedSurat);
 
   const { data: monitoringStats } = useQuery({
-    queryKey: ['surat-stats-dashboard'],
+    queryKey: ['surat-stats-dashboard', user?.id],
     queryFn: () => suratMonitoringService.getMyStats(),
+    enabled: Boolean(user?.id),
     staleTime: 30_000,
   });
 
