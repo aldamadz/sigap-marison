@@ -31,6 +31,17 @@
   `package-lock.json` changes, including the SEC-04 staging deploy.
 - No product runtime, database, migration, secret or deployment change; the
   edit is limited to test expectations. Status: staging candidate.
+## MRN-29 Explicit Staging And Production Release (2026-11-05)
+
+- User authorized completing MRN-29 after Kas Kecil still reached Procurement.
+  Original765 was never merged/deployed; SEC-03 resolved its former audit blocker.
+- Current-main selective PR809 preserves returned-Unit safeguards while adding
+  the private persisted-form boundary to enqueue/claim/build/transport/recovery.
+  Only unsent ineligible active work may be skipped; posted evidence is immutable.
+- All KEU remains in SIGAP pending Finance gateway; no Ticketing integration,
+  historical receipt deletion, business resend or automatic approval. Focused
+  tests/PG17 pass; environment migration and rollout verification pending.
+
 ## MRN-802 Verified Returned Unit Revision Delivery (2026-11-04)
 
 - Main-based candidate; user authorized staging then production. Supersedes the
@@ -171,6 +182,30 @@
   lint/typecheck/build. Release held pending hosted CI; eight full-suite failures
   reproduce on the Zod3 main baseline (#769). Documentation findings tracked in
   #768. No live staging or production change; see dated validation worklog.
+## MRN-29 Procurement Form Boundary (2026-11-03, Issue #411)
+
+- 2026-11-03 [Codex] IMPLEMENTED, NOT LIVE. PR#765 is the staging integration;
+  source877ea0a. Linux83 focused tests/lint/typecheck/frontend/backend build,
+  plus offline BFF3tests and PostgreSQL17 pass. Staging migration rehearsal
+  rolled back successfully. CI affected quality passed; audit fails on existing
+  high Zod dependency. No live migration/deploy; do not bypass security gate.
+
+- Owner correction: only PGD forms may dispatch to Procurement. All KEU forms
+  belong to Finance; until its gateway exists, completion ends inside SIGAP.
+- Candidate branch `fix/keu-procurement-outbound-boundary` from main; staging
+  target only. Form identity is resolved from persisted snapshots/master form,
+  not editable category. Missing/conflicting identity fails closed.
+- Forward migration20261103160000 gates enqueue, claim and DB mutation/POST
+  boundaries, including recovery/replacement. Only pre-POST active jobs without
+  vendor responses/references are skipped; historical payloads and receipts stay.
+- Backend gates payload construction, frozen transport, latest/Postman preview,
+  and recovery. Stored payload evidence remains viewable. Approval status is
+  unchanged; no Finance endpoint, new send or automatic resend is introduced.
+- Real disposable PostgreSQL17 assertions pass, including rerun, all four PGD
+  categories, KEU1/10/future forms, missing/conflicting identities, old queue,
+  immutable posted evidence, reopen/replacement and cached-POST rejection.
+  Live staging rollout and production authorization are still pending.
+
 
 ## SEC-01 DOMPurify Patch (2026-10-23, Issue #727)
 
