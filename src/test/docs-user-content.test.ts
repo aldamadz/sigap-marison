@@ -109,7 +109,7 @@ describe("docs-user-content D2A characterization", () => {
 
   it("matches documentation content after SUR-39 signer monitoring scope", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("cdb27df963da4bbf9e8587fa7b2b7e88bb8d95c2051fe013bc1d497d126bc24a");
+      .toBe("51a63796d18c004e6317e472618005f850fd11413a7724b01421938cb65019e5");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

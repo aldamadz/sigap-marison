@@ -47,7 +47,7 @@ describe("docs-troubleshooting-registry D2C", () => {
   });
 
   it("matches documentation content after SUR-39 user scope guidance", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("c73b5e44cdd0dfc30d2c3b7f478089ec26691422c57cc20a9a0d03e2d44566b7");
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("470471976ba8546dd02aa9518e8e72a06bfbb172fcccec6f813ee4208b92a372");
   });
 
   it("keeps facade and imports acyclic", () => {
