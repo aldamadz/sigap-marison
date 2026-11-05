@@ -149,7 +149,7 @@ begin
    where p.is_active is true and p.deleted_at is null and (p_audience is null or p.id=any(p_audience))
   ), working as (
    select u.*,(p_at at time zone tz)::date as work_day,(p_at at time zone tz)::time as work_clock from users u
-   where extract(dow from p_at at time zone tz)::integer=any(u.work_days)
+   where extract(isodow from p_at at time zone tz)::integer=any(u.work_days)
     and (p_at at time zone tz)::time>=work_start and (p_at at time zone tz)::time<work_end
     and not((p_at at time zone tz)::time>=break_start and (p_at at time zone tz)::time<break_end)
     and not exists(select 1 from public.holidays h where h.holiday_date=(p_at at time zone tz)::date)

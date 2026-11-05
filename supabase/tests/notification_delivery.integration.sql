@@ -89,5 +89,8 @@ select check_ok((select count(*)=1 from notifications where user_id=tid(4) and d
 select check_ok(not exists(select 1 from notification_push_deliveries d join notifications n on n.id=d.notification_id where n.data->>'category'='team_digest' and d.user_id=tid(4)),'team popup default remains off');
 select check_ok(generate_notification_reminders_at('2026-11-05T09:01:00+07:00',array[tid(4)])=0,'team digest hourly dedupe');
 select check_ok(generate_notification_reminders_at('2026-11-05T09:00:00+07:00',array[tid(6)])=0,'sibling KCP receives no digest');
+update department_kpi_configs set work_days=array[7];
+insert into work_calendar_entries(id,owner_id,work_date,title,starts_at) values(tid(940),tid(2),'2026-11-08','Sunday shift','2026-11-08T08:10:00+07:00');
+select check_ok(generate_notification_reminders_at('2026-11-08T08:00:00+07:00',array[tid(2)])>=1,'ISO Sunday seven matches configured workdays');
 select 'NTF06 delivery, planner and authorization assertions passed';
 rollback;
