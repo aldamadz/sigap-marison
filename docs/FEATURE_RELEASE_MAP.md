@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## OPS-19 CCTV Monitoring Released (2026-11-05, Issue #807)
+
+- Production status.marisoncloud.com now includes CCTV after status-staging
+  acceptance. Actual scheduled samples UP/HTTP200, one-minute interval; initial
+  insufficient history is explicit.55 tests/scoped lint/build/syntax passed.
+- D1 forward migration20261105090000 preserves all old observations and summaries.
+  Bindings, cron, SIGAP monitors and legal/maintenance/feed routes preserved.
+- Source3e5068e, independent status PR#808; no SIGAP app/DB/worker/CCTV deployment.
+  Scope is public login availability only, not individual camera/recording health.
+
 ## OPS-19 CCTV Public Status (2026-11-05, Issue #807)
 
 - Fifth top-level component on the independent status Worker. Public login

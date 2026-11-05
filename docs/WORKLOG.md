@@ -1,5 +1,29 @@
 # Worklog
 
+## 2026-11-05 [Codex] OPS-19 Completed On Public Production
+
+- Source3e5068e / PR#808 targets the existing independent status source, not SIGAP
+  main/staging. CCTV now appears on status.marisoncloud.com with actual scheduled
+  UP/HTTP200 samples. Two production samples observed, daily count2/no failures;
+  initial availability correctly says insufficient data rather than invented99.99%.
+- Status staging page/API and production page/API/RSS/Atom200; visible CCTV domain
+  and explicit scope excluding camera/recording health. Existing SIGAP components
+  remain present. Probe public root404, authenticated telemetry allowlist unchanged.
+  Existing cron remains once per minute and all four Worker binding sets preserved.
+- Atomic D1 batch migration applied staging then production; copy guards compare
+  every old observation/summary column before swap. Both schemas include CCTV and
+  no temporary tables remain. Old earliest observations retained; no history reset,
+  maintenance/incident rewrite, backfilled uptime or business data changes.
+- Production probe version4f73b14a-45d3-409c-97d7-948a46975b48;
+  pageb651330a-ab8c-44bf-ad83-cc0d801835ad. Prior versions/D1 Time Travel bookmarks
+  retained in ignored operator evidence. Rollback Worker versions only by default;
+  keep compatible expanded schema/history. No restore or rollback performed.
+-55 targeted tests and scoped lint/build/syntax passed. Global old-branch Zod
+  advisory remains as documented below, not a standalone Worker dependency or a
+  new issue. No SIGAP/CCTV deploy, process restart, camera access or secret change.
+  No remaining blocker. Public observations measure login reachability, not the
+  health of individual cameras. TOS/privacy assessment below remains unchanged.
+
 ## 2026-11-05 [Codex] OPS-19 CCTV Public Monitoring / Issue #807
 
 - Isolated `codex/status-cctv-20261105` from deployed independent status source
